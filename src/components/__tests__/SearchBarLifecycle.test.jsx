@@ -57,6 +57,7 @@ vi.mock('../../services/cacheManager.js', () => ({
 
 const { SearchBar } = await import('../SearchBar.jsx');
 const { useSearchStore } = await import('../../stores/searchStore.js');
+const { useViewStore } = await import('../../stores/viewStore.js');
 
 const box = path => ({ path, name: path, delimiter: '.', children: [] });
 const premium = () => ({ hasSubscription: true, premiumAccess: true });
@@ -113,6 +114,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   useSearchStore.getState().clearSearch();
+  useViewStore.setState({ activeViewId: null });
 });
 
 describe('SearchBar search lifecycle', () => {
@@ -230,5 +232,35 @@ describe('SearchBar search lifecycle', () => {
     view.rerender(<SearchBar />);
     act(() => useSearchStore.setState({ searchFallback: 'building' }));
     expect(document.querySelector('[data-testid="search-fallback-upgrade"]')).toBeNull();
+  });
+});
+
+/// `showRows` sets `searchActive`, so every reader of that flag now also sees a
+/// saved view. The search bar must not treat one as a search it can restart.
+describe('a saved view on screen is not a search', () => {
+  const showView = async () => {
+    useViewStore.setState({ activeViewId: 'builtin-starred' });
+    await act(async () => {
+      useSearchStore.getState().showRows([row(1, 'starred row', 'a', 'INBOX')]);
+    });
+  };
+
+  it('does not restart it as a search when the account changes', async () => {
+    const view = render(<SearchBar />);
+    await showView();
+    expect(harness.runs).toHaveLength(0);
+
+    harness.mailState = { ...harness.mailState, activeAccountId: 'b', activeMailbox: 'Archive', unifiedInbox: false };
+    await act(async () => { view.rerender(<SearchBar />); });
+
+    expect(harness.runs).toHaveLength(0);
+    expect(useSearchStore.getState().searchResults.map(email => email.subject)).toEqual(['starred row']);
+  });
+
+  it('does not claim a search in the footer', async () => {
+    const view = render(<SearchBar />);
+    await showView();
+    expect(view.container.textContent).not.toContain('search.foundResults');
+    expect(view.queryByTestId('save-search-as-view')).toBeNull();
   });
 });

@@ -132,4 +132,39 @@ describe('what a view is called', () => {
   it('uses the name of a view the user made', () => {
     expect(viewLabel(MINE, t)).toBe('Receipts');
   });
+
+  it('clears the search box it is replacing', async () => {
+    useSearchStore.setState({
+      searchQuery: 'invoice',
+      searchFilters: { location: 'all', folder: 'current', sender: 'ann@x.test', dateFrom: null, dateTo: null, hasAttachments: true },
+    });
+    harness.daemonCall.mockResolvedValueOnce({ available: true, rows: [row(1)], total: 1 });
+    await useViewStore.getState().openView(STARRED);
+    expect(useSearchStore.getState().searchQuery).toBe('');
+    expect(useSearchStore.getState().searchFilters.sender).toBe('');
+    expect(useSearchStore.getState().searchFilters.hasAttachments).toBe(false);
+  });
+
+  it('a view opened while another was still loading wins', async () => {
+    let releaseFirst;
+    harness.daemonCall
+      .mockReturnValueOnce(new Promise(resolve => { releaseFirst = resolve; }))
+      .mockResolvedValueOnce({ available: true, rows: [row(2)], total: 1 });
+    const first = useViewStore.getState().openView(STARRED);
+    const second = await useViewStore.getState().openView(MINE);
+    releaseFirst({ available: true, rows: [row(1)], total: 1 });
+    await first;
+    expect(second).toBe(true);
+    expect(useViewStore.getState().activeViewId).toBe('v1');
+    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([2]);
+  });
+
+  it('refreshes the counts once the view it opened has run', async () => {
+    harness.daemonCall
+      .mockResolvedValueOnce({ available: true, rows: [], total: 0 })
+      .mockResolvedValueOnce({ 'builtin-starred': 7 });
+    await useViewStore.getState().openView(STARRED);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(harness.daemonCall.mock.calls.map(([method]) => method)).toContain('views.counts');
+  });
 });

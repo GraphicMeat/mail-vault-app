@@ -2,6 +2,7 @@ import { Button } from './ui/Button';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { SaveSearchAsView } from './SaveSearchAsView';
+import { useViewStore } from '../stores/viewStore';
 import { useSearchStore } from '../stores/searchStore';
 import { effectiveSearchMailboxConcurrency, hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
@@ -41,6 +42,7 @@ export function SearchBar({ autoFocus = false }) {
   const searchQuery = useSearchStore(s => s.searchQuery);
   const searchFilters = useSearchStore(s => s.searchFilters);
   const searchActive = useSearchStore(s => s.searchActive);
+  const activeViewId = useViewStore(s => s.activeViewId);
   const isSearching = useSearchStore(s => s.isSearching);
   const searchProgress = useSearchStore(s => s.searchProgress);
   const searchIndexCoverage = useSearchStore(s => s.searchIndexCoverage);
@@ -93,7 +95,10 @@ export function SearchBar({ autoFocus = false }) {
       && (previous.activeMailbox !== activeMailbox || previous.unifiedFolder !== unifiedFolder);
     const entitlementChanged = previous.isPremium !== isPremium
       || previous.concurrency !== effectiveSearchConcurrency;
-    if (searchActive && (accountOrModeChanged || currentFolderChanged || entitlementChanged)) restartSearch();
+    // `searchActive` is also true while a saved view is on screen, and a view
+    // is not a search this can restart: doing so runs an empty query and wipes
+    // the rows out from under a sidebar entry that still says it is open.
+    if (searchActive && !activeViewId && (accountOrModeChanged || currentFolderChanged || entitlementChanged)) restartSearch();
   }, [activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, effectiveSearchConcurrency,
     isPremium, searchFilters.folder, searchActive, restartSearch]);
 
@@ -597,7 +602,7 @@ export function SearchBar({ autoFocus = false }) {
       </AnimatePresence>
 
       {/* Search results indicator */}
-      {searchActive && (
+      {searchActive && !activeViewId && (
         <div className="mt-2 text-xs text-mail-text-muted">
           {isSearching ? (
             <span className="flex items-center gap-2">

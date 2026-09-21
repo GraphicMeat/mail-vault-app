@@ -41,6 +41,10 @@ function accountsPayload() {
   return (mail.accounts || []).map(account => accountPayload(account, mail));
 }
 
+/// Opening a view is an await, and a second click must not land under the
+/// first one's rows. Same shape the search store uses for its own runs.
+let runGeneration = 0;
+
 export const useViewStore = create((set, get) => ({
   views: [],
   /// View id → how many messages it holds, straight from the daemon. Never
@@ -70,15 +74,22 @@ export const useViewStore = create((set, get) => ({
   openView: async (view) => {
     const id = typeof view === 'string' ? view : view?.id;
     if (!id) return false;
+    const mine = ++runGeneration;
+    // The search box is not what is on screen any more; leaving the query and
+    // its filters behind would let a later restart run a search nobody typed.
+    useSearchStore.getState().clearSearch();
     set({ activeViewId: id, loading: true, unavailableReason: null });
     let reply;
     try {
       reply = await daemonCall('views.evaluate', { viewId: id, accounts: accountsPayload() });
     } catch (error) {
+      if (mine !== runGeneration) return false;
       set({ loading: false, unavailableReason: 'error' });
       console.warn('[views] could not run the view:', error?.message || error);
       return false;
     }
+    // A view opened while this one was still running owns the screen now.
+    if (mine !== runGeneration) return false;
     set({ loading: false });
     if (!reply?.available) {
       // Not an empty view: the index could not answer at all.
@@ -86,10 +97,14 @@ export const useViewStore = create((set, get) => ({
       return false;
     }
     useSearchStore.getState().showRows(reply.rows || []);
+    // The badge beside every view is only true as of its last count, and
+    // opening one is the moment a person looks at them.
+    void get().refreshCounts();
     return true;
   },
 
   closeView: () => {
+    runGeneration += 1;
     set({ activeViewId: null, unavailableReason: null });
     useSearchStore.getState().clearSearch();
   },
@@ -97,6 +112,7 @@ export const useViewStore = create((set, get) => ({
   saveView: async (view) => {
     const saved = await daemonCall('views.save', { view });
     await get().loadViews();
+    void get().refreshCounts();
     return saved;
   },
 
@@ -104,6 +120,7 @@ export const useViewStore = create((set, get) => ({
     await daemonCall('views.delete', { id });
     if (get().activeViewId === id) get().closeView();
     await get().loadViews();
+    void get().refreshCounts();
   },
 
   /// The search on screen, as a view definition. `tags` are resolved from the
