@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Tags you can put on any message, on any provider.** A message can carry as many tags as you like, independently of the folder it sits in, and they work the same on a server that has no labels of its own. Tag one message from its row or the reading pane, or a whole selection at once, and narrow a search with `tag:receipts` (`tag:"needs reply"` for a name with a space). Tags are stored locally and never change your mail: nothing is written to the message file and nothing is sent to your server.
 - **Keep the conversation beside your reply.** Compose has a remembered toggle for reading the original message, or the thread you replied from, beside the message you are writing.
 - **You can turn off the confirmation that appears when you delete.** Settings → Mail preferences → Behavior → Deleting, and the Reading tab of first-time setup, choose between asking every time (the default) and deleting on the click. Delete everywhere, and removing a message the vault holds the only copy of, still ask: neither can be undone.
 - **Settings now lists the server actions MailVault still owes.** Background Daemon shows every delete, move or flag change your server has not accepted yet, with the reason it last failed, a Retry now button, and a Cancel for one that has been failing for too long.
@@ -13,6 +14,7 @@
 - **Drag an attachment out to the Desktop or any app.** Dragging a row hands over the real file, not a web link to it.
 
 ### Changed
+- **The labels you had already made are now tags.** They move across on the first start, keeping the messages they were on wherever MailVault can still recognise the message. A label MailVault cannot place is left behind rather than guessed at, and a quick action set to apply one keeps working. Unlike the old labels, a tag stays with its message when the message is moved to another folder.
 - **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
 
 ### Fixed

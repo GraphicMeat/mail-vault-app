@@ -127,6 +127,35 @@ Two SQLite stores hold everything that used to be loose JSON files:
 - **`<vault>/custody/custody.db`** — records about the mail: custody entries (`vault_entries`), the header cache (`header_cache`, `header_cache_meta`), the per-account folder list (`mailbox_cache`) and the sender address book (`contacts`). Never derived, never deleted, never rebuilt: a store this build cannot read is reported and left exactly as it is. Opened EXCLUSIVE by the daemon, so nothing else in either process may open it — everything reads it through `custody::with_conn`.
 - **`<app_data_dir>/app.db`** — what the app keeps about itself: the vault and external-backup locations with their security-scoped bookmarks (`external_locations`), wire-byte counters (`transfer_stats`), classification results/model/queue, and the journals of confirmed-but-unfinished work (`pending_ops`, `pending_backup_purge`, and the single in-flight bulk operation in `meta`). Deliberately **not** EXCLUSIVE and with a non-zero `busy_timeout`, because two processes hold it: the app creates the bookmark that grants the daemon access to the vault, so it cannot wait for the daemon to exist.
 
+### The metadata layer (tags, and the fields and views to come)
+
+Tags, custom field values and saved-view definitions are user-authored, so they
+live in `app.db` (schema v2: `tags`, `tag_assignments`, `fields`,
+`field_values`, `views`) and never in `<vault>/search_index/index.db`. That
+index is rebuildable by design — the daemon worker may delete and rebuild it —
+so anything a person typed would be lost with it. Nothing in this layer touches
+an `.eml`, a server flag or an IMAP keyword: a tag is local, and works the same
+on a provider with no label support.
+
+Assignments are keyed by `app_db::identity::msg_key`: the `Message-ID` where
+the message has one, and `u:<vault_dir>:<uid>` only where it does not. The old
+`[accountId, mailbox, uid]` key (`localMailLabelKey`, and `emailKey` for the
+render cache) does not survive a move — an IMAP uid is per-mailbox — nor a
+Graph resync, where vault files are named by listing position. Two copies of
+one message in two folders share a key, which is what "a tag is independent of
+the folder" means.
+
+The app computes no keys. It sends what its rows carry (account, mailbox, uid,
+`Message-ID` when present) and the daemon derives the key, so the rule has one
+home. The frontend's `tagStore.byRow` is a render cache for the rows on screen,
+refetched per page, and deliberately keyed by something unstable.
+
+`tags.migrate_legacy` re-keys the old settings-file labels. The app reads its
+own `frontend-settings.json` and hands the rows over — the daemon never opens
+that file — and the daemon refuses the whole migration while its index cannot
+place an assignment for an account, because the app clears its legacy store on
+a success reply.
+
 The one-time move of the pre-SQL JSON files runs on the first open of each store and retires each file to `<name>.pre-db-<stamp>` (never deletes it). `app.db`'s import runs entirely inside one `BEGIN IMMEDIATE` with a `legacy_import` marker set in the same transaction, because the app and the daemon can both reach it at the same launch and `transfer_stats` rows accumulate rather than replace.
 
 Two files deliberately stay outside both stores: `accounts.json` (the frontend owns it, and a second writer would turn a same-process race into a cross-process one) and `email_cache/<account>_<mailbox>/graph_id_map.json` (the Outlook uid ledger, which needs a cross-process file lock and must travel with the vault). Those sidecar directories therefore still exist; they just hold nothing but the ledger.

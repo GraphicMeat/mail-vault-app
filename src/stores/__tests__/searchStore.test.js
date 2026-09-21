@@ -7,6 +7,7 @@ const harness = vi.hoisted(() => ({
   startMailSearch: vi.fn(),
   cancelMailSearch: vi.fn(),
   buildSearchTargets: vi.fn(),
+  daemonCall: vi.fn(),
   unlisten: vi.fn(),
 }));
 
@@ -29,9 +30,14 @@ vi.mock('../../services/authUtils', () => ({
   ensureFreshToken: async account => account,
 }));
 vi.mock('../../services/db', () => ({ searchLocalEmails: async () => [] }));
+vi.mock('../../services/daemonClient', () => ({
+  daemonCall: (...args) => harness.daemonCall(...args),
+  DaemonError: class DaemonError extends Error {},
+}));
 vi.mock('../../services/api', () => ({ searchEmails: async () => ({ emails: [], total: 0 }) }));
 
 const { useSearchStore } = await import('../searchStore.js');
+const { useTagStore } = await import('../tagStore');
 
 const DEFAULT_FILTERS = {
   location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
@@ -95,6 +101,7 @@ describe('daemon-backed search lifecycle', () => {
       return { unlisten: run.unlisten };
     });
     harness.cancelMailSearch.mockReset().mockResolvedValue(undefined);
+    harness.daemonCall.mockReset().mockResolvedValue({ tags: [] });
     harness.buildSearchTargets.mockReset().mockImplementation(async () => [{
       accountId: 'acct-1', account, localMailboxes: null, knownMailboxes: ['INBOX'], serverMailboxes: ['INBOX'],
     }]);
@@ -392,5 +399,41 @@ describe('daemon-backed search lifecycle', () => {
     useSearchStore.getState().patchResultFlags([{ accountId: 'acct-9', mailbox: 'INBOX', uid: 7 }], () => ['\\Seen']);
 
     expect(useSearchStore.getState().searchResults).toBe(before);
+  });
+});
+
+describe('narrowing a search by tag', () => {
+  const tagged = (uid, extra = {}) => result(uid, `subject ${uid}`, {
+    _accountId: 'acct-1', _mailbox: 'INBOX', messageId: `<${uid}@example.test>`, ...extra,
+  });
+
+  beforeEach(() => {
+    useTagStore.setState({ tags: [{ id: 't1', name: 'Receipts', color: '', position: 0, count: 0 }], byRow: {} });
+  });
+
+  it('sends the daemon the text without the tag filter', async () => {
+    const run = await startSearch('invoice tag:Receipts');
+    expect(run.request.query).toBe('invoice');
+  });
+
+  it('runs on a tag alone, with no text at all', async () => {
+    const run = await startSearch('tag:Receipts');
+    expect(run).toBeTruthy();
+    expect(run.request.query).toBe('');
+  });
+
+  it('keeps only the rows that carry the tag', async () => {
+    const run = await startSearch('invoice tag:Receipts');
+    harness.daemonCall.mockResolvedValueOnce({ tags: [['t1'], []] });
+    await progress(run, 1, { rows: [tagged(1), tagged(2)], terminal: 'complete' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(useSearchStore.getState().searchResults.map(row => row.uid)).toEqual([1]);
+  });
+
+  it('drops every row when the tag names nothing', async () => {
+    const run = await startSearch('invoice tag:Nothing');
+    await progress(run, 1, { rows: [tagged(1)], terminal: 'complete' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(useSearchStore.getState().searchResults).toEqual([]);
   });
 });

@@ -4,8 +4,46 @@ import { buildSearchTargets } from '../services/searchTargets.js';
 import { useMailStore } from './mailStore';
 import { effectiveSearchMailboxConcurrency, useSettingsStore } from './settingsStore';
 import { emailKey } from './slices/unifiedHelpers';
+import { parseSearchQuery } from '../utils/searchQuery';
+import { useTagStore } from './tagStore';
+import { daemonCall } from '../services/daemonClient';
 import { normalizeMessageId } from '../utils/emailParser';
 import { isBackedUp } from '../components/email/MessageStateIcon';
+
+/// A `tag:` term that names no tag. It can match nothing, which is the point.
+const MISSING_TAG = '\u0000none';
+
+/// Which of these rows carry every named tag. The daemon answers for the rows
+/// it is handed, in order, so the key an assignment is stored under stays in
+/// one place instead of being re-derived here.
+async function keepRowsWithTags(rows, tagIds) {
+  const items = [];
+  const positions = [];
+  rows.forEach((row, index) => {
+    const accountId = row?._accountId || row?._srcAccountId;
+    const mailbox = row?._mailbox;
+    if (!accountId || !mailbox || row.uid == null) return;
+    positions.push(index);
+    items.push({ accountId, mailbox, uid: row.uid, ...(row.messageId ? { messageId: row.messageId } : {}) });
+  });
+  if (!items.length) return [];
+  if (tagIds.includes(MISSING_TAG)) return [];
+  let lists = [];
+  try {
+    const reply = await daemonCall('tags.for_messages', { items });
+    lists = Array.isArray(reply?.tags) ? reply.tags : [];
+  } catch {
+    // The tag store could not answer; showing untagged rows would be a lie
+    // about the filter, so the frame contributes nothing.
+    return [];
+  }
+  const keep = new Set();
+  positions.forEach((rowIndex, askIndex) => {
+    const ids = lists[askIndex] || [];
+    if (tagIds.every(tagId => ids.includes(tagId))) keep.add(rowIndex);
+  });
+  return rows.filter((_row, index) => keep.has(index));
+}
 
 // Merge incremental daemon rows without losing the existing custody/location
 // preference rules.
@@ -256,7 +294,16 @@ export const useSearchStore = create((set, get) => ({
       activeAccountId: mail.activeAccountId,
       activeMailbox: mail.activeMailbox,
     };
-    const hasCriteria = !!(query || filters.sender || filters.dateFrom || filters.dateTo || filters.hasAttachments);
+    const { text: queryText, tags: tagNames } = parseSearchQuery(query);
+    // A name nobody has a tag for resolves to nothing, and a search for it
+    // must return nothing rather than silently ignoring the filter.
+    const tagIds = tagNames.map(name => {
+      const tag = useTagStore.getState().tags
+        .find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+      return tag ? tag.id : MISSING_TAG;
+    });
+    const hasCriteria = !!(queryText || tagIds.length || filters.sender || filters.dateFrom
+      || filters.dateTo || filters.hasAttachments);
 
     set({
       searchGeneration: runGeneration,
@@ -284,7 +331,7 @@ export const useSearchStore = create((set, get) => ({
       searchId = newSearchId(runGeneration);
       const request = {
         searchId,
-        query,
+        query: queryText,
         sender: filters.sender || null,
         dateFrom: toEpochSeconds(filters.dateFrom),
         dateTo: toEpochSeconds(filters.dateTo, true),
@@ -296,7 +343,18 @@ export const useSearchStore = create((set, get) => ({
       activeId = searchId;
       set({ activeSearchId: searchId });
 
-      const { unlisten } = await startMailSearch(request, frame => get().handleSearchProgress(frame), () => {
+      let ordered = Promise.resolve();
+      const onFrame = frame => {
+        if (!tagIds.length) return get().handleSearchProgress(frame);
+        // Frames are sequenced and a later one is dropped once an earlier
+        // sequence has landed, so the awaited filtering has to stay in order.
+        ordered = ordered.then(async () => {
+          const rows = await keepRowsWithTags(Array.isArray(frame.rows) ? frame.rows : [], tagIds);
+          get().handleSearchProgress({ ...frame, rows });
+        }).catch(() => {});
+        return ordered;
+      };
+      const { unlisten } = await startMailSearch(request, onFrame, () => {
         const state = get();
         if (runGeneration !== generation || state.activeSearchId !== searchId || !state.isSearching) return;
         return state.performSearch();
