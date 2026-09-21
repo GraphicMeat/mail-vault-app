@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "다른 폴더로 이동",
   "settings.pendingActions.opFlag": "플래그 변경",
   "settings.pendingActions.opOther": "서버 작업",
-  "views": {
-    "section": "보기",
-    "builtin": {
-      "needs-reply": "답장 필요",
-      "starred": "별표",
-      "attachments": "첨부 파일"
-    },
-    "unavailable": {
-      "building": "메일을 아직 색인하는 중입니다. 완료되면서 이 보기가 채워집니다.",
-      "unavailable": "검색 색인이 열려 있지 않아 지금은 이 보기를 계산할 수 없습니다.",
-      "off": "저장된 보기를 사용하려면 검색 색인을 켜세요.",
-      "error": "이 보기를 계산하지 못했습니다."
-    },
-    "saveSearch": "이 검색을 보기로 저장"
-  },
-  "fields": {
-    "section": "필드",
-    "explainer": "필드는 메시지에 대한 나만의 메모입니다. 이 Mac에 저장되며 메시지에 기록되거나 메일 서버로 전송되지 않습니다.",
-    "noValue": "—",
-    "newName": "필드 이름",
-    "newKind": "종류",
-    "add": "필드 추가",
-    "deleteConfirm": "값과 함께 삭제",
-    "scope": {
-      "global": "모든 계정",
-      "account": "이 계정",
-      "makeGlobal": "모든 계정과 공유",
-      "makeAccount": "이 계정에만 두기"
-    },
-    "copyFrom": "필드를 복사할 계정…",
-    "copyRun": "복사",
-    "kind": {
-      "select": "선택",
-      "multi_select": "다중 선택",
-      "date": "날짜",
-      "checkbox": "체크박스",
-      "text": "텍스트"
-    }
-  }
+  "views.section": "보기",
+  "views.builtin.needs-reply": "답장 필요",
+  "views.builtin.starred": "별표",
+  "views.builtin.attachments": "첨부 파일",
+  "views.unavailable.building": "메일을 아직 색인하는 중입니다. 완료되면서 이 보기가 채워집니다.",
+  "views.unavailable.unavailable": "검색 색인이 열려 있지 않아 지금은 이 보기를 계산할 수 없습니다.",
+  "views.unavailable.off": "저장된 보기를 사용하려면 검색 색인을 켜세요.",
+  "views.unavailable.error": "이 보기를 계산하지 못했습니다.",
+  "views.saveSearch": "이 검색을 보기로 저장",
+  "fields.section": "필드",
+  "fields.explainer": "필드는 메시지에 대한 나만의 메모입니다. 이 Mac에 저장되며 메시지에 기록되거나 메일 서버로 전송되지 않습니다.",
+  "fields.noValue": "—",
+  "fields.newName": "필드 이름",
+  "fields.newKind": "종류",
+  "fields.add": "필드 추가",
+  "fields.deleteConfirm": "값과 함께 삭제",
+  "fields.scope.global": "모든 계정",
+  "fields.scope.account": "이 계정",
+  "fields.scope.makeGlobal": "모든 계정과 공유",
+  "fields.scope.makeAccount": "이 계정에만 두기",
+  "fields.copyFrom": "필드를 복사할 계정…",
+  "fields.copyRun": "복사",
+  "fields.kind.select": "선택",
+  "fields.kind.multi_select": "다중 선택",
+  "fields.kind.date": "날짜",
+  "fields.kind.checkbox": "체크박스",
+  "fields.kind.text": "텍스트"
 }

@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "In anderen Ordner verschieben",
   "settings.pendingActions.opFlag": "Markierungsänderung",
   "settings.pendingActions.opOther": "Serveraktion",
-  "views": {
-    "section": "Ansichten",
-    "builtin": {
-      "needs-reply": "Antwort nötig",
-      "starred": "Markiert",
-      "attachments": "Anhänge"
-    },
-    "unavailable": {
-      "building": "Ihre E-Mails werden noch indiziert — diese Ansicht füllt sich nach und nach.",
-      "unavailable": "Der Suchindex ist nicht geöffnet, daher lässt sich diese Ansicht gerade nicht ermitteln.",
-      "off": "Schalten Sie den Suchindex ein, um gespeicherte Ansichten zu nutzen.",
-      "error": "Diese Ansicht konnte nicht ermittelt werden."
-    },
-    "saveSearch": "Diese Suche als Ansicht speichern"
-  },
-  "fields": {
-    "section": "Felder",
-    "explainer": "Felder sind Ihre eigenen Notizen zu einer Nachricht. Sie liegen auf diesem Mac und werden weder in die Nachricht geschrieben noch an Ihren Mailserver gesendet.",
-    "noValue": "—",
-    "newName": "Feldname",
-    "newKind": "Art",
-    "add": "Feld hinzufügen",
-    "deleteConfirm": "Löschen, samt aller Werte",
-    "scope": {
-      "global": "Alle Konten",
-      "account": "Dieses Konto",
-      "makeGlobal": "Mit allen Konten teilen",
-      "makeAccount": "Nur für dieses Konto"
-    },
-    "copyFrom": "Felder kopieren von…",
-    "copyRun": "Kopieren",
-    "kind": {
-      "select": "Auswahl",
-      "multi_select": "Mehrfachauswahl",
-      "date": "Datum",
-      "checkbox": "Kästchen",
-      "text": "Text"
-    }
-  }
+  "views.section": "Ansichten",
+  "views.builtin.needs-reply": "Antwort nötig",
+  "views.builtin.starred": "Markiert",
+  "views.builtin.attachments": "Anhänge",
+  "views.unavailable.building": "Ihre E-Mails werden noch indiziert — diese Ansicht füllt sich nach und nach.",
+  "views.unavailable.unavailable": "Der Suchindex ist nicht geöffnet, daher lässt sich diese Ansicht gerade nicht ermitteln.",
+  "views.unavailable.off": "Schalten Sie den Suchindex ein, um gespeicherte Ansichten zu nutzen.",
+  "views.unavailable.error": "Diese Ansicht konnte nicht ermittelt werden.",
+  "views.saveSearch": "Diese Suche als Ansicht speichern",
+  "fields.section": "Felder",
+  "fields.explainer": "Felder sind Ihre eigenen Notizen zu einer Nachricht. Sie liegen auf diesem Mac und werden weder in die Nachricht geschrieben noch an Ihren Mailserver gesendet.",
+  "fields.noValue": "—",
+  "fields.newName": "Feldname",
+  "fields.newKind": "Art",
+  "fields.add": "Feld hinzufügen",
+  "fields.deleteConfirm": "Löschen, samt aller Werte",
+  "fields.scope.global": "Alle Konten",
+  "fields.scope.account": "Dieses Konto",
+  "fields.scope.makeGlobal": "Mit allen Konten teilen",
+  "fields.scope.makeAccount": "Nur für dieses Konto",
+  "fields.copyFrom": "Felder kopieren von…",
+  "fields.copyRun": "Kopieren",
+  "fields.kind.select": "Auswahl",
+  "fields.kind.multi_select": "Mehrfachauswahl",
+  "fields.kind.date": "Datum",
+  "fields.kind.checkbox": "Kästchen",
+  "fields.kind.text": "Text"
 }

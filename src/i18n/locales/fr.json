@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "Déplacer vers un autre dossier",
   "settings.pendingActions.opFlag": "Changement de marqueur",
   "settings.pendingActions.opOther": "Action serveur",
-  "views": {
-    "section": "Vues",
-    "builtin": {
-      "needs-reply": "À répondre",
-      "starred": "Suivis",
-      "attachments": "Pièces jointes"
-    },
-    "unavailable": {
-      "building": "Vos messages sont encore en cours d’indexation : cette vue se remplira au fur et à mesure.",
-      "unavailable": "L’index de recherche n’est pas ouvert, cette vue ne peut donc pas être calculée pour l’instant.",
-      "off": "Activez l’index de recherche pour utiliser les vues enregistrées.",
-      "error": "Cette vue n’a pas pu être calculée."
-    },
-    "saveSearch": "Enregistrer cette recherche comme vue"
-  },
-  "fields": {
-    "section": "Champs",
-    "explainer": "Les champs sont vos propres notes sur un message. Ils restent sur ce Mac : rien n’est écrit dans le message ni envoyé à votre serveur de messagerie.",
-    "noValue": "—",
-    "newName": "Nom du champ",
-    "newKind": "Type",
-    "add": "Ajouter un champ",
-    "deleteConfirm": "Supprimer, avec toutes ses valeurs",
-    "scope": {
-      "global": "Tous les comptes",
-      "account": "Ce compte",
-      "makeGlobal": "Partager avec tous les comptes",
-      "makeAccount": "Réserver à ce compte"
-    },
-    "copyFrom": "Copier les champs de…",
-    "copyRun": "Copier",
-    "kind": {
-      "select": "Choix",
-      "multi_select": "Plusieurs choix",
-      "date": "Date",
-      "checkbox": "Case à cocher",
-      "text": "Texte"
-    }
-  }
+  "views.section": "Vues",
+  "views.builtin.needs-reply": "À répondre",
+  "views.builtin.starred": "Suivis",
+  "views.builtin.attachments": "Pièces jointes",
+  "views.unavailable.building": "Vos messages sont encore en cours d’indexation : cette vue se remplira au fur et à mesure.",
+  "views.unavailable.unavailable": "L’index de recherche n’est pas ouvert, cette vue ne peut donc pas être calculée pour l’instant.",
+  "views.unavailable.off": "Activez l’index de recherche pour utiliser les vues enregistrées.",
+  "views.unavailable.error": "Cette vue n’a pas pu être calculée.",
+  "views.saveSearch": "Enregistrer cette recherche comme vue",
+  "fields.section": "Champs",
+  "fields.explainer": "Les champs sont vos propres notes sur un message. Ils restent sur ce Mac : rien n’est écrit dans le message ni envoyé à votre serveur de messagerie.",
+  "fields.noValue": "—",
+  "fields.newName": "Nom du champ",
+  "fields.newKind": "Type",
+  "fields.add": "Ajouter un champ",
+  "fields.deleteConfirm": "Supprimer, avec toutes ses valeurs",
+  "fields.scope.global": "Tous les comptes",
+  "fields.scope.account": "Ce compte",
+  "fields.scope.makeGlobal": "Partager avec tous les comptes",
+  "fields.scope.makeAccount": "Réserver à ce compte",
+  "fields.copyFrom": "Copier les champs de…",
+  "fields.copyRun": "Copier",
+  "fields.kind.select": "Choix",
+  "fields.kind.multi_select": "Plusieurs choix",
+  "fields.kind.date": "Date",
+  "fields.kind.checkbox": "Case à cocher",
+  "fields.kind.text": "Texte"
 }

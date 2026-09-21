@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "Move to another folder",
   "settings.pendingActions.opFlag": "Flag change",
   "settings.pendingActions.opOther": "Server action",
-  "views": {
-    "section": "Views",
-    "builtin": {
-      "needs-reply": "Needs reply",
-      "starred": "Starred",
-      "attachments": "Attachments"
-    },
-    "unavailable": {
-      "building": "Still indexing your mail — this view will fill in as it finishes.",
-      "unavailable": "The search index is not open, so this view cannot be worked out right now.",
-      "off": "Turn the search index on to use saved views.",
-      "error": "This view could not be worked out."
-    },
-    "saveSearch": "Save this search as a view"
-  },
-  "fields": {
-    "section": "Fields",
-    "explainer": "Fields are your own notes about a message. They are stored on this Mac and never written to the message or sent to your mail server.",
-    "noValue": "—",
-    "newName": "Field name",
-    "newKind": "Kind",
-    "add": "Add field",
-    "deleteConfirm": "Delete, with every value",
-    "scope": {
-      "global": "All accounts",
-      "account": "This account",
-      "makeGlobal": "Share with every account",
-      "makeAccount": "Keep to this account"
-    },
-    "copyFrom": "Copy fields from…",
-    "copyRun": "Copy",
-    "kind": {
-      "select": "Choice",
-      "multi_select": "Several choices",
-      "date": "Date",
-      "checkbox": "Tick box",
-      "text": "Text"
-    }
-  }
+  "views.section": "Views",
+  "views.builtin.needs-reply": "Needs reply",
+  "views.builtin.starred": "Starred",
+  "views.builtin.attachments": "Attachments",
+  "views.unavailable.building": "Still indexing your mail — this view will fill in as it finishes.",
+  "views.unavailable.unavailable": "The search index is not open, so this view cannot be worked out right now.",
+  "views.unavailable.off": "Turn the search index on to use saved views.",
+  "views.unavailable.error": "This view could not be worked out.",
+  "views.saveSearch": "Save this search as a view",
+  "fields.section": "Fields",
+  "fields.explainer": "Fields are your own notes about a message. They are stored on this Mac and never written to the message or sent to your mail server.",
+  "fields.noValue": "—",
+  "fields.newName": "Field name",
+  "fields.newKind": "Kind",
+  "fields.add": "Add field",
+  "fields.deleteConfirm": "Delete, with every value",
+  "fields.scope.global": "All accounts",
+  "fields.scope.account": "This account",
+  "fields.scope.makeGlobal": "Share with every account",
+  "fields.scope.makeAccount": "Keep to this account",
+  "fields.copyFrom": "Copy fields from…",
+  "fields.copyRun": "Copy",
+  "fields.kind.select": "Choice",
+  "fields.kind.multi_select": "Several choices",
+  "fields.kind.date": "Date",
+  "fields.kind.checkbox": "Tick box",
+  "fields.kind.text": "Text"
 }

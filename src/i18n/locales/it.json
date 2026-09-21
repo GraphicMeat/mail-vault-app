@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "Sposta in un’altra cartella",
   "settings.pendingActions.opFlag": "Modifica del contrassegno",
   "settings.pendingActions.opOther": "Azione sul server",
-  "views": {
-    "section": "Viste",
-    "builtin": {
-      "needs-reply": "Da rispondere",
-      "starred": "Speciali",
-      "attachments": "Allegati"
-    },
-    "unavailable": {
-      "building": "La posta è ancora in fase di indicizzazione: questa vista si completerà man mano.",
-      "unavailable": "L’indice di ricerca non è aperto, quindi questa vista non può essere calcolata ora.",
-      "off": "Attiva l’indice di ricerca per usare le viste salvate.",
-      "error": "Non è stato possibile calcolare questa vista."
-    },
-    "saveSearch": "Salva questa ricerca come vista"
-  },
-  "fields": {
-    "section": "Campi",
-    "explainer": "I campi sono i tuoi appunti su un messaggio. Restano su questo Mac: non vengono scritti nel messaggio né inviati al tuo server di posta.",
-    "noValue": "—",
-    "newName": "Nome del campo",
-    "newKind": "Tipo",
-    "add": "Aggiungi campo",
-    "deleteConfirm": "Elimina, con tutti i valori",
-    "scope": {
-      "global": "Tutti gli account",
-      "account": "Questo account",
-      "makeGlobal": "Condividi con tutti gli account",
-      "makeAccount": "Solo per questo account"
-    },
-    "copyFrom": "Copia i campi da…",
-    "copyRun": "Copia",
-    "kind": {
-      "select": "Scelta",
-      "multi_select": "Più scelte",
-      "date": "Data",
-      "checkbox": "Casella",
-      "text": "Testo"
-    }
-  }
+  "views.section": "Viste",
+  "views.builtin.needs-reply": "Da rispondere",
+  "views.builtin.starred": "Speciali",
+  "views.builtin.attachments": "Allegati",
+  "views.unavailable.building": "La posta è ancora in fase di indicizzazione: questa vista si completerà man mano.",
+  "views.unavailable.unavailable": "L’indice di ricerca non è aperto, quindi questa vista non può essere calcolata ora.",
+  "views.unavailable.off": "Attiva l’indice di ricerca per usare le viste salvate.",
+  "views.unavailable.error": "Non è stato possibile calcolare questa vista.",
+  "views.saveSearch": "Salva questa ricerca come vista",
+  "fields.section": "Campi",
+  "fields.explainer": "I campi sono i tuoi appunti su un messaggio. Restano su questo Mac: non vengono scritti nel messaggio né inviati al tuo server di posta.",
+  "fields.noValue": "—",
+  "fields.newName": "Nome del campo",
+  "fields.newKind": "Tipo",
+  "fields.add": "Aggiungi campo",
+  "fields.deleteConfirm": "Elimina, con tutti i valori",
+  "fields.scope.global": "Tutti gli account",
+  "fields.scope.account": "Questo account",
+  "fields.scope.makeGlobal": "Condividi con tutti gli account",
+  "fields.scope.makeAccount": "Solo per questo account",
+  "fields.copyFrom": "Copia i campi da…",
+  "fields.copyRun": "Copia",
+  "fields.kind.select": "Scelta",
+  "fields.kind.multi_select": "Più scelte",
+  "fields.kind.date": "Data",
+  "fields.kind.checkbox": "Casella",
+  "fields.kind.text": "Testo"
 }

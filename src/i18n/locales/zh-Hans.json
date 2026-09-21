@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "移动到其他文件夹",
   "settings.pendingActions.opFlag": "标记变更",
   "settings.pendingActions.opOther": "服务器操作",
-  "views": {
-    "section": "视图",
-    "builtin": {
-      "needs-reply": "待回复",
-      "starred": "已加星标",
-      "attachments": "附件"
-    },
-    "unavailable": {
-      "building": "邮件仍在建立索引，此视图会随之逐步填充。",
-      "unavailable": "搜索索引未打开，因此暂时无法计算此视图。",
-      "off": "启用搜索索引后即可使用已保存的视图。",
-      "error": "无法计算此视图。"
-    },
-    "saveSearch": "将此搜索保存为视图"
-  },
-  "fields": {
-    "section": "字段",
-    "explainer": "字段是你对邮件的私人备注。它们保存在这台 Mac 上，不会写入邮件，也不会发送到邮件服务器。",
-    "noValue": "—",
-    "newName": "字段名称",
-    "newKind": "类型",
-    "add": "添加字段",
-    "deleteConfirm": "连同所有值一起删除",
-    "scope": {
-      "global": "所有账户",
-      "account": "此账户",
-      "makeGlobal": "与所有账户共享",
-      "makeAccount": "仅保留在此账户"
-    },
-    "copyFrom": "从以下账户复制字段…",
-    "copyRun": "复制",
-    "kind": {
-      "select": "单选",
-      "multi_select": "多选",
-      "date": "日期",
-      "checkbox": "勾选框",
-      "text": "文本"
-    }
-  }
+  "views.section": "视图",
+  "views.builtin.needs-reply": "待回复",
+  "views.builtin.starred": "已加星标",
+  "views.builtin.attachments": "附件",
+  "views.unavailable.building": "邮件仍在建立索引，此视图会随之逐步填充。",
+  "views.unavailable.unavailable": "搜索索引未打开，因此暂时无法计算此视图。",
+  "views.unavailable.off": "启用搜索索引后即可使用已保存的视图。",
+  "views.unavailable.error": "无法计算此视图。",
+  "views.saveSearch": "将此搜索保存为视图",
+  "fields.section": "字段",
+  "fields.explainer": "字段是你对邮件的私人备注。它们保存在这台 Mac 上，不会写入邮件，也不会发送到邮件服务器。",
+  "fields.noValue": "—",
+  "fields.newName": "字段名称",
+  "fields.newKind": "类型",
+  "fields.add": "添加字段",
+  "fields.deleteConfirm": "连同所有值一起删除",
+  "fields.scope.global": "所有账户",
+  "fields.scope.account": "此账户",
+  "fields.scope.makeGlobal": "与所有账户共享",
+  "fields.scope.makeAccount": "仅保留在此账户",
+  "fields.copyFrom": "从以下账户复制字段…",
+  "fields.copyRun": "复制",
+  "fields.kind.select": "单选",
+  "fields.kind.multi_select": "多选",
+  "fields.kind.date": "日期",
+  "fields.kind.checkbox": "勾选框",
+  "fields.kind.text": "文本"
 }

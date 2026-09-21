@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "Mover a otra carpeta",
   "settings.pendingActions.opFlag": "Cambio de marca",
   "settings.pendingActions.opOther": "Acción del servidor",
-  "views": {
-    "section": "Vistas",
-    "builtin": {
-      "needs-reply": "Necesita respuesta",
-      "starred": "Destacados",
-      "attachments": "Adjuntos"
-    },
-    "unavailable": {
-      "building": "Todavía se está indexando tu correo: esta vista se completará al terminar.",
-      "unavailable": "El índice de búsqueda no está abierto, así que esta vista no se puede calcular ahora.",
-      "off": "Activa el índice de búsqueda para usar vistas guardadas.",
-      "error": "No se ha podido calcular esta vista."
-    },
-    "saveSearch": "Guardar esta búsqueda como vista"
-  },
-  "fields": {
-    "section": "Campos",
-    "explainer": "Los campos son tus propias notas sobre un mensaje. Se guardan en este Mac y nunca se escriben en el mensaje ni se envían a tu servidor de correo.",
-    "noValue": "—",
-    "newName": "Nombre del campo",
-    "newKind": "Tipo",
-    "add": "Añadir campo",
-    "deleteConfirm": "Eliminar, con todos sus valores",
-    "scope": {
-      "global": "Todas las cuentas",
-      "account": "Esta cuenta",
-      "makeGlobal": "Compartir con todas las cuentas",
-      "makeAccount": "Solo para esta cuenta"
-    },
-    "copyFrom": "Copiar campos de…",
-    "copyRun": "Copiar",
-    "kind": {
-      "select": "Opción",
-      "multi_select": "Varias opciones",
-      "date": "Fecha",
-      "checkbox": "Casilla",
-      "text": "Texto"
-    }
-  }
+  "views.section": "Vistas",
+  "views.builtin.needs-reply": "Necesita respuesta",
+  "views.builtin.starred": "Destacados",
+  "views.builtin.attachments": "Adjuntos",
+  "views.unavailable.building": "Todavía se está indexando tu correo: esta vista se completará al terminar.",
+  "views.unavailable.unavailable": "El índice de búsqueda no está abierto, así que esta vista no se puede calcular ahora.",
+  "views.unavailable.off": "Activa el índice de búsqueda para usar vistas guardadas.",
+  "views.unavailable.error": "No se ha podido calcular esta vista.",
+  "views.saveSearch": "Guardar esta búsqueda como vista",
+  "fields.section": "Campos",
+  "fields.explainer": "Los campos son tus propias notas sobre un mensaje. Se guardan en este Mac y nunca se escriben en el mensaje ni se envían a tu servidor de correo.",
+  "fields.noValue": "—",
+  "fields.newName": "Nombre del campo",
+  "fields.newKind": "Tipo",
+  "fields.add": "Añadir campo",
+  "fields.deleteConfirm": "Eliminar, con todos sus valores",
+  "fields.scope.global": "Todas las cuentas",
+  "fields.scope.account": "Esta cuenta",
+  "fields.scope.makeGlobal": "Compartir con todas las cuentas",
+  "fields.scope.makeAccount": "Solo para esta cuenta",
+  "fields.copyFrom": "Copiar campos de…",
+  "fields.copyRun": "Copiar",
+  "fields.kind.select": "Opción",
+  "fields.kind.multi_select": "Varias opciones",
+  "fields.kind.date": "Fecha",
+  "fields.kind.checkbox": "Casilla",
+  "fields.kind.text": "Texto"
 }

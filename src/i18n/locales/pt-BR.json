@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "Mover para outra pasta",
   "settings.pendingActions.opFlag": "Mudança de marcação",
   "settings.pendingActions.opOther": "Ação no servidor",
-  "views": {
-    "section": "Visões",
-    "builtin": {
-      "needs-reply": "Precisa de resposta",
-      "starred": "Com estrela",
-      "attachments": "Anexos"
-    },
-    "unavailable": {
-      "building": "Seus e-mails ainda estão sendo indexados — esta visão vai se preencher conforme terminar.",
-      "unavailable": "O índice de busca não está aberto, então esta visão não pode ser calculada agora.",
-      "off": "Ative o índice de busca para usar visões salvas.",
-      "error": "Não foi possível calcular esta visão."
-    },
-    "saveSearch": "Salvar esta busca como visão"
-  },
-  "fields": {
-    "section": "Campos",
-    "explainer": "Campos são suas próprias anotações sobre uma mensagem. Ficam neste Mac e nunca são gravados na mensagem nem enviados ao seu servidor de e-mail.",
-    "noValue": "—",
-    "newName": "Nome do campo",
-    "newKind": "Tipo",
-    "add": "Adicionar campo",
-    "deleteConfirm": "Excluir, com todos os valores",
-    "scope": {
-      "global": "Todas as contas",
-      "account": "Esta conta",
-      "makeGlobal": "Compartilhar com todas as contas",
-      "makeAccount": "Manter só nesta conta"
-    },
-    "copyFrom": "Copiar campos de…",
-    "copyRun": "Copiar",
-    "kind": {
-      "select": "Escolha",
-      "multi_select": "Várias escolhas",
-      "date": "Data",
-      "checkbox": "Caixa de seleção",
-      "text": "Texto"
-    }
-  }
+  "views.section": "Visões",
+  "views.builtin.needs-reply": "Precisa de resposta",
+  "views.builtin.starred": "Com estrela",
+  "views.builtin.attachments": "Anexos",
+  "views.unavailable.building": "Seus e-mails ainda estão sendo indexados — esta visão vai se preencher conforme terminar.",
+  "views.unavailable.unavailable": "O índice de busca não está aberto, então esta visão não pode ser calculada agora.",
+  "views.unavailable.off": "Ative o índice de busca para usar visões salvas.",
+  "views.unavailable.error": "Não foi possível calcular esta visão.",
+  "views.saveSearch": "Salvar esta busca como visão",
+  "fields.section": "Campos",
+  "fields.explainer": "Campos são suas próprias anotações sobre uma mensagem. Ficam neste Mac e nunca são gravados na mensagem nem enviados ao seu servidor de e-mail.",
+  "fields.noValue": "—",
+  "fields.newName": "Nome do campo",
+  "fields.newKind": "Tipo",
+  "fields.add": "Adicionar campo",
+  "fields.deleteConfirm": "Excluir, com todos os valores",
+  "fields.scope.global": "Todas as contas",
+  "fields.scope.account": "Esta conta",
+  "fields.scope.makeGlobal": "Compartilhar com todas as contas",
+  "fields.scope.makeAccount": "Manter só nesta conta",
+  "fields.copyFrom": "Copiar campos de…",
+  "fields.copyRun": "Copiar",
+  "fields.kind.select": "Escolha",
+  "fields.kind.multi_select": "Várias escolhas",
+  "fields.kind.date": "Data",
+  "fields.kind.checkbox": "Caixa de seleção",
+  "fields.kind.text": "Texto"
 }

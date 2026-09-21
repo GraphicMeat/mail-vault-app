@@ -2455,43 +2455,31 @@
   "settings.pendingActions.opMove": "別のフォルダーに移動",
   "settings.pendingActions.opFlag": "フラグの変更",
   "settings.pendingActions.opOther": "サーバー操作",
-  "views": {
-    "section": "ビュー",
-    "builtin": {
-      "needs-reply": "要返信",
-      "starred": "スター付き",
-      "attachments": "添付ファイル"
-    },
-    "unavailable": {
-      "building": "メールをインデックス中です。完了するにつれてこのビューに表示されます。",
-      "unavailable": "検索インデックスが開いていないため、このビューを今は計算できません。",
-      "off": "保存したビューを使うには検索インデックスを有効にしてください。",
-      "error": "このビューを計算できませんでした。"
-    },
-    "saveSearch": "この検索をビューとして保存"
-  },
-  "fields": {
-    "section": "フィールド",
-    "explainer": "フィールドはメッセージについてのあなた自身のメモです。この Mac に保存され、メッセージに書き込まれることも、メールサーバーに送信されることもありません。",
-    "noValue": "—",
-    "newName": "フィールド名",
-    "newKind": "種類",
-    "add": "フィールドを追加",
-    "deleteConfirm": "値ごと削除",
-    "scope": {
-      "global": "すべてのアカウント",
-      "account": "このアカウント",
-      "makeGlobal": "すべてのアカウントで共有",
-      "makeAccount": "このアカウントだけにする"
-    },
-    "copyFrom": "フィールドのコピー元…",
-    "copyRun": "コピー",
-    "kind": {
-      "select": "選択",
-      "multi_select": "複数選択",
-      "date": "日付",
-      "checkbox": "チェックボックス",
-      "text": "テキスト"
-    }
-  }
+  "views.section": "ビュー",
+  "views.builtin.needs-reply": "要返信",
+  "views.builtin.starred": "スター付き",
+  "views.builtin.attachments": "添付ファイル",
+  "views.unavailable.building": "メールをインデックス中です。完了するにつれてこのビューに表示されます。",
+  "views.unavailable.unavailable": "検索インデックスが開いていないため、このビューを今は計算できません。",
+  "views.unavailable.off": "保存したビューを使うには検索インデックスを有効にしてください。",
+  "views.unavailable.error": "このビューを計算できませんでした。",
+  "views.saveSearch": "この検索をビューとして保存",
+  "fields.section": "フィールド",
+  "fields.explainer": "フィールドはメッセージについてのあなた自身のメモです。この Mac に保存され、メッセージに書き込まれることも、メールサーバーに送信されることもありません。",
+  "fields.noValue": "—",
+  "fields.newName": "フィールド名",
+  "fields.newKind": "種類",
+  "fields.add": "フィールドを追加",
+  "fields.deleteConfirm": "値ごと削除",
+  "fields.scope.global": "すべてのアカウント",
+  "fields.scope.account": "このアカウント",
+  "fields.scope.makeGlobal": "すべてのアカウントで共有",
+  "fields.scope.makeAccount": "このアカウントだけにする",
+  "fields.copyFrom": "フィールドのコピー元…",
+  "fields.copyRun": "コピー",
+  "fields.kind.select": "選択",
+  "fields.kind.multi_select": "複数選択",
+  "fields.kind.date": "日付",
+  "fields.kind.checkbox": "チェックボックス",
+  "fields.kind.text": "テキスト"
 }
