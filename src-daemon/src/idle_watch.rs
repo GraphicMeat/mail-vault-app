@@ -205,10 +205,14 @@ impl IdleWatchers {
                     Ok(IdleResponse::NewData(_)) => {
                         let result = self.engine.sync_account(&account, "INBOX").await;
                         if result.success {
+                            // `arrivals`, not `new_emails`: a wake-up sync that
+                            // lands on a cold or far-behind cache writes a whole
+                            // page of old headers, and the app turns this number
+                            // straight into a "N new emails" banner.
                             self.engine.note_change(
                                 &account.id,
                                 "INBOX",
-                                result.new_emails,
+                                result.arrivals,
                                 result.updated_flags,
                             );
                         } else {
