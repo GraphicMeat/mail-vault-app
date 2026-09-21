@@ -18,6 +18,11 @@
  *      opening the in-app preview
  *   5. With the setting on, switching to the account caches its attachments
  *      without a click — the row opens "Click to open"
+ *   6. An image shows itself in the tile, a PDF does not borrow one
+ *   7. Save As is on the row, with a label no other button in it shares
+ *   8. Download All writes a folder under ~/Downloads holding both files
+ *   9. Dragging a row cancels the browser drag and starts a native one on
+ *      the real path (WebDriver cannot perform the OS drag itself)
  */
 
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
@@ -72,7 +77,11 @@ const installInvokeProbe = () => browser.execute(() => {
   window.__MV_INVOKES__ = [];
   const probe = (cmd, args) => {
     window.__MV_INVOKES__.push({ cmd, args });
-    if (cmd === 'open_file') return Promise.resolve(null);
+    // The three commands that leave the app: a Preview window, a Finder
+    // window and a live drag session all steal focus from every later spec.
+    if (cmd === 'open_file' || cmd === 'show_in_folder' || cmd === 'plugin:drag|start_drag') {
+      return Promise.resolve(null);
+    }
     return real(cmd, args);
   };
   probe.__mvProbe = true;
@@ -272,5 +281,120 @@ describe('Connected Attachments', function () {
       async () => ((await itemText(ATTACHMENT_PNG)) || '').includes('Click to open'),
       { timeout: 10_000, interval: 250, timeoutMsg: `the PNG row never showed the cached state: ${await itemText(ATTACHMENT_PNG)}` },
     );
+  });
+
+  // The tile used to be one FileText for every type. An image now IS its own
+  // preview, decoded in the page — `naturalWidth` is the only proof of that
+  // which a broken data: URI cannot fake.
+  it('shows the image itself in the tile instead of a generic icon', async function () {
+    await browser.waitUntil(
+      () => browser.execute((n) => {
+        const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+          .find((el) => (el.textContent || '').includes(n));
+        const img = item?.querySelector('[data-testid="attachment-thumb"]');
+        return !!img && img.complete && img.naturalWidth > 0;
+      }, ATTACHMENT_PNG),
+      { timeout: 30_000, interval: 250, timeoutMsg: 'the PNG row never rendered its own thumbnail' },
+    );
+
+    // The PDF has no thumbnail and must not borrow the image's.
+    expect(await browser.execute((n) => {
+      const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+        .find((el) => (el.textContent || '').includes(n));
+      return !!item && !item.querySelector('[data-testid="attachment-thumb"]');
+    }, ATTACHMENT_PDF)).toBe(true);
+  });
+
+  it('offers Save As on the row without a right-click', async function () {
+    expect(await browser.execute((n) => {
+      const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+        .find((el) => (el.textContent || '').includes(n));
+      const btn = item?.querySelector('[data-testid="attachment-save-as"]');
+      // Four icon buttons in one row: each must still say a different thing,
+      // or a later spec clicking by label gets whichever comes first.
+      const labels = [...item.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+      return !!btn && new Set(labels).size === labels.length;
+    }, ATTACHMENT_PDF)).toBe(true);
+  });
+
+  // The reported gap: "Download All" wrote into the app's own attachment
+  // cache, so the files were downloaded nowhere the user could reach. This
+  // asserts against the real filesystem — the folder and both names are read
+  // back off disk after the button runs.
+  it('exports every attachment into one new folder under Downloads', async function () {
+    expect(await installInvokeProbe()).toBe(true);
+    let exported = null;
+    try {
+      expect(await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="attachment-download-all"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      })).toBe(true);
+
+      // Finder is stubbed above, so its argument is the only place the
+      // exported folder's real path surfaces.
+      await browser.waitUntil(async () => (await invokedCommands()).includes('show_in_folder'), {
+        timeout: 60_000, interval: 250,
+        timeoutMsg: `the export never reached show_in_folder (saw ${JSON.stringify(await invokedCommands())})`,
+      });
+      exported = (await invokedWith('show_in_folder'))[0].path;
+      expect(exported).toContain('/Downloads/');
+      expect(exported).toContain(ATTACHMENT_SUBJECT);
+      expect(exported).toContain('Attachments');
+
+      // Not the app's private cache — that is the defect this replaced.
+      expect(exported).not.toContain('attachment_cache');
+
+      const names = await browser.executeAsync((dir, done) => {
+        window.__TAURI__.core.invoke('plugin:fs|read_dir', { path: dir, options: {} })
+          .then((entries) => done(entries.map((e) => e.name).sort()), (e) => done(String(e)));
+      }, exported);
+      expect(names).toEqual([ATTACHMENT_PDF, ATTACHMENT_PNG].sort());
+    } finally {
+      if (exported) {
+        await browser.executeAsync((dir, done) => {
+          window.__TAURI__.core.invoke('plugin:fs|remove', { path: dir, options: { recursive: true } })
+            .then(() => done(true), () => done(false));
+        }, exported);
+      }
+      expect(await removeInvokeProbe()).toBe(true);
+    }
+  });
+
+  // WebDriver cannot perform a real OS drag session, so this proves the seam
+  // the app owns: the browser drag is cancelled and a native drag is started
+  // on a real path, never on a blob or a data: URI.
+  it('starts a native drag on the file, not a webloc', async function () {
+    expect(await installInvokeProbe()).toBe(true);
+    try {
+      expect(await browser.execute((n) => {
+        const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+          .find((el) => (el.textContent || '').includes(n));
+        return item?.getAttribute('draggable') === 'true';
+      }, ATTACHMENT_PDF)).toBe(true);
+
+      expect(await browser.execute((n) => {
+        const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+          .find((el) => (el.textContent || '').includes(n));
+        const event = new Event('dragstart', { bubbles: true, cancelable: true });
+        item.dispatchEvent(event);
+        // WebKit's own drag hands the Desktop a .webloc; cancelling it is
+        // the precondition for the native session replacing it.
+        return event.defaultPrevented;
+      }, ATTACHMENT_PDF)).toBe(true);
+
+      await browser.waitUntil(async () => (await invokedCommands()).includes('plugin:drag|start_drag'), {
+        timeout: 30_000, interval: 250,
+        timeoutMsg: `dragstart never reached start_drag (saw ${JSON.stringify(await invokedCommands())})`,
+      });
+      const [args] = await invokedWith('plugin:drag|start_drag');
+      expect(args.item).toHaveLength(1);
+      expect(args.item[0].startsWith('/')).toBe(true);
+      expect(args.item[0].endsWith(ATTACHMENT_PDF)).toBe(true);
+      expect(args.image.startsWith('data:image/png;base64,')).toBe(true);
+    } finally {
+      expect(await removeInvokeProbe()).toBe(true);
+    }
   });
 });
