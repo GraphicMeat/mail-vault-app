@@ -1019,7 +1019,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
                           className="px-4 py-2 bg-mail-danger hover:bg-mail-danger/80
                                     text-white rounded-lg transition-colors text-sm font-medium"
                         >
-                          {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? t('settings.accounts.removeSignOut') : t('settings.accounts.remove')}
+                          {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? t('settings.accounts.removeSignOut') : t('common.remove')}
                         </button>
                         <button
                           onClick={() => setShowRemoveConfirm(false)}

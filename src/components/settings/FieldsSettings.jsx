@@ -7,6 +7,60 @@ import { useT } from '../../i18n/index.js';
 const KINDS = ['select', 'multi_select', 'date', 'checkbox', 'text'];
 const GLOBAL = '*';
 
+/// The choices a select or multi-select offers. Ids never change once given
+/// out: a message holds the id, so renaming a choice must leave every value
+/// exactly where it is.
+function OptionEditor({ field, onSave, usageOf }) {
+  const t = useT();
+  const [label, setLabel] = useState('');
+  const [removing, setRemoving] = useState(null);
+  const [usage, setUsage] = useState({});
+
+  const add = (event) => {
+    event.preventDefault();
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    const taken = field.options.some(option => option.label.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+    if (taken) return;
+    setLabel('');
+    onSave([...field.options, {
+      id: globalThis.crypto?.randomUUID?.() || `option-${Date.now()}-${field.options.length}`,
+      label: trimmed,
+      color: '',
+    }]);
+  };
+
+  const rename = (option, next) => {
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === option.label) return;
+    onSave(field.options.map(item => (item.id === option.id ? { ...item, label: trimmed } : item)));
+  };
+
+  const askToRemove = async (option) => {
+    setRemoving(option.id);
+    setUsage(await usageOf(field.id));
+  };
+
+  return <span className="field-options" data-testid={`field-options-${field.id}`}>
+    {field.options.map(option => <span key={option.id} className="field-option">
+      <input data-testid={`option-label-${option.id}`} defaultValue={option.label} maxLength={80}
+        aria-label={option.label} onBlur={event => rename(option, event.target.value)} />
+      {removing === option.id
+        ? <button type="button" data-testid={`option-remove-confirm-${option.id}`}
+          onClick={() => { setRemoving(null); onSave(field.options.filter(item => item.id !== option.id)); }}>
+          {t('fields.optionRemoveConfirm', { count: usage[option.id] || 0 })}
+        </button>
+        : <button type="button" data-testid={`option-remove-${option.id}`} onClick={() => askToRemove(option)}
+          aria-label={`${t('common.remove')}: ${option.label}`}>×</button>}
+    </span>)}
+    <form data-testid={`new-option-form-${field.id}`} onSubmit={add}>
+      <input data-testid={`new-option-${field.id}`} value={label} maxLength={80}
+        placeholder={t('fields.newOption')} aria-label={t('fields.newOption')}
+        onChange={event => setLabel(event.target.value)} />
+    </form>
+  </span>;
+}
+
 /// The custom fields of the active account: what they are called, what kind of
 /// answer they take, and whether every account shares them.
 export function FieldsSettings() {
@@ -18,6 +72,7 @@ export function FieldsSettings() {
   const saveField = useFieldStore(state => state.saveField);
   const deleteField = useFieldStore(state => state.deleteField);
   const copyFields = useFieldStore(state => state.copyFields);
+  const optionUsage = useFieldStore(state => state.optionUsage);
   const [name, setName] = useState('');
   const [kind, setKind] = useState('select');
   const [confirming, setConfirming] = useState(null);
@@ -53,6 +108,8 @@ export function FieldsSettings() {
     scope: field.scope === GLOBAL ? accountId : GLOBAL,
   });
 
+  const saveOptions = (field, options) => saveField(accountId, { ...field, options });
+
   return <section className="fields-settings" aria-label={t('fields.section')}>
     <div className="sidebar-section-heading"><h2>{t('fields.section')}</h2></div>
     <p className="text-xs text-mail-text-muted">{t('fields.explainer')}</p>
@@ -75,6 +132,8 @@ export function FieldsSettings() {
             title={t('common.delete')} aria-label={`${t('common.delete')}: ${field.name}`}>
             <Trash2 size={12} />
           </button>}
+        {(field.kind === 'select' || field.kind === 'multi_select')
+          && <OptionEditor field={field} onSave={options => saveOptions(field, options)} usageOf={optionUsage} />}
       </li>)}
     </ul>
 

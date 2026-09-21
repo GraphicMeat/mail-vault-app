@@ -710,3 +710,90 @@
   margin-top: 8px;
   font-size: 12px;
 }
+
+/* ── View editor and field choices ───────────────────────────────────────── */
+
+.sidebar-view-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.sidebar-view-entry .sidebar-view-row {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.sidebar-view-edit {
+  flex: 0 0 auto;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--mail-text-muted);
+  opacity: 0;
+}
+
+.sidebar-view-entry:hover .sidebar-view-edit,
+.sidebar-view-edit:focus-visible {
+  opacity: 1;
+}
+
+.view-editor {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 8px;
+  border: 1px solid var(--mail-border);
+  border-radius: 6px;
+  background: var(--mail-surface);
+  font-size: 11px;
+}
+
+.view-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.view-editor input[type="text"],
+.view-editor input:not([type]),
+.view-editor select {
+  padding: 2px 4px;
+  border: 1px solid var(--mail-border);
+  border-radius: 4px;
+  background: var(--mail-bg);
+  color: var(--mail-text);
+  font-size: 11px;
+}
+
+.view-editor .is-danger {
+  color: var(--mail-danger, #c0392b);
+}
+
+.field-options {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+  margin-top: 4px;
+}
+
+.field-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.field-options input {
+  padding: 1px 4px;
+  border: 1px solid var(--mail-border);
+  border-radius: 4px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font-size: 11px;
+  max-width: 120px;
+}

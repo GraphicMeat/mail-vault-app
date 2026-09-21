@@ -36,6 +36,7 @@ beforeEach(() => {
     fields: { 'acct-1': [OWNER, PRIORITY] },
     fieldsFor(accountId) { return this.fields[accountId] || []; },
     loadFields: vi.fn(async () => []),
+    optionUsage: vi.fn(async () => ({ hi: 2 })),
     saveField: vi.fn(async () => ({})),
     deleteField: vi.fn(async () => {}),
     copyFields: vi.fn(async () => []),
@@ -92,5 +93,51 @@ describe('the custom field editor', () => {
     fireEvent.click(screen.getByTestId('copy-field-x1'));
     fireEvent.click(screen.getByTestId('copy-fields-run'));
     expect(useFieldStoreMock.getState().copyFields).toHaveBeenCalledWith(['x1'], 'acct-1');
+  });
+
+  it('only offers choices for the kinds that take them', () => {
+    render(<FieldsSettings />);
+    expect(screen.getByTestId('field-options-f1')).toBeTruthy();
+    expect(screen.queryByTestId('field-options-g1')).toBeNull();
+  });
+
+  it('adds a choice to a select', () => {
+    render(<FieldsSettings />);
+    fireEvent.change(screen.getByTestId('new-option-f1'), { target: { value: 'Urgent' } });
+    fireEvent.submit(screen.getByTestId('new-option-form-f1'));
+    const [, field] = useFieldStoreMock.getState().saveField.mock.calls[0];
+    expect(field.options.map(option => option.label)).toEqual(['High', 'Urgent']);
+    expect(field.options[1].id).toBeTruthy();
+    expect(field.options[1].id).not.toBe(field.options[0].id);
+  });
+
+  it('will not add a choice twice under one name', () => {
+    render(<FieldsSettings />);
+    fireEvent.change(screen.getByTestId('new-option-f1'), { target: { value: 'high' } });
+    fireEvent.submit(screen.getByTestId('new-option-form-f1'));
+    expect(useFieldStoreMock.getState().saveField).not.toHaveBeenCalled();
+  });
+
+  it('renames a choice without changing what messages hold', () => {
+    render(<FieldsSettings />);
+    const input = screen.getByTestId('option-label-hi');
+    fireEvent.change(input, { target: { value: 'Highest' } });
+    fireEvent.blur(input);
+    const [, field] = useFieldStoreMock.getState().saveField.mock.calls[0];
+    // The id is untouched — that is what every message holds.
+    expect(field.options).toEqual([{ id: 'hi', label: 'Highest' }]);
+  });
+
+  /// Removing a choice leaves it on every message that already holds it, where
+  /// it renders as nothing at all. The count is what makes that a decision.
+  it('says how many messages hold a choice before it is removed', async () => {
+    render(<FieldsSettings />);
+    fireEvent.click(screen.getByTestId('option-remove-hi'));
+    await screen.findByTestId('option-remove-confirm-hi');
+    expect(screen.getByTestId('option-remove-confirm-hi').textContent).toContain('2');
+    expect(useFieldStoreMock.getState().saveField).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('option-remove-confirm-hi'));
+    const [, field] = useFieldStoreMock.getState().saveField.mock.calls[0];
+    expect(field.options).toEqual([]);
   });
 });

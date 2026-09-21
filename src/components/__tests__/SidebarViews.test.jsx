@@ -21,6 +21,9 @@ vi.mock('../../stores/viewStore', async () => {
   const actual = await vi.importActual('../../stores/viewStore');
   return { useViewStore, viewLabel: actual.viewLabel };
 });
+vi.mock('../ViewEditor', () => ({
+  ViewEditor: ({ view }) => React.createElement('div', { 'data-testid': `view-editor-${view.id}` }),
+}));
 
 const { SidebarViews } = await import('../SidebarViews');
 
@@ -77,5 +80,23 @@ describe('the Views section', () => {
     expect(screen.getByTestId('view-row-builtin-starred')).toBeTruthy();
     expect(screen.getByTestId('view-row-v1')).toBeTruthy();
     expect(screen.queryByText('Receipts')).toBeNull();
+  });
+
+  it('opens the editor for the view whose pencil was pressed', () => {
+    render(<SidebarViews />);
+    fireEvent.click(screen.getByTestId('view-edit-v1'));
+    expect(screen.getByTestId('view-editor-v1')).toBeTruthy();
+    expect(screen.queryByTestId('view-editor-builtin-starred')).toBeNull();
+  });
+
+  it('editing does not open the view', () => {
+    render(<SidebarViews />);
+    fireEvent.click(screen.getByTestId('view-edit-v1'));
+    expect(useViewStoreMock.getState().openView).not.toHaveBeenCalled();
+  });
+
+  it('the collapsed rail offers no editor', () => {
+    render(<SidebarViews collapsed />);
+    expect(screen.queryByTestId('view-edit-v1')).toBeNull();
   });
 });

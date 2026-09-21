@@ -117,7 +117,25 @@ export const useViewStore = create((set, get) => ({
     const saved = await daemonCall('views.save', { view });
     await get().loadViews();
     void get().refreshCounts();
+    // Editing the view on screen changes what it holds; showing the old rows
+    // under the new name would be the worst of both.
+    if (get().activeViewId === view.id) void get().openView(view.id);
     return saved;
+  },
+
+  /// Move a view past its neighbour. Positions are what the sidebar orders by,
+  /// so both rows have to be written.
+  moveView: async (id, delta) => {
+    const views = [...get().views].sort((a, b) => a.position - b.position);
+    const index = views.findIndex(view => view.id === id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= views.length) return false;
+    const moving = views[index];
+    const displaced = views[target];
+    await daemonCall('views.save', { view: { ...moving, position: displaced.position } });
+    await daemonCall('views.save', { view: { ...displaced, position: moving.position } });
+    await get().loadViews();
+    return true;
   },
 
   deleteView: async (id) => {

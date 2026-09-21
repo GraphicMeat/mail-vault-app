@@ -58,6 +58,18 @@ export const useFieldStore = create((set, get) => ({
     await get().loadFields(accountId);
   },
 
+  /// How many messages hold each choice of a field. Asked before a choice is
+  /// removed: removing one leaves it on every message that already holds it,
+  /// where it renders as nothing.
+  optionUsage: async (fieldId) => {
+    try {
+      const usage = await daemonCall('fields.option_usage', { fieldId });
+      return usage && typeof usage === 'object' ? usage : {};
+    } catch {
+      return {};
+    }
+  },
+
   /// Copy a schema, or part of one, into another account. The fields travel;
   /// the answers stay where they were given.
   copyFields: async (fieldIds, accountId) => {

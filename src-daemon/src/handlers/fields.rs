@@ -70,6 +70,7 @@ fn run(app_dir: &std::path::Path, method: &str, params: &Value) -> Result<Value,
                 .collect();
             Ok(serde_json::json!({ "values": rows }))
         }
+        "fields.option_usage" => json_of(fields::option_usage(conn, &arg(params, "fieldId")?)?),
         "fields.set" => {
             let item: MessageRef = serde_json::from_value(params.get("item").cloned().unwrap_or(Value::Null))
                 .map_err(|e| format!("item: {e}"))?;
@@ -202,6 +203,17 @@ mod tests {
         assert!(resp.result.is_none());
         let got = call(&s, "fields.values", json!({"items": [item(7, "<one@x.test>")]})).await;
         assert_eq!(got["values"][0][&field], "hi", "the answer is still there");
+    }
+
+    #[tokio::test]
+    async fn the_editor_can_ask_how_many_messages_hold_each_choice() {
+        let s = st();
+        let field = priority(&s, "a").await;
+        call(&s, "fields.set", json!({"item": item(7, "<one@x.test>"), "fieldId": field, "value": "hi"})).await;
+        call(&s, "fields.set", json!({"item": item(8, "<two@x.test>"), "fieldId": field, "value": "hi"})).await;
+        let usage = call(&s, "fields.option_usage", json!({"fieldId": field})).await;
+        assert_eq!(usage["hi"], 2);
+        assert!(usage.get("lo").is_none());
     }
 
     #[tokio::test]

@@ -217,6 +217,36 @@ pub fn set_value(
     .map_err(|e| e.to_string())
 }
 
+/// How many messages hold each option of a field, per option id.
+///
+/// Removing an option from a select does not remove it from the messages that
+/// already carry it — those values would just stop rendering. The editor shows
+/// this count so nobody deletes an option blind.
+pub fn option_usage(conn: &Connection, field_id: &str) -> Result<HashMap<String, i64>, String> {
+    let mut stmt = conn
+        .prepare("SELECT value_json, COUNT(*) FROM field_values WHERE field_id = ?1 GROUP BY value_json")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([field_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(|e| e.to_string())?;
+    let mut counts: HashMap<String, i64> = HashMap::new();
+    for row in rows {
+        let (value_json, count) = row.map_err(|e| e.to_string())?;
+        let value: serde_json::Value = serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+        // A multi-select holds several option ids in one value.
+        match value {
+            serde_json::Value::String(id) => *counts.entry(id).or_default() += count,
+            serde_json::Value::Array(ids) => {
+                for id in ids.into_iter().filter_map(|v| v.as_str().map(str::to_owned)) {
+                    *counts.entry(id).or_default() += count;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(counts)
+}
+
 /// The identities matching one field filter, for a saved view.
 pub fn messages_matching(conn: &Connection, account_id: &str, filter: &FieldFilter) -> Result<Vec<String>, String> {
     let json = serde_json::to_string(&filter.value).map_err(|e| e.to_string())?;
@@ -440,6 +470,36 @@ mod tests {
         let after = FieldFilter { field_id: "f1".into(), op: "after".into(), value: json!("2026-06-01") };
         assert_eq!(messages_matching(&c, "work", &before).unwrap(), vec!["early@x".to_string()]);
         assert_eq!(messages_matching(&c, "work", &after).unwrap(), vec!["late@x".to_string()]);
+    }
+
+    #[test]
+    fn option_usage_counts_the_messages_holding_each_choice() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        set_value(&c, "work", "one@x", "f1", Some(&json!("hi"))).unwrap();
+        set_value(&c, "work", "two@x", "f1", Some(&json!("hi"))).unwrap();
+        set_value(&c, "work", "three@x", "f1", Some(&json!("lo"))).unwrap();
+        let usage = option_usage(&c, "f1").unwrap();
+        assert_eq!(usage.get("hi"), Some(&2));
+        assert_eq!(usage.get("lo"), Some(&1));
+    }
+
+    #[test]
+    fn a_multi_select_counts_every_choice_a_message_holds() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Tags", "multi_select")).unwrap();
+        set_value(&c, "work", "one@x", "f1", Some(&json!(["hi", "lo"]))).unwrap();
+        set_value(&c, "work", "two@x", "f1", Some(&json!(["lo"]))).unwrap();
+        let usage = option_usage(&c, "f1").unwrap();
+        assert_eq!(usage.get("hi"), Some(&1));
+        assert_eq!(usage.get("lo"), Some(&2));
+    }
+
+    #[test]
+    fn a_field_nobody_has_answered_counts_nothing() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        assert!(option_usage(&c, "f1").unwrap().is_empty());
     }
 
     #[test]
