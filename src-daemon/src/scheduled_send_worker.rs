@@ -62,7 +62,22 @@ fn backoff_ms(attempt: i64) -> i64 {
     30_000 * 2i64.pow((attempt.max(1) - 1) as u32)
 }
 
+/// When the daemon came up. A credential read that fails inside
+/// `CREDENTIAL_GRACE` of that moment is treated as transient rather than
+/// terminal: with always-on enabled, launchd starts the daemon at login, and
+/// the login keychain is unlocked by login too — a read landing on the wrong
+/// side of that race would otherwise kill every send due around boot, which
+/// is exactly the window the catch-up pass always hits. Costing a dead
+/// credential one extra retry is the cheaper mistake.
+static STARTED_AT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+const CREDENTIAL_GRACE: Duration = Duration::from_secs(120);
+
+fn within_credential_grace() -> bool {
+    STARTED_AT.get().is_some_and(|t| t.elapsed() < CREDENTIAL_GRACE)
+}
+
 pub(crate) fn start(state: Arc<DaemonState>) {
+    let _ = STARTED_AT.set(std::time::Instant::now());
     tokio::spawn(async move { run(state).await });
 }
 
@@ -233,7 +248,10 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
     // a background job off whatever a stale RPC payload said.
     let account = match crate::credentials::resolve_account_credentials(&row.account_id) {
         Ok(a) => a,
-        Err(e) => return Outcome::Terminal(format!("Could not load this account's credentials: {e}")),
+        Err(e) => {
+            let msg = format!("Could not load this account's credentials: {e}");
+            return if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) };
+        }
     };
 
     let stored: StoredEnvelope = match serde_json::from_str(&row.envelope) {
