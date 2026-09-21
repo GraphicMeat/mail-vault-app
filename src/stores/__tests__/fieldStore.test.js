@@ -6,7 +6,7 @@ vi.mock('../../services/daemonClient', () => ({
   DaemonError: class DaemonError extends Error {},
 }));
 
-const { useFieldStore, fieldRowKey, requestRowValues } = await import('../fieldStore');
+const { useFieldStore, fieldRowKey, requestRowValues, requestSchema } = await import('../fieldStore');
 
 const PRIORITY = {
   id: 'f1', scope: 'acct-1', name: 'Priority', kind: 'select', position: 0,
@@ -111,6 +111,23 @@ describe('custom fields', () => {
   it('a row with no resolvable folder is left alone rather than keyed wrongly', async () => {
     const done = await useFieldStore.getState().setValue(email, { accountId: 'acct-1', mailbox: 'UNIFIED' }, 'f1', 'hi');
     expect(done).toBe(false);
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('asking for a schema', () => {
+  it('asks once, and a refusal never escapes as an unhandled rejection', async () => {
+    mockDaemonCall.mockRejectedValue(new Error('no daemon'));
+    requestSchema('acct-9');
+    requestSchema('acct-9');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(mockDaemonCall.mock.calls.filter(([method]) => method === 'fields.list')).toHaveLength(1);
+  });
+
+  it('does not ask for a schema it already has', async () => {
+    useFieldStore.setState({ fields: { 'acct-3': [] } });
+    requestSchema('acct-3');
+    await new Promise(resolve => setTimeout(resolve, 5));
     expect(mockDaemonCall).not.toHaveBeenCalled();
   });
 });

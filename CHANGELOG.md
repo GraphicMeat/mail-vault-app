@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Fields of your own on any message.** Add the columns your mail actually needs — Owner, Priority, Needs invoice, a due date, a tick box — and fill them in from the reading pane. A field belongs to one account or to all of them, and one account's schema can be copied into another. Fields can be searched (`field:Priority=High`, or `field:Priority` for anything with an answer) and used to build a saved view. Like tags, they are stored on your Mac: nothing is written into the message and nothing is sent to your mail server.
 - **Saved views: your own inboxes, made of filters.** A view is a name and a set of filters — tags, attachments, starred, unread, sender, dates, folders, free text — evaluated across every account and shown in the message list. Nothing is moved or copied: a message can appear in as many views as you like and still live in exactly one folder. Views sit at the top of the sidebar, above your accounts, and MailVault ships three: Needs reply, Starred and Attachments. Any search you can run can be saved as a view from the search bar.
 - **Tags you can put on any message, on any provider.** A message can carry as many tags as you like, independently of the folder it sits in, and they work the same on a server that has no labels of its own. Tag one message from its row or the reading pane, or a whole selection at once, and narrow a search with `tag:receipts` (`tag:"needs reply"` for a name with a space). Tags are stored locally and never change your mail: nothing is written to the message file and nothing is sent to your server.
 - **Keep the conversation beside your reply.** Compose has a remembered toggle for reading the original message, or the thread you replied from, beside the message you are writing.
@@ -20,6 +21,7 @@
 
 ### Fixed
 - **A message deleted in another email client stops haunting All Inboxes.** Its row used to come back every time the view repainted, and every click on it failed, because the removal was only ever written down in a single-folder view. The reading pane also stops calling it a failed load: when the server has proved the message is gone it now says it was removed elsewhere, instead of offering a retry that cannot succeed.
+- **A deleted message no longer leaves its tags behind.** Tags and field values were kept for messages that no longer existed anywhere, and the count beside a tag counted them. They are forgotten when the last copy of a message goes — and only then, so moving a message between folders still keeps everything you put on it.
 - **Unfinished messages return as draft bubbles after a restart.** Compose keeps the message, attachments, sending identity and reply context so you can continue where you left off.
 - **Reply quotes the text you selected.** Selecting part of a message before Reply or Reply All quotes that passage. Without a selection, the whole original is quoted as before.
 - **Tab from Subject goes straight to the message editor.** Formatting controls remain available from the keyboard.

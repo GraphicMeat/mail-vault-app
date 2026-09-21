@@ -73,8 +73,11 @@ fn run(app_dir: &std::path::Path, method: &str, params: &Value) -> Result<Value,
         "fields.set" => {
             let item: MessageRef = serde_json::from_value(params.get("item").cloned().unwrap_or(Value::Null))
                 .map_err(|e| format!("item: {e}"))?;
-            let value = params.get("value").cloned().unwrap_or(Value::Null);
-            fields::set_value(conn, &item.account_id, &item.msg_key(), &arg(params, "fieldId")?, Some(&value))
+            // An explicit null clears the value; a payload with no `value` at
+            // all is a caller bug, and silently forgetting the answer is the
+            // worst possible reading of it.
+            let value = params.get("value").ok_or("Missing value (send null to clear)")?;
+            fields::set_value(conn, &item.account_id, &item.msg_key(), &arg(params, "fieldId")?, Some(value))
                 .map(|_| Value::Null)
         }
         _ => Err(format!("Unknown method: {method}")),
@@ -184,6 +187,21 @@ mod tests {
         let out = call(&s, "fields.delete", json!({"id": field})).await;
         assert_eq!(out["droppedValues"], 2);
         assert!(call(&s, "fields.list", json!({"accountId": "a"})).await.as_array().unwrap().is_empty());
+    }
+
+    /// Forgetting an answer must be asked for, never inferred from a payload
+    /// that lost a key on the way.
+    #[tokio::test]
+    async fn a_set_with_no_value_at_all_is_refused_rather_than_clearing() {
+        let s = st();
+        let field = priority(&s, "a").await;
+        call(&s, "fields.set", json!({"item": item(7, "<one@x.test>"), "fieldId": field, "value": "hi"})).await;
+        let resp = route(&s, "fields.set", &json!({"item": item(7, "<one@x.test>"), "fieldId": field}), json!(1))
+            .await
+            .expect("routed");
+        assert!(resp.result.is_none());
+        let got = call(&s, "fields.values", json!({"items": [item(7, "<one@x.test>")]})).await;
+        assert_eq!(got["values"][0][&field], "hi", "the answer is still there");
     }
 
     #[tokio::test]

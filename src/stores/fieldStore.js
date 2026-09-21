@@ -132,6 +132,25 @@ async function flushRowValues() {
   }
 }
 
+// A schema is asked for once per account. The strip renders on every message,
+// so an unguarded call would retry a failing load on every render — and an
+// uncaught one would surface as an unhandled rejection rather than an absent
+// strip.
+const askedSchemas = new Set();
+
+/// Ask for an account's schema, unless it is loaded or already on its way.
+export function requestSchema(accountId) {
+  if (!accountId || askedSchemas.has(accountId) || useFieldStore.getState().fields[accountId]) return;
+  askedSchemas.add(accountId);
+  useFieldStore
+    .getState()
+    .loadFields(accountId)
+    .catch(error => {
+      askedSchemas.delete(accountId);
+      console.warn('[fields] could not load a schema:', error?.message || error);
+    });
+}
+
 /// Ask for a row's values, unless the render cache already holds them.
 export function requestRowValues(email, location) {
   const key = rowKeyOf(email, location);

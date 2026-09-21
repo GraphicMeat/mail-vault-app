@@ -156,6 +156,27 @@ that file — and the daemon refuses the whole migration while its index cannot
 place an assignment for an account, because the app clears its legacy store on
 a success reply.
 
+### Custom fields
+
+A field is a definition (`fields`) plus a value per message (`field_values`),
+both in `app.db`, both keyed by `identity::msg_key`. `scope` is an account id,
+or `*` for every account; values are always per account, because the same
+message in two accounts is two messages to the person reading it. Sharing a
+field is a scope change on the same row, never a copy, so the values already
+given stay attached; copying a schema to another account makes new fields and
+leaves the answers behind.
+
+Two rules worth keeping: editing a field is an `UPDATE`, never
+`INSERT OR REPLACE` — this store enforces foreign keys, so a REPLACE would
+delete the row and cascade every value away — and clearing a value deletes the
+row rather than storing a null, so "no answer" and "answered nothing" cannot
+read the same to a filter. `fields.set` refuses a payload with no `value` key
+at all: forgetting an answer has to be asked for.
+
+Views narrow on fields the same way they narrow on tags: `app.db` answers which
+identities match, the index answers which rows those are, and the two sets
+intersect. `field:` in the search box does the same over a search's frames.
+
 ### Saved views
 
 A view is a stored `ViewDef` (`app_db::views`) plus an evaluation, never a
@@ -182,6 +203,14 @@ in the file name and `index_doc_from_light` strips them from `row_json`, so
 Starred and unread were not answerable before. The migration reads them back out
 of the file names the index already holds — no re-read of the vault — and a
 rename (which is what starring a message *is*) updates the column.
+
+Metadata is forgotten when its message is. A reconcile pass reports the
+identities of the rows it removed and the daemon prunes `tag_assignments` and
+`field_values` for them — but only after checking no other folder of that
+account still holds the same identity, because a move is a removal plus an
+insertion and the halves can land in either order. That check runs while the
+index lock is held, before `app.db` is opened, so no path holds both in the
+other order.
 
 A tag-filtered view resolves its identities from `app.db` first and passes them
 to the index as a whitelist through a temp table; every `app.db` read happens

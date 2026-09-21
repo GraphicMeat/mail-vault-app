@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -19,9 +19,11 @@ vi.mock('../../stores/slices/unifiedHelpers', () => ({
   resolveEmailLocation: (email) => (email?._mailbox ? { accountId: 'acct-1', mailbox: email._mailbox } : null),
 }));
 const requestRowValues = vi.fn();
+const requestSchema = vi.fn();
 vi.mock('../../stores/fieldStore', () => ({
   useFieldStore: Object.assign(selector => useFieldStoreMock(selector), { getState: () => useFieldStoreMock.getState() }),
   requestRowValues: (...args) => requestRowValues(...args),
+  requestSchema: (...args) => requestSchema(...args),
   fieldRowKey: (a, m, u) => `${a}|${m}|${u}`,
 }));
 
@@ -38,12 +40,13 @@ const email = { uid: 7, messageId: '<abc@x>', _mailbox: 'INBOX' };
 
 beforeEach(() => {
   requestRowValues.mockReset();
+  requestSchema.mockReset();
   useMailStoreMock = create(() => ({ activeAccountId: 'acct-1' }));
   useFieldStoreMock = create(() => ({
     fields: { 'acct-1': [OWNER, PRIORITY, DONE] },
     byRow: { 'acct-1|INBOX|7': { f1: 'hi' } },
     fieldsFor(accountId) { return this.fields[accountId] || []; },
-    valuesFor() { return this.byRow['acct-1|INBOX|7'] || {}; },
+    loadFields: vi.fn(async () => []),
     setValue: vi.fn(async () => true),
   }));
 });
@@ -99,5 +102,21 @@ describe('the property strip in the reader', () => {
   it('renders nothing for a message whose folder cannot be resolved', () => {
     const { container } = render(<FieldStrip email={{ uid: 7 }} />);
     expect(container.textContent).toBe('');
+  });
+
+  it('repaints when the value for the row arrives after it mounted', () => {
+    useFieldStoreMock.setState({ byRow: {} });
+    render(<FieldStrip email={email} />);
+    expect(screen.getByTestId('field-input-f1').value).toBe('');
+    act(() => { useFieldStoreMock.setState({ byRow: { 'acct-1|INBOX|7': { f1: 'lo' } } }); });
+    expect(screen.getByTestId('field-input-f1').value).toBe('lo');
+  });
+
+  /// A unified list holds messages from accounts whose schema was never asked
+  /// for. Rendering nothing for them looks like "this account has no fields".
+  it('asks for a schema it has not got', () => {
+    useFieldStoreMock.setState({ fields: { 'acct-2': [PRIORITY] } });
+    render(<FieldStrip email={email} />);
+    expect(requestSchema).toHaveBeenCalledWith('acct-1');
   });
 });

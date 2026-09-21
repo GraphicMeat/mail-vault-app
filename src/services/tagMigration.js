@@ -29,8 +29,14 @@ export async function bootstrapTags() {
     console.warn('[views] could not load the saved views:', error?.message || error);
   }
   try {
-    const accountId = useMailStore.getState().activeAccountId;
-    if (accountId) await useFieldStore.getState().loadFields(accountId);
+    // Every account, not just the active one: a unified list shows messages
+    // from all of them, and a schema that was never asked for renders as no
+    // fields at all rather than as an error.
+    const mail = useMailStore.getState();
+    const ids = (mail.accounts || []).map(account => account.id).filter(Boolean);
+    for (const accountId of ids.length ? ids : [mail.activeAccountId].filter(Boolean)) {
+      await useFieldStore.getState().loadFields(accountId);
+    }
   } catch (error) {
     console.warn('[fields] could not load the custom fields:', error?.message || error);
   }
