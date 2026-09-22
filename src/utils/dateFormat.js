@@ -48,6 +48,12 @@ const _locale = () => {
   }
 };
 
+/** The same locale every formatter here uses, for a component formatting its own. */
+export const intlLocale = () => _locale();
+
+/** Intl `hour12` for a timeFormat setting; undefined lets the locale decide ('auto'). */
+export const hour12For = (timeFormat) => (timeFormat === '12h' ? true : timeFormat === '24h' ? false : undefined);
+
 /**
  * Build Intl.DateTimeFormat options for time based on the timeFormat setting.
  * Returns { hour12 } or {} (auto = let the locale decide).

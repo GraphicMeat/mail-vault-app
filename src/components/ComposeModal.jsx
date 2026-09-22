@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
-import { useDialogA11y } from '../hooks/useDialogA11y';
+import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
@@ -197,6 +197,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [dragging, setDragging] = useState(false);
   const [composeDelay, setComposeDelay] = useState(() => initialData?._composeDelay ?? null); // null = use global
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduleMaxWidth, setScheduleMaxWidth] = useState();
   const [scheduleDraft, setScheduleDraft] = useState(() => initialData?._scheduleDraft || ({
     localTime: '',
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -587,14 +588,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   }, [showTemplates]);
 
   // Close the schedule popover on click outside or Escape — same shape as
-  // the templates dropdown above.
+  // the templates dropdown above. The picker's calendar and zone list are
+  // portaled to body, outside scheduleRef: while one is open it owns the
+  // outside click and the Escape, and only that layer closes.
   useEffect(() => {
     if (!showSchedulePicker) return;
     const handleClick = (e) => {
+      if (hasOpenPopover()) return;
       if (scheduleRef.current && !scheduleRef.current.contains(e.target)) setShowSchedulePicker(false);
     };
     const handleKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); setShowSchedulePicker(false); }
+      if (e.key === 'Escape' && !hasOpenPopover()) { e.stopPropagation(); setShowSchedulePicker(false); }
     };
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKey, true);
@@ -1478,7 +1482,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   data-testid="compose-schedule-toggle"
                   disabled={sending}
                   title={t('scheduled.compose.menuLabel')}
-                  onClick={() => setShowSchedulePicker(v => !v)}
+                  onClick={() => {
+                    // The panel hangs left from this button inside compose-main,
+                    // which clips: with a reply's context pane open that can be
+                    // ~320px, less than the panel wants. Never wider than the room.
+                    const main = scheduleRef.current?.closest('[data-testid="compose-main"]');
+                    const room = main ? scheduleRef.current.getBoundingClientRect().right - main.getBoundingClientRect().left - 8 : 0;
+                    setScheduleMaxWidth(room > 0 ? room : undefined);
+                    setShowSchedulePicker(v => !v);
+                  }}
                   className="flex items-center justify-center px-2 py-2 bg-mail-accent-fill
                             hover:bg-mail-accent-hover disabled:opacity-50
                             text-white rounded-lg transition-all"
@@ -1486,7 +1498,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   <ChevronRight size={16} className={showSchedulePicker ? '-rotate-90 transition-transform' : 'rotate-90 transition-transform'} />
                 </button>
                 {showSchedulePicker && (
-                  <div className="absolute bottom-full right-0 mb-1 w-80 bg-mail-surface border border-mail-border
+                  <div style={{ maxWidth: scheduleMaxWidth }}
+                    className="absolute bottom-full right-0 mb-1 w-[26rem] bg-mail-surface border border-mail-border
                                   rounded-lg z-50 p-3 space-y-2">
                     <div className="text-sm font-medium text-mail-text">{t('scheduled.compose.pickerTitle')}</div>
                     <SchedulePicker

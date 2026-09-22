@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { zonedTimeToEpoch, isPastLocalTime, formatWallClock } from '../scheduledTime';
+import {
+  zonedTimeToEpoch, isPastLocalTime, formatWallClock, wallClockAt, addDays,
+  presetTomorrow8am, presetNextMonday8am, utcOffsetAt, zoneCity, zoneOptions,
+} from '../scheduledTime';
 
 // US DST rule (2026): America/New_York springs forward on 2026-03-08 at
 // 02:00 local (clocks jump straight to 03:00) — verified independently below
@@ -58,5 +61,124 @@ describe('formatWallClock', () => {
     const out = formatWallClock('2026-03-08T02:30', 'en-US');
     expect(out).toContain('2026');
     expect(out).toMatch(/2:30/);
+  });
+});
+
+describe('formatWallClock with options', () => {
+  it('takes caller options and the hour12 choice, still without tz math', () => {
+    const out = formatWallClock('2026-09-24T16:00', 'en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: false,
+    });
+    expect(out).toContain('Thu');
+    expect(out).toContain('24');
+    expect(out).toContain('Sep');
+    expect(out).toContain('16:00');
+  });
+});
+
+// Every expectation below pins its own instant: "today", offsets and presets
+// all depend on when the suite runs and on the runner's own zone otherwise.
+// 2026-09-23 23:30 UTC is Wednesday evening in Los Angeles and already
+// Thursday morning in Tokyo.
+const WED_LATE_UTC = Date.UTC(2026, 8, 23, 23, 30);
+
+describe('wallClockAt', () => {
+  it('reads the wall clock in the zone asked for, not the machine\'s', () => {
+    expect(wallClockAt(WED_LATE_UTC, 'Asia/Tokyo')).toBe('2026-09-24T08:30');
+    expect(wallClockAt(WED_LATE_UTC, 'America/Los_Angeles')).toBe('2026-09-23T16:30');
+    expect(wallClockAt(WED_LATE_UTC, 'UTC')).toBe('2026-09-23T23:30');
+  });
+
+  it('round-trips with zonedTimeToEpoch', () => {
+    expect(zonedTimeToEpoch(wallClockAt(WED_LATE_UTC, NY), NY)).toBe(WED_LATE_UTC);
+  });
+});
+
+describe('addDays', () => {
+  it('crosses month, year and leap-day boundaries', () => {
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addDays('2026-09-28', 7)).toBe('2026-10-05');
+  });
+});
+
+describe('presets in the selected zone', () => {
+  it('"tomorrow" is tomorrow where the email is going', () => {
+    // The two zones disagree about today's date at this instant.
+    expect(presetTomorrow8am('Asia/Tokyo', WED_LATE_UTC)).toBe('2026-09-25T08:00');
+    expect(presetTomorrow8am('America/Los_Angeles', WED_LATE_UTC)).toBe('2026-09-24T08:00');
+  });
+
+  it('"Monday" is the next Monday in the zone, strictly after its today', () => {
+    expect(presetNextMonday8am('Asia/Tokyo', WED_LATE_UTC)).toBe('2026-09-28T08:00');
+    // 2026-09-28 01:00 UTC: already Monday in Tokyo (so the NEXT one), still
+    // Sunday in Los Angeles (so tomorrow).
+    const mondayInTokyo = Date.UTC(2026, 8, 28, 1, 0);
+    expect(presetNextMonday8am('Asia/Tokyo', mondayInTokyo)).toBe('2026-10-05T08:00');
+    expect(presetNextMonday8am('America/Los_Angeles', mondayInTokyo)).toBe('2026-09-28T08:00');
+  });
+
+  it('never lands in the past', () => {
+    for (const tz of ['Asia/Tokyo', 'America/Los_Angeles', 'Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+      expect(isPastLocalTime(presetTomorrow8am(tz, WED_LATE_UTC), tz, WED_LATE_UTC), tz).toBe(false);
+      expect(isPastLocalTime(presetNextMonday8am(tz, WED_LATE_UTC), tz, WED_LATE_UTC), tz).toBe(false);
+    }
+  });
+});
+
+describe('utcOffsetAt', () => {
+  it('is the offset at the instant asked for: New York either side of the November change', () => {
+    expect(utcOffsetAt(NY, Date.UTC(2026, 8, 15, 12))).toEqual({ minutes: -240, text: '-04:00' });
+    expect(utcOffsetAt(NY, Date.UTC(2026, 10, 15, 12))).toEqual({ minutes: -300, text: '-05:00' });
+  });
+
+  it('reads a bare GMT as +00:00 and keeps half hours', () => {
+    expect(utcOffsetAt('UTC', WED_LATE_UTC)).toEqual({ minutes: 0, text: '+00:00' });
+    expect(utcOffsetAt('Asia/Kolkata', WED_LATE_UTC)).toEqual({ minutes: 330, text: '+05:30' });
+  });
+});
+
+describe('zoneCity', () => {
+  it('is the last segment with spaces', () => {
+    expect(zoneCity('America/New_York')).toBe('New York');
+    expect(zoneCity('America/Argentina/Buenos_Aires')).toBe('Buenos Aires');
+    expect(zoneCity('UTC')).toBe('UTC');
+  });
+});
+
+describe('zoneOptions', () => {
+  const JAN = Date.UTC(2026, 0, 15, 12);
+  const zones = ['Europe/Vilnius', 'Asia/Kolkata', NY, 'Europe/Paris', 'Europe/Berlin'];
+
+  it('labels each zone with its offset, spaces for underscores, value untouched', () => {
+    const ny = zoneOptions([NY], JAN)[0];
+    expect(ny.value).toBe(NY);
+    expect(ny.label).toBe('(UTC-05:00) America/New York');
+    expect(zoneOptions(['Europe/Vilnius'], JAN)[0].label).toBe('(UTC+02:00) Europe/Vilnius');
+  });
+
+  it('labels at the instant given, so a send after the clocks change shows its own offset', () => {
+    expect(zoneOptions([NY], Date.UTC(2026, 8, 15, 12))[0].label).toBe('(UTC-04:00) America/New York');
+    expect(zoneOptions([NY], Date.UTC(2026, 10, 15, 12))[0].label).toBe('(UTC-05:00) America/New York');
+  });
+
+  it('sorts by offset, then by id', () => {
+    expect(zoneOptions(zones, JAN).map(o => o.value))
+      .toEqual([NY, 'Europe/Berlin', 'Europe/Paris', 'Europe/Vilnius', 'Asia/Kolkata']);
+  });
+
+  it('carries every offset spelling a search might use', () => {
+    const [vilnius] = zoneOptions(['Europe/Vilnius'], JAN);
+    expect(vilnius.keywords).toEqual(expect.arrayContaining(
+      ['Europe/Vilnius', 'Vilnius', '+2', '+02', '+02:00', 'utc+2', 'gmt+2']));
+    const [kolkata] = zoneOptions(['Asia/Kolkata'], JAN);
+    expect(kolkata.keywords).toEqual(expect.arrayContaining(['+5:30', '+05:30', 'utc+5:30', 'gmt+5:30']));
+    const [ny] = zoneOptions([NY], JAN);
+    expect(ny.keywords).toEqual(expect.arrayContaining(['New York', '-5', '-05', '-05:00', 'utc-5', 'gmt-5', 'EST']));
+  });
+
+  it('keeps only letters-only abbreviations, never a "GMT+2" spelled as one', () => {
+    const [vilnius] = zoneOptions(['Europe/Vilnius'], JAN);
+    expect(vilnius.keywords.filter(k => /^GMT/.test(k))).toEqual([]);
   });
 });

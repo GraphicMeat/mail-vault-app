@@ -204,8 +204,9 @@ describe('Scheduled Send', function () {
       timeout: 10_000, interval: 200, timeoutMsg: 'The schedule picker never opened from the toggle',
     });
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-preset-monday"]')?.click());
-    const localTime = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-time"]')?.value);
-    const tz = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-tz"]')?.value);
+    // Both fields are buttons now (date-time picker, zone combobox); the value lives on data-value.
+    const localTime = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-time"]')?.dataset.value);
+    const tz = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-tz"]')?.dataset.value);
     expect(localTime).toBeTruthy();
 
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-submit"]')?.click());

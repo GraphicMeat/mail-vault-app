@@ -169,3 +169,36 @@ describe('compose editing a scheduled email', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+// The picker's zone list and calendar are portaled to body, outside the
+// schedule panel's DOM: a click or an Escape inside one used to read as
+// "outside the panel" and closed the whole panel under the user.
+describe('compose schedule panel with a picker open', () => {
+  it('a click in the zone list and its Escape close only the list', async () => {
+    render(<ComposeModal initialData={initialData} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-schedule-tz'));
+    const search = screen.getByTestId('compose-schedule-tz-search');
+    fireEvent.mouseDown(search);
+    expect(screen.getByTestId('compose-schedule-submit')).toBeTruthy();
+
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.queryByTestId('compose-schedule-tz-search')).toBeNull();
+    expect(screen.getByTestId('compose-schedule-submit')).toBeTruthy();
+
+    // With the list gone, Escape belongs to the schedule panel again.
+    fireEvent.keyDown(screen.getByTestId('compose-schedule-tz'), { key: 'Escape' });
+    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
+  });
+
+  it('the panel is never wider than the room left of its button', async () => {
+    render(<ComposeModal initialData={initialData} onClose={() => {}} onSaveState={() => {}} />);
+    const toggle = await screen.findByTestId('compose-schedule-toggle');
+    // A narrow compose-main, as a reply's context pane leaves it.
+    vi.spyOn(screen.getByTestId('compose-main'), 'getBoundingClientRect').mockReturnValue({ left: 100, right: 420 });
+    vi.spyOn(toggle.parentElement, 'getBoundingClientRect').mockReturnValue({ left: 380, right: 400 });
+    fireEvent.click(toggle);
+    const panel = screen.getByTestId('compose-schedule-submit').closest('.absolute');
+    expect(panel.style.maxWidth).toBe('292px');
+  });
+});

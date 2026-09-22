@@ -19,6 +19,7 @@ const openDialogs = [];
 const openPopovers = [];
 
 export function hasOpenDialog() { return openDialogs.length > 0; }
+export function hasOpenPopover() { return openPopovers.length > 0; }
 
 export function registerPopoverLayer(onClose, { handlesTab = false } = {}) {
   const layer = { onClose, handlesTab };

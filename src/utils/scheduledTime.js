@@ -8,6 +8,29 @@
 // No tz library in this project (and none is being added) — `Intl` already
 // knows the rules.
 
+// Building an Intl.DateTimeFormat is the expensive part and the zone list asks
+// for two per zone (~840) every time the send instant crosses an hour; the
+// formatters themselves never change, so they are built once per zone.
+const formatters = new Map();
+function formatter(tz, kind) {
+  const key = `${tz}|${kind}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', kind === 'parts'
+      ? { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit' }
+      : { timeZone: tz, timeZoneName: kind });
+    formatters.set(key, f);
+  }
+  return f;
+}
+
+function partsIn(tz, ms) {
+  return Object.fromEntries(formatter(tz, 'parts').formatToParts(ms).map(p => [p.type, p.value]));
+}
+
+const pad = (n) => String(n).padStart(2, '0');
+
 /**
  * `localTime` ("YYYY-MM-DDTHH:MM", as `<input type="datetime-local">` gives
  * it) interpreted in IANA `tz`, as an epoch ms instant.
@@ -23,14 +46,7 @@
 export function zonedTimeToEpoch(localTime, tz) {
   const guess = Date.parse(`${localTime}:00Z`);
   const offsetAt = (ms) => {
-    const parts = Object.fromEntries(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        hourCycle: 'h23',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-      }).formatToParts(ms).map(p => [p.type, p.value])
-    );
+    const parts = partsIn(tz, ms);
     const asIfUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
     return asIfUtc - ms; // ms east of UTC at this instant
   };
@@ -50,10 +66,75 @@ export function isPastLocalTime(localTime, tz, now = Date.now()) {
 // Display only — a wall clock prints as itself, no tz conversion needed, so
 // this never touches zonedTimeToEpoch. Formatted as if the picked numbers
 // were UTC purely to borrow Intl's locale-aware month/weekday names.
-export function formatWallClock(localTime, locale) {
+export function formatWallClock(localTime, locale, options = { dateStyle: 'medium', timeStyle: 'short' }) {
   const [datePart, timePart] = localTime.split('T');
   const [y, m, d] = datePart.split('-').map(Number);
   const [h, min] = (timePart || '00:00').split(':').map(Number);
   const asIfUtc = new Date(Date.UTC(y, m - 1, d, h, min));
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(asIfUtc);
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(asIfUtc);
+}
+
+/** What the clock on the wall in `tz` reads at instant `ms`, as "YYYY-MM-DDTHH:MM". */
+export function wallClockAt(ms, tz) {
+  const p = partsIn(tz, ms);
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+/** The calendar date `n` days after "YYYY-MM-DD". */
+export function addDays(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// Presets are wall clocks IN `tz`: "tomorrow" is tomorrow where the email is
+// going, which is not tomorrow here when the two sides of the date line
+// disagree. Both land strictly after today in `tz`, so never in the past.
+export function presetTomorrow8am(tz, now = Date.now()) {
+  return `${addDays(wallClockAt(now, tz).slice(0, 10), 1)}T08:00`;
+}
+
+export function presetNextMonday8am(tz, now = Date.now()) {
+  const today = wallClockAt(now, tz).slice(0, 10);
+  const weekday = new Date(`${today}T00:00Z`).getUTCDay();
+  return `${addDays(today, (8 - weekday) % 7 || 7)}T08:00`;
+}
+
+/**
+ * `tz`'s offset from UTC at instant `ms`: `{ minutes, text: '+02:00' }`.
+ * At an instant, not "now": New York is -04:00 in September and -05:00 after
+ * the first Sunday of November, and the label must match the send.
+ */
+export function utcOffsetAt(tz, ms) {
+  const name = formatter(tz, 'longOffset').formatToParts(ms).find(p => p.type === 'timeZoneName')?.value || '';
+  // "GMT+05:30"; a bare "GMT" is +00:00. U+2212 in case a runtime prints a real minus.
+  const m = /([+\-\u2212])(\d{2}):(\d{2})/.exec(name);
+  if (!m) return { minutes: 0, text: '+00:00' };
+  const sign = m[1] === '+' ? '+' : '-';
+  return { minutes: (sign === '+' ? 1 : -1) * (+m[2] * 60 + +m[3]), text: `${sign}${m[2]}:${m[3]}` };
+}
+
+/** "America/New_York" -> "New York": the last segment, the way people say it. */
+export function zoneCity(tz) {
+  return tz.split('/').pop().replace(/_/g, ' ');
+}
+
+/**
+ * The timezone picker's options for `zones` as they stand at instant `ms`:
+ * label "(UTC-04:00) America/New York", value the IANA id untouched, sorted
+ * by offset then id. Keywords let a search for "+2", "utc+2", "gmt+5:30" or
+ * "EDT" find a zone whose label spells none of those.
+ */
+export function zoneOptions(zones, ms) {
+  return zones.map(tz => {
+    const { minutes, text } = utcOffsetAt(tz, ms);
+    const sign = minutes < 0 ? '-' : '+';
+    const h = Math.floor(Math.abs(minutes) / 60);
+    const min = Math.abs(minutes) % 60;
+    const short = min ? `${sign}${h}:${pad(min)}` : `${sign}${h}`;
+    const keywords = [tz, zoneCity(tz), short, text, `utc${short}`, `gmt${short}`];
+    if (!min) keywords.push(`${sign}${pad(h)}`);
+    const abbr = formatter(tz, 'short').formatToParts(ms).find(p => p.type === 'timeZoneName')?.value;
+    if (abbr && /^[A-Za-z]+$/.test(abbr)) keywords.push(abbr);
+    return { value: tz, label: `(UTC${text}) ${tz.replace(/_/g, ' ')}`, keywords, minutes };
+  }).sort((a, b) => a.minutes - b.minutes || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 }
