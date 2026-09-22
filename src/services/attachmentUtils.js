@@ -8,6 +8,23 @@
  */
 import { send } from './transport';
 
+// Win32-invalid characters and controls. `:` is the dangerous one: on NTFS
+// `a.pdf:x.exe` addresses a hidden stream of `a.pdf`.
+// eslint-disable-next-line no-control-regex
+const WIN32_UNSAFE_RE = /[<>:"|?*\u0000-\u001f]/g;
+
+/**
+ * The one component of a sender-chosen attachment name that may name a file
+ * we write. Only the last path component survives (`path.join` resolves `..`,
+ * so `../../x` would otherwise land outside the folder), a name that is only
+ * `.`/`..`/empty falls back, and Win32-invalid characters become `_` on every
+ * platform. Mirrors `safe_leaf` + `win32_safe` in src-core/src/vault_files.rs.
+ */
+export function safeLeaf(filename) {
+  const leaf = String(filename ?? '').split(/[/\\]/).pop().replace(WIN32_UNSAFE_RE, '_');
+  return leaf && leaf !== '.' && leaf !== '..' ? leaf : 'attachment';
+}
+
 export function getRealAttachments(attachments, html) {
   if (!attachments) return [];
   return attachments

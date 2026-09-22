@@ -604,11 +604,29 @@ pub fn fs_safe(s: &str) -> String {
 /// component survives, and a component that names a directory instead of a
 /// file (empty, `.`, `..`) falls back.
 pub fn safe_leaf(filename: &str) -> String {
-    Path::new(filename)
+    let leaf = Path::new(filename)
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .filter(|f| !f.is_empty() && f != "." && f != "..")
-        .unwrap_or_else(|| "attachment".to_string())
+        .unwrap_or_else(|| "attachment".to_string());
+    // Unix keeps its names byte for byte: cached attachments are found again
+    // by this name, so changing it there would orphan every cached file.
+    #[cfg(windows)]
+    let leaf = win32_safe(&leaf);
+    leaf
+}
+
+/// `: < > " | ? *` and control characters become `_`. Win32 rejects them in
+/// a file name, except `:`, which is worse: `a.pdf:x.exe` addresses an NTFS
+/// alternate data stream of `a.pdf`, where no Mark-of-the-Web can follow.
+/// `Re: invoice.pdf` is a real name this makes writable.
+///
+/// Platform-independent so it is tested everywhere; only called on Windows.
+/// Mirrored by `safeLeaf` in src/services/attachmentUtils.js.
+pub fn win32_safe(leaf: &str) -> String {
+    leaf.chars()
+        .map(|c| if matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*') || c.is_control() { '_' } else { c })
+        .collect()
 }
 
 pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
@@ -893,6 +911,14 @@ mod tests {
             build_maildir_filename(12, &parse_flags_from_filename("12:2,AS.eml")),
             "12:2,AS.eml"
         );
+    }
+
+    #[test]
+    fn win32_safe_leaves_no_stream_or_invalid_character() {
+        assert_eq!(win32_safe("a.pdf:x.exe"), "a.pdf_x.exe");
+        assert_eq!(win32_safe("Re: invoice.pdf"), "Re_ invoice.pdf");
+        assert_eq!(win32_safe("<a>|\"b\"?*\u{1}.txt"), "_a___b____.txt");
+        assert_eq!(win32_safe("Rechnung März.pdf"), "Rechnung März.pdf");
     }
 
     #[test]

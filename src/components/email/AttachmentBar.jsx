@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { Popover, MenuItem } from '../ui/Popover';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { previewKind } from '../../services/attachmentUtils';
+import { previewKind, safeLeaf } from '../../services/attachmentUtils';
 import {
   Download,
   Save,
@@ -142,22 +142,7 @@ function browserDownload(attachment) {
  */
 async function downloadsDest(filename) {
   const { downloadDir, join } = await import('@tauri-apps/api/path');
-  const { exists } = await import('@tauri-apps/plugin-fs');
-  const dir = await downloadDir();
-  const dot = filename.lastIndexOf('.');
-  const base = dot > 0 ? filename.slice(0, dot) : filename;
-  const ext = dot > 0 ? filename.slice(dot) : '';
-  // ponytail: a linear probe, capped — a folder holding 500 copies of one
-  // name is not a case worth a smarter search, and the cap stops a failing
-  // `exists` from spinning forever.
-  for (let n = 0; n < 500; n++) {
-    const candidate = await join(dir, n === 0 ? filename : `${base} (${n})${ext}`);
-    // A refused `exists` must not cost the download: the worst it can do is
-    // overwrite a same-named file, while letting it throw turns every
-    // download into "Failed to download".
-    if (!await exists(candidate).catch(() => false)) return candidate;
-  }
-  return await join(dir, `${base} (${Date.now()})${ext}`);
+  return uniqueIn(await downloadDir(), safeLeaf(filename), join);
 }
 
 /** Read one attachment's bytes (base64) from the message's cached .eml. */
@@ -749,10 +734,9 @@ async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, atta
   for (const index of indices) {
     const filename = byIndex.get(index)?.filename || `attachment-${index}`;
     const b64 = await send('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex: index });
-    // A sender picks the filename; only its last component may name a file
-    // here, and a name already taken in the folder gets the same `(n)` the
-    // daemon would have given it.
-    const leaf = filename.split('/').pop().split('\\').pop() || 'attachment';
+    // A sender picks the filename; see `safeLeaf`. A name already taken in
+    // the folder gets the same `(n)` the daemon would have given it.
+    const leaf = safeLeaf(filename);
     const dest = await uniqueIn(destDir, leaf, join);
     await invoke('save_attachment_to', { filename: leaf, contentBase64: getCleanBase64(b64), destPath: dest });
     files.push(dest.split('/').pop());
@@ -766,8 +750,12 @@ async function uniqueIn(dir, leaf, join) {
   const dot = leaf.lastIndexOf('.');
   const base = dot > 0 ? leaf.slice(0, dot) : leaf;
   const ext = dot > 0 ? leaf.slice(dot) : '';
+  // ponytail: a linear probe, capped — the cap stops a failing `exists` from
+  // spinning forever.
   for (let n = 0; n < 500; n++) {
     const candidate = await join(dir, n === 0 ? leaf : `${base} (${n})${ext}`);
+    // A refused `exists` must not cost the download: the worst it can do is
+    // overwrite a same-named file, while letting it throw fails every download.
     if (!await exists(candidate).catch(() => false)) return candidate;
   }
   return await join(dir, `${base} (${Date.now()})${ext}`);
