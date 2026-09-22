@@ -257,11 +257,19 @@ pub async fn run(state: Arc<DaemonState>, endpoint: &Path) -> std::io::Result<()
     // waiting instance (see the call sites below), and a transient failure
     // here must not end the listener the way a bare `?` would.
     async fn create_next_instance(name: &str) -> NamedPipeServer {
+        // Finding 5 (final fix wave): the retry itself is unbounded on
+        // purpose (the caller must never be left without a waiting instance),
+        // but a permanently uncreatable pipe name would otherwise log at
+        // `error!` every 50ms forever. Log the first failure only.
+        let mut logged = false;
         loop {
             match ServerOptions::new().create(name) {
                 Ok(next) => return next,
                 Err(e) => {
-                    error!("Failed to create the next pipe instance: {e}");
+                    if !logged {
+                        error!("Failed to create the next pipe instance: {e}");
+                        logged = true;
+                    }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
             }
