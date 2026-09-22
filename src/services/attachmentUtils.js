@@ -79,26 +79,39 @@ export async function hydrateInlineImages(email, accountId, mailbox) {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke || !email?.html || !email.attachments?.length) return email;
 
-  let hydrated = false;
-  const attachments = await Promise.all(email.attachments.map(async (att, index) => {
-    if (att.content || !att.contentId) return att;
+  // One daemon call per message: it resolves and parses the .eml once for
+  // every referenced part, not once per image.
+  const indices = [];
+  email.attachments.forEach((att, index) => {
+    if (att.content || !att.contentId) return;
     // ponytail: 10MB cap keeps a pathological inline image out of the email cache
-    if (att.size > 10 * 1024 * 1024) return att;
+    if (att.size > 10 * 1024 * 1024) return;
     const cid = att.contentId.replace(/^<|>$/g, '');
-    if (!email.html.includes(`cid:${cid}`)) return att;
-    try {
-      const content = await send('maildir_read_attachment', {
-        accountId,
-        mailbox,
-        uid: email.uid,
-        attachmentIndex: index,
-      });
-      hydrated = true;
-      return { ...att, content };
-    } catch {
-      return att; // .eml not cached yet — image stays a placeholder
-    }
-  }));
+    if (email.html.includes(`cid:${cid}`)) indices.push(index);
+  });
+  if (!indices.length) return email;
+
+  let contents;
+  try {
+    contents = await send('maildir_read_attachments', {
+      accountId,
+      mailbox,
+      uid: email.uid,
+      attachmentIndices: indices,
+    });
+  } catch {
+    return email; // .eml not cached yet — images stay placeholders
+  }
+  if (!Array.isArray(contents)) return email;
+
+  // A null slot is a part that could not be read: that image alone stays a placeholder.
+  let hydrated = false;
+  const attachments = [...email.attachments];
+  indices.forEach((index, i) => {
+    if (typeof contents[i] !== 'string') return;
+    attachments[index] = { ...attachments[index], content: contents[i] };
+    hydrated = true;
+  });
 
   return hydrated ? { ...email, attachments } : email;
 }

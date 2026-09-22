@@ -105,6 +105,25 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // One call per message for its inline images (`hydrateInlineImages`):
+        // the .eml is found and parsed once, one base64-or-null slot per index.
+        "maildir_read_attachments" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let indices = req!(vec_arg::<usize>(&id, params, "attachmentIndices"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let root = vault_root(&state)?;
+                    let parts = vault_files::read_attachments(&root, &account_id, &mailbox, uid, &indices)?;
+                    serde_json::to_value(parts).map_err(|e| e.to_string())
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         "maildir_exists" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -461,6 +480,17 @@ mod tests {
         let r = call(&s, "maildir_read_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 42, "attachmentIndex": 0})).await;
         let err = r.error.unwrap();
         assert_eq!(err.message, "Email UID 42 not found");
+    }
+
+    #[tokio::test]
+    async fn maildir_read_attachments_has_a_null_slot_for_a_bad_index() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let r = call(&s, "maildir_read_attachments", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndices": [0, 3]})).await;
+        // "data\r\n": the raw part keeps its CRLF before the boundary (see M1 below).
+        assert_eq!(r.result, Some(json!(["ZGF0YQ0K", null])));
+        let r = call(&s, "maildir_read_attachments", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 42, "attachmentIndices": [0]})).await;
+        assert_eq!(r.error.unwrap().message, "Email UID 42 not found");
     }
 
     // M1 fix (2.6 review): `seed_email`'s fixed input pins every field of the

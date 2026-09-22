@@ -1101,7 +1101,7 @@ async fn open_auxiliary_window(app: tauri::AppHandle, kind: String, token: Strin
 // Maildir .eml storage commands (remaining app-side writers)
 //
 // The read family and the attachment cache (maildir_read, maildir_read_light,
-// maildir_read_light_batch, maildir_read_raw_source, maildir_read_attachment,
+// maildir_read_light_batch, maildir_read_raw_source, maildir_read_attachment(s),
 // maildir_exists, maildir_list, maildir_storage_stats, maildir_orphan_stats,
 // cache_attachment, cached_attachment_path, prefetch_attachments) moved to
 // the daemon (Task 2.6, `handlers::vault_files`), and the six simple writers
@@ -2524,7 +2524,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "ping" => Some(Duration::from_secs(10)),
 
         "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
-        | "maildir_read" | "maildir_read_light" | "maildir_read_attachment"
+        | "maildir_read" | "maildir_read_light" | "maildir_read_attachment" | "maildir_read_attachments"
         | "maildir_read_raw_source" | "maildir_exists" | "maildir_store" | "maildir_delete"
         | "maildir_delete_many" | "maildir_set_flags" | "cache_attachment" | "cached_attachment_path"
         | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
@@ -3970,7 +3970,7 @@ mod tests {
     #[test]
     fn reply_timeout_gives_every_phase_2_thirty_second_method_thirty_seconds() {
         for method in [
-            "maildir_read", "maildir_read_light", "maildir_read_attachment",
+            "maildir_read", "maildir_read_light", "maildir_read_attachment", "maildir_read_attachments",
             "maildir_read_raw_source", "maildir_exists", "maildir_store", "maildir_delete",
             "maildir_delete_many", "maildir_set_flags", "cache_attachment", "cached_attachment_path",
             "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",

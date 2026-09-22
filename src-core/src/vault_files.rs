@@ -217,6 +217,21 @@ pub fn read_attachment(root: &Path, account_id: &str, mailbox: &str, uid: u32, a
     Ok(base64::engine::general_purpose::STANDARD.encode(&body))
 }
 
+/// `read_attachment` for several parts of one message: the file is found and
+/// parsed once. One slot per requested index, in request order, `None` where
+/// that one part could not be read (out of range, undecodable body); a
+/// message that cannot be found, read or parsed is an `Err` for the call.
+pub fn read_attachments(root: &Path, account_id: &str, mailbox: &str, uid: u32, indices: &[usize]) -> Result<Vec<Option<String>>, String> {
+    use base64::Engine;
+    let raw = read_eml(&cur_path(root, account_id, mailbox), uid)?;
+    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    Ok(indices.iter()
+        .map(|i| parts.get(*i)?.get_body_raw().ok().map(|body| base64::engine::general_purpose::STANDARD.encode(body)))
+        .collect())
+}
+
 pub fn read_raw_source(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<String, String> {
     use base64::Engine;
     let cur_dir = cur_path(root, account_id, mailbox);
@@ -1251,6 +1266,26 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), None);
         let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
         assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), Some(path));
+    }
+
+    #[test]
+    fn read_attachments_matches_the_single_read_per_slot_and_nulls_a_bad_index() {
+        let root = tempfile::tempdir().unwrap();
+        let cur = cur_path(root.path(), "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(build_maildir_filename(9, &[])), photo_with_inline_and_pixel()).unwrap();
+
+        // Parts: 0 photo, 1 inline logo, 2 tracking pixel. Request order, a
+        // repeat and an out-of-range index all keep their own slot.
+        let got = read_attachments(root.path(), "acct", "INBOX", 9, &[2, 1, 7, 1]).unwrap();
+
+        let one = |i| read_attachment(root.path(), "acct", "INBOX", 9, i).unwrap();
+        assert_eq!(got, vec![Some(one(2)), Some(one(1)), None, Some(one(1))]);
+        assert_eq!(got[1].as_deref(), Some("iVBORw0KGgo="));
+        assert!(read_attachment(root.path(), "acct", "INBOX", 9, 7).is_err());
+
+        let missing = read_attachments(root.path(), "acct", "INBOX", 8, &[0]).unwrap_err();
+        assert_eq!(missing, "Email UID 8 not found");
     }
 
     #[test]

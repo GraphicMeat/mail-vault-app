@@ -122,6 +122,7 @@ export const DAEMON_OWNED = new Set([
   // Task 5: the daemon owns the search-run and cancellation lifecycle.
   'mail_search_start', 'mail_search_cancel',
   'maildir_read', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source', 'maildir_read_attachment',
+  'maildir_read_attachments',
   'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments', 'export_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.

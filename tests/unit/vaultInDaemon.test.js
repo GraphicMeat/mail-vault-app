@@ -17,6 +17,7 @@ const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(
 // Task 2.6: the vault read family and the attachment cache.
 const MOVED = [
   'maildir_read', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source', 'maildir_read_attachment',
+  'maildir_read_attachments',
   'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getRealAttachments, hasRealAttachments, hydrateInlineImages, replaceCidUrls } from '../../src/services/attachmentUtils';
 
-// hydrateInlineImages now reads maildir_read_attachment through transport.js
+// hydrateInlineImages now reads maildir_read_attachments through transport.js
 // (Task 2.1). Delegate to whatever the test wired up on window.__TAURI__.core
 // so every fixture above still drives the same fake invoke.
 vi.mock('../../src/services/transport', () => ({
@@ -287,17 +287,9 @@ describe('hydrateInlineImages', () => {
     expect(result).toBe(huge);
   });
 
-  it('keeps the images it could read when one read fails', async () => {
-    globalThis.window = {
-      __TAURI__: {
-        core: {
-          invoke: async (_cmd, { attachmentIndex }) => {
-            if (attachmentIndex === 0) throw new Error('boom');
-            return 'B';
-          },
-        },
-      },
-    };
+  it('keeps the images it could read when one part fails', async () => {
+    // The daemon answers a part it could not read with a null slot.
+    globalThis.window = { __TAURI__: { core: { invoke: async () => [null, 'B'] } } };
     const two = { uid: 1, html: '<img src="cid:a"><img src="cid:b">', attachments: [inlineImage('a'), inlineImage('b')] };
 
     const result = await hydrateInlineImages(two, 'acct', 'INBOX');
@@ -313,8 +305,8 @@ describe('hydrateInlineImages', () => {
       __TAURI__: {
         core: {
           invoke: async (cmd, args) => {
-            calls.push(args);
-            return 'BASE64';
+            calls.push([cmd, args]);
+            return ['BASE64'];
           },
         },
       },
@@ -323,13 +315,29 @@ describe('hydrateInlineImages', () => {
     const result = await hydrateInlineImages(email, 'acct', 'INBOX');
 
     expect(calls).toEqual([
-      { accountId: 'acct', mailbox: 'INBOX', uid: 42, attachmentIndex: 1 },
+      ['maildir_read_attachments', { accountId: 'acct', mailbox: 'INBOX', uid: 42, attachmentIndices: [1] }],
     ]);
     expect(result.attachments[1].content).toBe('BASE64');
     expect(result.attachments[0].content).toBeUndefined();
     expect(result.attachments[2].content).toBeUndefined();
     expect(replaceCidUrls(result.html, result.attachments))
       .toBe('<img src="data:image/png;base64,BASE64"><img src="cid:unused">');
+  });
+
+  it('reads every inline image of a message in one call, in index order', async () => {
+    const invoke = vi.fn(async (_cmd, { attachmentIndices }) => attachmentIndices.map((i) => `IMG${i}`));
+    globalThis.window = { __TAURI__: { core: { invoke } } };
+    const three = {
+      uid: 5,
+      html: '<img src="cid:a"><img src="cid:c"><img src="cid:d">',
+      attachments: [inlineImage('a'), pdfAttachment, inlineImage('c'), inlineImage('d')],
+    };
+
+    const result = await hydrateInlineImages(three, 'acct', 'INBOX');
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls[0][1].attachmentIndices).toEqual([0, 2, 3]);
+    expect(result.attachments.map((a) => a.content)).toEqual(['IMG0', undefined, 'IMG2', 'IMG3']);
   });
 
   it('returns the same object when nothing is hydratable', async () => {

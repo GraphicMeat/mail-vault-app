@@ -67,7 +67,7 @@ describe('daemon-owned commands', () => {
       'maildir_migrate_email_dirs', 'maildir_migrate_json_to_eml',
       'maildir_orphan_stats',
       'maildir_purge_orphans',
-      'maildir_read', 'maildir_read_attachment', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source',
+      'maildir_read', 'maildir_read_attachment', 'maildir_read_attachments', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source',
       'maildir_repair_generation',
       'maildir_set_flags', 'maildir_storage_stats',
       'maildir_store',

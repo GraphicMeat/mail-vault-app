@@ -832,6 +832,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'maildir_read_light_batch': return (args.uids || []).map(uid => { const row = find({ accountId, mailbox, uid }); return row && row.vaultPresent ? header(row) : null; });
       case 'maildir_read_raw_source': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.rawSourceBase64 || null; }
       case 'maildir_read_attachment': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.attachments?.[args.attachmentIndex]?.content || null; }
+      case 'maildir_read_attachments': { const row = find({ accountId, mailbox, uid: args.uid }); return (args.attachmentIndices || []).map(i => row?.attachments?.[i]?.content || null); }
       // The demo has no filesystem: the folder export degrades to the same
       // per-file browser download the single Download button uses.
       case 'export_attachments': {
