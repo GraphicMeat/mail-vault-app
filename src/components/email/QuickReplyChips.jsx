@@ -10,12 +10,21 @@ import { openCompose } from '../../utils/composeOpener';
 const FALLBACK_AI_SETTINGS = { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false };
 
 /**
- * Chips under the newest message (EmailViewer's single-message view).
- * One click opens Compose prefilled and editable — the same `templateBody`
- * seam the reply-template feature already uses (RowQuickActions.jsx),
- * nothing new to wire up. Nothing here ever sends anything.
+ * Chips under the newest message — EmailViewer's single-message view, and
+ * (via `isNewest` in ThreadEmailItem) the newest row of a real thread. One
+ * click opens Compose prefilled and editable — the same `templateBody` seam
+ * the reply-template feature already uses (RowQuickActions.jsx), nothing
+ * new to wire up. Nothing here ever sends anything.
+ *
+ * `contextMessages` (a real thread's recent messages, oldest→newest, from
+ * already-cached bodies — no new fetch) does double duty: it feeds Tier 2's
+ * prompt so it can read the back-and-forth instead of just this message in
+ * isolation (see quickReplies.js's `boundedThreadText`), and — when there is
+ * more than one — it is forwarded onto the reply as `_threadContext`, the
+ * same field ThreadEmailItem's own Reply button sets, so a chip's reply
+ * shows the same collapsible thread context.
  */
-export function QuickReplyChips({ email, suppressed = false }) {
+export function QuickReplyChips({ email, suppressed = false, contextMessages }) {
   const t = useT();
   // Defensive default: some EmailViewer specs stub settingsStore partially.
   const aiSettings = useSettingsStore(s => s.aiSettings) || FALLBACK_AI_SETTINGS;
@@ -32,7 +41,7 @@ export function QuickReplyChips({ email, suppressed = false }) {
     setStarters(tier1Starters(email));
     if (hidden) return;
     let cancelled = false;
-    tier2Starters(email).then(list => {
+    tier2Starters(email, { contextMessages }).then(list => {
       if (!cancelled && list) setStarters(list);
     });
     return () => { cancelled = true; };
@@ -41,6 +50,12 @@ export function QuickReplyChips({ email, suppressed = false }) {
 
   if (hidden || !starters.length) return null;
 
+  const openWith = (starterText) => openCompose({
+    mode: 'reply',
+    replyTo: contextMessages?.length > 1 ? { ...email, _threadContext: contextMessages } : { ...email },
+    templateBody: starterText,
+  });
+
   return (
     <div data-testid="quick-reply-chips" className="flex flex-wrap items-center gap-2 px-3 pb-3">
       {starters.map((starterText, index) => (
@@ -48,7 +63,7 @@ export function QuickReplyChips({ email, suppressed = false }) {
           key={index}
           type="button"
           data-testid="quick-reply-chip"
-          onClick={() => openCompose({ mode: 'reply', replyTo: { ...email }, templateBody: starterText })}
+          onClick={() => openWith(starterText)}
           className="px-3 py-1.5 text-xs rounded-full border border-mail-border bg-mail-surface text-mail-text hover:bg-mail-surface-hover transition-colors"
         >
           {starterText}

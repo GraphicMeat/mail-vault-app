@@ -61,6 +61,29 @@ function plainTextOf(email) {
   return email?.snippet || '';
 }
 
+// ponytail: last 3 messages by date, each truncated to 800 chars — bounds
+// any AI prompt built from a real thread's back-and-forth instead of
+// growing with it. Widen (or summarize older messages instead of dropping
+// them) if a long-running thread's Tier 2 starters read as ignoring context.
+const MAX_CONTEXT_MESSAGES = 3;
+const MAX_MESSAGE_CHARS = 800;
+
+/**
+ * Chronological (oldest → newest), bounded, plain-text rendering of a real
+ * thread's most recent messages — the multi-message context Tier 2 quick
+ * replies and "Summarize thread" both need instead of just the newest
+ * message. Works on a single-element array too (EmailViewer's un-threaded
+ * case), rendering the same as a plain `plainTextOf`.
+ */
+export function boundedThreadText(messages) {
+  const list = Array.isArray(messages) && messages.length ? messages : [];
+  const byDate = [...list].sort((a, b) => new Date(a?.date || 0) - new Date(b?.date || 0));
+  return byDate
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map(m => `From: ${m?.from?.address || 'unknown'}\n${plainTextOf(m).slice(0, MAX_MESSAGE_CHARS)}`)
+    .join('\n---\n');
+}
+
 // ponytail: regex heuristics, not NLP — good enough to pick a shape, not to
 // understand the email. A model (Tier 2) does better; this is what ships
 // with zero setup and no network.
@@ -118,14 +141,21 @@ function parseStarters(text) {
  * automatic, background, and un-previewed, and the endpoint consent is what
  * keeps "never discover after the fact what left the machine" true for it.
  * Local providers (on-device by construction) need no such gate.
+ *
+ * `contextMessages`, when given (ThreadView passes its thread's recent
+ * messages — see boundedThreadText), is what makes a generated starter beat
+ * the deterministic Tier 1 one here: it can answer "yes" to the SECOND email
+ * in a back-and-forth, not just the newest in isolation. EmailViewer's
+ * un-threaded case omits it and gets the single-message prompt.
  */
-export async function tier2Starters(email) {
+export async function tier2Starters(email, { contextMessages } = {}) {
   const settings = useSettingsStore.getState().aiSettings;
   if (!settings?.enabled) return null;
   const provider = currentProvider(settings);
   if (provider.type === 'endpoint' && !settings.endpointConsented) return null;
 
-  const prompt = `Suggest exactly 3 very short email reply starters (a few words each), one per line, no numbering, for this message:\n\nSubject: ${email?.subject || ''}\n\n${plainTextOf(email).slice(0, 2000)}`;
+  const threadText = boundedThreadText(contextMessages?.length ? contextMessages : [email]);
+  const prompt = `Suggest exactly 3 very short email reply starters (a few words each), one per line, no numbering, for this email conversation:\n\nSubject: ${email?.subject || ''}\n\n${threadText}`;
   try {
     const text = await withTimeout(generate({ prompt, provider, maxTokens: 120 }), 8000);
     const starters = parseStarters(text);

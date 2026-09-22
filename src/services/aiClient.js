@@ -25,29 +25,19 @@ export function isNonLocal(provider) {
   return provider?.type === 'endpoint';
 }
 
-// ponytail: 15s memo keyed on the endpoint URL, not a real cache with
-// invalidation — `appleFm`'s status spawns and waits on the Swift helper
-// (up to its 60s timeout) and `AiComposeActions` checks on every mount, so
-// opening several emails in a row would otherwise spawn it that many times.
-// Grow into a store-driven invalidation (on provider/URL change) if a
+// ponytail: no caching here — `appleFm`'s status spawns and waits on the
+// Swift helper (up to its 60s timeout), and both `AiComposeActions` and
+// `QuickReplyChips`' Tier 2 check on every mount, so opening several emails
+// in a row while AI is on spawns it that many times. A tried memo (keyed on
+// endpoint URL, short TTL) made a stale "unavailable" from one render leak
+// into the next component that asked, sight unseen — wrong beats slow here.
+// Revisit with real invalidation (on provider/URL change, not a timer) if a
 // helper spawn under load ever shows up as a real cost.
-let _providersCache = null; // { key, at, promise }
-const PROVIDERS_CACHE_MS = 15_000;
 
-/**
- * `[{ provider, available, reason }]` for localGguf, endpoint and appleFm.
- * `force: true` (Settings' "Check status") always asks fresh.
- */
-export async function listProviders(endpointUrl = useSettingsStore.getState().aiSettings?.endpointUrl, { force = false } = {}) {
-  const key = endpointUrl || '';
-  const now = Date.now();
-  if (!force && _providersCache && _providersCache.key === key && now - _providersCache.at < PROVIDERS_CACHE_MS) {
-    return _providersCache.promise;
-  }
-  const promise = daemonCall('ai.providers', endpointUrl ? { endpointUrl } : {})
-    .then(reply => (Array.isArray(reply) ? reply : []));
-  _providersCache = { key, at: now, promise };
-  return promise;
+/** `[{ provider, available, reason }]` for localGguf, endpoint and appleFm. */
+export async function listProviders(endpointUrl = useSettingsStore.getState().aiSettings?.endpointUrl) {
+  const reply = await daemonCall('ai.providers', endpointUrl ? { endpointUrl } : {});
+  return Array.isArray(reply) ? reply : [];
 }
 
 export async function isProviderAvailable(provider) {

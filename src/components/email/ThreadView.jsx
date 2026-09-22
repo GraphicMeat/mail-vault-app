@@ -41,7 +41,10 @@ import { getEmailColors } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
 import { replySelection } from '../../utils/replySelection';
-import { registerActiveReply } from '../../utils/composeOpener';
+import { registerActiveReply, openCompose } from '../../utils/composeOpener';
+import { QuickReplyChips } from './QuickReplyChips';
+import { AiComposeActions } from '../ai/AiComposeActions';
+import { boundedThreadText } from '../../utils/quickReplies';
 import { describePurge } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
@@ -305,7 +308,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false }) {
+function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
@@ -378,6 +381,18 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   };
 
   const realAttachments = loadedEmail ? getRealAttachments(loadedEmail.attachments, loadedEmail.html) : [];
+  const isSentEmail = location?.mailbox?.toLowerCase() === 'sent' || email.flags?.includes('\\Sent');
+
+  // Quick Replies (Phase 5): only under the newest message, and only what is
+  // already loaded — no fetch just to build this. Same cache the reply
+  // buttons below already read (bodiesMapRef), so a still-loading message
+  // in the bunch simply contributes its header/snippet instead of a body.
+  // `threadEmails` is in the user's chosen DISPLAY order (oldest- or
+  // newest-first), so the whole list is handed over — `boundedThreadText`
+  // (quickReplies.js) does its own date sort before bounding to the last few.
+  const recentContext = isNewest
+    ? threadEmails.map(message => bodiesMapRef.current.get(emailKey(message))?.email || message)
+    : undefined;
 
   return (
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
@@ -493,6 +508,14 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
             )}
           </div>
 
+          {/* Quick Replies (Phase 5) — under the newest message only, never
+              under an older one in the same thread. */}
+          {isNewest && !showRaw && (
+            <div className="pl-9">
+              <QuickReplyChips email={email} suppressed={isSentEmail} contextMessages={recentContext} />
+            </div>
+          )}
+
           {/* Attachments */}
           {realAttachments.length > 0 && (
             <div className="mt-3 pl-9">
@@ -549,6 +572,11 @@ export function ThreadView({ thread, onComposeReply }) {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  // AI Compose actions (Phase 6): "Summarize thread" is the one action that
+  // reads the whole conversation rather than a single draft or message, so
+  // it lives at the thread level, not per-row. Read-only result — it never
+  // sends or saves anything.
+  const [aiSummary, setAiSummary] = useState(null);
   const scrollContainerRef = useRef(null);
   const confirmationReturnRef = useRef(null);
 
@@ -716,6 +744,7 @@ export function ThreadView({ thread, onComposeReply }) {
   useEffect(() => {
     setExpandedMessages({});
     setSelectedMessage(null);
+    setAiSummary(null);
   }, [threadId]);
   useLayoutEffect(() => {
     const previous = virtualizerContextRef.current;
@@ -807,7 +836,39 @@ export function ThreadView({ thread, onComposeReply }) {
           className="bg-mail-surface text-mail-text text-xs border border-mail-border rounded px-2 py-1">
           {['timeline', 'compact', 'split'].map(layout => <option key={layout} value={layout}>{t(`email.thread.layout.${layout}`)}</option>)}
         </select>
+
+        {/* AI Compose actions (Phase 6) — "Summarize thread" reads the whole
+            conversation (real thread text, not one message): the one action
+            that belongs at this level rather than under a single row. */}
+        <div className="ml-auto">
+          <AiComposeActions
+            actions={['summarize']}
+            getThreadText={() => boundedThreadText(sortedEmails.map(message => bodiesMapRef.current.get(emailKey(message))?.email || message))}
+            onResult={(_actionId, text) => setAiSummary(text)}
+          />
+        </div>
       </div>
+      {aiSummary && (
+        <div data-testid="ai-summary-panel" className="mx-3 mt-2 rounded-lg border border-mail-border bg-mail-surface p-3 text-sm text-mail-text space-y-2">
+          <p className="whitespace-pre-wrap">{aiSummary}</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setAiSummary(null)}
+              className="px-2 py-1 text-xs rounded-md text-mail-text-muted hover:text-mail-text">
+              {t('common.close')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                openCompose({ mode: 'reply', replyTo: { ...selectedEmail, _threadContext: sortedEmails }, templateBody: aiSummary });
+                setAiSummary(null);
+              }}
+              className="px-2 py-1 text-xs rounded-md border border-mail-border text-mail-text hover:bg-mail-surface-hover"
+            >
+              {t('ai.actions.useInReply')}
+            </button>
+          </div>
+        </div>
+      )}
       <div className={`thread-reader-content flex-1 min-h-0 min-w-0 ${readerLayout === 'split' ? 'thread-reader-split' : 'flex flex-col'}`}>
       {/* Thread emails — virtualized */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 w-full" style={{ contain: 'inline-size' }}>
@@ -840,6 +901,7 @@ export function ThreadView({ thread, onComposeReply }) {
                   expanded={expandedMessages[emailKey(email)] ?? isNewest}
                   onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: !(previous[emailKey(email)] ?? isNewest) }))}
                   compact={readerLayout === 'compact'}
+                  isNewest={isNewest}
                   email={email}
                   threadEmails={sortedEmails}
                   bodiesMapRef={bodiesMapRef}
@@ -865,6 +927,7 @@ export function ThreadView({ thread, onComposeReply }) {
       {readerLayout === 'split' && selectedEmail && (
         <div className="min-w-0 min-h-0 overflow-auto border-mail-border thread-reader-detail">
           <ThreadEmailItem key={emailKey(selectedEmail)} email={selectedEmail} threadEmails={sortedEmails} expanded={expandedMessages[emailKey(selectedEmail)] ?? true}
+            isNewest={emailKey(selectedEmail) === newestKey}
             onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(selectedEmail)]: !(previous[emailKey(selectedEmail)] ?? true) }))}
             bodiesMapRef={bodiesMapRef} registerListener={registerListener} archivedEmailIds={archivedEmailIds}
             signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}

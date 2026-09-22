@@ -37,7 +37,7 @@ export function AiProvidersSettings() {
     setChecking(true);
     setStatus(null);
     try {
-      const list = await listProviders(aiSettings.endpointUrl, { force: true });
+      const list = await listProviders(aiSettings.endpointUrl);
       setStatus(list.find(p => p.provider === provider.type) || null);
     } catch {
       setStatus({ available: false, reason: t('ai.settings.checkFailed') });
