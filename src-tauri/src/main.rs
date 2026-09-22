@@ -1750,10 +1750,17 @@ fn may_spawn_daemon() -> bool {
 /// the spawn while still holding `DAEMON_CHILD` (no new lock, same order).
 static APP_EXITING: AtomicBool = AtomicBool::new(false);
 
+/// A daemon process id. `libc::pid_t` on unix; on Windows a pid is a DWORD and
+/// `std::process::Child::id()` already returns it as a `u32`.
+#[cfg(unix)]
+pub(crate) type DaemonPid = libc::pid_t;
+#[cfg(windows)]
+pub(crate) type DaemonPid = u32;
+
 /// Our own on-demand child's pid right now, if we have one. Locks `DAEMON_CHILD`
 /// just long enough to read it — never held across a wait.
-fn daemon_child_pid() -> Option<libc::pid_t> {
-    DAEMON_CHILD.lock().ok()?.as_ref().map(|c| c.id() as libc::pid_t)
+fn daemon_child_pid() -> Option<DaemonPid> {
+    DAEMON_CHILD.lock().ok()?.as_ref().map(|c| c.id() as DaemonPid)
 }
 
 /// `$HOME/.mailvault/{mv.sock, mv.token}`; must match src-daemon's `ipc_dir()`.
@@ -1782,26 +1789,34 @@ fn daemon_pid_path() -> PathBuf {
 /// whitespace (`write_pid_file` writes no newline, but don't depend on that).
 /// Anything else — empty, garbage, negative, non-numeric — is not a pid we
 /// trust enough to signal.
-fn parse_daemon_pid(content: &str) -> Option<libc::pid_t> {
-    content.trim().parse::<libc::pid_t>().ok().filter(|&pid| pid > 0)
+fn parse_daemon_pid(content: &str) -> Option<DaemonPid> {
+    content.trim().parse::<DaemonPid>().ok().filter(|&pid| pid > 0)
 }
 
-fn read_daemon_pid_file(path: &Path) -> Option<libc::pid_t> {
+fn read_daemon_pid_file(path: &Path) -> Option<DaemonPid> {
     parse_daemon_pid(&std::fs::read_to_string(path).ok()?)
 }
 
 /// True if `file_name` names the daemon binary. Tolerates the " (deleted)"
 /// suffix Linux appends to `/proc/<pid>/exe`'s readlink target once a package
-/// upgrade replaces the file backing an already-running process.
+/// upgrade replaces the file backing an already-running process, and a
+/// trailing `.exe` (case-insensitively) — Windows always has one, and
+/// `tasklist` reports the shipped filename.
 fn is_daemon_exe_name(file_name: &str) -> bool {
-    file_name.strip_suffix(" (deleted)").unwrap_or(file_name) == "mailvault-daemon"
+    let name = file_name.strip_suffix(" (deleted)").unwrap_or(file_name);
+    let name = if name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".exe") {
+        &name[..name.len() - 4]
+    } else {
+        name
+    };
+    name == "mailvault-daemon"
 }
 
 /// True only if `pid` is a running process whose executable is named
 /// `mailvault-daemon` — never signal a pid before confirming this: a stale
 /// pid file naming a since-reused pid must not kill an unrelated process.
 #[cfg(target_os = "macos")]
-fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
+fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
     let mut buf = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
     // SAFETY: `buf` is sized exactly to Apple's documented
     // PROC_PIDPATHINFO_MAXSIZE; proc_pidpath writes at most buf.len() bytes
@@ -1817,22 +1832,63 @@ fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
         .is_some_and(is_daemon_exe_name)
 }
 
-#[cfg(not(target_os = "macos"))]
-fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
+#[cfg(all(unix, not(target_os = "macos")))]
+fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
     std::fs::read_link(format!("/proc/{pid}/exe"))
         .ok()
         .and_then(|p| p.file_name().and_then(|n| n.to_str().map(str::to_owned)))
         .is_some_and(|s| is_daemon_exe_name(&s))
 }
 
+/// Windows has no `proc_pidpath`/`/proc`; shell out to `tasklist` and read the
+/// image name off its one CSV row for `pid`, the same approach `main.rs`
+/// already uses for `get_os_version` (`cmd /C ver`) and reveal-in-Explorer.
+#[cfg(windows)]
+fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
+    // Treat any failure to even run `tasklist` as "not the daemon" — this
+    // guards an irreversible kill, so "unsure" must mean "do not kill".
+    let Ok(output) = std::process::Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output() else {
+        return false;
+    };
+    // No match: `tasklist` prints an `INFO:`-prefixed line (still exit 0)
+    // instead of a data row. That line has no quoted first field, so it fails
+    // the strip_prefix/strip_suffix below and this correctly reports false.
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .and_then(|line| line.split(',').next())
+        .and_then(|field| field.strip_prefix('"'))
+        .and_then(|field| field.strip_suffix('"'))
+        .is_some_and(is_daemon_exe_name)
+}
+
 /// `kill(pid, 0)` sends no signal, only checks whether the process exists (and
 /// is ours to signal). ESRCH means it is gone; any other outcome (alive, or
 /// EPERM because it's alive but owned by someone else) is not "dead".
-fn pid_is_dead(pid: libc::pid_t) -> bool {
+#[cfg(unix)]
+fn pid_is_dead(pid: DaemonPid) -> bool {
     // SAFETY: signal 0 is documented as a pure existence/permission check —
     // it never actually signals the process.
     let ret = unsafe { libc::kill(pid, 0) };
     ret == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+}
+
+/// Same `tasklist` query as `pid_is_mailvault_daemon`, without the image-name
+/// check: dead when there is no CSV row for `pid` at all.
+///
+/// Note the asymmetry with unix: `kill(pid, 0)` returning EPERM means
+/// alive-but-not-ours, whereas `tasklist` shows processes across every user
+/// session, so this arm is if anything more willing to say "alive" than
+/// unix's check — which is the safe direction for a function whose answer
+/// gates a kill. A failure to run `tasklist` at all is treated the same way:
+/// "not dead", so callers keep waiting/escalating instead of concluding the
+/// orphan is already gone.
+#[cfg(windows)]
+fn pid_is_dead(pid: DaemonPid) -> bool {
+    let Ok(output) = std::process::Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output() else {
+        return false;
+    };
+    !String::from_utf8_lossy(&output.stdout).lines().next().is_some_and(|line| line.starts_with('"'))
 }
 
 /// The sidecar's filename. Tauri appends `.exe` on Windows when it installs the
@@ -2036,7 +2092,28 @@ pub fn shutdown_daemon_child() {
             {
                 // Safe from PID reuse: we have never reaped this child, so it
                 // stays a zombie holding its PID until the wait() below.
-                unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGTERM) };
+                unsafe { libc::kill(child.id() as DaemonPid, libc::SIGTERM) };
+
+                let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
+                while std::time::Instant::now() < deadline {
+                    if matches!(child.try_wait(), Ok(Some(_))) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+
+            #[cfg(windows)]
+            {
+                // Windows has no graceful inter-process signal to send here —
+                // the graceful attempt already happened upstream (the app
+                // sends the `daemon.shutdown` RPC before this path runs), so
+                // reaching here means the daemon did not honour it.
+                // `child.kill()` is `TerminateProcess`, immediately forceful;
+                // still wait out the same grace period for it to actually
+                // exit before falling through to the unconditional kill/wait
+                // below.
+                let _ = child.kill();
 
                 let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
                 while std::time::Instant::now() < deadline {
@@ -2312,27 +2389,48 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
             if still_up {
                 match known_pid {
                     Some(pid) if pid_is_mailvault_daemon(pid) => {
-                        warn!("orphan daemon (pid {pid}) did not clear its socket/pid after daemon.shutdown; sending SIGTERM");
-                        // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
-                        unsafe { libc::kill(pid, libc::SIGTERM) };
-                        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-                        while (mailvault_core::transport::is_listening(&socket) || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                        }
-                        if !pid_is_dead(pid) {
-                            // Ruling-2: the pid could have exited and been reused by an
-                            // unrelated process in the up-to-3s window since the last
-                            // check — re-verify identity right before an irreversible kill.
-                            if pid_is_mailvault_daemon(pid) {
-                                warn!("orphan daemon (pid {pid}) ignored SIGTERM; sending SIGKILL");
-                                // SAFETY: identity re-checked immediately above; SIGTERM already failed to stop it.
-                                unsafe { libc::kill(pid, libc::SIGKILL) };
-                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
-                                while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
-                                    std::thread::sleep(std::time::Duration::from_millis(50));
+                        #[cfg(unix)]
+                        {
+                            warn!("orphan daemon (pid {pid}) did not clear its socket/pid after daemon.shutdown; sending SIGTERM");
+                            // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
+                            unsafe { libc::kill(pid, libc::SIGTERM) };
+                            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                            while (mailvault_core::transport::is_listening(&socket) || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                            }
+                            if !pid_is_dead(pid) {
+                                // Ruling-2: the pid could have exited and been reused by an
+                                // unrelated process in the up-to-3s window since the last
+                                // check — re-verify identity right before an irreversible kill.
+                                if pid_is_mailvault_daemon(pid) {
+                                    warn!("orphan daemon (pid {pid}) ignored SIGTERM; sending SIGKILL");
+                                    // SAFETY: identity re-checked immediately above; SIGTERM already failed to stop it.
+                                    unsafe { libc::kill(pid, libc::SIGKILL) };
+                                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+                                    while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+                                        std::thread::sleep(std::time::Duration::from_millis(50));
+                                    }
+                                } else {
+                                    warn!("pid {pid} is no longer a mailvault-daemon process (likely exited and the pid was reused); not sending SIGKILL");
                                 }
-                            } else {
-                                warn!("pid {pid} is no longer a mailvault-daemon process (likely exited and the pid was reused); not sending SIGKILL");
+                            }
+                        }
+                        #[cfg(windows)]
+                        {
+                            // Windows has no weaker-than-forced-kill signal, so
+                            // there is no SIGTERM-then-wait step to collapse
+                            // into: unix's two identity checks (once before
+                            // SIGTERM, once again before SIGKILL) become one
+                            // here, because nothing — no wait, no signal — runs
+                            // between the match guard above (which just
+                            // confirmed `pid_is_mailvault_daemon(pid)`) and the
+                            // forced kill below. That guard IS the re-check
+                            // immediately before the one irreversible action.
+                            warn!("orphan daemon (pid {pid}) did not clear its socket/pid after daemon.shutdown; forcing termination with taskkill /F");
+                            let _ = std::process::Command::new("taskkill").args(["/PID", &pid.to_string(), "/F"]).output();
+                            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+                            while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
                             }
                         }
                         if mailvault_core::transport::is_listening(&socket) {
@@ -3626,9 +3724,21 @@ mod tests {
     }
 
     #[test]
+    fn is_daemon_exe_name_tolerates_the_windows_exe_suffix() {
+        // `tasklist` reports the shipped filename, which is `.exe` on Windows.
+        assert!(crate::is_daemon_exe_name("mailvault-daemon.exe"));
+    }
+
+    #[test]
+    fn is_daemon_exe_name_tolerates_the_exe_suffix_case_insensitively() {
+        assert!(crate::is_daemon_exe_name("mailvault-daemon.EXE"));
+    }
+
+    #[test]
     fn is_daemon_exe_name_rejects_anything_else() {
         assert!(!crate::is_daemon_exe_name("mailvault"));
         assert!(!crate::is_daemon_exe_name("mailvault-daemon-old"));
+        assert!(!crate::is_daemon_exe_name("mailvault-daemon-old.exe"));
         assert!(!crate::is_daemon_exe_name(""));
     }
 
