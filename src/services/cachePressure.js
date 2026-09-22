@@ -4,7 +4,13 @@
 // Eviction policy stays with the body cache owner (cacheSlice).
 
 let _sizeMB = 0;
-let _limitMB = 128; // default, updated from settings
+// Nothing updates this, and nothing should update it naively. The eviction
+// limit in cacheSlice is `cacheLimitMB || 4096` — the 4 GB standing in for the
+// "unlimited" setting. Point this gate at that number and prefetch would run
+// until the body cache had filled several gigabytes of WKWebView heap; the
+// hardcoded 128 is what stops it. Whoever wires it to the setting must clamp:
+// `_limitMB = mb > 0 ? mb : 128` — honour a real number, never the 4 GB.
+const _limitMB = 128;
 
 /** Record current body cache size in MB. Called by cache owner on add/clear. */
 export function recordSize(sizeMB) {
