@@ -163,6 +163,35 @@ describe('AccountPipeline daemon headers', () => {
     expect(pipeline._lastLoadedEmails).toHaveLength(3);
   });
 
+  it('keeps only uid and date from a loaded header set', async () => {
+    // The whole row used to be retained, which is a second copy of the mailbox
+    // in the webview for as long as the body phase runs. Nothing downstream
+    // reads more than these two fields.
+    const fat = [{
+      uid: 7, date: '2026-01-02T03:04:05Z', subject: 'x'.repeat(200),
+      from: 'a@b.test', to: ['c@d.test'], flags: ['\\Seen'], snippet: 'y'.repeat(500),
+    }];
+    db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 1, totalEmails: 1 });
+    db.getEmailHeadersPartial.mockResolvedValue({ emails: fat });
+    waitForSync.mockRejectedValue(new Error('no sync in this test'));
+
+    const pipeline = new AccountPipeline(account);
+    await pipeline.loadHeaders('INBOX');
+
+    expect(pipeline._lastLoadedEmails).toEqual([{ uid: 7, date: '2026-01-02T03:04:05Z' }]);
+  });
+
+  it('falls back to internalDate when a row carries no date', async () => {
+    db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 1, totalEmails: 1 });
+    db.getEmailHeadersPartial.mockResolvedValue({ emails: [{ uid: 9, internalDate: '2026-02-03T00:00:00Z' }] });
+    waitForSync.mockRejectedValue(new Error('no sync in this test'));
+
+    const pipeline = new AccountPipeline(account);
+    await pipeline.loadHeaders('INBOX');
+
+    expect(pipeline._lastLoadedEmails).toEqual([{ uid: 9, date: '2026-02-03T00:00:00Z' }]);
+  });
+
   it('a cold cache waits for the sync and reads once', async () => {
     const four = [{ uid: 1 }, { uid: 2 }, { uid: 3 }, { uid: 4 }];
     db.getEmailHeadersMeta.mockResolvedValueOnce(null); // nothing cached yet

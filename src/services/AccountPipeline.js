@@ -13,6 +13,22 @@ import { setArchivedGroup } from '../stores/slices/messageListSlice';
 export { hasValidCredentials };
 
 /**
+ * The two fields the content phase ever reads off a loaded header set.
+ *
+ * `EmailPipelineManager._getUncachedUids` asks each row for its uid and
+ * whether its date falls inside the local-cache window, and nothing else
+ * touches `_lastLoadedEmails`. Keeping whole rows meant a second full copy of
+ * the mailbox lived in the webview for as long as the body phase ran, beside
+ * the store's own list — measured at roughly 3.4 KB a header, so tens of MB on
+ * a five-figure mailbox, and for the ACTIVE account not even read (its queue is
+ * built from the store's rows instead).
+ *
+ * `date || internalDate` is collapsed here rather than at the reader so the
+ * projection keeps the fallback the reader used to do itself.
+ */
+const contentQueueRows = (emails) => (emails || []).map((e) => ({ uid: e.uid, date: e.date || e.internalDate }));
+
+/**
  * Manages the complete background loading pipeline for a single account:
  *   Phase 1 — load and cache INBOX headers (paginated)
  *   Phase 2 — download email bodies (.eml) with configurable concurrency
@@ -41,7 +57,7 @@ export class AccountPipeline {
     this._phase = 'idle'; // 'idle' | 'headers' | 'content' | 'done'
     this._destroyed = false;
     this._paused = false;
-    this._lastLoadedEmails = null; // Cache loaded headers in memory for content caching phase
+    this._lastLoadedEmails = null; // {uid, date} rows for the content phase — see contentQueueRows
     this._graphIdMap = null; // Map<uid, graphMessageId> for Graph content caching
   }
 
@@ -106,7 +122,7 @@ export class AccountPipeline {
 
     if (allEmails.length > 0 && !this._destroyed) {
       await db.saveEmailHeaders(this.accountId, mailbox, allEmails, total);
-      this._lastLoadedEmails = allEmails;
+      this._lastLoadedEmails = contentQueueRows(allEmails);
       console.log(`[Pipeline:${this.account.email}] Cached ${allEmails.length}/${total} headers`);
     }
   }
@@ -141,7 +157,7 @@ export class AccountPipeline {
       // Warm cache: paint what the daemon already has and let the sync land later.
       const warm = await this._readDaemonCache(mailbox);
       if (warm) {
-        this._lastLoadedEmails = warm.emails;
+        this._lastLoadedEmails = contentQueueRows(warm.emails);
         console.log(
           `[Pipeline:${this.account.email}] ${mailbox}: ${warm.emails.length}/${warm.totalEmails ?? '?'} headers from daemon cache`
         );
@@ -155,7 +171,7 @@ export class AccountPipeline {
       const cold = await this._readDaemonCache(mailbox);
       if (!cold) return false;
 
-      this._lastLoadedEmails = cold.emails;
+      this._lastLoadedEmails = contentQueueRows(cold.emails);
       console.log(
         `[Pipeline:${this.account.email}] ${mailbox}: ${cold.emails.length}/${cold.totalEmails ?? '?'} headers from daemon cache`
       );
@@ -188,7 +204,7 @@ export class AccountPipeline {
       const fresh = await this._readDaemonCache(mailbox);
       if (!fresh || this._destroyed) return;
 
-      this._lastLoadedEmails = fresh.emails;
+      this._lastLoadedEmails = contentQueueRows(fresh.emails);
       this.onHeadersRefreshed(mailbox, fresh.emails, result);
     } catch (e) {
       console.warn(`[Pipeline:${this.account.email}] ${mailbox}: sync reload skipped:`, e.message);
@@ -236,7 +252,7 @@ export class AccountPipeline {
 
     if (allHeaders.length > 0 && !this._destroyed) {
       await db.saveEmailHeaders(this.accountId, mailbox, allHeaders, allHeaders.length);
-      this._lastLoadedEmails = allHeaders;
+      this._lastLoadedEmails = contentQueueRows(allHeaders);
 
       // UID → Graph message ID for the content caching phase. Read off the
       // rows, which listGraphMessages stamped from the same response that
