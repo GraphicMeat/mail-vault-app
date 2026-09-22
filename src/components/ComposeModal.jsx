@@ -4,7 +4,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { formatDateTime } from '../utils/dateFormat';
 import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
@@ -123,7 +123,7 @@ const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade }) {
   const t = useT();
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
@@ -141,6 +141,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // the override changes while compose is open.
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
   const globalSendDelay = useSettingsStore(s => s.sendDelay) ?? 0;
+  const billingProfile = useSettingsStore(s => s.billingProfile);
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
   const spellcheckEnabled = useSettingsStore(s => s.spellcheckEnabled ?? true);
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
@@ -207,6 +208,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
   const [tzSuggestion, setTzSuggestion] = useState(null);
+  // Only the schedule panel is gated: Send and its delay menu stay free.
+  // Subscribed, so a subscription that lapses with the panel open swaps the
+  // picker for the locked panel instead of leaving a Schedule that fails.
+  const schedulePremium = showSchedulePicker && hasPremiumAccess(billingProfile);
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
@@ -622,7 +627,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const suggestName = suggestFor?.name || suggestFor?.address || '';
   const editingScheduled = Boolean(initialData?._editScheduledId);
   useEffect(() => {
-    if (!showSchedulePicker || !suggestAddress || scheduleDraft.tzPicked || editingScheduled) return undefined;
+    if (!schedulePremium || !suggestAddress || scheduleDraft.tzPicked || editingScheduled) return undefined;
     let live = true;
     const timer = setTimeout(async () => {
       const suggestion = await useScheduledStore.getState().suggestTz(suggestAddress);
@@ -634,7 +639,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       setTzSuggestion(suggestion && { ...suggestion, name: suggestName, address: suggestAddress });
     }, 250);
     return () => { live = false; clearTimeout(timer); };
-  }, [showSchedulePicker, suggestAddress, suggestName, scheduleDraft.tzPicked, editingScheduled]);
+  }, [schedulePremium, suggestAddress, suggestName, scheduleDraft.tzPicked, editingScheduled]);
 
   const insertTemplate = (template) => {
     if (detaching) return;
@@ -1530,6 +1535,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     className="absolute bottom-full right-0 mb-1 w-[26rem] bg-mail-surface border border-mail-border
                                   rounded-lg z-50 p-3 space-y-2">
                     <div className="text-sm font-medium text-mail-text">{t('scheduled.compose.pickerTitle')}</div>
+                    {schedulePremium ? <>
                     <SchedulePicker
                       localTime={scheduleDraft.localTime}
                       tz={scheduleDraft.tz}
@@ -1555,6 +1561,26 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                         {t('scheduled.compose.submit')}
                       </button>
                     </div>
+                    </> : (
+                      <div data-testid="compose-schedule-locked" className="space-y-2">
+                        <p className="text-xs text-mail-text">{t('scheduled.premium.upsell')}</p>
+                        <p className="text-xs text-mail-text-muted">{t('scheduled.premium.freeDelay')}</p>
+                        <div className="flex justify-end pt-1">
+                          <button type="button" data-testid="compose-schedule-upgrade"
+                            onClick={() => {
+                              setShowSchedulePicker(false);
+                              // A compose window of its own has no Settings:
+                              // ComposeWindow routes this to the main window.
+                              if (onUpgrade) onUpgrade();
+                              else useMailStore.getState().requestSettingsTab('billing');
+                            }}
+                            className="px-3 py-1.5 text-sm bg-mail-accent-fill hover:bg-mail-accent-hover
+                                      text-white font-medium rounded-lg transition-all">
+                            {t('common.upgrade')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

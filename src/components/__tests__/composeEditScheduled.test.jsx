@@ -5,6 +5,8 @@
 // out still says which row it replaces (minimize, undo, detach and Schedule
 // all go through one), and a Schedule the daemon refuses because the row
 // already fired is shown as its catalog message with the window left open.
+// The schedule panel is Premium: a free user gets a locked panel with the
+// way to upgrade and the free send delay, never the picker.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -86,6 +88,7 @@ const mail = {
   updateSortedEmails: vi.fn(),
   loadSentHeaders: vi.fn(),
   // Send now, and keep the closure: retryOutbox re-runs this exact function.
+  requestSettingsTab: vi.fn(),
   queueSend: (_state, sendFn) => {
     mail._sendFn = sendFn;
     mail._sendError = null;
@@ -96,6 +99,7 @@ const settings = {
   getSignature: () => '', getDisplayName: () => 'Me', getOrderedAccounts: (accounts) => accounts,
   sendAsAddresses: {}, sendDelay: 0, emailTemplates: [], spellcheckEnabled: true,
   addEmailTemplate: vi.fn(), lastComposeIdentity: null, setLastComposeIdentity: vi.fn(),
+  billingProfile: { premiumAccess: true },
 };
 vi.mock('../../stores/mailStore', () => {
   const hook = vi.fn((selector) => selector(mail));
@@ -107,7 +111,7 @@ vi.mock('../../stores/accountStore', () => ({ useAccountStore: (selector) => sel
 vi.mock('../../stores/settingsStore', () => {
   const hook = vi.fn((selector) => selector(settings));
   hook.getState = () => settings;
-  return { useSettingsStore: hook };
+  return { useSettingsStore: hook, hasPremiumAccess: (profile) => !!profile?.premiumAccess };
 });
 
 const { ComposeModal } = await import('../ComposeModal');
@@ -272,5 +276,60 @@ describe('compose timezone suggestion', () => {
     expect(asked()).toHaveLength(0);
     expect(zone()).toBe('UTC');
     expect(screen.queryByTestId('compose-schedule-tz-note')).toBeNull();
+  });
+});
+
+describe('compose schedule panel for a free user', () => {
+  const PREMIUM = settings.billingProfile;
+  beforeEach(() => { settings.billingProfile = null; mail.requestSettingsTab.mockClear(); invoke.mockClear(); });
+  afterEach(() => { settings.billingProfile = PREMIUM; });
+
+  it('shows the locked panel instead of the picker, and the free delay stays', async () => {
+    render(<ComposeModal initialData={{ ...initialData, _editScheduledId: undefined, _editScheduledRow: undefined }}
+      onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+
+    const locked = screen.getByTestId('compose-schedule-locked');
+    expect(locked.textContent).toContain('Scheduled Send is part of Premium');
+    expect(locked.textContent).toContain('delay sending by up to 5 minutes');
+    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
+    expect(screen.queryByTestId('compose-schedule-tz')).toBeNull();
+    expect(screen.getByTestId('compose-delay').disabled).toBe(false);
+    // No zone to suggest for a picker that is not there.
+    await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+    expect(invoke.mock.calls.filter(([, args]) => args?.method === 'scheduled.suggest_tz')).toHaveLength(0);
+  });
+
+  it('Upgrade opens Settings on Billing from the main window', async () => {
+    render(<ComposeModal initialData={initialData} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-schedule-upgrade'));
+
+    expect(mail.requestSettingsTab).toHaveBeenCalledWith('billing');
+    expect(screen.queryByTestId('compose-schedule-locked')).toBeNull();
+  });
+
+  it('Upgrade goes through onUpgrade from a compose window of its own', async () => {
+    const onUpgrade = vi.fn();
+    render(<ComposeModal detached initialData={initialData} onUpgrade={onUpgrade} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-schedule-upgrade'));
+
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+    expect(mail.requestSettingsTab).not.toHaveBeenCalled();
+  });
+
+  it('a subscription that lapses with the picker open swaps it for the locked panel', async () => {
+    settings.billingProfile = PREMIUM;
+    // A fresh element each time: React skips re-rendering an identical one.
+    const ui = () => <ComposeModal initialData={initialData} onClose={() => {}} onSaveState={() => {}} />;
+    const { rerender } = render(ui());
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    expect(screen.getByTestId('compose-schedule-submit')).toBeTruthy();
+
+    settings.billingProfile = null;
+    rerender(ui());
+    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
+    expect(screen.getByTestId('compose-schedule-locked')).toBeTruthy();
   });
 });

@@ -4,7 +4,7 @@ import { Button } from '../ui/Button';
 import { Clock, X, Send, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useT, getLocale } from '../../i18n/index.js';
 import { useScheduledStore } from '../../stores/scheduledStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useAutostartState } from '../../hooks/useAutostartState';
 import { scheduledSendCopyKey, canOfferAlwaysOn } from '../../utils/scheduledCopy';
 import { formatWallClock } from '../../utils/scheduledTime';
@@ -44,8 +44,8 @@ export function ScheduledSendNotice({ className = '' }) {
  * (scheduledCopy.js): `daemonAlwaysOn` is what the OS confirmed, and
  * `autostart_state` says whether this build can offer it at all, so it never
  * promises a background send, or offers a switch, the build does not have.
- * Compose keeps the one-line notice instead: a compose window of its own
- * cannot open Settings.
+ * Compose keeps the one-line notice instead: this card is too much for a
+ * popover over the message being written.
  */
 function BackgroundHelperCard({ onOpenSettings }) {
   const t = useT();
@@ -63,7 +63,7 @@ function BackgroundHelperCard({ onOpenSettings }) {
     state = (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-mail-text-muted">{t('scheduled.background.off')}</span>
-        <Button variant="accentTint" size="xs" data-testid="scheduled-background-turn-on" onClick={onOpenSettings}>
+        <Button variant="accentTint" size="xs" data-testid="scheduled-background-turn-on" onClick={() => onOpenSettings?.('daemon')}>
           {t('scheduled.background.turnOn')}
         </Button>
       </div>
@@ -78,7 +78,7 @@ function BackgroundHelperCard({ onOpenSettings }) {
             {t('scheduled.background.unsupported')}
           </span>
         )}
-        <Button variant="link" size="xs" data-testid="scheduled-background-settings" onClick={onOpenSettings}>
+        <Button variant="link" size="xs" data-testid="scheduled-background-settings" onClick={() => onOpenSettings?.('daemon')}>
           {t('scheduled.background.settingsLink', { tab: t('settings.tab.daemon') })}
         </Button>
       </div>
@@ -126,6 +126,10 @@ function RowActions({ row, onReschedule, onCancel, onSendNow }) {
  * the `scheduled-send` event via the store. Not a real IMAP mailbox — the
  * rows are the daemon's queue, so this reads the store instead of the mail
  * list machinery every other folder uses.
+ *
+ * Editing and rescheduling are Premium; seeing the queue, Cancel, Send now
+ * and Retry are not, so a lapsed subscriber can still get their mail out or
+ * stop it.
  */
 export function ScheduledFolderModal({ onClose, onOpenSettings }) {
   const t = useT();
@@ -134,6 +138,9 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
   const reschedule = useScheduledStore(s => s.reschedule);
   const cancel = useScheduledStore(s => s.cancel);
   const sendNow = useScheduledStore(s => s.sendNow);
+  const isPremium = hasPremiumAccess(useSettingsStore(s => s.billingProfile));
+  // The row whose edit or reschedule was refused, to show the upgrade under it.
+  const [lockedId, setLockedId] = useState(null);
   const [reschedulingId, setReschedulingId] = useState(null);
   const [draft, setDraft] = useState({ localTime: '', tz: '' });
   const [error, setError] = useState(null);
@@ -146,6 +153,7 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
   const visible = rows.filter(r => r.status !== 'cancelled' && r.status !== 'sent');
 
   const startReschedule = (row) => {
+    if (!isPremium) { setLockedId(row.id); return; }
     setReschedulingId(row.id);
     setDraft({ localTime: row.localTime, tz: row.tz });
   };
@@ -162,6 +170,7 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
   };
 
   const handleEdit = async (row) => {
+    if (!isPremium) { setLockedId(row.id); return; }
     try {
       if (!getAccounts().some(a => a.id === row.accountId)) throw new Error(t('scheduled.errors.accountGone'));
       // The frozen message lives only in the vault's `Scheduled` mailbox
@@ -231,6 +240,15 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
                 )}
                 {row.status === 'sending' && (
                   <div className="text-xs text-mail-text-muted">{t('scheduled.row.sending')}</div>
+                )}
+                {lockedId === row.id && (
+                  <div data-testid={`scheduled-locked-${row.id}`} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-mail-text-muted">{t('scheduled.premium.editLocked')}</span>
+                    <Button variant="accentTint" size="xs" data-testid={`scheduled-upgrade-${row.id}`}
+                      onClick={() => onOpenSettings?.('billing')}>
+                      {t('common.upgrade')}
+                    </Button>
+                  </div>
                 )}
                 {reschedulingId === row.id && (
                   <div className="pt-1">

@@ -2,18 +2,20 @@
 //
 // The Scheduled folder: its "keep running" card tells the truth for each
 // always-on state, and clicking a row opens that email for editing from its
-// vault copy without cancelling the schedule underneath it.
+// vault copy without cancelling the schedule underneath it. Editing and
+// rescheduling are Premium; Cancel and Send now work on any plan.
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const { getLocalEmailFull, openCompose, cancel, loadRows, state } = vi.hoisted(() => ({
+const { getLocalEmailFull, openCompose, cancel, sendNow, loadRows, state } = vi.hoisted(() => ({
   getLocalEmailFull: vi.fn(),
   loadRows: async () => [],
   openCompose: vi.fn(),
   cancel: vi.fn(),
-  state: { rows: [], daemonAlwaysOn: false, autostart: null },
+  sendNow: vi.fn(),
+  state: { rows: [], daemonAlwaysOn: false, autostart: null, premium: true },
 }));
 
 vi.mock('../../../i18n/index.js', () => ({
@@ -27,11 +29,12 @@ vi.mock('../../../stores/scheduledStore', () => ({
     loadRows,
     reschedule: vi.fn(),
     cancel,
-    sendNow: vi.fn(),
+    sendNow,
   }),
 }));
 vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: selector => selector({ daemonAlwaysOn: state.daemonAlwaysOn }),
+  useSettingsStore: selector => selector({ daemonAlwaysOn: state.daemonAlwaysOn, billingProfile: state.premium }),
+  hasPremiumAccess: profile => profile === true,
 }));
 vi.mock('../../../hooks/useAutostartState', () => ({ useAutostartState: () => state.autostart }));
 vi.mock('../../../stores/accountStore', () => ({ getAccounts: () => [{ id: 'acct-1', email: 'me@example.com' }] }));
@@ -53,9 +56,11 @@ beforeEach(() => {
   state.rows = [];
   state.daemonAlwaysOn = false;
   state.autostart = null;
+  state.premium = true;
   getLocalEmailFull.mockReset();
   openCompose.mockReset();
   cancel.mockReset();
+  sendNow.mockReset();
 });
 afterEach(cleanup);
 
@@ -72,6 +77,14 @@ describe('Scheduled folder rows', () => {
     expect(getLocalEmailFull).toHaveBeenCalledWith('acct-1', 'Scheduled', 7);
     expect(cancel).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('Reschedule opens the picker under the row, with no upgrade prompt', () => {
+    state.rows = [row('q1', 'queued')];
+    render(<ScheduledFolderModal />);
+    fireEvent.click(within(screen.getByTestId('scheduled-row-q1')).getByTitle('scheduled.row.reschedule'));
+    expect(screen.getByTestId('scheduled-reschedule-q1-time')).toBeTruthy();
+    expect(screen.queryByTestId('scheduled-locked-q1')).toBeNull();
   });
 
   it('opens a failed row too, but a row already sending is not a button', () => {
@@ -97,6 +110,48 @@ describe('Scheduled folder rows', () => {
   });
 });
 
+describe('Scheduled folder for a free user', () => {
+  beforeEach(() => { state.premium = false; });
+
+  it('a row click shows the upgrade under that row instead of opening it', async () => {
+    state.rows = [row('q1', 'queued'), row('q2', 'queued')];
+    const onOpenSettings = vi.fn();
+    render(<ScheduledFolderModal onOpenSettings={onOpenSettings} />);
+
+    fireEvent.click(screen.getByTestId('scheduled-row-open-q1'));
+
+    const locked = screen.getByTestId('scheduled-locked-q1');
+    expect(locked.textContent).toContain('scheduled.premium.editLocked');
+    expect(screen.queryByTestId('scheduled-locked-q2')).toBeNull();
+    expect(getLocalEmailFull).not.toHaveBeenCalled();
+    expect(openCompose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('scheduled-upgrade-q1'));
+    expect(onOpenSettings).toHaveBeenCalledWith('billing');
+  });
+
+  it('Reschedule shows the upgrade, not the picker, while Cancel and Send now still work', () => {
+    state.rows = [row('q1', 'queued')];
+    render(<ScheduledFolderModal onOpenSettings={vi.fn()} />);
+    const scope = within(screen.getByTestId('scheduled-row-q1'));
+
+    fireEvent.click(scope.getByTitle('scheduled.row.reschedule'));
+    expect(screen.getByTestId('scheduled-locked-q1')).toBeTruthy();
+    expect(screen.queryByTestId('scheduled-reschedule-q1-time')).toBeNull();
+
+    fireEvent.click(scope.getByTitle('scheduled.row.sendNow'));
+    expect(sendNow).toHaveBeenCalledWith('q1');
+    fireEvent.click(scope.getByTitle('common.cancel'));
+    expect(cancel).toHaveBeenCalledWith('q1');
+  });
+
+  it('Retry on a failed row works too', () => {
+    state.rows = [row('f1', 'failed')];
+    render(<ScheduledFolderModal />);
+    fireEvent.click(within(screen.getByTestId('scheduled-row-f1')).getByTitle('common.retry'));
+    expect(sendNow).toHaveBeenCalledWith('f1');
+  });
+});
+
 describe('Scheduled folder background card', () => {
   it('explains the background helper by the setting\'s own name', () => {
     render(<ScheduledFolderModal />);
@@ -118,7 +173,7 @@ describe('Scheduled folder background card', () => {
     const onOpenSettings = vi.fn();
     render(<ScheduledFolderModal onOpenSettings={onOpenSettings} />);
     fireEvent.click(screen.getByTestId('scheduled-background-turn-on'));
-    expect(onOpenSettings).toHaveBeenCalled();
+    expect(onOpenSettings).toHaveBeenCalledWith('daemon');
     expect(screen.queryByTestId('scheduled-background-unsupported')).toBeNull();
   });
 
@@ -129,7 +184,7 @@ describe('Scheduled folder background card', () => {
     expect(screen.getByTestId('scheduled-background-unsupported')).toBeTruthy();
     expect(screen.queryByTestId('scheduled-background-turn-on')).toBeNull();
     fireEvent.click(screen.getByTestId('scheduled-background-settings'));
-    expect(onOpenSettings).toHaveBeenCalled();
+    expect(onOpenSettings).toHaveBeenCalledWith('daemon');
   });
 
   it('claims nothing about this build before the answer arrives', () => {

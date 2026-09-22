@@ -892,13 +892,17 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, []);
 
-  // Listen for open-settings event from native menu
+  // Listen for open-settings event from native menu, or from a compose window
+  // of its own asking for a tab (its Upgrade). That one comes forward first:
+  // Settings opened behind the compose window reads as a dead button.
   useEffect(() => {
     let unlisten;
     let active = true;
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('open-settings', () => {
-        openSettings();
+      listen('open-settings', ({ payload }) => {
+        if (typeof payload?.tab !== 'string') { openSettings(); return; }
+        void WebviewWindow.getByLabel('main').then(window => window?.setFocus()).catch(() => {});
+        openSettings({ tab: payload.tab });
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;

@@ -536,9 +536,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
   const [showScheduled, setShowScheduled] = useState(false);
-  // The Scheduled folder's "keep running" card leads to the Background helper
-  // tab; the folder closes first so Settings is what is left on screen.
-  const openBackgroundHelperSettings = () => { setShowScheduled(false); onOpenSettings?.('daemon'); };
+  // The Scheduled folder leads to a Settings tab (Background helper from its
+  // "keep running" card, Billing from its upgrade prompt); the folder closes
+  // first so Settings is what is left on screen.
+  const openSettingsFromScheduled = (tab) => { setShowScheduled(false); onOpenSettings?.(tab); };
   const scheduledPendingCount = useScheduledStore(
     s => s.rows.filter(r => r.status === 'queued' || r.status === 'failed').length
   );
@@ -1049,7 +1050,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {errorModal}
         {hoverBubble}
         {folderOpsUi}
-        {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} onOpenSettings={openBackgroundHelperSettings} />}
+        {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} onOpenSettings={openSettingsFromScheduled} />}
       </div>
     );
   }
@@ -1285,7 +1286,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {errorModal}
       {hoverBubble}
       {folderOpsUi}
-      {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} onOpenSettings={openBackgroundHelperSettings} />}
+      {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} onOpenSettings={openSettingsFromScheduled} />}
     </div>
   );
 }

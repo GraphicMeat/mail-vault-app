@@ -56,6 +56,7 @@
 import { ImapFlow } from 'imapflow';
 import { MOCK_PASSWORD } from './mockImap.js';
 import { waitForApp, waitForEmails } from './helpers.js';
+import { setPremium } from './mockBilling.js';
 import {
   openComposeFresh,
   closeComposeHard,
@@ -231,6 +232,9 @@ describe('Scheduled Send', function () {
     await waitForEmails();
     lukeId = (browser.mockAccounts || []).find((a) => a.email === LUKE)?.id;
     expect(lukeId).toBeTruthy();
+    // Scheduling at a set time is Premium: without this Compose shows its
+    // locked panel and the picker this file drives never opens.
+    await setPremium(true);
   });
 
   afterEach(async function () {
@@ -239,6 +243,7 @@ describe('Scheduled Send', function () {
   });
 
   after(async function () {
+    await setPremium(false).catch(() => {});
     // Anything still queued/failed under luke when the file ends is this
     // file's own mess (a row it meant to cancel or send, not a fixture
     // another spec expects) — scoped to lukeId since nothing here touches

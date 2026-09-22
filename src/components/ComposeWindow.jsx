@@ -221,6 +221,8 @@ export function ComposeWindow() {
       onAddTemplate={value => relaySetting('addEmailTemplate', value)}
       onQueueSend={(snapshot, delay) => request('send', { snapshot, delay }, { timeoutMs: null })}
       onSchedule={snapshot => request('schedule', { snapshot }, { timeoutMs: null })}
+      // Settings lives in the main window, which also answers the native menu's Settings item.
+      onUpgrade={() => { void emit('open-settings', { tab: 'billing' }).catch(() => {}); }}
     />
   </>;
 }

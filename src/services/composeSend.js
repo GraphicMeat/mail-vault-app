@@ -8,7 +8,7 @@ import { deleteLocalDraft } from './localDrafts';
 import { markAnswered, markForwarded } from './workflows/messageMutations';
 import { send } from './transport';
 import { useMailStore } from '../stores/mailStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
 import { parseReferenceList, splitRecipients } from '../utils/emailParser';
@@ -308,6 +308,11 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
  * send, or save an edited scheduled email (`_editScheduledId`) over its row.
  */
 export async function scheduleCompose({ snapshot, account, settings = {} }) {
+  // Scheduling at a set time is Premium. Compose shows a free user a locked
+  // panel instead of the picker; this is the one place both the in-window and
+  // the detached Schedule land, so a stale panel cannot get past it. What is
+  // already queued keeps sending: the daemon's worker is never gated.
+  if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) throw new Error(t('errors.composeSchedulePremium'));
   const schedule = snapshot._scheduleDraft;
   if (!schedule?.localTime || !schedule?.tz) throw new Error(t('errors.composeMissingSchedule'));
   const freshAccount = await ensureFreshToken(account);

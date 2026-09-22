@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   invoke, sendEmail, buildOutgoingMime, appendLocalIndex, deleteLocalDraft, markAnswered, markForwarded, createSchedule, ensureFreshToken,
-  replaceSchedule, cancelSchedule,
+  replaceSchedule, cancelSchedule, billing,
 } = vi.hoisted(() => ({
+  billing: { premium: true },
   replaceSchedule: vi.fn().mockResolvedValue(undefined),
   cancelSchedule: vi.fn().mockResolvedValue(undefined),
   invoke: vi.fn().mockResolvedValue(undefined),
@@ -50,6 +51,7 @@ vi.mock('../../stores/mailStore', () => {
 });
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ setLastComposeIdentity: vi.fn() }) },
+  hasPremiumAccess: () => billing.premium,
 }));
 vi.mock('../../stores/scheduledStore', () => ({
   useScheduledStore: { getState: () => ({
@@ -92,6 +94,7 @@ beforeEach(() => {
   cancelSchedule.mockResolvedValue(undefined);
   ensureFreshToken.mockReset();
   ensureFreshToken.mockImplementation(async item => item);
+  billing.premium = true;
   const state = mailStore.useMailStore.getState();
   state.sentEmails = [];
   state.emails = [];
@@ -204,6 +207,22 @@ describe('createComposeSend', () => {
 });
 
 describe('scheduleCompose', () => {
+  /// The Premium gate every Schedule goes through, in-window or detached: a
+  /// panel left open past a lapsed subscription still cannot queue or edit.
+  it('refuses a free user before touching credentials, the queue or the draft', async () => {
+    billing.premium = false;
+    const scheduled = { ...snapshot, _scheduleDraft: { localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' } };
+
+    await expect(scheduleCompose({ snapshot: scheduled, account })).rejects.toThrow('Scheduling an email for a set time is part of Premium.');
+    await expect(scheduleCompose({ snapshot: { ...scheduled, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } }, account }))
+      .rejects.toThrow('part of Premium');
+
+    expect(ensureFreshToken).not.toHaveBeenCalled();
+    expect(createSchedule).not.toHaveBeenCalled();
+    expect(replaceSchedule).not.toHaveBeenCalled();
+    expect(deleteLocalDraft).not.toHaveBeenCalled();
+  });
+
   it('rejects an incomplete schedule before touching account credentials', async () => {
     await expect(scheduleCompose({
       snapshot: { ...snapshot, _scheduleDraft: { localTime: '', tz: 'Europe/Vilnius' } },
