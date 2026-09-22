@@ -268,8 +268,60 @@ sudo spctl --master-disable
   brew install llvm
   cargo install cargo-xwin
   rustup target add x86_64-pc-windows-msvc
-  cargo xwin check --target x86_64-pc-windows-msvc -p mailvault-core -p mailvault-daemon
+  cargo xwin check --target x86_64-pc-windows-msvc -p mailvault-core -p mailvault-daemon -p mailvault
   ```
+  All three crates check green today. The `mailvault` (Tauri) crate's build
+  script looks for the sidecar at
+  `src-tauri/binaries/mailvault-daemon-x86_64-pc-windows-msvc.exe` (that
+  directory is gitignored) — build it first with
+  `cargo xwin build --target x86_64-pc-windows-msvc -p mailvault-daemon` and
+  copy the resulting `.exe` there, or the app crate's check fails looking for
+  a file that doesn't exist rather than on anything in our code. This proves
+  the code compiles for the target and nothing more: no linking of the app
+  binary (`check` skips that), no execution, no proof the daemon or app runs.
+- **`cargo xwin check --tests` does not pass.** Test code does not compile for
+  Windows: five `UnixListener`/`std::os::unix` sites in
+  `src-tauri/src/main.rs` (lines 4023, 4048, 4069, 4093, 4122), three
+  `tokio::net::unix`/`UnixStream` sites in `src-daemon/src/server.rs`
+  (lines 660, 978, 1053), and two `std::os::unix::fs::PermissionsExt::set_mode`
+  calls in `src-daemon/src/classification_worker.rs` (lines 537, 564). None of
+  these are gated behind `#[cfg(unix)]` on the test itself. A Windows CI job
+  cannot run `cargo test` until those test modules are gated — that gating was
+  deliberately left out of this pass; it is follow-up work, not a check that
+  silently regressed.
+- **Schema-regeneration trap.** A Windows-target `cargo build` of the
+  `mailvault` crate rewrites tracked files under `src-tauri/gen/schemas/`:
+  `desktop-schema.json` is regenerated from the Windows feature set and loses
+  every Sparkle permission (Sparkle is macOS-only), `acl-manifests.json`
+  changes, and an untracked `windows-schema.json` appears. Committing any of
+  that breaks the macOS build's ACL. `cargo xwin check` does not trigger this
+  — every `check` run for this document left `git status --short` clean —
+  but `build` does. After **every** Windows build, before staging anything:
+  ```bash
+  git checkout -- src-tauri/gen/schemas/
+  rm -f src-tauri/gen/schemas/windows-schema.json
+  ```
+  Confirm `git status --short` is clean before committing. Never
+  `git add -A` in this repo.
+
+#### Windows smoke-test checklist (for a VM, later)
+
+Nothing below has been run. This is the outstanding work once a Windows
+machine or VM exists — the checklist a future maintainer works through, not a
+report of results:
+
+1. App launches; window appears; no WebView2 prompt loop.
+2. Daemon spawns; `\\.\pipe\mailvault-<user>` exists; the Helper card in
+   Settings reads healthy.
+3. Second app launch focuses the first, does not start a second daemon.
+4. Add an IMAP account; password lands in Credential Manager
+   (`cmdkey /list`).
+5. Sync a folder; `.eml` files appear with `;2,` names (not `:2,` — Windows
+   gets the semicolon separator); no path errors in `daemon.log`.
+6. Open a message, search for a word in it, star it, delete it, undo.
+7. Backup to an external folder.
+8. Quit the app; daemon exits; the named pipe disappears.
+9. Relaunch; account, mail and search index are all still there.
 
 ### Linux (future)
 - Will require webkit2gtk and related libraries
