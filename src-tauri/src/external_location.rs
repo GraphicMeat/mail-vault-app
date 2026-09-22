@@ -130,9 +130,9 @@ mod macos {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { stop_access_inner(&p) }));
     }
 
-    pub fn open_in_finder(path: &str, bookmark: Option<Vec<u8>>, reveal: bool) -> Result<(), String> {
+    pub fn open_in_finder(path: &str, bookmark: Option<Vec<u8>>, reveal: bool, app: Option<&str>) -> Result<(), String> {
         let p = path.to_string();
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { open_in_finder_inner(&p, bookmark, reveal) })) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { open_in_finder_inner(&p, bookmark, reveal, app) })) {
             Ok(result) => result,
             Err(e) => {
                 let msg = format!("open_in_finder panicked: {:?}", e.downcast_ref::<&str>().unwrap_or(&"unknown"));
@@ -229,7 +229,11 @@ mod macos {
     /// click arriving in between saw nothing at all. NSWorkspace also returns
     /// whether the open was accepted; spawning `/usr/bin/open` threw the exit
     /// code away, which is why the failure was silent.
-    unsafe fn open_in_finder_inner(path: &str, bookmark: Option<Vec<u8>>, reveal: bool) -> Result<(), String> {
+    ///
+    /// `app` (a bundle path) opens the file in that app instead of its default
+    /// one. Both strings go to NSWorkspace as objects, never through a script
+    /// or a shell, so a sender-chosen attachment name is only ever a name.
+    unsafe fn open_in_finder_inner(path: &str, bookmark: Option<Vec<u8>>, reveal: bool, app: Option<&str>) -> Result<(), String> {
         let url = path_to_nsurl(path)?;
 
         // The scope has to be started on the URL the bookmark resolves to —
@@ -263,6 +267,9 @@ mod macos {
             let urls: *const Object = msg_send![class!(NSArray), arrayWithObject: url];
             let _: () = msg_send![workspace, activateFileViewerSelectingURLs: urls];
             Ok(())
+        } else if let Some(app) = app {
+            let ok: bool = msg_send![workspace, openFile: string_to_nsstring(path) withApplication: string_to_nsstring(app)];
+            if ok { Ok(()) } else { Err(format!("{} refused to open {}", app, path)) }
         } else {
             let ok: bool = msg_send![workspace, openURL: url];
             if ok { Ok(()) } else { Err(format!("Finder refused to open {}", path)) }
@@ -271,7 +278,7 @@ mod macos {
         if started {
             let _: () = msg_send![scoped, stopAccessingSecurityScopedResource];
         }
-        info!("[external_location] open_in_finder({}, reveal: {}, scoped: {}) -> {:?}", path, reveal, started, result);
+        info!("[external_location] open_in_finder({}, reveal: {}, app: {:?}, scoped: {}) -> {:?}", path, reveal, app, started, result);
         result
     }
 
@@ -482,7 +489,7 @@ pub fn release_external_access(path: &str) {
 /// [`macos::open_in_finder_inner`] for why spawning `/usr/bin/open` cannot work
 /// for a folder outside the sandbox container.
 #[cfg(target_os = "macos")]
-pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool) -> Result<(), String> {
+pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool, app: Option<&str>) -> Result<(), String> {
     let bookmark = [SLOT_EXTERNAL_BACKUP, SLOT_VAULT].iter().find_map(|slot| {
         let stored = saved(app_data_dir, slot)?;
         if stored.display_path.is_empty() || !std::path::Path::new(path).starts_with(&stored.display_path) {
@@ -490,7 +497,7 @@ pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool) 
         }
         saved_bookmark(app_data_dir, slot)
     });
-    macos::open_in_finder(path, bookmark, reveal)
+    macos::open_in_finder(path, bookmark, reveal, app)
 }
 
 /// Validate the saved external location by resolving + testing write access.

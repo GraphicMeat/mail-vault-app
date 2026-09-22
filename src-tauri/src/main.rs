@@ -871,7 +871,7 @@ fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), Stri
 
     #[cfg(target_os = "macos")]
     {
-        return finder_open(&app_handle, &path, true);
+        return finder_open(&app_handle, &path, true, None);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -902,12 +902,12 @@ fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), Stri
 /// bookmark's scope at that moment — and `.spawn()`ing `/usr/bin/open` threw
 /// away the refusal, so the button appeared to do nothing.
 #[cfg(target_os = "macos")]
-fn finder_open(app_handle: &tauri::AppHandle, path: &str, reveal: bool) -> Result<(), String> {
+fn finder_open(app_handle: &tauri::AppHandle, path: &str, reveal: bool, app: Option<&str>) -> Result<(), String> {
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
-    external_location::open_in_finder(&data_dir, path, reveal)
+    external_location::open_in_finder(&data_dir, path, reveal, app)
 }
 
 #[tauri::command]
@@ -924,7 +924,7 @@ fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
         // if a data folder ever gets one of those names.
         let p = std::path::Path::new(&path);
         let reveal = p.is_dir() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"));
-        return finder_open(&app_handle, &path, reveal);
+        return finder_open(&app_handle, &path, reveal, None);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -932,8 +932,10 @@ fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path])
+        // Not `cmd /C start`: cmd.exe reparses the line, and an `&` in a
+        // sender-chosen attachment name would run whatever follows it.
+        Command::new("explorer")
+            .arg(&path)
             .spawn()
             .map_err(|e| format!("Failed to open file: {}", e))?;
     }
@@ -950,33 +952,32 @@ fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_with_dialog(path: String) -> Result<(), String> {
+fn open_with_dialog(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
     info!("open_with_dialog called for: {}", path);
 
+    // The attachment name is chosen by whoever sent the mail. It used to be
+    // spliced into an AppleScript, where a quote or a backslash in it ran a
+    // shell command. Now the app is picked in a native panel and the file is
+    // handed to NSWorkspace as an object: nothing parses the name.
     #[cfg(target_os = "macos")]
     {
-        // Pass the path and file name via environment, not through string
-        // interpolation: `system attribute` reads them back as opaque strings,
-        // so a filename containing quotes, backslashes or newlines can't end
-        // the AppleScript literal and inject a `do shell script`.
-        let filename = Path::new(&path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let script = r#"
-            set thePath to system attribute "MV_OPEN_PATH"
-            set theName to system attribute "MV_OPEN_NAME"
-            set chosenApp to choose application with prompt ("Open '" & theName & "' with:")
-            set appPath to POSIX path of (path to chosenApp)
-            do shell script "open -a " & quoted form of appPath & " " & quoted form of thePath
-        "#;
-        Command::new("osascript")
-            .env("MV_OPEN_PATH", &path)
-            .env("MV_OPEN_NAME", &filename)
-            .args(["-e", script])
-            .spawn()
-            .map_err(|e| format!("Failed to open 'Open With' dialog: {}", e))?;
+        use tauri_plugin_dialog::DialogExt;
+        let handle = app_handle.clone();
+        app_handle
+            .dialog()
+            .file()
+            .set_directory("/Applications")
+            .add_filter("Applications", &["app"])
+            .pick_file(move |picked| {
+                let Some(app) = picked.and_then(|p| p.into_path().ok()) else { return };
+                if let Err(e) = finder_open(&handle, &path, false, Some(&app.to_string_lossy())) {
+                    error!("Open With failed: {}", e);
+                }
+            });
     }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = &app_handle;
 
     #[cfg(target_os = "windows")]
     {
