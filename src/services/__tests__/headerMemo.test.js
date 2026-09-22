@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const {
-  remember, recall, peek, forget, trim, adopt, clearOnScreen, recallOnScreen, _size,
+  remember, recall, peek, forget, trim, adopt, clearOnScreen, recallOnScreen, isOnScreen, _size,
 } = await import('../headerMemo.js');
 
 const META = { totalEmails: 3, totalCached: 3, highestModseq: 900 };
@@ -313,9 +313,12 @@ describe('headerMemo', () => {
     it('answers nothing for another view, after the view is left, or once forgotten', async () => {
       const id = nextId();
       adopt(id, 'INBOX', META, Date.now());
+      expect(isOnScreen(id, 'INBOX')).toBe(true);
+      expect(isOnScreen(id, 'Sent')).toBe(false);
       expect(await recallOnScreen(id, 'Sent', EMAILS, META)).toBeNull();
 
       clearOnScreen();
+      expect(isOnScreen(id, 'INBOX')).toBe(false);
       expect(await recallOnScreen(id, 'INBOX', EMAILS, META)).toBeNull();
 
       adopt(id, 'INBOX', META, Date.now());

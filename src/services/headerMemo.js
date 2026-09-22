@@ -188,6 +188,11 @@ export function clearOnScreen() {
   _onScreen = null;
 }
 
+/** Whether the store's set for this view carries a stamp `recallOnScreen` can use. */
+export function isOnScreen(accountId, mailbox) {
+  return _onScreen?.key === _key(accountId, mailbox);
+}
+
 /**
  * `emails` (the store's rows for this view) brought up to `meta`, or null.
  *

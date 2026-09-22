@@ -15,6 +15,7 @@ import { proveServerUidsIfUnproven } from './loadEmails';
 import {
   recall as memoRecall, remember as memoRemember, peek as memoPeek, trim as memoTrim,
   adopt as memoAdopt, clearOnScreen as memoClearOnScreen, recallOnScreen as memoRecallOnScreen,
+  isOnScreen as memoIsOnScreen,
 } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
@@ -650,8 +651,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const ownRows = reactivatesView && effectiveMailbox === mailbox
         ? currentEmails.filter(e => !e._optimistic)
         : [];
-      const ownRowsCover = ownRows.length > 0
-        && ownRows.length >= Math.min(500, memoMeta?.totalCached ?? 0);
+      // Checked synchronously, so an activation this cannot serve (no stamp, no
+      // meta) awaits exactly what it did before. The disk paint's timing is
+      // load-bearing: loadServerEmails only refuses to certify completeness
+      // over rows a disk paint merged EARLIER, so an extra await here let the
+      // paint land after it and put an unvouched row under a complete set.
+      const ownRowsCover = ownRows.length > 0 && memoMeta?.totalCached > 0
+        && memoIsOnScreen(accountId, effectiveMailbox)
+        && ownRows.length >= Math.min(500, memoMeta.totalCached);
       const memoized = await memoRecall(accountId, effectiveMailbox, memoMeta, memoIo)
         ?? (ownRowsCover
           ? await memoRecallOnScreen(accountId, effectiveMailbox, ownRows, memoMeta, memoIo)
