@@ -156,7 +156,7 @@
   "autoTag.instruction": "Regla, en lenguaje sencillo",
   "autoTag.instructionHint": "La regla solo ve el remitente, el asunto, la carpeta y si hay un adjunto — nunca el cuerpo del mensaje.",
   "autoTag.instructionPlaceholder": "p. ej. Recibos y facturas de tiendas online",
-  "autoTag.intro": "Reglas que etiquetan el correo por ti, escritas en lenguaje sencillo. Se ejecutan en este Mac a menos que apuntes una explícitamente a un proveedor remoto, y nunca mueven ni eliminan nada en el servidor.",
+  "autoTag.intro": "Reglas que etiquetan el correo por ti, escritas en lenguaje sencillo. Se ejecutan en este Mac a menos que apuntes una explícitamente a un proveedor remoto, y nunca mueven ni eliminan nada en el servidor. Una regla funciona esté o no activada la IA en otros sitios: ese interruptor cubre las Respuestas rápidas y las acciones de Redacción.",
   "autoTag.listIdPresent": "Cabecera de lista de correo presente",
   "autoTag.mailbox": "Carpeta",
   "autoTag.minConfidence": "Confianza mínima",

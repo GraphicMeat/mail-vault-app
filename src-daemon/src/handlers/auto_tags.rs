@@ -252,13 +252,10 @@ async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
 
 /// Bounded, one-shot backfill: evaluate the rule over its last N cached
 /// headers and assign the tag to everything that clears the threshold,
-/// recording a batch so it can be undone. Runs to completion inline rather
-/// than through a persistent worker — nothing in this phase drives a
-/// standing loop over new mail (`enabled` only gates the app's own UI; there
-/// is no ongoing evaluation to hand off to one). A future phase that DOES
-/// want new mail auto-tagged as it arrives should give this its own
-/// `start()` in `main.rs`, modeled on `scheduled_send_worker.rs`, calling
-/// straight back into `evaluate` above rather than a second copy of it.
+/// recording a batch so it can be undone. Runs to completion inline, which is
+/// what makes it the explicit action: mail arriving from now on is handled by
+/// `auto_tag_worker`, which sweeps enabled rules and calls straight back into
+/// `evaluate` above, so history is only ever touched by someone pressing this.
 async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let account_id = arg(params, "accountId")?;
     let provider = provider_of(params)?;

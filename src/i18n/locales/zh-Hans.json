@@ -156,7 +156,7 @@
   "autoTag.instruction": "规则(用简单语言描述)",
   "autoTag.instructionHint": "规则只会查看发件人、主题、邮箱和是否有附件——绝不会查看正文。",
   "autoTag.instructionPlaceholder": "例如:来自网店的收据和发票",
-  "autoTag.intro": "用简单的语言写规则,就能自动为邮件打标签。除非你明确将某条规则指向远程服务,否则它们都在这台 Mac 上运行,并且永远不会移动或删除服务器上的任何内容。",
+  "autoTag.intro": "用简单的语言写规则,就能自动为邮件打标签。除非你明确将某条规则指向远程服务,否则它们都在这台 Mac 上运行,并且永远不会移动或删除服务器上的任何内容。 即使别处关闭了 AI 功能，规则仍会运行：那个开关管的是快速回复和撰写操作。",
   "autoTag.listIdPresent": "存在邮件列表标头",
   "autoTag.mailbox": "邮箱",
   "autoTag.minConfidence": "最低置信度",

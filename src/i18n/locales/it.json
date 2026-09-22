@@ -156,7 +156,7 @@
   "autoTag.instruction": "Regola, in linguaggio naturale",
   "autoTag.instructionHint": "La regola vede solo mittente, oggetto, cartella e presenza di allegati — mai il corpo del messaggio.",
   "autoTag.instructionPlaceholder": "es. Ricevute e fatture di negozi online",
-  "autoTag.intro": "Regole che etichettano la posta per te, scritte in linguaggio naturale. Vengono eseguite su questo Mac a meno che non ne punti esplicitamente una verso un provider remoto, e non spostano né eliminano mai nulla sul server.",
+  "autoTag.intro": "Regole che etichettano la posta per te, scritte in linguaggio naturale. Vengono eseguite su questo Mac a meno che non ne punti esplicitamente una verso un provider remoto, e non spostano né eliminano mai nulla sul server. Una regola funziona anche se le funzioni IA sono disattivate altrove: quel pulsante riguarda le Risposte rapide e le azioni di Scrittura.",
   "autoTag.listIdPresent": "Intestazione di mailing list presente",
   "autoTag.mailbox": "Cartella",
   "autoTag.minConfidence": "Affidabilità minima",

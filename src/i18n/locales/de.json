@@ -156,7 +156,7 @@
   "autoTag.instruction": "Regel, in Klartext",
   "autoTag.instructionHint": "Die Regel sieht nur Absender, Betreff, Ordner und ob ein Anhang vorhanden ist — nie den Nachrichtentext.",
   "autoTag.instructionPlaceholder": "z. B. Quittungen und Rechnungen von Onlineshops",
-  "autoTag.intro": "Regeln, die Post für dich in Klartext taggen. Sie laufen auf diesem Mac, sofern du nicht ausdrücklich einen externen Anbieter angibst, und sie verschieben oder löschen niemals etwas auf dem Server.",
+  "autoTag.intro": "Regeln, die Post für dich in Klartext taggen. Sie laufen auf diesem Mac, sofern du nicht ausdrücklich einen externen Anbieter angibst, und sie verschieben oder löschen niemals etwas auf dem Server. Eine Regel läuft unabhängig davon, ob KI-Funktionen an anderer Stelle eingeschaltet sind: dieser Schalter gilt für Schnellantworten und Verfassen-Aktionen.",
   "autoTag.listIdPresent": "Mailinglisten-Header vorhanden",
   "autoTag.mailbox": "Ordner",
   "autoTag.minConfidence": "Mindestvertrauen",

@@ -156,7 +156,7 @@
   "autoTag.instruction": "Règle, en langage courant",
   "autoTag.instructionHint": "La règle ne voit que l'expéditeur, l'objet, le dossier et la présence d'une pièce jointe — jamais le corps du message.",
   "autoTag.instructionPlaceholder": "p. ex. Reçus et factures des boutiques en ligne",
-  "autoTag.intro": "Des règles qui étiquettent le courrier à votre place, écrites en langage courant. Elles s'exécutent sur ce Mac sauf si vous en pointez une explicitement vers un fournisseur distant, et elles ne déplacent ni ne suppriment jamais rien sur le serveur.",
+  "autoTag.intro": "Des règles qui étiquettent le courrier à votre place, écrites en langage courant. Elles s'exécutent sur ce Mac sauf si vous en pointez une explicitement vers un fournisseur distant, et elles ne déplacent ni ne suppriment jamais rien sur le serveur. Une règle fonctionne que les fonctions d'IA soient activées ailleurs ou non : ce réglage concerne les Réponses rapides et les actions de Rédaction.",
   "autoTag.listIdPresent": "En-tête de liste de diffusion présent",
   "autoTag.mailbox": "Dossier",
   "autoTag.minConfidence": "Confiance minimale",

@@ -156,7 +156,7 @@
   "autoTag.instruction": "규칙 (쉬운 말로)",
   "autoTag.instructionHint": "이 규칙은 보낸 사람, 제목, 메일함, 첨부파일 여부만 확인하며 본문은 보지 않습니다.",
   "autoTag.instructionPlaceholder": "예: 온라인 상점의 영수증과 청구서",
-  "autoTag.intro": "쉬운 말로 적으면 메일에 태그를 붙여주는 규칙입니다. 원격 제공자를 명시적으로 지정하지 않는 한 이 Mac에서 실행되며, 서버의 어떤 것도 이동하거나 삭제하지 않습니다.",
+  "autoTag.intro": "쉬운 말로 적으면 메일에 태그를 붙여주는 규칙입니다. 원격 제공자를 명시적으로 지정하지 않는 한 이 Mac에서 실행되며, 서버의 어떤 것도 이동하거나 삭제하지 않습니다. 규칙은 다른 곳에서 AI 기능이 꺼져 있어도 작동합니다. 그 스위치는 빠른 답장과 작성 동작에 적용됩니다.",
   "autoTag.listIdPresent": "메일링 리스트 헤더 존재",
   "autoTag.mailbox": "메일함",
   "autoTag.minConfidence": "최소 신뢰도",

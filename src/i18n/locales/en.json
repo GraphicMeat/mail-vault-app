@@ -156,7 +156,7 @@
   "autoTag.instruction": "Rule, in plain English",
   "autoTag.instructionHint": "The rule only sees the sender, subject, mailbox and whether there's an attachment — never the message body.",
   "autoTag.instructionPlaceholder": "e.g. Receipts and invoices from online stores",
-  "autoTag.intro": "Rules that tag mail for you, written in plain English. They run on this Mac unless you explicitly point one at a remote provider, and they never move or delete anything on the server.",
+  "autoTag.intro": "Rules that tag mail for you, written in plain English. They run on this Mac unless you explicitly point one at a remote provider, and they never move or delete anything on the server. A rule runs whether or not AI features are switched on elsewhere: that switch covers Quick Replies and Compose actions.",
   "autoTag.listIdPresent": "Mailing-list header present",
   "autoTag.mailbox": "Mailbox",
   "autoTag.minConfidence": "Minimum confidence",
