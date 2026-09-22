@@ -251,28 +251,49 @@ pub async fn run(state: Arc<DaemonState>, socket_path: &Path) -> std::io::Result
 /// leaves no filesystem residue when its owner dies.
 #[cfg(windows)]
 pub async fn run(state: Arc<DaemonState>, endpoint: &Path) -> std::io::Result<()> {
-    use tokio::net::windows::named_pipe::ServerOptions;
+    use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+
+    // Retries until it succeeds: the caller must never be left without a
+    // waiting instance (see the call sites below), and a transient failure
+    // here must not end the listener the way a bare `?` would.
+    async fn create_next_instance(name: &str) -> NamedPipeServer {
+        loop {
+            match ServerOptions::new().create(name) {
+                Ok(next) => return next,
+                Err(e) => {
+                    error!("Failed to create the next pipe instance: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            }
+        }
+    }
+
     let name = endpoint.to_string_lossy().to_string();
 
     let mut server = ServerOptions::new().first_pipe_instance(true).create(&name)?;
     info!("Daemon listening on {}", name);
 
     loop {
-        server.connect().await?;
+        if let Err(e) = server.connect().await {
+            // The unix arm logs an accept error and keeps accepting; a bare
+            // `?` here would instead kill the whole daemon over one client
+            // that opened the pipe and dropped before ConnectNamedPipe
+            // completed (an aborted liveness probe, a cancelled connect
+            // racing a spawn). The failed instance itself is discarded
+            // rather than retried: what `ConnectNamedPipe` leaves it in is
+            // undocumented, so reusing it would be guessing. Recreating one
+            // just reopens the same instance-less window `create()` below
+            // already lives with — no new hazard class, just hit more often.
+            error!("Failed to accept a pipe connection: {e}");
+            server = create_next_instance(&name).await;
+            continue;
+        }
         let connected = server;
         // Create the replacement BEFORE spawning the handler, and never leave
         // the loop without one: between `connect()` returning and `create()`
         // succeeding there is no instance waiting on the name, and a probe that
         // lands in that window reads the daemon as down.
-        server = loop {
-            match ServerOptions::new().create(&name) {
-                Ok(next) => break next,
-                Err(e) => {
-                    error!("Failed to create the next pipe instance: {e}");
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-            }
-        };
+        server = create_next_instance(&name).await;
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             if let Err(e) = handle_connection(state, connected).await {

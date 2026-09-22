@@ -317,7 +317,8 @@ async fn daemon_main() {
     // moment while it releases it; wait it out instead of exiting immediately.
     //
     // Unix only: see `acquire_singleton_lock`'s doc comment for why Windows
-    // needs no equivalent here.
+    // has a different, authoritative mechanism instead (below and in
+    // `server::run`).
     #[cfg(unix)]
     let _lock_file = {
         let mut lock = acquire_singleton_lock(&data_dir);
@@ -336,6 +337,25 @@ async fn daemon_main() {
             }
         }
     };
+
+    // Windows equivalent, advisory only — NOT a replacement for the real
+    // rejection. That's `ServerOptions::first_pipe_instance(true)` inside
+    // `server::run`, and it cannot run this early: creating a pipe instance
+    // registers it with tokio's IO driver, so it has to happen on the
+    // runtime that will drive it, and that runtime (and its own OS thread)
+    // don't exist until `spawn_on_own_thread` below. `is_listening` is a
+    // point-in-time enumeration of `\\.\pipe\`, not a lock — two daemons
+    // launched within the same few hundred milliseconds of each other can
+    // both pass this check, and only `first_pipe_instance` still tells them
+    // apart when that happens. What this buys is the common case: a second
+    // launch while one is already running exits now, for free, instead of
+    // racing the live daemon through the PID file write, the `.eml`
+    // migration, and opening `app.db`/`custody.db` below.
+    #[cfg(windows)]
+    if mailvault_core::transport::is_listening(&mailvault_core::transport::endpoint(&ipc_dir())) {
+        info!("Another daemon appears to already be running for this data directory. Exiting.");
+        std::process::exit(0);
+    }
 
     write_pid_file(&data_dir);
 
