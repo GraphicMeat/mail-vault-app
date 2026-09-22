@@ -394,10 +394,44 @@ export function _resolveMailboxPath(accountMailboxes, folderId) {
 // the mailbox paths the server told us about and matching.
 // Rust's `char::is_alphanumeric` is Unicode-aware, so this regex must be too:
 // an "Entwürfe" folder is not stored as "Entw_rfe".
+// On Windows, `vault_dir_name` (src-core/src/search_index/text.rs) additionally
+// suffixes Win32-reserved names — mirrored here by `avoidReserved`, gated on
+// the same platform check `vaultDirName` uses. The two sides agree everywhere,
+// not just on unix; the shared fixture (`vaultDirNameParity.test.js`) only
+// covers the unix-equal part, since it runs on a non-Windows CI host.
 const VAULT_UNSAFE_RE = /[^\p{Alphabetic}\p{N}.\-_]/gu;
 
+const RESERVED_DEVICES = new Set(['CON', 'PRN', 'AUX', 'NUL']);
+
+// Win32 reserved device names, and names Win32 silently rewrites — pure port
+// of `avoid_reserved` in src-core/src/search_index/text.rs. Kept standalone
+// (not folded into `vaultDirName`) so it can be unit-tested on any platform
+// without mocking `navigator`.
+export function avoidReserved(name) {
+  const stem = name.includes('.') ? name.slice(0, name.indexOf('.')) : name;
+  const upper = stem.toUpperCase();
+  const numbered = (prefix) => {
+    if (!upper.startsWith(prefix)) return false;
+    const rest = upper.slice(prefix.length);
+    return rest.length === 1 && rest >= '1' && rest <= '9';
+  };
+  if (RESERVED_DEVICES.has(upper) || numbered('COM') || numbered('LPT')) {
+    return `${name}_`;
+  }
+  if (name.endsWith('.') || name.endsWith(' ')) {
+    return `${name}_`;
+  }
+  return name;
+}
+
+function isWindowsPlatform() {
+  return typeof navigator !== 'undefined'
+    && (navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows'));
+}
+
 export function vaultDirName(mailbox) {
-  return String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
+  const safe = String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
+  return isWindowsPlatform() ? avoidReserved(safe) : safe;
 }
 
 export function flattenMailboxes(mailboxes, out = []) {

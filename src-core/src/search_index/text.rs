@@ -2,7 +2,11 @@
 
 /// Directory name a mailbox path gets under `Maildir/<account>/`. Mirrors
 /// `vaultDirName` in src/stores/slices/unifiedHelpers.js
-/// (`/[^\p{Alphabetic}\p{N}.\-_]/gu` → `_`); the shared fixture keeps them equal.
+/// (`/[^\p{Alphabetic}\p{N}.\-_]/gu` → `_`); the shared fixture keeps the two
+/// sanitizers equal on unix. On Windows both sides additionally run
+/// `avoid_reserved`/`avoidReserved` — kept as a second, platform-gated step
+/// rather than folded into the fixture, so the fixture stays the same on
+/// every platform and only the Windows-only step needs its own test.
 pub fn vault_dir_name(mailbox: &str) -> String {
     let safe: String = mailbox.chars()
         .map(|c| if c.is_alphabetic() || c.is_numeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
