@@ -42,6 +42,7 @@ beforeEach(() => {
     saveView: vi.fn(async view => view),
     deleteView: vi.fn(async () => {}),
     moveView: vi.fn(async () => true),
+    previewDef: vi.fn(async () => ({ available: true, reason: null, rows: [], total: 0 })),
   }));
   useTagStoreMock = create(() => ({ tags: [{ id: 't1', name: 'Receipts' }, { id: 't2', name: 'Clients' }] }));
   useFieldStoreMock = create(() => ({

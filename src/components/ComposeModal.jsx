@@ -25,6 +25,7 @@ import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime } from '../utils/scheduledTime';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
+import { signatureCaretPos } from '../utils/signatureCaret';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId }) {
@@ -1151,7 +1152,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     const editor = editorRef.current;
                     if (editor?.chain) {
                       e.preventDefault();
-                      editor.chain().focus().run();
+                      editor.chain().focus(signatureCaretPos(editor.state.doc) ?? 'start').run();
                     }
                   }
                 }}

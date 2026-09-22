@@ -366,6 +366,7 @@ export const useSettingsStore = create(
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
+      viewsSectionCollapsed: false, // Whether the sidebar's Views section is folded away
       sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
       sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
@@ -970,6 +971,7 @@ export const useSettingsStore = create(
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setTimeFormat: (value) => set({ timeFormat: value }),
+      toggleViewsSection: () => set(state => ({ viewsSectionCollapsed: !state.viewsSectionCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
@@ -1206,6 +1208,7 @@ export const useSettingsStore = create(
           actionButtonDisplay: 'icon-label',
           emailViewerTheme: 'system',
           sidebarCollapsed: false,
+          viewsSectionCollapsed: false,
           sidebarStyle: 'list',
           sidebarLayout: 'stacked',
           sidebarDensity: 'comfortable',

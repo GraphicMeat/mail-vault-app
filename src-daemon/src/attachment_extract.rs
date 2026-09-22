@@ -13,21 +13,28 @@ mod imp {
 
     impl TextExtractor for NativeExtractor {
         fn pdf_text_layer(&self, bytes: &[u8]) -> Result<(String, usize), ExtractError> {
-            let data = NSData::with_bytes(bytes);
-            let doc = unsafe { PDFDocument::initWithData(PDFDocument::alloc(), &data) };
-            // `initWithData` returns `None` when the bytes don't parse as a
-            // PDF at all (truncated, corrupt, mislabeled) — not specifically
-            // because it's encrypted. A structurally valid encrypted PDF
-            // constructs fine and is caught by `isLocked()` below.
-            let Some(doc) = doc else {
-                return Err(ExtractError::Permanent("failed"));
-            };
-            if unsafe { doc.isLocked() } {
-                return Err(ExtractError::Permanent("encrypted"));
-            }
-            let pages = unsafe { doc.pageCount() } as usize;
-            let text = unsafe { doc.string() }.map(|s| s.to_string()).unwrap_or_default();
-            Ok((text, pages.max(1)))
+            // Every Obj-C temporary these frameworks hand back is autoreleased.
+            // The index worker is a long-lived thread with no run loop, so its
+            // top-level pool only drains when the thread exits — i.e. never.
+            // Without this the daemon grew ~780MB of Vision/PDFKit leftovers
+            // (5k live `CRImageReaderOutput`, IOSurface-backed) over one day.
+            objc2::rc::autoreleasepool(|_| {
+                let data = NSData::with_bytes(bytes);
+                let doc = unsafe { PDFDocument::initWithData(PDFDocument::alloc(), &data) };
+                // `initWithData` returns `None` when the bytes don't parse as a
+                // PDF at all (truncated, corrupt, mislabeled) — not specifically
+                // because it's encrypted. A structurally valid encrypted PDF
+                // constructs fine and is caught by `isLocked()` below.
+                let Some(doc) = doc else {
+                    return Err(ExtractError::Permanent("failed"));
+                };
+                if unsafe { doc.isLocked() } {
+                    return Err(ExtractError::Permanent("encrypted"));
+                }
+                let pages = unsafe { doc.pageCount() } as usize;
+                let text = unsafe { doc.string() }.map(|s| s.to_string()).unwrap_or_default();
+                Ok((text, pages.max(1)))
+            })
         }
 
         fn pdf_ocr(&self, _bytes: &[u8], _max_pages: usize) -> Result<String, ExtractError> {
@@ -43,42 +50,47 @@ mod imp {
             use objc2_foundation::NSArray;
             use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel};
 
-            let data = NSData::with_bytes(bytes);
-            let handler = VNImageRequestHandler::initWithData_options(
-                VNImageRequestHandler::alloc(),
-                &data,
-                &objc2_foundation::NSDictionary::new(),
-            );
+            // Same pool rule as `pdf_text_layer` — Vision is the worst
+            // offender of the two (every recognised image leaks its reader
+            // output and the IOSurface behind it).
+            objc2::rc::autoreleasepool(|_| {
+                let data = NSData::with_bytes(bytes);
+                let handler = VNImageRequestHandler::initWithData_options(
+                    VNImageRequestHandler::alloc(),
+                    &data,
+                    &objc2_foundation::NSDictionary::new(),
+                );
 
-            let request = VNRecognizeTextRequest::new();
-            request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
+                let request = VNRecognizeTextRequest::new();
+                request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
 
-            let request_ref: &VNRequest = &request;
-            let requests = NSArray::from_slice(&[request_ref]);
-            if handler.performRequests_error(&requests).is_err() {
-                return Err(ExtractError::Transient("vision request failed".into()));
-            }
-
-            // `performRequests_error`'s `Err` only covers scheduling-level
-            // failure; the synchronous objc2-vision 0.3.2 API has no
-            // per-request `.error()` to tell "genuinely found nothing" apart
-            // from "failed internally" when `results()` comes back `None`.
-            // Treat `None` as retryable rather than risk recording a false
-            // "ok" that never gets another sweep. `Some(empty array)` means
-            // Vision ran fine and found zero text regions — that's a real
-            // empty-text success, not a failure.
-            let results = request.results();
-            let Some(results) = results else {
-                return Err(ExtractError::Transient("vision returned no results".into()));
-            };
-            let mut out = String::new();
-            for obs in results.iter() {
-                if let Some(candidate) = obs.topCandidates(1).iter().next() {
-                    out.push_str(&candidate.string().to_string());
-                    out.push('\n');
+                let request_ref: &VNRequest = &request;
+                let requests = NSArray::from_slice(&[request_ref]);
+                if handler.performRequests_error(&requests).is_err() {
+                    return Err(ExtractError::Transient("vision request failed".into()));
                 }
-            }
-            Ok(out)
+
+                // `performRequests_error`'s `Err` only covers scheduling-level
+                // failure; the synchronous objc2-vision 0.3.2 API has no
+                // per-request `.error()` to tell "genuinely found nothing" apart
+                // from "failed internally" when `results()` comes back `None`.
+                // Treat `None` as retryable rather than risk recording a false
+                // "ok" that never gets another sweep. `Some(empty array)` means
+                // Vision ran fine and found zero text regions — that's a real
+                // empty-text success, not a failure.
+                let results = request.results();
+                let Some(results) = results else {
+                    return Err(ExtractError::Transient("vision returned no results".into()));
+                };
+                let mut out = String::new();
+                for obs in results.iter() {
+                    if let Some(candidate) = obs.topCandidates(1).iter().next() {
+                        out.push_str(&candidate.string().to_string());
+                        out.push('\n');
+                    }
+                }
+                Ok(out)
+            })
         }
     }
 }
@@ -237,5 +249,56 @@ mod tests {
         let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hello.png")).unwrap();
         let text = current_extractor().image_ocr(&bytes, "image/png").unwrap();
         assert!(text.to_lowercase().contains("hello"), "got: {text:?}");
+    }
+
+    /// Regression guard for the autorelease pools in `imp`: without them the
+    /// index worker thread accumulates every Vision temporary it ever made
+    /// (a live daemon reached 780MB of IOSurface-backed `CRImageReaderOutput`
+    /// over one day). `#[ignore]`d because it measures the process footprint,
+    /// which only means anything when the test runs alone.
+    /// Run with: `cargo test -p mailvault-daemon --bin mailvault-daemon
+    ///            vision_ocr_does_not_grow -- --ignored --test-threads=1`
+    #[test]
+    #[ignore]
+    fn vision_ocr_does_not_grow_the_footprint() {
+        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hello.png")).unwrap();
+        let extractor = current_extractor();
+        for _ in 0..20 {
+            let _ = extractor.image_ocr(&bytes, "image/png");
+        }
+        let baseline = footprint_bytes();
+        for _ in 0..200 {
+            let _ = extractor.image_ocr(&bytes, "image/png");
+        }
+        let grew = footprint_bytes().saturating_sub(baseline);
+        eprintln!("200 OCR calls grew the footprint by {}MB", grew / (1024 * 1024));
+        assert!(
+            grew < 64 * 1024 * 1024,
+            "200 OCR calls grew the footprint by {}MB — an autorelease pool is missing",
+            grew / (1024 * 1024)
+        );
+    }
+
+    /// `vmmap` rather than `task_info`: IOSurface is shared memory, so RSS
+    /// does not see the leak this test exists to catch.
+    fn footprint_bytes() -> u64 {
+        let out = std::process::Command::new("/usr/bin/vmmap")
+            .args(["--summary", &std::process::id().to_string()])
+            .output()
+            .expect("vmmap");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("Physical footprint:"))
+            .unwrap_or_else(|| panic!("no footprint line in vmmap output: {text}"));
+        let value = line.split_whitespace().last().unwrap();
+        let (number, scale) = value.split_at(value.len() - 1);
+        let scale = match scale {
+            "K" => 1024.0,
+            "M" => 1024.0 * 1024.0,
+            "G" => 1024.0 * 1024.0 * 1024.0,
+            other => panic!("unexpected footprint unit {other:?} in {line:?}"),
+        };
+        (number.parse::<f64>().expect("footprint number") * scale) as u64
     }
 }

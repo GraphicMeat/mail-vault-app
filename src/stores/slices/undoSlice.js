@@ -23,6 +23,22 @@ export const createUndoSlice = (set, get) => ({
     set({ undo: null });   // one shot — a second Cmd+Z must not redo the redo
     try {
       await u.run();
+      // The delete evicted the row from the open result list (pruneSearchResults)
+      // and parked its key in `excludedSearchCopies`, which no reload clears —
+      // so an undone delete came back to the folder and stayed missing from the
+      // search. Re-running the query is what puts it back: it drops the
+      // exclusions and re-matches the message, which the restore gave a NEW uid
+      // anyway, so re-inserting the old row would have been a dead one.
+      //
+      // Its own try: a query that fails to re-run is not a failed undo, and
+      // saying "Undo failed" over a message that is back would be a lie.
+      try {
+        const { useSearchStore } = await import('../../stores/searchStore');
+        const search = useSearchStore.getState();
+        if (search.searchActive) await search.performSearch();
+      } catch (e) {
+        console.warn('[undo] Could not re-run the search:', e);
+      }
       return true;
     } catch (e) {
       set({ error: tr('undo.failed', { err: e?.message || String(e) }) });

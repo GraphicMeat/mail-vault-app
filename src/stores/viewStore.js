@@ -20,6 +20,18 @@ export function viewLabel(view, translate) {
   return '';
 }
 
+/// How many views a free account may keep. The starters count: they are
+/// ordinary rows a person can delete, so a free account that wants a view of
+/// its own makes room by dropping one it never opens.
+export const MAX_FREE_VIEWS = 3;
+
+/// Is there room for one more view? The only place the cap is decided — both
+/// doors that make a view (the + in Settings, "save this search") ask here,
+/// and hiding a button is never the guard.
+export function viewLimitReached(views, premium) {
+  return !premium && (views?.length || 0) >= MAX_FREE_VIEWS;
+}
+
 /// The folders of one account, and which of them are its bin, junk and
 /// archive. A folder's name is a per-mailbox word, so "not the bin" is only
 /// answerable here, never in the daemon.
@@ -49,6 +61,9 @@ function accountsPayload() {
 /// Opening a view is an await, and a second click must not land under the
 /// first one's rows. Same shape the search store uses for its own runs.
 let runGeneration = 0;
+/// The editor's preview runs its own generation: a keystroke in Settings must
+/// not cancel the view somebody has open on the mail screen.
+let previewGeneration = 0;
 
 export const useViewStore = create((set, get) => ({
   views: [],
@@ -56,6 +71,10 @@ export const useViewStore = create((set, get) => ({
   /// counted from the rows on screen: those are one page of one view.
   counts: {},
   activeViewId: null,
+  /// The sidebar's + asked for a new view; the Views settings page consumes
+  /// this once on open. A prop cannot cross that gap — Settings is a window of
+  /// its own.
+  pendingNew: false,
   /// Why the last evaluation could not answer ("building", "unavailable",
   /// "off"), or null. An empty list is a different statement.
   unavailableReason: null,
@@ -161,6 +180,37 @@ export const useViewStore = create((set, get) => ({
     if (get().activeViewId === id) get().closeView();
     await get().loadViews();
     void get().refreshCounts();
+  },
+
+  /// Make a view, or say why not. Both doors route here so the cap is decided
+  /// once: hiding the + in Settings would still leave "save this search" open.
+  createView: async (view, premium) => {
+    // The cap is a fact about what is stored, not about what this window has
+    // loaded. A Settings window opens with an empty list, and deciding on that
+    // handed a full account one more view; the sidebar's + arrives before the
+    // first `views.list` has even answered.
+    const views = await get().loadViews().catch(() => get().views);
+    if (viewLimitReached(views, premium)) return { ok: false, reason: 'limit' };
+    const saved = await get().saveView(view);
+    return { ok: true, view: saved };
+  },
+
+  /// What a definition would find, for the editor's preview. Never shows its
+  /// rows on the mail screen — that is what `openView` is for — and answers
+  /// with the same "could not answer" the sidebar already speaks.
+  previewDef: async (def, limit = 25) => {
+    const mine = ++previewGeneration;
+    let reply;
+    try {
+      reply = await daemonCall('views.evaluate', { def, accounts: accountsPayload(), limit });
+    } catch (error) {
+      if (mine !== previewGeneration) return null;
+      console.warn('[views] could not preview the view:', error?.message || error);
+      return { available: false, reason: 'error', rows: [], total: 0 };
+    }
+    if (mine !== previewGeneration) return null;
+    if (!reply?.available) return { available: false, reason: reply?.reason || 'unavailable', rows: [], total: 0 };
+    return { available: true, reason: null, rows: reply.rows || [], total: reply.total || 0 };
   },
 
   /// The search on screen, as a view definition. `tags` are resolved from the

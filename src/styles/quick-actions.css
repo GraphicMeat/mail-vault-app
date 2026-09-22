@@ -544,7 +544,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 8px 4px;
+  padding: 0 0 4px;
 }
 
 .sidebar-view-row {
@@ -583,7 +583,7 @@
 }
 
 .sidebar-views-unavailable {
-  padding: 0 16px 6px;
+  padding: 0 8px 6px;
   font-size: 11px;
   color: var(--mail-text-muted);
 }
@@ -812,4 +812,169 @@
   color: var(--mail-text);
   font-size: 11px;
   max-width: 120px;
+}
+
+/* ── Views: the sidebar section folds, the page builds ──────────────────── */
+
+.sidebar-views-fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--mail-text-muted);
+}
+
+.sidebar-views-fold h2 {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: inherit;
+}
+
+.sidebar-view-new,
+.views-new {
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 4px;
+  color: var(--mail-text-muted);
+}
+
+.sidebar-view-new:hover,
+.views-new:hover:not(:disabled) {
+  color: var(--mail-text);
+  background: var(--mail-surface-hover);
+}
+
+.views-new:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.views-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.views-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.views-row-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--mail-text);
+  text-align: left;
+}
+
+.views-row-button:hover {
+  background: var(--mail-surface-hover);
+}
+
+.views-row-button.is-editing {
+  background: var(--mail-surface-hover);
+  font-weight: 600;
+}
+
+.views-empty,
+.views-refused {
+  color: var(--mail-text-muted);
+}
+
+.views-upgrade {
+  color: var(--mail-accent, #4f46e5);
+  text-decoration: underline;
+}
+
+/* The builder is a page, not a sidebar popover: it gets page-sized type. */
+.views-settings .view-editor {
+  font-size: 12px;
+}
+
+.views-settings .view-editor input[type="text"],
+.views-settings .view-editor input[type="date"],
+.views-settings .view-editor input:not([type]),
+.views-settings .view-editor select {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.view-editor-hint {
+  color: var(--mail-text-muted);
+}
+
+.view-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mail-border);
+}
+
+.view-preview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.view-preview-heading h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mail-text-muted);
+}
+
+.view-preview-total,
+.view-preview-note {
+  font-size: 11px;
+  color: var(--mail-text-muted);
+}
+
+/* The preview is a sample, not the mail list: it scrolls inside the builder
+   rather than growing the page until Save is off screen. */
+.view-preview-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.view-preview-rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.view-preview-rows li:nth-child(odd) {
+  background: var(--mail-surface);
+}
+
+.view-preview-sender,
+.view-preview-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view-preview-sender {
+  color: var(--mail-text-muted);
+}
+
+.view-preview-date {
+  color: var(--mail-text-muted);
+  white-space: nowrap;
 }

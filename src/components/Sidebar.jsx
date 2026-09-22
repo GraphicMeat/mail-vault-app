@@ -515,6 +515,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  // A view and a folder are two lists, and only one of them is on screen. The
+  // account stays active — the daemon needs its mailboxes to run the view at
+  // all — so what a view takes away is the highlight, not the account.
+  const activeViewId = useViewStore(s => s.activeViewId);
   const mailboxes = useAccountStore(s => s.mailboxes);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   // STATUS counts for the folders that are not open. Keyed by account, and
@@ -547,7 +551,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // last. activateAccount aborts whatever is in flight, so the later call is
   // the one that wins — as long as it is actually made.
   const activateInbox = useCallback(
-    (accountId) => { onOpenMail?.(); return activateAccount(accountId, 'INBOX'); },
+    (accountId) => {
+      if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
+      onOpenMail?.();
+      return activateAccount(accountId, 'INBOX');
+    },
     [activateAccount, onOpenMail],
   );
   const setViewMode = useUiStore(s => s.setViewMode);
@@ -924,7 +932,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Account icons */}
-        <SidebarViews collapsed />
+        <SidebarViews collapsed onOpenSettings={onOpenSettings} />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
@@ -936,7 +944,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               <CollapsedAccountButton
                 account={account}
                 label={displayNames[account.id] || account.name || account.email}
-                isActive={account.id === activeAccountId}
+                isActive={account.id === activeAccountId && !activeViewId}
                 color={getAccountColor(accountColors, account)}
                 initial={getAccountInitial(account, displayNames[account.id])}
                 unifiedInbox={unifiedInbox}
@@ -970,7 +978,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <FolderTree
             compact
             mailboxes={mailboxes}
-            activeMailbox={activeMailbox}
+            activeMailbox={activeViewId ? null : activeMailbox}
             expanded={expandedFolders}
             onToggle={toggleFolder}
             onSelect={selectFolder}
@@ -1055,9 +1063,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   };
   const useSwitcher = sidebarLayout === 'switcher';
   const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
-    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !insightsOpen ? 'true' : undefined}
-      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !insightsOpen ? 'sidebar-account-selected' : ''}`}
-      onClick={() => { if (chooser) closeChooser(); onOpenMail?.(); setUnifiedInbox(true); }}>
+    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !insightsOpen && !activeViewId ? 'true' : undefined}
+      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !insightsOpen && !activeViewId ? 'sidebar-account-selected' : ''}`}
+      onClick={() => {
+        if (chooser) closeChooser();
+        if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
+        onOpenMail?.();
+        setUnifiedInbox(true);
+      }}>
       <span className="sidebar-unified-icon"><Inbox size={17} /></span>
       <span>{t('sidebar.allInboxes')}</span>
     </button>
@@ -1068,7 +1081,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       onMouseEnter={chooser ? undefined : () => handleAccountHoverStart(account.id)}
       onMouseLeave={chooser ? undefined : scheduleHoverClose}>
       <ExpandedAccountRow account={account} label={displayNames[account.id] || account.name || account.email}
-        isActive={account.id === activeAccountId} color={getAccountColor(accountColors, account)}
+        isActive={account.id === activeAccountId && !activeViewId} color={getAccountColor(accountColors, account)}
         initial={getAccountInitial(account, displayNames[account.id])} unifiedInbox={unifiedInbox}
         connectionStatus={connectionStatus} unreadCount={unreadPerAccount[account.id] || 0}
         insightsOpen={insightsOpen}
@@ -1158,7 +1171,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
           )}
         </button>
-        <SidebarViews />
+        <SidebarViews onOpenSettings={onOpenSettings} />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>
@@ -1231,7 +1244,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </label>}
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
             {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} /> : (
-              <Folders mailboxes={mailboxes} activeMailbox={activeMailbox} expanded={expandedFolders}
+              <Folders mailboxes={mailboxes} activeMailbox={activeViewId ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
             )}

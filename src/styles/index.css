@@ -1395,9 +1395,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 .email-action-group { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
 .email-action-main { display: contents; }
 .email-action-tools { margin-left: auto; }
-.email-action-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border-radius: 6px; font-size: 12px; line-height: 1.4; color: var(--mail-text-muted); white-space: nowrap; }
+.email-action-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border-radius: 6px; font-size: 12px; line-height: 1.4; color: var(--quick-action-color, var(--mail-text-muted)); white-space: nowrap; }
 .email-action-button svg { flex-shrink: 0; }
-.email-action-button:hover:not(:disabled), .email-action-button[aria-expanded="true"] { background: var(--mail-surface-hover); color: var(--mail-text); }
+.email-action-button:hover:not(:disabled), .email-action-button[aria-expanded="true"] { background: var(--mail-surface-hover); color: var(--quick-action-color, var(--mail-text)); }
 .email-action-button:disabled { opacity: .5; }
 .email-action-primary { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .email-action-danger:hover:not(:disabled) { color: var(--mail-danger); }
