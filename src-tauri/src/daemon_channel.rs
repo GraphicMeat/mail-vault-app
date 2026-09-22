@@ -7,10 +7,23 @@ use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::OnceLock;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
+
+/// The split halves of whichever stream type `connect` produced. A unix
+/// socket and a Windows named pipe both go through `tokio::io::split`
+/// (rather than the stream-specific `into_split()`, which unix sockets have
+/// and named pipes don't), so the same `ReadHalf`/`WriteHalf` wrapper types
+/// work on both platforms — only the type parameter differs.
+#[cfg(unix)]
+type DaemonRead = tokio::io::ReadHalf<tokio::net::UnixStream>;
+#[cfg(unix)]
+type DaemonWrite = tokio::io::WriteHalf<tokio::net::UnixStream>;
+#[cfg(windows)]
+type DaemonRead = tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>;
+#[cfg(windows)]
+type DaemonWrite = tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>;
 
 static TX: OnceLock<UnboundedSender<String>> = OnceLock::new();
 static CONNECTED: AtomicBool = AtomicBool::new(false);
@@ -126,13 +139,13 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
     }
 }
 
-async fn write_line(w: &mut OwnedWriteHalf, v: &Value) -> Result<(), String> {
+async fn write_line<W: tokio::io::AsyncWrite + Unpin>(w: &mut W, v: &Value) -> Result<(), String> {
     let mut buf = v.to_string().into_bytes();
     buf.push(b'\n');
     w.write_all(&buf).await.map_err(|e| e.to_string())
 }
 
-async fn read_line(lines: &mut Lines<BufReader<OwnedReadHalf>>) -> Result<Value, String> {
+async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(lines: &mut Lines<R>) -> Result<Value, String> {
     let line = lines.next_line().await.map_err(|e| e.to_string())?.ok_or("daemon closed the connection")?;
     serde_json::from_str(&line).map_err(|e| e.to_string())
 }
@@ -144,7 +157,7 @@ async fn read_line(lines: &mut Lines<BufReader<OwnedReadHalf>>) -> Result<Value,
 /// forever.
 const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
-async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<OwnedReadHalf>>, OwnedWriteHalf), String> {
+async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>, DaemonWrite), String> {
     let (socket, token_path) = crate::daemon_ipc_paths()?;
     // Both ensure_daemon_running (blocking: socket check, heartbeat, possible
     // restart) and the token file read are blocking I/O — neither belongs on
@@ -162,7 +175,22 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<OwnedReadHal
     if STOPPING.load(SeqCst) {
         return Err("app is exiting".into());
     }
-    let (r, mut w) = tokio::net::UnixStream::connect(&socket).await.map_err(|e| e.to_string())?.into_split();
+    #[cfg(unix)]
+    let (r, mut w) = {
+        let stream = tokio::net::UnixStream::connect(&socket).await.map_err(|e| e.to_string())?;
+        tokio::io::split(stream)
+    };
+    // A pipe client can lose the race for a free instance; ERROR_PIPE_BUSY is
+    // "try again in a moment", not "no daemon". The caller's reconnect backoff
+    // (`daemon_ipc::next_backoff`) handles the retry, so surface it as an
+    // ordinary connect error rather than a special case here.
+    #[cfg(windows)]
+    let (r, mut w) = {
+        let stream = tokio::net::windows::named_pipe::ClientOptions::new()
+            .open(&socket)
+            .map_err(|e| e.to_string())?;
+        tokio::io::split(stream)
+    };
     let mut lines = BufReader::new(r).lines();
     let handshake = async {
         write_line(&mut w, &json!({"token": token.trim()})).await?;
@@ -184,7 +212,7 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<OwnedReadHal
 
 /// Reads daemon events and re-emits them to the frontend. Never writes —
 /// see `write_loop` for why the two are split across tasks.
-async fn pump(app: &tauri::AppHandle, mut lines: Lines<BufReader<OwnedReadHalf>>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) {
+async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut lines: Lines<R>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) {
     loop {
         tokio::select! {
             line = lines.next_line() => match line {
@@ -216,7 +244,7 @@ async fn pump(app: &tauri::AppHandle, mut lines: Lines<BufReader<OwnedReadHalf>>
 /// + newline in the same buffer). Returns the receiver so the next
 /// connection attempt can reuse it — `rx` outlives any single connection,
 /// since `TX`'s sender (used by `notify()`) is set once for the app's life.
-async fn write_loop(mut w: OwnedWriteHalf, mut rx: UnboundedReceiver<String>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) -> UnboundedReceiver<String> {
+async fn write_loop<W: tokio::io::AsyncWrite + Unpin>(mut w: W, mut rx: UnboundedReceiver<String>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) -> UnboundedReceiver<String> {
     loop {
         tokio::select! {
             out = rx.recv() => match out {

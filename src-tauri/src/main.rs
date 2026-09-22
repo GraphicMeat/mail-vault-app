@@ -1760,7 +1760,7 @@ fn daemon_child_pid() -> Option<libc::pid_t> {
 /// Inside the sandbox HOME is the container home, the same for app and daemon.
 pub(crate) fn daemon_ipc_paths() -> Result<(PathBuf, PathBuf), String> {
     let dir = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?.join(".mailvault");
-    Ok((dir.join("mv.sock"), dir.join("mv.token")))
+    Ok((mailvault_core::transport::endpoint(&dir), dir.join("mv.token")))
 }
 
 /// Path to the daemon's PID file. This is NOT under `daemon_ipc_paths()`'s
@@ -1835,12 +1835,16 @@ fn pid_is_dead(pid: libc::pid_t) -> bool {
     ret == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
 }
 
+/// The sidecar's filename. Tauri appends `.exe` on Windows when it installs the
+/// external binary, so the search has to look for the same name it shipped.
+const DAEMON_EXE: &str = if cfg!(windows) { "mailvault-daemon.exe" } else { "mailvault-daemon" };
+
 /// Find the daemon binary. Checks next to the app binary first, then common build paths.
 fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     // 1. Next to the Tauri app binary (release layout)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let candidate = dir.join("mailvault-daemon");
+            let candidate = dir.join(DAEMON_EXE);
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -1859,7 +1863,7 @@ fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
         std::env::current_dir().ok(),
     ].into_iter().flatten() {
         for profile in ["debug", "release"] {
-            let candidate = base.join("target").join(profile).join("mailvault-daemon");
+            let candidate = base.join("target").join(profile).join(DAEMON_EXE);
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -1912,12 +1916,16 @@ fn spawn_detached_daemon() -> Result<(), String> {
 /// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
 fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
     // Already running?
-    if socket_path.exists() {
-        // Quick liveness check: can we connect?
-        if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
+    if mailvault_core::transport::is_listening(socket_path) {
+        // Quick liveness check: can we actually connect? (Same defect as the
+        // `.exists()` probes above: a raw unix `UnixStream::connect` here
+        // doesn't compile on Windows. `transport::connect_sync` is the
+        // cross-platform blocking client Task 3 built for exactly this.)
+        if mailvault_core::transport::connect_sync(socket_path, std::time::Duration::from_secs(1)).is_ok() {
             return Ok(());
         }
-        // Stale socket — remove it
+        // Stale socket — remove it (a no-op on Windows: an unaccepted pipe
+        // name isn't a filesystem entry to unlink)
         let _ = std::fs::remove_file(socket_path);
     }
 
@@ -1931,7 +1939,7 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
                 // Still running but socket gone — wait a moment
                 for _ in 0..20 {
                     std::thread::sleep(std::time::Duration::from_millis(100));
-                    if socket_path.exists() { return Ok(()); }
+                    if mailvault_core::transport::is_listening(socket_path) { return Ok(()); }
                 }
                 return Err("Daemon child is running but socket not appearing".into());
             }
@@ -1981,7 +1989,7 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
     // Wait for socket to appear (up to 3 seconds)
     for _ in 0..30 {
         std::thread::sleep(std::time::Duration::from_millis(100));
-        if socket_path.exists() {
+        if mailvault_core::transport::is_listening(socket_path) {
             info!("Daemon socket ready");
             return Ok(());
         }
@@ -1994,7 +2002,10 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
 /// escalating to SIGKILL. Must exceed the daemon's own shutdown budget (2s of
 /// IMAP logout in src-daemon/src/main.rs) or we kill it mid-cleanup — and it
 /// blocks app quit, so it can't be generous.
-#[cfg(unix)]
+///
+/// Not `cfg(unix)`-only: `stop_daemon_locked` uses it as a plain socket-gone
+/// deadline on every platform, not just in the SIGTERM-specific unix arm of
+/// `shutdown_daemon_child` below.
 const DAEMON_STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Stop the on-demand daemon child process (called on app exit).
@@ -2052,9 +2063,22 @@ fn set_cached_daemon_token(token: Option<String>) {
     *DAEMON_TOKEN.lock().unwrap_or_else(|p| p.into_inner()) = token;
 }
 
+/// A cheap identity for "this exact endpoint was already build-verified".
+///
+/// Windows has no inode and a pipe has no metadata, so it returns 0 — which the
+/// caller already reads as "no cache", costing one extra heartbeat per call
+/// rather than a wrong cache hit.
 fn socket_ino(path: &Path) -> u64 {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata(path).map(|m| m.ino()).unwrap_or(0)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).map(|m| m.ino()).unwrap_or(0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        0
+    }
 }
 
 /// A daemon is listening AND it is this build's (spec §3.3). Blocking: call it
@@ -2251,7 +2275,7 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
             let _ = mailvault_core::daemon_ipc::call(&socket, &token, "daemon.shutdown", serde_json::json!({}), std::time::Duration::from_secs(1));
         }
         let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
-        while socket.exists() && std::time::Instant::now() < deadline {
+        while mailvault_core::transport::is_listening(&socket) && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
@@ -2269,7 +2293,7 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
             // R3: an orphan from a build too old to answer `daemon.shutdown`
             // (or one the RPC above simply never reached) leaves the socket
             // and/or pid behind. Signal it ourselves instead of waiting forever.
-            let still_up = socket.exists() || known_pid.is_some_and(|pid| !pid_is_dead(pid));
+            let still_up = mailvault_core::transport::is_listening(&socket) || known_pid.is_some_and(|pid| !pid_is_dead(pid));
             if still_up {
                 match known_pid {
                     Some(pid) if pid_is_mailvault_daemon(pid) => {
@@ -2277,7 +2301,7 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
                         // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
                         unsafe { libc::kill(pid, libc::SIGTERM) };
                         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-                        while (socket.exists() || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
+                        while (mailvault_core::transport::is_listening(&socket) || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                         }
                         if !pid_is_dead(pid) {
@@ -2296,7 +2320,7 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
                                 warn!("pid {pid} is no longer a mailvault-daemon process (likely exited and the pid was reused); not sending SIGKILL");
                             }
                         }
-                        if socket.exists() {
+                        if mailvault_core::transport::is_listening(&socket) {
                             let _ = std::fs::remove_file(&socket);
                         }
                     }
@@ -2550,13 +2574,28 @@ async fn rpc_attempt(
 /// has one.
 async fn rpc_attempt_inner(socket_path: &Path, token: &str, method: &str, params: &serde_json::Value) -> RpcOutcome {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::UnixStream;
 
-    let stream = match UnixStream::connect(socket_path).await {
-        Ok(s) => s,
-        Err(e) => return RpcOutcome::Unavailable { message: format!("cannot connect to daemon: {e}"), retryable: true },
+    // Same split as daemon_channel::connect: `tokio::io::split` works for
+    // both stream types, so only the connect call differs per platform. A
+    // pipe client losing the race for a free instance (ERROR_PIPE_BUSY) is
+    // "try again", not "no daemon" — surfaced as an ordinary connect error,
+    // same as the unix arm's connection-refused.
+    #[cfg(unix)]
+    let (reader, mut writer) = {
+        let stream = match tokio::net::UnixStream::connect(socket_path).await {
+            Ok(s) => s,
+            Err(e) => return RpcOutcome::Unavailable { message: format!("cannot connect to daemon: {e}"), retryable: true },
+        };
+        tokio::io::split(stream)
     };
-    let (reader, mut writer) = stream.into_split();
+    #[cfg(windows)]
+    let (reader, mut writer) = {
+        let stream = match tokio::net::windows::named_pipe::ClientOptions::new().open(socket_path) {
+            Ok(s) => s,
+            Err(e) => return RpcOutcome::Unavailable { message: format!("cannot connect to daemon: {e}"), retryable: true },
+        };
+        tokio::io::split(stream)
+    };
     let mut lines = BufReader::new(reader).lines();
 
     // Auth handshake
@@ -3521,10 +3560,12 @@ mod tests {
 
     #[test]
     fn daemon_ipc_paths_live_under_home_dot_mailvault() {
-        let (sock, token) = crate::daemon_ipc_paths().unwrap();
+        let (endpoint, token) = crate::daemon_ipc_paths().unwrap();
         let home = dirs::home_dir().unwrap().join(".mailvault");
-        assert_eq!(sock, home.join("mv.sock"));
-        assert_eq!(token, home.join("mv.token"));
+        assert_eq!(token, home.join("mv.token"), "the token is a real file on both platforms");
+        assert_eq!(endpoint, mailvault_core::transport::endpoint(&home));
+        #[cfg(unix)]
+        assert_eq!(endpoint, home.join("mv.sock"));
     }
 
     #[test]
