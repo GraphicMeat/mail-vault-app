@@ -158,6 +158,34 @@ describe('createComposeSend', () => {
     await expect(createComposeSend({ snapshot: edited, mode: 'new', replyTo: null, account })()).resolves.toBeUndefined();
   });
 
+  /// Due inside the undo window: the row would fire while this copy waits, so
+  /// it goes at hand-off, and an Undo reopens compose as a new email.
+  it('cancels an edited row due within the send delay at hand-off, not after the send', async () => {
+    const soon = new Date(Date.now() + 2 * 60 * 1000);
+    const pad = n => String(n).padStart(2, '0');
+    const localTime = `${soon.getUTCFullYear()}-${pad(soon.getUTCMonth() + 1)}-${pad(soon.getUTCDate())}T${pad(soon.getUTCHours())}:${pad(soon.getUTCMinutes())}`;
+    const edited = { ...snapshot, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1', localTime, tz: 'UTC' } };
+
+    const sendFn = createComposeSend({ snapshot: edited, mode: 'new', replyTo: null, account });
+    expect(cancelSchedule).toHaveBeenCalledWith('row-1');
+    expect(edited._editScheduledId).toBeUndefined();
+    expect(edited._editScheduledRow).toBeUndefined();
+
+    sendEmail.mockResolvedValueOnce({ messageId: '<one@example.test>' });
+    await sendFn();
+    expect(cancelSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an edited row due after the send delay queued until the send is out', async () => {
+    const edited = { ...snapshot, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1', localTime: '2099-01-01T09:00', tz: 'UTC' } };
+    const sendFn = createComposeSend({ snapshot: edited, mode: 'new', replyTo: null, account });
+    expect(cancelSchedule).not.toHaveBeenCalled();
+
+    sendEmail.mockResolvedValueOnce({ messageId: '<one@example.test>' });
+    await sendFn();
+    expect(cancelSchedule).toHaveBeenCalledWith('row-1');
+  });
+
   it('never cancels a scheduled row for an ordinary send', async () => {
     sendEmail.mockResolvedValue({ messageId: '<one@example.test>' });
     await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();

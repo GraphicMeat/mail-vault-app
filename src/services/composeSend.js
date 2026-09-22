@@ -146,6 +146,9 @@ function cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseud
   };
 }
 
+// The longest send delay compose offers (5 min) plus a minute of slack.
+const EDITED_ROW_DUE_MARGIN_MS = 6 * 60 * 1000;
+
 /**
  * Make the function kept by queueSend/retryOutbox. The returned closure holds
  * the one MIME/uid identity for all retries, while its input is plain data that
@@ -153,6 +156,23 @@ function cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseud
  */
 export function createComposeSend({ snapshot, mode, replyTo, account, settings = {} }) {
   let staged = null;
+
+  // This runs at hand-off, before the undo window. An edited scheduled email
+  // whose row falls due before the longest send delay (5 min) runs out would
+  // fire from the row while this copy still waits to go: the recipient gets
+  // both. So such a row goes now, and the pending send holds the message.
+  // Undo reopens compose from this same snapshot, so the edit markers go too:
+  // it is a new email from here, and a later Schedule creates a row instead
+  // of being refused for replacing a cancelled one. A row due later stays
+  // queued until the send is out (below), where it survives a quit.
+  const edited = snapshot._editScheduledRow;
+  if (snapshot._editScheduledId && edited?.localTime && edited?.tz
+      && zonedTimeToEpoch(edited.localTime, edited.tz) <= Date.now() + EDITED_ROW_DUE_MARGIN_MS) {
+    useScheduledStore.getState().cancel(snapshot._editScheduledId)
+      .catch(err => console.warn('[composeSend] could not cancel the edited scheduled send:', err));
+    delete snapshot._editScheduledId;
+    delete snapshot._editScheduledRow;
+  }
 
   return async function sendCompose() {
     const freshAccount = await ensureFreshToken(account);
