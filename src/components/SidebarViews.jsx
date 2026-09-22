@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Paperclip, Reply, Bookmark, Inbox, Pencil, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { Star, Paperclip, Reply, Bookmark, Inbox, Plus, ChevronRight, ChevronDown } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n/index.js';
@@ -9,9 +9,9 @@ const ICONS = { star: Star, paperclip: Paperclip, reply: Reply, tag: Bookmark, i
 /// Saved views, pinned above the accounts: a view carries its account scope as
 /// a property, so it belongs to no one account's folder tree.
 ///
-/// Nothing here edits a view. A filter is changed on the Views page in
-/// Settings, where the builder can show what the change would find before it
-/// is saved; the pencil is a way through to it, not an editor.
+/// Nothing here edits a view, and no row carries a way to: views are edited on
+/// the Views page in Settings, where the builder can show what a change would
+/// find before it is saved. A row only opens its view.
 export function SidebarViews({ collapsed = false, onOpenSettings }) {
   const t = useT();
   const views = useViewStore(state => state.views);
@@ -47,15 +47,6 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
     </button>;
   };
 
-  /// The pencil is its own button beside the row: pressing it must not open
-  /// the view, only the page where it is made of something.
-  const editButton = (view) => <button type="button" className="sidebar-view-edit"
-    data-testid={`view-edit-${view.id}`} aria-label={`${t('views.edit')}: ${viewLabel(view, t)}`}
-    title={t('views.edit')}
-    onClick={event => { event.stopPropagation(); openSettingsPage(); }}>
-    <Pencil size={11} />
-  </button>;
-
   if (collapsed) {
     if (!views?.length) return null;
     return <div className="sidebar-collapsed-views w-full py-2 border-b border-mail-border flex flex-col items-center gap-1"
@@ -80,10 +71,7 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
     </div>
     {!folded && <>
       <div className="sidebar-view-list">
-        {views.map(view => <div key={view.id} className="sidebar-view-entry">
-          {row(view)}
-          {editButton(view)}
-        </div>)}
+        {views.map(row)}
       </div>
       {activeViewId && unavailableReason && <p className="sidebar-views-unavailable" role="status" data-testid="views-unavailable">
         {t(`views.unavailable.${unavailableReason}`)}

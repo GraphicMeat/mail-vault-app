@@ -91,26 +91,19 @@ describe('the Views section', () => {
     expect(screen.queryByText('Receipts')).toBeNull();
   });
 
-  /// A filter is changed on the Views page, where the builder can show what
-  /// the change would find. Editing it from here rewrote the list under the
-  /// person reading it.
-  it('sends the pencil to the Views page instead of editing in place', () => {
-    const onOpenSettings = vi.fn();
-    render(<SidebarViews onOpenSettings={onOpenSettings} />);
-    fireEvent.click(screen.getByTestId('view-edit-v1'));
-    expect(onOpenSettings).toHaveBeenCalledWith('views');
-    expect(screen.queryByTestId('view-editor-form')).toBeNull();
-  });
-
-  it('editing does not open the view', () => {
-    render(<SidebarViews onOpenSettings={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('view-edit-v1'));
-    expect(useViewStoreMock.getState().openView).not.toHaveBeenCalled();
-  });
-
-  it('the collapsed rail offers no editor', () => {
-    render(<SidebarViews collapsed />);
+  /// A view is edited on the Views page in Settings, never from its row: a
+  /// pencil at the end of every row was one more target in a list that is only
+  /// for opening things, so the row is the only control each view gets.
+  it('gives a row no edit control, wide or collapsed', () => {
+    const { unmount } = render(<SidebarViews onOpenSettings={vi.fn()} />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
+    // Rows, the fold heading and the + : nothing else is clickable here.
+    expect(screen.getAllByRole('button').map(b => b.dataset.testid).sort())
+      .toEqual(['view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
+    unmount();
+    render(<SidebarViews collapsed onOpenSettings={vi.fn()} />);
+    expect(screen.queryByTestId('view-edit-v1')).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
   /// The + is the accounts + : it makes one, rather than only showing the

@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "Excluir esta visão",
   "views.direction.asc": "Crescente",
   "views.direction.desc": "Decrescente",
-  "views.edit": "Editar visão",
   "views.explainer": "Uma visão é um conjunto de filtros salvo sobre seus e-mails. Ela não move nada: uma mensagem pode aparecer em quantas visões você quiser e continuar em uma única pasta.",
   "views.filter.accounts": "Contas",
   "views.filter.allAccounts": "Todas as contas",

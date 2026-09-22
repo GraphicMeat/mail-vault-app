@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "Eliminar esta vista",
   "views.direction.asc": "Ascendente",
   "views.direction.desc": "Descendente",
-  "views.edit": "Editar vista",
   "views.explainer": "Una vista es un conjunto guardado de filtros sobre tu correo. No mueve nada: un mensaje puede aparecer en tantas vistas como quieras y seguir estando en una sola carpeta.",
   "views.filter.accounts": "Cuentas",
   "views.filter.allAccounts": "Todas las cuentas",

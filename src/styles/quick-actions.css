@@ -729,31 +729,6 @@
 
 /* ── View editor and field choices ───────────────────────────────────────── */
 
-.sidebar-view-entry {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-}
-
-.sidebar-view-entry .sidebar-view-row {
-  flex: 1 1 auto;
-  width: auto;
-}
-
-.sidebar-view-edit {
-  flex: 0 0 auto;
-  padding: 4px;
-  border-radius: 4px;
-  color: var(--mail-text-muted);
-  opacity: 0;
-}
-
-.sidebar-view-entry:hover .sidebar-view-edit,
-.sidebar-view-edit:focus-visible {
-  opacity: 1;
-}
-
 .view-editor {
   flex: 1 1 100%;
   display: flex;

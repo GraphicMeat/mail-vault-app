@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "Diese Ansicht löschen",
   "views.direction.asc": "Aufsteigend",
   "views.direction.desc": "Absteigend",
-  "views.edit": "Ansicht bearbeiten",
   "views.explainer": "Eine Ansicht ist ein gespeicherter Satz von Filtern über Ihre Mail. Sie verschiebt nichts: Eine Nachricht kann in beliebig vielen Ansichten auftauchen und liegt weiterhin in einem Ordner.",
   "views.filter.accounts": "Konten",
   "views.filter.allAccounts": "Alle Konten",

@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "이 보기 삭제",
   "views.direction.asc": "오름차순",
   "views.direction.desc": "내림차순",
-  "views.edit": "보기 편집",
   "views.explainer": "보기는 메일에 적용할 필터를 저장해 둔 것입니다. 메일을 옮기지는 않습니다. 한 메시지가 여러 보기에 나타나도 실제로는 한 폴더에 그대로 있습니다.",
   "views.filter.accounts": "계정",
   "views.filter.allAccounts": "모든 계정",

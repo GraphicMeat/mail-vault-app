@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "删除此视图",
   "views.direction.asc": "升序",
   "views.direction.desc": "降序",
-  "views.edit": "编辑视图",
   "views.explainer": "视图是保存下来的一组邮件筛选条件。它不会移动任何邮件：同一封邮件可以出现在任意多个视图里，仍然只存放在一个文件夹中。",
   "views.filter.accounts": "账户",
   "views.filter.allAccounts": "所有账户",

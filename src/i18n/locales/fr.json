@@ -2572,7 +2572,6 @@
   "views.deleteConfirm": "Supprimer cette vue",
   "views.direction.asc": "Croissant",
   "views.direction.desc": "Décroissant",
-  "views.edit": "Modifier la vue",
   "views.explainer": "Une vue est un ensemble de filtres enregistré sur votre courrier. Elle ne déplace rien : un message peut apparaître dans autant de vues que vous voulez tout en restant dans un seul dossier.",
   "views.filter.accounts": "Comptes",
   "views.filter.allAccounts": "Tous les comptes",

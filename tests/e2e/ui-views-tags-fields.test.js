@@ -29,9 +29,9 @@ describe('Saved views, tags and custom fields', function () {
     if (appState !== 'ready') this.skip();
   });
 
-  /// Open one view's builder on the Views page in Settings. The sidebar's
-  /// pencil leads here rather than editing under the list being read, so every
-  /// edit below goes through Settings.
+  /// Open one view's builder on the Views page in Settings. Views are edited
+  /// only there, never from the sidebar, so every edit below goes through
+  /// Settings.
   async function openViewBuilder(viewId) {
     await openSettings();
     await browser.pause(400);
@@ -112,16 +112,15 @@ describe('Saved views, tags and custom fields', function () {
     await closeSettings();
   });
 
-  /// The sidebar's pencil is a way through to the builder, not a builder.
-  it('sends the sidebar pencil to the Views page instead of editing in place', async function () {
-    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click());
-    await browser.waitUntil(async () => browser.execute(() => {
-      const page = document.querySelector('[data-testid="settings-content"]');
-      return page?.dataset.page === 'views';
-    }), { timeout: 15000, timeoutMsg: 'the pencil never opened the Views page' });
-    const inlineEditor = await browser.execute(() => !!document.querySelector('.sidebar-view-entry [data-testid="view-editor-form"]'));
-    expect(inlineEditor).toBe(false);
-    await closeSettings();
+  /// A sidebar view row only opens its view: there is no pencil at the end
+  /// of it, and no other edit control anywhere in the Views section.
+  it('offers no edit control on a sidebar view row', async function () {
+    // An object, not the bare count: waitUntil would keep waiting on a 0.
+    const found = await browser.waitUntil(async () => browser.execute(() => {
+      if (!document.querySelector('[data-testid="view-row-builtin-starred"]')) return false;
+      return { editControls: document.querySelectorAll('[data-testid^="view-edit-"], .sidebar-view-edit').length };
+    }), { timeout: 15000, timeoutMsg: 'the Views section never showed the starred view' });
+    expect(found.editControls).toBe(0);
   });
 
   /// The builder's grouping control is the one new affordance a headless run
