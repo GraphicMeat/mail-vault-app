@@ -79,8 +79,9 @@ pub fn is_listening(endpoint: &Path) -> bool {
 /// instance consumed, no connection for the daemon to accept and discard.
 ///
 /// This matters more than it looks. The daemon keeps one unconnected instance
-/// waiting at a time (`server::run`), and the app polls this function in wait
-/// loops (`main.rs:2138`, `:2164`). A probe that *opened* the pipe would eat
+/// waiting at a time (`server::run`), and the app polls this function in the
+/// two wait loops inside `ensure_daemon_socket` (`src-tauri/src/main.rs`). A
+/// probe that *opened* the pipe would eat
 /// that instance on every poll, spawn a handler task for a client that says
 /// nothing, and — in the window between the daemon's `connect()` returning and
 /// its next `create()` — a following probe would find no instance and report
