@@ -193,6 +193,9 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(prune[0]).toBe(ACCOUNT.id);
     expect(prune[1]).toBe('INBOX.Spam');
     expect([...prune[4].removedUids].sort()).toEqual([1, 2]);
+    // The prune and the view's count, never the rows.
+    expect(prune[2]).toEqual([]);
+    expect(prune[3]).toBe(useMailStore.getState().totalEmails);
   });
 
   it('does not prune a uid whose server delete failed', async () => {

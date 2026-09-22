@@ -475,6 +475,10 @@ describe('deleteSelectedFromServer', () => {
     expect(prune).toBeTruthy();
     expect(prune[0]).toBe(ACCOUNT.id);
     expect(prune[1]).toBe('INBOX');
+    // The prune and the view's count, never the rows: re-sending the list
+    // serialised the whole mailbox for every delete.
+    expect(prune[2]).toEqual([]);
+    expect(prune[3]).toBe(1);
   });
 
   // Mirror of the move case: a branch root is a real folder ('INBOX' itself on
@@ -1107,6 +1111,8 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
+    // The prune and the count, never the remaining rows.
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [], 1, { removedUids: [1] });
   });
 
   // The row menu, the bulk bar and the M shortcut hand this workflow SELECTION

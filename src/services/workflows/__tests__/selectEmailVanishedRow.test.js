@@ -210,7 +210,9 @@ describe('selectEmail — a row the server no longer holds', () => {
     const [accountId, mailbox, headers, total, opts] = mockSaveEmailHeaders.mock.calls[0];
     expect(accountId).toBe('acct1');
     expect(mailbox).toBe('INBOX');
-    expect(headers.map(e => e.uid)).toEqual([31051]);
+    // The prune and the count, never the rows: the cache holds them already,
+    // and re-sending the list serialised the whole mailbox for one removal.
+    expect(headers).toEqual([]);
     expect(total).toBe(1);
     expect(opts).toEqual({ removedUids: [31056] });
   });

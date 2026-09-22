@@ -1210,10 +1210,11 @@ export async function applyServerRemoval(uid, {
   get().updateSortedEmails();
 
   const exactTargetFolder = !liveSpansMailboxes && targetViewMatches;
-  // When the user changed folders while this delete was on the wire, the
-  // rows in memory belong to another mailbox. Prune the target sidecar by
-  // UID while leaving its existing rows/count intact; never write the other
-  // mailbox's rows into this cache.
+  // Prune by UID and never write rows: the cache already holds every other
+  // row, and re-sending the store's list serialised the whole mailbox (tens of
+  // MB for a big folder) for one removal. When the user changed folders while
+  // this delete was on the wire, the count is left alone too — the one in
+  // memory belongs to another mailbox.
   //
   // A spanning view takes exactly that shape — `[]` and a null total, so the
   // write is the prune and nothing else. Skipping it there is what made the
@@ -1223,8 +1224,7 @@ export async function applyServerRemoval(uid, {
   // and every click on it failed again until the daemon's own reconcile came
   // round, up to six hours later.
   await db.saveEmailHeaders(
-    accountId, mailbox,
-    exactTargetFolder ? filteredEmails : [],
+    accountId, mailbox, [],
     exactTargetFolder ? newTotal : null,
     { removedUids: [uid] },
   );
@@ -1870,12 +1870,10 @@ export async function deleteSelectedFromServer() {
   if (openNext) get().selectEmail(selectionKey(openNext, state));
 
   const deletedRealUids = new Set();
-  // Uids deleted out of the mailbox currently on screen. Only these can be
-  // pruned from the header sidecar here, because saveEmailHeaders rewrites a
-  // mailbox's whole entry from the `emails` array passed to it — handing it the
-  // active list while naming another mailbox would corrupt that mailbox's
-  // cache. Deletes in other mailboxes (Sent) are pruned when those are next
-  // loaded.
+  // Uids deleted out of the mailbox currently on screen. Only these are
+  // pruned from the header sidecar here, together with the view's count, which
+  // is the active mailbox's alone. Deletes in other mailboxes (Sent) are pruned
+  // when those are next loaded.
   const deletedInActiveMailbox = new Set();
   // Tombstones to lift once the server delete succeeds AND the message still
   // has a surviving local (archived) copy on disk — those rows must re-render
@@ -2013,9 +2011,8 @@ export async function deleteSelectedFromServer() {
   //     Pruning the mailbox that happens to be on screen now, with uids from
   //     the one we deleted from, makes a row disappear from a mailbox nobody
   //     touched — uids are unique per mailbox, not globally.
-  //   - the prune still runs when the view HAS moved; only the `emails`
-  //     payload is dropped (an empty array writes no headers, and a null total
-  //     leaves the stored one untouched). Skipping the prune outright was the
+  //   - the prune still runs when the view HAS moved; only the count is
+  //     dropped (a null total leaves the stored one untouched). Skipping the prune outright was the
   //     first fix and it was wrong: by the comment above, loadEmails() cannot
   //     reconcile this later — the uid is absent from both sides of its diff —
   //     so the sidecar keeps the header forever, the session tombstone is the
@@ -2032,9 +2029,10 @@ export async function deleteSelectedFromServer() {
     if (viewUnmoved) {
       useMailStore.setState({ serverUids: withoutUids(s.serverUids, deletedInActiveMailbox) });
     }
+    // Rows are never written — the cache holds them already, and the list
+    // would serialise the whole mailbox for a prune.
     await db.saveEmailHeaders(
-      state.activeAccountId, state.activeMailbox,
-      viewUnmoved ? s.emails : [],
+      state.activeAccountId, state.activeMailbox, [],
       viewUnmoved ? s.totalEmails : null,
       { removedUids: [...deletedInActiveMailbox] },
     );
@@ -2320,9 +2318,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // then hides the row only until a reload, after which a message purged from
   // the server, the vault and the backup mirror reappears from cache.
   //
-  // Only the active mailbox's group: saveEmailHeaders rewrites a mailbox's
-  // whole entry from the `emails` passed to it, so naming another mailbox while
-  // handing it the active list would corrupt that mailbox's cache.
+  // Only the active mailbox's group, and rows are never written: the cache
+  // holds them already, and the list would serialise the whole mailbox for a
+  // prune. The count written is the view's, which is the active mailbox's alone.
   // Pin the identity: `activeGroup.uids` belongs to the mailbox this purge ran
   // against, while `s.emails` is whatever is on screen NOW — the purge spans
   // seconds of server, vault and backup awaits, and the user can switch account
@@ -2331,18 +2329,16 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // nobody deleted from (uids collide freely across accounts — they are only
   // unique per mailbox).
   //
-  // When the view HAS moved, drop the payload but still prune: an empty
-  // `emails` writes no headers and a null total leaves the stored one alone,
-  // so nothing foreign lands in this mailbox's cache — while the uids that
-  // were genuinely purged still go away. "Skip and let it reconcile later" was
+  // When the view HAS moved, drop the count but still prune: a null total
+  // leaves the stored one alone, so nothing foreign lands in this mailbox's
+  // cache — while the uids that were genuinely purged still go away. "Skip and let it reconcile later" was
   // the first fix and it does not hold: per the paragraph above, loadEmails()
   // never sees these uids as newly-gone, so the sidecar keeps them forever.
   if (!isUnified && activeGroup?.uids.length) {
     const s = get();
     const viewUnmoved = s.activeAccountId === activeGroup.accountId && s.activeMailbox === activeGroup.mailbox;
     await db.saveEmailHeaders(
-      activeGroup.accountId, activeGroup.mailbox,
-      viewUnmoved ? s.emails : [],
+      activeGroup.accountId, activeGroup.mailbox, [],
       viewUnmoved ? s.totalEmails : null,
       { removedUids: [...activeGroup.uids] },
     );
@@ -2501,9 +2497,12 @@ export async function moveEmails(keys, targetMailbox) {
   // discussion #1), unlike the literal 'UNIFIED'. Writing the branch list and
   // its total into that folder's cache is what the next single-folder load
   // paints cache-first: mail that was moved away still in the inbox.
+  //
+  // The prune and the count only: the cache holds the remaining rows already,
+  // and re-sending the list serialised the whole mailbox for every move.
   const own = groups.get(`${activeAccountId}|${activeMailbox}`);
   if (!isUnified) {
-    await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal,
+    await db.saveEmailHeaders(activeAccountId, activeMailbox, [], newTotal,
       own ? { removedUids: own.uids } : undefined);
   }
 
