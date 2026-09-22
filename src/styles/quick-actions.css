@@ -544,7 +544,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 8px 4px;
+  padding: 0 0 4px;
 }
 
 .sidebar-view-row {
@@ -583,7 +583,7 @@
 }
 
 .sidebar-views-unavailable {
-  padding: 0 16px 6px;
+  padding: 0 8px 6px;
   font-size: 11px;
   color: var(--mail-text-muted);
 }
