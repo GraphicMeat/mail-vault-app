@@ -84,6 +84,12 @@
   left: 1.5rem;
 }
 
+/* A month's first row carries the date scrubber's header band above it
+   (MONTH_HEADER_H in email/DateScrubber.jsx); same anchor rule as above. */
+.has-month-header > .virtual-row {
+  top: 26px;
+}
+
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:
    text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are

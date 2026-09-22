@@ -240,7 +240,8 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
 
   const syncCurrent = useCallback(() => {
     const el = scrollRef.current;
-    const item = el ? virtualizerRef.current.getVirtualItemForOffset?.(el.scrollTop) : null;
+    // The first row visible BELOW the pinned band, not the one hidden under it.
+    const item = el ? virtualizerRef.current.getVirtualItemForOffset?.(el.scrollTop + MONTH_HEADER_H) : null;
     const b = bucketAtIndex(bucketsRef.current, item ? item.index : 0);
     setCurrentKey(b ? b.key : null);
   }, [scrollRef]);

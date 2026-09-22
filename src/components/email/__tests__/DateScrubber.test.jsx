@@ -3,7 +3,7 @@
 import React, { useRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { DateScrubber, MonthHeader } from '../DateScrubber';
+import { DateScrubber, MonthHeader, MONTH_HEADER_H } from '../DateScrubber';
 import { monthBuckets, railSegments } from '../../../utils/dateBuckets';
 
 afterEach(cleanup);
@@ -12,9 +12,9 @@ const row = (y, m) => ({ type: 'email', email: { date: new Date(y, m - 1, 15, 12
 const buckets = monthBuckets([row(2021, 3), row(2021, 3), row(2021, 2), row(2020, 11)]);
 const segments = railSegments(buckets, [{ ym: '2020-06', count: 9 }], { totalEmails: 30, totalCached: 20 });
 
-function Harness({ onJump, loading = null }) {
+function Harness({ onJump, loading = null, itemForOffset = () => ({ index: 0 }) }) {
   const scrollRef = useRef(null);
-  const virtualizer = { getVirtualItemForOffset: () => ({ index: 0 }), scrollToIndex: vi.fn() };
+  const virtualizer = { getVirtualItemForOffset: itemForOffset, scrollToIndex: vi.fn() };
   return (
     <div style={{ position: 'relative' }}>
       <div ref={scrollRef} />
@@ -59,6 +59,13 @@ describe('DateScrubber', () => {
   it('shows the target and a spinner while a jump loads', () => {
     render(<Harness onJump={() => {}} loading={segments.find(s => s.kind === 'unloaded')} />);
     expect(screen.getByTestId('date-scrubber-pill').textContent).toBe('June 2020');
+  });
+
+  it('names the first row visible below the pinned band, not the one hidden under it', () => {
+    // Row 1 (March) ends where the band's bottom edge sits; row 2 (February) shows below it.
+    const itemForOffset = (offset) => ({ index: offset >= MONTH_HEADER_H ? 2 : 1 });
+    render(<Harness onJump={() => {}} itemForOffset={itemForOffset} />);
+    expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('February 2021');
   });
 
   it('draws a month header band', () => {

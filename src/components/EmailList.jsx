@@ -1512,6 +1512,7 @@ function EmailListComponent({ stacked = false }) {
                       height: vr.size + 'px',
                       transform: `translateY(${vr.start}px)`,
                     }}
+                    className={monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                   >
                     {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
                     <ThreadRowComponent
@@ -1553,7 +1554,7 @@ function EmailListComponent({ stacked = false }) {
                     transform: `translateY(${vr.start}px)`,
                   }}
                   data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
-                  className={item.type === 'thread-member' ? 'thread-member' : undefined}
+                  className={item.type === 'thread-member' ? 'thread-member' : monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                 >
                   {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
                   <RowComponent
