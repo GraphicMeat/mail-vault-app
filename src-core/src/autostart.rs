@@ -199,6 +199,31 @@ pub fn bundled_plist_path(app_exe: &Path) -> Option<PathBuf> {
     Some(contents.join("Library").join("LaunchAgents").join(AGENT_PLIST_NAME))
 }
 
+/// The app group container both the app and a sandboxed helper can reach.
+///
+/// Inside the App Sandbox `dirs::home_dir()` is redirected to
+/// `<real home>/Library/Containers/<id>/Data`, and every sandboxed process
+/// gets its *own* container — a helper launched by launchd does not inherit
+/// the app's. The group container is the one directory both are granted, so
+/// it is where they have to meet. Unwinding the redirect here keeps the path
+/// the same whether the caller is contained or not.
+pub fn group_container_dir(home: &Path, group: &str) -> PathBuf {
+    let mut real = home;
+    // .../Library/Containers/<id>/Data -> ...
+    if real.file_name().is_some_and(|n| n == "Data") {
+        if let Some(parent) = real.parent().and_then(|p| p.parent()) {
+            if parent.file_name().is_some_and(|n| n == "Containers") {
+                if let Some(lib) = parent.parent() {
+                    if lib.file_name().is_some_and(|n| n == "Library") {
+                        real = lib.parent().unwrap_or(home);
+                    }
+                }
+            }
+        }
+    }
+    real.join("Library").join("Group Containers").join(group)
+}
+
 /// Wrap in double quotes only when the path needs it. An unquoted path is
 /// what every hand-written `.desktop` carries, and quoting unconditionally
 /// would make the common case look odd in `reg query` output too.
@@ -358,6 +383,34 @@ mod tests {
     fn a_loose_binary_yields_a_path_that_is_not_there() {
         let p = bundled_plist_path(Path::new("/x/target/debug/mailvault")).unwrap();
         assert!(!p.exists());
+    }
+
+    /// The same answer whether the caller is inside a container or not — that
+    /// is the whole point, because the app and a launchd-started helper sit in
+    /// different containers and must still name one directory.
+    #[test]
+    fn the_group_container_is_the_same_path_from_inside_and_outside_the_sandbox() {
+        let want = PathBuf::from("/Users/rokas/Library/Group Containers/group.com.mailvault");
+        assert_eq!(
+            group_container_dir(Path::new("/Users/rokas"), "group.com.mailvault"),
+            want
+        );
+        assert_eq!(
+            group_container_dir(
+                Path::new("/Users/rokas/Library/Containers/com.mailvault.app/Data"),
+                "group.com.mailvault"
+            ),
+            want
+        );
+    }
+
+    /// A home that merely ends in `Data` is not a container redirect.
+    #[test]
+    fn an_unrelated_data_directory_is_not_unwound() {
+        assert_eq!(
+            group_container_dir(Path::new("/srv/Data"), "g"),
+            PathBuf::from("/srv/Data/Library/Group Containers/g")
+        );
     }
 
     #[test]

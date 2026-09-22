@@ -54,6 +54,14 @@ impl AutostartState {
     }
 }
 
+/// Help-menu probe (macOS): register the throwaway sandboxed agent and report
+/// exactly what macOS said, plus whether the agent actually ran and reached
+/// the group container. Throwaway with the probe itself.
+#[cfg(target_os = "macos")]
+pub fn probe_register_agent() -> Result<isize, String> {
+    imp::register_agent_by_name("com.mailvault.app.probe.plist")
+}
+
 #[tauri::command]
 pub fn autostart_state() -> AutostartState {
     imp::state()
@@ -185,13 +193,41 @@ mod imp {
         }))
     }
 
+    /// Domain and code alongside the sentence. "The operation couldn't be
+    /// completed. Operation not permitted" is what `localizedDescription`
+    /// gives for a bare POSIX EPERM, and on its own it names neither who
+    /// refused nor why — which cost a whole signed build to work out once.
     fn error_message(err: *mut AnyObject) -> Option<String> {
         if err.is_null() {
             return None;
         }
         unsafe {
             let desc: Option<Retained<NSString>> = msg_send![err, localizedDescription];
-            desc.map(|d| d.to_string())
+            let domain: Option<Retained<NSString>> = msg_send![err, domain];
+            let code: isize = msg_send![err, code];
+            let desc = desc.map(|d| d.to_string())?;
+            Some(match domain {
+                Some(d) => format!("{desc} ({}, code {code})", d.to_string()),
+                None => format!("{desc} (code {code})"),
+            })
+        }
+    }
+
+    /// Register an arbitrary bundled agent by plist name and report what macOS
+    /// said. Used by the Help-menu probe; the toggle goes through `set()`.
+    pub fn register_agent_by_name(plist_name: &str) -> Result<isize, String> {
+        let cls = AnyClass::get(c"SMAppService").ok_or("SMAppService needs macOS 13 or later")?;
+        let svc: Retained<AnyObject> = unsafe {
+            let name = NSString::from_str(plist_name);
+            let svc: Option<Retained<AnyObject>> = msg_send![cls, agentServiceWithPlistName: &*name];
+            svc.ok_or_else(|| format!("no agent service for {plist_name}"))?
+        };
+        let mut err: *mut AnyObject = std::ptr::null_mut();
+        let ok: bool = unsafe { msg_send![&*svc, registerAndReturnError: &mut err] };
+        if ok {
+            Ok(status(&svc))
+        } else {
+            Err(error_message(err).unwrap_or_else(|| "register refused, no NSError".into()))
         }
     }
 }

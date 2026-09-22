@@ -3253,6 +3253,10 @@ fn main() {
             // already-sandboxed app process sidesteps that entirely.
             #[cfg(target_os = "macos")]
             let probe_oauth2_item = MenuItem::with_id(app, "probe_oauth2_loopback", "Probe: OAuth2 Loopback Bind (automatic)", true, None::<&str>)?;
+            // Throwaway, with the agent probe it drives: does a sandboxed app
+            // get a bundled LaunchAgent registered once the agent's own program
+            // is sandboxed, and can that agent reach the group container.
+            let probe_agent_item = MenuItem::with_id(app, "probe_agent_registration", "Probe: Background Agent Registration (automatic)", true, None::<&str>)?;
 
             #[cfg(target_os = "macos")]
             {
@@ -3293,6 +3297,7 @@ fn main() {
                                 let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
                                 let _ = sub.append(&probe_backup_scope_item);
+                                let _ = sub.append(&probe_agent_item);
                                 let _ = sub.append(&probe_oauth2_item);
                                 break;
                             }
@@ -3359,6 +3364,12 @@ fn main() {
                     let _ = app_handle_for_menu.shell().open("https://graphicmeat.com", None::<tauri_plugin_shell::open::Program>);
                 } else if event.id().as_ref() == "open_shortcuts" {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
+                } else if event.id().as_ref() == "probe_agent_registration" {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let h = app_handle_for_menu.clone();
+                        std::thread::spawn(move || probe_agent_registration(h));
+                    }
                 } else if event.id().as_ref() == "probe_backup_scope" {
                     #[cfg(target_os = "macos")]
                     {
@@ -3551,6 +3562,61 @@ fn main() {
 /// session grant from picking the folder is still live — only the persisted
 /// bookmark is being tested.
 #[cfg(target_os = "macos")]
+/// Throwaway probe: register the sandboxed agent, then look for the line it
+/// writes into the group container.
+///
+/// Both halves matter. Registration clearing "Operation not permitted" proves
+/// the EPERM was the agent's program not being sandboxed, not the app being
+/// sandboxed. The line appearing proves a launchd-started agent — which gets
+/// its own container, not the app's — can still reach `group.com.mailvault`,
+/// which is where the daemon's socket has to move for the real thing to work.
+/// A pass on the first and a fail on the second means the mechanism is fine
+/// and the meeting point is not, which are very different pieces of work.
+#[cfg(target_os = "macos")]
+fn probe_agent_registration(h: tauri::AppHandle) {
+    use tauri_plugin_dialog::DialogExt;
+
+    let log = mailvault_core::autostart::group_container_dir(
+        &dirs::home_dir().unwrap_or_default(),
+        "group.com.mailvault",
+    )
+    .join("agent-probe.log");
+    let before = fs::read_to_string(&log).unwrap_or_default();
+
+    let registered = match autostart::probe_register_agent() {
+        Ok(status) => format!("register: OK (status {status})"),
+        Err(e) => {
+            h.dialog()
+                .message(format!("register refused:\n{e}\n\nLog looked for at:\n{}", log.display()))
+                .title("Probe: Background Agent — FAIL")
+                .blocking_show();
+            return;
+        }
+    };
+
+    // RunAtLoad fires on registration; give launchd a moment to start it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut after = before.clone();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        after = fs::read_to_string(&log).unwrap_or_default();
+        if after.len() > before.len() {
+            break;
+        }
+    }
+
+    let (title, body) = if after.len() > before.len() {
+        let line = after[before.len()..].trim().to_string();
+        ("Probe: Background Agent — PASS", format!("{registered}\n\nThe agent ran and reached the group container:\n{line}"))
+    } else {
+        (
+            "Probe: Background Agent — PARTIAL",
+            format!("{registered}\n\nBut nothing was written to:\n{}\n\nRegistration works; the agent either did not start or cannot reach the group container. Check: log show --last 5m --predicate 'process == \"mailvault-agent-probe\"'", log.display()),
+        )
+    };
+    h.dialog().message(body).title(title).blocking_show();
+}
+
 fn probe_backup_scope(h: tauri::AppHandle) {
     use serde_json::json;
     use tauri_plugin_dialog::DialogExt;

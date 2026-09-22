@@ -1,5 +1,5 @@
 [workspace]
-members = ["src-tauri", "src-daemon", "src-core", "src-mock-imap", "vendor/imap-proto"]
+members = ["src-tauri", "src-daemon", "src-core", "src-mock-imap", "src-agent-probe", "vendor/imap-proto"]
 resolver = "2"
 
 # imap-proto 0.16.6 with three MailVault patches (see vendor/imap-proto/src/parser):
