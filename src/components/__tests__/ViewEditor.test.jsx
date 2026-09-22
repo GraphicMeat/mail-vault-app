@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -149,29 +149,29 @@ describe('editing a saved view', () => {
     expect(useViewStoreMock.getState().saveView).not.toHaveBeenCalled();
   });
 
-  it('moves the view in the sidebar', () => {
+  it('moves the view in the sidebar', async () => {
     render(<ViewEditor view={MINE} onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('view-move-up'));
-    expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1);
+    await waitFor(() => expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1));
   });
 
-  it('deletes only after the second press', () => {
+  it('deletes only after the second press', async () => {
     const onClose = vi.fn();
     render(<ViewEditor view={MINE} onClose={onClose} />);
     fireEvent.click(screen.getByTestId('view-delete'));
     expect(useViewStoreMock.getState().deleteView).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('view-delete-confirm'));
     expect(useViewStoreMock.getState().deleteView).toHaveBeenCalledWith('v1');
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
   });
 
   /// Moving re-reads the stored view, so an unsaved name would be thrown away
   /// the moment the list reloads.
-  it('saves what is typed before it moves the view', () => {
+  it('saves what is typed before it moves the view', async () => {
     render(<ViewEditor view={MINE} onClose={() => {}} />);
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
     fireEvent.click(screen.getByTestId('view-move-up'));
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].name).toBe('Unpaid');
-    expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1);
+    await waitFor(() => expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1));
   });
 });

@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tag, Trash2, PenTool, Plus, Eye, PlayCircle, Undo2 } from 'lucide-react';
 import { useAutoTagStore } from '../../stores/autoTagStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useAccountStore } from '../../stores/accountStore';
+import { useMailStore } from '../../stores/mailStore';
 import { currentProvider } from '../../services/aiClient';
 import { AiContextPreview } from '../ai/AiContextPreview';
 import { Button } from '../ui/Button';
+import { SettingsField, SettingsSection, SegmentedControl } from '../ui/SettingsForm';
+import { TomSelectField } from '../ui/TomSelectField';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useT } from '../../i18n/index.js';
 
@@ -108,8 +111,19 @@ export function AutoTagSettings() {
   const runBackfill = useAutoTagStore(s => s.backfill);
   const undoBackfill = useAutoTagStore(s => s.undoBackfill);
   const tags = useTagStore(s => s.tags);
+  const tagOptions = useMemo(() => tags.map(tag => ({ value: tag.id, label: tag.name })), [tags]);
   const createTag = useTagStore(s => s.createTag);
+  const loadedEmails = useMailStore(s => s.emails) || [];
+  const senderOptions = useMemo(() => {
+    const addresses = [...new Set(loadedEmails.map(email => email.from?.address?.toLowerCase()).filter(Boolean))].sort();
+    return {
+      addresses: addresses.slice(0, 100).map(value => ({ value, label: value })),
+      domains: [...new Set(addresses.map(address => address.split('@')[1]).filter(Boolean))].slice(0, 100)
+        .map(value => ({ value, label: value })),
+    };
+  }, [loadedEmails]);
   const accounts = useAccountStore(s => s.accounts) || [];
+  const accountOptions = useMemo(() => accounts.map(account => ({ value: account.id, label: account.email })), [accounts]);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
 
   const [editing, setEditing] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id }
@@ -121,6 +135,8 @@ export function AutoTagSettings() {
   const [backfilling, setBackfilling] = useState(false);
   const [pendingRemoteConfirm, setPendingRemoteConfirm] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const previewGeneration = useRef(0);
+  const manualPreviewKey = useRef(null);
 
   const patch = (fields) => setForm(f => ({ ...f, ...fields }));
   const patchConstraints = (fields) => setForm(f => ({ ...f, constraints: { ...f.constraints, ...fields } }));
@@ -173,17 +189,45 @@ export function AutoTagSettings() {
   // previewing changes before Save commits them, edit or add alike (the
   // daemon's `rule_for_eval` accepts an inline draft either way).
   const runPreview = async () => {
+    const generation = ++previewGeneration.current;
+    manualPreviewKey.current = previewKey;
     setPreviewing(true);
     setPreviewRows(null);
     try {
       const rows = await previewRule({ rule: formToDraft(form), accountId, provider: providerFor() });
-      setPreviewRows(rows);
+      if (generation === previewGeneration.current) setPreviewRows(rows);
     } catch (e) {
-      setPreviewRows({ error: e?.message || String(e) });
+      if (generation === previewGeneration.current) setPreviewRows({ error: e?.message || String(e) });
     } finally {
-      setPreviewing(false);
+      if (generation === previewGeneration.current) setPreviewing(false);
     }
   };
+
+  // A local rule can be sampled as the form changes. Remote rules wait for an
+  // explicit Preview press so typing never silently sends mail metadata out.
+  const previewKey = JSON.stringify({ instruction: form.instruction, constraints: form.constraints,
+    minConfidence: form.minConfidence, allowRemote: form.allowRemote, accountId });
+  useEffect(() => {
+    const generation = ++previewGeneration.current;
+    manualPreviewKey.current = null;
+    setPreviewRows(null);
+    setPreviewing(false);
+    if (!editing || !form.instruction.trim() || !accountId || form.allowRemote) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (manualPreviewKey.current === previewKey) return;
+      setPreviewing(true);
+      try {
+        const rows = await previewRule({ rule: formToDraft(form), accountId, provider: { type: 'localGguf' } });
+        if (!cancelled && generation === previewGeneration.current) setPreviewRows(rows);
+      } catch (error) {
+        if (!cancelled && generation === previewGeneration.current) setPreviewRows({ error: error?.message || String(error) });
+      } finally {
+        if (!cancelled && generation === previewGeneration.current) setPreviewing(false);
+      }
+    }, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [previewKey, editing?.mode, editing?.id, previewRule]);
 
   const startBackfill = async () => {
     setBackfilling(true);
@@ -258,74 +302,66 @@ export function AutoTagSettings() {
           <AnimatePresence>
             {editing && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="p-4 bg-mail-bg rounded-lg border border-mail-border space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-mail-text mb-1">{t('autoTag.name')}</label>
+                <SettingsSection title={editing.mode === 'add' ? t('autoTag.newRule') : t('autoTag.edit')}
+                  description={t('autoTag.editorIntro')}>
+                  <SettingsField label={t('autoTag.name')} hint={t('autoTag.nameHint')}>
                     <input aria-label={t('autoTag.name')} type="text" value={form.name} onChange={e => patch({ name: e.target.value })}
-                      placeholder={t('autoTag.namePlaceholder')} className="settings-input" autoFocus />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-mail-text mb-1">{t('autoTag.instruction')}</label>
+                      placeholder={t('autoTag.namePlaceholder')} autoFocus />
+                  </SettingsField>
+                  <SettingsField label={t('autoTag.instruction')} hint={t('autoTag.instructionHint')}>
                     <textarea aria-label={t('autoTag.instruction')} value={form.instruction} onChange={e => patch({ instruction: e.target.value })}
-                      placeholder={t('autoTag.instructionPlaceholder')} rows={2} className="settings-input resize-y" />
-                    <p className="mt-1 text-xs text-mail-text-muted">{t('autoTag.instructionHint')}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-mail-text mb-1">{t('autoTag.constraints')}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input aria-label={t('autoTag.fromDomain')} placeholder={t('autoTag.fromDomain')} value={form.constraints.fromDomain}
-                        onChange={e => patchConstraints({ fromDomain: e.target.value })} className="settings-input" />
-                      <input aria-label={t('autoTag.fromAddress')} placeholder={t('autoTag.fromAddress')} value={form.constraints.fromAddress}
-                        onChange={e => patchConstraints({ fromAddress: e.target.value })} className="settings-input" />
-                      <input aria-label={t('autoTag.subjectContains')} placeholder={t('autoTag.subjectContains')} value={form.constraints.subjectContains}
-                        onChange={e => patchConstraints({ subjectContains: e.target.value })} className="settings-input" />
-                      <input aria-label={t('autoTag.mailbox')} placeholder={t('autoTag.mailbox')} value={form.constraints.mailbox}
-                        onChange={e => patchConstraints({ mailbox: e.target.value })} className="settings-input" />
-                      <select aria-label={t('autoTag.hasAttachments')} value={form.constraints.hasAttachments}
-                        onChange={e => patchConstraints({ hasAttachments: e.target.value })} className="settings-input">
-                        <option value="">{t('autoTag.hasAttachments')}: {t('autoTag.any')}</option>
-                        <option value="yes">{t('autoTag.hasAttachments')}: {t('autoTag.yes')}</option>
-                        <option value="no">{t('autoTag.hasAttachments')}: {t('autoTag.no')}</option>
-                      </select>
-                      <select aria-label={t('autoTag.listIdPresent')} value={form.constraints.listIdPresent}
-                        onChange={e => patchConstraints({ listIdPresent: e.target.value })} className="settings-input">
-                        <option value="">{t('autoTag.listIdPresent')}: {t('autoTag.any')}</option>
-                        <option value="yes">{t('autoTag.listIdPresent')}: {t('autoTag.yes')}</option>
-                        <option value="no">{t('autoTag.listIdPresent')}: {t('autoTag.no')}</option>
-                      </select>
-                      <input aria-label={t('autoTag.olderThanDays')} type="number" min="0" placeholder={t('autoTag.olderThanDays')}
-                        value={form.constraints.olderThanDays} onChange={e => patchConstraints({ olderThanDays: e.target.value })} className="settings-input" />
-                      <input aria-label={t('autoTag.newerThanDays')} type="number" min="0" placeholder={t('autoTag.newerThanDays')}
-                        value={form.constraints.newerThanDays} onChange={e => patchConstraints({ newerThanDays: e.target.value })} className="settings-input" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-mail-text mb-1">{t('autoTag.tag')}</label>
-                    <div className="flex gap-2">
-                      <select aria-label={t('autoTag.tag')} value={form.tagId} onChange={e => patch({ tagId: e.target.value })} className="settings-input flex-1">
-                        <option value="">{t('autoTag.tagPlaceholder')}</option>
-                        {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-                      </select>
-                    </div>
+                      placeholder={t('autoTag.instructionPlaceholder')} rows={3} />
+                  </SettingsField>
+                  <SettingsField label={t('autoTag.tag')} hint={t('autoTag.tagHint')}>
+                    <TomSelectField label={t('autoTag.tag')} value={form.tagId} placeholder={t('autoTag.tagPlaceholder')}
+                      options={tagOptions} onChange={tagId => { if (tagId !== form.tagId) patch({ tagId }); }} />
                     <div className="flex gap-2 mt-2">
                       <input aria-label={t('autoTag.newTagPlaceholder')} placeholder={t('autoTag.newTagPlaceholder')} value={newTagName}
-                        onChange={e => setNewTagName(e.target.value)} className="settings-input flex-1" />
+                        onChange={e => setNewTagName(e.target.value)} />
                       <Button variant="secondary" size="sm" onClick={addTag} disabled={!newTagName.trim()}>{t('autoTag.newTag')}</Button>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-mail-text mb-1">{t('autoTag.inboxAction')}</label>
-                    <select aria-label={t('autoTag.inboxAction')} value={form.inboxAction} onChange={e => patch({ inboxAction: e.target.value })} className="settings-input">
-                      <option value="keep">{t('autoTag.inboxActionKeep')}</option>
-                      <option value="hide">{t('autoTag.inboxActionHide')}</option>
-                    </select>
-                    {form.inboxAction === 'hide' && <p className="mt-1 text-xs text-mail-text-muted">{t('autoTag.inboxActionHideHint')}</p>}
-                  </div>
-
+                  </SettingsField>
+                  <SettingsField label={t('autoTag.inboxAction')} hint={t('autoTag.inboxActionHint')}>
+                    <SegmentedControl label={t('autoTag.inboxAction')} value={form.inboxAction}
+                      options={[{ value: 'keep', label: t('autoTag.inboxActionKeep') }, { value: 'hide', label: t('autoTag.inboxActionHide') }]}
+                      onChange={inboxAction => patch({ inboxAction })} />
+                    {form.inboxAction === 'hide' && <p className="settings-editor-summary">{t('autoTag.inboxActionHideHint')}</p>}
+                  </SettingsField>
+                  <details className="settings-editor-details">
+                    <summary>{t('autoTag.constraints')}</summary>
+                    <p className="settings-editor-summary">{t('autoTag.constraintsHint')}</p>
+                    <SettingsField label={t('autoTag.hasAttachments')} hint={t('autoTag.hasAttachmentsHint')}>
+                      <SegmentedControl label={t('autoTag.hasAttachments')} value={form.constraints.hasAttachments}
+                        options={[{ value: '', label: t('autoTag.any') }, { value: 'yes', label: t('autoTag.yes') }, { value: 'no', label: t('autoTag.no') }]}
+                        onChange={hasAttachments => patchConstraints({ hasAttachments })} />
+                    </SettingsField>
+                    <SettingsField label={t('autoTag.listIdPresent')} hint={t('autoTag.listIdHint')}>
+                      <SegmentedControl label={t('autoTag.listIdPresent')} value={form.constraints.listIdPresent}
+                        options={[{ value: '', label: t('autoTag.any') }, { value: 'yes', label: t('autoTag.yes') }, { value: 'no', label: t('autoTag.no') }]}
+                        onChange={listIdPresent => patchConstraints({ listIdPresent })} />
+                    </SettingsField>
+                    <div className="settings-editor-split">
+                      <label>{t('autoTag.fromAddress')}
+                        <TomSelectField label={t('autoTag.fromAddress')} value={form.constraints.fromAddress}
+                          options={senderOptions.addresses} placeholder={t('autoTag.fromAddress')} create
+                          onChange={fromAddress => patchConstraints({ fromAddress })} />
+                      </label>
+                      <label>{t('autoTag.fromDomain')}
+                        <TomSelectField label={t('autoTag.fromDomain')} value={form.constraints.fromDomain}
+                          options={senderOptions.domains} placeholder={t('autoTag.fromDomain')} create
+                          onChange={fromDomain => patchConstraints({ fromDomain })} />
+                      </label>
+                      {[
+                        ['subjectContains', 'autoTag.subjectContains'], ['mailbox', 'autoTag.mailbox'],
+                        ['olderThanDays', 'autoTag.olderThanDays'], ['newerThanDays', 'autoTag.newerThanDays'],
+                      ].map(([key, label]) => <label key={key}>{t(label)}
+                        <input aria-label={t(label)} type={key.endsWith('Days') ? 'number' : 'text'} min={key.endsWith('Days') ? '0' : undefined}
+                          value={form.constraints[key]} onChange={e => patchConstraints({ [key]: e.target.value })} className="settings-input" />
+                      </label>)}
+                    </div>
+                  </details>
+                  <details className="settings-editor-details">
+                    <summary>{t('autoTag.advanced')}</summary>
                   <div>
                     <label className="block text-sm font-medium text-mail-text mb-1">
                       {t('autoTag.minConfidence')}: {Math.round(form.minConfidence * 100)}%
@@ -351,16 +387,19 @@ export function AutoTagSettings() {
                     <ToggleSwitch testId="auto-tag-enabled-editor" active={form.enabled} label={t('autoTag.enabledLabel')} onClick={() => patch({ enabled: !form.enabled })} />
                   </div>
 
+                  </details>
+
                   {accounts.length > 1 && (
-                    <div>
-                      <label className="block text-sm font-medium text-mail-text mb-1">{t('common.from')}</label>
-                      <select aria-label={t('common.from')} value={accountId} onChange={e => setAccountId(e.target.value)} className="settings-input">
-                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.email}</option>)}
-                      </select>
-                    </div>
+                    <SettingsField label={t('common.from')}>
+                      <TomSelectField label={t('common.from')} value={accountId} options={accountOptions}
+                        placeholder={t('common.from')} onChange={setAccountId} />
+                    </SettingsField>
                   )}
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="settings-editor-preview">
+                    <h3>{t('autoTag.resultHeading')}</h3>
+                    <p>{t('autoTag.resultSummary', { tag: tags.find(tag => tag.id === form.tagId)?.name || t('autoTag.tagPlaceholder'), action: form.inboxAction === 'hide' ? t('autoTag.inboxActionHide') : t('autoTag.inboxActionKeep') })}</p>
+                    <div className="settings-editor-actions">
                     <Button variant="secondary" size="sm" onClick={runPreview} disabled={previewing || !form.instruction.trim() || !accountId}>
                       <Eye size={14} /> {previewing ? t('autoTag.previewing') : t('autoTag.preview')}
                     </Button>
@@ -375,7 +414,6 @@ export function AutoTagSettings() {
                       </Button>
                     )}
                   </div>
-
                   {backfillState && (
                     <p className="text-xs text-mail-text-muted" data-testid="auto-tag-backfill-status">
                       {backfillState.done
@@ -406,13 +444,15 @@ export function AutoTagSettings() {
 
                   {saveError && <p className="text-xs text-mail-danger">{t('autoTag.saveFailed', { error: saveError })}</p>}
 
-                  <div className="flex items-center gap-2 justify-end">
+                  </div>
+
+                  <div className="settings-editor-actions justify-end">
                     <Button variant="ghost" size="sm" onClick={closeEditor}>{t('common.cancel')}</Button>
                     <Button variant="primary" size="sm" onClick={save} disabled={!form.name.trim() || !form.instruction.trim() || !form.tagId}>
                       {t('common.save')}
                     </Button>
                   </div>
-                </div>
+                </SettingsSection>
               </motion.div>
             )}
           </AnimatePresence>

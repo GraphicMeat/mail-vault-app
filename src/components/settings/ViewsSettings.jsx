@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Bookmark, Star, Paperclip, Reply, Inbox } from 'lucide-react';
 import { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } from '../../stores/viewStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { ViewEditor } from '../ViewEditor';
+import { Button } from '../ui/Button';
+import { SettingsSection } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 
 const ICONS = { star: Star, paperclip: Paperclip, reply: Reply, tag: Bookmark, inbox: Inbox };
@@ -18,34 +20,65 @@ export function ViewsSettings({ onUpgrade }) {
   const views = useViewStore(state => state.views);
   const loadViews = useViewStore(state => state.loadViews);
   const createView = useViewStore(state => state.createView);
+  const deleteView = useViewStore(state => state.deleteView);
   // The sidebar's + cannot reach this page's props, so it leaves its intent in
   // the store and this consumes it once.
   const pendingNew = useViewStore(state => state.pendingNew);
   const premium = useSettingsStore(state => hasPremiumAccess(state.billingProfile));
   const [editingId, setEditingId] = useState(null);
+  const [newlyCreatedId, setNewlyCreatedId] = useState(null);
   const [refused, setRefused] = useState(false);
+  const [error, setError] = useState('');
+  const switching = useRef(false);
 
   useEffect(() => { void loadViews(); }, [loadViews]);
 
   const full = viewLimitReached(views, premium);
 
+  const discardUnsaved = async () => {
+    if (newlyCreatedId && newlyCreatedId === editingId) await deleteView(newlyCreatedId);
+    setNewlyCreatedId(null);
+  };
+
   const startNew = async () => {
-    const view = {
-      id: globalThis.crypto?.randomUUID?.() || `view-${Date.now()}`,
-      name: t('views.new'),
-      icon: 'tag',
-      // The daemon puts a new view last on its own; a position sent from here
-      // is ignored on an insert, so guessing one would only be a lie on screen.
-      position: 0,
-      builtin: null,
-      def: {},
-    };
-    // Asked before the builder opens: filling one in only to be refused at
-    // Save is the worse order.
-    const reply = await createView(view, premium);
-    if (!reply.ok) { setRefused(true); return; }
-    setRefused(false);
-    setEditingId(view.id);
+    if (switching.current) return;
+    switching.current = true;
+    try {
+      setError('');
+      await discardUnsaved();
+      const view = {
+        id: globalThis.crypto?.randomUUID?.() || `view-${Date.now()}`,
+        name: t('views.new'),
+        icon: 'tag',
+        // The daemon puts a new view last on its own; a position sent from here
+        // is ignored on an insert, so guessing one would only be a lie on screen.
+        position: 0,
+        builtin: null,
+        def: {},
+      };
+      // Asked before the builder opens: filling one in only to be refused at
+      // Save is the worse order.
+      const reply = await createView(view, premium);
+      if (!reply.ok) { setRefused(true); return; }
+      setRefused(false);
+      setEditingId(view.id);
+      setNewlyCreatedId(view.id);
+    } catch (cause) {
+      setError(cause?.message || String(cause));
+    } finally { switching.current = false; }
+  };
+
+  const selectView = async id => {
+    if (switching.current) return;
+    switching.current = true;
+    try {
+      setError('');
+      if (newlyCreatedId && newlyCreatedId === editingId) await discardUnsaved();
+      else setNewlyCreatedId(null);
+      setEditingId(current => current === id ? null : id);
+    } catch (cause) {
+      setError(cause?.message || String(cause));
+    } finally { switching.current = false; }
   };
 
   useEffect(() => {
@@ -60,14 +93,9 @@ export function ViewsSettings({ onUpgrade }) {
   const editing = views.find(view => view.id === editingId);
 
   return <section className="views-settings" aria-label={t('views.section')}>
-    <div className="sidebar-section-heading">
-      <h2>{t('views.section')}</h2>
-      <button type="button" data-testid="views-new" className="views-new" disabled={full}
-        aria-label={t('views.new')} title={t('views.new')} onClick={startNew}>
-        <Plus size={14} />
-      </button>
-    </div>
-    <p className="text-xs text-mail-text-muted">{t('views.explainer')}</p>
+    <SettingsSection title={t('views.section')} description={t('views.explainer')}>
+      <Button variant="secondary" size="sm" type="button" data-testid="views-new" disabled={full}
+        aria-label={t('views.new')} onClick={startNew}><Plus size={14} /> {t('views.new')}</Button>
 
     {/* The cap is a fact about the plan, so it is stated before it bites, not
         only when the + refuses. */}
@@ -83,6 +111,8 @@ export function ViewsSettings({ onUpgrade }) {
       {t('views.limitReached', { max: MAX_FREE_VIEWS })}
     </p>}
 
+    {error && <p className="text-sm text-mail-danger" role="alert">{error}</p>}
+
     <ul className="views-list" data-testid="views-list">
       {views.map((view) => {
         const Icon = ICONS[view.icon] || Bookmark;
@@ -90,7 +120,7 @@ export function ViewsSettings({ onUpgrade }) {
           <button type="button" data-testid={`views-row-${view.id}`}
             className={`views-row-button${editingId === view.id ? ' is-editing' : ''}`}
             aria-expanded={editingId === view.id}
-            onClick={() => setEditingId(current => (current === view.id ? null : view.id))}>
+            onClick={() => { void selectView(view.id); }}>
             <Icon size={14} aria-hidden="true" />
             <span className="views-row-name">{viewLabel(view, t)}</span>
           </button>
@@ -99,6 +129,18 @@ export function ViewsSettings({ onUpgrade }) {
       {views.length === 0 && <li className="views-empty" data-testid="views-empty">{t('views.none')}</li>}
     </ul>
 
-    {editing && <ViewEditor key={editing.id} view={editing} onClose={() => setEditingId(null)} />}
+    </SettingsSection>
+
+    {editing && <ViewEditor key={editing.id} view={editing} onClose={async saved => {
+      if (switching.current) return;
+      switching.current = true;
+      try {
+        if (!saved) await discardUnsaved();
+        else setNewlyCreatedId(null);
+        setEditingId(null);
+      } catch (cause) {
+        setError(cause?.message || String(cause));
+      } finally { switching.current = false; }
+    }} />}
   </section>;
 }

@@ -8,12 +8,17 @@ import { wireConnectivityEvents, installNetMock } from './stores/connectivitySto
 import './styles/index.css';
 
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
+const isOriginalWindow = new URLSearchParams(window.location.search).has('original');
+const isSettingsWindow = new URLSearchParams(window.location.search).has('settings');
+if (isSettingsWindow) document.body.dataset.auxiliaryWindow = 'settings';
 const App = React.lazy(() => import('./App'));
 const ComposeWindow = React.lazy(() => import('./components/ComposeWindow').then(m => ({ default: m.ComposeWindow })));
+const OriginalMessageWindow = React.lazy(() => import('./components/OriginalMessageWindow').then(m => ({ default: m.OriginalMessageWindow })));
+const SettingsWindow = React.lazy(() => import('./components/SettingsWindow').then(m => ({ default: m.SettingsWindow })));
 
 // Listen to the webview's path-monitor events. Cheap, and the only signal that
 // arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
-if (!isComposeWindow) wireConnectivityEvents();
+if (!isComposeWindow && !isOriginalWindow && !isSettingsWindow) wireConnectivityEvents();
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //
@@ -222,7 +227,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           matching @media block in styles/index.css. */}
       <MotionConfig reducedMotion="user">
         <SplashDismisser>
-          <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : <App />}</React.Suspense>
+          <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : isOriginalWindow ? <OriginalMessageWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />}</React.Suspense>
         </SplashDismisser>
       </MotionConfig>
     </ErrorBoundary>

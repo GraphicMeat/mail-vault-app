@@ -6,6 +6,8 @@ import { useTagStore } from '../stores/tagStore';
 import { useFieldStore } from '../stores/fieldStore';
 import { useMailStore } from '../stores/mailStore';
 import { useT } from '../i18n/index.js';
+import { Button } from './ui/Button';
+import { SettingsSection } from './ui/SettingsForm';
 
 const ICONS = ['tag', 'star', 'paperclip', 'reply', 'inbox'];
 /// Three states, not two: a filter can demand a flag, demand its absence, or
@@ -73,6 +75,8 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const [sort, setSort] = useState(def.sort || 'date');
   const [direction, setDirection] = useState(def.direction || 'desc');
   const [confirming, setConfirming] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const filterFor = id => fieldFilters[id] || NO_FILTER;
   const setFilter = (id, patch) =>
@@ -110,20 +114,49 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
 
   const edited = () => ({ ...view, name: name.trim(), icon, def: editedDef() });
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     // A starter carries no name of its own — the app translates it — so only a
     // view someone made needs one.
     if (!name.trim() && !view.builtin) return;
-    saveView(edited());
-    onClose?.();
+    setSaveError('');
+    setSaving(true);
+    try {
+      await saveView(edited());
+      onClose?.(true);
+    } catch (cause) {
+      setSaveError(cause?.message || String(cause));
+    } finally {
+      setSaving(false);
+    }
   };
 
   /// Moving re-reads the stored view, so anything typed and not yet saved
   /// would be thrown away when the list reloads. Save first.
-  const move = (delta) => {
-    if (name.trim() || view.builtin) saveView(edited());
-    moveView(view.id, delta);
+  const move = async (delta) => {
+    setSaveError('');
+    setSaving(true);
+    try {
+      if (name.trim() || view.builtin) await saveView(edited());
+      await moveView(view.id, delta);
+    } catch (cause) {
+      setSaveError(cause?.message || String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    setSaveError('');
+    setSaving(true);
+    try {
+      await deleteView(view.id);
+      onClose?.(true);
+    } catch (cause) {
+      setSaveError(cause?.message || String(cause));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tri = (key) => <select data-testid={`view-${key}`} value={flags[key]} aria-label={t(`views.filter.${key}`)}
@@ -132,6 +165,7 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   </select>;
 
   return <form className="view-editor" data-testid="view-editor-form" onSubmit={submit}>
+    <SettingsSection title={view.builtin ? viewLabel(view, t) : t('views.edit')} description={t('views.editorIntro')}>
     <div className="view-editor-row">
       <input data-testid="view-name" value={name} maxLength={80} aria-label={t('views.name')}
         placeholder={view.builtin ? viewLabel(view, t) : t('views.name')}
@@ -140,10 +174,10 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
         onChange={event => setIcon(event.target.value)}>
         {ICONS.map(option => <option key={option} value={option}>{t(`views.iconName.${option}`)}</option>)}
       </select>
-      <button type="button" data-testid="view-move-up" aria-label={t('views.moveUp')} onClick={() => move(-1)}>
+      <button type="button" data-testid="view-move-up" aria-label={t('views.moveUp')} disabled={saving} onClick={() => { void move(-1); }}>
         <ChevronUp size={12} />
       </button>
-      <button type="button" data-testid="view-move-down" aria-label={t('views.moveDown')} onClick={() => move(1)}>
+      <button type="button" data-testid="view-move-down" aria-label={t('views.moveDown')} disabled={saving} onClick={() => { void move(1); }}>
         <ChevronDown size={12} />
       </button>
     </div>
@@ -160,6 +194,9 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
         onChange={event => setSender(event.target.value)} />
     </label>
 
+    </SettingsSection>
+
+    <SettingsSection title={t('views.filter.filters')} description={t('views.filtersHint')}>
     <div className="view-editor-row">
       <label>{t('views.filter.unread')}{tri('unread')}</label>
       <label>{t('views.filter.starred')}{tri('starred')}</label>
@@ -224,6 +261,9 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       {chosenAccounts.length === 0 && <span className="view-editor-hint">{t('views.filter.allAccounts')}</span>}
     </div>}
 
+    </SettingsSection>
+
+    <SettingsSection title={t('views.presentation')} description={t('views.presentationHint')}>
     {/* Outside the schema block on purpose: none/sender/date need no schema,
         and an app with no account yet still has a grouping to choose. */}
     <div className="view-editor-row">
@@ -253,6 +293,9 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       </label>
     </div>
 
+    </SettingsSection>
+
+    {(tags.length > 0 || schema.length > 0) && <SettingsSection title={t('views.filter.more')} description={t('views.moreHint')}>
     {tags.length > 0 && <div className="view-editor-row">
       <span>{t('views.filter.tags')}</span>
       {tags.map(tag => <label key={tag.id}>
@@ -286,16 +329,19 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       </label>)}
     </div>}
 
-    {showPreview && <ViewPreview def={editedDef()} />}
+    </SettingsSection>}
 
-    <div className="view-editor-row">
-      <button type="submit">{t('common.save')}</button>
-      <button type="button" onClick={() => onClose?.()}>{t('common.cancel')}</button>
+    {showPreview && <SettingsSection title={t('views.preview.title')} description={t('views.previewHint')}><ViewPreview def={editedDef()} /></SettingsSection>}
+
+    <div className="settings-editor-actions justify-end">
+      <Button variant="primary" size="sm" type="submit" disabled={saving}>{t('common.save')}</Button>
+      <Button variant="ghost" size="sm" type="button" onClick={() => onClose?.()}>{t('common.cancel')}</Button>
       {confirming
         ? <button type="button" data-testid="view-delete-confirm" className="is-danger"
-          onClick={() => { deleteView(view.id); onClose?.(); }}>{t('views.deleteConfirm')}</button>
+          disabled={saving} onClick={() => { void remove(); }}>{t('views.deleteConfirm')}</button>
         : <button type="button" data-testid="view-delete" onClick={() => setConfirming(true)}
           aria-label={t('common.delete')}><Trash2 size={12} /></button>}
     </div>
+    {saveError && <p role="alert" className="text-sm text-mail-danger">{saveError}</p>}
   </form>;
 }

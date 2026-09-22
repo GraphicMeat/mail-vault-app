@@ -64,7 +64,7 @@ let saveTimer = null;
 // snapshot is intentionally partial. Decide before Zustand can hydrate so it
 // can never overwrite the main window's settings file during child startup.
 let writesEnabled = typeof window === 'undefined'
-  || !new URLSearchParams(window.location?.search || '').has('compose');
+  || !['compose', 'original', 'settings'].some(key => new URLSearchParams(window.location?.search || '').has(key));
 function debouncedSave() {
   if (!writesEnabled) return;
   if (saveTimer) clearTimeout(saveTimer);

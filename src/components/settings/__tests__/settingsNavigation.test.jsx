@@ -52,6 +52,13 @@ it('applies the palette independently of light and dark mode', () => {
 });
 
 describe('settings page search', () => {
+  it('hands the selected destination to a detached Settings window', () => {
+    const onDetach = vi.fn();
+    render(<SettingsPage initialTab="appearance" onClose={() => {}} onDetach={onDetach} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Reading', exact: true }));
+    fireEvent.click(screen.getByTestId('settings-detach'));
+    expect(onDetach).toHaveBeenCalledWith({ tab: 'appearance', accountId: undefined, section: 'reading' });
+  });
   it('opens a mail setting from its own label and lets the user change it', () => {
     render(<SettingsPage onClose={() => {}} />);
     const search = within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('textbox', { name: 'Find a setting' });

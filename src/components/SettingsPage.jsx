@@ -27,6 +27,7 @@ import {
   Bot,
   Tag,
   LayoutList,
+  Maximize2,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -190,7 +191,7 @@ const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'c
 const searchText = value => value.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId, initialSection,
-  minimized = false, onMinimize, onNavigationLabelChange }) {
+  minimized = false, onMinimize, onDetach, onNavigationLabelChange }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -374,6 +375,12 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
               {onMinimize && <Button variant="ghost" icon size="md"
                 aria-label={t('settingsPage.minimize')} title={t('settingsPage.minimize')} onClick={onMinimize}>
                 <Minus size={20} aria-hidden="true" />
+              </Button>}
+              {onDetach && <Button variant="ghost" icon size="md" data-testid="settings-detach"
+                aria-label={t('settingsPage.detach')} title={t('settingsPage.detach')}
+                onClick={() => onDetach({ tab: activeTab, accountId: selectedFeatureAccountId,
+                  section: activeTab === 'appearance' ? appearanceSection : activeTab === 'mail-preferences' ? generalSubTab : activeTab === 'accounts' ? accountSection : null })}>
+                <Maximize2 size={18} aria-hidden="true" />
               </Button>}
               <Button variant="ghost" icon size="md"
                 aria-label={t('common.close')} title={t('common.close')} onClick={onClose}

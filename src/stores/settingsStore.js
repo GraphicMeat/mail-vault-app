@@ -340,6 +340,7 @@ export const useSettingsStore = create(
       emailListStyle: 'compact', // 'default' | 'compact'
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       emailListView: 'list', // 'list' | 'explorer'
+      listTimelineVisible: false,
       explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
       explorerDateDepth: 'month',
       explorerPaths: {},
@@ -956,6 +957,7 @@ export const useSettingsStore = create(
         return { dismissedQuickReplyThreads: Object.fromEntries(entries) };
       }),
       setEmailListView: value => set({ emailListView: normalizeEmailListView(value) }),
+      setListTimelineVisible: value => set({ listTimelineVisible: Boolean(value) }),
       setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
       setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
       setExplorerPath: (scope, path) => set(state => {
@@ -1193,6 +1195,7 @@ export const useSettingsStore = create(
           emailListStyle: 'compact',
           emailListGrouping: 'chronological',
           emailListView: 'list',
+          listTimelineVisible: false,
           explorerGrouping: 'date',
           explorerDateDepth: 'month',
           explorerPaths: {},

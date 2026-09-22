@@ -23,6 +23,7 @@
    ========================================================================= */
 
 @import './fonts.css';
+@import './settings-editors.css';
 
 @tailwind base;
 @tailwind components;
@@ -42,9 +43,8 @@
 }
 
 .compose-context-aside {
-  resize: horizontal;
   min-width: 240px;
-  max-width: min(560px, 55vw);
+  max-width: min(760px, 70vw);
 }
 
 .compose-window-detached { resize: none; max-width: none; max-height: none; }
