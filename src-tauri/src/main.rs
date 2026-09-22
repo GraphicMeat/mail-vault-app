@@ -2901,6 +2901,16 @@ fn main() {
         });
     }
 
+    // Same shape as --daemon-only: answer and leave, before a window, a
+    // single-instance lock or a tray icon exists. Exists so the probe can be
+    // driven over ssh, where clicking a Help menu is not an option.
+    #[cfg(target_os = "macos")]
+    if std::env::args().any(|a| a == "--probe-agent") {
+        let (title, body) = probe_agent_report();
+        println!("{title}\n{body}");
+        std::process::exit(if title.contains("PASS") { 0 } else { 1 });
+    }
+
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
         let location = info.location()
@@ -3575,7 +3585,16 @@ fn main() {
 #[cfg(target_os = "macos")]
 fn probe_agent_registration(h: tauri::AppHandle) {
     use tauri_plugin_dialog::DialogExt;
+    let (title, body) = probe_agent_report();
+    h.dialog().message(body).title(title).blocking_show();
+}
 
+/// The probe itself, with no UI and no AppHandle, so `--probe-agent` can run it
+/// over ssh on a machine whose GUI nobody is sitting at. Registration has to
+/// come from inside the app bundle — SMAppService reports on the calling
+/// bundle — but it needs no Tauri runtime, so this runs before one exists.
+#[cfg(target_os = "macos")]
+fn probe_agent_report() -> (&'static str, String) {
     let log = mailvault_core::autostart::group_container_dir(
         &dirs::home_dir().unwrap_or_default(),
         "group.com.mailvault",
@@ -3586,11 +3605,10 @@ fn probe_agent_registration(h: tauri::AppHandle) {
     let registered = match autostart::probe_register_agent() {
         Ok(status) => format!("register: OK (status {status})"),
         Err(e) => {
-            h.dialog()
-                .message(format!("register refused:\n{e}\n\nLog looked for at:\n{}", log.display()))
-                .title("Probe: Background Agent — FAIL")
-                .blocking_show();
-            return;
+            return (
+                "Probe: Background Agent — FAIL",
+                format!("register refused:\n{e}\n\nLog looked for at:\n{}", log.display()),
+            );
         }
     };
 
@@ -3605,7 +3623,7 @@ fn probe_agent_registration(h: tauri::AppHandle) {
         }
     }
 
-    let (title, body) = if after.len() > before.len() {
+    if after.len() > before.len() {
         let line = after[before.len()..].trim().to_string();
         ("Probe: Background Agent — PASS", format!("{registered}\n\nThe agent ran and reached the group container:\n{line}"))
     } else {
@@ -3613,8 +3631,7 @@ fn probe_agent_registration(h: tauri::AppHandle) {
             "Probe: Background Agent — PARTIAL",
             format!("{registered}\n\nBut nothing was written to:\n{}\n\nRegistration works; the agent either did not start or cannot reach the group container. Check: log show --last 5m --predicate 'process == \"mailvault-agent-probe\"'", log.display()),
         )
-    };
-    h.dialog().message(body).title(title).blocking_show();
+    }
 }
 
 fn probe_backup_scope(h: tauri::AppHandle) {
