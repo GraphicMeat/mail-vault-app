@@ -58,6 +58,7 @@ export {
   getEmailHeadersPartial,
   getEmailHeadersMeta,
   listCachedUids,
+  getMonthHistogram,
   getEmailHeadersByUids,
   getEmailHeaders,
   loadGraphIdMap,

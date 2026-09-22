@@ -126,7 +126,7 @@ export const DAEMON_OWNED = new Set([
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments', 'export_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.
   'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_meta',
-  'load_email_cache_by_uids', 'list_cached_uids', 'clear_email_cache',
+  'load_email_cache_by_uids', 'list_cached_uids', 'header_cache_month_histogram', 'clear_email_cache',
   'save_mailbox_cache', 'load_mailbox_cache', 'delete_mailbox_cache',
   'graph_allocate_uids', 'load_graph_id_map',
   'op_journal_queue', 'op_journal_clear', 'op_journal_read',

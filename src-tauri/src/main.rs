@@ -2319,7 +2319,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "maildir_read_raw_source" | "maildir_exists" | "maildir_store" | "maildir_delete"
         | "maildir_delete_many" | "maildir_set_flags" | "cache_attachment" | "cached_attachment_path"
         | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
-        | "list_cached_uids" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
+        | "list_cached_uids" | "header_cache_month_histogram" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
         | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
         | "read_pending_operation" | "save_pending_operation" | "clear_pending_operation" | "local_index_read"
         | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
@@ -3641,7 +3641,7 @@ mod tests {
             "maildir_read_raw_source", "maildir_exists", "maildir_store", "maildir_delete",
             "maildir_delete_many", "maildir_set_flags", "cache_attachment", "cached_attachment_path",
             "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
-            "list_cached_uids", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
+            "list_cached_uids", "header_cache_month_histogram", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
             "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
             "read_pending_operation", "save_pending_operation", "clear_pending_operation", "local_index_read",
             "local_index_append", "local_index_remove", "custody_status", "maildir_repair_generation",

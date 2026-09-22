@@ -895,6 +895,16 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'save_email_cache': case 'save_mailbox_cache': case 'clear_email_cache': case 'delete_mailbox_cache': return null;
       case 'load_mailbox_cache': return JSON.stringify({ mailboxes: accountMailboxes(accountId), fetchedAt: sessionNow, lastKnownGoodMailboxes: accountMailboxes(accountId), lastKnownGoodAt: sessionNow });
       case 'list_cached_uids': return { uids: local(accountId, mailbox).map(row => row.uid), changed: [] };
+      case 'header_cache_month_histogram': {
+        const counts = new Map();
+        for (const row of local(accountId, mailbox)) {
+          const d = new Date(row.date);
+          if (Number.isNaN(d.getTime())) continue;
+          const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+          counts.set(ym, (counts.get(ym) || 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([ym, count]) => ({ ym, count }));
+      }
       case 'local_index_append': {
         const entries = typeof args.entriesJson === 'string' ? JSON.parse(args.entriesJson) : (args.entries || []);
         for (const entry of entries) {

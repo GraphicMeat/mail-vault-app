@@ -200,6 +200,23 @@ export async function listCachedUids(accountId, mailbox, sinceMs = null) {
   return null;
 }
 
+/**
+ * Whole-mailbox month histogram over the header cache — `[{ym, count}, ...]`,
+ * newest first — for the list date scrubber (Task 1 of
+ * `docs/superpowers/specs/2026-09-22-list-date-scrubber-design.md`).
+ */
+export async function getMonthHistogram(accountId, mailbox) {
+  if (invoke) {
+    try {
+      const res = await invoke('header_cache_month_histogram', { accountId, mailbox });
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      console.warn('[db.js] Failed to load month histogram:', error);
+    }
+  }
+  return null;
+}
+
 /** Headers for specific UIDs — one sidecar read each, so keep the list short. */
 export async function getEmailHeadersByUids(accountId, mailbox, uids) {
   if (invoke && uids?.length) {

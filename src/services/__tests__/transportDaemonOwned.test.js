@@ -48,6 +48,7 @@ describe('daemon-owned commands', () => {
       'graph_move_emails', 'graph_move_folder',
       'graph_rename_folder',
       'graph_set_flagged', 'graph_set_read',
+      'header_cache_month_histogram',
       'imap_check_mailbox_status', 'imap_create_mailbox', 'imap_delete_email', 'imap_delete_mailbox',
       'imap_disconnect', 'imap_ensure_sent_mailbox', 'imap_fetch_changed_flags', 'imap_fetch_headers_by_uids',
       'imap_find_message_id', 'imap_folder_status', 'imap_get_email', 'imap_get_email_light', 'imap_get_emails',

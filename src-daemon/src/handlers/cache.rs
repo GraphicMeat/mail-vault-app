@@ -135,6 +135,20 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        "header_cache_month_histogram" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::month_histogram(c, &account_id, &mailbox))
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         // F2: the tree-write lock inside `header_cache::clear` blocks every
         // mailbox writer (including sync_engine, via the same registry) for
         // its duration — one call for the whole clear, same scope the body
@@ -312,6 +326,19 @@ mod tests {
         let r = call(&s, "list_cached_uids", json!({"accountId": "a", "mailbox": "INBOX", "sinceMs": Value::Null})).await.result.unwrap();
         assert!(r.get("uids").is_some());
         assert!(r.get("changed").is_some());
+    }
+
+    #[tokio::test]
+    async fn header_cache_month_histogram_groups_by_utc_month_newest_first() {
+        let (_t, s) = st(true);
+        let data = json!({"emails": [
+            {"uid": 1, "internalDate": "2021-03-01T00:00:00Z"},
+            {"uid": 2, "internalDate": "2021-03-15T00:00:00Z"},
+            {"uid": 3, "internalDate": "2021-01-05T00:00:00Z"},
+        ], "totalEmails": 3}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": data})).await;
+        let r = call(&s, "header_cache_month_histogram", json!({"accountId": "a", "mailbox": "INBOX"})).await.result.unwrap();
+        assert_eq!(r, json!([{"ym": "2021-03", "count": 2}, {"ym": "2021-01", "count": 1}]));
     }
 
     #[tokio::test]

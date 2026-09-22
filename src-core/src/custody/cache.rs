@@ -110,6 +110,22 @@ pub fn list_uids(conn: &Connection, account: &str, mailbox: &str, since_ms: Opti
     Ok(json!({"uids":uids,"changed":changed}))
 }
 
+/// Whole-mailbox month histogram for the list date scrubber
+/// (`docs/superpowers/specs/2026-09-22-list-date-scrubber-design.md` §1):
+/// `[{"ym":"2021-03","count":412}, ...]`, newest first, UTC months. Rows with
+/// `sort_ms <= 0` (unknown date — `save_headers_at`'s `sort_ms` falls back to
+/// a negative sentinel when neither `internalDate` nor `date` parses) are
+/// excluded rather than bucketed under some sentinel month.
+pub fn month_histogram(conn: &Connection, account: &str, mailbox: &str) -> Result<Value, String> {
+    let mut stmt = conn.prepare(
+        "SELECT strftime('%Y-%m', sort_ms/1000, 'unixepoch') AS ym, COUNT(*) FROM header_cache \
+         WHERE account_id=?1 AND mailbox_path=?2 AND sort_ms > 0 GROUP BY ym ORDER BY ym DESC"
+    ).map_err(err)?;
+    let rows = stmt.query_map(params![account, mailbox], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))).map_err(err)?
+        .collect::<Result<Vec<_>, _>>().map_err(err)?;
+    Ok(Value::Array(rows.into_iter().map(|(ym, count)| json!({"ym": ym, "count": count})).collect()))
+}
+
 /// How many headers this mailbox has cached. Replaces counting `<uid>.json`
 /// files in the sidecar directory — which also had to exclude `_meta.json`
 /// and the Outlook uid ledger that still live there.
@@ -281,4 +297,63 @@ pub fn load_mailboxes(conn: &Connection, account: &str) -> Result<Option<String>
 }
 pub fn delete_mailboxes(conn: &Connection, account: &str) -> Result<(), String> {
     conn.execute("DELETE FROM mailbox_cache WHERE account_id=?1", [account]).map(|_| ()).map_err(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::custody::db::open;
+    use chrono::{TimeZone, Utc};
+
+    fn store() -> (tempfile::TempDir, Connection) {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        (tmp, conn)
+    }
+
+    fn ms(y: i32, m: u32, d: u32) -> i64 {
+        Utc.with_ymd_and_hms(y, m, d, 12, 0, 0).unwrap().timestamp_millis()
+    }
+
+    fn insert(conn: &Connection, account: &str, mailbox: &str, uid: i64, sort_ms: i64) {
+        conn.execute(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![account, mailbox, uid, sort_ms, 0i64, "{}"],
+        ).unwrap();
+    }
+
+    #[test]
+    fn month_histogram_groups_filters_excludes_unknown_dates_and_orders_newest_first() {
+        let (_t, c) = store();
+        // account a / INBOX: three months, three rows in 2021-03.
+        insert(&c, "a", "INBOX", 1, ms(2021, 3, 1));
+        insert(&c, "a", "INBOX", 2, ms(2021, 3, 15));
+        insert(&c, "a", "INBOX", 3, ms(2021, 3, 28));
+        insert(&c, "a", "INBOX", 4, ms(2021, 1, 5));
+        insert(&c, "a", "INBOX", 5, ms(2020, 12, 31));
+        // sort_ms <= 0 is an unknown date and must be excluded, not bucketed.
+        insert(&c, "a", "INBOX", 6, 0);
+        // Another mailbox on the same account must not leak in.
+        insert(&c, "a", "Archive", 7, ms(2021, 3, 1));
+        // Another account, same mailbox name, must not leak in either.
+        insert(&c, "b", "INBOX", 8, ms(2021, 3, 1));
+
+        let result = month_histogram(&c, "a", "INBOX").unwrap();
+        assert_eq!(
+            result,
+            json!([
+                {"ym": "2021-03", "count": 3},
+                {"ym": "2021-01", "count": 1},
+                {"ym": "2020-12", "count": 1},
+            ])
+        );
+    }
+
+    #[test]
+    fn month_histogram_is_empty_for_an_unknown_mailbox() {
+        let (_t, c) = store();
+        insert(&c, "a", "INBOX", 1, ms(2021, 3, 1));
+        assert_eq!(month_histogram(&c, "a", "Archive").unwrap(), json!([]));
+        assert_eq!(month_histogram(&c, "z", "INBOX").unwrap(), json!([]));
+    }
 }
