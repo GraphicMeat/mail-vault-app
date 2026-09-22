@@ -63,20 +63,37 @@ const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 /** Newest message is `today - 0`; dates walk backwards from there. */
 const TODAY = new Date();
 
+/** Minutes east of UTC that `tz` observes at `ms`, from Intl's "GMT-04:00" ("GMT" alone is 0). */
+function zoneOffset(tz, ms) {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+    .formatToParts(ms).find((p) => p.type === 'timeZoneName').value;
+  const [, sign, h, m] = /([+-])(\d\d):(\d\d)/.exec(name) || [];
+  return sign ? (sign === '-' ? -1 : 1) * (Number(h) * 60 + Number(m)) : 0;
+}
+
 /**
  * A date `daysAgo` days back, at a fixed hour so a re-shoot of one screenshot
- * still matches the rest of the set.
+ * still matches the rest of the set. The instant is `hour:minute` UTC.
+ *
+ * `tz` writes the Date header on the sender's own clock: the same instant, so
+ * every list and sort is unchanged, but with a real offset. `+0000` is what
+ * Exchange stamps on everything, so compose's timezone suggestion ignores it
+ * and needs a sender whose offset says something.
  */
-function stamp(daysAgo, hour = 9, minute = 14) {
+function stamp(daysAgo, hour = 9, minute = 14, tz = null) {
   const d = new Date(TODAY);
   d.setDate(d.getDate() - daysAgo);
-  d.setHours(hour, minute, 0, 0);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(hour).padStart(2, '0');
-  const mm = String(minute).padStart(2, '0');
+  const at = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), hour, minute);
+  // Taken at that date, not today: New York is -04:00 in summer and -05:00 in
+  // winter, and a fixed -0400 in December reads as Halifax.
+  const offset = tz ? zoneOffset(tz, at) : 0;
+  const wall = new Date(at + offset * 60000); // read through the UTC getters
+  const p2 = (n) => String(n).padStart(2, '0');
+  const zone = `${offset < 0 ? '-' : '+'}${p2(Math.floor(Math.abs(offset) / 60))}${p2(Math.abs(offset) % 60)}`;
   return {
-    internalDate: `${dd}-${MONTHS[d.getMonth()]}-${d.getFullYear()} ${hh}:${mm}:00 +0000`,
-    header: `${DOW[d.getDay()]}, ${dd} ${MONTHS[d.getMonth()]} ${d.getFullYear()} ${hh}:${mm}:00 +0000`,
+    internalDate: `${p2(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()} ${p2(hour)}:${p2(minute)}:00 +0000`,
+    header: `${DOW[wall.getUTCDay()]}, ${p2(wall.getUTCDate())} ${MONTHS[wall.getUTCMonth()]} ${wall.getUTCFullYear()} `
+      + `${p2(wall.getUTCHours())}:${p2(wall.getUTCMinutes())}:00 ${zone}`,
   };
 }
 
@@ -106,6 +123,13 @@ const CAST = {
 
 const OWNER = 'Rowan Marsh <rowan@primecut.studio>';
 
+/**
+ * Senders whose Date headers carry their own clock (see `stamp`). One is
+ * enough: `premium-scheduled-send` addresses her, and compose suggests her
+ * zone from her last email. Everyone else stays on `+0000`.
+ */
+const SENDER_TZ = { [CAST.priya]: 'America/New_York' };
+
 // ── MIME builders ───────────────────────────────────────────────────────────
 
 function headers({ from, to, subject, date, messageId, extra = [] }) {
@@ -121,7 +145,7 @@ function headers({ from, to, subject, date, messageId, extra = [] }) {
 }
 
 function textMessage({ uid, daysAgo, hour, minute, from, to, subject, body, seen = true, messageId, extra = [] }) {
-  const { internalDate, header } = stamp(daysAgo, hour, minute);
+  const { internalDate, header } = stamp(daysAgo, hour, minute, SENDER_TZ[from]);
   return {
     uid,
     flags: seen ? ['\\Seen'] : [],
@@ -138,7 +162,7 @@ function textMessage({ uid, daysAgo, hour, minute, from, to, subject, body, seen
 }
 
 function htmlMessage({ uid, daysAgo, hour, minute, from, to, subject, text, html, seen = true, messageId, extra = [] }) {
-  const { internalDate, header } = stamp(daysAgo, hour, minute);
+  const { internalDate, header } = stamp(daysAgo, hour, minute, SENDER_TZ[from]);
   const boundary = 'PrimeCutAlt';
   return {
     uid,
@@ -167,7 +191,7 @@ function htmlMessage({ uid, daysAgo, hour, minute, from, to, subject, text, html
 
 /** A message carrying one small PDF attachment, so the attachment chip shows. */
 function messageWithAttachment({ uid, daysAgo, hour, from, to, subject, body, filename, seen = true }) {
-  const { internalDate, header } = stamp(daysAgo, hour);
+  const { internalDate, header } = stamp(daysAgo, hour, undefined, SENDER_TZ[from]);
   const boundary = 'PrimeCutMixed';
   // Smallest valid-enough PDF: the viewer only needs a name, size and type.
   const pdf = Buffer.from(
@@ -852,7 +876,19 @@ export function demoScenarios(code = 'en') {
     invoice: S('Invoice CC-2026-0413 — paid, no strings'),
   };
 
-  return { DEMO_ACCOUNTS, MARKERS };
+  /**
+   * What `premium-scheduled-send` writes: Rowan's renewal reply to Priya, timed
+   * for her morning. Both strings are already in every catalog (the Sent copy
+   * of the same reply), so nothing new to translate.
+   */
+  const SCHEDULED_REPLY = {
+    to: CAST.priya,
+    tz: SENDER_TZ[CAST.priya],
+    subject: S('Re: Brisket Sans — licence renews 4 September'),
+    body: S('Happy to renew. Same five seats, invoice to accounts@primecut.studio please.\n\nRowan'),
+  };
+
+  return { DEMO_ACCOUNTS, MARKERS, SCHEDULED_REPLY };
 }
 
 /**

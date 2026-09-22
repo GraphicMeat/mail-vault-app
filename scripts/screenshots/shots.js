@@ -15,6 +15,7 @@
  */
 
 import { waitForApp, waitForEmails, openSettings, closeSettings, pressKey } from '../../tests/e2e/helpers.js';
+import { setField, typeInBody, pressInBody } from '../../tests/e2e/composeHelpers.js';
 import { capture } from './capture.js';
 import { raiseWindow } from './window.js';
 import { demoScenarios } from './demoData.js';
@@ -32,7 +33,7 @@ const APP_LOCALE = appCode(LOCALE_DIR);
  * screen up and the shot is taken anyway.
  */
 const L = makeLabels(APP_LOCALE);
-const { MARKERS } = demoScenarios(APP_LOCALE);
+const { MARKERS, SCHEDULED_REPLY } = demoScenarios(APP_LOCALE);
 
 // The chat view groups by topic, and the topic row shows the thread subject.
 // `Rack & Rind` is a brand and identical in every locale, so it is the one
@@ -161,6 +162,13 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
     searchInput: !!document.querySelector('[data-testid="mail-search-input"]'),
     chat: vis('[data-testid="chat-view"]'),
     compose: vis('[data-testid="compose-modal"]'),
+    // Compose's schedule panel: `data-value` is each picker's own state, and
+    // `scheduleLocked` means the Premium gate is up instead (a seed that missed).
+    scheduleTz: document.querySelector('[data-testid="compose-schedule-tz"]')?.dataset.value || '',
+    scheduleTime: document.querySelector('[data-testid="compose-schedule-time"]')?.dataset.value || '',
+    scheduleNote: vis('[data-testid="compose-schedule-tz-note"]'),
+    scheduleSends: vis('[data-testid="compose-schedule-sends"]'),
+    scheduleLocked: !!document.querySelector('[data-testid="compose-schedule-locked"]'),
     shortcuts: vis('[data-testid="shortcuts-modal"]'),
     insights: vis('[data-testid="sender-insights-panel"]'),
     // The Insights workspace, not the per-sender panel above it: two different
@@ -605,6 +613,38 @@ describe('MailVault marketing screenshots', function () {
         }
       });
       await browser.pause(800);
+    });
+
+    /**
+     * Scheduled Send: a reply to Priya, whose mail is dated on New York's clock
+     * (demoData `SENDER_TZ`). Opening the panel preselects her zone and says
+     * why, and "Tomorrow 8am" lands in HER morning with both wall clocks
+     * spelled out. Nothing closes it: `selection-dialog` starts with
+     * resetToInbox, which discards this compose as it does compose-email's.
+     */
+    await step('premium-scheduled-send', async () => {
+      await resetToInbox();
+      if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
+      await expectState((s) => s.compose, 'compose did not open');
+      await setField('compose-to', SCHEDULED_REPLY.to);
+      await setField('compose-subject', SCHEDULED_REPLY.subject);
+      // insertText carries no newline; a paragraph is ProseMirror's own Enter.
+      // Typing also moves focus off To, so its contacts dropdown stays shut.
+      const [first, ...rest] = SCHEDULED_REPLY.body.split(/\n+/);
+      await typeInBody(first);
+      for (const line of rest) {
+        await pressInBody('Enter');
+        await typeInBody(line);
+      }
+      if (!(await clickTestId('compose-schedule-toggle'))) throw new Error('schedule toggle not found');
+      // The suggestion lands a beat after the panel opens (a daemon lookup of
+      // her newest cached message). The zone alone could be a coincidence;
+      // the note is what says it was suggested.
+      await expectState((s) => s.scheduleTz === SCHEDULED_REPLY.tz && s.scheduleNote,
+        `schedule panel did not suggest ${SCHEDULED_REPLY.tz}`);
+      if (!(await clickTestId('compose-schedule-preset-tomorrow'))) throw new Error('tomorrow preset not found');
+      await expectState((s) => s.scheduleTime && s.scheduleSends && s.scheduleTz === SCHEDULED_REPLY.tz,
+        'picked time or its "sends ... your time" line missing');
     });
 
     // ── Bulk operations ───────────────────────────────────────────────────
