@@ -1032,10 +1032,6 @@ function EmailListComponent({ stacked = false }) {
           </button>
         </div>
         <MailboxCustodyStatus vaultShare={vaultShare} vaultShareLabel={vaultShareLabel} searchActive={searchActive} />
-        {searchActive && (
-          <button type="button" className="mt-2 text-xs text-mail-accent-text hover:underline"
-            onClick={() => { clearSearch(); setShowSearch(false); }}>{t('list.clearSearch')}</button>
-        )}
       </div>
       <div className="mail-list-toolbar" role="toolbar" aria-label={t('workspace.listControls')}>
         {/* Searching has already narrowed the list to the hits, so "select
