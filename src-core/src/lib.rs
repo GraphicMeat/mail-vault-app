@@ -30,8 +30,8 @@ pub mod smtp;
 pub mod spellcheck;
 pub mod transfer_stats;
 pub mod net;
-#[cfg(unix)]
 pub mod daemon_ipc;
+pub mod transport;
 
 pub const BUILD_ID: &str = env!("MAILVAULT_BUILD_ID");
 

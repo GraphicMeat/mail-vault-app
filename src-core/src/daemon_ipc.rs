@@ -4,7 +4,6 @@
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
@@ -20,7 +19,7 @@ fn unreachable(e: impl ToString) -> CallError {
     CallError::Unreachable(e.to_string())
 }
 
-fn read_json(r: &mut BufReader<UnixStream>) -> Result<Value, CallError> {
+fn read_json<R: BufRead>(r: &mut R) -> Result<Value, CallError> {
     let mut line = String::new();
     match r.read_line(&mut line) {
         Ok(0) => Err(unreachable("daemon closed the connection")),
@@ -29,18 +28,15 @@ fn read_json(r: &mut BufReader<UnixStream>) -> Result<Value, CallError> {
     }
 }
 
-fn write_json(w: &mut UnixStream, v: &Value) -> Result<(), CallError> {
+fn write_json<W: Write>(w: &mut W, v: &Value) -> Result<(), CallError> {
     let mut buf = v.to_string().into_bytes();
     buf.push(b'\n');
     w.write_all(&buf).map_err(unreachable)
 }
 
-pub fn call(socket: &Path, token: &str, method: &str, params: Value, timeout: Duration) -> Result<Value, CallError> {
-    let stream = UnixStream::connect(socket).map_err(unreachable)?;
-    stream.set_read_timeout(Some(timeout)).map_err(unreachable)?;
-    stream.set_write_timeout(Some(timeout)).map_err(unreachable)?;
-    let mut writer = stream.try_clone().map_err(unreachable)?;
-    let mut reader = BufReader::new(stream);
+fn call_blocking(endpoint: &Path, token: &str, method: &str, params: Value, timeout: Duration) -> Result<Value, CallError> {
+    let (reader, mut writer) = crate::transport::connect_sync(endpoint, timeout).map_err(unreachable)?;
+    let mut reader = BufReader::new(reader);
     write_json(&mut writer, &json!({"token": token.trim()}))?;
     if read_json(&mut reader)?.get("error").is_some() {
         return Err(unreachable("daemon rejected the token"));
@@ -51,6 +47,49 @@ pub fn call(socket: &Path, token: &str, method: &str, params: Value, timeout: Du
         return Err(CallError::Rpc(err.get("message").and_then(Value::as_str).unwrap_or("daemon error").to_string()));
     }
     Ok(resp.get("result").cloned().unwrap_or(Value::Null))
+}
+
+/// One connection, token handshake, one request, one reply.
+#[cfg(unix)]
+pub fn call(endpoint: &Path, token: &str, method: &str, params: Value, timeout: Duration) -> Result<Value, CallError> {
+    call_blocking(endpoint, token, method, params, timeout)
+}
+
+/// A named-pipe handle carries no read deadline, so the deadline lives on a
+/// worker thread instead: the caller waits `timeout`, and a daemon that never
+/// answers costs one parked thread rather than a hung app.
+///
+/// The parked thread ends when the daemon replies or the pipe breaks (daemon
+/// exit closes it), so a dead daemon leaks nothing. A **wedged** one is the
+/// problem: every caller that times out retries on `next_backoff`, and each
+/// retry parks another thread holding another pipe handle against a server
+/// that serves one instance at a time. `IN_FLIGHT` caps that — past the cap the
+/// call fails fast with the same error it would have returned anyway, so the
+/// caller's own retry ladder is unchanged and no new thread is created.
+#[cfg(windows)]
+pub fn call(endpoint: &Path, token: &str, method: &str, params: Value, timeout: Duration) -> Result<Value, CallError> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    /// Enough for the handful of concurrent RPCs the app really makes; past it
+    /// the daemon is not answering and more threads will not change that.
+    const MAX_PARKED: usize = 4;
+    static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+    if IN_FLIGHT.load(Ordering::SeqCst) >= MAX_PARKED {
+        return Err(unreachable("daemon is not answering; earlier calls are still waiting"));
+    }
+    IN_FLIGHT.fetch_add(1, Ordering::SeqCst);
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let (endpoint, token, method) = (endpoint.to_path_buf(), token.to_string(), method.to_string());
+    std::thread::spawn(move || {
+        let result = call_blocking(&endpoint, &token, &method, params, timeout);
+        IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+        let _ = tx.send(result);
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(_) => Err(unreachable("daemon did not answer in time")),
+    }
 }
 
 pub const BACKOFF_FIRST: Duration = Duration::from_millis(250);
@@ -88,7 +127,10 @@ pub fn parse_event(line: &str) -> Option<(String, Value)> {
     Some((name, params.get("payload").cloned().unwrap_or(Value::Null)))
 }
 
-#[cfg(test)]
+// A pipe server cannot be stood up on darwin, so these tests exercise only
+// the unix arm; the Windows arm of `call`/`connect_sync` is compile-checked
+// only (Task 8), never run until this runs on Windows.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use serde_json::json;
