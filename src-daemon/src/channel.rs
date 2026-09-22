@@ -4,8 +4,7 @@ use crate::ipc;
 use crate::server::DaemonState;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::io::{AsyncWriteExt, BufReader, Lines};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::io::{AsyncWriteExt, BufReader, Lines, ReadHalf, WriteHalf};
 use tokio::sync::broadcast::{self, error::RecvError};
 
 pub(crate) fn outgoing(msg: Result<Arc<str>, RecvError>) -> Option<String> {
@@ -46,7 +45,10 @@ pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Val
 /// used to stop the read side from draining the client's outgoing buffer,
 /// which could in turn block the client's own write, wedging both ends
 /// forever once each side's ~8 KB socket buffer filled.
-async fn forward_bus_to_socket(mut rx: broadcast::Receiver<Arc<str>>, mut writer: OwnedWriteHalf) {
+async fn forward_bus_to_socket<W>(mut rx: broadcast::Receiver<Arc<str>>, mut writer: W)
+where
+    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
     loop {
         match outgoing(rx.recv().await) {
             Some(line) => {
@@ -63,12 +65,15 @@ async fn forward_bus_to_socket(mut rx: broadcast::Receiver<Arc<str>>, mut writer
 
 /// `rx` is subscribed BEFORE `channel.open` is answered, so no event emitted
 /// after the client saw the answer is missed.
-pub(crate) async fn run(
+pub(crate) async fn run<S>(
     state: Arc<DaemonState>,
     rx: broadcast::Receiver<Arc<str>>,
-    mut lines: Lines<BufReader<OwnedReadHalf>>,
-    writer: OwnedWriteHalf,
-) -> std::io::Result<()> {
+    mut lines: Lines<BufReader<ReadHalf<S>>>,
+    writer: WriteHalf<S>,
+) -> std::io::Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
+{
     let mut forwarder = tokio::spawn(forward_bus_to_socket(rx, writer));
     let result = loop {
         tokio::select! {

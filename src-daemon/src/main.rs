@@ -142,11 +142,12 @@ fn ipc_dir() -> PathBuf {
     dir
 }
 
-/// Socket path — under ~/.mailvault/ (SUN_LEN ≤ 104 bytes).
+/// The endpoint the app connects on: a socket file under `~/.mailvault`
+/// (SUN_LEN ≤ 104 bytes), or a named pipe on Windows.
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
-    let sock = ipc_dir().join("mv.sock");
-    info!("Daemon socket path: {}", sock.display());
-    sock
+    let ep = mailvault_core::transport::endpoint(&ipc_dir());
+    info!("Daemon endpoint: {}", ep.display());
+    ep
 }
 
 /// Token path — same directory as socket.
@@ -187,6 +188,10 @@ fn cleanup_pid_file(data_dir: &PathBuf) {
 
 /// Acquire exclusive flock on daemon.lock — ensures only one daemon per data dir.
 /// Returns the File handle (must be kept alive for the lock to hold).
+///
+/// Unix only, and deliberately: on Windows `ServerOptions::first_pipe_instance`
+/// in `server::run` already fails a second daemon, so a lock file would be a
+/// second mechanism for a job that is done.
 #[cfg(unix)]
 fn acquire_singleton_lock(data_dir: &PathBuf) -> Option<std::fs::File> {
     use std::os::unix::io::AsRawFd;
@@ -216,11 +221,6 @@ fn acquire_singleton_lock(data_dir: &PathBuf) -> Option<std::fs::File> {
     let _ = f.write_all(std::process::id().to_string().as_bytes());
 
     Some(file)
-}
-
-#[cfg(not(unix))]
-fn acquire_singleton_lock(_data_dir: &PathBuf) -> Option<std::fs::File> {
-    Some(std::fs::File::open("/dev/null").ok()?) // No-op on non-unix
 }
 
 /// `mailvault-daemon --extract-pdf`: read PDF bytes from stdin, write extracted text
@@ -315,19 +315,25 @@ async fn daemon_main() {
     // Singleton guard — exit if another daemon owns the lock. A daemon that was
     // just told to shut down (`daemon.shutdown`) may still hold the lock for a
     // moment while it releases it; wait it out instead of exiting immediately.
-    let mut lock = acquire_singleton_lock(&data_dir);
-    for _ in 0..20 {
-        if lock.is_some() {
-            break;
+    //
+    // Unix only: see `acquire_singleton_lock`'s doc comment for why Windows
+    // needs no equivalent here.
+    #[cfg(unix)]
+    let _lock_file = {
+        let mut lock = acquire_singleton_lock(&data_dir);
+        for _ in 0..20 {
+            if lock.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            lock = acquire_singleton_lock(&data_dir);
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        lock = acquire_singleton_lock(&data_dir);
-    }
-    let _lock_file = match lock {
-        Some(f) => f,
-        None => {
-            info!("Another daemon is already running for this data directory. Exiting.");
-            std::process::exit(0);
+        match lock {
+            Some(f) => f,
+            None => {
+                info!("Another daemon is already running for this data directory. Exiting.");
+                std::process::exit(0);
+            }
         }
     };
 
@@ -535,6 +541,7 @@ async fn daemon_main() {
 
     // Handle graceful shutdown on SIGINT (ctrl_c) and SIGTERM (service stop / kill)
     let data_dir_cleanup = data_dir.clone();
+    #[cfg_attr(windows, allow(unused_variables))]
     let socket_cleanup = socket_path.clone();
     let pool_cleanup = Arc::clone(&state.imap_pool);
     let idle_cleanup = Arc::clone(&state.idle);
@@ -577,6 +584,9 @@ async fn daemon_main() {
 
         mailvault_core::transfer_stats::global().flush(&data_dir_cleanup, "daemon");
         cleanup_pid_file(&data_dir_cleanup);
+        // Unix only: the socket file outlives the process and has to be
+        // unlinked. A named pipe disappears with its last handle.
+        #[cfg(unix)]
         let _ = std::fs::remove_file(&socket_cleanup);
         info!("Cleanup complete, exiting");
         std::process::exit(0);

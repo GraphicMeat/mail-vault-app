@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::UnixListener;
 use tracing::{error, info, warn};
 
@@ -183,6 +184,7 @@ pub struct DaemonState {
 }
 
 /// Start the daemon socket server.
+#[cfg(unix)]
 pub async fn run(state: Arc<DaemonState>, socket_path: &Path) -> std::io::Result<()> {
     // Remove socket only if it's stale (can't connect to it)
     if socket_path.exists() {
@@ -239,6 +241,47 @@ pub async fn run(state: Arc<DaemonState>, socket_path: &Path) -> std::io::Result
     }
 }
 
+/// Windows has no bind-once listener: a named pipe is a server *instance* that
+/// serves exactly one client, so the next instance is created the moment the
+/// current one is handed off.
+///
+/// `first_pipe_instance(true)` on the first instance is also the daemon
+/// singleton — a second daemon fails here instead of needing the flock the unix
+/// build takes in `main.rs`. And there is no stale endpoint to clean up: a pipe
+/// leaves no filesystem residue when its owner dies.
+#[cfg(windows)]
+pub async fn run(state: Arc<DaemonState>, endpoint: &Path) -> std::io::Result<()> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    let name = endpoint.to_string_lossy().to_string();
+
+    let mut server = ServerOptions::new().first_pipe_instance(true).create(&name)?;
+    info!("Daemon listening on {}", name);
+
+    loop {
+        server.connect().await?;
+        let connected = server;
+        // Create the replacement BEFORE spawning the handler, and never leave
+        // the loop without one: between `connect()` returning and `create()`
+        // succeeding there is no instance waiting on the name, and a probe that
+        // lands in that window reads the daemon as down.
+        server = loop {
+            match ServerOptions::new().create(&name) {
+                Ok(next) => break next,
+                Err(e) => {
+                    error!("Failed to create the next pipe instance: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            }
+        };
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(state, connected).await {
+                warn!("Connection handler error: {}", e);
+            }
+        });
+    }
+}
+
 /// Run the socket server on its OWN OS thread, with its OWN tokio runtime.
 ///
 /// Nothing else lives on that runtime: the sync engine, the IDLE watchers, the
@@ -273,11 +316,14 @@ pub fn spawn_on_own_thread(
 }
 
 /// Handle a single client connection: authenticate, then process requests.
-async fn handle_connection(
+async fn handle_connection<S>(
     state: Arc<DaemonState>,
-    stream: tokio::net::UnixStream,
-) -> std::io::Result<()> {
-    let (reader, mut writer) = stream.into_split();
+    stream: S,
+) -> std::io::Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
+{
+    let (reader, mut writer) = tokio::io::split(stream);
     let mut lines = BufReader::new(reader).lines();
 
     // Step 1: Expect authentication handshake as the first message

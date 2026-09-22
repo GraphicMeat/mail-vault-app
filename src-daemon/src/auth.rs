@@ -26,6 +26,10 @@ pub fn generate_token(data_dir: &Path) -> io::Result<String> {
     fs::write(&path, token.as_bytes())?;
 
     // chmod 0600 — owner read/write only
+    // Windows has no mode bits. The token sits in %USERPROFILE%, whose
+    // default ACL is the user alone, and the pipe's own default ACL grants
+    // the creating user — so the guarantee this chmod makes on unix is
+    // already the platform default there.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
