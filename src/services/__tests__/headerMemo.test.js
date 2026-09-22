@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { remember, recall, peek, forget, _size } = await import('../headerMemo.js');
+const { remember, recall, peek, forget, trim, _size } = await import('../headerMemo.js');
 
 const META = { totalEmails: 3, totalCached: 3, highestModseq: 900 };
 const EMAILS = [{ uid: 3 }, { uid: 2 }, { uid: 1 }];
@@ -111,6 +111,15 @@ describe('headerMemo', () => {
     remember(id, 'INBOX', read, META);
     // Same stamp, even though flags on disk changed.
     expect(await recall(id, 'INBOX', META)).toBe(read);
+  });
+
+  it('trims to the most recently used entries', async () => {
+    const [a, b] = [nextId(), nextId()];
+    remember(a, 'INBOX', EMAILS, META);
+    remember(b, 'INBOX', EMAILS, META);
+    trim(1);
+    expect(peek(a, 'INBOX')).toBeNull();
+    expect(peek(b, 'INBOX')).toBe(EMAILS);
   });
 
   it('forgets a whole account', async () => {

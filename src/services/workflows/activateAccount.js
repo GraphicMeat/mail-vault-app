@@ -12,7 +12,7 @@ import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven } from './loadEmails';
-import { recall as memoRecall, remember as memoRemember, peek as memoPeek, forget as memoForget } from '../headerMemo';
+import { recall as memoRecall, remember as memoRemember, peek as memoPeek, forget as memoForget, trim as memoTrim } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -739,6 +739,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       } else if (!isBackgroundRefresh) {
         useMailStore.setState({ loading: true });
       }
+
+      // One whole mailbox at rest: the folder just left. Touring folders never
+      // recalls (so never forgets) the ones left earlier. Here, not before the
+      // adoption above — a hit makes the incoming set the most recent entry.
+      memoTrim(1);
 
       if (archivedEmailIds.size > 0) {
         const archivedAccount = accountId;

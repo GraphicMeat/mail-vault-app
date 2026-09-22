@@ -9,11 +9,12 @@
  * away; this keeps them.
  *
  * Expensive to hold: a header row costs ~3.4 KB in the webview, so a 15k
- * mailbox is ~50 MB per entry. The caller drops an entry once the store adopts
- * it (the store then holds the same rows), so at rest the memo holds only the
- * mailbox you left last. The cap is 2, not 1: on a switch back, the outgoing
- * mailbox is memoized BEFORE the incoming one is recalled, and a cap of 1
- * would evict the very entry the switch back is about to read.
+ * mailbox is ~50 MB per entry. So at rest it holds one: the caller drops an
+ * entry once the store adopts it (the store then holds the same rows) and
+ * trims to the most recent one once a load settles. The cap is 2, not 1: on a
+ * switch back, the outgoing mailbox is memoized BEFORE the incoming one is
+ * recalled, and a cap of 1 would evict the very entry the switch back is about
+ * to read.
  */
 
 const MAX_MAILBOXES = 2;
@@ -90,7 +91,12 @@ export function remember(accountId, mailbox, emails, meta) {
     savedAt: Date.now(),
   });
 
-  while (_memo.size > MAX_MAILBOXES) {
+  trim(MAX_MAILBOXES);
+}
+
+/** Evict least-recently-used entries until at most `n` remain. */
+export function trim(n) {
+  while (_memo.size > n) {
     _memo.delete(_memo.keys().next().value);
   }
 }

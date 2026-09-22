@@ -707,10 +707,17 @@ describe('activateAccount keeps the known archived ids when the read fails on ac
 describe('activateAccount header memo', () => {
   const META = { uidValidity: 1, uidNext: 3, highestModseq: 5, totalEmails: 2, totalCached: 2 };
 
-  it('recalls the folder switched back to, then drops it once the store holds it', async () => {
+  // Switching from Archive to INBOX. The server half sees nothing new.
+  function primeOnArchive() {
     primeActiveForBackgroundRefresh();
     useMailStore.setState({ activeMailbox: 'Archive', emails: [mkHeader(9)], totalEmails: 1 });
     mockGetEmailHeadersMeta.mockResolvedValue(META);
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 3, highestModseq: 5, exists: 2 });
+    mockFetchEmails.mockResolvedValue({ total: 2, emails: [mkHeader(2), mkHeader(1)] });
+  }
+
+  it('recalls the folder switched back to, then drops it once the store holds it', async () => {
+    primeOnArchive();
     rememberMemo(ACCOUNT.id, 'INBOX', [mkHeader(2), mkHeader(1)], META);
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
@@ -718,6 +725,18 @@ describe('activateAccount header memo', () => {
     expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 500);
     expect(peekMemo(ACCOUNT.id, 'INBOX')).toBeNull();
     // The folder just left is what a switch back will want.
+    expect(peekMemo(ACCOUNT.id, 'Archive')?.map(e => e.uid)).toEqual([9]);
+  });
+
+  // Touring folders recalls nothing, so nothing is forgotten: without a trim
+  // every folder left along the way would stay memoized.
+  it('keeps only the folder just left once a load settles', async () => {
+    primeOnArchive();
+    rememberMemo(ACCOUNT.id, 'Sent', [mkHeader(4)], META);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(peekMemo(ACCOUNT.id, 'Sent')).toBeNull();
     expect(peekMemo(ACCOUNT.id, 'Archive')?.map(e => e.uid)).toEqual([9]);
   });
 });
