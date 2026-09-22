@@ -362,6 +362,16 @@ Insights is a separate sidebar workspace. `insightsStore` owns shared filters, s
 
 `openInsightsMessage` verifies a physical account/mailbox/UID locator and known identity evidence before using the existing reader. The ordinary reader is unmounted during an Insights visit; its previous selection is restored from current headers only when still valid. Choosing an ordinary account or folder discards that restoration. Insights chart browsing reads headers only; opening a matching message uses normal reader loading and mark-as-read behavior. Source, export, and reply actions keep the selected message's account and mailbox context.
 
+### Reads come from the database
+
+The daemon's databases are what every read consults: list headers, which messages the vault holds and with which flags, and the parsed light row of each stored message. The disk is not re-read to answer those questions.
+
+- **Read the disk once, or on recovery.** A mailbox's vault directory is listed and verified at most once per daemon session, and again only after a failed read (a stored filename that no longer opens invalidates the mailbox, triggers one rescan, then one retry). Never list or stat a whole directory to answer a question about one message.
+- **Parse once.** A message is MIME-parsed when it is written (or first seen by a verify pass) and the result is stored; later readers take the stored row. Only opening a message's body or an attachment reads its `.eml`, and one open resolves the file and parses it once, however many parts it needs.
+- **Writers update the database before replying.** A vault write that returns has already updated or invalidated the rows it touched, so the next read sees it. A coalesced background nudge (the search index's) is not a substitute.
+- **Unknown is not empty.** A mailbox not yet verified, or a read that failed, returns `null` ("unknown, keep what you know"), never an empty set; callers persist only real answers.
+- **Batch, do not loop.** One RPC per user action, not one per message, image or folder; chunk large id sets instead of issuing one query per id or one unbounded `IN (...)`.
+
 ### General caching rules
 
 Caching exists to reduce latency, not to create alternate truth sources.
