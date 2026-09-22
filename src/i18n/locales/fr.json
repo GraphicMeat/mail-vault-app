@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "Compte en sourdine",
   "notifyPolicy.reason.deliveredDefault": "Livrée",
   "notifyPolicy.reason.focusHold": "Session de concentration",
+  "notifyPolicy.reason.notificationsOff": "Les notifications sont désactivées",
   "notifyPolicy.reason.folderNotWatched": "Dossier non surveillé",
   "notifyPolicy.reason.priorityAllowlist": "Expéditeur prioritaire",
   "notifyPolicy.reason.quietHours": "Heures de silence",

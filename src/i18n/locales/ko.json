@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "계정 음소거됨",
   "notifyPolicy.reason.deliveredDefault": "전달됨",
   "notifyPolicy.reason.focusHold": "포커스 세션",
+  "notifyPolicy.reason.notificationsOff": "알림이 꺼져 있습니다",
   "notifyPolicy.reason.folderNotWatched": "감시하지 않는 폴더",
   "notifyPolicy.reason.priorityAllowlist": "우선 발신자",
   "notifyPolicy.reason.quietHours": "방해 금지 시간",

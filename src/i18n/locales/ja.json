@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "アカウントがミュート",
   "notifyPolicy.reason.deliveredDefault": "配信済み",
   "notifyPolicy.reason.focusHold": "フォーカスセッション中",
+  "notifyPolicy.reason.notificationsOff": "通知はオフになっています",
   "notifyPolicy.reason.folderNotWatched": "監視していないフォルダ",
   "notifyPolicy.reason.priorityAllowlist": "優先送信者",
   "notifyPolicy.reason.quietHours": "サイレント時間",

@@ -103,9 +103,12 @@ export const useTagStore = create((set, get) => ({
     set(state => {
       const byRow = { ...state.byRow };
       resolved.forEach((row, index) => {
-        const ids = lists[index] || [];
-        if (ids.length) byRow[row.key] = ids;
-        else delete byRow[row.key];
+        // An untagged row is recorded as an empty list, not dropped:
+        // `requestRowTags` treats "no entry" as "never asked", so deleting
+        // the key made every untagged row re-request its tags forever --
+        // which the auto-tag Inbox prefetch turned into a permanent loop of
+        // `tags.for_messages` calls.
+        byRow[row.key] = lists[index] || [];
       });
       return { byRow };
     });

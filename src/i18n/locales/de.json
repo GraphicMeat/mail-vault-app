@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "Konto stummgeschaltet",
   "notifyPolicy.reason.deliveredDefault": "Zugestellt",
   "notifyPolicy.reason.focusHold": "Fokus-Sitzung",
+  "notifyPolicy.reason.notificationsOff": "Benachrichtigungen sind ausgeschaltet",
   "notifyPolicy.reason.folderNotWatched": "Ordner nicht beobachtet",
   "notifyPolicy.reason.priorityAllowlist": "Bevorzugter Absender",
   "notifyPolicy.reason.quietHours": "Ruhezeiten",

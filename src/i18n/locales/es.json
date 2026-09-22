@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "Cuenta silenciada",
   "notifyPolicy.reason.deliveredDefault": "Entregada",
   "notifyPolicy.reason.focusHold": "Sesión de enfoque",
+  "notifyPolicy.reason.notificationsOff": "Las notificaciones están desactivadas",
   "notifyPolicy.reason.folderNotWatched": "Carpeta no vigilada",
   "notifyPolicy.reason.priorityAllowlist": "Remitente prioritario",
   "notifyPolicy.reason.quietHours": "Horario silencioso",

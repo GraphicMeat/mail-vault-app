@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "账户已静音",
   "notifyPolicy.reason.deliveredDefault": "已送达",
   "notifyPolicy.reason.focusHold": "专注会话",
+  "notifyPolicy.reason.notificationsOff": "通知已关闭",
   "notifyPolicy.reason.folderNotWatched": "未监视的文件夹",
   "notifyPolicy.reason.priorityAllowlist": "优先发件人",
   "notifyPolicy.reason.quietHours": "免打扰时段",

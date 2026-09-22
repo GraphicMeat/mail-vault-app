@@ -108,10 +108,22 @@ describe('decide — notification policy precedence', () => {
     expect(result).toEqual({ deliver: false, reason: 'account-muted' });
   });
 
-  it('account-muted when notifications are off globally, even for a configured+enabled account', () => {
+  it('notifications-off when the master switch is off, even for a configured+enabled account', () => {
     const policy = { ...basePolicy(), enabled: false, accounts: { a1: { enabled: true, folders: ['INBOX'] } } };
     const result = decide({ accountId: 'a1', folder: 'INBOX', now: at(12) }, policy);
-    expect(result).toEqual({ deliver: false, reason: 'account-muted' });
+    expect(result).toEqual({ deliver: false, reason: 'notifications-off' });
+  });
+
+  it('an important sender does not punch through the master switch', () => {
+    // Turning notifications off means silence, not silence with exceptions
+    // the user has to remember they configured.
+    const policy = {
+      ...basePolicy(),
+      enabled: false,
+      importantSenders: [{ match: 'boss@corp.example', throughQuietHours: true }],
+    };
+    const result = decide({ accountId: 'a1', folder: 'INBOX', from: 'boss@corp.example', now: at(10) }, policy);
+    expect(result).toEqual({ deliver: false, reason: 'notifications-off' });
   });
 
   it('an unconfigured account still defaults to enabled INBOX (today\'s behavior)', () => {

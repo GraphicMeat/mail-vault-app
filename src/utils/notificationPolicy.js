@@ -63,6 +63,11 @@ export function decide(ctx = {}, policy = {}) {
 
   if (focusHeld) return { deliver: false, reason: 'focus-hold' };
 
+  // The master switch is not a mute an important sender may punch through:
+  // someone who turned notifications off wants silence, not silence with
+  // exceptions they have to remember they configured.
+  if (!policy.enabled) return { deliver: false, reason: 'notifications-off' };
+
   const account = policy.accounts?.[accountId];
   const quiet = inQuietHours(account?.quietHours, now);
 
@@ -79,8 +84,6 @@ export function decide(ctx = {}, policy = {}) {
     return { deliver: false, reason: 'view-muted' };
   }
 
-  if (!policy.enabled) return { deliver: false, reason: 'account-muted' };
-
   if (account) {
     if (!account.enabled) return { deliver: false, reason: 'account-muted' };
     // An unconfigured account defaults to enabled for every folder (today's
@@ -95,6 +98,7 @@ export function decide(ctx = {}, policy = {}) {
 
 const REASON_I18N_KEY = {
   'focus-hold': 'notifyPolicy.reason.focusHold',
+  'notifications-off': 'notifyPolicy.reason.notificationsOff',
   'priority-allowlist': 'notifyPolicy.reason.priorityAllowlist',
   'quiet-hours': 'notifyPolicy.reason.quietHours',
   'view-muted': 'notifyPolicy.reason.viewMuted',

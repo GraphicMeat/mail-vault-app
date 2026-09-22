@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "Account silenziato",
   "notifyPolicy.reason.deliveredDefault": "Consegnata",
   "notifyPolicy.reason.focusHold": "Sessione di concentrazione",
+  "notifyPolicy.reason.notificationsOff": "Le notifiche sono disattivate",
   "notifyPolicy.reason.folderNotWatched": "Cartella non monitorata",
   "notifyPolicy.reason.priorityAllowlist": "Mittente prioritario",
   "notifyPolicy.reason.quietHours": "Ore silenziose",

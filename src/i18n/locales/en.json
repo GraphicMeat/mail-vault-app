@@ -914,6 +914,7 @@
   "notifyPolicy.reason.accountMuted": "Account muted",
   "notifyPolicy.reason.deliveredDefault": "Delivered",
   "notifyPolicy.reason.focusHold": "Focus session",
+  "notifyPolicy.reason.notificationsOff": "Notifications are switched off",
   "notifyPolicy.reason.folderNotWatched": "Folder not watched",
   "notifyPolicy.reason.priorityAllowlist": "Priority sender",
   "notifyPolicy.reason.quietHours": "Quiet hours",
