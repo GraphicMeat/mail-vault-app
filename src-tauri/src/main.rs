@@ -879,8 +879,16 @@ fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), Stri
 
     #[cfg(target_os = "windows")]
     {
+        // explorer splits its command line on commas, so the path goes in
+        // quotes, verbatim: `.arg` would quote the whole `/select,...` when the
+        // path has a space, which explorer ignores. No Windows file name can
+        // hold a `"`, so one here is not a real path.
+        use std::os::windows::process::CommandExt;
+        if path.contains('"') {
+            return Err(format!("Not a file path: {}", path));
+        }
         Command::new("explorer")
-            .arg(format!("/select,{}", path))
+            .raw_arg(format!("/select,\"{}\"", path))
             .spawn()
             .map_err(|e| format!("Failed to reveal in Explorer: {}", e))?;
     }
@@ -932,12 +940,10 @@ fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Not `cmd /C start`: cmd.exe reparses the line, and an `&` in a
-        // sender-chosen attachment name would run whatever follows it.
-        Command::new("explorer")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+        // ShellExecuteExW takes the path whole. Not `cmd /C start` (an `&` in a
+        // sender-chosen attachment name runs whatever follows it) and not
+        // `explorer <path>` (explorer splits its argument on commas).
+        open::that_detached(&path).map_err(|e| format!("Failed to open file: {}", e))?;
     }
 
     #[cfg(target_os = "linux")]

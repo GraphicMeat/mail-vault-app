@@ -3806,6 +3806,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-store-kit",
  "objc2-user-notifications",
+ "open",
  "rand 0.9.4",
  "reqwest 0.12.28",
  "serde",

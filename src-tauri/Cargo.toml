@@ -61,6 +61,11 @@ block2 = "0.6"
 # message (notification_open.rs). The plugin's banner reports no click.
 objc2-user-notifications = "0.3"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Already in the tree through tauri-plugin-shell, with this feature on: it
+# opens a file through ShellExecuteExW instead of `cmd /c start`.
+open = { version = "5", features = ["shellexecute-on-windows"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
