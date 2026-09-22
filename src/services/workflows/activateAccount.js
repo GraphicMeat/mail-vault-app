@@ -606,6 +606,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   const mbResult = await loadMailboxes(accountId, account, mailbox, signal, useMailStoreRef, { isBackgroundRefresh });
   if (!mbResult || signal.aborted) return;
   const { effectiveMailbox: resolvedMailbox, serverMailboxesPromise } = mbResult;
+  // The proof in place before either half runs. A different, complete one at
+  // paint time was written during this activation — see loadLocalEmails.
+  const serverUidsAtStart = get().serverUids;
 
   const loadLocalEmails = async () => {
     if (signal.aborted) return;
@@ -701,7 +704,16 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           isLocal: savedEmailIds.has(e.uid),
           isArchived: archivedEmailIds.has(e.uid),
         }));
-        uidMap.merge(headersWithSource);
+        // loadServerEmails refuses to certify completeness only over rows this
+        // paint merged EARLIER. When the server half won the race and already
+        // proved the set, a cache row it did not list is one the server does
+        // not hold; merging it now would put an unvouched row under a complete
+        // set. Downgrading the proof instead is not recoverable in place (see
+        // the serverUids comment below), so the row is left out.
+        const proven = get().serverUids;
+        uidMap.merge(proven.complete && proven !== serverUidsAtStart
+          ? headersWithSource.filter(e => proven.uids.has(e.uid))
+          : headersWithSource);
 
         if (cachedHeaders.uidValidity != null) {
           uidMap.checkUidValidity(cachedHeaders.uidValidity);

@@ -357,6 +357,27 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
     expect(state.emails.map(e => e.uid).sort()).toEqual([1, 99]); // sanity: both rows really did land in uidMap
     expect(state.serverUids.complete).toBe(false);
   });
+
+  // The other ordering: the disk read is slow, so the server half proves the
+  // set first and the paint lands after it. The guard above cannot see rows
+  // that arrive after it ran; the paint itself must not add one the proof
+  // does not vouch for.
+  it('a disk paint landing after the proof adds no row outside the proven set', async () => {
+    primeCold();
+    mockGetEmailHeadersPartial.mockImplementation(() => new Promise((r) => setTimeout(() => r({
+      emails: [mkHeader(99), mkHeader(1)], // 99: stale disk-only row; 1: also on the server
+      totalEmails: 2,
+    }), 30)));
+    mockFetchEmails.mockResolvedValue({ total: 1, emails: [mkHeader(1)] });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    const state = useMailStore.getState();
+    expect(mockGetEmailHeadersPartial).toHaveBeenCalled(); // the paint really ran, late
+    expect(state.serverUids.complete).toBe(true);
+    expect(state.emails.map(e => e.uid)).toEqual([1]);
+  });
 });
 
 describe('activateAccount daemon-sync cold path (daemon alive, first visit)', () => {
