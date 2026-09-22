@@ -282,6 +282,9 @@ export const config = {
     './tests/e2e/connected-insights.test.js',
     './tests/e2e/ui-insights.test.js',
     './tests/e2e/graph-*.test.js',
+    // Measurement, not a test: 45 minutes of deliberate idling, asserts
+    // nothing. wdio.ram.conf.js selects it by name.
+    './tests/e2e/ram-*.test.js',
   ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
