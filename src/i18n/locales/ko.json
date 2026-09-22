@@ -1180,6 +1180,8 @@
   "scheduled.picker.presetTomorrow": "내일 오전 8시",
   "scheduled.picker.searchTimezone": "도시 또는 UTC 오프셋 검색",
   "scheduled.picker.sendsAt": "{{city}} 기준 {{there}}에 발송 = 내 시간 {{here}}",
+  "scheduled.picker.suggestedFromEmail": "{{name}}님의 최근 이메일 기준 추천 (UTC{{offset}})",
+  "scheduled.picker.suggestedLastUsed": "지난번 {{name}}님에게 사용함",
   "scheduled.picker.time": "발송 시간",
   "scheduled.picker.timezone": "표준 시간대",
   "scheduled.row.edit": "편집",

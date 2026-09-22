@@ -4,11 +4,13 @@
 //! (`.eml` first, row second — an orphan `.eml` is a stale draft, a row
 //! pointing at a uid that was never written is unrepairable), and wakes
 //! `scheduled_send_worker` on anything that changes what it should do next.
-use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, with_mailbox_write};
+use crate::custody as daemon_custody;
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::scheduled_send_worker;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
+use mailvault_core::custody::cache as sql_cache;
 use mailvault_core::imap::ImapConfig;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::vault_files;
@@ -55,7 +57,7 @@ fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
 
 /// The next uid free in this mailbox, second-resolution like
 /// `localDrafts.js`'s `newDraftUid` — this mailbox is written only by this
-/// app, one row at a time under `with_vault_write`, so a linear probe from
+/// app, one row at a time under `with_mailbox_write`, so a linear probe from
 /// "now" is cheap and never races another writer.
 fn allocate_uid(root: &std::path::Path, account_id: &str) -> u32 {
     let mut uid = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) as u32;
@@ -135,6 +137,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "scheduled.send_now" => {
             let row_id = req!(str_arg(&id, params, "id"));
             send_now(state, &row_id, id.clone()).await
+        }
+
+        "scheduled.suggest_tz" => {
+            let address = req!(str_arg(&id, params, "address"));
+            let state = Arc::clone(state);
+            done(id, blocking(move || suggest_tz(&state, address.trim())).await)
         }
 
         _ => return None,
@@ -239,6 +247,28 @@ fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
+/// Facts for the app's timezone suggestion for a recipient, not a zone:
+/// picking one needs `Intl`'s DST rules, which live in the app. Each half is
+/// best-effort on its own, so a closed custody store (a vault mid-move) still
+/// answers with the remembered zone, and an unknown address is all nulls,
+/// never an error. No `@`, no lookup: an empty address would LIKE-match
+/// every row.
+fn suggest_tz(state: &Arc<DaemonState>, address: &str) -> Value {
+    let lookup = address.contains('@');
+    let clock = lookup
+        .then(|| {
+            vault_root(state).and_then(|_| daemon_custody::with_conn(state, |c| sql_cache::sender_clock(c, address))).ok().flatten()
+        })
+        .flatten();
+    let remembered =
+        lookup.then(|| app_db::with(&state.app_dir, |c| scheduled::last_tz_for(c, address)).ok().flatten()).flatten();
+    json!({
+        "headerOffsetMinutes": clock.map(|(offset, _)| offset),
+        "headerDateMs": clock.and_then(|(_, at)| at),
+        "rememberedTz": remembered,
+    })
+}
+
 /// Fire immediately, through `scheduled_send_worker::attempt_row` — the exact
 /// same send path the periodic worker uses, not a second one that could
 /// drift from it.
@@ -312,6 +342,8 @@ mod tests {
         let s = st();
         let resp = crate::server::handle_request_for_test(&s, "scheduled.list", json!({})).await;
         assert!(resp.result.is_some(), "scheduled.list is not routed: {:?}", resp.error);
+        let resp = crate::server::handle_request_for_test(&s, "scheduled.suggest_tz", json!({"address": "x@example.com"})).await;
+        assert!(resp.result.is_some(), "scheduled.suggest_tz is not routed: {:?}", resp.error);
     }
 
     #[tokio::test]
@@ -521,6 +553,28 @@ mod tests {
         let after = stored(&s, &id);
         assert_eq!(after.status, "cancelled");
         assert_eq!(after.attempts, 0, "a skipped row must not count as a try");
+    }
+
+    /// The facts behind the compose timezone suggestion: the offset of the
+    /// newest message the recipient sent us, and the zone last used when
+    /// scheduling to them, whatever case and spacing the app sends.
+    #[tokio::test]
+    async fn suggest_tz_reports_the_senders_offset_and_the_zone_last_used_for_them() {
+        let s = st();
+        call(&s, "scheduled.create", create_params("acc1")).await;
+        let headers = json!({"emails": [{"uid": 5, "from": {"name": "Partner", "address": "partner@example.com"},
+            "date": "Tue, 14 Jul 2026 12:00:00 -0400"}]})
+        .to_string();
+        crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
+
+        let facts = call(&s, "scheduled.suggest_tz", json!({"address": " Partner@Example.com "})).await;
+        assert_eq!(facts["headerOffsetMinutes"], json!(-240));
+        assert_eq!(facts["headerDateMs"], json!(1_784_044_800_000i64), "2026-07-14 16:00 UTC");
+        assert_eq!(facts["rememberedTz"], json!("Europe/Vilnius"));
+
+        let none = json!({"headerOffsetMinutes": null, "headerDateMs": null, "rememberedTz": null});
+        assert_eq!(call(&s, "scheduled.suggest_tz", json!({"address": "stranger@example.com"})).await, none);
+        assert_eq!(call(&s, "scheduled.suggest_tz", json!({"address": ""})).await, none, "no address, no lookup");
     }
 
     #[tokio::test]

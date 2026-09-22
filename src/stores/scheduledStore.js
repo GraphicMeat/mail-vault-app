@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import { zonedTimeToEpoch } from '../utils/scheduledTime';
+import { zonedTimeToEpoch, resolveSuggestedTz } from '../utils/scheduledTime';
 
 // Rows from `scheduled.*` (src-daemon/src/handlers/scheduled.rs). Modeled on
 // tagStore.js: one flat list, refetched on mount, patched in place from the
@@ -61,6 +61,18 @@ export const useScheduledStore = create((set, get) => ({
     const row = await daemonCall('scheduled.send_now', { id });
     set(state => ({ rows: state.rows.map(r => (r.id === id ? row : r)) }));
     return row;
+  },
+
+  /// The zone to preselect for `address` (resolveSuggestedTz's shape), or
+  /// null. A suggestion is a nicety: any failure is just no suggestion, never
+  /// an error in the user's way.
+  suggestTz: async (address) => {
+    try {
+      const facts = await daemonCall('scheduled.suggest_tz', { address });
+      return resolveSuggestedTz(facts || {}, { localTz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    } catch {
+      return null;
+    }
   },
 
   /// Push a corrected `fireAt` for every `queued` row whose stored cache no

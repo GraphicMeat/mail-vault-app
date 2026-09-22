@@ -1180,6 +1180,8 @@
   "scheduled.picker.presetTomorrow": "Tomorrow 8am",
   "scheduled.picker.searchTimezone": "Search city or UTC offset",
   "scheduled.picker.sendsAt": "Sends {{there}} in {{city}} = {{here}} your time",
+  "scheduled.picker.suggestedFromEmail": "Suggested from {{name}}'s last email (UTC{{offset}})",
+  "scheduled.picker.suggestedLastUsed": "Last used for {{name}}",
   "scheduled.picker.time": "Send time",
   "scheduled.picker.timezone": "Time zone",
   "scheduled.row.edit": "Edit",

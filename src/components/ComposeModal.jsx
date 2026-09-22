@@ -23,6 +23,8 @@ import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
+import { firstRecipient } from '../utils/mailto';
+import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos } from '../utils/signatureCaret';
@@ -198,10 +200,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [composeDelay, setComposeDelay] = useState(() => initialData?._composeDelay ?? null); // null = use global
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [scheduleMaxWidth, setScheduleMaxWidth] = useState();
+  // `tzPicked`: the zone was chosen by hand, so no suggestion replaces it.
+  // Kept in the draft so a minimize or detach keeps it too.
   const [scheduleDraft, setScheduleDraft] = useState(() => initialData?._scheduleDraft || ({
     localTime: '',
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
+  const [tzSuggestion, setTzSuggestion] = useState(null);
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
@@ -607,6 +612,29 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       document.removeEventListener('keydown', handleKey, true);
     };
   }, [showSchedulePicker]);
+
+  // Preselect the recipient's zone when the schedule panel opens, and again
+  // if the first To address changes while it is open. Never over a zone
+  // picked by hand, and never on an edit of a scheduled email, whose own
+  // zone is the answer. The panel does not wait for the daemon.
+  const suggestFor = firstRecipient(formData.to);
+  const suggestAddress = suggestFor?.address.toLowerCase() || '';
+  const suggestName = suggestFor?.name || suggestFor?.address || '';
+  const editingScheduled = Boolean(initialData?._editScheduledId);
+  useEffect(() => {
+    if (!showSchedulePicker || !suggestAddress || scheduleDraft.tzPicked || editingScheduled) return undefined;
+    let live = true;
+    const timer = setTimeout(async () => {
+      const suggestion = await useScheduledStore.getState().suggestTz(suggestAddress);
+      if (!live) return;
+      // Back to this machine's zone when there is nothing for this
+      // recipient: a zone already there was suggested for someone else.
+      const tz = suggestion?.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setScheduleDraft(d => (d.tzPicked || d.tz === tz ? d : { ...d, tz }));
+      setTzSuggestion(suggestion && { ...suggestion, name: suggestName, address: suggestAddress });
+    }, 250);
+    return () => { live = false; clearTimeout(timer); };
+  }, [showSchedulePicker, suggestAddress, suggestName, scheduleDraft.tzPicked, editingScheduled]);
 
   const insertTemplate = (template) => {
     if (detaching) return;
@@ -1505,8 +1533,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     <SchedulePicker
                       localTime={scheduleDraft.localTime}
                       tz={scheduleDraft.tz}
-                      onChange={setScheduleDraft}
+                      onChange={(next) => setScheduleDraft(d => ({ ...next, tzPicked: d.tzPicked || next.tz !== d.tz }))}
                       testIdPrefix="compose-schedule"
+                      tzNote={tzSuggestion?.tz !== scheduleDraft.tz || tzSuggestion.address !== suggestAddress ? null
+                        : tzSuggestion.source === 'email'
+                        ? t('scheduled.picker.suggestedFromEmail', { name: tzSuggestion.name, offset: tzSuggestion.offset })
+                        : t('scheduled.picker.suggestedLastUsed', { name: tzSuggestion.name })}
                     />
                     <ScheduledSendNotice />
                     <div className="flex justify-end gap-2 pt-1">

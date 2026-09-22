@@ -1180,6 +1180,8 @@
   "scheduled.picker.presetTomorrow": "Mañana 8:00",
   "scheduled.picker.searchTimezone": "Buscar ciudad o desfase UTC",
   "scheduled.picker.sendsAt": "Se envía {{there}} en {{city}} = {{here}} en tu hora",
+  "scheduled.picker.suggestedFromEmail": "Sugerida según el último correo de {{name}} (UTC{{offset}})",
+  "scheduled.picker.suggestedLastUsed": "Usada la última vez para {{name}}",
   "scheduled.picker.time": "Hora de envío",
   "scheduled.picker.timezone": "Zona horaria",
   "scheduled.row.edit": "Editar",

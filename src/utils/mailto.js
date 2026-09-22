@@ -100,6 +100,18 @@ export function splitAddresses(text) {
 }
 
 /**
+ * The first address in a recipient field ("Bob <bob@x.com>, amy@y.com") and
+ * the display name typed before it, if any: `{ address, name }` or null.
+ */
+export function firstRecipient(text) {
+  const runs = splitAddresses(text);
+  const at = runs.findIndex(r => r.address);
+  if (at < 0) return null;
+  const name = at > 0 ? runs[at - 1].text.replace(/^[\s,"]+|[\s"<]+$/g, '') : '';
+  return { address: runs[at].address, name };
+}
+
+/**
  * The same thing as an HTML fragment, for the one plain-text body that renders
  * inside an iframe rather than as React children (FullViewEmailModal). Escaped
  * here because nothing downstream will do it.

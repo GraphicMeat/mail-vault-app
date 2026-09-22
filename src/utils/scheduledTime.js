@@ -138,3 +138,51 @@ export function zoneOptions(zones, ms) {
     return { value: tz, label: `(UTC${text}) ${tz.replace(/_/g, ' ')}`, keywords, minutes };
   }).sort((a, b) => a.minutes - b.minutes || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 }
+
+// Every IANA zone `Intl` ships with the runtime: no date-picker dependency,
+// no bundled tz data.
+export const ALL_TIMEZONES = (() => {
+  try { return Intl.supportedValuesOf('timeZone'); } catch { return [Intl.DateTimeFormat().resolvedOptions().timeZone]; }
+})();
+
+// ponytail: "which zone is a UTC offset" has no answer, only a likely one.
+// The first of these that has the offset at the message's date wins, then any
+// Region/City zone alphabetically. Add the recipient's city here, or let a
+// hand pick be remembered (it is, through the schedule history), when a
+// report says the guess was wrong.
+const LIKELY_ZONES = [
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage',
+  'Pacific/Honolulu', 'America/Halifax', 'America/Sao_Paulo',
+  'Europe/London', 'Europe/Paris', 'Europe/Vilnius', 'Europe/Moscow',
+  'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok', 'Asia/Shanghai', 'Asia/Tokyo',
+  'Australia/Sydney', 'Australia/Brisbane', 'Pacific/Auckland',
+];
+
+/**
+ * The zone to preselect for a recipient, from the daemon's facts
+ * (`scheduled.suggest_tz`): `{ tz, source: 'email', offset: '-04:00' }`,
+ * `{ tz, source: 'history' }`, or null.
+ *
+ * 1. Their newest email's Date offset, at that email's date (New York is
+ *    -04:00 in July and -05:00 in December): the zone last used for them if
+ *    it had that offset then, else this machine's zone if it did, else a
+ *    likely zone for the offset.
+ * 2. The zone last used when scheduling to them.
+ */
+export function resolveSuggestedTz({ headerOffsetMinutes, headerDateMs, rememberedTz } = {}, { localTz, zones = ALL_TIMEZONES, now = Date.now() } = {}) {
+  // A zone this runtime does not know throws in Intl; it is just not a match.
+  const offsetOf = (tz, ms) => { try { return tz ? utcOffsetAt(tz, ms).minutes : null; } catch { return null; } };
+  if (Number.isFinite(headerOffsetMinutes)) {
+    const at = Number.isFinite(headerDateMs) ? headerDateMs : now;
+    const fits = (tz) => offsetOf(tz, at) === headerOffsetMinutes;
+    const regional = zones.filter(z => z.includes('/') && !/^(Etc|Antarctica)\//.test(z)).sort();
+    const tz = [rememberedTz, localTz, ...LIKELY_ZONES].find(fits) || regional.find(fits);
+    if (tz) {
+      const abs = Math.abs(headerOffsetMinutes);
+      const offset = `${headerOffsetMinutes < 0 ? '-' : '+'}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+      return { tz, source: 'email', offset };
+    }
+  }
+  if (offsetOf(rememberedTz, now) !== null) return { tz: rememberedTz, source: 'history' };
+  return null;
+}

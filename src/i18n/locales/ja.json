@@ -1180,6 +1180,8 @@
   "scheduled.picker.presetTomorrow": "明日 8時",
   "scheduled.picker.searchTimezone": "都市名またはUTCオフセットで検索",
   "scheduled.picker.sendsAt": "{{city}}の {{there}} に送信 = こちらの {{here}}",
+  "scheduled.picker.suggestedFromEmail": "{{name}} の最新メールから提案 (UTC{{offset}})",
+  "scheduled.picker.suggestedLastUsed": "前回 {{name}} に使用",
   "scheduled.picker.time": "送信時刻",
   "scheduled.picker.timezone": "タイムゾーン",
   "scheduled.row.edit": "編集",

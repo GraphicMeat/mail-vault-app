@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { parseMailto, openMailtoCompose, setMailtoComposeOpener, splitAddresses, addressesToHtml } from '../mailto';
+import { parseMailto, openMailtoCompose, setMailtoComposeOpener, splitAddresses, addressesToHtml, firstRecipient } from '../mailto';
 
 // The rule this file protects: a mailto: link in someone else's email is data,
 // not a command. It prefills a compose window — it never navigates, never
@@ -161,5 +161,17 @@ describe('addressesToHtml', () => {
     const out = addressesToHtml('<img src=x onerror=alert(1)>');
     expect(out).not.toContain('<img');
     expect(out).toBe('&lt;img src=x onerror=alert(1)&gt;');
+  });
+});
+
+describe('firstRecipient', () => {
+  it('is the first address and the display name typed before it', () => {
+    expect(firstRecipient('Bob Smith <bob@example.com>, amy@example.com')).toEqual({ address: 'bob@example.com', name: 'Bob Smith' });
+    expect(firstRecipient('"Doe, John" <john@example.com>')).toEqual({ address: 'john@example.com', name: 'Doe, John' });
+    expect(firstRecipient('  amy@example.com, Bob <bob@example.com>')).toEqual({ address: 'amy@example.com', name: '' });
+  });
+
+  it('is null when there is no address yet', () => {
+    for (const v of ['', 'Bob', null, undefined]) expect(firstRecipient(v)).toBeNull();
   });
 });

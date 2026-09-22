@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
 // Compose as the editor of a scheduled email (ScheduledFolderModal's row
-// click). The window names the email it is editing, every snapshot it hands
+// click), and the recipient's timezone preselected in the schedule panel. The window names the email it is editing, every snapshot it hands
 // out still says which row it replaces (minimize, undo, detach and Schedule
 // all go through one), and a Schedule the daemon refuses because the row
 // already fired is shown as its catalog message with the window left open.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 
 const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(undefined),
@@ -200,5 +200,77 @@ describe('compose schedule panel with a picker open', () => {
     fireEvent.click(toggle);
     const panel = screen.getByTestId('compose-schedule-submit').closest('.absolute');
     expect(panel.style.maxWidth).toBe('292px');
+  });
+});
+
+// The schedule panel preselects the first To recipient's zone from what the
+// daemon knows (`scheduled.suggest_tz`), says where it came from, and never
+// overrides a zone picked by hand or the zone of a scheduled email being
+// edited. The machine's own zone is whatever the runner has: the zones here
+// are chosen so none of the assertions depend on it.
+describe('compose timezone suggestion', () => {
+  const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const BY_HAND = HERE === 'America/Denver' ? 'Pacific/Auckland' : 'America/Denver';
+  const fresh = {
+    to: 'Bob Smith <Bob@Example.test>, amy@example.test', cc: '', bcc: '', subject: 'Later', body: '<p>Hi</p>',
+    attachments: [], _accountId: 'acct-1',
+  };
+  // Tokyo's +09:00 read off his last email, with Tokyo also the zone last used for him.
+  const TOKYO = { headerOffsetMinutes: 540, headerDateMs: Date.UTC(2026, 6, 14, 3), rememberedTz: 'Asia/Tokyo' };
+  let answer;
+  const asked = () => invoke.mock.calls.filter(([cmd, args]) => cmd === 'daemon_rpc' && args?.method === 'scheduled.suggest_tz');
+
+  beforeEach(() => {
+    answer = Promise.resolve(TOKYO);
+    invoke.mockImplementation((cmd, args) => (
+      cmd === 'daemon_rpc' && args?.method === 'scheduled.suggest_tz' ? answer : Promise.resolve(undefined)));
+  });
+  afterEach(() => { invoke.mockReset(); invoke.mockResolvedValue(undefined); });
+
+  const zone = () => screen.getByTestId('compose-schedule-tz').dataset.value;
+
+  it('preselects the zone of their last email and says so', async () => {
+    render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    await waitFor(() => expect(screen.getByTestId('compose-schedule-tz-note').textContent)
+      .toBe("Suggested from Bob Smith's last email (UTC+09:00)"));
+    expect(zone()).toBe('Asia/Tokyo');
+    expect(asked()).toHaveLength(1);
+    expect(asked()[0][1].params).toEqual({ address: 'bob@example.test' });
+  });
+
+  it('names the zone last used for them when they have never written', async () => {
+    answer = Promise.resolve({ headerOffsetMinutes: null, headerDateMs: null, rememberedTz: 'Asia/Tokyo' });
+    render(<ComposeModal initialData={{ ...fresh, to: 'bob@example.test' }} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    await waitFor(() => expect(screen.getByTestId('compose-schedule-tz-note').textContent)
+      .toBe('Last used for bob@example.test'));
+    expect(zone()).toBe('Asia/Tokyo');
+  });
+
+  it('keeps a zone picked by hand while the suggestion was still on its way', async () => {
+    let arrive;
+    answer = new Promise((resolve) => { arrive = resolve; });
+    render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    await waitFor(() => expect(asked()).toHaveLength(1));
+
+    fireEvent.click(screen.getByTestId('compose-schedule-tz'));
+    fireEvent.change(screen.getByTestId('compose-schedule-tz-search'), { target: { value: BY_HAND.split('/')[1] } });
+    fireEvent.keyDown(screen.getByTestId('compose-schedule-tz-search'), { key: 'Enter' });
+    expect(zone()).toBe(BY_HAND);
+
+    await act(async () => { arrive(TOKYO); await answer; await new Promise(r => setTimeout(r, 0)); });
+    expect(zone()).toBe(BY_HAND);
+    expect(screen.queryByTestId('compose-schedule-tz-note')).toBeNull();
+  });
+
+  it('asks nothing when editing a scheduled email: its own zone stands', async () => {
+    render(<ComposeModal initialData={initialData} onClose={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+    expect(asked()).toHaveLength(0);
+    expect(zone()).toBe('UTC');
+    expect(screen.queryByTestId('compose-schedule-tz-note')).toBeNull();
   });
 });

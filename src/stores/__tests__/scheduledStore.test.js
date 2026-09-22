@@ -144,4 +144,20 @@ describe('scheduledStore', () => {
       expect(useScheduledStore.getState().rows).toEqual([stale]);
     });
   });
+
+  describe('suggestTz', () => {
+    it('asks the daemon about the address and resolves its facts to a zone', async () => {
+      mockDaemonCall.mockResolvedValueOnce({ headerOffsetMinutes: null, headerDateMs: null, rememberedTz: 'Europe/Vilnius' });
+      await expect(useScheduledStore.getState().suggestTz('bob@example.com'))
+        .resolves.toEqual({ tz: 'Europe/Vilnius', source: 'history' });
+      expect(mockDaemonCall).toHaveBeenCalledWith('scheduled.suggest_tz', { address: 'bob@example.com' });
+    });
+
+    it('is no suggestion, not an error, when the daemon fails or knows nothing', async () => {
+      mockDaemonCall.mockRejectedValueOnce(new Error('offline'));
+      await expect(useScheduledStore.getState().suggestTz('bob@example.com')).resolves.toBeNull();
+      mockDaemonCall.mockResolvedValueOnce(null);
+      await expect(useScheduledStore.getState().suggestTz('bob@example.com')).resolves.toBeNull();
+    });
+  });
 });

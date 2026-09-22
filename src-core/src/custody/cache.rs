@@ -141,6 +141,77 @@ pub fn month_histogram(conn: &Connection, account: &str, mailbox: &str) -> Resul
     Ok(Value::Array(rows.into_iter().map(|(ym, count)| json!({"ym": ym, "count": count})).collect()))
 }
 
+/// "... +0300 (EEST)" -> "... +0300": clients append the zone's name as a
+/// comment, and neither the offset read nor chrono's parser wants it.
+fn without_trailing_comment(date: &str) -> &str {
+    let s = date.trim();
+    match s.rfind('(') {
+        Some(i) if s.ends_with(')') => s[..i].trim_end(),
+        _ => s,
+    }
+}
+
+/// The numeric zone closing an RFC 2822 Date header, in minutes east of UTC.
+/// `None` for `+0000`/`-0000` as well as for anything that is not one: RFC
+/// 5322 makes `-0000` "zone unknown", and servers such as Exchange rewrite
+/// every Date to `+0000`, so a zero says nothing about where the sender is.
+/// ISO strings (a Graph row's `date`) and obsolete names like `GMT` are not
+/// read either.
+fn date_offset_minutes(date: &str) -> Option<i32> {
+    let zone = without_trailing_comment(date).rsplit(char::is_whitespace).next()?;
+    let (sign, digits) = match zone.as_bytes().first()? {
+        b'+' => (1, &zone[1..]),
+        b'-' => (-1, &zone[1..]),
+        _ => return None,
+    };
+    if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (hours, minutes): (i32, i32) = (digits[..2].parse().ok()?, digits[2..].parse().ok()?);
+    if hours > 14 || minutes > 59 || hours + minutes == 0 {
+        return None;
+    }
+    Some(sign * (hours * 60 + minutes))
+}
+
+/// What the newest cached message FROM `address` (any account, any mailbox,
+/// case-insensitive) says about the sender's clock: its Date header's UTC
+/// offset, and the instant that header names, so the caller can check a
+/// zone's offset in the right season. `sort_ms` stands in for the instant
+/// only when the header will not parse: it prefers INTERNALDATE, which for
+/// imported or appended mail can be months away from when it was written.
+///
+/// `messageDate` before `date`: an IMAP row carries the raw Date header in
+/// both, but a Graph row's `date` is the ISO receive time and only its
+/// `messageDate` is what the sender's client wrote.
+///
+/// ponytail: a full scan of `header_cache`, under the one custody connection
+/// every sync write also waits on; the LIKE only spares the JSON parse of
+/// rows that cannot match. Add an indexed from-address column when a large
+/// vault makes this show.
+pub fn sender_clock(conn: &Connection, address: &str) -> Result<Option<(i32, Option<i64>)>, String> {
+    use rusqlite::OptionalExtension;
+    let newest: Option<(Option<String>, i64)> = conn
+        .query_row(
+            "SELECT COALESCE(json_extract(header_json, '$.messageDate'), json_extract(header_json, '$.date')), sort_ms
+             FROM header_cache
+             WHERE header_json LIKE '%' || ?1 || '%'
+               AND lower(json_extract(header_json, '$.from.address')) = lower(?1)
+             ORDER BY sort_ms DESC, uid DESC LIMIT 1",
+            [address],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(err)?;
+    let Some((Some(date), sort_ms)) = newest else { return Ok(None) };
+    let Some(offset) = date_offset_minutes(&date) else { return Ok(None) };
+    let at = DateTime::parse_from_rfc2822(without_trailing_comment(&date))
+        .map(|d| d.timestamp_millis())
+        .ok()
+        .or((sort_ms > 0).then_some(sort_ms));
+    Ok(Some((offset, at)))
+}
+
 /// How many headers this mailbox has cached. Replaces counting `<uid>.json`
 /// files in the sidecar directory — which also had to exclude `_meta.json`
 /// and the Outlook uid ledger that still live there.
@@ -393,6 +464,87 @@ mod tests {
         expected.sort_by(|a, b| (b % 1000).cmp(&(a % 1000)).then(b.cmp(a)));
         assert_eq!(got.len(), 40_000);
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn date_offset_reads_the_numeric_zone_and_nothing_else() {
+        let cases: &[(&str, Option<i32>)] = &[
+            ("Tue, 22 Sep 2026 10:00:00 +0300", Some(180)),
+            ("Tue, 22 Sep 2026 10:00:00 -0400", Some(-240)),
+            ("Tue, 22 Sep 2026 10:00:00 +0530 (IST)", Some(330)),
+            ("22 Sep 2026 10:00 -0930", Some(-570)),
+            ("Tue, 22 Sep 2026 10:00:00 +0000", None),
+            ("Tue, 22 Sep 2026 10:00:00 -0000", None),
+            ("2026-09-09T00:30:00Z", None),
+            ("2026-09-09T00:30:00+03:00", None),
+            ("Tue, 22 Sep 2026 10:00:00 GMT", None),
+            ("Tue, 22 Sep 2026 10:00:00 +03", None),
+            ("Tue, 22 Sep 2026 10:00:00 +9900", None),
+            ("Tue, 22 Sep 2026 10:00:00 +03a0", None),
+            ("", None),
+            ("garbage", None),
+        ];
+        for (date, want) in cases {
+            assert_eq!(date_offset_minutes(date), *want, "{date:?}");
+        }
+    }
+
+    fn put(c: &Connection, account: &str, mailbox: &str, uid: i64, sort_ms: i64, row: Value) {
+        c.execute(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![account, mailbox, uid, sort_ms, 0i64, row.to_string()],
+        ).unwrap();
+    }
+
+    fn utc(y: i32, m: u32, d: u32, h: u32) -> i64 {
+        Utc.with_ymd_and_hms(y, m, d, h, 0, 0).unwrap().timestamp_millis()
+    }
+
+    #[test]
+    fn sender_clock_reads_the_newest_message_from_the_address_across_accounts() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 1, ms(2026, 1, 5), json!({"uid": 1, "from": {"address": "bob@example.com"}, "date": "Mon, 05 Jan 2026 12:00:00 -0500"}));
+        // Newer, in another account and mailbox, in other case: this one wins.
+        put(&c, "b", "Archive", 9, ms(2026, 7, 14), json!({"uid": 9, "from": {"name": "Bob", "address": "Bob@Example.com"}, "date": "Tue, 14 Jul 2026 12:00:00 -0400"}));
+        // Newer still, but only mention him: my own Sent copy to him, and an
+        // address his is a substring of. The LIKE lets both through.
+        put(&c, "a", "Sent", 2, ms(2026, 8, 1), json!({"uid": 2, "from": {"address": "me@example.com"}, "to": [{"address": "bob@example.com"}], "date": "Sat, 01 Aug 2026 12:00:00 +0900"}));
+        put(&c, "a", "INBOX", 3, ms(2026, 8, 2), json!({"uid": 3, "from": {"address": "notbob@example.com"}, "date": "Sun, 02 Aug 2026 12:00:00 +0100"}));
+
+        assert_eq!(sender_clock(&c, "BOB@example.com").unwrap(), Some((-240, Some(utc(2026, 7, 14, 16)))));
+        assert_eq!(sender_clock(&c, "nobody@example.com").unwrap(), None);
+    }
+
+    #[test]
+    fn sender_clock_dates_the_offset_by_the_header_not_by_arrival() {
+        let (_t, c) = store();
+        // Imported in December, written in July: the July instant is the one
+        // whose DST season the offset belongs to.
+        put(&c, "a", "INBOX", 1, ms(2026, 12, 20), json!({"uid": 1, "from": {"address": "bob@example.com"},
+            "date": "Tue, 14 Jul 2026 12:00:00 -0400 (EDT)", "internalDate": "2026-12-20T12:00:00+00:00"}));
+        assert_eq!(sender_clock(&c, "bob@example.com").unwrap(), Some((-240, Some(utc(2026, 7, 14, 16)))));
+
+        // A header chrono cannot read still has an offset; its row's sort
+        // time is the best date there is.
+        put(&c, "a", "INBOX", 2, ms(2026, 12, 21), json!({"uid": 2, "from": {"address": "eve@example.com"}, "date": "sometime +0200"}));
+        assert_eq!(sender_clock(&c, "eve@example.com").unwrap(), Some((120, Some(ms(2026, 12, 21)))));
+    }
+
+    #[test]
+    fn sender_clock_reads_a_graph_rows_message_date_and_says_nothing_for_a_zero_zone() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 1, ms(2026, 9, 9), json!({"uid": 1, "from": {"address": "carol@example.com"},
+            "date": "2026-09-09T00:30:00Z", "messageDate": "Wed, 09 Sep 2026 09:30:00 +0900"}));
+        assert_eq!(sender_clock(&c, "carol@example.com").unwrap(), Some((540, Some(utc(2026, 9, 9, 0) + 30 * 60_000))));
+
+        // No Date header fetched: the ISO receive time says nothing.
+        put(&c, "a", "INBOX", 2, ms(2026, 9, 9), json!({"uid": 2, "from": {"address": "dave@example.com"}, "date": "2026-09-09T00:30:00Z"}));
+        assert_eq!(sender_clock(&c, "dave@example.com").unwrap(), None);
+
+        // Exchange rewrote the newest one to +0000: no guess from an older one.
+        put(&c, "a", "INBOX", 3, ms(2026, 3, 1), json!({"uid": 3, "from": {"address": "erin@example.com"}, "date": "Sun, 01 Mar 2026 12:00:00 -0500"}));
+        put(&c, "a", "INBOX", 4, ms(2026, 9, 1), json!({"uid": 4, "from": {"address": "erin@example.com"}, "date": "Tue, 01 Sep 2026 12:00:00 +0000"}));
+        assert_eq!(sender_clock(&c, "erin@example.com").unwrap(), None);
     }
 
     #[test]

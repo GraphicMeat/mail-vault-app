@@ -223,6 +223,43 @@ pub fn delete(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM scheduled_sends WHERE id = ?1", [id]).map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// The zone of the newest schedule (any status) whose envelope `to` holds
+/// `address`, compared case-insensitively on the bare address: Scheduled
+/// Send's suggestion for someone who has never written to us. `cc`/`bcc` do
+/// not count, the zone was picked for whoever the email was to. Nothing
+/// prunes this table (`delete` has no caller), so sent and cancelled rows are
+/// all history here.
+pub fn last_tz_for(conn: &Connection, address: &str) -> Result<Option<String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT envelope, tz FROM scheduled_sends WHERE envelope LIKE '%' || ?1 || '%'
+             ORDER BY updated_at DESC, created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([address], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .map_err(|e| e.to_string())?;
+    for row in rows {
+        let (envelope, tz) = row.map_err(|e| e.to_string())?;
+        let to = serde_json::from_str::<serde_json::Value>(&envelope)
+            .ok()
+            .and_then(|v| v.get("to").and_then(|t| t.as_str()).map(str::to_owned))
+            .unwrap_or_default();
+        if to.split(',').any(|part| bare_address(part).eq_ignore_ascii_case(address)) {
+            return Ok(Some(tz));
+        }
+    }
+    Ok(None)
+}
+
+/// "Bob <bob@x.com>" -> "bob@x.com"; a bare address comes back trimmed.
+fn bare_address(part: &str) -> &str {
+    match (part.find('<'), part.rfind('>')) {
+        (Some(open), Some(close)) if open < close => part[open + 1..close].trim(),
+        _ => part.trim(),
+    }
+}
+
 /// Rows worth firing right now: `queued` and due, plus `sending` (a crash
 /// recovery case — see `attempt_before_send`). Never `sent`, `failed` or
 /// `cancelled`. Oldest `fire_at` first, so a catch-up pass replays history in
@@ -440,6 +477,27 @@ mod tests {
         set_status(&c, "sent", "sent", "").unwrap();
         update_schedule(&c, "sent", "2026-10-01T09:00", "Europe/Vilnius", 9999).unwrap();
         assert_eq!(get(&c, "sent").unwrap().unwrap().status, "sent", "a sent row is not un-sent");
+    }
+
+    /// `updated_at` set by hand: two inserts in a row can share a millisecond.
+    fn schedule(c: &Connection, id: &str, envelope: serde_json::Value, tz: &str, updated_at: i64) {
+        insert(c, id, "acct", "Scheduled", 1, &envelope.to_string(), "2026-10-01T09:00", tz, 1000).unwrap();
+        c.execute("UPDATE scheduled_sends SET updated_at = ?2 WHERE id = ?1", params![id, updated_at]).unwrap();
+    }
+
+    #[test]
+    fn last_tz_for_is_the_newest_schedule_to_that_address_in_any_status() {
+        let c = conn();
+        schedule(&c, "old", serde_json::json!({"to": "bob@example.com"}), "Europe/Vilnius", 100);
+        schedule(&c, "new", serde_json::json!({"to": "Alice <alice@example.com>, Bob Smith <Bob@Example.com>"}), "America/New_York", 300);
+        c.execute("UPDATE scheduled_sends SET status = 'cancelled' WHERE id = 'new'", []).unwrap();
+        // Newer, but he was only copied, or only a substring of the address.
+        schedule(&c, "cc", serde_json::json!({"to": "carol@example.com", "cc": "bob@example.com"}), "Asia/Tokyo", 500);
+        schedule(&c, "sub", serde_json::json!({"to": "notbob@example.com"}), "Asia/Tokyo", 600);
+
+        assert_eq!(last_tz_for(&c, "bob@example.com").unwrap().as_deref(), Some("America/New_York"));
+        assert_eq!(last_tz_for(&c, "alice@example.com").unwrap().as_deref(), Some("America/New_York"));
+        assert_eq!(last_tz_for(&c, "nobody@example.com").unwrap(), None);
     }
 
     #[test]

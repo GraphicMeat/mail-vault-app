@@ -546,6 +546,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           return { account_id: sync.accountId, mailbox: sync.mailbox, new_emails: 0, total_emails: visible(sync.accountId, sync.mailbox).length, success: true };
         }
         if (method === 'sync.status') return { status: 'idle', simulated: true };
+        // Compose asks when its schedule panel opens; nothing is known here.
+        if (method === 'scheduled.suggest_tz') return { headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null };
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         if (method === 'sync.events') {
           const timeoutMs = Math.min(25000, Math.max(1, Number(args.params?.timeoutMs ?? args.timeoutMs ?? 25000)));

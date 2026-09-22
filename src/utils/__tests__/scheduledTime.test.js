@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   zonedTimeToEpoch, isPastLocalTime, formatWallClock, wallClockAt, addDays,
-  presetTomorrow8am, presetNextMonday8am, utcOffsetAt, zoneCity, zoneOptions,
+  presetTomorrow8am, presetNextMonday8am, utcOffsetAt, zoneCity, zoneOptions, resolveSuggestedTz,
 } from '../scheduledTime';
 
 // US DST rule (2026): America/New_York springs forward on 2026-03-08 at
@@ -180,5 +180,54 @@ describe('zoneOptions', () => {
   it('keeps only letters-only abbreviations, never a "GMT+2" spelled as one', () => {
     const [vilnius] = zoneOptions(['Europe/Vilnius'], JAN);
     expect(vilnius.keywords.filter(k => /^GMT/.test(k))).toEqual([]);
+  });
+});
+
+// The machine zone is always passed in: the runner's own zone must not decide.
+describe('resolveSuggestedTz', () => {
+  const JULY = Date.UTC(2026, 6, 14, 16);
+  const DECEMBER = Date.UTC(2026, 11, 14, 17);
+  const ctx = { localTz: 'Asia/Tokyo', zones: [NY, 'Asia/Tokyo', 'Asia/Yangon', 'Indian/Cocos'], now: DECEMBER };
+
+  it('reads a -04:00 header dated in July as New York, though New York is -05:00 in December', () => {
+    expect(resolveSuggestedTz({ headerOffsetMinutes: -240, headerDateMs: JULY }, ctx))
+      .toEqual({ tz: NY, source: 'email', offset: '-04:00' });
+  });
+
+  it('does not read the same -04:00 dated in December as New York, and -05:00 then is', () => {
+    const december = resolveSuggestedTz({ headerOffsetMinutes: -240, headerDateMs: DECEMBER }, ctx);
+    expect(december.tz).not.toBe(NY);
+    expect(utcOffsetAt(december.tz, DECEMBER).minutes).toBe(-240);
+    expect(resolveSuggestedTz({ headerOffsetMinutes: -300, headerDateMs: DECEMBER }, ctx).tz).toBe(NY);
+  });
+
+  it('prefers the zone last used for them, then this machine\'s, when it had that offset', () => {
+    const facts = { headerOffsetMinutes: -240, headerDateMs: JULY };
+    expect(resolveSuggestedTz({ ...facts, rememberedTz: 'America/Toronto' }, ctx).tz).toBe('America/Toronto');
+    expect(resolveSuggestedTz({ ...facts, rememberedTz: 'Europe/Vilnius' }, { ...ctx, localTz: 'America/Toronto' }).tz)
+      .toBe('America/Toronto');
+  });
+
+  it('falls back to the first Region/City zone with the offset when no likely one has it', () => {
+    expect(resolveSuggestedTz({ headerOffsetMinutes: 390, headerDateMs: JULY }, ctx))
+      .toEqual({ tz: 'Asia/Yangon', source: 'email', offset: '+06:30' });
+  });
+
+  it('uses the zone last scheduled to them when the header says nothing usable', () => {
+    const history = { tz: 'Europe/Vilnius', source: 'history' };
+    expect(resolveSuggestedTz({ rememberedTz: 'Europe/Vilnius' }, ctx)).toEqual(history);
+    expect(resolveSuggestedTz({ headerOffsetMinutes: 7, headerDateMs: JULY, rememberedTz: 'Europe/Vilnius' }, ctx))
+      .toEqual(history);
+  });
+
+  it('dates the offset "now" when the header had no readable date', () => {
+    expect(resolveSuggestedTz({ headerOffsetMinutes: -300, headerDateMs: null }, ctx).tz).toBe(NY);
+  });
+
+  it('suggests nothing from nothing, and never throws on a zone this runtime does not know', () => {
+    expect(resolveSuggestedTz({}, ctx)).toBeNull();
+    expect(resolveSuggestedTz({ headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null }, ctx)).toBeNull();
+    expect(resolveSuggestedTz({ rememberedTz: 'Not/AZone' }, ctx)).toBeNull();
+    expect(resolveSuggestedTz({ headerOffsetMinutes: -240, headerDateMs: JULY, rememberedTz: 'Not/AZone' }, ctx).tz).toBe(NY);
   });
 });

@@ -4,16 +4,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { intlLocale, hour12For } from '../../utils/dateFormat';
 import {
   isPastLocalTime, zonedTimeToEpoch, wallClockAt, formatWallClock, zoneOptions, zoneCity,
-  presetTomorrow8am, presetNextMonday8am,
+  presetTomorrow8am, presetNextMonday8am, ALL_TIMEZONES,
 } from '../../utils/scheduledTime';
 import { Combobox } from '../ui/Combobox';
 import { DateTimePicker } from '../ui/DateTimePicker';
-
-// Every IANA zone `Intl` ships with the runtime — no date-picker dependency,
-// no bundled tz data.
-const ALL_TIMEZONES = (() => {
-  try { return Intl.supportedValuesOf('timeZone'); } catch { return [Intl.DateTimeFormat().resolvedOptions().timeZone]; }
-})();
 
 const LOCAL_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const HOUR_MS = 3_600_000;
@@ -33,8 +27,11 @@ const WHEN = { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric'
  * Zone labels carry the UTC offset AT THE SEND INSTANT, not today's: a send
  * after the clocks change is labelled with the offset it will actually go
  * out under.
+ *
+ * `tzNote` says where a preselected zone came from (compose's suggestion
+ * for the recipient); the caller drops it once the user picks a zone.
  */
-export function SchedulePicker({ localTime, tz, onChange, presets = true, testIdPrefix = 'schedule' }) {
+export function SchedulePicker({ localTime, tz, onChange, presets = true, testIdPrefix = 'schedule', tzNote = null }) {
   const t = useT();
   const hour12 = hour12For(useSettingsStore(s => s.timeFormat));
   const locale = intlLocale();
@@ -85,6 +82,9 @@ export function SchedulePicker({ localTime, tz, onChange, presets = true, testId
           className="flex-1 min-w-0"
         />
       </div>
+      {tzNote && (
+        <p data-testid={`${testIdPrefix}-tz-note`} className="text-xs text-mail-text-muted">{tzNote}</p>
+      )}
       {presets && (
         <div className="flex items-center gap-2">
           <button type="button" data-testid={`${testIdPrefix}-preset-tomorrow`}

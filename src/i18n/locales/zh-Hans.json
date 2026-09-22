@@ -1180,6 +1180,8 @@
   "scheduled.picker.presetTomorrow": "明天上午8点",
   "scheduled.picker.searchTimezone": "搜索城市或 UTC 偏移",
   "scheduled.picker.sendsAt": "将于{{city}} {{there}} 发送 = 本地 {{here}}",
+  "scheduled.picker.suggestedFromEmail": "根据 {{name}} 最近的邮件推荐（UTC{{offset}}）",
+  "scheduled.picker.suggestedLastUsed": "上次发给 {{name}} 时使用",
   "scheduled.picker.time": "发送时间",
   "scheduled.picker.timezone": "时区",
   "scheduled.row.edit": "编辑",
