@@ -4,9 +4,43 @@
 /// `vaultDirName` in src/stores/slices/unifiedHelpers.js
 /// (`/[^\p{Alphabetic}\p{N}.\-_]/gu` → `_`); the shared fixture keeps them equal.
 pub fn vault_dir_name(mailbox: &str) -> String {
-    mailbox.chars()
+    let safe: String = mailbox.chars()
         .map(|c| if c.is_alphabetic() || c.is_numeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
-        .collect()
+        .collect();
+    // Unix keeps the fixture's output byte for byte: existing vault directories
+    // are named by this function and must not move.
+    #[cfg(windows)]
+    let safe = avoid_reserved(&safe);
+    safe
+}
+
+/// Win32 reserved device names, and names Win32 silently rewrites.
+///
+/// `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9` and `LPT1`-`LPT9` cannot be used
+/// as a path component at all, in any case, with or without an extension. A
+/// trailing dot or space is stripped by the API rather than rejected, which
+/// would quietly collide two mailboxes onto one directory. Both get one
+/// trailing `_`, which is not a name any of the rules reject.
+///
+/// Platform-independent so it can be tested anywhere; only called under
+/// `cfg(windows)`, because on unix it would rename directories that already
+/// exist.
+pub fn avoid_reserved(name: &str) -> String {
+    const DEVICES: [&str; 4] = ["CON", "PRN", "AUX", "NUL"];
+    let stem = name.split_once('.').map_or(name, |(head, _)| head);
+    let upper = stem.to_ascii_uppercase();
+    let numbered = |prefix: &str| {
+        upper.strip_prefix(prefix).is_some_and(|rest| {
+            rest.len() == 1 && matches!(rest.as_bytes()[0], b'1'..=b'9')
+        })
+    };
+    if DEVICES.contains(&upper.as_str()) || numbered("COM") || numbered("LPT") {
+        return format!("{name}_");
+    }
+    if name.ends_with('.') || name.ends_with(' ') {
+        return format!("{name}_");
+    }
+    name.to_string()
 }
 
 pub fn is_cjk(c: char) -> bool {
@@ -160,6 +194,25 @@ pub fn snippet(text: &str, needles: &[String], max_chars: usize) -> Option<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reserved_windows_names_get_a_suffix() {
+        // Reserved device names, with or without an extension, any case.
+        for name in ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1", "lpt9", "CON.txt"] {
+            let out = avoid_reserved(name);
+            assert_ne!(out, name, "{name} must not survive unchanged");
+            assert!(out.ends_with('_'), "{name} -> {out}");
+        }
+        // A trailing dot or space is silently stripped by Win32 and would make
+        // two mailboxes collide on one directory.
+        assert_eq!(avoid_reserved("Inbox."), "Inbox._");
+        assert_eq!(avoid_reserved("Inbox "), "Inbox _");
+        // Everything else is left exactly as it was.
+        for name in ["INBOX", "Sent", "CONTRACTS", "COM", "COM10", "Inbox.Spam", "_meta"] {
+            assert_eq!(avoid_reserved(name), name, "{name} must be untouched");
+        }
+        assert_eq!(avoid_reserved(""), "");
+    }
 
     #[test]
     fn vault_dir_name_matches_shared_fixture() {

@@ -148,12 +148,15 @@ pub(crate) fn vec_arg<T: serde::de::DeserializeOwned>(id: &Value, params: &Value
         .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, format!("Missing {key}")))
 }
 
-/// A mailbox name made safe for use as a directory component. Task 4.5: a
-/// third copy of this exact function would otherwise land here (`backup_zip`
-/// and `insights` each already carry their own private copy), promoted here
-/// instead so `mbox` reuses it rather than duplicating it a third time.
+/// A mailbox name made safe for use as a directory component. Task 4.5
+/// promoted this here so `mbox` could reuse it instead of holding its own
+/// copy; `backup_zip` and `insights` each still carried a private copy of the
+/// exact same function until now, folded into this one.
 pub(crate) fn sanitize_mailbox_name(mailbox: &str) -> String {
-    mailbox.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
+    let safe: String = mailbox.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect();
+    #[cfg(windows)]
+    let safe = mailvault_core::search_index::text::avoid_reserved(&safe);
+    safe
 }
 
 // ── Run-token registry (Task 3.4, generalized by Task 4.7 decision 7) ───────

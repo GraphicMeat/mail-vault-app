@@ -10,6 +10,7 @@
 //! commands (`insights_begin_snapshot`/`insights_read_page`/
 //! `insights_release_snapshot`), so this is the only implementation left
 //! and `handlers::insights` is the only way in.
+use crate::handlers::common;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -29,17 +30,6 @@ type ResultValue = Result<Value, Value>;
 
 pub(crate) fn error(code: &str) -> Value {
     json!({"code":code,"message":code})
-}
-
-/// Vault mailbox paths are sanitized against the filesystem the same way the
-/// app's `main.rs::sanitize_mailbox_name` does, copied here rather than
-/// exposed from `mailvault_core` (Task 3.6 stays in scope: this file and its
-/// router, nothing in `src-core`).
-fn sanitize_mailbox_name(mailbox: &str) -> String {
-    mailbox
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
-        .collect()
 }
 
 // Unknown JSON fields are skipped by serde while streaming. Cached body and
@@ -880,7 +870,7 @@ fn inventory(
             physical.insert((local.clone(), uid));
             let candidates: Vec<_> = locations
                 .values()
-                .filter(|l| sanitize_mailbox_name(&l.mailbox) == local)
+                .filter(|l| common::sanitize_mailbox_name(&l.mailbox) == local)
                 .cloned()
                 .collect();
             let mut location = if candidates.len() == 1 {
@@ -907,7 +897,7 @@ fn inventory(
             let matching: Vec<_> = indexes
                 .iter()
                 .filter(|(m, _, v)| {
-                    sanitize_mailbox_name(m) == local
+                    common::sanitize_mailbox_name(m) == local
                         && v["uid"].as_u64() == Some(uid as u64)
                 })
                 .collect();
@@ -928,7 +918,7 @@ fn inventory(
                 snapshot.problem("unreadableHeader", &account, Some(&mailbox));
                 continue;
             };
-            if physical.contains(&(sanitize_mailbox_name(&mailbox), uid)) {
+            if physical.contains(&(common::sanitize_mailbox_name(&mailbox), uid)) {
                 continue;
             }
             let mut location = locations.get(&mailbox).unwrap().clone();

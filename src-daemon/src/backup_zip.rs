@@ -103,13 +103,6 @@ pub struct AccountsJsonEntry {
     pub created_at: Option<String>,
 }
 
-fn sanitize_mailbox_name(mailbox: &str) -> String {
-    mailbox
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
-        .collect()
-}
-
 /// `accounts_entries`: the router's own one-time read of `accounts.json`
 /// (id -> email), read-only, passed in rather than read here: see the
 /// module doc's porting note 1.
@@ -421,8 +414,8 @@ pub fn import(
 
         // account_id joins the same filesystem path as mailbox; sanitize it
         // the same way rather than trusting the accounts-map value verbatim.
-        let safe_account_id = sanitize_mailbox_name(&account_id);
-        let safe_mailbox = sanitize_mailbox_name(mailbox);
+        let safe_account_id = common::sanitize_mailbox_name(&account_id);
+        let safe_mailbox = common::sanitize_mailbox_name(mailbox);
         let filename_owned = filename.to_string();
 
         // Decision 10: the gate is re-acquired here, inside the loop, once
