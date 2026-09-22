@@ -379,8 +379,18 @@ mod tests {
         let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
 
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
-        std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
-        std::env::remove_var("MAILVAULT_IMAP_PLAINTEXT");
+        // The two PLAINTEXT vars are deliberately NOT removed. They are
+        // process-global, and this is the only test in the daemon binary that
+        // ever cleared them — every other one (`handlers::smtp`, `imap`,
+        // `archive`, `restore`, `migration`, `mail_search`, `sync_engine`,
+        // `server`, `idle_watch`) only ever sets them, and none of them takes
+        // `test_env_lock`. So clearing them here yanked loopback TLS relaxation
+        // out from under whichever of those happened to be running in parallel,
+        // and the four `handlers::smtp` tests failed with the RPC erroring out.
+        // Green alone, red in the suite, and only once the test count crossed
+        // some scheduling threshold. Leaving them set is harmless: they only
+        // relax TLS for loopback, inside this test binary, and every other test
+        // wants them set anyway.
 
         assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
         assert_eq!(server.sent_messages().len(), 1, "commands: {:?}", server.smtp_commands());
