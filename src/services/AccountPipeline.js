@@ -337,10 +337,10 @@ export class AccountPipeline {
           email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId, { background: true });
         }
 
-        const cacheKey = `${this.accountId}-${mailbox}-${uid}`;
-        const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-        const store = useMailStore.getState();
-        store.addToCache(cacheKey, email, cacheLimitMB);
+        // No webview body cache fill: the fetch stored the .eml, and opening
+        // the message reads it back. Parking every background body here too
+        // kept up to 128 MB of mail nobody opened, pinned against the
+        // prefetch eviction pass.
 
         // Update hasAttachments on the email list item — mutate in place to avoid
         // creating a new emails array (which would trigger expensive re-renders)

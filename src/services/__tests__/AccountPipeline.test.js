@@ -303,6 +303,32 @@ describe('AccountPipeline attachment prefetch', () => {
   });
 });
 
+// The background pass only puts bodies on disk. Holding each one in the
+// webview's body cache too kept up to 128 MB of mail nobody had opened.
+describe('AccountPipeline background body fetch', () => {
+  const account = { id: 'acc-2', email: 'me@mock.test', password: 'pw' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settings.autoDownloadAttachments = false;
+  });
+
+  it('leaves the webview body cache alone, and still marks the row as having attachments', async () => {
+    const row = { uid: 1 };
+    mail.state.emails = [row];
+    api.fetchEmailLight.mockResolvedValue({ uid: 1, hasAttachments: true, html: '<p>body</p>' });
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1], 'INBOX');
+    await browserTicks(6);
+
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    expect(mail.state.addToCache).not.toHaveBeenCalled();
+    expect(row.hasAttachments).toBe(true);
+    pipeline.destroy();
+    mail.state.emails = [];
+  });
+});
+
 describe('AccountPipeline Graph header load', () => {
   const graphAccount = { id: 'acc-3', email: 'leia@mock.test', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
   const listing = [{ id: 'f2', displayName: 'Gesendete Elemente', wellKnownName: 'sentitems', storageKey: 'Sent' }];
