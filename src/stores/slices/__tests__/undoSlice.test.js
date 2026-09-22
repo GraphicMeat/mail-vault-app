@@ -3,12 +3,20 @@
 // toast that has not repainted yet) cannot undo the undo.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
+
+// The slice reaches for the search store after a successful undo. Mocked so the
+// real one (and its api/daemon graph) never loads here.
+const search = { searchActive: false, performSearch: vi.fn() };
+vi.mock('../../searchStore', () => ({ useSearchStore: { getState: () => search } }));
+
 import { createUndoSlice } from '../undoSlice';
 
 const store = create((set, get) => ({ error: null, ...createUndoSlice(set, get) }));
 
 beforeEach(() => {
   store.setState({ error: null, undo: null });
+  search.searchActive = false;
+  search.performSearch.mockReset().mockResolvedValue(undefined);
 });
 
 describe('undoSlice', () => {
@@ -85,5 +93,34 @@ describe('undoSlice', () => {
     store.getState().setUndo({ labelKey: 'undo.starred', run: vi.fn() });
     store.getState().clearUndo();
     expect(store.getState().undo).toBeNull();
+  });
+
+  // A delete evicts the row from an open result list and parks its key in
+  // `excludedSearchCopies`, which no list reload clears. Undo has to re-run the
+  // query or the restored message stays missing from the search.
+  it('re-runs an active search after a successful undo', async () => {
+    search.searchActive = true;
+    store.getState().setUndo({ labelKey: 'undo.deleted', run: vi.fn().mockResolvedValue(undefined) });
+
+    await store.getState().runUndo();
+
+    expect(search.performSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the search alone when none is open', async () => {
+    store.getState().setUndo({ labelKey: 'undo.deleted', run: vi.fn().mockResolvedValue(undefined) });
+
+    await store.getState().runUndo();
+
+    expect(search.performSearch).not.toHaveBeenCalled();
+  });
+
+  it('still reports the undo as done when the re-run throws', async () => {
+    search.searchActive = true;
+    search.performSearch.mockRejectedValue(new Error('offline'));
+    store.getState().setUndo({ labelKey: 'undo.deleted', run: vi.fn().mockResolvedValue(undefined) });
+
+    await expect(store.getState().runUndo()).resolves.toBe(true);
+    expect(store.getState().error).toBeNull();
   });
 });
