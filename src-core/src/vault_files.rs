@@ -619,14 +619,17 @@ pub fn safe_leaf(filename: &str) -> String {
 /// `: < > " | ? *` and control characters become `_`. Win32 rejects them in
 /// a file name, except `:`, which is worse: `a.pdf:x.exe` addresses an NTFS
 /// alternate data stream of `a.pdf`, where no Mark-of-the-Web can follow.
-/// `Re: invoice.pdf` is a real name this makes writable.
+/// `Re: invoice.pdf` is a real name this makes writable. Then reserved device
+/// names and a trailing dot or space go through `avoid_reserved`, the rule
+/// vault directories use: `CON.txt` -> `CON_.txt`.
 ///
 /// Platform-independent so it is tested everywhere; only called on Windows.
 /// Mirrored by `safeLeaf` in src/services/attachmentUtils.js.
 pub fn win32_safe(leaf: &str) -> String {
-    leaf.chars()
+    let chars: String = leaf.chars()
         .map(|c| if matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*') || c.is_control() { '_' } else { c })
-        .collect()
+        .collect();
+    crate::search_index::text::avoid_reserved(&chars)
 }
 
 pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
@@ -919,6 +922,8 @@ mod tests {
         assert_eq!(win32_safe("Re: invoice.pdf"), "Re_ invoice.pdf");
         assert_eq!(win32_safe("<a>|\"b\"?*\u{1}.txt"), "_a___b____.txt");
         assert_eq!(win32_safe("Rechnung März.pdf"), "Rechnung März.pdf");
+        assert_eq!(win32_safe("CON.txt"), "CON_.txt");
+        assert_eq!(win32_safe("invoice.pdf."), "invoice.pdf._");
     }
 
     #[test]

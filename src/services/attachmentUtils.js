@@ -7,6 +7,7 @@
  * lazy loading via `maildir_read_attachment`.
  */
 import { send } from './transport';
+import { avoidReserved, isWindowsPlatform } from '../stores/slices/unifiedHelpers.js';
 
 // Win32-invalid characters and controls. `:` is the dangerous one: on NTFS
 // `a.pdf:x.exe` addresses a hidden stream of `a.pdf`.
@@ -22,7 +23,9 @@ const WIN32_UNSAFE_RE = /[<>:"|?*\u0000-\u001f]/g;
  */
 export function safeLeaf(filename) {
   const leaf = String(filename ?? '').split(/[/\\]/).pop().replace(WIN32_UNSAFE_RE, '_');
-  return leaf && leaf !== '.' && leaf !== '..' ? leaf : 'attachment';
+  if (!leaf || leaf === '.' || leaf === '..') return 'attachment';
+  // Reserved device names only exist on Windows; elsewhere `CON.txt` is a name.
+  return isWindowsPlatform() ? avoidReserved(leaf) : leaf;
 }
 
 export function getRealAttachments(attachments, html) {
