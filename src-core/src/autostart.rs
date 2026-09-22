@@ -16,10 +16,17 @@
 
 use std::path::{Path, PathBuf};
 
+/// The app's own bundle identifier. The agent label has to sit *under* it:
+/// SMAppService inherits the SMLoginItem rule that a helper's identifier is
+/// prefixed by the main app's, and a label that breaks it is rejected with
+/// `SMAppServiceStatusNotFound` — the same answer as a plist that is not
+/// there at all, which is what made the first attempt so hard to read.
+pub const APP_BUNDLE_ID: &str = "com.mailvault.app";
+
 /// launchd label and the `.plist` basename inside `Contents/Library/LaunchAgents`.
 /// Changing it orphans every already-registered agent, which the user can then
 /// only remove in System Settings.
-pub const AGENT_LABEL: &str = "com.mailvault.daemon";
+pub const AGENT_LABEL: &str = "com.mailvault.app.daemon";
 
 /// The daemon sidecar's path relative to the app bundle root, as launchd's
 /// `BundleProgram` wants it. Tauri's `externalBin` puts the sidecar next to
@@ -28,7 +35,7 @@ pub const AGENT_BUNDLE_PROGRAM: &str = "Contents/MacOS/mailvault-daemon";
 
 /// Basename of the shipped agent plist, and the argument
 /// `SMAppService.agent(plistName:)` takes.
-pub const AGENT_PLIST_NAME: &str = "com.mailvault.daemon.plist";
+pub const AGENT_PLIST_NAME: &str = "com.mailvault.app.daemon.plist";
 
 /// Basename of the XDG autostart entry.
 pub const LINUX_ENTRY_NAME: &str = "mailvault-daemon.desktop";
@@ -178,6 +185,20 @@ pub fn always_on_from_settings(raw: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Where the shipped agent plist sits inside a built `.app`, given the app
+/// binary's own path (`Contents/MacOS/mailvault`).
+///
+/// This exists to tell two very different things apart, because SMAppService
+/// reports both as `NotFound`: a bundle that genuinely has no plist (any dev
+/// build — `cargo tauri dev` has no `Contents/` at all), and a bundle that has
+/// one which macOS then refused. The first is "this build cannot", the second
+/// is a bug, and mapping both to a greyed-out switch is what hid a rejected
+/// label behind a plausible-looking explanation.
+pub fn bundled_plist_path(app_exe: &Path) -> Option<PathBuf> {
+    let contents = app_exe.parent()?.parent()?; // Contents/MacOS/x -> Contents
+    Some(contents.join("Library").join("LaunchAgents").join(AGENT_PLIST_NAME))
+}
+
 /// Wrap in double quotes only when the path needs it. An unquoted path is
 /// what every hand-written `.desktop` carries, and quoting unconditionally
 /// would make the common case look odd in `reg query` output too.
@@ -193,10 +214,29 @@ fn quote(path: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Every bundled agent that works on a real Mac prefixes its label with the
+    /// app's bundle id (com.openai.chat -> com.openai.chat-helper,
+    /// com.microsoft.teams2 -> com.microsoft.teams2.agent). Ours did not, and
+    /// a signed build answered `NotFound` for what looked like a perfect
+    /// bundle. This is that rule, written down so it cannot regress quietly.
+    #[test]
+    fn the_agent_label_sits_under_the_apps_bundle_id() {
+        assert!(
+            AGENT_LABEL.starts_with(&format!("{APP_BUNDLE_ID}.")),
+            "{AGENT_LABEL} is not under {APP_BUNDLE_ID}; SMAppService answers NotFound"
+        );
+    }
+
+    /// launchd matches the two, and every shipping example keeps them equal.
+    #[test]
+    fn the_plist_is_named_after_the_label() {
+        assert_eq!(AGENT_PLIST_NAME, format!("{AGENT_LABEL}.plist"));
+    }
+
     #[test]
     fn the_plist_names_the_daemon_and_asks_launchd_to_keep_it_up() {
         let plist = launch_agent_plist();
-        assert!(plist.contains("<string>com.mailvault.daemon</string>"));
+        assert!(plist.contains(&format!("<string>{AGENT_LABEL}</string>")));
         assert!(plist.contains("<key>RunAtLoad</key>\n    <true/>"));
         assert!(plist.contains("<key>KeepAlive</key>\n    <true/>"));
     }
@@ -299,6 +339,25 @@ mod tests {
                     r#"{"mailvault-settings":{"state":{"daemonAlwaysOn":"yes"}}}"#] {
             assert!(!always_on_from_settings(raw), "{raw:?} should read as off");
         }
+    }
+
+    #[test]
+    fn the_bundled_plist_is_found_beside_the_app_binary() {
+        let p = bundled_plist_path(Path::new("/Applications/MailVault.app/Contents/MacOS/mailvault"));
+        assert_eq!(
+            p,
+            Some(PathBuf::from(
+                "/Applications/MailVault.app/Contents/Library/LaunchAgents/com.mailvault.app.daemon.plist"
+            ))
+        );
+    }
+
+    /// A dev binary (target/debug/mailvault) has no bundle around it; the
+    /// caller must get a path that simply does not exist rather than a panic.
+    #[test]
+    fn a_loose_binary_yields_a_path_that_is_not_there() {
+        let p = bundled_plist_path(Path::new("/x/target/debug/mailvault")).unwrap();
+        assert!(!p.exists());
     }
 
     #[test]

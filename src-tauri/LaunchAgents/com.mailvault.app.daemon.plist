@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.mailvault.daemon</string>
+    <string>com.mailvault.app.daemon</string>
     <key>BundleProgram</key>
     <string>Contents/MacOS/mailvault-daemon</string>
     <key>RunAtLoad</key>

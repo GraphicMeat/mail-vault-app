@@ -8,8 +8,10 @@
 //! Three very different mechanisms, one toggle:
 //!
 //! * **macOS** — `SMAppService`. Developer ID registers the bundled LaunchAgent
-//!   (`Contents/Library/LaunchAgents/com.mailvault.daemon.plist`), so launchd
-//!   runs the *daemon* with no UI at all. The App Store build cannot: its
+//!   (`Contents/Library/LaunchAgents/com.mailvault.app.daemon.plist`), so
+//!   launchd runs the *daemon* with no UI at all. The label has to sit under
+//!   the app's bundle id or macOS answers `NotFound` — see
+//!   `mailvault_core::autostart::APP_BUNDLE_ID`. The App Store build cannot: its
 //!   sidecar is signed `app-sandbox` + `com.apple.security.inherit`, and a
 //!   binary with `inherit` aborts unless its sandboxed parent spawned it —
 //!   launchd is not that parent. There it falls back to registering the app
@@ -72,6 +74,7 @@ mod imp {
     use objc2::runtime::{AnyClass, AnyObject};
     use objc2::msg_send;
     use objc2_foundation::NSString;
+    use tracing::warn;
 
     /// `SMAppServiceStatus`.
     const NOT_REGISTERED: isize = 0;
@@ -98,6 +101,16 @@ mod imp {
         }
     }
 
+    /// Whether this build actually ships the agent plist. See the `NotFound`
+    /// arm below for why the distinction matters.
+    fn bundled_plist_is_present() -> bool {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| core::bundled_plist_path(&exe))
+            .map(|p| p.exists())
+            .unwrap_or(false)
+    }
+
     fn status(svc: &AnyObject) -> isize {
         unsafe { msg_send![svc, status] }
     }
@@ -114,10 +127,27 @@ mod imp {
                 reason: None,
                 needs_approval: true,
             },
-            // `NotFound` means the bundle holds no such plist — an unsigned or
-            // half-built bundle (`cargo tauri dev` has no LaunchAgents dir).
-            // Reported as unsupported rather than as a toggle that fails.
-            NOT_FOUND => AutostartState::unsupported("not-bundled"),
+            // `NotFound` covers two opposite cases, and telling them apart is
+            // the difference between an honest "this build cannot" and hiding
+            // a real defect. A dev build has no `Contents/Library/LaunchAgents`
+            // at all, so the switch is correctly unavailable. A *shipped*
+            // bundle that has the plist and still gets `NotFound` has been
+            // refused by macOS — leaving the switch enabled is what surfaces
+            // the reason, because `register()` returns an NSError and a greyed
+            // switch never calls it. (A label that is not prefixed by the app's
+            // bundle id is exactly this case, and cost a whole signed build to
+            // find the first time.)
+            NOT_FOUND => {
+                if bundled_plist_is_present() {
+                    warn!(
+                        "SMAppService rejected {}: the plist is in the bundle and status is still NotFound",
+                        core::AGENT_PLIST_NAME
+                    );
+                    AutostartState::on(false)
+                } else {
+                    AutostartState::unsupported("not-bundled")
+                }
+            }
             NOT_REGISTERED => AutostartState::on(false),
             other => {
                 tracing::warn!("SMAppService returned unknown status {other}");
