@@ -71,22 +71,27 @@ const LUKE_SERVER = 0; // MOCK_ACCOUNTS order: luke, vader, yoda
 const SCHEDULED_MODAL = '[data-testid="scheduled-folder-modal"]';
 
 /**
- * `src/utils/scheduledTime.js`'s own `formatWallClock`, inlined rather than
- * imported cross-tree: every other spec in this suite runs only against
- * built/served app code and `tests/e2e/` helpers, never a direct import of a
- * frontend module into the Node/mocha process, and this file has no way to
- * prove that path survives wdio's loader untested. Four lines is cheaper than
- * finding out during the one run that matters. Kept byte-for-byte identical
- * to the source; if that function's formatting ever changes, this drifts and
- * is meant to — a diverged copy failing loudly is the point.
+ * The row's own wall-clock text, computed the exact way
+ * `ScheduledFolderModal.jsx` computes it — `formatWallClock(row.localTime,
+ * getLocale())` followed by ` (${row.tz})` — and run through
+ * `browser.execute` so it goes through the WEBVIEW's own Intl/ICU, not
+ * Node's. The first version of this spec reimplemented `formatWallClock` in
+ * plain Node and compared its output to the rendered row; that failed for a
+ * real reason — Node's ICU renders `dateStyle:'medium', timeStyle:'short'`
+ * as "Sep 28, 2026, 8:00 AM" (comma) where WebKit renders the same options
+ * as "Sep 28, 2026 at 8:00 AM" ("at") — a plain engine difference with
+ * nothing to do with the feature. Formatting in the same engine that renders
+ * the row removes the question entirely.
  */
-function formatWallClock(localTime, locale) {
-  const [datePart, timePart] = localTime.split('T');
+const expectedRowClock = (localTime, tz) => browser.execute((lt, zone) => {
+  const [datePart, timePart] = lt.split('T');
   const [y, m, d] = datePart.split('-').map(Number);
   const [h, min] = (timePart || '00:00').split(':').map(Number);
   const asIfUtc = new Date(Date.UTC(y, m - 1, d, h, min));
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(asIfUtc);
-}
+  const locale = window.__I18N__.getLocale();
+  const clock = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(asIfUtc);
+  return `${clock} (${zone})`;
+}, localTime, tz);
 
 describe('Scheduled Send', function () {
   this.timeout(180_000);
@@ -134,7 +139,6 @@ describe('Scheduled Send', function () {
   // ── The app ───────────────────────────────────────────────────────────────
 
   const t = (key) => browser.execute((k) => window.__I18N__.t(k), key);
-  const locale = () => browser.execute(() => window.__I18N__.getLocale());
 
   // No `accountId` filter: if Compose ever schedules under the wrong account,
   // filtering here would just time out later on "no new row appeared" — an
@@ -201,6 +205,7 @@ describe('Scheduled Send', function () {
     });
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-preset-monday"]')?.click());
     const localTime = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-time"]')?.value);
+    const tz = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-tz"]')?.value);
     expect(localTime).toBeTruthy();
 
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-submit"]')?.click());
@@ -217,7 +222,7 @@ describe('Scheduled Send', function () {
       timeoutMsg: 'scheduled.create never produced a new row — the Compose "Schedule send" submit did not reach the daemon',
     });
     expect(row.accountId).toBe(lukeId);
-    return { id: row.id, localTime, to };
+    return { id: row.id, localTime, tz, to };
   }
 
   before(async function () {
@@ -258,13 +263,13 @@ describe('Scheduled Send', function () {
   });
 
   it('schedules from Compose and lists it with the chosen wall clock', async function () {
-    const { id, localTime, to } = await scheduleViaCompose({ subject: 'Scheduled send lists correctly' });
+    const { id, localTime, tz, to } = await scheduleViaCompose({ subject: 'Scheduled send lists correctly' });
 
     await openScheduledFolder();
     const text = await rowText(id);
     expect(text).not.toBe(null);
     expect(text).toContain(to);
-    const expectedClock = formatWallClock(localTime, await locale());
+    const expectedClock = await expectedRowClock(localTime, tz);
     expect(text).toContain(expectedClock);
 
     // Tidy: this row would otherwise sit `queued` for a day out, real but

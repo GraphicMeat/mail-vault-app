@@ -414,7 +414,31 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // had to guess, and the viewer's mark-unread wrote against the folder on
   // screen — INBOX's own message under a merged Sent copy's uid. Stamp both
   // here, where they are already resolved.
-  const withAccount = (e) => (e ? { ...e, _accountId: e._accountId || accountId, _mailbox: e._mailbox || mailbox } : e);
+  //
+  // Same reasoning for listId/listUnsubscribe/precedence: the header sync row
+  // (EmailHeader, src-core/src/imap/mod.rs) carries them, but the light body
+  // fetch that fills every branch below (LightFullEmail / graphMessageToEmail)
+  // never asked for them — they are dropped entirely, not just re-requested.
+  // Without this, QuickReplyChips' suppression (isAutomatedThread,
+  // src/utils/quickReplies.js) never sees these fields on a freshly opened
+  // message, silently disabling it for the exact mail it exists to catch.
+  // `_selectExplicitEmail`'s own `stamp` already does this merge for the
+  // Insights path (`{ ...header, ...email }`); every branch through here
+  // (selectEmail's ordinary click-to-open) went through withAccount with no
+  // equivalent, so this is applied here instead of at each of its four
+  // call sites.
+  const withAccount = (e) => {
+    if (!e) return e;
+    const row = selectedRow();
+    return {
+      ...e,
+      _accountId: e._accountId || accountId,
+      _mailbox: e._mailbox || mailbox,
+      listId: e.listId ?? row?.listId,
+      listUnsubscribe: e.listUnsubscribe ?? row?.listUnsubscribe,
+      precedence: e.precedence ?? row?.precedence,
+    };
+  };
 
   // Through the helper the ROWS use: `selectionKey`, not `rowKey`. A single
   // folder's list keys by bare uid — except for a row it merged in from
