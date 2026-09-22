@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "Afficher ou masquer la chronologie",
   "compose.focusOriginalWindow": "Afficher la fenêtre du message d’origine",
   "compose.detachOriginal": "Ouvrir le message d’origine dans une autre fenêtre",
-  "settingsPage.detach": "Ouvrir les réglages dans une autre fenêtre"
+  "settingsPage.detach": "Ouvrir les réglages dans une autre fenêtre",
+  "compose.resizeOriginalPanel": "Redimensionner le volet du message d’origine",
+  "compose.resizeWindow": "Redimensionner la fenêtre de rédaction. Les flèches changent la largeur ; Maj plus les flèches, la hauteur.",
+  "settings.backup.restore.demoBackupHint": "Téléchargez une sauvegarde d’exemple du navigateur au format JSON. Elle contient des messages fictifs du coffre et ne lit jamais de chemin de fichier.",
+  "settings.backup.restore.demoMboxHint": "Téléchargez un MBOX d’exemple ou importez la boîte aux lettres fictive fournie dans cette session du navigateur.",
+  "settings.daemon.demoActive": "Simulation dans le navigateur active",
+  "settings.daemon.demoCheck": "Vérifier la simulation",
+  "settings.daemon.demoAboutTab": "Tous les e-mails, le coffre et les graphiques de la démo restent dans cet onglet du navigateur.",
+  "settings.daemon.demoAboutNoHelper": "Aucun processus assistant, compte réseau ni stockage natif n’est utilisé."
 }

@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "一覧のタイムラインを表示または非表示",
   "compose.focusOriginalWindow": "元のメールのウィンドウを表示",
   "compose.detachOriginal": "元のメールを別ウィンドウで開く",
-  "settingsPage.detach": "設定を別ウィンドウで開く"
+  "settingsPage.detach": "設定を別ウィンドウで開く",
+  "compose.resizeOriginalPanel": "元のメッセージパネルのサイズを変更",
+  "compose.resizeWindow": "作成ウィンドウのサイズを変更します。矢印キーで幅、Shift＋矢印キーで高さを変更します。",
+  "settings.backup.restore.demoBackupHint": "ブラウザーのサンプルバックアップを JSON でダウンロードします。架空の保管庫メッセージを含み、ファイルパスは読み取りません。",
+  "settings.backup.restore.demoMboxHint": "サンプルの MBOX をダウンロードするか、用意された架空のメールボックスをこのブラウザーセッションに読み込みます。",
+  "settings.daemon.demoActive": "ブラウザーシミュレーション実行中",
+  "settings.daemon.demoCheck": "ブラウザーシミュレーションを確認",
+  "settings.daemon.demoAboutTab": "デモのメール、保管庫、グラフの処理はすべてこのブラウザータブ内で完結します。",
+  "settings.daemon.demoAboutNoHelper": "ヘルパープロセス、ネットワークアカウント、ネイティブストレージは使用しません。"
 }

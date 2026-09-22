@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "Zeitleiste ein- oder ausblenden",
   "compose.focusOriginalWindow": "Fenster der Originalnachricht anzeigen",
   "compose.detachOriginal": "Originalnachricht in eigenem Fenster öffnen",
-  "settingsPage.detach": "Einstellungen in eigenem Fenster öffnen"
+  "settingsPage.detach": "Einstellungen in eigenem Fenster öffnen",
+  "compose.resizeOriginalPanel": "Bereich der Originalnachricht anpassen",
+  "compose.resizeWindow": "Nachrichtenfenster anpassen. Pfeiltasten ändern die Breite, Umschalt plus Pfeiltasten die Höhe.",
+  "settings.backup.restore.demoBackupHint": "Lade eine Beispielsicherung aus dem Browser als JSON herunter. Sie enthält fiktive Tresornachrichten und liest nie einen Dateipfad.",
+  "settings.backup.restore.demoMboxHint": "Lade eine Beispiel-MBOX herunter oder importiere das mitgelieferte fiktive Postfach in diese Browsersitzung.",
+  "settings.daemon.demoActive": "Browsersimulation aktiv",
+  "settings.daemon.demoCheck": "Browsersimulation prüfen",
+  "settings.daemon.demoAboutTab": "Alle Demo-Mails, der Tresor und die Diagramme bleiben in diesem Browser-Tab.",
+  "settings.daemon.demoAboutNoHelper": "Es werden kein Helferprozess, kein Netzwerkkonto und kein nativer Speicher verwendet."
 }

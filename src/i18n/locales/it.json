@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "Mostra o nascondi la cronologia",
   "compose.focusOriginalWindow": "Mostra finestra del messaggio originale",
   "compose.detachOriginal": "Apri messaggio originale in un’altra finestra",
-  "settingsPage.detach": "Apri Impostazioni in un’altra finestra"
+  "settingsPage.detach": "Apri Impostazioni in un’altra finestra",
+  "compose.resizeOriginalPanel": "Ridimensiona il riquadro del messaggio originale",
+  "compose.resizeWindow": "Ridimensiona la finestra di composizione. I tasti freccia cambiano la larghezza; Maiusc più i tasti freccia l’altezza.",
+  "settings.backup.restore.demoBackupHint": "Scarica un backup di esempio del browser in JSON. Contiene messaggi fittizi della cassaforte e non legge mai un percorso di file.",
+  "settings.backup.restore.demoMboxHint": "Scarica un MBOX di esempio o importa la casella fittizia fornita in questa sessione del browser.",
+  "settings.daemon.demoActive": "Simulazione nel browser attiva",
+  "settings.daemon.demoCheck": "Verifica la simulazione",
+  "settings.daemon.demoAboutTab": "Tutte le email, la cassaforte e i grafici della demo restano in questa scheda del browser.",
+  "settings.daemon.demoAboutNoHelper": "Non vengono usati processi helper, account di rete né archiviazione nativa."
 }

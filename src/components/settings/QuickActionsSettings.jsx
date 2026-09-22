@@ -40,6 +40,7 @@ import {
   resolveQuickActions,
 } from "../../utils/quickActions";
 import { quickActionColorFor } from "../../utils/quickActionColors";
+import { formatTime } from "../../utils/dateFormat";
 import { useT } from "../../i18n/index.js";
 import "../../styles/settings-usability.css";
 
@@ -141,7 +142,7 @@ function QuickActionsSettingsPreview({
       {preview.name === "row" && <div className="quick-actions-preview-row" data-radial={isRadialPreview}>
         <div className="quick-actions-preview-copy">
           <span><strong>{t("quickActions.sample.sender")}</strong><small>{t("quickActions.sample.subject")}</small></span>
-          <time>10:42</time>
+          <time>{formatTime(new Date(2026, 1, 25, 10, 42))}</time>
         </div>
         <QuickActions surface="row" config={preview.config} descriptors={preview.descriptors} preview identity={identity} />
       </div>}

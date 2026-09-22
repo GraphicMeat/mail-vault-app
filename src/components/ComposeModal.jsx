@@ -1061,7 +1061,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             )}
             {onDetach && !detached && (
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
-                onClick={handleDetach} title="Open in new window" data-testid="compose-detach">
+                onClick={handleDetach} title={t('chat.bubble.openNewWindow')} data-testid="compose-detach">
                 <Maximize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
@@ -1504,7 +1504,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               role="separator"
               tabIndex={0}
               aria-orientation="vertical"
-              aria-label="Resize original message panel"
+              aria-label={t('compose.resizeOriginalPanel')}
               aria-valuemin={240}
               aria-valuemax={Math.max(240, Math.min(760, contentWidth - 290))}
               aria-valuenow={Math.round(effectiveContextWidth)}
@@ -1567,7 +1567,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               data-testid="compose-window-resize"
               role="separator"
               tabIndex={0}
-              aria-label="Resize compose window. Arrow keys change width; Shift plus Arrow keys change height."
+              aria-label={t('compose.resizeWindow')}
               onKeyDown={resizeComposeWindow}
               className="compose-window-resize"
             ><span aria-hidden="true">↘</span></button>

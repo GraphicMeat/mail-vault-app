@@ -284,7 +284,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          {isDemo ? 'Download a browser sample backup as JSON. It includes fictional vault messages and never reads a file path.' : t('settings.backup.restore.writeEverythingVaultSingleZip')}
+          {isDemo ? t('settings.backup.restore.demoBackupHint') : t('settings.backup.restore.writeEverythingVaultSingleZip')}
         </p>
 
         <div className="flex gap-3">
@@ -312,7 +312,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          {isDemo ? 'Download a sample MBOX or import the provided fictional mailbox into this browser session.' : t('settings.backup.restore.writeVaultStandardMboxFile')}
+          {isDemo ? t('settings.backup.restore.demoMboxHint') : t('settings.backup.restore.writeVaultStandardMboxFile')}
         </p>
 
         <div className="flex gap-3">

@@ -51,7 +51,7 @@ export function DaemonSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">
-              {isDemo ? 'Browser simulation active' : checking ? t('settings.daemon.checking') : connected ? t('settings.daemon.helperConnected') : connected === false ? t('settings.daemon.helperRunning') : t('settings.daemon.backgroundHelper')}
+              {isDemo ? t('settings.daemon.demoActive') : checking ? t('settings.daemon.checking') : connected ? t('settings.daemon.helperConnected') : connected === false ? t('settings.daemon.helperRunning') : t('settings.daemon.backgroundHelper')}
             </h3>
             {status && (
               <p className="text-xs text-mail-text-muted">
@@ -72,7 +72,7 @@ export function DaemonSettings() {
           disabled={checking}
           className="text-xs font-medium text-mail-accent-text hover:text-mail-accent/80 disabled:opacity-50 transition-colors"
         >
-          {isDemo ? 'Check browser simulation' : checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
+          {isDemo ? t('settings.daemon.demoCheck') : checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
         </button>
       </div>
 
@@ -84,7 +84,7 @@ export function DaemonSettings() {
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
-        {isDemo ? <><p>All demo mail, vault and chart work stays in this browser tab.</p><p>No helper process, network account or native storage is used.</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t(alwaysOn ? 'settings.daemon.alwaysOn.aboutRunsAtLogin' : 'settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
+        {isDemo ? <><p>{t('settings.daemon.demoAboutTab')}</p><p>{t('settings.daemon.demoAboutNoHelper')}</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t(alwaysOn ? 'settings.daemon.alwaysOn.aboutRunsAtLogin' : 'settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
       </div>
     </div>
   );

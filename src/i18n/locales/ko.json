@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "목록 타임라인 표시 또는 숨기기",
   "compose.focusOriginalWindow": "원본 메시지 창 표시",
   "compose.detachOriginal": "원본 메시지를 별도 창에서 열기",
-  "settingsPage.detach": "설정을 별도 창에서 열기"
+  "settingsPage.detach": "설정을 별도 창에서 열기",
+  "compose.resizeOriginalPanel": "원본 메시지 패널 크기 조절",
+  "compose.resizeWindow": "작성 창 크기를 조절합니다. 화살표 키로 너비를, Shift와 화살표 키로 높이를 바꿉니다.",
+  "settings.backup.restore.demoBackupHint": "브라우저 샘플 백업을 JSON으로 다운로드합니다. 가상의 보관함 메시지가 들어 있으며 파일 경로는 읽지 않습니다.",
+  "settings.backup.restore.demoMboxHint": "샘플 MBOX를 다운로드하거나 제공된 가상 메일함을 이 브라우저 세션으로 가져옵니다.",
+  "settings.daemon.demoActive": "브라우저 시뮬레이션 사용 중",
+  "settings.daemon.demoCheck": "브라우저 시뮬레이션 확인",
+  "settings.daemon.demoAboutTab": "데모 메일, 보관함, 차트 작업은 모두 이 브라우저 탭 안에서만 이루어집니다.",
+  "settings.daemon.demoAboutNoHelper": "도우미 프로세스, 네트워크 계정, 네이티브 저장소는 사용하지 않습니다."
 }

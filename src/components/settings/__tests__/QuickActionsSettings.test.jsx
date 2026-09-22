@@ -13,7 +13,8 @@ const state = vi.hoisted(() => ({
   resetQuickActions: vi.fn(),
 }));
 vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: selector => selector(state),
+  // getState: the row preview's sample time goes through formatTime.
+  useSettingsStore: Object.assign(selector => selector(state), { getState: () => state }),
 }));
 const mailState = vi.hoisted(() => ({
   activeMailbox: 'INBOX', activeAccountId: 'acct-1', viewMode: 'all', unifiedInbox: false,

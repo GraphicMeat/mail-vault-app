@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "Show or hide the list timeline",
   "compose.focusOriginalWindow": "Show original message window",
   "compose.detachOriginal": "Open original message in a separate window",
-  "settingsPage.detach": "Open Settings in a separate window"
+  "settingsPage.detach": "Open Settings in a separate window",
+  "compose.resizeOriginalPanel": "Resize original message panel",
+  "compose.resizeWindow": "Resize compose window. Arrow keys change width; Shift plus Arrow keys change height.",
+  "settings.backup.restore.demoBackupHint": "Download a browser sample backup as JSON. It includes fictional vault messages and never reads a file path.",
+  "settings.backup.restore.demoMboxHint": "Download a sample MBOX or import the provided fictional mailbox into this browser session.",
+  "settings.daemon.demoActive": "Browser simulation active",
+  "settings.daemon.demoCheck": "Check browser simulation",
+  "settings.daemon.demoAboutTab": "All demo mail, vault and chart work stays in this browser tab.",
+  "settings.daemon.demoAboutNoHelper": "No helper process, network account or native storage is used."
 }

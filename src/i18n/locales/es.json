@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "Mostrar u ocultar la línea de tiempo",
   "compose.focusOriginalWindow": "Mostrar ventana del mensaje original",
   "compose.detachOriginal": "Abrir mensaje original en otra ventana",
-  "settingsPage.detach": "Abrir Ajustes en otra ventana"
+  "settingsPage.detach": "Abrir Ajustes en otra ventana",
+  "compose.resizeOriginalPanel": "Ajustar el panel del mensaje original",
+  "compose.resizeWindow": "Ajustar la ventana de redacción. Las flechas cambian el ancho; Mayús más las flechas, el alto.",
+  "settings.backup.restore.demoBackupHint": "Descarga una copia de ejemplo del navegador en JSON. Incluye mensajes ficticios de la bóveda y nunca lee una ruta de archivo.",
+  "settings.backup.restore.demoMboxHint": "Descarga un MBOX de ejemplo o importa el buzón ficticio incluido en esta sesión del navegador.",
+  "settings.daemon.demoActive": "Simulación en el navegador activa",
+  "settings.daemon.demoCheck": "Comprobar la simulación",
+  "settings.daemon.demoAboutTab": "Todo el correo, la bóveda y los gráficos de la demo se quedan en esta pestaña del navegador.",
+  "settings.daemon.demoAboutNoHelper": "No se usa ningún proceso auxiliar, cuenta de red ni almacenamiento nativo."
 }

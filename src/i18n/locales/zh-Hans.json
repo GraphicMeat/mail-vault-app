@@ -2724,5 +2724,13 @@
   "list.timelineToggle": "显示或隐藏列表时间线",
   "compose.focusOriginalWindow": "显示原邮件窗口",
   "compose.detachOriginal": "在单独窗口打开原邮件",
-  "settingsPage.detach": "在单独窗口打开设置"
+  "settingsPage.detach": "在单独窗口打开设置",
+  "compose.resizeOriginalPanel": "调整原始邮件面板大小",
+  "compose.resizeWindow": "调整撰写窗口大小。方向键调整宽度；Shift 加方向键调整高度。",
+  "settings.backup.restore.demoBackupHint": "以 JSON 格式下载浏览器示例备份。其中包含虚构的保险库邮件，且从不读取文件路径。",
+  "settings.backup.restore.demoMboxHint": "下载示例 MBOX，或将提供的虚构邮箱导入此浏览器会话。",
+  "settings.daemon.demoActive": "浏览器模拟已启用",
+  "settings.daemon.demoCheck": "检查浏览器模拟",
+  "settings.daemon.demoAboutTab": "所有演示邮件、保险库和图表操作都只在此浏览器标签页中进行。",
+  "settings.daemon.demoAboutNoHelper": "不使用助手进程、网络账户或本机存储。"
 }
