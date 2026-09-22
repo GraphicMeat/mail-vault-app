@@ -129,11 +129,19 @@ export async function recall(accountId, mailbox, meta, io) {
   const hit = _memo.get(k);
   if (!hit) return null;
 
-  const stamp = _stampOf(meta);
-  if (_sameStamp(hit.stamp, stamp)) {
-    _touch(k, hit);
-    return hit.emails;
+  const fresh = await _freshen(accountId, mailbox, hit, meta, io);
+  if (!fresh) {
+    _memo.delete(k); // disk moved on and we couldn't catch up
+    return null;
   }
+  _touch(k, fresh);
+  return fresh.emails;
+}
+
+/** `hit` brought up to `meta`: `{ emails, stamp, savedAt }`, or null. */
+async function _freshen(accountId, mailbox, hit, meta, io, ceiling = RECONCILE_CEILING) {
+  const stamp = _stampOf(meta);
+  if (_sameStamp(hit.stamp, stamp)) return hit;
 
   // A UIDVALIDITY change (or a vanished `_meta.json`) means the UID space itself
   // was reissued: reconciling by UID set would find the sets equal and restamp a
@@ -144,22 +152,64 @@ export async function recall(accountId, mailbox, meta, io) {
   // must count as changed next time round, not be assumed covered.
   const readAt = Date.now();
   const merged = io && !reissued
-    ? await _reconcile(accountId, mailbox, hit, io)
+    ? await _reconcile(accountId, mailbox, hit, io, ceiling)
     : null;
-  if (!merged) {
-    _memo.delete(k); // disk moved on and we couldn't catch up
-    return null;
-  }
+  return merged ? { emails: merged, stamp, savedAt: readAt } : null;
+}
 
-  _touch(k, { emails: merged, stamp, savedAt: readAt });
-  return merged;
+/**
+ * The stamp of the set the store holds for the view on screen — no rows, so it
+ * pins no memory. Re-activating that view (Refresh, a retry) brings the
+ * store's own rows up to date the way `recall` does a memo entry, instead of
+ * repainting from a 500-row read and draining the rest again.
+ */
+let _onScreen = null;
+
+/**
+ * The store adopted a set for this view. A memo entry for it is dropped — the
+ * store holds those rows now, and the next refresh replaces them with copies,
+ * so a kept entry would be a second, staler copy of the mailbox on screen —
+ * and its stamp becomes the view's. Otherwise the set was read as of `readAt`.
+ * A mark `recallOnScreen` already brought up to date is kept: re-marking would
+ * move `savedAt` past changes the stamp cannot see (flags).
+ */
+export function adopt(accountId, mailbox, meta, readAt) {
+  const k = _key(accountId, mailbox);
+  const hit = _memo.get(k);
+  _memo.delete(k);
+  if (_onScreen?.key === k) return;
+  _onScreen = hit
+    ? { key: k, stamp: hit.stamp, savedAt: hit.savedAt }
+    : meta ? { key: k, stamp: _stampOf(meta), savedAt: readAt } : null;
+}
+
+/** The view is being left; its stamp says nothing about what gets painted next. */
+export function clearOnScreen() {
+  _onScreen = null;
+}
+
+/**
+ * `emails` (the store's rows for this view) brought up to `meta`, or null.
+ *
+ * No ceiling here. It weighs a memo against the caller's bulk read, but for the
+ * view on screen that read is the 500-row repaint plus a drain that fetches
+ * every other row in one by-uid call anyway — and a refresh of the open list
+ * rewrites every row it holds, so nearly all of them always count as moved.
+ */
+export async function recallOnScreen(accountId, mailbox, emails, meta, io) {
+  const k = _key(accountId, mailbox);
+  const mark = _onScreen;
+  if (!mark || mark.key !== k || !emails?.length) return null;
+  const fresh = await _freshen(accountId, mailbox, { ...mark, emails }, meta, io, Infinity);
+  _onScreen = fresh ? { key: k, stamp: fresh.stamp, savedAt: fresh.savedAt } : null;
+  return fresh?.emails ?? null;
 }
 
 /**
  * Bring a stale memo in line with the sidecar directory, reading only what
  * moved. Returns null when that isn't worth it or can't be done exactly.
  */
-async function _reconcile(accountId, mailbox, hit, io) {
+async function _reconcile(accountId, mailbox, hit, io, ceiling) {
   const listing = await io.listCachedUids(accountId, mailbox, hit.savedAt - MTIME_SKEW_MS);
   if (!listing?.uids?.length) return null; // no listing, or the cache was cleared
 
@@ -175,7 +225,7 @@ async function _reconcile(accountId, mailbox, hit, io) {
   const rewritten = listing.changed.filter(uid => have.has(uid));
   const needed = [...new Set([...arrivals, ...rewritten])];
 
-  if (needed.length > have.size * RECONCILE_CEILING) return null;
+  if (needed.length > have.size * ceiling) return null;
 
   const fresh = needed.length
     ? await io.getEmailHeadersByUids(accountId, mailbox, needed)
@@ -194,16 +244,21 @@ async function _reconcile(accountId, mailbox, hit, io) {
   return [...added, ...kept]; // newest first; display re-sorts by date anyway
 }
 
-/** Drop a mailbox, or every mailbox of an account when `mailbox` is omitted. */
+/**
+ * Drop a mailbox, or every mailbox of an account when `mailbox` is omitted —
+ * the on-screen stamp included.
+ */
 export function forget(accountId, mailbox) {
   if (mailbox) {
     _memo.delete(_key(accountId, mailbox));
+    if (_onScreen?.key === _key(accountId, mailbox)) _onScreen = null;
     return;
   }
   const prefix = `${accountId}\x01`;
   for (const k of [..._memo.keys()]) {
     if (k.startsWith(prefix)) _memo.delete(k);
   }
+  if (_onScreen?.key.startsWith(prefix)) _onScreen = null;
 }
 
 /** Test/diagnostic helper. */

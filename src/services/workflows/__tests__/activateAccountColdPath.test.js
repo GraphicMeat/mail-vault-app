@@ -739,4 +739,68 @@ describe('activateAccount header memo', () => {
     expect(peekMemo(ACCOUNT.id, 'Sent')).toBeNull();
     expect(peekMemo(ACCOUNT.id, 'Archive')?.map(e => e.uid)).toEqual([9]);
   });
+
+  // Refresh routes to activateAccount for the view already on screen. The memo
+  // never holds that view, so without reusing the store's own rows the list
+  // restarted from a 500-row read ("500 of N") and drained the rest again.
+  function primeOnInbox() {
+    primeActiveForBackgroundRefresh();
+    mockGetEmailHeadersMeta.mockResolvedValue(META);
+    mockGetEmailHeadersPartial.mockResolvedValue({
+      emails: [mkHeader(2), mkHeader(1)], totalEmails: 2, totalCached: 2, uidValidity: 1,
+    });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 3, highestModseq: 5, exists: 2 });
+    mockFetchEmails.mockResolvedValue({ total: 2, emails: [mkHeader(2), mkHeader(1)] });
+    mockSearchAllUids.mockResolvedValue([1, 2]);
+  }
+
+  it('re-activating the view on screen keeps its rows and makes no 500-row read', async () => {
+    primeOnInbox();
+    // The first load reads the cache and stamps the set the store adopts.
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+    expect(mockGetEmailHeadersPartial).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 500);
+    mockGetEmailHeadersPartial.mockClear();
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 500);
+    expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([1, 2]);
+  });
+
+  // The usual case: a refresh of the open list rewrote every row it holds and
+  // moved the meta, so the stamp no longer matches and every row reads as moved.
+  it('keeps the rows after a write restamped all of them', async () => {
+    primeOnInbox();
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+    mockGetEmailHeadersPartial.mockClear();
+    const moved = { ...META, highestModseq: 6 };
+    mockGetEmailHeadersMeta.mockResolvedValue(moved);
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 3, highestModseq: 6, exists: 2 });
+    const db = await import('../../db');
+    db.listCachedUids.mockResolvedValueOnce({ uids: [1, 2], changed: [1, 2] });
+    db.getEmailHeadersByUids.mockResolvedValueOnce([mkHeader(2), mkHeader(1)]);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 500);
+    expect(db.getEmailHeadersByUids).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [1, 2]);
+    expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([1, 2]);
+  });
+
+  it('paints the view on screen with its own rows, not the 50-row restore window', async () => {
+    primeOnInbox();
+    useMailStore.setState({ emails: [mkHeader(2), mkHeader(1)], totalEmails: 2 });
+    mockGetRestoreDescriptor.mockReturnValue({
+      accountId: ACCOUNT.id, mailbox: 'INBOX', viewMode: 'all', totalEmails: 1,
+      topVisibleIndex: 0, selectedUid: null, mailboxes: [{ name: 'INBOX', path: 'INBOX' }],
+      mailboxesFetchedAt: Date.now(), firstWindow: [mkHeader(7)],
+      firstWindowSavedUids: [], firstWindowArchivedUids: [], timestamp: Date.now(),
+    });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    const state = useMailStore.getState();
+    expect(state.emails.map(e => e.uid).sort()).toEqual([1, 2]);
+    expect(state.totalEmails).toBe(2);
+  });
 });

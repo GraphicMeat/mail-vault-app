@@ -12,7 +12,10 @@ import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven } from './loadEmails';
-import { recall as memoRecall, remember as memoRemember, peek as memoPeek, forget as memoForget, trim as memoTrim } from '../headerMemo';
+import {
+  recall as memoRecall, remember as memoRemember, peek as memoPeek, trim as memoTrim,
+  adopt as memoAdopt, clearOnScreen as memoClearOnScreen, recallOnScreen as memoRecallOnScreen,
+} from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -423,6 +426,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     _saveRestore(_buildRestoreDescriptor(get(), previousMailbox));
     _memoizeOutgoing(currentAccountId, previousMailbox, currentEmails);
   }
+  // Refresh, or a retry, of the view already on screen. The memo never holds
+  // that view (see headerMemo), so the store's own rows are the set to keep —
+  // repainting from a 500-row read restarted the list at "500 of N" and
+  // drained the rest again. Any other activation leaves the view, and the
+  // on-screen stamp with it.
+  const reactivatesView = isMailboxSwitch && previousMailbox === mailbox
+    && !get().unifiedInbox && !get().mailboxScope;
+  if (!reactivatesView) memoClearOnScreen();
 
   const viewMode = get().viewMode || 'all';
   // Keyed on the requested folder for an account switch too. Keying on the
@@ -448,11 +459,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     const optimistic = memoPainted
       ? restored.firstWindow.filter(e => e._optimistic)
       : [];
-    const painted = !memoPainted
+    const restoredPaint = !memoPainted
       ? restored.firstWindow
       : optimistic.length
         ? [...optimistic, ...memoPainted]
         : memoPainted;
+    // The view on screen already shows its rows; a placeholder window over
+    // them would only shrink the list. Unless it is the shorter of the two.
+    const ownPaint = reactivatesView && currentEmails.length >= restoredPaint.length;
+    const painted = ownPaint ? currentEmails : restoredPaint;
 
     console.log('[activateAccount] %s restore HIT for %s:%s — rendering %d headers (%s)',
       label, accountId, restored.mailbox, painted.length,
@@ -495,7 +510,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       unifiedInbox: false,
       mailboxScope: null,
       emails: painted,
-      totalEmails: restored.totalEmails,
+      totalEmails: ownPaint ? currentTotalEmails : restored.totalEmails,
       // All three were previously left at the OUTGOING account's values, so
       // pagination and range loading ran against a window that no longer
       // existed. `hasMoreEmails` is false rather than `painted.length <
@@ -604,6 +619,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // which is why the list restarted at "500 of 15,065" and climbed each
       // time. `_meta.json` is read either way and doubles as the staleness
       // check, so a hit costs nothing extra and a miss costs nothing either.
+      // Before the meta read: rows read after it are at least this fresh.
+      const readAt = Date.now();
       const [memoMeta, rawArchivedEmailIds, savedEmailIds] = await Promise.all([
         db.getEmailHeadersMeta(accountId, effectiveMailbox),
         db.getArchivedEmailIds(accountId, effectiveMailbox),
@@ -623,10 +640,22 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // On a stamp mismatch this re-reads only the sidecars that moved (readdir
       // + mtime, then one read per changed UID) instead of discarding the set —
       // a single new message used to cost a full re-read of the mailbox.
-      const memoized = await memoRecall(accountId, effectiveMailbox, memoMeta, {
+      const memoIo = {
         listCachedUids: db.listCachedUids,
         getEmailHeadersByUids: db.getEmailHeadersByUids,
-      });
+      };
+      // Re-activating the view on screen: its rows are already in the store —
+      // brought up to date the same way, if they hold at least what the
+      // 500-row read below would (a short window is better refilled by it).
+      const ownRows = reactivatesView && effectiveMailbox === mailbox
+        ? currentEmails.filter(e => !e._optimistic)
+        : [];
+      const ownRowsCover = ownRows.length > 0
+        && ownRows.length >= Math.min(500, memoMeta?.totalCached ?? 0);
+      const memoized = await memoRecall(accountId, effectiveMailbox, memoMeta, memoIo)
+        ?? (ownRowsCover
+          ? await memoRecallOnScreen(accountId, effectiveMailbox, ownRows, memoMeta, memoIo)
+          : null);
       if (signal.aborted) return;
       const cachedHeaders = memoized
         ? {
@@ -701,12 +730,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             ? { serverUids: serverUids(cachedHeaders.serverUids, { complete: false }) }
             : {}),
         });
-        // The store holds this set now, and the next refresh replaces its rows
-        // with copies — a memo entry kept past here is a second, staler copy of
-        // the mailbox on screen. The next switch away memoizes it afresh.
-        // Same guards as commitToStore, which returns silently on either.
-        if (memoized && !signal.aborted && useMailStoreRef.getState().activeAccountId === accountId) {
-          memoForget(accountId, effectiveMailbox);
+        // The store holds this set now: drop its memo entry (the next switch
+        // away memoizes it afresh) and stamp it as the view's. Same guards as
+        // commitToStore, which returns silently on either.
+        if (!signal.aborted && useMailStoreRef.getState().activeAccountId === accountId) {
+          memoAdopt(accountId, effectiveMailbox, memoMeta, readAt);
         }
         localTrace.mark('first-paint', { emailCount: cachedHeaders.emails.length });
 

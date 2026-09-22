@@ -19,17 +19,19 @@
  *
  * SCOPE — read before trusting a green here. This is a CONTRACT test, not a
  * discriminating one: it passes against the pre-fix build too (verified on the
- * mini, 2026-08-17, both runs 841ms). Truncating the store leaves the in-memory
- * header memo and the restore descriptor holding the whole mailbox, so the next
- * activation repaints from memory before the probe path is reached. The field
- * case had neither — a launched-seconds-ago process with a cache that had just
- * been wiped — and reproducing that needs handles on `headerMemo` and
- * `cacheManager` that the app does not expose. The fix itself is pinned at the
+ * mini, 2026-08-17, both runs 841ms). The header memo never holds the mailbox
+ * on screen, and a re-activation of that mailbox only reuses the store's own
+ * rows when they hold at least the first 500-row cache read — a truncated
+ * window does not, so the next activation re-reads the cache (and the restore
+ * descriptor's window paints first) before the probe path is reached. The field
+ * case had no such read to fall back on — a launched-seconds-ago process with a
+ * cache that had just been wiped — and reproducing that needs handles on
+ * `headerMemo` and `cacheManager` that the app does not expose. The fix itself is pinned at the
  * unit layer (`tests/unit/shortWindowDrain.test.js`), and the empty-LIST half at
  * the Rust layer (`src-core/tests/imap_session.rs`,
  * `a_dropped_list_is_an_error_not_an_empty_folder_list`). What this spec is
- * worth: it fails if ANY of the three recovery paths — memo repaint, descriptor
- * repaint, cache drain — stops putting the list back after a short paint.
+ * worth: it fails if ANY of the recovery paths — descriptor repaint, cache
+ * re-read, cache drain — stops putting the list back after a short paint.
  */
 
 import assert from 'node:assert';

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { remember, recall, peek, forget, trim, _size } = await import('../headerMemo.js');
+const {
+  remember, recall, peek, forget, trim, adopt, clearOnScreen, recallOnScreen, _size,
+} = await import('../headerMemo.js');
 
 const META = { totalEmails: 3, totalCached: 3, highestModseq: 900 };
 const EMAILS = [{ uid: 3 }, { uid: 2 }, { uid: 1 }];
@@ -23,6 +25,7 @@ function fakeIo({ uids, changed = [], rows = [] }) {
 
 beforeEach(() => {
   for (let i = 0; i <= n; i++) forget(`acc${i}`);
+  clearOnScreen();
 });
 
 describe('headerMemo', () => {
@@ -266,6 +269,72 @@ describe('headerMemo', () => {
         getEmailHeadersByUids: vi.fn(),
       };
       expect(await recall(id, 'INBOX', GREW, io)).toBeNull();
+    });
+  });
+
+  // Refresh of the view on screen: the memo never holds it, so the store's own
+  // rows are brought up to date against the stamp of the set it adopted.
+  describe('the view on screen', () => {
+    const GREW = { totalEmails: 4, totalCached: 4, highestModseq: 901 };
+
+    it('hands the store\'s own rows back when the cache has not moved', async () => {
+      const id = nextId();
+      adopt(id, 'INBOX', META, Date.now());
+      expect(await recallOnScreen(id, 'INBOX', EMAILS, META)).toBe(EMAILS);
+    });
+
+    it('reads only what moved, as recall does', async () => {
+      const id = nextId();
+      adopt(id, 'INBOX', META, Date.now());
+      const io = fakeIo({ uids: [4, 3, 2, 1], changed: [4], rows: [{ uid: 4 }] });
+
+      expect(await recallOnScreen(id, 'INBOX', EMAILS, GREW, io)).toEqual([
+        { uid: 4 }, { uid: 3 }, { uid: 2 }, { uid: 1 },
+      ]);
+      expect(io.getEmailHeadersByUids.mock.calls[0][2]).toEqual([4]);
+    });
+
+    // A refresh of the open list rewrites every row it holds, so after one
+    // nearly everything counts as moved. The memo gives up there; the view on
+    // screen must not, or Refresh repaints from 500 rows again.
+    it('re-reads even when most of the set moved', async () => {
+      const id = nextId();
+      adopt(id, 'INBOX', META, Date.now());
+      const io = fakeIo({
+        uids: [3, 2, 1],
+        changed: [3, 2, 1],
+        rows: [{ uid: 3, flags: ['\\Seen'] }, { uid: 2 }, { uid: 1 }],
+      });
+
+      const out = await recallOnScreen(id, 'INBOX', EMAILS, { ...META, highestModseq: 901 }, io);
+      expect(out).toEqual([{ uid: 3, flags: ['\\Seen'] }, { uid: 2 }, { uid: 1 }]);
+    });
+
+    it('answers nothing for another view, after the view is left, or once forgotten', async () => {
+      const id = nextId();
+      adopt(id, 'INBOX', META, Date.now());
+      expect(await recallOnScreen(id, 'Sent', EMAILS, META)).toBeNull();
+
+      clearOnScreen();
+      expect(await recallOnScreen(id, 'INBOX', EMAILS, META)).toBeNull();
+
+      adopt(id, 'INBOX', META, Date.now());
+      forget(id);
+      expect(await recallOnScreen(id, 'INBOX', EMAILS, META)).toBeNull();
+    });
+
+    // The memo entry's rows are as fresh as its snapshot, not as the adoption:
+    // a flag rewrite moves no stamp, so a later savedAt would skip it for good.
+    it('adopting a recalled entry drops it and keeps its snapshot time', async () => {
+      const id = nextId();
+      remember(id, 'INBOX', EMAILS, META);
+      await recall(id, 'INBOX', META);
+      adopt(id, 'INBOX', META, Date.now() + 1e9);
+      expect(peek(id, 'INBOX')).toBeNull();
+
+      const io = fakeIo({ uids: [4, 3, 2, 1], changed: [4], rows: [{ uid: 4 }] });
+      await recallOnScreen(id, 'INBOX', EMAILS, GREW, io);
+      expect(io.listCachedUids.mock.calls[0][2]).toBeLessThan(Date.now());
     });
   });
 });
