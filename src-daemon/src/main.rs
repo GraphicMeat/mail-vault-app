@@ -361,6 +361,9 @@ async fn daemon_main() {
 
     // One-time Maildir filename migration: append `.eml` to message files that
     // pre-date the extension change. Idempotent; version-guarded.
+    // No vault registry update: it runs synchronously before the registry is
+    // opened below, and a new session verifies every mailbox afresh (a rename
+    // it did keeps its row by size and mtime). It is called nowhere else.
     let mig = startup_eml_migration(&mail_dir, mail_dir_ok);
     if mig.renamed > 0 || mig.errors > 0 {
         info!(

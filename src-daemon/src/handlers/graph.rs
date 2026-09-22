@@ -19,19 +19,20 @@
 //! own Tauri definition and `generate_handler!` entry referenced it), so it
 //! is deleted outright along with its Tauri twin, not routed here.
 //!
-//! `graph_cache_mime`'s raw `std::fs::write` straight to the maildir `cur`
-//! path — bypassing `mailvault_core::vault_files::store` and the daemon's
-//! `with_vault_write` gate — is a pre-existing, already-documented exception
-//! (architecture.md: "commands.rs (`graph_cache_mime`)"). It is migrated
-//! AS-IS: still ungated (uses `common::vault_root`, not
-//! `common::with_vault_write`), still a raw write, per the Task 5.6 scoping
-//! call ("fixing it is out of scope, would be scope creep on a
-//! security-sensitive migration phase").
+//! `graph_cache_mime` bypasses the daemon's `with_vault_write` gate, a
+//! pre-existing, already-documented exception (architecture.md:
+//! "commands.rs (`graph_cache_mime`)"). It was migrated AS-IS, still ungated
+//! (uses `common::vault_root`, not `common::with_vault_write`), per the Task
+//! 5.6 scoping call ("fixing it is out of scope, would be scope creep on a
+//! security-sensitive migration phase"). Its write itself now goes through
+//! `vault_files::store(.., overwrite: false)` under the vault registry's
+//! mailbox lock, so the registry holds the row it wrote (vault registry
+//! plan, Task 2b); the gate stays off.
 use crate::handlers::common::{self, blocking, opt_str_arg, str_arg, u32_arg, vec_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::graph::GraphClient;
-use mailvault_core::vault_eml::{self, find_file_by_uid};
+use mailvault_core::vault_eml;
 use mailvault_core::vault_files;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -143,29 +144,30 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(r) => r,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
-            let cur_dir = vault_files::cur_path(&root, &account_id, &mailbox);
             let raw_for_write = raw_bytes.clone();
+            let write_state = Arc::clone(state);
+            let (write_account, write_mailbox) = (account_id.clone(), mailbox.clone());
             // Unlike `imap_get_email_light`'s auto-cache (best-effort, only
             // `warn!`s on failure), this write failing fails the whole
             // command — verbatim from commands.rs's `?` propagation, because
             // here the cache write IS the operation, not a side effect of one.
+            // `overwrite: false` skips a uid that already has a file, as the
+            // `find_file_by_uid` check it replaces did; a write upserts the
+            // row and the registry's hook nudges the index.
             let write = blocking(move || -> Result<bool, String> {
-                std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
-                if find_file_by_uid(&cur_dir, uid).is_none() {
-                    let filename = vault_files::build_maildir_filename(uid, &[] as &[String]);
-                    let file_path = cur_dir.join(&filename);
-                    std::fs::write(&file_path, &raw_for_write).map_err(|e| format!("Failed to write .eml file: {}", e))?;
-                    info!("Graph: cached UID {} to {:?} ({} bytes)", uid, file_path, raw_for_write.len());
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
+                let registry = &write_state.vault_registry;
+                registry.serialized(&write_account, &write_mailbox, || {
+                    vault_files::store(registry, &root, &write_account, &write_mailbox, uid, &raw_for_write, &[], false)
+                })
             })
             .await;
 
             match write {
-                Ok(Ok(true)) => crate::search_index::nudge(&state.search_index, &account_id, &mailbox),
-                Ok(Ok(false)) => {} // already cached — no nudge, matching commands.rs
+                Ok(Ok(wrote)) => {
+                    if wrote {
+                        info!("Graph: cached UID {} for {}/{} ({} bytes)", uid, account_id, mailbox, raw_bytes.len());
+                    }
+                }
                 Ok(Err(e)) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
                 Err(join_err) => {
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Task join error: {join_err}")));
@@ -177,7 +179,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
 
-            RpcResponse::success(id, json!({"success": true, "email": email}))
+            // Reached only when `store` succeeded: the uid's file is in the vault.
+            RpcResponse::success(id, json!({"success": true, "email": email, "cached": true}))
         }
 
         "graph_set_read" => {
@@ -448,7 +451,28 @@ mod tests {
         assert_eq!(result["email"]["subject"], json!("hi"));
 
         let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
-        assert!(find_file_by_uid(&cur_dir, 7).is_some(), "the raw .eml must land in the vault's cur dir");
+        assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_some(), "the raw .eml must land in the vault's cur dir");
+        assert_eq!(result["cached"], json!(true));
+    }
+
+    /// The write goes through `vault_files::store`, so a verified mailbox
+    /// holds the new row with no relisting.
+    #[tokio::test]
+    async fn cache_mime_records_the_file_in_a_verified_registry() {
+        let _g = mock_graph(vec![(200, "From: a@b.com\r\nSubject: hi\r\n\r\nBody".to_string())]);
+        let s = st();
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(&s.data_dir, "acct1", "INBOX"), Some((vec![], vec![])));
+
+        let resp = call(
+            &s,
+            "graph_cache_mime",
+            json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await;
+        assert_eq!(resp.result.expect("success")["cached"], json!(true));
+        assert_eq!(reg.uid_sets(&s.data_dir, "acct1", "INBOX"), Some((vec![7], vec![])));
+        assert_eq!(reg.listing_count(), 1, "the row came from the write, not a relisting");
     }
 
     #[tokio::test]

@@ -424,7 +424,12 @@ pub fn import(
         // cleanly instead of propagating as a hard error: whatever imported
         // before the refusal is still a valid partial result, matching this
         // repo's "resilient over noisy" rule.
-        let wrote = match common::with_vault_write(state, |root| -> Result<bool, String> {
+        //
+        // Under the vault registry's lock for the folder (keyed by the
+        // sanitized names, the directory itself). A name the registry's
+        // listing reads a uid from lands as a row right after its write; any
+        // other name is not a vault message to it, as on a relisting.
+        let wrote = match common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<bool, String> {
             let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
             let dest_path = cur_dir.join(&filename_owned);
@@ -432,7 +437,17 @@ pub fn import(
                 info!("Skipping existing file: {:?}", dest_path);
                 return Ok(false);
             }
-            std::fs::write(&dest_path, &content).map_err(|e| format!("Failed to write .eml file: {}", e))?;
+            let uid = mailvault_core::maildir::vault_filename_uid(&filename_owned);
+            if let Err(e) = std::fs::write(&dest_path, &content) {
+                if uid.is_some() {
+                    // A failed plain write can leave a partial file.
+                    state.vault_registry.invalidate(&safe_account_id, &safe_mailbox);
+                }
+                return Err(format!("Failed to write .eml file: {}", e));
+            }
+            if let Some(uid) = uid {
+                state.vault_registry.upsert(&safe_account_id, &safe_mailbox, uid, &dest_path);
+            }
             Ok(true)
         }) {
             Ok(w) => w,
@@ -678,6 +693,34 @@ mod tests {
         let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.new_accounts.len(), 0, "an already-known email must not mint a new account");
         assert_eq!(result.email_count, 1);
+    }
+
+    /// Each imported file lands in the vault registry as it is written: a
+    /// folder verified before the import answers with the new uid and no
+    /// relisting. A name with no uid the registry reads is not recorded.
+    #[test]
+    fn import_records_each_file_in_a_verified_registry() {
+        let (v, s) = state(true);
+        seed_file(v.path(), "acct-known", "INBOX", 5, &["A"], b"already");
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(v.path(), "acct-known", "INBOX"), Some((vec![5], vec![5])));
+
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[
+                ("mailvault-backup/emails/known@test.com/INBOX/1:2,A.eml", b"body"),
+                ("mailvault-backup/emails/known@test.com/INBOX/x:2,A.eml", b"no uid"),
+            ],
+            &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
+        );
+        let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 2);
+
+        assert_eq!(reg.uid_sets(v.path(), "acct-known", "INBOX"), Some((vec![1, 5], vec![1, 5])));
+        assert_eq!(reg.listing_count(), 1, "the rows came from the import, not a relisting");
     }
 
     /// Decision 10 (a) + (c): the gate is re-acquired per file, inside the

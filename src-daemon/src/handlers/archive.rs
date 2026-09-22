@@ -1,8 +1,9 @@
 //! Daemon routes for archive, bulk delete and verify (Task 3.4), calling into
 //! `mailvault_core::archive` (Task 3.2) with the daemon's own sinks: the bus
-//! for `emit`, an in-process custody upsert for `custody_append`, and
-//! `search_index::nudge`. `bulk_delete_emails` is intentionally ungated (it
-//! touches only the IMAP server, no vault file, inventory-archive-bulk §3.2);
+//! for `emit`, an in-process custody upsert for `custody_append`, and the
+//! vault registry (whose hook nudges the index). `bulk_delete_emails` is
+//! intentionally ungated (it touches only the IMAP server, no vault file,
+//! inventory-archive-bulk §3.2);
 //! `archive_emails` and `verify_archived_emails` go through
 //! `common::vault_root` / `common::with_vault_write` like every other Phase 2
 //! vault route.
@@ -73,11 +74,6 @@ pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) ->
             })
         });
 
-    let nudge_state = Arc::clone(state);
-    let nudge: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(move |account_id: &str, mailbox: &str| {
-        crate::search_index::nudge(&nudge_state.search_index, account_id, mailbox);
-    });
-
     let gate_state = Arc::clone(state);
     let gate: ArchiveGate = Arc::new(move |work: &mut dyn FnMut() -> Result<(), String>| {
         with_vault_write(&gate_state, |_root| work())
@@ -87,7 +83,9 @@ pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) ->
         root,
         pool: Arc::clone(&state.imap_pool),
         gate,
-        sinks: ArchiveSinks { emit, custody_append, nudge },
+        sinks: ArchiveSinks { emit, custody_append },
+        // Each stored file upserts its row; the registry's hook nudges the index.
+        registry: Arc::clone(&state.vault_registry),
     })
 }
 
@@ -307,8 +305,8 @@ mod tests {
             sinks: ArchiveSinks {
                 emit: panicking_emit,
                 custody_append: Arc::new(|_, _, _| Ok(0)),
-                nudge: Arc::new(|_, _| {}),
             },
+            registry: Arc::clone(&s.vault_registry),
         });
         let s2 = Arc::clone(&s);
         let handle = tokio::spawn(async move {

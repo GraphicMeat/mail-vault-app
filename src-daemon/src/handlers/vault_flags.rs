@@ -91,7 +91,7 @@ pub(crate) fn rename_mailbox(
         for p in &pairs {
             let from = vault_flags::dirs_for(root, account_id, &p.from, account_email, mirror_root);
             let to = vault_flags::dirs_for(root, account_id, &p.to, account_email, mirror_root);
-            let (n, mut bad) = vault_flags::rename_dirs(&from, &to);
+            let (n, mut bad) = vault_flags::rename_dirs(&state.vault_registry, &from, &to);
             moved += n;
             failed.append(&mut bad);
             match daemon_custody::with_conn(state, |c| entries::rename_mailbox(c, account_id, &p.from, &p.to)) {
@@ -130,7 +130,7 @@ pub(crate) fn adopt_mailbox_dirs(
         for p in &pairs {
             let from = vault_flags::dirs_for(root, account_id, &p.from, account_email, mirror_root);
             let to = vault_flags::dirs_for(root, account_id, &p.to, account_email, mirror_root);
-            let out = vault_flags::adopt_dirs(&from, &to);
+            let out = vault_flags::adopt_dirs(&state.vault_registry, &from, &to);
             any_moved |= out.moved > 0;
             let label = format!("{} -> {}", p.from, p.to);
             if out.app_moved > 0 {

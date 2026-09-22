@@ -391,6 +391,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         })
                     })
                     .await;
+                    // `store` answered Ok: written now, or a file was already there.
+                    let cached = matches!(cache_result, Ok(Ok(_)));
                     match cache_result {
                         // A write nudges the index through the registry's change hook.
                         Ok(Ok(true)) => {}
@@ -398,7 +400,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", store_uid, err),
                         Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", store_uid, join_err),
                     }
-                    RpcResponse::success(id, json!({"success": true, "email": e}))
+                    RpcResponse::success(id, json!({"success": true, "email": e, "cached": cached}))
                 }
                 // Proven absence (a tagged OK on the second probe), not an
                 // error — `success:false, gone:true` is what api.js's
@@ -870,6 +872,7 @@ mod tests {
         let cur = tmp.join("Maildir").join("acc1").join("INBOX").join("cur");
         let files: Vec<_> = std::fs::read_dir(&cur).unwrap().collect();
         assert_eq!(files.len(), 1, "the light fetch must auto-cache the .eml to the vault: {cur:?}");
+        assert_eq!(result["cached"], json!(true));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -903,6 +906,7 @@ mod tests {
         let resp = call(&s, "imap_get_email_light", json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX"})).await;
         let result = resp.result.expect("the fetch must still succeed");
         assert_eq!(result["success"], json!(true));
+        assert_eq!(result["cached"], json!(false), "a cache write that did not land is not reported as cached");
     }
 
     #[tokio::test]

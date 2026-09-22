@@ -9,6 +9,7 @@ mod common;
 
 use common::{config_for, eml, pool};
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
+use mailvault_core::vault_registry::VaultRegistry;
 use mock_imap::state::Mailbox;
 use mock_imap::{MockImap, Scenario};
 use std::sync::atomic::AtomicBool;
@@ -40,8 +41,14 @@ fn noop_sinks() -> ArchiveSinks {
     ArchiveSinks {
         emit: Arc::new(|_, _| {}),
         custody_append: Arc::new(|_, _, _| Ok(0)),
-        nudge: Arc::new(|_, _| {}),
     }
+}
+
+/// A registry for `root`, its file in a tempdir of its own.
+fn registry_for(root: &std::path::Path) -> (tempfile::TempDir, Arc<VaultRegistry>) {
+    let app = tempfile::tempdir().expect("tempdir");
+    let reg = Arc::new(VaultRegistry::open(app.path(), root));
+    (app, reg)
 }
 
 fn always_open_gate() -> ArchiveGate {
@@ -68,6 +75,7 @@ fn file_names(dir: &std::path::Path) -> Vec<String> {
 async fn a_custody_append_failure_does_not_fail_the_run() {
     let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
     let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
 
     let mut sinks = noop_sinks();
     // The daemon's real sink can fail (custody.db locked, disk full, etc.); the
@@ -83,6 +91,7 @@ async fn a_custody_append_failure_does_not_fail_the_run() {
         pool: Arc::new(pool()),
         gate: always_open_gate(),
         sinks,
+        registry: Arc::clone(&registry),
     });
 
     let result = archive::run(
@@ -109,6 +118,7 @@ async fn a_custody_append_failure_does_not_fail_the_run() {
 async fn the_gate_wraps_the_write_entry_and_exit_bracket_it() {
     let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
     let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
 
     let order: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
     let order_for_gate = Arc::clone(&order);
@@ -124,6 +134,7 @@ async fn the_gate_wraps_the_write_entry_and_exit_bracket_it() {
         pool: Arc::new(pool()),
         gate,
         sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
     });
 
     let result = archive::run(
@@ -153,6 +164,7 @@ async fn a_gate_that_refuses_leaves_no_file_on_disk() {
     // gate's refusal would not stop it and a file would still appear.
     let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
     let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
 
     let gate: ArchiveGate = Arc::new(|_work| Err("E_VAULT_UNAVAILABLE: closed for a move".to_string()));
 
@@ -161,6 +173,7 @@ async fn a_gate_that_refuses_leaves_no_file_on_disk() {
         pool: Arc::new(pool()),
         gate,
         sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
     });
 
     let result = archive::run(
@@ -188,6 +201,7 @@ async fn a_gate_that_refuses_leaves_no_file_on_disk() {
 async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
     let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
     let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
     let dir = cur_dir(root.path(), "acct", "INBOX");
     std::fs::create_dir_all(&dir).unwrap();
     // A pre-existing vault file for uid 1 under a different flag letter than
@@ -200,6 +214,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
         pool: Arc::new(pool()),
         gate: always_open_gate(),
         sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
     });
 
     let result = archive::run_with_backup(
@@ -233,6 +248,7 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
     // uid up and replaces what it finds.
     let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
     let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
     let dir = cur_dir(root.path(), "acct", "INBOX");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("1:2,S.eml"), b"stale").unwrap();
@@ -242,6 +258,7 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
         pool: Arc::new(pool()),
         gate: always_open_gate(),
         sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
     });
 
     let result = archive::run(
@@ -262,4 +279,46 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
         "remove_existing=true replaces the stale file it finds: {names:?}"
     );
     assert_eq!(names.len(), 1, "only the fresh write remains: {names:?}");
+}
+
+// ── (d) the vault registry holds every stored uid without a relisting ───────
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_leaves_its_rows_in_a_verified_registry_without_a_relisting() {
+    let mut mb = Mailbox::new("INBOX");
+    for uid in [1, 2] {
+        mb.add(mock_imap::Message::new(uid, eml("Subject", "sender@example.com", "body")));
+    }
+    let server = MockImap::start(Scenario::new().mailbox(mb));
+    let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
+    // Verified before the run: an empty tempdir root lists as an empty folder.
+    assert_eq!(registry.uid_sets(root.path(), "acct", "INBOX"), Some((vec![], vec![])));
+    assert_eq!(registry.listing_count(), 1);
+
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::new(pool()),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
+    });
+    let result = archive::run(
+        ctx,
+        "acct".to_string(),
+        account_json(&server),
+        "INBOX".to_string(),
+        vec![1, 2],
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .expect("run does not error");
+    assert_eq!(result.completed, 2);
+
+    // `store_flags` always adds `archived`, so both are saved and archived.
+    assert_eq!(registry.uid_sets(root.path(), "acct", "INBOX"), Some((vec![1, 2], vec![1, 2])));
+    assert_eq!(registry.listing_count(), 1, "every row came from the run's own upserts");
+    let names = file_names(&cur_dir(root.path(), "acct", "INBOX"));
+    let held = registry.resolve(root.path(), "acct", "INBOX", 1).unwrap().unwrap();
+    assert!(names.contains(&held.file_name().unwrap().to_string_lossy().into_owned()), "{held:?} vs {names:?}");
 }

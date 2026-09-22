@@ -5,7 +5,8 @@
 //! `maildir_cur_path`, an injected `ImapPool` instead of Tauri managed
 //! state, an injected custody-append sink instead of the
 //! `daemon_call_blocking("local_index_append", ...)` bridge call, an
-//! injected nudge sink instead of `crate::nudge_index`, and the per-file
+//! injected nudge sink instead of `crate::nudge_index` (since replaced by the
+//! vault registry's change hook, `ArchiveCtx::registry`), and the per-file
 //! disk write wrapped in the injected vault gate. See the Task 3.2 report
 //! for the full diff summary, including the handful of substitutions this
 //! required beyond the plan's named list (`ArchiveGate` instead of the
@@ -24,6 +25,7 @@ use tracing::{info, warn};
 
 use crate::imap::{self, ImapConfig, ImapPool};
 use crate::vault_files;
+use crate::vault_registry::VaultRegistry;
 
 // ── Event payload ─────────────────────────────────────────────────────────────
 
@@ -118,14 +120,14 @@ impl DrivePace {
 /// does not compile, so this is the minimal change that keeps its call shape.
 pub type ArchiveGate = Arc<dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String> + Send + Sync>;
 
-/// The three points where the app and the daemon differ: how a progress event
-/// reaches the UI, how a custody row gets recorded, and how the search index
-/// is told something changed. `Arc`-wrapped for the same `'static` reason as
-/// `ArchiveGate`, cloned once per spawned task rather than re-taken by reference.
+/// The two points where the app and the daemon differ: how a progress event
+/// reaches the UI and how a custody row gets recorded. `Arc`-wrapped for the
+/// same `'static` reason as `ArchiveGate`, cloned once per spawned task rather
+/// than re-taken by reference. The search index hears about each write from
+/// the vault registry's change hook, so there is no nudge sink.
 pub struct ArchiveSinks {
     pub emit: Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>,
     pub custody_append: Arc<dyn Fn(&str, &str, String) -> Result<usize, String> + Send + Sync>,
-    pub nudge: Arc<dyn Fn(&str, &str) + Send + Sync>,
 }
 
 /// Everything the runner needs beyond the call's own arguments. `root` is
@@ -137,6 +139,9 @@ pub struct ArchiveCtx {
     pub pool: Arc<ImapPool>,
     pub gate: ArchiveGate,
     pub sinks: ArchiveSinks,
+    /// Every vault write here updates it (architecture.md "Writers update the
+    /// database before replying"); its hook also nudges the search index.
+    pub registry: Arc<VaultRegistry>,
 }
 
 // ── Core archive runner ───────────────────────────────────────────────────────
@@ -391,10 +396,6 @@ pub async fn run_with_backup(
     let final_completed = completed.load(Ordering::Relaxed);
     let final_errors = errors.load(Ordering::Relaxed);
     let final_ext_failures = ext_failures.load(Ordering::Relaxed);
-    // Once per run, for archive_emails and each backup folder alike.
-    if final_completed > 0 {
-        (ctx.sinks.nudge)(&account_id, &mailbox);
-    }
 
     info!(
         "archive_emails: done — {}/{} completed, {} errors, {} external copy failures",
@@ -504,6 +505,8 @@ async fn fetch_and_store(
         std::path::PathBuf::from(bp).join(addr).join(&mailbox_owned).join("cur")
     });
     let gate = Arc::clone(&ctx.gate);
+    let registry = Arc::clone(&ctx.registry);
+    let account_key = account_id.to_string();
     let (_filename, external_copy_failed, write_ms) = tokio::task::spawn_blocking(
         move || -> Result<(String, bool, u64), String> {
             use std::fs;
@@ -519,7 +522,13 @@ async fn fetch_and_store(
             let mut external_copy_failed = false;
             let mut write_ms: u64 = 0;
 
-            gate(&mut || {
+            // The mailbox's registry lock first, then the gate (the lock
+            // order), so a delete of this uid never lands between the write
+            // and its row.
+            // ponytail: the lock also spans the mirror write, so one run's
+            // five tasks write one at a time; split it out if a slow mirror
+            // ever makes that the bottleneck.
+            registry.serialized(&account_key, &mailbox_owned, || gate(&mut || {
                 fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
 
                 if let Some(listed) = &listed {
@@ -535,8 +544,13 @@ async fn fetch_and_store(
                 let started = std::time::Instant::now();
                 // Atomic: a kill (or a drive that vanishes) mid-write must not leave
                 // a half file behind for the next run's resume scan to trust.
-                crate::fsx::write_atomic(&cur_dir.join(&filename), &raw_bytes)
-                    .map_err(|e| format!("write .eml: {}", e))?;
+                let written = cur_dir.join(&filename);
+                if let Err(e) = crate::fsx::write_atomic(&written, &raw_bytes) {
+                    // The listed copy may already be gone: its row must not outlive it.
+                    registry.invalidate(&account_key, &mailbox_owned);
+                    return Err(format!("write .eml: {}", e));
+                }
+                registry.upsert(&account_key, &mailbox_owned, uid, &written);
 
                 // Also write to backup location if configured
                 if let Some(backup_dir) = &mirror {
@@ -561,7 +575,7 @@ async fn fetch_and_store(
 
                 write_ms = started.elapsed().as_millis() as u64;
                 Ok(())
-            })?;
+            }))?;
 
             Ok((filename, external_copy_failed, write_ms))
         },

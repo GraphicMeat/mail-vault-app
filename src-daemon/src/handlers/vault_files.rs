@@ -332,10 +332,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
                     let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
-                    let result = vault_files::clear_cache(&root, &gate)?;
-                    if result.deleted_count > 0 {
-                        crate::search_index::sweep_soon(&state.search_index); // every folder of every account lost files
-                    }
+                    // A walk that removed anything invalidates the whole
+                    // registry, and its hook sweeps the index.
+                    let result = vault_files::clear_cache(&state.vault_registry, &root, &gate)?;
                     serde_json::to_value(result).map_err(|e| e.to_string())
                 })
                 .await
@@ -350,9 +349,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
                     let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
-                    // Legacy-only path; never nudges the index (inventory §4,
-                    // kept unchanged — writes .eml files with no signal).
-                    vault_files::migrate_json_to_eml(&root, &gate).map(Value::String)
+                    // A walk that wrote any .eml invalidates the whole
+                    // registry, and its hook sweeps the index.
+                    vault_files::migrate_json_to_eml(&state.vault_registry, &root, &gate).map(Value::String)
                 })
                 .await
                 .and_then(|r| r),
@@ -369,10 +368,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
                     let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
-                    let migrated = vault_files::migrate_email_dirs(&root, &account_map, &gate)?;
-                    if migrated > 0 {
-                        crate::search_index::sweep_soon(&state.search_index); // folders moved between account dirs
-                    }
+                    // Folders moved between account dirs: the registry is
+                    // invalidated whole, and its hook sweeps the index.
+                    let migrated = vault_files::migrate_email_dirs(&state.vault_registry, &root, &account_map, &gate)?;
                     Ok(serde_json::json!({ "migrated": migrated }))
                 })
                 .await
@@ -853,7 +851,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn maildir_migrate_json_to_eml_writes_the_eml_and_never_nudges() {
+    async fn maildir_migrate_json_to_eml_writes_the_eml_and_sweeps() {
         let (t, s) = st(true);
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
         fs::create_dir_all(&cur).unwrap();
@@ -865,7 +863,10 @@ mod tests {
         assert!(summary.as_str().unwrap().contains("Migrated: 1"), "{summary}");
         assert!(cur.join("7:2,AS.eml").exists());
         assert!(!cur.join("7.json").exists());
-        assert!(rx.try_recv().is_err(), "inventory §4: this legacy-only path never nudges");
+        // Inventory §4 pinned "never nudges" as a known gap. The .eml it
+        // writes now invalidates the vault registry, whose change hook sweeps
+        // the index: harmless, and the index finally sees the migrated file.
+        assert_eq!(rx.try_recv().unwrap(), mailvault_core::search_index::plan::Signal::Sweep);
     }
 
     #[tokio::test]

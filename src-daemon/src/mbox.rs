@@ -313,7 +313,11 @@ pub fn import_mbox(
         // the vault closing mid-import for a move) stops the loop cleanly
         // instead of propagating as a hard error, matching
         // backup_zip::import's "resilient over noisy" precedent.
-        let write_result = common::with_vault_write(state, |root| -> Result<(), String> {
+        //
+        // Under the vault registry's lock for the folder (keyed by the
+        // sanitized names, the directory itself), and each file lands as a
+        // row right after its write.
+        let write_result = common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<(), String> {
             let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
@@ -328,7 +332,13 @@ pub fn import_mbox(
                 let filename2 = build_maildir_filename(max_uid, &["archived".to_string()]);
                 dest = cur_dir.join(&filename2);
             }
-            std::fs::write(&dest, &unescaped).map_err(|e| format!("Failed to write .eml: {}", e))
+            if let Err(e) = std::fs::write(&dest, &unescaped) {
+                // A failed plain write can leave a partial file.
+                state.vault_registry.invalidate(&safe_account_id, &safe_mailbox);
+                return Err(format!("Failed to write .eml: {}", e));
+            }
+            state.vault_registry.upsert(&safe_account_id, &safe_mailbox, max_uid, &dest);
+            Ok(())
         });
 
         match write_result {
@@ -565,6 +575,25 @@ mod tests {
     /// then runs the real `clear_cache` over the same vault root and asserts
     /// the imported file survives, the mechanism the bug bypassed, not just
     /// a filename-shape assertion.
+    /// Each imported message lands in the vault registry as it is written:
+    /// a folder verified before the import answers with the new uids and no
+    /// relisting.
+    #[test]
+    fn import_records_each_message_in_a_verified_registry() {
+        let (v, s) = state(true);
+        seed_file(v.path(), "acct1", "INBOX", 3, &["archived"], b"already");
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(v.path(), "acct1", "INBOX"), Some((vec![3], vec![3])));
+
+        let dir = tempfile::tempdir().unwrap();
+        let mbox_path = write_mbox(dir.path(), "in.mbox", &["Subject: one\r\n\r\nbody", "Subject: two\r\n\r\nbody"]);
+        let result = import_mbox(&s, mbox_path, "acct1".to_string(), "INBOX".to_string(), |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 2);
+
+        assert_eq!(reg.uid_sets(v.path(), "acct1", "INBOX"), Some((vec![3, 4, 5], vec![3, 4, 5])));
+        assert_eq!(reg.listing_count(), 1, "the rows came from the import, not a relisting");
+    }
+
     #[test]
     fn imported_message_survives_clear_cache() {
         let (v, s) = state(true);
@@ -577,7 +606,7 @@ mod tests {
         assert_eq!(std::fs::read_dir(&cur).unwrap().count(), 1, "the message must have been written before clear_cache runs");
 
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let result = mailvault_core::vault_files::clear_cache(v.path(), &noop_gate).unwrap();
+        let result = mailvault_core::vault_files::clear_cache(&s.vault_registry, v.path(), &noop_gate).unwrap();
 
         assert_eq!(result.deleted_count, 0, "the imported message must not be deleted");
         assert_eq!(result.skipped_archived, 1, "clear_cache must recognize it as archived and skip it");

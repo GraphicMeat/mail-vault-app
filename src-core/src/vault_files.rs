@@ -417,8 +417,10 @@ pub struct MaildirClearCacheResult {
 }
 
 /// Deletes every non-archived vault file. Skips `orphaned/` (messages the
-/// current server does not have — this copy may be the only one). The caller
-/// sweeps the index soon when `deleted_count > 0`.
+/// current server does not have — this copy may be the only one). Any mailbox
+/// may have lost files, so a walk that removed anything ends with one
+/// `invalidate_all` (whose hook sweeps the index), on a refused gate too:
+/// files already removed stay removed.
 ///
 /// `gate` wraps each file's own delete, the same shape
 /// `prefetch_attachments_in` uses: a vault-wide walk can cover thousands of
@@ -428,6 +430,7 @@ pub struct MaildirClearCacheResult {
 /// A gate error (vault closed for a move) stops the sweep where it is; files
 /// already removed stay removed.
 pub fn clear_cache(
+    reg: &VaultRegistry,
     root: &Path,
     gate: VaultGate<'_>,
 ) -> Result<MaildirClearCacheResult, String> {
@@ -439,43 +442,53 @@ pub fn clear_cache(
     let mut deleted_count: u32 = 0;
     let mut skipped_archived: u32 = 0;
 
-    for entry in walkdir::WalkDir::new(&base).into_iter().flatten() {
-        if entry.path().components().any(|c| c.as_os_str() == maildir::ORPHAN_DIR) {
-            continue;
-        }
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !crate::maildir::has_info(&name) {
-            continue;
-        }
-        let flags = parse_flags_from_filename(&name);
-        if flags.iter().any(|f| f == "archived") {
-            skipped_archived += 1;
-            continue;
-        }
-        gate(&mut || {
-            match fs::remove_file(entry.path()) {
-                Ok(()) => deleted_count += 1,
-                Err(e) => warn!("Failed to delete cached email {:?}: {}", entry.path(), e),
+    let walked = (|| -> Result<(), String> {
+        for entry in walkdir::WalkDir::new(&base).into_iter().flatten() {
+            if entry.path().components().any(|c| c.as_os_str() == maildir::ORPHAN_DIR) {
+                continue;
             }
-            Ok(())
-        })?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !crate::maildir::has_info(&name) {
+                continue;
+            }
+            let flags = parse_flags_from_filename(&name);
+            if flags.iter().any(|f| f == "archived") {
+                skipped_archived += 1;
+                continue;
+            }
+            gate(&mut || {
+                match fs::remove_file(entry.path()) {
+                    Ok(()) => deleted_count += 1,
+                    Err(e) => warn!("Failed to delete cached email {:?}: {}", entry.path(), e),
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    })();
+    if deleted_count > 0 {
+        reg.invalidate_all();
     }
+    walked?;
 
     info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
     Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
 }
 
 /// One-time migration of pre-.eml JSON sidecars (`<uid>.json` with a
-/// `rawSource` field) into `<uid>:2,AS.eml` files. Legacy-only path; never
-/// nudges the index (suspected gap, inventory §4 — kept unchanged).
+/// `rawSource` field) into `<uid>:2,AS.eml` files. Legacy-only path. A walk
+/// that wrote any `.eml` ends with one `invalidate_all` (a refused gate too),
+/// whose hook also sweeps the index: the "never nudges" gap of inventory §4
+/// closes as a side effect.
 ///
 /// `gate` wraps each file's write (or remove, for a sidecar with no
 /// `rawSource`) — same reasoning as `clear_cache`: a whole-vault walk must not
 /// hold the vault gate for its entire duration.
 pub fn migrate_json_to_eml(
+    reg: &VaultRegistry,
     root: &Path,
     gate: VaultGate<'_>,
 ) -> Result<String, String> {
@@ -490,83 +503,90 @@ pub fn migrate_json_to_eml(
     let mut skipped = 0u32;
     let mut errors = 0u32;
 
-    for entry in walkdir::WalkDir::new(&base).into_iter().flatten() {
-        if !entry.file_type().is_file() { continue; }
-        let path = entry.path().to_path_buf();
-        let ext = path.extension().and_then(|e| e.to_str());
-        if ext != Some("json") { continue; }
+    let walked = (|| -> Result<(), String> {
+        for entry in walkdir::WalkDir::new(&base).into_iter().flatten() {
+            if !entry.file_type().is_file() { continue; }
+            let path = entry.path().to_path_buf();
+            let ext = path.extension().and_then(|e| e.to_str());
+            if ext != Some("json") { continue; }
 
-        let json_str = match fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("Could not read {:?}: {}", path, e);
-                errors += 1;
-                continue;
-            }
-        };
-
-        let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Could not parse JSON {:?}: {}", path, e);
-                errors += 1;
-                continue;
-            }
-        };
-
-        let uid: u32 = match path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse().ok()) {
-            Some(u) => u,
-            None => {
-                warn!("Could not extract UID from {:?}", path);
-                errors += 1;
-                continue;
-            }
-        };
-
-        if let Some(raw_b64) = json_val.get("rawSource").and_then(|v| v.as_str()) {
-            let raw_bytes = match base64::engine::general_purpose::STANDARD.decode(raw_b64) {
-                Ok(b) => b,
+            let json_str = match fs::read_to_string(&path) {
+                Ok(s) => s,
                 Err(e) => {
-                    warn!("Could not decode rawSource for {:?}: {}", path, e);
+                    warn!("Could not read {:?}: {}", path, e);
                     errors += 1;
                     continue;
                 }
             };
 
-            let cur_dir = match path.parent() {
-                Some(d) => d,
+            let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Could not parse JSON {:?}: {}", path, e);
+                    errors += 1;
+                    continue;
+                }
+            };
+
+            let uid: u32 = match path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse().ok()) {
+                Some(u) => u,
                 None => {
-                    warn!("migrate_json_to_eml: path {:?} has no parent dir", path);
+                    warn!("Could not extract UID from {:?}", path);
                     errors += 1;
                     continue;
                 }
             };
-            let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
-            let eml_path = cur_dir.join(&eml_filename);
 
-            gate(&mut || {
-                match write_atomic(&eml_path, &raw_bytes) {
-                    Ok(_) => {
-                        let _ = fs::remove_file(&path);
-                        migrated += 1;
-                        info!("Migrated {:?} -> {:?}", path, eml_path);
-                    }
+            if let Some(raw_b64) = json_val.get("rawSource").and_then(|v| v.as_str()) {
+                let raw_bytes = match base64::engine::general_purpose::STANDARD.decode(raw_b64) {
+                    Ok(b) => b,
                     Err(e) => {
-                        warn!("Failed to write .eml for {:?}: {}", path, e);
+                        warn!("Could not decode rawSource for {:?}: {}", path, e);
                         errors += 1;
+                        continue;
                     }
-                }
-                Ok(())
-            })?;
-        } else {
-            gate(&mut || {
-                warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
-                let _ = fs::remove_file(&path);
-                skipped += 1;
-                Ok(())
-            })?;
+                };
+
+                let cur_dir = match path.parent() {
+                    Some(d) => d,
+                    None => {
+                        warn!("migrate_json_to_eml: path {:?} has no parent dir", path);
+                        errors += 1;
+                        continue;
+                    }
+                };
+                let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
+                let eml_path = cur_dir.join(&eml_filename);
+
+                gate(&mut || {
+                    match write_atomic(&eml_path, &raw_bytes) {
+                        Ok(_) => {
+                            let _ = fs::remove_file(&path);
+                            migrated += 1;
+                            info!("Migrated {:?} -> {:?}", path, eml_path);
+                        }
+                        Err(e) => {
+                            warn!("Failed to write .eml for {:?}: {}", path, e);
+                            errors += 1;
+                        }
+                    }
+                    Ok(())
+                })?;
+            } else {
+                gate(&mut || {
+                    warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
+                    let _ = fs::remove_file(&path);
+                    skipped += 1;
+                    Ok(())
+                })?;
+            }
         }
+        Ok(())
+    })();
+    if migrated > 0 {
+        reg.invalidate_all();
     }
+    walked?;
 
     let result = format!(
         "Migration complete. Migrated: {}, Skipped (no rawSource): {}, Errors: {}",
@@ -577,14 +597,17 @@ pub fn migrate_json_to_eml(
 }
 
 /// Moves account-email-keyed mailbox dirs onto their account-uuid dir.
-/// Returns the number of files moved; the caller sweeps the index soon when
-/// it is non-zero.
+/// Returns the number of files moved. Every existing source account dir is
+/// deleted at the end even when a file was skipped (its destination existed),
+/// so any source seen at all ends the walk with one `invalidate_all` (a
+/// refused gate too), whose hook sweeps the index.
 ///
 /// `gate` wraps one mailbox's whole move (create dest, rename every file in
 /// it) at a time, and separately wraps the final `remove_dir_all` per
 /// account — "per batch/mailbox for the long ones", never one gate call
 /// around the whole migration.
 pub fn migrate_email_dirs(
+    reg: &VaultRegistry,
     root: &Path,
     account_map: &HashMap<String, String>,
     gate: VaultGate<'_>,
@@ -595,53 +618,62 @@ pub fn migrate_email_dirs(
     }
 
     let mut migrated = 0usize;
+    let mut touched = false;
 
-    for (email, uuid) in account_map {
-        let email_dir = maildir_base.join(email);
-        let uuid_dir = maildir_base.join(uuid);
+    let walked = (|| -> Result<(), String> {
+        for (email, uuid) in account_map {
+            let email_dir = maildir_base.join(email);
+            let uuid_dir = maildir_base.join(uuid);
 
-        if !email_dir.exists() || email_dir == uuid_dir {
-            continue;
-        }
+            if !email_dir.exists() || email_dir == uuid_dir {
+                continue;
+            }
+            touched = true;
 
-        if let Ok(mailbox_entries) = fs::read_dir(&email_dir) {
-            for mb_entry in mailbox_entries.flatten() {
-                if !mb_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-                let mb_name = mb_entry.file_name();
-                let src_cur = mb_entry.path().join("cur");
-                if !src_cur.exists() { continue; }
-
-                let dst_cur = uuid_dir.join(&mb_name).join("cur");
-                gate(&mut || {
-                    if let Err(e) = fs::create_dir_all(&dst_cur) {
-                        warn!("Migration: failed to create {:?}: {}", dst_cur, e);
-                        return Ok(());
+            if let Ok(mailbox_entries) = fs::read_dir(&email_dir) {
+                for mb_entry in mailbox_entries.flatten() {
+                    if !mb_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
                     }
-                    if let Ok(files) = fs::read_dir(&src_cur) {
-                        for file in files.flatten() {
-                            let fname = file.file_name();
-                            let dst_path = dst_cur.join(&fname);
-                            if !dst_path.exists() {
-                                if let Err(e) = fs::rename(file.path(), &dst_path) {
-                                    warn!("Migration: failed to move {:?}: {}", fname, e);
-                                } else {
-                                    migrated += 1;
+                    let mb_name = mb_entry.file_name();
+                    let src_cur = mb_entry.path().join("cur");
+                    if !src_cur.exists() { continue; }
+
+                    let dst_cur = uuid_dir.join(&mb_name).join("cur");
+                    gate(&mut || {
+                        if let Err(e) = fs::create_dir_all(&dst_cur) {
+                            warn!("Migration: failed to create {:?}: {}", dst_cur, e);
+                            return Ok(());
+                        }
+                        if let Ok(files) = fs::read_dir(&src_cur) {
+                            for file in files.flatten() {
+                                let fname = file.file_name();
+                                let dst_path = dst_cur.join(&fname);
+                                if !dst_path.exists() {
+                                    if let Err(e) = fs::rename(file.path(), &dst_path) {
+                                        warn!("Migration: failed to move {:?}: {}", fname, e);
+                                    } else {
+                                        migrated += 1;
+                                    }
                                 }
                             }
                         }
-                    }
-                    Ok(())
-                })?;
+                        Ok(())
+                    })?;
+                }
             }
-        }
 
-        gate(&mut || {
-            let _ = fs::remove_dir_all(&email_dir);
-            Ok(())
-        })?;
+            gate(&mut || {
+                let _ = fs::remove_dir_all(&email_dir);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    })();
+    if touched {
+        reg.invalidate_all();
     }
+    walked?;
 
     info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
     Ok(migrated)
@@ -1564,6 +1596,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn clear_cache_deletes_non_archived_skips_archived_and_orphaned() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
@@ -1573,7 +1606,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         fs::write(orphan_dir.join("3:2,S.eml"), b"c").unwrap(); // orphaned: kept
 
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let result = clear_cache(root, &noop_gate).unwrap();
+        let result = clear_cache(&reg, root, &noop_gate).unwrap();
         assert_eq!(result.deleted_count, 1);
         assert_eq!(result.skipped_archived, 1);
         assert!(!cur.join("1:2,S.eml").exists());
@@ -1588,6 +1621,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn clear_cache_gate_error_between_files_stops_the_walk() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
@@ -1600,7 +1634,7 @@ R0lGODlhAQABAAAAACw=\r\n\
             }
             work()
         };
-        let err = clear_cache(root, &gate).unwrap_err();
+        let err = clear_cache(&reg, root, &gate).unwrap_err();
         assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
         let remaining: Vec<String> = fs::read_dir(&cur).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert_eq!(remaining.len(), 1, "exactly one file must survive the interrupted walk: {:?}", remaining);
@@ -1611,6 +1645,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         use base64::Engine;
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         let raw_b64 = base64::engine::general_purpose::STANDARD.encode(b"From: a@b.com\r\n\r\nbody");
@@ -1619,7 +1654,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         fs::write(cur.join("8.json"), serde_json::json!({}).to_string()).unwrap();
 
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let summary = migrate_json_to_eml(root, &noop_gate).unwrap();
+        let summary = migrate_json_to_eml(&reg, root, &noop_gate).unwrap();
         assert!(summary.contains("Migrated: 1"), "{summary}");
         assert!(summary.contains("Skipped (no rawSource): 1"), "{summary}");
         assert!(cur.join("7:2,AS.eml").exists());
@@ -1631,6 +1666,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn migrate_email_dirs_moves_files_onto_the_uuid_dir_and_removes_the_source() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let src_cur = cur_path(root, "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
         fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
@@ -1638,7 +1674,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let mut map = HashMap::new();
         map.insert("user@example.com".to_string(), "uuid-123".to_string());
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let migrated = migrate_email_dirs(root, &map, &noop_gate).unwrap();
+        let migrated = migrate_email_dirs(&reg, root, &map, &noop_gate).unwrap();
         assert_eq!(migrated, 1);
         let dst_cur = cur_path(root, "uuid-123", "INBOX");
         assert!(dst_cur.join("1:2,S.eml").exists());
@@ -1653,6 +1689,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn migrate_email_dirs_gate_error_after_the_move_leaves_the_source_dir_but_not_the_files() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let src_cur = cur_path(root, "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
         fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
@@ -1666,10 +1703,98 @@ R0lGODlhAQABAAAAACw=\r\n\
         };
         let mut map = HashMap::new();
         map.insert("user@example.com".to_string(), "uuid-123".to_string());
-        let err = migrate_email_dirs(root, &map, &gate).unwrap_err();
+        let err = migrate_email_dirs(&reg, root, &map, &gate).unwrap_err();
         assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
         let dst_cur = cur_path(root, "uuid-123", "INBOX");
         assert!(dst_cur.join("1:2,S.eml").exists(), "the mailbox move itself already committed");
         assert!(root.join("Maildir").join("user@example.com").exists(), "the source dir cleanup never ran");
+    }
+
+    // ── The vault registry after the whole-vault walkers: each leaves a
+    // verified mailbox unverified, so the next read lists it again and
+    // answers the disk's truth.
+
+    fn refuse_after_first() -> impl Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String> {
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        move |work| {
+            if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) > 0 {
+                return Err("E_VAULT_UNAVAILABLE: closed for a move".to_string());
+            }
+            work()
+        }
+    }
+
+    #[test]
+    fn clear_cache_makes_a_verified_mailbox_list_again_even_when_the_gate_stops_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        for uid in [1, 2] {
+            store(&reg, root, "acct", "INBOX", uid, b"x", &[], true).unwrap();
+        }
+        store(&reg, root, "acct", "INBOX", 3, b"x", &["archived".to_string()], true).unwrap();
+        assert_eq!(sets(&reg, root), (vec![1, 2, 3], vec![3]));
+        assert_eq!(reg.listing_count(), 1);
+
+        // One file goes, then the vault closes: the walk still invalidates.
+        let gate = refuse_after_first();
+        clear_cache(&reg, root, &gate).unwrap_err();
+        let (saved, archived) = sets(&reg, root);
+        assert_eq!(reg.listing_count(), 2, "the next read relisted");
+        assert_eq!(saved.len(), 2, "one of uids 1/2 is gone, the archived 3 stays: {saved:?}");
+        assert_eq!(archived, vec![3]);
+
+        clear_cache(&reg, root, &|work| work()).unwrap();
+        assert_eq!(sets(&reg, root), (vec![3], vec![3]));
+        assert_eq!(reg.listing_count(), 3);
+    }
+
+    #[test]
+    fn a_clear_cache_that_deletes_nothing_keeps_the_mailbox_verified() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        store(&reg, root, "acct", "INBOX", 3, b"x", &["archived".to_string()], true).unwrap();
+        assert_eq!(sets(&reg, root), (vec![3], vec![3]));
+        clear_cache(&reg, root, &|work| work()).unwrap();
+        assert_eq!(sets(&reg, root), (vec![3], vec![3]));
+        assert_eq!(reg.listing_count(), 1);
+    }
+
+    #[test]
+    fn migrate_json_to_eml_makes_a_verified_mailbox_list_again() {
+        use base64::Engine;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(b"From: a@b.com\r\n\r\nbody");
+        fs::write(cur.join("7.json"), serde_json::json!({"rawSource": raw_b64}).to_string()).unwrap();
+        assert_eq!(sets(&reg, root), (vec![], vec![]), "a sidecar is not a vault message");
+
+        migrate_json_to_eml(&reg, root, &|work| work()).unwrap();
+        assert_eq!(sets(&reg, root), (vec![7], vec![7]));
+        assert_eq!(reg.listing_count(), 2);
+    }
+
+    #[test]
+    fn migrate_email_dirs_makes_both_accounts_mailboxes_list_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let src_cur = cur_path(root, "user@example.com", "INBOX");
+        fs::create_dir_all(&src_cur).unwrap();
+        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        let uid_sets = |account: &str| reg.uid_sets(root, account, "INBOX").unwrap().0;
+        assert_eq!(uid_sets("user@example.com"), vec![1]);
+        assert_eq!(uid_sets("uuid-123"), Vec::<u32>::new());
+        assert_eq!(reg.listing_count(), 2);
+
+        let map = HashMap::from([("user@example.com".to_string(), "uuid-123".to_string())]);
+        migrate_email_dirs(&reg, root, &map, &|work| work()).unwrap();
+        assert_eq!(uid_sets("user@example.com"), Vec::<u32>::new());
+        assert_eq!(uid_sets("uuid-123"), vec![1]);
+        assert_eq!(reg.listing_count(), 4);
     }
 }

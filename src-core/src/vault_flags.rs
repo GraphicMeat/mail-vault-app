@@ -281,7 +281,7 @@ pub struct RenamePair {
 /// `Projects/Alpha` along with it. That is harmless as long as the parent pair
 /// runs first, which is why `vault_rename_mailbox` sorts shallowest-first: the
 /// descendant's pair then finds its source already gone and skips.
-pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
+pub fn rename_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
@@ -306,6 +306,12 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
 
     if let (Some(a), Some(b)) = (up(&from.cur), up(&to.cur)) {
         do_move(&a, &b, &mut moved, &mut failed);
+        // A mailbox directory that moved, or failed part-way, changed both
+        // sides: each lists again on its next read.
+        if moved + failed.len() > 0 {
+            reg.invalidate(&from.account_id, &from.mailbox);
+            reg.invalidate(&to.account_id, &to.mailbox);
+        }
     }
 
     // M-3 (final fix wave): the sidecar dir MOVE also needs the header-cache
@@ -381,7 +387,7 @@ pub struct Adopted {
 /// The mirror moves on its own, when its source exists and its destination does
 /// not. `fs::rename` only; nothing is deleted, an existing destination is left
 /// alone and counted as blocked.
-pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
+pub fn adopt_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
@@ -452,6 +458,10 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
                     }
                 } else {
                     mv(src, dst, &mut out.moved, &mut out.failed);
+                    // The Maildir mailbox directory moved (or failed
+                    // part-way): both sides list again on their next read.
+                    reg.invalidate(&from.account_id, &from.mailbox);
+                    reg.invalidate(&to.account_id, &to.mailbox);
                 }
             }
         }
@@ -779,6 +789,14 @@ mod tests {
         }
     }
 
+    /// A registry for `base`, its file in a tempdir of its own so the
+    /// "nothing deleted" file counts under `base` never see it.
+    fn registry_at(base: &Path) -> (tempfile::TempDir, VaultRegistry) {
+        let app = tempfile::tempdir().unwrap();
+        let reg = VaultRegistry::open(app.path(), base);
+        (app, reg)
+    }
+
     /// A file beside `cur/`, as `.uidvalidity` sits: it travels only if the
     /// whole mailbox DIRECTORY moved, not just `cur/`.
     fn sibling(d: &Dirs) -> PathBuf {
@@ -788,6 +806,7 @@ mod tests {
     #[test]
     fn rename_dirs_moves_every_existing_location_and_skips_missing_ones() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let base = tmp.path();
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
@@ -799,7 +818,7 @@ mod tests {
         fs::write(sibling(&from), b"1").unwrap();
         fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
 
-        assert_eq!(rename_dirs(&from, &to), (2, vec![]));
+        assert_eq!(rename_dirs(&reg, &from, &to), (2, vec![]));
 
         assert!(to.cur.join("7:2,AS").exists());
         // The whole mailbox directory moved, so its sibling files came along.
@@ -812,7 +831,7 @@ mod tests {
         assert!(!from.sidecar_dir.exists());
 
         // Idempotent: the sources are gone, so a repeat moves nothing.
-        assert_eq!(rename_dirs(&from, &to), (0, vec![]));
+        assert_eq!(rename_dirs(&reg, &from, &to), (0, vec![]));
     }
 
     /// 2.4 review forward constraint F2: `rename_dirs` must not move the
@@ -826,6 +845,7 @@ mod tests {
     #[test]
     fn rename_dirs_waits_for_an_in_flight_ledger_holder_before_moving_the_sidecar() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let base = tmp.path();
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
@@ -857,7 +877,7 @@ mod tests {
             }
 
             scope.spawn(|| {
-                let (moved, failed) = rename_dirs(&from, &to);
+                let (moved, failed) = rename_dirs(&reg, &from, &to);
                 assert_eq!(failed, Vec::<String>::new(), "{failed:?}");
                 assert!(moved >= 1);
                 assert_eq!(
@@ -886,6 +906,7 @@ mod tests {
     #[test]
     fn rename_dirs_waits_for_an_in_flight_tree_reader_before_moving_the_sidecar() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let base = tmp.path();
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
@@ -915,7 +936,7 @@ mod tests {
             }
 
             scope.spawn(|| {
-                let (moved, failed) = rename_dirs(&from, &to);
+                let (moved, failed) = rename_dirs(&reg, &from, &to);
                 assert_eq!(failed, Vec::<String>::new(), "{failed:?}");
                 assert!(moved >= 1);
                 assert_eq!(
@@ -936,6 +957,7 @@ mod tests {
     #[test]
     fn a_rename_that_errors_is_reported_by_path_not_swallowed_into_the_count() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let base = tmp.path();
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
@@ -952,7 +974,7 @@ mod tests {
             ..rename_fixture(base, "Work", "a_Work")
         };
 
-        let (moved, failed) = rename_dirs(&from, &blocked);
+        let (moved, failed) = rename_dirs(&reg, &from, &blocked);
         assert_eq!(moved, 1, "the Maildir directory still moved");
         assert_eq!(failed.len(), 1, "{failed:?}");
         assert!(failed[0].contains("a_Projects"), "names the source it could not move: {failed:?}");
@@ -995,9 +1017,10 @@ mod tests {
     #[test]
     fn adopt_dirs_is_a_no_op_when_nothing_exists_on_the_from_side() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
         let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
-        let out = adopt_dirs(&from, &to);
+        let out = adopt_dirs(&reg, &from, &to);
         assert_eq!((out.moved, out.blocked), (0, 0));
         assert!(out.failed.is_empty());
         assert!(!to.cur.exists());
@@ -1006,12 +1029,13 @@ mod tests {
     #[test]
     fn adopt_dirs_moves_both_app_dirs_and_the_ledger_when_every_destination_is_absent() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
         let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
         seed_app_side(&from);
         let before = file_count(tmp.path());
 
-        let out = adopt_dirs(&from, &to);
+        let out = adopt_dirs(&reg, &from, &to);
 
         assert_eq!(out.moved, 2, "vault dir, sidecar dir");
         assert_eq!(out.app_moved, 2, "both of them app-side");
@@ -1027,6 +1051,7 @@ mod tests {
     #[test]
     fn adopt_dirs_moves_nothing_on_the_app_side_when_one_destination_exists() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let from = rename_fixture(tmp.path(), "Papierkorb", "a_Papierkorb");
         let to = rename_fixture(tmp.path(), "Trash", "a_Trash");
         seed_app_side(&from);
@@ -1034,7 +1059,7 @@ mod tests {
         fs::create_dir_all(&to.cur).unwrap();
         let before = file_count(tmp.path());
 
-        let out = adopt_dirs(&from, &to);
+        let out = adopt_dirs(&reg, &from, &to);
 
         assert_eq!(out.moved, 0, "a partial move would pair one ledger with another numbering's files");
         assert_eq!(out.app_moved, 0, "so the caller leaves the custody rows where they are");
@@ -1055,6 +1080,7 @@ mod tests {
     #[test]
     fn adopt_dirs_moves_the_mirror_on_its_own_rule() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let from = rename_fixture(tmp.path(), "Papierkorb", "a_Papierkorb");
         let to = rename_fixture(tmp.path(), "Trash", "a_Trash");
         seed_app_side(&from);
@@ -1064,7 +1090,7 @@ mod tests {
         fs::write(from_mirror.join("1:2,S.eml"), b"mirror").unwrap();
         let before = file_count(tmp.path());
 
-        let out = adopt_dirs(&from, &to);
+        let out = adopt_dirs(&reg, &from, &to);
 
         assert_eq!(out.moved, 1, "the mirror moved");
         assert_eq!(out.app_moved, 0, "the mirror is not the app side: the custody rows stay put");
@@ -1078,7 +1104,7 @@ mod tests {
         fs::create_dir_all(&from_mirror).unwrap();
         fs::write(from_mirror.join("2:2,S.eml"), b"second").unwrap();
         let before2 = file_count(tmp.path());
-        let out2 = adopt_dirs(&from, &to);
+        let out2 = adopt_dirs(&reg, &from, &to);
         assert_eq!(out2.moved, 0);
         assert_eq!(out2.blocked, 2, "app side and mirror both blocked");
         assert!(
@@ -1093,13 +1119,64 @@ mod tests {
     #[test]
     fn adopt_dirs_without_a_mirror_configured_only_touches_the_app_side() {
         let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
         let mut from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
         let mut to = rename_fixture(tmp.path(), "Sent", "a_Sent");
         from.mirror_cur = None;
         to.mirror_cur = None;
         seed_app_side(&from);
-        let out = adopt_dirs(&from, &to);
+        let out = adopt_dirs(&reg, &from, &to);
         assert_eq!((out.moved, out.blocked), (2, 0));
         assert!(out.failed.is_empty());
+    }
+
+    #[test]
+    fn rename_dirs_makes_both_mailboxes_list_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let (_app, reg) = registry_at(base);
+        let from = rename_fixture(base, "Projects", "a_Projects");
+        let to = rename_fixture(base, "Work", "a_Work");
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::write(from.cur.join("7:2,AS.eml"), b"body").unwrap();
+        let saved = |mailbox: &str| reg.uid_sets(base, "a", mailbox).unwrap().0;
+        assert_eq!(saved("Projects"), vec![7]);
+        assert_eq!(saved("Work"), Vec::<u32>::new());
+
+        assert_eq!(rename_dirs(&reg, &from, &to).0, 1);
+        assert_eq!(saved("Projects"), Vec::<u32>::new());
+        assert_eq!(saved("Work"), vec![7]);
+        assert_eq!(reg.listing_count(), 4, "each side relisted once");
+
+        // A repeat finds no source: nothing moved, nothing invalidated.
+        assert_eq!(rename_dirs(&reg, &from, &to), (0, vec![]));
+        assert_eq!(saved("Work"), vec![7]);
+        assert_eq!(reg.listing_count(), 4);
+    }
+
+    #[test]
+    fn adopt_dirs_makes_both_mailboxes_list_again_and_a_mirror_only_move_does_not() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry_at(tmp.path());
+        let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
+        let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
+        seed_app_side(&from);
+        let saved = |mailbox: &str| reg.uid_sets(tmp.path(), "a", mailbox).unwrap().0;
+        assert_eq!(saved("Gesendet"), vec![1]);
+        assert_eq!(saved("Sent"), Vec::<u32>::new());
+
+        assert_eq!(adopt_dirs(&reg, &from, &to).app_moved, 2);
+        assert_eq!(saved("Gesendet"), Vec::<u32>::new());
+        assert_eq!(saved("Sent"), vec![1]);
+        assert_eq!(reg.listing_count(), 4, "each side relisted once");
+
+        // The mirror is not the vault: moving it alone invalidates nothing.
+        let from_mirror = from.mirror_cur.clone().unwrap();
+        fs::create_dir_all(&from_mirror).unwrap();
+        fs::write(from_mirror.join("2:2,S.eml"), b"mirror").unwrap();
+        let out = adopt_dirs(&reg, &from, &to);
+        assert_eq!((out.moved, out.app_moved), (1, 0));
+        assert_eq!(saved("Sent"), vec![1]);
+        assert_eq!(reg.listing_count(), 4);
     }
 }
