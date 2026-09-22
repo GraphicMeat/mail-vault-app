@@ -32,6 +32,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 pub struct CustodyState {
@@ -230,6 +231,10 @@ fn emit(state: &DaemonState) {
     state.events.emit("custody-status", status_json(state));
 }
 
+/// `with_conn` logs a lock wait or hold at or past these.
+const SLOW_LOCK_WAIT: Duration = Duration::from_millis(100);
+const SLOW_LOCK_HOLD: Duration = Duration::from_millis(250);
+
 /// Run `f` on the open store. `Err` with the open failure while it is closed:
 /// a caller never mistakes a store it could not read for "no entries".
 ///
@@ -242,10 +247,19 @@ fn emit(state: &DaemonState) {
 /// own. This is the one chokepoint every custody write already goes
 /// through (`handlers::archive`, `handlers::custody`, `handlers::vault_flags`
 /// all call `with_conn`), so the counter needs no changes anywhere else.
+///
+/// Every custody.db reader and writer (header cache, sync, archive) shares
+/// this one lock, so a slow wait or a long hold is logged with the calling
+/// site (`#[track_caller]`: no signature change at the call sites). Under
+/// the thresholds the cost is three clock reads.
+#[track_caller]
 pub fn with_conn<T>(state: &DaemonState, f: impl FnOnce(&Connection) -> Result<T, String>) -> Result<T, String> {
     let st = &state.custody;
+    let caller = std::panic::Location::caller();
+    let asked = Instant::now();
     let guard = lock(&st.db);
-    match guard.as_ref() {
+    let acquired = Instant::now();
+    let result = match guard.as_ref() {
         Some(conn) => {
             let before = conn.total_changes();
             let result = f(conn);
@@ -255,7 +269,13 @@ pub fn with_conn<T>(state: &DaemonState, f: impl FnOnce(&Connection) -> Result<T
             result
         }
         None => Err(format!("custody store unavailable: {}", g(&st.error).clone().unwrap_or_else(|| "closed".into()))),
+    };
+    drop(guard);
+    let (wait, hold) = (acquired - asked, acquired.elapsed());
+    if wait >= SLOW_LOCK_WAIT || hold >= SLOW_LOCK_HOLD {
+        warn!("[custody] lock slow at {caller}: waited {} ms, held {} ms", wait.as_millis(), hold.as_millis());
     }
+    result
 }
 
 /// The live write counter (Task 3.6 Step 4). `insights.rs` reads this fresh
