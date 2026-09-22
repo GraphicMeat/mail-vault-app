@@ -463,26 +463,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // Read-only-by-permission-bits is a Unix failure mode; Windows enforces
+    // this through ACLs instead, so a mode-bit toggle here would assert
+    // nothing about it. No Windows equivalent is faked.
     #[test]
+    #[cfg(unix)]
     fn an_unretirable_file_does_not_stop_the_import_committing() {
         // A read-only app dir: the rows land, the rename cannot.
         let dir = scratch("unretirable");
         write(&dir, "pending_backup_purge.json", &json!({"a":[1]}).to_string());
         let conn = db::open(&dir).unwrap();
         let mut perms = std::fs::metadata(&dir).unwrap().permissions();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            perms.set_mode(0o500);
-            std::fs::set_permissions(&dir, perms.clone()).unwrap();
-        }
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o500);
+        std::fs::set_permissions(&dir, perms.clone()).unwrap();
         run(&conn, &dir);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            perms.set_mode(0o700);
-            std::fs::set_permissions(&dir, perms).unwrap();
-        }
+        perms.set_mode(0o700);
+        std::fs::set_permissions(&dir, perms).unwrap();
         assert_eq!(ops::purge_read(&conn).get("a"), Some(&vec![1u32]), "the rows committed");
         let _ = std::fs::remove_dir_all(&dir);
     }

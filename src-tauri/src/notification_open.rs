@@ -10,6 +10,11 @@
 //! the app when clicked, and that response lands before the webview exists.
 //!
 //! Other platforms keep the plugin path, so their banners still open nothing.
+//! On Windows that means tauri-plugin-notification's WinRT toast: it shows —
+//! title, body, sound all work — but a click on it reaches nobody, because the
+//! plugin drops the result exactly as it does everywhere it isn't macOS.
+//! Click-to-open is a macOS-only capability here; nothing is wired up on
+//! Windows to receive it.
 
 use std::sync::Mutex;
 

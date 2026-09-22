@@ -2,7 +2,8 @@
 //!
 //! On macOS sandboxed builds, user-selected folders must be persisted as
 //! security-scoped bookmarks so the app can re-access them after restart.
-//! On Linux, plain paths are sufficient.
+//! On Linux and Windows, plain paths are sufficient — neither has a
+//! sandbox-scoped-bookmark equivalent, and none is needed.
 //!
 //! Both halves live in `app.db`'s `external_locations` table (they were
 //! `<slot>-bookmark` and `<slot>-meta.json`, the vault slot's metadata file
@@ -434,11 +435,19 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> 
         let dp = if display_path.is_empty() { path.clone() } else { display_path };
         let snap = is_snap_confined();
         let packaging = if snap { "snap" } else { "deb" };
+        // Snap confinement and the deb/snap distinction only exist on Linux;
+        // elsewhere (Windows) the bare OS name is the accurate label rather
+        // than a borrowed Linux packaging term.
+        let platform = if cfg!(target_os = "linux") {
+            format!("linux-{}", packaging)
+        } else {
+            std::env::consts::OS.to_string()
+        };
 
         if !std::path::Path::new(&path).exists() {
             let loc = ExternalLocation {
                 display_path: dp,
-                platform: format!("linux-{}", packaging),
+                platform: platform.clone(),
                 status: "unavailable".to_string(),
                 last_validated_at: Some(now_millis()),
                 last_error: Some("Directory does not exist or is disconnected".to_string()),
@@ -465,7 +474,7 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> 
 
         let loc = ExternalLocation {
             display_path: dp,
-            platform: format!("linux-{}", packaging),
+            platform,
             status: "ready".to_string(),
             last_validated_at: Some(now_millis()),
             last_error: None,

@@ -115,6 +115,10 @@ struct Stamp {
     len: u64,
     modified: Option<SystemTime>,
     directory: bool,
+    /// Unix only. On Windows a stamp is len + mtime alone, which cannot tell a
+    /// replaced file from an edited one within the mtime's resolution — the
+    /// strong identity needs an open handle per file and the scan does not
+    /// open them.
     #[cfg(unix)]
     identity: (u64, u64, i64, i64),
 }

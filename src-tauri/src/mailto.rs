@@ -290,8 +290,15 @@ mod platform {
     ///
     /// Windows has never allowed an app to claim a default: `UserChoice` is
     /// hash-protected, so the only honest move is to send the user to Settings.
-    // ponytail: reads no registry. When a Windows build actually exists, query
-    // `HKCU\...\mailto\UserChoice\ProgId` here so the row can say "yes".
+    // Reading `HKCU\...\mailto\UserChoice\ProgId` to report the current
+    // default needs a registry crate: windows-sys/windows-registry are only
+    // transitive here (via tauri/keyring), not usable without adding one as a
+    // direct dependency. Shelling out to `reg query` instead (no new crate,
+    // and `make_default` below already shells out for `ms-settings:`) was
+    // considered and rejected — parsing `reg query`'s console-formatted
+    // output for one string is not worth owning, and it is the same class of
+    // fragile text-scrape a registry crate exists to avoid. Deliberately not
+    // added for this task.
     pub fn status() -> MailtoStatus {
         MailtoStatus { is_default: false, can_set: false, hint: "windows_settings" }
     }
