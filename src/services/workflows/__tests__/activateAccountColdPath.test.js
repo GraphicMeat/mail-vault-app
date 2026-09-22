@@ -125,7 +125,7 @@ const { useMailStore } = await import('../../../stores/mailStore');
 // mocked, but explicitly cleared per test below so a header set memoized by
 // one test's activation can't be recalled (and reconciled against an io that
 // this file doesn't mock) by the next.
-const { forget: forgetMemo } = await import('../../headerMemo');
+const { forget: forgetMemo, remember: rememberMemo, peek: peekMemo } = await import('../../headerMemo');
 
 const ACCOUNT = { id: 'acct-1', email: 'me@mock.test', password: 'pw' };
 const mkHeader = (uid) => ({ uid, subject: `Msg ${uid}`, date: '2026-08-01T00:00:00Z', flags: [] });
@@ -699,3 +699,25 @@ describe('activateAccount keeps the known archived ids when the read fails on ac
   });
 });
 
+// The memo holds whole mailboxes (~3.4 KB a row in the webview), so it keeps
+// only what the store does not: once the store adopts a recalled set, the entry
+// goes. And on a switch back, the folder being left is memoized BEFORE the one
+// being opened is recalled — a cap of 1 would evict the set the switch is about
+// to read and fall back to a 500-row partial read.
+describe('activateAccount header memo', () => {
+  const META = { uidValidity: 1, uidNext: 3, highestModseq: 5, totalEmails: 2, totalCached: 2 };
+
+  it('recalls the folder switched back to, then drops it once the store holds it', async () => {
+    primeActiveForBackgroundRefresh();
+    useMailStore.setState({ activeMailbox: 'Archive', emails: [mkHeader(9)], totalEmails: 1 });
+    mockGetEmailHeadersMeta.mockResolvedValue(META);
+    rememberMemo(ACCOUNT.id, 'INBOX', [mkHeader(2), mkHeader(1)], META);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 500);
+    expect(peekMemo(ACCOUNT.id, 'INBOX')).toBeNull();
+    // The folder just left is what a switch back will want.
+    expect(peekMemo(ACCOUNT.id, 'Archive')?.map(e => e.uid)).toEqual([9]);
+  });
+});

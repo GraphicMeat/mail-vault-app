@@ -1,18 +1,22 @@
 /**
- * In-memory memo of COMPLETE header sets, so switching back to an account
- * doesn't re-read its cache off disk.
+ * In-memory memo of the header set of the mailbox you just left, so switching
+ * straight back paints the whole list at once.
  *
- * The sidecar cache stores one JSON file per message. Rehydrating a 15,000
- * message mailbox therefore means a readdir plus 15,000 `read_to_string` calls
- * and 15,000 JSON parses — and that ran on every single account switch, which
- * is what made the list restart at "500 of 15,065" and climb every time. The
- * headers are already in memory when you switch away; this keeps them.
+ * The header cache is SQLite now, so a miss is one query, not a file per
+ * message. What a miss still costs is the list: it repaints from a 500-row
+ * partial read and drains the rest behind it, which is the "500 of 15,065" that
+ * climbs on every switch. The headers are already in memory when you switch
+ * away; this keeps them.
  *
- * Bounded to a few mailboxes: ~15k headers is a few MB, so an unbounded map
- * would grow with every folder visited.
+ * Expensive to hold: a header row costs ~3.4 KB in the webview, so a 15k
+ * mailbox is ~50 MB per entry. The caller drops an entry once the store adopts
+ * it (the store then holds the same rows), so at rest the memo holds only the
+ * mailbox you left last. The cap is 2, not 1: on a switch back, the outgoing
+ * mailbox is memoized BEFORE the incoming one is recalled, and a cap of 1
+ * would evict the very entry the switch back is about to read.
  */
 
-const MAX_MAILBOXES = 3;
+const MAX_MAILBOXES = 2;
 
 /**
  * The snapshot is taken from the store, so a sidecar written in the moments

@@ -12,7 +12,7 @@ import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven } from './loadEmails';
-import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
+import { recall as memoRecall, remember as memoRemember, peek as memoPeek, forget as memoForget } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -701,6 +701,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             ? { serverUids: serverUids(cachedHeaders.serverUids, { complete: false }) }
             : {}),
         });
+        // The store holds this set now, and the next refresh replaces its rows
+        // with copies — a memo entry kept past here is a second, staler copy of
+        // the mailbox on screen. The next switch away memoizes it afresh.
+        // Same guards as commitToStore, which returns silently on either.
+        if (memoized && !signal.aborted && useMailStoreRef.getState().activeAccountId === accountId) {
+          memoForget(accountId, effectiveMailbox);
+        }
         localTrace.mark('first-paint', { emailCount: cachedHeaders.emails.length });
 
         // Persist a restore descriptor for this mailbox NOW — previously this

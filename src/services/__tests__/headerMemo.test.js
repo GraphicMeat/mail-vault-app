@@ -72,18 +72,32 @@ describe('headerMemo', () => {
     expect(await recall(id, 'INBOX', META)).toEqual(EMAILS);
   });
 
-  it('evicts least-recently-used past the cap, keeping the touched one', async () => {
-    const ids = [nextId(), nextId(), nextId(), nextId()];
-    for (const id of ids.slice(0, 3)) remember(id, 'INBOX', EMAILS, META);
-    expect(_size()).toBe(3);
+  // Each entry is a whole mailbox of rows (~3.4 KB each in the webview). Two,
+  // not one: a switch back memoizes the folder being left before it recalls
+  // the one being opened.
+  it('holds at most two mailboxes, evicting least-recently-used, keeping the touched one', async () => {
+    const ids = [nextId(), nextId(), nextId()];
+    for (const id of ids.slice(0, 2)) remember(id, 'INBOX', EMAILS, META);
+    expect(_size()).toBe(2);
 
     // Touch the oldest so it is no longer the eviction candidate.
     expect(await recall(ids[0], 'INBOX', META)).toEqual(EMAILS);
 
-    remember(ids[3], 'INBOX', EMAILS, META);
-    expect(_size()).toBe(3);
+    remember(ids[2], 'INBOX', EMAILS, META);
+    expect(_size()).toBe(2);
     expect(await recall(ids[0], 'INBOX', META)).toEqual(EMAILS); // survived
     expect(await recall(ids[1], 'INBOX', META)).toBeNull();      // evicted
+  });
+
+  // What activateAccount does once the store adopts a recalled set: the store
+  // holds those rows now, so the memo must not keep a second copy.
+  it('forgets one mailbox and leaves the account\'s others', async () => {
+    const id = nextId();
+    remember(id, 'INBOX', EMAILS, META);
+    remember(id, 'Sent', EMAILS, META);
+    forget(id, 'INBOX');
+    expect(peek(id, 'INBOX')).toBeNull();
+    expect(peek(id, 'Sent')).toBe(EMAILS);
   });
 
   // The stamp CANNOT see a local flag change: save_email_cache preserves
