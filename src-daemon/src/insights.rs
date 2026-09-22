@@ -604,9 +604,12 @@ fn mailbox_tree(value: &Value, account: &str, result: &mut BTreeMap<String, Loca
 }
 fn file_uid(path: &Path) -> Option<u32> {
     let name = path.file_name()?.to_str()?;
-    // `mailvault_core::maildir::is_info_sep`: `:` on unix, `;` on Windows
-    // (a colon is illegal in a Win32 filename). A plain `split(':')` returns
-    // the whole filename on Windows and every uid parse fails silently.
+    // `mailvault_core::maildir::is_info_sep` accepts BOTH `:` and `;` on every
+    // platform (the writer's separator is the platform-conditional one — `;`
+    // on Windows, since a colon is illegal in a Win32 filename — but every
+    // reader must take either spelling, since a vault written on one OS is
+    // routinely read on another). A plain `split(':')` returns the whole
+    // filename for a `;`-named file and every uid parse fails silently.
     let head = name.split(mailvault_core::maildir::is_info_sep).next()?;
     head.strip_suffix(".eml").unwrap_or(head).parse().ok()
 }
