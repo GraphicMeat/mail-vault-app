@@ -30,6 +30,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, zonedTimeToEpoch } from '../utils/scheduledTime';
+import { AiComposeActions } from './ai/AiComposeActions';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -1540,7 +1541,32 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               />
             </div>
           </div>
-          
+
+          {/* AI Compose actions (Phase 6). Draft reply/action items/summarize
+              need thread text, which only exists when replying/forwarding —
+              a fresh compose only gets shorten/tone. */}
+          <div className="px-5 py-1.5 border-b border-mail-border">
+            <AiComposeActions
+              actions={actionReplyTo ? ['draftReply', 'shorten', 'tone', 'actionItems', 'summarize'] : ['shorten', 'tone']}
+              getThreadText={() => htmlToText(contextHtml || quotedHtml || '')}
+              getDraftText={() => htmlToText(formData.body)}
+              onResult={(_actionId, text) => {
+                // Through the editor's own chain, not the `content` prop —
+                // RichTextEditor's external-sync effect applies that with
+                // `addToHistory: false` (it exists for spellcheck/minimize
+                // restores), which would make Ctrl+Z unable to bring back
+                // whatever this action just replaced. Falls back to the prop
+                // path only if the editor has not mounted yet, where there
+                // is nothing to undo either way.
+                const editor = editorRef.current;
+                const html = textToHtml(text);
+                if (editor?.chain) editor.chain().focus().setContent(html).run();
+                else setFormData(prev => ({ ...prev, body: html }));
+                setError(null);
+              }}
+            />
+          </div>
+
           {/* Attachments */}
           {attachments.length > 0 && (
             <div data-testid="compose-attachments" className="px-5 py-3 border-b border-mail-border shrink-0 max-h-32 overflow-y-auto">

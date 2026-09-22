@@ -24,6 +24,7 @@ import {
   Languages,
   Search,
   HardDriveDownload,
+  Bot,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -43,6 +44,7 @@ import { TimeCapsuleSettings } from './settings/TimeCapsuleSettings';
 import { CleanupView } from './settings/CleanupSettings';
 import { LanguageSettings } from './settings/LanguageSettings';
 import { TrackerBlockingView } from './settings/TrackerBlockingView';
+import { AiProvidersSettings } from './settings/AiProvidersSettings';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
 
@@ -59,6 +61,7 @@ const settingsTabs = [
   { id: 'mail-preferences', labelKey: 'settings.navigation.mailPreferences', descriptionKey: 'settings.navigation.mailPreferencesSummary', icon: Settings },
   { id: 'accounts', labelKey: 'settings.tab.accounts', icon: User },
   { id: 'templates', labelKey: 'settings.tab.templates', icon: FileText },
+  { id: 'ai-providers', labelKey: 'settings.tab.aiProviders', icon: Bot },
   { id: 'storage', labelKey: 'settings.tab.storage', icon: HardDrive },
   { id: 'data-usage', labelKey: 'settings.tab.dataUsage', icon: Gauge },
   { id: 'security', labelKey: 'settings.tab.security', icon: Shield },
@@ -78,7 +81,7 @@ const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 
 const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
 const sections = [
-  { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'language'] },
+  { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'ai-providers', 'language'] },
   { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'security', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
   { labelKey: 'settings.navigation.supportSystem', ids: ['billing', 'migration', 'daemon', 'logs', 'help'] },
 ].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]) }));
@@ -429,6 +432,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
 
             {activeTab === 'templates' && (
               <TemplateSettings />
+            )}
+
+            {activeTab === 'ai-providers' && (
+              <AiProvidersSettings />
             )}
 
             {activeTab === 'storage' && (

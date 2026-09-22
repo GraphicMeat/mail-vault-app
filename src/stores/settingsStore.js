@@ -113,6 +113,18 @@ const normalizeExplorerPaths = value => Object.fromEntries(
     .slice(-100).map(([key, path]) => [key, [...path]])
 );
 
+// AI features are OFF by default (Phase 3c) — nothing about this provider
+// layer runs, downloads a model, or reaches a network until the user turns
+// it on. `endpointConsented` gates automatic (un-previewed) use of a
+// non-local provider, e.g. Quick Replies' Tier 2 — see quickReplies.js.
+export const DEFAULT_AI_SETTINGS = {
+  enabled: false,
+  provider: 'localGguf', // 'localGguf' | 'endpoint' | 'appleFm'
+  endpointUrl: '',
+  endpointModel: '',
+  endpointConsented: false,
+};
+
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
@@ -175,6 +187,10 @@ function normalizeCleanupRule(rule) {
  * persisted blob doesn't have them yet, so nothing the user already
  * configured (accounts, folders, sound) is touched.
  *
+ * v6 → v7: the AI provider layer (Phase 3b/3c) added `aiSettings` and
+ * `dismissedQuickReplyThreads`. Backfilled with AI OFF by default — no
+ * existing install silently starts sending anything anywhere.
+ *
  * Exported for tests: the disarm is the safety mechanism of the fix, so it
  * needs a test that can call it directly.
  */
@@ -197,6 +213,13 @@ export function migrateSettings(persisted, version) {
         importantSenders: [],
         ...next.notificationSettings,
       },
+    };
+  }
+  if (version < 7) {
+    next = {
+      ...next,
+      aiSettings: { ...DEFAULT_AI_SETTINGS, ...next.aiSettings },
+      dismissedQuickReplyThreads: next.dismissedQuickReplyThreads || {},
     };
   }
   return next;
@@ -321,6 +344,12 @@ export const useSettingsStore = create(
       explorerDateDepth: 'month',
       explorerPaths: {},
       insightsPreferences: normalizeInsightsPreferences(),
+      // AI provider layer (Phase 3b/3c) — see DEFAULT_AI_SETTINGS above.
+      aiSettings: { ...DEFAULT_AI_SETTINGS },
+      // Quick Replies (Phase 5): threads whose chips the user dismissed,
+      // keyed by quickReplyThreadKey() (never a uid — see that function's
+      // comment). Capped the same way explorerPaths is above.
+      dismissedQuickReplyThreads: {},
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
@@ -906,6 +935,25 @@ export const useSettingsStore = create(
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setInsightsPreferences: value => set({ insightsPreferences: normalizeInsightsPreferences(value) }),
+      // Changing the endpoint URL points `endpointConsented` at a NEW
+      // destination, so it resets unless the caller explicitly sets it in
+      // the same patch (AiContextPreview's confirm does exactly that).
+      setAiSettings: (patch) => set(state => {
+        const next = { ...state.aiSettings, ...patch };
+        if (patch.endpointUrl !== undefined && patch.endpointUrl !== state.aiSettings.endpointUrl
+          && patch.endpointConsented === undefined) {
+          next.endpointConsented = false;
+        }
+        return { aiSettings: next };
+      }),
+      dismissQuickReplyThread: (key) => set(state => {
+        if (!key) return {};
+        // ponytail: last-200 cap, same idea as normalizeExplorerPaths above —
+        // a session with more open threads than that re-shows chips on the
+        // oldest ones instead of growing the map forever.
+        const entries = Object.entries({ ...state.dismissedQuickReplyThreads, [key]: true }).slice(-200);
+        return { dismissedQuickReplyThreads: Object.fromEntries(entries) };
+      }),
       setEmailListView: value => set({ emailListView: normalizeEmailListView(value) }),
       setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
       setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
@@ -1205,7 +1253,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

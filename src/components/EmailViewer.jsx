@@ -55,6 +55,10 @@ import { FieldStrip } from './FieldStrip';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { describePurge } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
+import { QuickReplyChips } from './email/QuickReplyChips';
+import { AiComposeActions } from './ai/AiComposeActions';
+import { htmlToText } from './RichTextEditor';
+import { openCompose } from '../utils/composeOpener';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -110,6 +114,10 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   const rawRequest = useRef(0);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  // AI Compose actions (Phase 6): the viewer only ever hosts "Summarize
+  // thread" — draft reply/shorten/tone/action items act on a draft, which
+  // only Compose has. Read-only result: it never sends or saves anything.
+  const [aiSummary, setAiSummary] = useState(null);
   // Per-email theme override. null = follow app theme; 'light'|'dark' = forced.
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const moveButtonRef = useRef(null);
@@ -183,6 +191,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     setLoadingRaw(false);
     setShowInsights(false);
     setEmailThemeOverride(null);
+    setAiSummary(null);
     return () => { ++rawRequest.current; };
   }, [selectedEmail?.uid, selectedEmail?._accountId, selectedEmail?._mailbox, selectedEmail?.messageId]);
 
@@ -812,6 +821,41 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             </div>
           )}
         </div>
+
+        {/* Quick Replies (Phase 5) — chips under the newest message. Suppressed
+            on your own sent mail: replying to yourself is not a quick reply. */}
+        {!showRaw && <QuickReplyChips email={selectedEmail} suppressed={isSentEmail} />}
+
+        {/* AI Compose actions (Phase 6) — the viewer only gets Summarize
+            thread; draft reply/shorten/tone/action items need an open draft,
+            which only Compose has. */}
+        {!showRaw && (
+          <div className="px-3 pb-3">
+            <AiComposeActions
+              actions={['summarize']}
+              getThreadText={() => selectedEmail.text || (selectedEmail.html ? htmlToText(selectedEmail.html) : '') || selectedEmail.snippet || ''}
+              onResult={(_actionId, text) => setAiSummary(text)}
+            />
+            {aiSummary && (
+              <div data-testid="ai-summary-panel" className="mt-2 rounded-lg border border-mail-border bg-mail-surface p-3 text-sm text-mail-text space-y-2">
+                <p className="whitespace-pre-wrap">{aiSummary}</p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setAiSummary(null)}
+                    className="px-2 py-1 text-xs rounded-md text-mail-text-muted hover:text-mail-text">
+                    {t('common.close')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { openCompose({ mode: 'reply', replyTo: { ...selectedEmail }, templateBody: aiSummary }); setAiSummary(null); }}
+                    className="px-2 py-1 text-xs rounded-md border border-mail-border text-mail-text hover:bg-mail-surface-hover"
+                  >
+                    {t('ai.actions.useInReply')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Attachments */}
         {(() => {

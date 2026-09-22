@@ -161,7 +161,15 @@ describe('persist migration v3 → v4', () => {
 
   it('leaves an already-migrated map alone', () => {
     const persisted = { linkAlerts: { 'acct-1-INBOX-41': 'red' } };
-    expect(migrate(persisted, 4)).toBe(persisted);
+    // v7 (AI provider layer) also backfills below version 7 regardless of
+    // this fixture's other fields — every pre-v7 install lacks aiSettings
+    // outright, so it is not conditional the way v5/v6's sibling-field
+    // guards are. linkAlerts itself is still untouched by that step.
+    expect(migrate(persisted, 4)).toEqual({
+      linkAlerts: { 'acct-1-INBOX-41': 'red' },
+      aiSettings: { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false },
+      dismissedQuickReplyThreads: {},
+    });
   });
 });
 
