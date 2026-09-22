@@ -222,6 +222,14 @@ mod imp {
             let svc: Option<Retained<AnyObject>> = msg_send![cls, agentServiceWithPlistName: &*name];
             svc.ok_or_else(|| format!("no agent service for {plist_name}"))?
         };
+        // "If an app updates either the plist or the executable for a
+        // LaunchAgent [...] the SMAppService must be re-registered or it may
+        // not launch. It is recommended to also call unregister before
+        // re-registering" — SMAppService.h. A probe is rebuilt constantly, so
+        // it would otherwise keep launching the binary from the last run.
+        let mut drop_err: *mut AnyObject = std::ptr::null_mut();
+        let _: bool = unsafe { msg_send![&*svc, unregisterAndReturnError: &mut drop_err] };
+
         let mut err: *mut AnyObject = std::ptr::null_mut();
         let ok: bool = unsafe { msg_send![&*svc, registerAndReturnError: &mut err] };
         if ok {
