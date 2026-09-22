@@ -1,10 +1,21 @@
 /** Native compose handoff: use real Tauri window handles, never browser tabs. */
 import { waitForApp, waitForEmails } from './helpers.js';
-import { openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen } from './composeHelpers.js';
+import { openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen, settingsCall } from './composeHelpers.js';
 
 describe('Connected Compose Detach', function () {
   this.timeout(120_000);
   let mainHandle;
+  const setNativeSize = (width, height) => browser.executeAsync(async (w, h, done) => {
+    try {
+      const current = window.__TAURI__?.window?.getCurrentWindow?.();
+      const LogicalSize = window.__TAURI__?.dpi?.LogicalSize;
+      if (!current || !LogicalSize) throw new Error('Tauri window sizing API is unavailable');
+      await current.setSize(new LogicalSize(w, h));
+      done({ width: window.innerWidth, height: window.innerHeight });
+    } catch (error) {
+      done({ error: error?.message || String(error) });
+    }
+  }, width, height);
 
   before(async () => {
     await waitForApp();
@@ -20,6 +31,36 @@ describe('Connected Compose Detach', function () {
       await browser.closeWindow();
     }
     await browser.switchToWindow(mainHandle);
+    await settingsCall('setSendDelay', 0);
+  });
+
+  it('keeps the embedded size stable and lets the keyboard resize corner change both axes', async () => {
+    await openComposeFresh();
+    await browser.waitUntil(() => browser.execute(() => {
+      const style = document.querySelector('[data-testid="compose-modal"]')?.style;
+      return Boolean(style?.width && style?.height);
+    }), { timeout: 10_000, timeoutMsg: 'Embedded compose never recorded its initial size' });
+    const before = await browser.execute(() => {
+      const style = document.querySelector('[data-testid="compose-modal"]')?.style;
+      return { width: Number.parseInt(style.width, 10), height: Number.parseInt(style.height, 10) };
+    });
+    await browser.pause(300);
+    const stable = await browser.execute(() => {
+      const style = document.querySelector('[data-testid="compose-modal"]')?.style;
+      return { width: Number.parseInt(style.width, 10), height: Number.parseInt(style.height, 10) };
+    });
+    expect(stable).toEqual(before);
+
+    await browser.execute(() => {
+      const resize = document.querySelector('[data-testid="compose-window-resize"]');
+      resize?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      resize?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true }));
+    });
+    await browser.waitUntil(() => browser.execute((size) => {
+      const style = document.querySelector('[data-testid="compose-modal"]')?.style;
+      return Number.parseInt(style.width, 10) === size.width + 24
+        && Number.parseInt(style.height, 10) === size.height + 24;
+    }, before), { timeout: 10_000, timeoutMsg: 'Keyboard resize corner did not update both compose dimensions' });
   });
 
   it('detaches typed state into a resizable native window and preserves it after close', async () => {
@@ -42,7 +83,8 @@ describe('Connected Compose Detach', function () {
     expect(await fieldValue('compose-to')).toBe('detach@example.test');
     await setField('compose-subject', 'Typed in detached window');
 
-    await browser.setWindowSize(1050, 760);
+    const wideSize = await setNativeSize(1050, 760);
+    if (wideSize.error) throw new Error(wideSize.error);
     expect(await testidPresent('compose-modal')).toBe(true);
     await browser.closeWindow();
     await browser.switchToWindow(mainHandle);
@@ -88,7 +130,8 @@ describe('Connected Compose Detach', function () {
       timeoutMsg: 'Detached reply did not restore its reading context',
     });
 
-    await browser.setWindowSize(1050, 760);
+    const contextWideSize = await setNativeSize(1050, 760);
+    if (contextWideSize.error) throw new Error(contextWideSize.error);
     await browser.waitUntil(() => browser.execute(() => window.innerWidth >= 1000), {
       timeout: 10_000,
       timeoutMsg: 'Detached compose did not reach the requested wide size',
@@ -110,7 +153,8 @@ describe('Connected Compose Detach', function () {
     expect(wide.contextLeft).toBeGreaterThanOrEqual(wide.mainRight - 1);
     expect(wide.contentDisplay).toBe('flex');
 
-    await browser.setWindowSize(520, 760);
+    const narrowSize = await setNativeSize(520, 760);
+    if (narrowSize.error) throw new Error(narrowSize.error);
     await browser.waitUntil(() => browser.execute(() => window.innerWidth <= 540), {
       timeout: 10_000,
       timeoutMsg: 'Detached compose did not reach the requested narrow size',
@@ -130,5 +174,34 @@ describe('Connected Compose Detach', function () {
     await browser.waitUntil(() => browser.execute(() =>
       document.querySelector('[data-testid="compose-context-toggle"]')?.getAttribute('aria-pressed') === 'false'
     ), { timeout: 10_000, timeoutMsg: 'Context toggle did not respond in the narrow native window' });
+  });
+
+  it('queues a detached delayed send in main and restores the latest draft with Undo', async () => {
+    await settingsCall('setSendDelay', 60);
+    await openComposeFresh();
+    await setField('compose-to', 'undo-detach@example.test');
+    await setField('compose-subject', 'Detached delayed send');
+    await browser.$('[data-testid="compose-detach"]').click();
+    await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 2, {
+      timeout: 15_000, timeoutMsg: 'Compose did not detach before delayed send',
+    });
+    const detached = (await browser.getWindowHandles()).find(handle => handle !== mainHandle);
+    await browser.switchToWindow(detached);
+    await browser.waitUntil(() => testidPresent('compose-send'), {
+      timeout: 15_000, timeoutMsg: 'Detached compose did not activate before delayed send',
+    });
+    await browser.$('[data-testid="compose-send"]').click();
+    await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 1, {
+      timeout: 15_000, timeoutMsg: 'Detached compose stayed open after main accepted delayed send',
+    });
+    await browser.switchToWindow(mainHandle);
+    await browser.waitUntil(() => browser.execute(() => {
+      const pending = window.__MAIL_STORE__?.getState?.().pendingSend;
+      return pending?.composeState?.initialData?.subject === 'Detached delayed send';
+    }), { timeout: 15_000, timeoutMsg: 'Main did not retain the detached send in its undo queue' });
+    await browser.$('[data-testid="undo-send-btn"]').click();
+    await browser.waitUntil(modalOpen, { timeout: 15_000, timeoutMsg: 'Undo did not restore the detached draft' });
+    expect(await fieldValue('compose-subject')).toBe('Detached delayed send');
+    expect(await fieldValue('compose-to')).toBe('undo-detach@example.test');
   });
 });

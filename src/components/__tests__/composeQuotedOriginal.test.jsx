@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
 const { buildOutgoingMime, saveLocalDraft } = vi.hoisted(() => ({
   buildOutgoingMime: vi.fn().mockResolvedValue({
@@ -301,8 +301,14 @@ describe('the quoted original in a reply', () => {
     expect(resize.tabIndex).toBe(0);
     const windowResize = screen.getByTestId('compose-window-resize');
     expect(windowResize.getAttribute('role')).toBe('separator');
-    fireEvent.keyDown(windowResize, { key: 'ArrowRight' });
+    // Two key events can arrive in one browser turn. Functional state updates
+    // must compose them instead of applying the second event to stale size.
+    act(() => {
+      windowResize.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      windowResize.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true, bubbles: true, cancelable: true }));
+    });
     expect(screen.getByTestId('compose-modal').style.width).toBe('664px');
+    expect(screen.getByTestId('compose-modal').style.height).toBe('496px');
   });
 
   it('moves forward Tab from Subject into the editor but leaves Shift-Tab native', async () => {

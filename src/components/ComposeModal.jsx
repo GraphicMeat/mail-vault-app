@@ -951,13 +951,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const heightDelta = shiftKey && key === 'ArrowUp' ? -24 : shiftKey && key === 'ArrowDown' ? 24 : 0;
     if (!widthDelta && !heightDelta) return;
     event.preventDefault();
-    const current = composeSize || {
-      width: shellRef.current?.clientWidth || 640,
-      height: shellRef.current?.clientHeight || 520,
-    };
-    setComposeSize({
-      width: Math.max(320, Math.min(window.innerWidth - 32, current.width + widthDelta)),
-      height: Math.max(320, Math.min(window.innerHeight - 32, current.height + heightDelta)),
+    setComposeSize(previous => {
+      const current = previous || {
+        width: shellRef.current?.clientWidth || 640,
+        height: shellRef.current?.clientHeight || 520,
+      };
+      return {
+        width: Math.max(320, Math.min(window.innerWidth - 32, current.width + widthDelta)),
+        height: Math.max(320, Math.min(window.innerHeight - 32, current.height + heightDelta)),
+      };
     });
   };
 

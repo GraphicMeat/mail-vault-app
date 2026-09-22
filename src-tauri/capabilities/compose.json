@@ -3,5 +3,5 @@
   "identifier": "compose-window",
   "description": "Minimal capability for trusted compose editor windows",
   "windows": ["compose-*"] ,
-  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-destroy", "dialog:allow-open", "fs:allow-read-text-file", "drag:default"]
+  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-destroy", "core:window:allow-set-size", "dialog:allow-open", "fs:allow-read-text-file", "drag:default"]
 }
