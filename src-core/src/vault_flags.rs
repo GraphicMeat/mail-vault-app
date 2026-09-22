@@ -26,6 +26,7 @@ use crate::graph_ledger;
 use crate::maildir::mirror_file_map;
 use crate::vault_eml::parse_flags_from_filename;
 use crate::vault_files::{build_maildir_filename, cur_path};
+use crate::vault_registry::VaultRegistry;
 use crate::header_cache;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -103,6 +104,9 @@ pub struct Dirs {
     /// while this module is moving a sidecar directory. Private — a caller
     /// only ever gets a `Dirs` back from `dirs_for`.
     root: PathBuf,
+    /// Whose `cur` this is, for the vault registry's rows.
+    account_id: String,
+    mailbox: String,
 }
 
 pub fn dirs_for(
@@ -122,6 +126,8 @@ pub fn dirs_for(
         mirror_cur,
         sidecar_dir: header_cache::sidecar_dir(root, account_id, mailbox),
         root: root.to_path_buf(),
+        account_id: account_id.to_string(),
+        mailbox: mailbox.to_string(),
     }
 }
 
@@ -141,16 +147,19 @@ static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// The test seam for the locked file half: `apply_files` under `WRITER`, which
 /// is what `apply_everywhere` does before it also patches custody.
 #[cfg(test)]
-pub fn apply_in(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
+pub fn apply_in(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
     let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    apply_files(dirs, changes)
+    apply_files(reg, dirs, changes)
 }
 
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
 /// does not hold — there is nothing to rename or patch, and the counts say so.
 /// No lock of its own: the caller holds `WRITER`.
 ///
-fn apply_files(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
+/// Every app-side rename renames the registry row too, never an invalidate:
+/// every star and read toggle comes through here, and an invalidate would
+/// relist the folder on the next read.
+fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
     let mut out = Applied::default();
     if changes.is_empty() {
         return out;
@@ -168,7 +177,10 @@ fn apply_files(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
 
         if let Some(path) = app_files.get(&change.uid) {
             match rename_for(path, change.uid, imap) {
-                Ok(Some(_)) => out.renamed += 1,
+                Ok(Some(new_name)) => {
+                    reg.rename(&dirs.account_id, &dirs.mailbox, change.uid, &new_name);
+                    out.renamed += 1;
+                }
                 Ok(None) => {}
                 Err(e) => warn!("vault_flags: rename uid {} failed: {}", change.uid, e),
             }
@@ -206,6 +218,7 @@ fn apply_files(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
 /// one uid at the same moment: patching custody after the lock was released
 /// let the name say read while the entry said unread.
 pub fn apply_everywhere(
+    reg: &VaultRegistry,
     dirs: &Dirs,
     changes: &[FlagChange],
     patch_custody: impl FnOnce(&[(u32, Vec<String>)]) -> Result<(usize, usize), String>,
@@ -214,7 +227,7 @@ pub fn apply_everywhere(
         return Applied::default();
     }
     let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    let mut applied = apply_files(dirs, changes);
+    let mut applied = apply_files(reg, dirs, changes);
     let patch: Vec<(u32, Vec<String>)> = changes.iter().map(|c| (c.uid, c.flags.clone())).collect();
     match patch_custody(&patch) {
         Ok((entries, headers)) => {
@@ -511,6 +524,7 @@ mod tests {
     struct Fixture {
         _tmp: tempfile::TempDir,
         dirs: Dirs,
+        reg: VaultRegistry,
     }
 
     fn fixture() -> Fixture {
@@ -519,7 +533,8 @@ mod tests {
         let cur = base.join("Maildir").join("acct").join("INBOX").join("cur");
         let mirror = base.join("mirror").join("me@mock.test").join("INBOX").join("cur");
         let sidecar_dir = base.join("email_cache").join("acct_INBOX");
-        for d in [&cur, &mirror, &sidecar_dir] {
+        let app = base.join("app");
+        for d in [&cur, &mirror, &sidecar_dir, &app] {
             fs::create_dir_all(d).unwrap();
         }
         Fixture {
@@ -528,7 +543,10 @@ mod tests {
                 mirror_cur: Some(mirror),
                 sidecar_dir,
                 root: base.to_path_buf(),
+                account_id: "acct".into(),
+                mailbox: "INBOX".into(),
             },
+            reg: VaultRegistry::open(&app, base),
             _tmp: tmp,
         }
     }
@@ -560,8 +578,8 @@ mod tests {
         fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
 
         let (first, second) = std::thread::scope(|scope| {
-            let a = scope.spawn(|| apply_in(d, &[change(1, &["\\Seen"])]));
-            let b = scope.spawn(|| apply_in(d, &[change(2, &["\\Seen"])]));
+            let a = scope.spawn(|| apply_in(&f.reg, d, &[change(1, &["\\Seen"])]));
+            let b = scope.spawn(|| apply_in(&f.reg, d, &[change(2, &["\\Seen"])]));
             (a.join().unwrap(), b.join().unwrap())
         });
 
@@ -577,7 +595,7 @@ mod tests {
         fs::write(d.cur.join("7:2,A"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,A.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
+        let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
         // The cached header is the caller's closure now (custody.db), so
         // `apply_files` itself only ever touches the two file copies.
@@ -597,7 +615,7 @@ mod tests {
         fs::write(d.cur.join("9:2,.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("9.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(9, &["\\Seen", "archived"])]);
+        let applied = apply_in(&f.reg, d, &[change(9, &["\\Seen", "archived"])]);
 
         assert_eq!(applied.renamed, 1);
         assert_eq!(applied.mirrored, 1);
@@ -612,7 +630,7 @@ mod tests {
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,AS.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &[])]);
+        let applied = apply_in(&f.reg, d, &[change(7, &[])]);
 
         assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The .eml suffix the file had is kept.
@@ -626,7 +644,7 @@ mod tests {
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
+        let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied, Applied::default());
         assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
@@ -637,7 +655,7 @@ mod tests {
         let f = fixture();
         let d = &f.dirs;
 
-        let applied = apply_in(d, &[change(9, &["\\Seen"]), change(10, &["\\Seen"])]);
+        let applied = apply_in(&f.reg, d, &[change(9, &["\\Seen"]), change(10, &["\\Seen"])]);
 
         assert_eq!(applied, Applied::default());
     }
@@ -649,7 +667,7 @@ mod tests {
         let mirror = d.mirror_cur.as_ref().unwrap();
         fs::write(mirror.join("7.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
+        let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied.mirrored, 1);
         assert_eq!(names(mirror), vec!["7:2,S.eml"]);
@@ -664,7 +682,7 @@ mod tests {
         fs::write(d.cur.join("3:2,AS.eml"), b"c").unwrap();
 
         // The server: 1 was read elsewhere, 2 is as stored, 3 was marked unread.
-        let applied = apply_in(d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])]);
+        let applied = apply_in(&f.reg, d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])]);
 
         assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
         assert_eq!(names(&d.cur), vec!["1:2,AS.eml", "2:2,AS.eml", "3:2,A.eml"]);
@@ -697,7 +715,7 @@ mod tests {
         let state = &state;
         std::thread::scope(|scope| {
             scope.spawn(|| {
-                apply_everywhere(d, &[change(1, &["\\Seen"])], |_patch| {
+                apply_everywhere(&f.reg, d, &[change(1, &["\\Seen"])], |_patch| {
                     state.store(1, std::sync::atomic::Ordering::SeqCst);
                     std::thread::sleep(std::time::Duration::from_millis(SLOW_MS));
                     state.store(2, std::sync::atomic::Ordering::SeqCst);
@@ -714,7 +732,7 @@ mod tests {
             }
 
             scope.spawn(|| {
-                apply_everywhere(d, &[change(2, &["\\Seen"])], |_patch| {
+                apply_everywhere(&f.reg, d, &[change(2, &["\\Seen"])], |_patch| {
                     assert_eq!(
                         state.load(std::sync::atomic::Ordering::SeqCst),
                         2,
@@ -726,6 +744,28 @@ mod tests {
         });
     }
 
+    /// Every star or read toggle comes through here: the registry row follows
+    /// the rename in place, with no relisting and no reparse.
+    #[test]
+    fn apply_everywhere_renames_the_registry_rows_without_a_relisting_or_a_reparse() {
+        let f = fixture();
+        let d = &f.dirs;
+        let root = f._tmp.path();
+        fs::write(d.cur.join("7:2,A.eml"), b"From: a@x.test\r\nSubject: seven\r\n\r\nbody\r\n").unwrap();
+        let rows = f.reg.light_rows(root, "acct", "INBOX", None).unwrap();
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived"]));
+        assert_eq!((f.reg.listing_count(), f.reg.parse_count()), (1, 1));
+
+        let applied = apply_everywhere(&f.reg, d, &[change(7, &["\\Seen", "\\Flagged"])], |_patch| Ok((0, 0)));
+        assert_eq!(applied.renamed, 1);
+
+        assert_eq!(f.reg.resolve(root, "acct", "INBOX", 7), Some(Some(d.cur.join("7:2,AFS.eml"))));
+        let rows = f.reg.light_rows(root, "acct", "INBOX", Some(&[7])).unwrap();
+        assert_eq!(rows[0]["subject"], "seven", "the light row survives the rename");
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "flagged", "seen", "\\Seen", "\\Flagged"]));
+        assert_eq!((f.reg.listing_count(), f.reg.parse_count()), (1, 1), "no relisting, no reparse");
+    }
+
     /// A `Dirs` pair for one mailbox rename, laid out the way `dirs_for` builds
     /// it: a sanitized Maildir/sidecar name, a raw path for the mirror.
     fn rename_fixture(base: &Path, mailbox: &str, sidecar: &str) -> Dirs {
@@ -734,6 +774,8 @@ mod tests {
             mirror_cur: Some(base.join("mirror").join("me@x").join(mailbox).join("cur")),
             sidecar_dir: base.join("email_cache").join(sidecar),
             root: base.to_path_buf(),
+            account_id: "a".into(),
+            mailbox: mailbox.into(),
         }
     }
 

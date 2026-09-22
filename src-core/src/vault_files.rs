@@ -16,6 +16,7 @@ use tracing::{info, warn};
 
 use crate::fsx::{mark_from_internet, write_atomic};
 use crate::maildir::{self, find_by_uid, vault_filename_uid};
+use crate::vault_registry::VaultRegistry;
 use crate::vault_eml::{
     collect_attachment_parts, is_real_attachment, parse_eml_bytes, parse_eml_bytes_light,
     parse_flags_from_filename, part_filename, read_light_at, walk_mime_parts_light, LightEmail,
@@ -70,12 +71,17 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     format!("{}{}{}.eml", uid, crate::maildir::INFO_PREFIX, flag_str)
 }
 
-/// Delete every vault file in `cur_dir` whose uid is in `uids`. One directory
-/// pass — the per-uid `find_by_uid` rescans the whole directory each call,
-/// which is quadratic over a bulk selection.
-pub fn delete_maildir_files(cur_dir: &Path, uids: &HashSet<u32>) -> usize {
+/// Delete every vault file of the mailbox whose uid is in `uids`. One
+/// directory pass — the per-uid `find_by_uid` rescans the whole directory
+/// each call, which is quadratic over a bulk selection. The registry drops
+/// the uids whose files went; a failed removal leaves the disk uncertain, so
+/// the mailbox is invalidated instead.
+pub fn delete_maildir_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> usize {
+    let cur_dir = cur_path(root, account_id, mailbox);
     let mut removed = 0usize;
-    if let Ok(entries) = fs::read_dir(cur_dir) {
+    let mut gone: Vec<u32> = Vec::new();
+    let mut failed = false;
+    if let Ok(entries) = fs::read_dir(&cur_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             let Some(uid) = vault_filename_uid(&name) else { continue };
@@ -83,10 +89,22 @@ pub fn delete_maildir_files(cur_dir: &Path, uids: &HashSet<u32>) -> usize {
                 continue;
             }
             match fs::remove_file(entry.path()) {
-                Ok(()) => removed += 1,
-                Err(e) => warn!("maildir purge: failed to remove {:?}: {}", entry.path(), e),
+                Ok(()) => {
+                    removed += 1;
+                    gone.push(uid);
+                }
+                Err(e) => {
+                    failed = true;
+                    warn!("maildir purge: failed to remove {:?}: {}", entry.path(), e);
+                }
             }
         }
+    }
+    gone.sort_unstable();
+    gone.dedup();
+    reg.remove(account_id, mailbox, &gone);
+    if failed {
+        reg.invalidate(account_id, mailbox);
     }
     removed
 }
@@ -113,7 +131,18 @@ pub fn decode_raw_source(raw_source_base64: &str) -> Result<Vec<u8>, String> {
 /// returned, so a crash-left duplicate from an earlier interrupted store does
 /// not survive the next one (M4). A failed or killed write leaves every
 /// existing copy intact (oddity 1; was remove-then-plain-write).
+///
+/// On a mailbox the registry has verified, the registry answers "does uid
+/// already exist" and there is no directory sweep: a verified miss is
+/// authoritative, and the one stale file is the row's own name. An
+/// unverified mailbox keeps the sweep.
+///
+/// Every writer here updates `reg` right after its fs op. The caller holds
+/// the mailbox's `VaultRegistry::serialized` lock around the call (the
+/// daemon's `with_mailbox_write`), so two writers of one mailbox never
+/// interleave a file op with the other's registry update.
 pub fn store(
+    reg: &VaultRegistry,
     root: &Path,
     account_id: &str,
     mailbox: &str,
@@ -123,6 +152,10 @@ pub fn store(
     overwrite: bool,
 ) -> Result<bool, String> {
     let dir = cur_path(root, account_id, mailbox);
+    let known = reg.known(account_id, mailbox, uid);
+    if !overwrite && matches!(known, Some(Some(_))) {
+        return Ok(false);
+    }
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
 
     let filename = build_maildir_filename(uid, flags);
@@ -130,23 +163,32 @@ pub fn store(
 
     // One pass over the directory both answers "does uid already exist" and
     // collects every stale file the write below must clean up.
-    let stale: Vec<PathBuf> = fs::read_dir(&dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()) == Some(uid))
-        .map(|e| e.path())
-        .collect();
+    let stale: Vec<PathBuf> = match known {
+        Some(row) => row.into_iter().map(|name| dir.join(name)).collect(),
+        None => fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()) == Some(uid))
+            .map(|e| e.path())
+            .collect(),
+    };
 
     if !overwrite && !stale.is_empty() {
         return Ok(false);
     }
 
     write_atomic(&new_path, raw).map_err(|e| format!("Failed to write .eml file: {}", e))?;
+    reg.upsert(account_id, mailbox, uid, &new_path);
 
     for old in stale {
         if old != new_path {
-            let _ = fs::remove_file(&old);
+            match fs::remove_file(&old) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                // A second file for the uid is still there: let the next read relist.
+                Err(_) => reg.invalidate(account_id, mailbox),
+            }
         }
     }
 
@@ -289,10 +331,11 @@ pub fn list(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&
 
 /// Removes the vault file for `uid`, if there is one. Returns whether a file
 /// was removed (the caller nudges the index only then).
-pub fn delete(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
+pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
     if let Some(path) = find_by_uid(&cur_dir, uid) {
         fs::remove_file(&path).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
+        reg.remove(account_id, mailbox, &[uid]);
         info!("Deleted email UID {} from {:?}", uid, path);
         return Ok(true);
     }
@@ -301,7 +344,7 @@ pub fn delete(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<
 
 /// Rename the vault file for `uid` onto the filename `flags` builds. Returns
 /// whether a rename happened (the old and new names can already agree).
-pub fn set_flags(root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> Result<bool, String> {
+pub fn set_flags(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
     let old_path = match find_by_uid(&cur_dir, uid) {
         Some(p) => p,
@@ -313,6 +356,7 @@ pub fn set_flags(root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: 
 
     if old_path != new_path {
         fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
+        reg.rename(account_id, mailbox, uid, &new_filename);
         info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
         return Ok(true);
     }
@@ -923,6 +967,13 @@ pub fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf
 mod tests {
     use super::*;
 
+    /// A registry of its own per test, in a tempdir beside the vault.
+    fn registry(root: &Path) -> (tempfile::TempDir, VaultRegistry) {
+        let app = tempfile::tempdir().unwrap();
+        let reg = VaultRegistry::open(app.path(), root);
+        (app, reg)
+    }
+
     #[test]
     fn a_vault_file_name_round_trips_through_the_builder() {
         assert_eq!(
@@ -966,7 +1017,9 @@ mod tests {
     #[test]
     fn deletes_only_requested_uids() {
         let tmp = tempfile::tempdir().unwrap();
-        let cur = tmp.path();
+        let (_app, reg) = registry(tmp.path());
+        let cur = &cur_path(tmp.path(), "acct", "INBOX");
+        fs::create_dir_all(cur).unwrap();
         fs::write(cur.join("101:2,S"), b"x").unwrap();
         fs::write(cur.join("102:2,"), b"x").unwrap();
         fs::write(cur.join("103:2,S"), b"x").unwrap();
@@ -977,7 +1030,7 @@ mod tests {
         uids.insert(101u32);
         uids.insert(103u32);
 
-        let removed = delete_maildir_files(cur, &uids);
+        let removed = delete_maildir_files(&reg, tmp.path(), "acct", "INBOX", &uids);
 
         assert_eq!(removed, 2);
         assert!(!cur.join("101:2,S").exists());
@@ -990,12 +1043,13 @@ mod tests {
     fn store_writes_atomically_then_removes_the_old_differently_named_file() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        assert!(store(root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
         let cur = cur_path(root, "acct", "INBOX");
         assert!(cur.join("7:2,S.eml").exists());
 
         // Overwrite with new flags: exactly one file survives.
-        assert!(store(root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true).unwrap());
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true).unwrap());
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names, vec!["7:2,FS.eml"]);
@@ -1003,7 +1057,7 @@ mod tests {
 
         // Storing the same flags again (same target filename) still leaves
         // exactly one file, holding the latest content.
-        assert!(store(root, "acct", "INBOX", 7, b"three", &["flagged".to_string(), "seen".to_string()], true).unwrap());
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"three", &["flagged".to_string(), "seen".to_string()], true).unwrap());
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names, vec!["7:2,FS.eml"]);
@@ -1014,13 +1068,14 @@ mod tests {
     fn store_removes_every_stale_file_for_the_uid_not_just_the_first() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         // Two files left behind for uid 7 by an earlier interrupted store.
         fs::write(cur.join("7:2,S.eml"), b"old-a").unwrap();
         fs::write(cur.join("7:2,AS.eml"), b"old-b").unwrap();
 
-        assert!(store(root, "acct", "INBOX", 7, b"new", &["flagged".to_string()], true).unwrap());
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"new", &["flagged".to_string()], true).unwrap());
 
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
@@ -1035,7 +1090,8 @@ mod tests {
 
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        assert!(store(root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
         let cur = cur_path(root, "acct", "INBOX");
 
         let writable = fs::metadata(&cur).unwrap().permissions();
@@ -1043,7 +1099,7 @@ mod tests {
         readonly.set_mode(0o555);
         fs::set_permissions(&cur, readonly).unwrap();
 
-        let result = store(root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true);
+        let result = store(&reg, root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true);
 
         // Restore before any assertion can short-circuit, so tempdir cleanup
         // (which needs to delete files inside `cur`) never fails.
@@ -1072,7 +1128,8 @@ mod tests {
 
         let mut uids = HashSet::new();
         uids.insert(7u32);
-        let removed = delete_maildir_files(&cur, &uids);
+        let (_app, reg) = registry(root);
+        let removed = delete_maildir_files(&reg, root, "acct", "INBOX", &uids);
         assert_eq!(removed, 1);
         assert!(!cur.join("7:2,S.eml").exists());
         assert!(cur.join("07:2,S.eml").exists(), "leading zero must not be swept as uid 7");
@@ -1083,10 +1140,76 @@ mod tests {
     fn store_without_overwrite_skips_an_existing_uid() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        assert!(store(root, "acct", "INBOX", 7, b"one", &[], false).unwrap());
-        assert!(!store(root, "acct", "INBOX", 7, b"two", &[], false).unwrap(), "must skip, not overwrite");
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &[], false).unwrap());
+        assert!(!store(&reg, root, "acct", "INBOX", 7, b"two", &[], false).unwrap(), "must skip, not overwrite");
         let cur = cur_path(root, "acct", "INBOX");
         assert_eq!(fs::read(find_by_uid(&cur, 7).unwrap()).unwrap(), b"one");
+    }
+
+    // -- the writers keep the vault registry current --
+
+    fn sets(reg: &VaultRegistry, root: &Path) -> (Vec<u32>, Vec<u32>) {
+        reg.uid_sets(root, "acct", "INBOX").unwrap()
+    }
+
+    #[test]
+    fn a_store_on_a_verified_mailbox_answers_from_the_registry_not_a_sweep() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 1, b"one", &[], false).unwrap());
+        assert_eq!(sets(&reg, root), (vec![1], vec![]));
+        assert_eq!(reg.listing_count(), 1);
+
+        // Planted behind the registry's back. A sweep would find it and skip;
+        // on a verified mailbox the miss is authoritative and the store writes.
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::write(cur.join("5:2,S.eml"), b"planted").unwrap();
+        assert!(store(&reg, root, "acct", "INBOX", 5, b"five", &[], false).unwrap(), "no directory sweep on a verified mailbox");
+        assert!(!store(&reg, root, "acct", "INBOX", 1, b"again", &[], false).unwrap(), "a live row skips with no fs access");
+        assert_eq!(fs::read(cur.join("1:2,.eml")).unwrap(), b"one");
+
+        // Overwrite under new flags: the row's old name goes, the row follows.
+        assert!(store(&reg, root, "acct", "INBOX", 1, b"two", &["archived".to_string()], true).unwrap());
+        assert!(!cur.join("1:2,.eml").exists());
+        assert_eq!(fs::read(cur.join("1:2,A.eml")).unwrap(), b"two");
+
+        assert_eq!(sets(&reg, root), (vec![1, 5], vec![1]));
+        assert_eq!(reg.listing_count(), 1, "every answer came from the registry");
+    }
+
+    #[test]
+    fn set_flags_and_delete_keep_a_verified_mailbox_current() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"seven", &[], true).unwrap());
+        assert_eq!(sets(&reg, root), (vec![7], vec![]));
+
+        assert!(set_flags(&reg, root, "acct", "INBOX", 7, &["archived".to_string(), "seen".to_string()]).unwrap());
+        assert_eq!(sets(&reg, root), (vec![7], vec![7]));
+        assert_eq!(reg.resolve(root, "acct", "INBOX", 7), Some(Some(cur_path(root, "acct", "INBOX").join("7:2,AS.eml"))));
+
+        assert!(delete(&reg, root, "acct", "INBOX", 7).unwrap());
+        assert_eq!(sets(&reg, root), (vec![], vec![]));
+        assert_eq!(reg.listing_count(), 1);
+    }
+
+    #[test]
+    fn delete_maildir_files_drops_only_the_removed_uids_from_a_verified_mailbox() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        for uid in [1, 2, 3] {
+            assert!(store(&reg, root, "acct", "INBOX", uid, b"x", &[], true).unwrap());
+        }
+        assert_eq!(sets(&reg, root).0, vec![1, 2, 3]);
+
+        let uids: HashSet<u32> = [1, 3, 99].into_iter().collect();
+        assert_eq!(delete_maildir_files(&reg, root, "acct", "INBOX", &uids), 2);
+        assert_eq!(sets(&reg, root).0, vec![2]);
+        assert_eq!(reg.listing_count(), 1);
     }
 
     // -- read_light_batch (moved from src-tauri/src/light_batch_tests.rs) --

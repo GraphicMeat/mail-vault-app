@@ -419,6 +419,11 @@ async fn daemon_main() {
     let events = events::EventBus::new(events::CAPACITY);
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
+    // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls
+    // back to `data_dir`, and opening the registry under that root would wipe
+    // the real vault's rows for a session that cannot read them anyway.
+    let vault_registry = server::open_vault_registry(&data_dir, Path::new(&vault_location.display_path), &search_index_state);
+
     let custody = custody::CustodyState::default();
     sync_eng.attach_custody_db(Arc::clone(&custody.db));
     contacts.attach_db(Arc::clone(&custody.db));
@@ -446,6 +451,7 @@ async fn daemon_main() {
         shutdown: Arc::new(tokio::sync::Notify::new()),
         events,
         search_index: Arc::clone(&search_index_state),
+        vault_registry,
         search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),

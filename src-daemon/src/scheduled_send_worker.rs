@@ -218,8 +218,8 @@ pub(crate) async fn attempt_row(state: &Arc<DaemonState>, row: &scheduled::Sched
 
     let (status, error) = match send_one(state, row).await {
         Outcome::Sent => {
-            if let Err(e) = crate::handlers::common::with_vault_write(state, |root| {
-                vault_files::delete(root, &row.account_id, &row.mailbox, row.uid)
+            if let Err(e) = crate::handlers::common::with_mailbox_write(state, &row.account_id, &row.mailbox, |root| {
+                vault_files::delete(&state.vault_registry, root, &row.account_id, &row.mailbox, row.uid)
             }) {
                 warn!("[scheduled-send] sent {id} but could not remove the frozen draft: {e}");
             }

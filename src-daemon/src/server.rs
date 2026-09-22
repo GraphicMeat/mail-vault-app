@@ -111,6 +111,11 @@ pub struct DaemonState {
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
+    /// What the vault holds, answered from `<app_dir>/vault_registry.db`
+    /// (architecture.md "Reads come from the database"). Every vault writer
+    /// updates or invalidates it before replying; built by
+    /// `open_vault_registry`, which also feeds its changes to the index.
+    pub vault_registry: Arc<mailvault_core::vault_registry::VaultRegistry>,
     /// Named local/server search runs. The handler removes entries by pointer
     /// identity so an older completion cannot unregister a newer run.
     pub(crate) search_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>>,
@@ -181,6 +186,33 @@ pub struct DaemonState {
     /// `idle_watch`), shared with `idle` via `IdleWatchers::set_auto_tag_notify`
     /// so an IDLE wake-up sweeps auto-tag rules too.
     pub auto_tag_worker: crate::auto_tag_worker::AutoTagWorkerState,
+}
+
+/// Opens the vault registry for the vault at `root` and points its change
+/// hook at the search index: a mailbox change nudges that folder, a global
+/// one sweeps. The one wiring both `daemon_main` and `for_test` use.
+///
+/// Synchronous and local (a SQLite file in `app_dir`, never on the vault's
+/// drive), so it runs before the socket is bound without awaiting anything.
+/// A root change respawns the daemon, and a registry opened for another root
+/// drops its rows.
+pub fn open_vault_registry(
+    app_dir: &Path,
+    root: &Path,
+    search_index: &Arc<crate::search_index::SearchIndexState>,
+) -> Arc<mailvault_core::vault_registry::VaultRegistry> {
+    use mailvault_core::vault_registry::{Scope, VaultRegistry};
+    let started = std::time::Instant::now();
+    let registry = Arc::new(VaultRegistry::open(app_dir, root));
+    let index = Arc::clone(search_index);
+    registry.set_on_change(Box::new(move |scope| match scope {
+        // `nudge` maps its mailbox through `vault_dir_name`, which is
+        // idempotent, so the directory name goes in as is.
+        Scope::Mailbox { account, vault_dir } => crate::search_index::nudge(&index, &account, &vault_dir),
+        Scope::All => crate::search_index::sweep_soon(&index),
+    }));
+    info!("vault registry: opened in {:?}", started.elapsed());
+    registry
 }
 
 /// Start the daemon socket server.
@@ -646,6 +678,11 @@ impl DaemonState {
         }
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
         contacts.attach_db(Arc::clone(&custody.db));
+        let search_index = crate::search_index::SearchIndexState::new(mail_dir.clone(), app_dir_for_index.clone(), mail_dir_ok, events.clone());
+        // A registry file of its own per state: many tests pass the vault dir
+        // (or one shared dir) as `app_dir`, and one file under two roots wipes.
+        let registry_dir = tempfile::tempdir().expect("registry tempdir").keep();
+        let vault_registry = open_vault_registry(&registry_dir, &mail_dir, &search_index);
         Arc::new(DaemonState {
             net,
             idle,
@@ -668,7 +705,8 @@ impl DaemonState {
             sync_engine,
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
-            search_index: crate::search_index::SearchIndexState::new(mail_dir, app_dir_for_index.clone(), mail_dir_ok, events.clone()),
+            search_index,
+            vault_registry,
             search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             events,
             prefetch_lock: std::sync::Mutex::new(()),

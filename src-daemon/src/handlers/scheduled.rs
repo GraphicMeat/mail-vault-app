@@ -4,7 +4,7 @@
 //! (`.eml` first, row second — an orphan `.eml` is a stale draft, a row
 //! pointing at a uid that was never written is unrepairable), and wakes
 //! `scheduled_send_worker` on anything that changes what it should do next.
-use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, with_vault_write};
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::scheduled_send_worker;
 use crate::server::DaemonState;
@@ -153,12 +153,12 @@ fn create(
     // The .eml first, the row second (Global constraint, restated in the
     // plan): an orphan .eml is just a stale draft, a row over a uid that was
     // never written is a permanent failure the user cannot repair.
-    let uid = with_vault_write(state, |root| {
+    // The write nudges the index through the registry's change hook.
+    let uid = with_mailbox_write(state, account_id, MAILBOX, |root| {
         let uid = allocate_uid(root, account_id);
-        vault_files::store(root, account_id, MAILBOX, uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)?;
+        vault_files::store(&state.vault_registry, root, account_id, MAILBOX, uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)?;
         Ok(uid)
     })?;
-    crate::search_index::nudge(&state.search_index, account_id, MAILBOX);
 
     let row_id = uuid::Uuid::new_v4().to_string();
     let envelope = envelope_json(account, email, sent_mailbox);
@@ -185,11 +185,10 @@ fn update(
 
     if let Some((account, email, sent_mailbox)) = rebuild {
         let built = smtp::build_draft_mime(&account, &email)?;
-        with_vault_write(state, |root| {
-            vault_files::store(root, &existing.account_id, &existing.mailbox, existing.uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)
+        with_mailbox_write(state, &existing.account_id, &existing.mailbox, |root| {
+            vault_files::store(&state.vault_registry, root, &existing.account_id, &existing.mailbox, existing.uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)
                 .map(|_| ())
         })?;
-        crate::search_index::nudge(&state.search_index, &existing.account_id, &existing.mailbox);
         let envelope = envelope_json(&account, &email, sent_mailbox.as_deref());
         app_db::with(&state.app_dir, |c| {
             c.execute("UPDATE scheduled_sends SET envelope = ?2 WHERE id = ?1", rusqlite::params![row_id, envelope])
@@ -215,7 +214,9 @@ fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, String> {
     let Some(row) = app_db::with(&state.app_dir, |c| scheduled::get(c, row_id))? else {
         return Ok(Value::Null);
     };
-    let _ = with_vault_write(state, |root| Ok(vault_files::delete(root, &row.account_id, &row.mailbox, row.uid).unwrap_or(false)));
+    let _ = with_mailbox_write(state, &row.account_id, &row.mailbox, |root| {
+        Ok(vault_files::delete(&state.vault_registry, root, &row.account_id, &row.mailbox, row.uid).unwrap_or(false))
+    });
     app_db::with(&state.app_dir, |c| scheduled::cancel(c, row_id))?;
     Ok(Value::Null)
 }

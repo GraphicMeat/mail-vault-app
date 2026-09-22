@@ -27,7 +27,7 @@
 //! omitted, so — like Task 2.8's `maildir_clear_cache` — it re-checks the
 //! gate once per mailbox directory rather than once for the whole call.
 use crate::custody as daemon_custody;
-use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, with_vault_write};
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::custody::{cache, entries};
@@ -119,13 +119,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let uid_set: HashSet<u32> = uids.into_iter().collect();
-                    let removed = with_vault_write(&state, |root| {
-                        let cur = vault_files::cur_path(root, &account_id, &mailbox);
-                        Ok(vault_files::delete_maildir_files(&cur, &uid_set))
+                    // The registry drops the removed uids, and its change hook
+                    // nudges the index when anything went.
+                    let removed = with_mailbox_write(&state, &account_id, &mailbox, |root| {
+                        Ok(vault_files::delete_maildir_files(&state.vault_registry, root, &account_id, &mailbox, &uid_set))
                     })?;
-                    if removed > 0 {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                    }
                     // Every requested uid is pruned from custody, not only the
                     // ones a file existed for (inventory-maildir row 13).
                     let all_uids: Vec<u32> = uid_set.into_iter().collect();
@@ -146,7 +144,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let report = with_vault_write(&state, |root| -> Result<maildir::GenerationRepair, String> {
+                    // Under the registry's per-mailbox lock, so a verify never
+                    // lists the folder mid-repair.
+                    let report = with_mailbox_write(&state, &account_id, &mailbox, |root| -> Result<maildir::GenerationRepair, String> {
                         let (cached_uv, cached_total) =
                             daemon_custody::with_conn(&state, |c| cache::sync_meta(c, &account_id, &mailbox))
                                 .unwrap_or((None, None));
@@ -179,6 +179,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             }
                         };
                         let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
+                        // Files were renamed or set aside wholesale: the next
+                        // read relists the folder. The change hook nudges the index.
+                        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
+                            state.vault_registry.invalidate(&account_id, &mailbox);
+                        }
                         if !report.rebound.is_empty() || !report.orphaned.is_empty() {
                             if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remap(c, &account_id, &mailbox, &report.rebound, &report.orphaned)) {
                                 warn!("maildir_repair_generation: custody remap failed: {}", e);
@@ -186,9 +191,6 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         }
                         Ok(report)
                     })?;
-                    if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                    }
                     serde_json::to_value(report).map_err(|e| e.to_string())
                 })
                 .await
@@ -211,6 +213,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let base = crate::handlers::common::vault_root(&state)?.join("Maildir");
                     let mut removed = 0u64;
                     for mailbox_dir in vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
+                        // Only `orphaned/` is touched, never `cur/`: nothing the
+                        // vault registry holds changes, so it is not told.
                         match with_vault_write(&state, |_| maildir::purge_orphans(&mailbox_dir)) {
                             Ok(n) => removed += n,
                             Err(e) if e.starts_with("E_VAULT_UNAVAILABLE:") => return Err(e),
@@ -329,6 +333,31 @@ mod tests {
         let r = call(&s, "maildir_delete_many", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [1]})).await;
         let err = r.error.unwrap();
         assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
+    }
+
+    /// A repair that re-keys files changes the folder wholesale: it must
+    /// invalidate the registry, so the next answer is a fresh listing that
+    /// shows the rebound uid, never the pre-repair row.
+    #[tokio::test]
+    async fn a_repair_that_rebinds_invalidates_the_vault_registry() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+        maildir::write_generation(cur.parent().unwrap(), 1).unwrap();
+        let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<m@x.test>"}]});
+        daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![1], vec![])));
+        assert_eq!(reg.listing_count(), 1);
+
+        let r = call(&s, "maildir_repair_generation", json!({"accountId": "acc", "mailbox": "INBOX"})).await;
+        assert_eq!(r.result.unwrap()["rebound"], json!([[1, 5]]));
+
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![5], vec![])));
+        assert_eq!(reg.listing_count(), 2, "the repair invalidated, so the folder was listed again");
     }
 
     /// Task 3.7: the Task 2.9b bridge route is gone with its only caller.

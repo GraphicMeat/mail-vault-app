@@ -29,7 +29,7 @@
 //! and `run_read` adds a dead-socket retry `with_background` never had.
 //! `imap_get_email`/`imap_get_email_light` already used `run_read` as Tauri
 //! commands (`commands.rs`), so they keep doing so here, unchanged.
-use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_vault_write};
+use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_mailbox_write};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -386,11 +386,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let aid2 = aid.clone();
                     let mb2 = mb.clone();
                     let cache_result = blocking(move || -> Result<bool, String> {
-                        with_vault_write(&state2, |root| vault_files::store(root, &aid2, &mb2, store_uid, &raw, &[], false))
+                        with_mailbox_write(&state2, &aid2, &mb2, |root| {
+                            vault_files::store(&state2.vault_registry, root, &aid2, &mb2, store_uid, &raw, &[], false)
+                        })
                     })
                     .await;
                     match cache_result {
-                        Ok(Ok(true)) => crate::search_index::nudge(&state.search_index, &aid, &mb),
+                        // A write nudges the index through the registry's change hook.
+                        Ok(Ok(true)) => {}
                         Ok(Ok(false)) => {} // already cached — no nudge, matching maildir_store_raw
                         Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", store_uid, err),
                         Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", store_uid, join_err),

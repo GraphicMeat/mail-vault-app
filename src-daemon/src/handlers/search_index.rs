@@ -74,6 +74,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     si::reopen(&st);
+                    // Same root (a root change respawns the daemon), but the
+                    // folder was out of the daemon's hands while closed: every
+                    // mailbox is listed again on its next read.
+                    reopen_state.vault_registry.invalidate_all();
                     // 2.9a review I1: a custody store that will not reopen is
                     // answered as a failed `vault_reopen`, so the app's own
                     // lifecycle error path stops the daemon and the channel
@@ -200,6 +204,21 @@ mod tests {
         assert!(s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
         call(&s, "vault_reopen", json!({})).await;
         assert!(!s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    /// While closed the folder was out of the daemon's hands (a copy, an
+    /// aborted move): a reopen relists every mailbox on its next read.
+    #[tokio::test]
+    async fn vault_reopen_makes_the_registry_list_every_mailbox_again() {
+        let (t, s) = st();
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(t.path(), "acc", "INBOX"), Some((vec![], vec![])));
+        assert_eq!(reg.uid_sets(t.path(), "acc", "INBOX"), Some((vec![], vec![])));
+        assert_eq!(reg.listing_count(), 1);
+        call(&s, "vault_close", json!({})).await;
+        call(&s, "vault_reopen", json!({})).await;
+        assert_eq!(reg.uid_sets(t.path(), "acc", "INBOX"), Some((vec![], vec![])));
+        assert_eq!(reg.listing_count(), 2);
     }
 
     // -------------------------------------------------------------------

@@ -16,7 +16,7 @@
 //! and nothing else (2.5/2.7 review constraint carried forward) — never a
 //! bare `state.data_dir`.
 use crate::custody as daemon_custody;
-use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, vec_arg, with_vault_write};
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, vec_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::custody::{cache, entries};
@@ -49,9 +49,9 @@ pub(crate) fn apply_flags(
     changes: &[FlagChange],
     sidecars: bool,
 ) -> Result<Applied, String> {
-    with_vault_write(state, |root| {
+    with_mailbox_write(state, account_id, mailbox, |root| {
         let dirs = vault_flags::dirs_for(root, account_id, mailbox, account_email, mirror_root);
-        Ok(vault_flags::apply_everywhere(&dirs, changes, |patch| {
+        Ok(vault_flags::apply_everywhere(&state.vault_registry, &dirs, changes, |patch| {
             match daemon_custody::with_conn(state, |c| {
                 let rows = entries::patch_flags_many(c, account_id, mailbox, patch)?;
                 // `sidecars`: the header cache is what the next repaint reads,
@@ -167,10 +167,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    // Each rename nudges the index through the registry's change hook.
                     let applied = apply_flags(&state, &account_id, &mailbox, account_email.as_deref(), mirror_root.as_deref(), &changes, sidecars)?;
-                    if applied.renamed > 0 {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                    }
                     if applied.total() > 0 {
                         info!(
                             "vault_flags: {}/{} — {} renamed, {} mirrored, {} index, {} sidecars",
@@ -379,7 +377,7 @@ mod tests {
                 // untouched yet — the probe is entirely inside the window
                 // `apply_everywhere` promises to hold WRITER for.
                 let dirs = vault_flags::dirs_for(&vault_path, "acc", "INBOX", None, None);
-                vault_flags::apply_everywhere(&dirs, &[change(1, &["\\Seen"])], |patch| {
+                vault_flags::apply_everywhere(&s.vault_registry, &dirs, &[change(1, &["\\Seen"])], |patch| {
                     state_flag.store(1, std::sync::atomic::Ordering::SeqCst);
                     std::thread::sleep(std::time::Duration::from_millis(SLOW_MS));
                     let r = daemon_custody::with_conn(s, |c| entries::patch_flags_many(c, "acc", "INBOX", patch))

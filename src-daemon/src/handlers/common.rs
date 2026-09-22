@@ -96,6 +96,22 @@ pub(crate) fn with_vault_write<T>(state: &Arc<DaemonState>, f: impl FnOnce(&std:
     f(&root)
 }
 
+/// `with_vault_write` for a writer of one mailbox's files, under the vault
+/// registry's per-mailbox lock, taken first (lock order: per-mailbox lock,
+/// vault gate, custody, registry connection). Two writers of one mailbox then
+/// never interleave a file op with the other's registry update: a delete that
+/// unlinks and then tombstones cannot land its tombstone over a re-store that
+/// ran in between. `f` must not call a verifying registry read (`uid_sets`,
+/// `light_rows`, `resolve`): that lock is not reentrant. `known` is fine.
+pub(crate) fn with_mailbox_write<T>(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    mailbox: &str,
+    f: impl FnOnce(&std::path::Path) -> Result<T, String>,
+) -> Result<T, String> {
+    state.vault_registry.serialized(account_id, mailbox, || with_vault_write(state, f))
+}
+
 /// A required string param. `Err` names the missing key, as `INVALID_PARAMS`.
 pub(crate) fn str_arg(id: &Value, params: &Value, key: &str) -> Result<String, RpcResponse> {
     params

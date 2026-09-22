@@ -5,7 +5,7 @@
 //! `common::with_vault_write` for the two writers into `attachment_cache`),
 //! and runs everything inside `handlers::common::blocking` — every method
 //! here touches disk.
-use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_vault_write};
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::{maildir, vault_files};
@@ -273,10 +273,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     // Always overwrites (a differently-named old file for the
                     // same uid is removed after the new one lands —
-                    // `vault_files::store`, oddity 1); nudges unconditionally
-                    // after a successful write, same as the deleted command.
-                    with_vault_write(&state, |root| vault_files::store(root, &account_id, &mailbox, uid, &raw, &flags, true))?;
-                    crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                    // `vault_files::store`, oddity 1). Every successful write
+                    // nudges the index: the registry's change hook does it.
+                    with_mailbox_write(&state, &account_id, &mailbox, |root| {
+                        vault_files::store(&state.vault_registry, root, &account_id, &mailbox, uid, &raw, &flags, true)
+                    })?;
                     Ok(Value::Null)
                 })
                 .await
@@ -291,10 +292,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let removed = with_vault_write(&state, |root| vault_files::delete(root, &account_id, &mailbox, uid))?;
-                    if removed {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                    }
+                    // A real removal nudges the index through the registry's
+                    // change hook; an absent uid touches neither.
+                    with_mailbox_write(&state, &account_id, &mailbox, |root| {
+                        vault_files::delete(&state.vault_registry, root, &account_id, &mailbox, uid)
+                    })?;
                     Ok(Value::Null)
                 })
                 .await
@@ -312,10 +314,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     // `vault_files::set_flags` answers `E_UID_NOT_IN_MAILDIR:`
                     // verbatim when the uid has no file — propagated as-is.
-                    let renamed = with_vault_write(&state, |root| vault_files::set_flags(root, &account_id, &mailbox, uid, &flags))?;
-                    if renamed {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                    }
+                    // A real rename nudges through the registry's change hook.
+                    with_mailbox_write(&state, &account_id, &mailbox, |root| {
+                        vault_files::set_flags(&state.vault_registry, root, &account_id, &mailbox, uid, &flags)
+                    })?;
                     Ok(Value::Null)
                 })
                 .await
@@ -750,6 +752,20 @@ mod tests {
             rx.try_recv().unwrap(),
             mailvault_core::search_index::plan::Signal::Nudge { account_id: "acc".into(), vault_dir: "INBOX".into() }
         );
+    }
+
+    /// Verified first, so the second answer can only come from the row the
+    /// store wrote: a relisting would be visible in `listing_count`.
+    #[tokio::test]
+    async fn maildir_store_updates_a_verified_registry_without_a_relisting() {
+        let (t, s) = st(true);
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(t.path(), "acc", "INBOX"), Some((vec![], vec![])));
+        assert_eq!(reg.listing_count(), 1);
+        let r = call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": b64(b"From: a@b.com\r\n\r\nbody"), "flags": ["archived"]})).await;
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert_eq!(reg.uid_sets(t.path(), "acc", "INBOX"), Some((vec![7], vec![7])));
+        assert_eq!(reg.listing_count(), 1);
     }
 
     #[tokio::test]
