@@ -74,12 +74,13 @@ import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
-import { tErr, t as tr, useT  } from './i18n/index.js';
+import { tErr, t as tr, useT, setLocale } from './i18n/index.js';
 import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { createComposeWindowOwner } from './services/composeWindow';
 import { createComposeSend, scheduleCompose } from './services/composeSend';
+import { getAccountCacheMailboxes } from './services/cacheManager';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -708,6 +709,99 @@ function App() {
   // The button opens the choice of channel; the email template above is only
   // one of them (GitHub Discussions is the one others can find later).
   const handleReportBug = useCallback(() => setShowBugModal(true), []);
+  const settingsAuxRef = useRef(null);
+  const settingsRelayMuted = useRef(false);
+  const detachSettings = useCallback(async request => {
+    if (settingsAuxRef.current?.label) {
+      const existing = await WebviewWindow.getByLabel(settingsAuxRef.current.label);
+      if (existing) { await existing.setFocus(); return; }
+    }
+    const token = crypto.randomUUID();
+    let stopReady;
+    try {
+      stopReady = await listen('settings-window-ready', async event => {
+        if (event.payload?.token !== token) return;
+        const state = useMailStore.getState();
+        await emitTo(event.payload.label, 'settings-window-payload', {
+          token, request, accounts: state.accounts, activeAccountId: state.activeAccountId,
+          mailboxes: state.mailboxes,
+          accountMailboxes: Object.fromEntries((state.accounts || []).map(account => [account.id,
+            getAccountCacheMailboxes(account.id) || (account.id === state.activeAccountId ? state.mailboxes : [])])),
+          settings: Object.fromEntries(Object.entries(useSettingsStore.getState()).filter(([, value]) => typeof value !== 'function')),
+          theme: { theme: useThemeStore.getState().theme, palette: useThemeStore.getState().palette },
+        });
+        stopReady?.();
+      });
+      const label = await invoke('open_auxiliary_window', { kind: 'settings', token });
+      settingsAuxRef.current = { token, label };
+      minimizeSettings();
+    } catch (cause) {
+      stopReady?.();
+      console.warn('[settings] could not detach:', cause);
+    }
+  }, [minimizeSettings]);
+
+  useEffect(() => {
+    let disposed = false;
+    let stops = [];
+    Promise.all([
+      listen('settings-window-change', event => {
+        if (event.payload?.token !== settingsAuxRef.current?.token) return;
+        settingsRelayMuted.current = true;
+        try {
+          if (event.payload.settings) {
+            useSettingsStore.setState(event.payload.settings);
+            if (event.payload.settings.language) void setLocale(event.payload.settings.language);
+          }
+          if (event.payload.accounts) useMailStore.setState({ accounts: event.payload.accounts });
+          if (event.payload.theme) {
+            const theme = useThemeStore.getState();
+            if (event.payload.theme.theme !== theme.theme) theme.setTheme(event.payload.theme.theme);
+            if (event.payload.theme.palette !== theme.palette) theme.setPalette(event.payload.theme.palette);
+          }
+        } finally {
+          settingsRelayMuted.current = false;
+        }
+      }),
+      listen('settings-window-closed', event => {
+        if (event.payload?.token !== settingsAuxRef.current?.token) return;
+        settingsAuxRef.current = null;
+        closeSettings();
+        void import('./stores/viewStore').then(({ useViewStore }) => useViewStore.getState().loadViews());
+        void import('./stores/tagStore').then(({ useTagStore }) => useTagStore.getState().loadTags());
+        void import('./stores/autoTagStore').then(({ useAutoTagStore }) => useAutoTagStore.getState().loadRules());
+        void import('./stores/fieldStore').then(({ useFieldStore }) => Promise.allSettled(
+          (useMailStore.getState().accounts || []).map(account => useFieldStore.getState().loadFields(account.id))));
+      }),
+      listen('settings-window-action', event => {
+        if (event.payload?.token !== settingsAuxRef.current?.token) return;
+        if (event.payload.action === 'add-account') setShowAccountModal(true);
+        if (event.payload.action === 'report-bug') handleReportBug();
+        void WebviewWindow.getByLabel('main').then(window => window?.setFocus());
+      }),
+    ]).then(results => { if (disposed) results.forEach(stop => stop()); else stops = results; });
+    const forward = change => {
+      const current = settingsAuxRef.current;
+      if (settingsRelayMuted.current || !current?.label) return;
+      void emitTo(current.label, 'settings-window-owner-change', { token: current.token, ...change }).catch(() => {});
+    };
+    const stopSettings = useSettingsStore.subscribe((state, previous) => {
+      const changed = Object.fromEntries(Object.entries(state).filter(([key, value]) =>
+        key !== 'localeEpoch' && typeof value !== 'function' && value !== previous[key]));
+      if (Object.keys(changed).length) forward({ settings: changed });
+    });
+    const stopTheme = useThemeStore.subscribe((state, previous) => {
+      if (state.theme !== previous.theme || state.palette !== previous.palette) {
+        forward({ theme: { theme: state.theme, palette: state.palette } });
+      }
+    });
+    const stopMail = useMailStore.subscribe((state, previous) => {
+      if (state.accounts !== previous.accounts || state.activeAccountId !== previous.activeAccountId) {
+        forward({ accounts: state.accounts, activeAccountId: state.activeAccountId });
+      }
+    });
+    return () => { disposed = true; stops.forEach(stop => stop()); stopSettings(); stopTheme(); stopMail(); };
+  }, [closeSettings, handleReportBug]);
 
   const handleReferFriend = useCallback(() => {
     setComposeState({
@@ -1272,6 +1366,7 @@ function App() {
             <SettingsPage key={settingsWindowRequest.id}
               minimized={settingsMinimized}
               onMinimize={minimizeSettings}
+              onDetach={detachSettings}
               onClose={closeSettings}
               onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
               onReportBug={handleReportBug}

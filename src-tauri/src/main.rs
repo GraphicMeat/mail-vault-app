@@ -1066,6 +1066,30 @@ async fn open_compose_window(app: tauri::AppHandle, compose_id: String, token: S
     Ok(label)
 }
 
+#[tauri::command]
+async fn open_auxiliary_window(app: tauri::AppHandle, kind: String, token: String) -> Result<String, String> {
+    use tauri::webview::WebviewWindowBuilder;
+    use tauri::WebviewUrl;
+
+    if !matches!(kind.as_str(), "original" | "settings")
+        || token.len() > 128
+        || !token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("Invalid auxiliary window request".into());
+    }
+    let n = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let label = format!("{}-{}", kind, n);
+    let url = format!("app.html?{}={}", kind, token);
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title(if kind == "settings" { "Settings" } else { "Original Message" })
+        .inner_size(if kind == "settings" { 1080.0 } else { 700.0 }, if kind == "settings" { 760.0 } else { 680.0 })
+        .min_inner_size(520.0, 420.0)
+        .resizable(true)
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(label)
+}
+
 // ==========================================
 // Maildir .eml storage commands (remaining app-side writers)
 //
@@ -2855,6 +2879,7 @@ fn main() {
             open_with_dialog,
             open_email_window,
             open_compose_window,
+            open_auxiliary_window,
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,

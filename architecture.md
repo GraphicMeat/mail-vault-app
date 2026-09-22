@@ -28,6 +28,17 @@ Migration note: many Tauri commands still do real work from before this split. T
 
 ### Frontend
 
+#### Atomic UI design and reuse
+
+Build UI from the smallest useful shared units, then compose them into workflows:
+
+- **Atoms** in `src/components/ui/` own one control or visual rule: buttons, searchable selects, segmented choices, labels, and accessible input states. Use one atom for the same interaction across Settings and the rest of the app.
+- **Molecules** combine atoms into one understandable choice. `SettingsField` joins a visible label and explanation to a control; `SettingsSection` groups related fields with the shared settings card rhythm. Their layout and responsive behavior belong to the molecule, not each feature page.
+- **Organisms** own a complete task with state and feedback, such as an Auto Tag rule editor, a saved View editor, or a message preview. They consume the shared controls and keep feature-specific rules in their store or service.
+- **Templates and pages** arrange organisms in the Settings window, message list, or compose window. A page chooses the reading order and where a preview appears; it should not copy the atoms' CSS or recreate their keyboard behavior.
+
+Reuse is an ownership rule, not a requirement to make every control generic. When two surfaces need the same behavior, extend the existing shared component and update both callers. When their behavior differs, keep two clear components. New settings flows should use the established 920px reading width, settings sections, field labels, and preview placement. Preview data stays local to its editor and never repaints the active mail list. A detached window is another host for the same page component, not a second implementation of that page; the main window remains the owner of persisted settings and receives explicit changes from the detached host.
+
 Notifications are decided in exactly one place: `notify()` in `src/stores/focusStore.js`, which `notifyChokepoint.test.js` enforces — a caller reaching past it into `services/api.sendNotification` is a banner that fires through a Focus session's hold. The policy itself is a pure function (`src/utils/notificationPolicy.js`) applied there, in order: a Focus session, the global switch, the important-sender allowlist, quiet hours, view mutes, then account and folder mutes. Every decision is recorded with the rule that made it, delivered or suppressed, so a notification that never arrived can be accounted for. Deciding whether to raise a banner is shell work and stays in the app; nothing about it belongs in the daemon.
 
 The frontend owns:

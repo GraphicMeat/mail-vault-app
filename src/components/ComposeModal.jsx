@@ -16,8 +16,8 @@ import { replyTemplateHtml } from '../utils/replyTemplate';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT  } from '../i18n/index.js';
-import { listen } from '@tauri-apps/api/event';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { emitTo, listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
@@ -184,7 +184,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [quotedHtml, setQuotedHtml] = useState('');
   const [contextHtml, setContextHtml] = useState('');
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
-  const [contextWidth, setContextWidth] = useState(320);
+  const [contextWidth, setContextWidth] = useState(400);
+  const [originalDetached, setOriginalDetached] = useState(false);
+  const originalWindowRef = useRef(null);
+  const originalCloseStopRef = useRef(null);
+  const contextDragRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(Infinity);
   const [composeSize, setComposeSize] = useState(() => initialData?._composeSize || null);
   // WebKit reports a null relatedTarget on dragleave, so the old
@@ -205,6 +209,40 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const shellRef = useRef(null);
   const onSaveStateRef = useRef(onSaveState);
   useEffect(() => { onSaveStateRef.current = onSaveState; }, [onSaveState]);
+  useEffect(() => () => {
+    originalCloseStopRef.current?.();
+    void originalWindowRef.current?.destroy();
+  }, []);
+
+  const openOriginalWindow = async () => {
+    if (originalWindowRef.current) {
+      await originalWindowRef.current.setFocus();
+      return;
+    }
+    const token = crypto.randomUUID();
+    let unlisten;
+    try {
+      unlisten = await listen('original-message-ready', async event => {
+        if (event.payload?.token !== token) return;
+        await emitTo(event.payload.label, 'original-message-payload', { token, html: contextHtml });
+        unlisten?.();
+      });
+      const label = await invoke('open_auxiliary_window', { kind: 'original', token });
+      const window = await WebviewWindow.getByLabel(label);
+      if (!window) throw new Error('Original message window did not open');
+      originalWindowRef.current = window;
+      setOriginalDetached(true);
+      originalCloseStopRef.current = await window?.onCloseRequested(() => {
+        originalCloseStopRef.current?.();
+        originalCloseStopRef.current = null;
+        originalWindowRef.current = null;
+        setOriginalDetached(false);
+      });
+    } catch (cause) {
+      unlisten?.();
+      setError(cause?.message || String(cause));
+    }
+  };
 
   const setComposeShellRef = useCallback((node) => {
     dialogRef.current = node;
@@ -486,7 +524,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // and the drop as pasteboard paths plus the pointer position. The element
   // under that point picks the zone, as the HTML5 handlers do by target.
   useEffect(() => {
-    if (!window.__TAURI__) return undefined;
+    if (!window.__TAURI__ || document.body.dataset.mailvaultDemo === 'true') return undefined;
     let disposed = false;
     const stops = [];
     const onDrop = async ({ paths = [], position } = {}) => {
@@ -940,7 +978,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
-  const effectiveContextWidth = Math.min(contextWidth, Math.max(240, contentWidth - 324));
+  const effectiveContextWidth = Math.min(contextWidth, Math.max(240, contentWidth - 290));
   const composeWindowStyle = {
     ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
     ...(detaching ? { pointerEvents: 'none' } : {}),
@@ -1027,6 +1065,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 <Maximize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
+            {contextHtml && <Button variant="ghost" icon size="sm" onClick={openOriginalWindow}
+              title={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
+              aria-label={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
+              data-testid="compose-original-detach"><Maximize2 size={16} className="text-mail-text-muted" /></Button>}
             <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
               onClick={confirmClose}
               title={t('common.close')}
@@ -1455,7 +1497,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           </form>
           </div>
 
-          {contextHtml && <>
+          {contextHtml && !originalDetached && <>
             <button
               type="button"
               data-testid="compose-resize"
@@ -1463,12 +1505,26 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               tabIndex={0}
               aria-orientation="vertical"
               aria-label="Resize original message panel"
+              aria-valuemin={240}
+              aria-valuemax={Math.max(240, Math.min(760, contentWidth - 290))}
+              aria-valuenow={Math.round(effectiveContextWidth)}
+              onPointerDown={event => {
+                contextDragRef.current = { id: event.pointerId, x: event.clientX, width: effectiveContextWidth };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerMove={event => {
+                const drag = contextDragRef.current;
+                if (!drag || drag.id !== event.pointerId) return;
+                setContextWidth(Math.max(240, Math.min(760, Math.min(contentWidth - 290, drag.width + drag.x - event.clientX))));
+              }}
+              onPointerUp={() => { contextDragRef.current = null; }}
+              onPointerCancel={() => { contextDragRef.current = null; }}
               onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
                 event.preventDefault();
-                setContextWidth(width => Math.max(240, Math.min(560, width + (event.key === 'ArrowLeft' ? -20 : 20))));
+                setContextWidth(width => Math.max(240, Math.min(760, contentWidth - 290, width + (event.key === 'ArrowLeft' ? -20 : 20))));
               }}
-              className={`w-1 shrink-0 bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
+              className={`w-1.5 shrink-0 cursor-col-resize touch-none bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
             />
             <aside
               data-testid="compose-context"

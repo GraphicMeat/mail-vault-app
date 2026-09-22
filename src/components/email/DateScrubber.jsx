@@ -1,5 +1,5 @@
-// Date scrubber for the chronological email list: a Time Machine style rail on
-// the right edge, a big month pill beside the scroll thumb, and a pinned
+// Date scrubber for the chronological email list: a subdued rail on
+// the left edge, a month pill beside it, and a pinned
 // current-month header. Design: docs/superpowers/specs/2026-09-22-list-date-scrubber-design.md
 
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -12,8 +12,7 @@ import { bucketAtIndex, monthBuckets, railSegments, reachedMonth, rowDate } from
 
 export const MONTH_HEADER_H = 26;
 const RAIL_W = 28;
-// Narrower than the gap to a row's right-edge buttons (Quick actions sits
-// 12px in), so aiming at a row control never arms the rail over it.
+// Only the left gutter arms the rail; row actions stay clear on the right.
 const EDGE_PX = 12;
 const RAIL_IDLE_MS = 1200;
 const PILL_IDLE_MS = 800;
@@ -227,7 +226,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   const [hover, setHover] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [railH, setRailH] = useState(0);
-  const [gutter, setGutter] = useState(0);
   const railRef = useRef(null);
   const pillRef = useRef(null);
   const labelRef = useRef(null);
@@ -280,11 +278,10 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
     };
     const measure = () => {
       setRailH(railRef.current?.clientHeight || 0);
-      setGutter(Math.max(0, el.offsetWidth - el.clientWidth));
     };
     const onMove = (e) => {
       const r = el.getBoundingClientRect();
-      setNear(r.right - (el.offsetWidth - el.clientWidth) - e.clientX <= EDGE_PX);
+      setNear(e.clientX - r.left <= EDGE_PX);
     };
     const onLeave = () => setNear(false);
     measure();
@@ -431,13 +428,13 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-      <div aria-hidden="true" className={`absolute top-0 left-0 ${HEADER_CLASS}`} style={{ right: gutter, height: MONTH_HEADER_H }}>
+      <div aria-hidden="true" className={`absolute top-0 left-0 ${HEADER_CLASS}`} style={{ right: 0, height: MONTH_HEADER_H }}>
         {current ? segLabel(current, older) : null}
       </div>
 
       <div ref={pillRef} aria-hidden="true"
-        className={`absolute top-0 flex items-center gap-2 whitespace-nowrap rounded-full border border-mail-border bg-mail-surface/95 px-4 py-1.5 text-lg font-semibold text-mail-text shadow-lg transition-opacity duration-200 ${pillVisible ? 'opacity-100' : 'opacity-0'}`}
-        style={{ right: gutter + RAIL_W + 8 }}>
+        className={`absolute top-0 flex items-center gap-2 whitespace-nowrap rounded-md border border-mail-border bg-mail-surface px-2 py-1 text-xs font-medium text-mail-text transition-opacity duration-200 ${pillVisible ? 'opacity-100' : 'opacity-0'}`}
+        style={{ left: RAIL_W + 8 }}>
         {loading && <Loader2 size={16} className="animate-spin text-mail-accent-text" />}
         <span ref={labelRef} data-testid="date-scrubber-pill">
           {parts
@@ -456,30 +453,30 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
         aria-valuenow={Math.max(0, currentIdx)} aria-valuetext={segLabel(current, older)}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp} onPointerLeave={onPointerLeave} onKeyDown={onKeyDown}
-        className={`absolute touch-none select-none rounded-full bg-mail-surface/80 outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-mail-accent ${railVisible ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100'} ${railLive
+        className={`absolute touch-none select-none rounded-full bg-transparent outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-mail-accent ${railVisible ? 'opacity-100' : 'opacity-50 focus-visible:opacity-100'} ${railLive
           ? 'pointer-events-auto' : 'pointer-events-none focus-visible:pointer-events-auto'}`}
-        style={{ top: MONTH_HEADER_H + 6, bottom: 6, right: gutter, width: RAIL_W }}>
-        <div className="absolute inset-y-0 right-[13px] w-px bg-mail-border" />
+        style={{ top: MONTH_HEADER_H + 6, bottom: 6, left: 0, width: RAIL_W }}>
+        <div className="absolute inset-y-0 left-[13px] w-px bg-mail-border" />
         {tail && (
-          <div className="absolute right-[12px] w-[3px] rounded-full bg-mail-text-muted/25"
+          <div className="absolute left-[12px] w-[3px] rounded-full bg-mail-text-muted/25"
             style={{ top: `${tail.start * 100}%`, height: `${tail.size * 100}%` }} />
         )}
         {current && (
-          <div className="absolute right-[6px] h-[2px] w-4 -translate-y-1/2 rounded-full bg-mail-accent"
+          <div className="absolute left-[6px] h-[2px] w-4 -translate-y-1/2 rounded-full bg-mail-accent"
             style={{ top: `${current.start * 100}%` }} />
         )}
         {ticks.map(tick => (
           <div key={`${tick.type}-${tick.i}`} data-tick data-pos={tick.pos}
-            className={`absolute right-[4px] origin-right ${tick.dim ? 'opacity-50' : ''}`}
+            className={`absolute left-[4px] origin-left ${tick.dim ? 'opacity-50' : ''}`}
             style={{ top: `${tick.pos * 100}%`, transform: 'translateY(-50%)' }}>
             {tick.type === 'year'
-              ? <span className="block text-[10px] font-semibold leading-none text-mail-text-muted">{tick.y}</span>
-              : <span className="mr-[7px] block h-[3px] w-[3px] rounded-full bg-mail-text-muted" />}
+              ? <span className="block text-[11px] font-semibold leading-none text-mail-text-muted">{tick.y}</span>
+              : <span className="ml-[7px] block h-[3px] w-[3px] rounded-full bg-mail-text-muted" />}
           </div>
         ))}
         {hover !== null && segments[hover] && (
           <div ref={hoverLabelRef}
-            className="absolute right-full top-0 mr-2 whitespace-nowrap rounded-md border border-mail-border bg-mail-surface px-2 py-0.5 text-xs font-medium text-mail-text shadow-md"
+            className="absolute left-full top-0 ml-2 whitespace-nowrap rounded-md border border-mail-border bg-mail-surface px-2 py-0.5 text-xs font-medium text-mail-text"
             style={{ transform: `translateY(${hoverY.current}px) translateY(-50%)` }}>
             {segLabel(segments[hover], older)}
           </div>

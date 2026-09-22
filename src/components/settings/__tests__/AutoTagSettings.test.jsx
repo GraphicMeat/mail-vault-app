@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -100,5 +100,44 @@ describe('AutoTagSettings', () => {
     expect(within(results).getByText(/Your receipt/)).toBeTruthy();
     expect(within(results).getByText(/92%/)).toBeTruthy();
     expect(within(results).getByText(/Newsletter/)).toBeTruthy();
+  });
+
+  it('clears a preview when the instruction is removed', async () => {
+    mockDaemonCall.mockResolvedValueOnce({ candidates: [
+      { accountId: 'a1', mailbox: 'INBOX', uid: 1, subject: 'Old match', matched: true, confidence: 0.9 },
+    ] });
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    const instruction = screen.getByLabelText('Rule, in plain English');
+    fireEvent.change(instruction, { target: { value: 'receipts' } });
+    fireEvent.click(screen.getByText('Preview'));
+    expect(await screen.findByText('Old match')).toBeTruthy();
+    fireEvent.change(instruction, { target: { value: '' } });
+    await act(async () => {});
+    expect(screen.queryByTestId('auto-tag-preview-results')).toBeNull();
+    expect(screen.getByText('Preview').closest('button').disabled).toBe(true);
+  });
+
+  it('offers loaded senders in Tom Select for From filters', () => {
+    useMailStore.setState({ emails: [{ from: { address: 'sender@example.test' } }] });
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    fireEvent.click(screen.getByText('Narrow it down (optional)'));
+    const address = document.querySelector('select[aria-label="From address"]');
+    const domain = document.querySelector('select[aria-label="From domain"]');
+    expect(address.tomselect).toBeTruthy();
+    expect(domain.tomselect).toBeTruthy();
+    expect(address.tomselect.options['sender@example.test']).toBeTruthy();
+    expect(domain.tomselect.options['example.test']).toBeTruthy();
+  });
+
+  it('uses Tom Select to choose the preview account', () => {
+    useMailStore.setState({ accounts: [
+      { id: 'a1', email: 'me@example.test' }, { id: 'a2', email: 'team@example.test' },
+    ] });
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    const from = document.querySelector('select[aria-label="From"]');
+    expect(from.tomselect.options.a2.text).toBe('team@example.test');
   });
 });

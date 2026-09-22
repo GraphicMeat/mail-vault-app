@@ -44,6 +44,7 @@ import {
   Users,
   Mail,
   Network,
+  Clock3,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
@@ -215,6 +216,8 @@ function EmailListComponent({ stacked = false }) {
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const emailListView = useSettingsStore(s => s.emailListView);
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
+  const listTimelineVisible = useSettingsStore(s => s.listTimelineVisible);
+  const setListTimelineVisible = useSettingsStore(s => s.setListTimelineVisible);
   // A saved view that groups is shown grouped, whichever list mode is on: the
   // grouping is what the view says it is, not a setting of this screen.
   const viewGrouping = activeView?.def?.group || null;
@@ -803,7 +806,7 @@ function EmailListComponent({ stacked = false }) {
   // Date scrubber (list mode only): a header band on each month's first row.
   // Heights change, indices do not — rows stay 1:1 with threadedDisplay.
   const monthList = useMonthBuckets(threadedDisplay, !isExplorer && emailListGrouping !== 'sender');
-  const showScrubber = monthList.length >= 2;
+  const showScrubber = listTimelineVisible && emailListGrouping === 'chronological' && monthList.length >= 2;
   const monthHeaders = useMemo(() => (showScrubber ? firstRowOfMonth(monthList) : EMPTY_SET), [showScrubber, monthList]);
 
   const virtualizer = useVirtualizer({
@@ -1091,6 +1094,10 @@ function EmailListComponent({ stacked = false }) {
             disabled={!!viewGrouping}
             onClick={() => { setEmailListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
         </div>
+        {!isExplorer && emailListGrouping === 'chronological' && <button type="button"
+          data-testid="timeline-toggle" className={`mail-toolbar-button ${listTimelineVisible ? 'is-active' : ''}`}
+          aria-pressed={listTimelineVisible} title={t('list.timelineToggle')}
+          onClick={() => setListTimelineVisible(!listTimelineVisible)}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
       </div>
 
       {/* Search Bar */}
@@ -1116,7 +1123,7 @@ function EmailListComponent({ stacked = false }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`flex-1 min-h-0 ${isExplorer ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
+        className={`flex-1 min-h-0 ${isExplorer ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'} ${showScrubber ? 'mail-list-with-timeline' : ''}`}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || isRefreshing) && (
