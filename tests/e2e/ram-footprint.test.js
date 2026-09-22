@@ -85,21 +85,45 @@ const listState = () => browser.execute(() => {
 });
 
 /**
- * Wait until the header drain stops moving. Not "loaded === total": a mailbox
- * can finish short of the server's count (tombstones, an expunge mid-drain),
- * and a measurement that times out waiting for an exact number reports nothing
- * at all. Stable-for-15s is the real "it stopped".
+ * Scroll the message list to its end. The list is virtualized and the header
+ * drain is driven by reaching the bottom, so a mailbox loads 500 at a time and
+ * only while something asks for more — a spec that merely waits sees the drain
+ * stop at the first page and reads it as "loaded".
+ *
+ * The scroller is the element with the LARGEST scroll range, never the first
+ * one found: the sidebar scrolls too and is first in document order.
  */
-async function waitForDrain(timeoutMs) {
+const scrollListToEnd = () => browser.execute(() => {
+  const list = [...document.querySelectorAll('div')]
+    .filter((d) => d.clientHeight > 200 && d.scrollHeight - d.clientHeight > 200)
+    .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
+  if (!list) return null;
+  const max = list.scrollHeight - list.clientHeight;
+  list.scrollTop = max;
+  return { top: Math.round(list.scrollTop), max: Math.round(max) };
+});
+
+/**
+ * Drive the drain to the end and return the state it settled at.
+ *
+ * Not "loaded === total" as the only exit: a mailbox can finish short of the
+ * server's count (tombstones, an expunge mid-drain), and a measurement that
+ * times out waiting for an exact number reports nothing at all.
+ */
+async function drainWholeMailbox(timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let last = -1, lastMoveAt = Date.now();
   for (;;) {
+    await scrollListToEnd();
     const s = await listState();
-    if (s && s.loaded !== last) { last = s.loaded; lastMoveAt = Date.now(); console.log(`[ram]   drain ${s.loaded}/${s.total}`); }
-    if (s && !s.hasMore && Date.now() - lastMoveAt > 15_000) return s;
-    if (Date.now() - lastMoveAt > 60_000) { console.warn('[ram] drain stalled — measuring where it stopped'); return s; }
-    if (Date.now() > deadline) { console.warn('[ram] drain did not finish in time — measuring where it is'); return s; }
-    await browser.pause(3000);
+    if (s && s.loaded !== last) {
+      if (s.loaded - last > 400 || last < 0) console.log(`[ram]   drain ${s.loaded}/${s.total}`);
+      last = s.loaded; lastMoveAt = Date.now();
+    }
+    if (s && !s.hasMore && Date.now() - lastMoveAt > 10_000) return s;
+    if (Date.now() - lastMoveAt > 120_000) { console.warn(`[ram] drain stuck at ${s?.loaded}/${s?.total} — measuring there`); return s; }
+    if (Date.now() > deadline) { console.warn(`[ram] drain out of time at ${s?.loaded}/${s?.total}`); return s; }
+    await browser.pause(1500);
   }
 }
 
@@ -118,36 +142,41 @@ describe('memory footprint', () => {
     sample('launch (first paint)', { state: await listState() });
 
     await switchToFolder('small@mock.test', 'INBOX');
-    const smallState = await waitForDrain(5 * 60_000);
-    sample(`small INBOX drained (${SMALL} fixture)`, { state: smallState });
+    sample(`small INBOX drained (${SMALL} fixture)`, { state: await drainWholeMailbox(5 * 60_000) });
 
+    // Immediately either side of the switch, so the peak delta belongs to the
+    // large account's cold read and not to anything that came after it. The
+    // app shell relays every daemon payload, and the cold read asks for the
+    // whole mailbox in one response.
+    sample('before switching to the big account', { state: await listState() });
     await switchToFolder('big@mock.test', 'INBOX');
-    const bigState = await waitForDrain(30 * 60_000);
+    sample('right after the big account switch', { state: await listState() });
+
+    const bigState = await drainWholeMailbox(25 * 60_000);
     sample(`big INBOX drained (${BIG} fixture)`, { state: bigState });
 
-    // Scrolling is what runs the body prefetch and churns the virtualizer's
-    // rows — the list at rest holds only a window of them. The scroller is the
-    // element with the LARGEST scroll range, never the first one found: the
-    // sidebar scrolls too and is first in document order.
-    for (let step = 0; step < 25; step++) {
-      const at = await browser.execute(() => {
+    // A second pass over a fully loaded list: this is what runs the body
+    // prefetch and churns the virtualizer's rows.
+    for (let step = 0; step < 40; step++) {
+      // `step` has to be an argument: the function body is serialized into the
+      // page, where nothing from this scope exists.
+      const at = await browser.execute((n) => {
         const list = [...document.querySelectorAll('div')]
           .filter((d) => d.clientHeight > 200 && d.scrollHeight - d.clientHeight > 200)
           .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
         if (!list) return null;
         const max = list.scrollHeight - list.clientHeight;
-        list.scrollTop = Math.min(list.scrollTop + list.clientHeight, max);
+        list.scrollTop = n === 0 ? 0 : Math.min(list.scrollTop + list.clientHeight, max);
         return { top: Math.round(list.scrollTop), max: Math.round(max) };
-      });
+      }, step);
       if (!at) { console.warn('[ram] no scroller found'); break; }
-      if (step % 5 === 0) console.log(`[ram]   scrolled ${at.top}/${at.max}`);
-      if (at.top >= at.max) break;
       await browser.pause(700);
     }
     await browser.pause(20_000);
-    sample('big INBOX after scrolling to the end', { state: await listState() });
+    sample('big INBOX after a scroll pass', { state: await listState() });
 
-    // The dwell is where a leak shows. Nothing is driven here on purpose.
+    // The dwell is where a leak shows, and it only means something once the
+    // drain is finished — otherwise loading eats the window.
     for (const minutes of [3, 3, 4]) {
       await browser.pause(minutes * 60_000);
       sample(`idle +${minutes} min`, { state: await listState() });
