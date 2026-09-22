@@ -606,3 +606,53 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
         save_external_location(app_data_dir, SLOT_EXTERNAL_BACKUP, legacy_path)
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod open_with_tests {
+    use std::process::Command;
+    use std::time::Duration;
+
+    const TEXTEDIT: &str = "/System/Applications/TextEdit.app";
+
+    fn textedit_window_names() -> String {
+        let out = Command::new("osascript")
+            .args(["-e", r#"tell application "System Events" to get name of every window of process "TextEdit""#])
+            .output()
+            .expect("osascript");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    /// Launches TextEdit on whatever Mac runs it, hence `#[ignore]`: run it on
+    /// the mini with `cargo test --bin mailvault open_with -- --ignored`.
+    ///
+    /// The name carries every character the old AppleScript choked on (a
+    /// quote, an apostrophe, a backslash) plus a non-ASCII letter. Proof is the
+    /// process table: a TextEdit this call launched, showing this document.
+    #[test]
+    #[ignore]
+    fn open_with_hands_an_awkward_name_to_the_chosen_app_intact() {
+        let _ = Command::new("pkill").args(["-x", "TextEdit"]).status();
+        std::thread::sleep(Duration::from_millis(500));
+
+        let dir = tempfile::tempdir().unwrap();
+        let stem = r#"Sąskaita "q3" it's a\b"#;
+        let path = dir.path().join(format!("{stem}.txt"));
+        std::fs::write(&path, "open-with test\n").unwrap();
+
+        super::macos::open_in_finder(path.to_str().unwrap(), None, false, Some(TEXTEDIT)).unwrap();
+
+        let mut windows = String::new();
+        for _ in 0..50 {
+            std::thread::sleep(Duration::from_millis(200));
+            let running = Command::new("pgrep").args(["-x", "TextEdit"]).status().is_ok_and(|s| s.success());
+            if running {
+                windows = textedit_window_names();
+                if windows.contains(stem) {
+                    break;
+                }
+            }
+        }
+        let _ = Command::new("pkill").args(["-x", "TextEdit"]).status();
+        assert!(windows.contains(stem), "TextEdit windows: {windows:?}");
+    }
+}
