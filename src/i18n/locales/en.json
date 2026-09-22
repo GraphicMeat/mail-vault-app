@@ -2661,5 +2661,7 @@
   "workspace.title": "Your workspace",
   "workspace.twoLineRows": "Two lines",
   "workspace.twoLineRowsHint": "Sender above the subject. Easy to scan in any pane.",
-  "workspace.unread": "Unread"
+  "workspace.unread": "Unread",
+  "autoTag.remote.sampleHeading": "Email:",
+  "autoTag.remote.sampleQuestion": "Does this email match the rule?"
 }

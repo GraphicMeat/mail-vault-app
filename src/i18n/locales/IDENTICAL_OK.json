@@ -17,6 +17,7 @@
   "app.vault",
   "autoTag.name",
   "autoTag.no",
+  "autoTag.remote.sampleHeading",
   "bugReport.graphicMeat",
   "bulk.ops.start",
   "bulk.save.messages",

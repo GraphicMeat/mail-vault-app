@@ -2661,5 +2661,7 @@
   "workspace.title": "你的工作区",
   "workspace.twoLineRows": "两行",
   "workspace.twoLineRowsHint": "发件人在主题上方，窄窗格中也清晰易读。",
-  "workspace.unread": "未读"
+  "workspace.unread": "未读",
+  "autoTag.remote.sampleHeading": "邮件：",
+  "autoTag.remote.sampleQuestion": "这封邮件符合该规则吗？"
 }

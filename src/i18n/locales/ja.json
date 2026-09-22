@@ -2661,5 +2661,7 @@
   "workspace.title": "ワークスペース",
   "workspace.twoLineRows": "2行",
   "workspace.twoLineRowsHint": "差出人の下に件名を表示。狭いペインでも読みやすくなります。",
-  "workspace.unread": "未読"
+  "workspace.unread": "未読",
+  "autoTag.remote.sampleHeading": "メール:",
+  "autoTag.remote.sampleQuestion": "このメールはルールに一致しますか？"
 }

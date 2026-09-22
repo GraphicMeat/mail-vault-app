@@ -2661,5 +2661,7 @@
   "workspace.title": "내 작업 공간",
   "workspace.twoLineRows": "두 줄",
   "workspace.twoLineRowsHint": "보낸 사람 아래에 제목을 표시하여 좁은 창에서도 읽기 쉽습니다.",
-  "workspace.unread": "읽지 않음"
+  "workspace.unread": "읽지 않음",
+  "autoTag.remote.sampleHeading": "메일:",
+  "autoTag.remote.sampleQuestion": "이 메일이 규칙에 맞습니까?"
 }

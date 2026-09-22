@@ -2661,5 +2661,7 @@
   "workspace.title": "Ihr Arbeitsbereich",
   "workspace.twoLineRows": "Zwei Zeilen",
   "workspace.twoLineRowsHint": "Absender über dem Betreff. In jedem Bereich gut lesbar.",
-  "workspace.unread": "Ungelesen"
+  "workspace.unread": "Ungelesen",
+  "autoTag.remote.sampleHeading": "E-Mail:",
+  "autoTag.remote.sampleQuestion": "Passt diese E-Mail zur Regel?"
 }

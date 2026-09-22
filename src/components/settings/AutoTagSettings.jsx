@@ -77,6 +77,26 @@ function formToDraft(form) {
  * `deriveDisplayRows` in `messageListSlice.js` — this component only edits
  * the rule that asks for it.
  */
+/// What the consent sheet has to show: not the rule's own words, which the
+/// user just typed, but the message fields that travel with them. The daemon
+/// builds this prompt in `auto_tags::verdict_prompt` — a rule pointed at a
+/// provider sends every candidate's sender, subject, mailbox and attachment
+/// flag, and someone approving "use my endpoint" deserves to see that before
+/// their mail's subject lines start leaving the machine.
+export function remoteSampleText(instruction, translate) {
+  return [
+    `Rule: ${instruction || ''}`,
+    '',
+    translate('autoTag.remote.sampleHeading'),
+    'From: sender@example.com',
+    'Subject: Your receipt for order 1041',
+    'Mailbox: INBOX',
+    'Has attachments: true',
+    '',
+    translate('autoTag.remote.sampleQuestion'),
+  ].join('\n');
+}
+
 export function AutoTagSettings() {
   const t = useT();
   const rules = useAutoTagStore(s => s.rules);
@@ -401,7 +421,7 @@ export function AutoTagSettings() {
 
       <AiContextPreview
         open={pendingRemoteConfirm}
-        text={form.instruction}
+        text={remoteSampleText(form.instruction, t)}
         provider={currentProvider()}
         onCancel={() => setPendingRemoteConfirm(false)}
         onConfirm={confirmAllowRemote}

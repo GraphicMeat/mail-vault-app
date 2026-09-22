@@ -2661,5 +2661,7 @@
   "workspace.title": "Votre espace de travail",
   "workspace.twoLineRows": "Deux lignes",
   "workspace.twoLineRowsHint": "L’expéditeur au-dessus de l’objet, lisible dans tous les volets.",
-  "workspace.unread": "Non lus"
+  "workspace.unread": "Non lus",
+  "autoTag.remote.sampleHeading": "E-mail :",
+  "autoTag.remote.sampleQuestion": "Cet e-mail correspond-il à la règle ?"
 }

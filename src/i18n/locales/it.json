@@ -2661,5 +2661,7 @@
   "workspace.title": "Il tuo spazio di lavoro",
   "workspace.twoLineRows": "Due righe",
   "workspace.twoLineRowsHint": "Il mittente sopra l’oggetto. Leggibile in ogni riquadro.",
-  "workspace.unread": "Non letti"
+  "workspace.unread": "Non letti",
+  "autoTag.remote.sampleHeading": "Email:",
+  "autoTag.remote.sampleQuestion": "Questa email corrisponde alla regola?"
 }
