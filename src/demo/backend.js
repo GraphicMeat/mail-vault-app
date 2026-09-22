@@ -903,7 +903,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
           counts.set(ym, (counts.get(ym) || 0) + 1);
         }
-        return [...counts.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([ym, count]) => ({ ym, count }));
+        return [...counts.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0)).map(([ym, count]) => ({ ym, count }));
       }
       case 'local_index_append': {
         const entries = typeof args.entriesJson === 'string' ? JSON.parse(args.entriesJson) : (args.entries || []);
