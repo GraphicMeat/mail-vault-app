@@ -339,6 +339,19 @@ if [ -f "$DAEMON_PATH" ]; then
     echo "   ✓ Signed daemon binary (with expanded daemon entitlements)"
 fi
 
+# Sign the Foundation Models helper WITHOUT entitlements: the daemon spawns it
+# and it needs nothing beyond what it inherits. Missing = Apple Intelligence
+# silently reports "helper not found", so a bundle without it is a failed build.
+FM_HELPER_PATH="$APP_PATH/Contents/MacOS/mailvault-fm-helper"
+if [ ! -f "$FM_HELPER_PATH" ]; then
+    echo -e "${RED}❌ mailvault-fm-helper missing from the bundle${NC}"
+    exit 1
+fi
+codesign --force --options runtime --timestamp \
+    --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+    "$FM_HELPER_PATH"
+echo "   ✓ Signed Foundation Models helper"
+
 # Sign the default-mail helper WITHOUT entitlements. It exists to make a
 # LaunchServices call the App Sandbox refuses (-54), so sandboxing it would
 # defeat the whole thing — the verification below fails the build if it ever
@@ -370,7 +383,7 @@ codesign --verify --verbose=4 "$APP_PATH"
 echo "   ✓ App bundle signature valid"
 
 # Verify nested binaries individually
-for BIN_NAME in mailvault mailvault-daemon; do
+for BIN_NAME in mailvault mailvault-daemon mailvault-fm-helper; do
     BIN_PATH="$APP_PATH/Contents/MacOS/$BIN_NAME"
     if [ -f "$BIN_PATH" ]; then
         codesign --verify --verbose=4 "$BIN_PATH" 2>&1 || {

@@ -4,8 +4,8 @@
   "version": "2.15.0",
   "identifier": "com.mailvault.app",
   "build": {
-    "beforeBuildCommand": "npm run build && npm run build:mail-helper",
-    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build && npm run build:mail-helper && npm run build:fm-helper",
+    "beforeDevCommand": "npm run build:fm-helper && npm run dev",
     "devUrl": "http://localhost:5173/app.html",
     "frontendDist": "../dist"
   },
@@ -59,6 +59,7 @@
       "entitlements": "entitlements.plist",
       "files": {
         "Helpers/MailVault Default Mail Helper.app": "helpers/MailVault Default Mail Helper.app",
+        "MacOS/mailvault-fm-helper": "helpers/mailvault-fm-helper",
         "Library/LaunchAgents/com.mailvault.app.daemon.plist": "LaunchAgents/com.mailvault.app.daemon.plist"
       },
       "exceptionDomain": "",

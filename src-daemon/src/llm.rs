@@ -464,49 +464,20 @@ async fn generate_via_endpoint(url: &str, model: &str, prompt: &str, system: Opt
     mailvault_core::ai::parse_chat_response(&json)
 }
 
-#[cfg(target_os = "macos")]
-fn host_triple() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
-        "aarch64-apple-darwin"
-    } else {
-        "x86_64-apple-darwin"
-    }
-}
-
-/// Locate the Apple FM helper sidecar. Mirrors `find_daemon_binary` in
-/// `src-tauri/src/main.rs` (packaged layout first, then dev build locations)
-/// — the daemon has no `AppHandle` to ask for a resource dir, so `cwd` stands
-/// in for it in dev, same as that function's `current_dir` fallback.
+/// Locate the Apple FM helper sidecar.
+///
+/// Packaged: `bundle.macOS.files` puts it in `Contents/MacOS`, next to this
+/// binary. Dev: `scripts/build-fm-helper.sh` writes it to
+/// `src-tauri/helpers/`, and this binary runs from `<repo>/target/<profile>/`
+/// — so walk up from the exe, never from `cwd`, which under `tauri dev` is
+/// `src-tauri/` and in the sandbox is the app container.
 #[cfg(target_os = "macos")]
 pub fn find_fm_helper_binary() -> Option<PathBuf> {
-    // 1. Next to this binary — packaged layout (Tauri strips the triple).
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join("mailvault-fm-helper");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    // 2. Dev: scripts/build-fm-helper.sh drops it in src-tauri/binaries/
-    // (it's a Swift binary — `cargo build` never produces it), but check
-    // target/{debug,release} too in case a future build step places it there.
-    let triple_name = format!("mailvault-fm-helper-{}", host_triple());
-    if let Ok(cwd) = std::env::current_dir() {
-        let candidate = cwd.join("src-tauri").join("binaries").join(&triple_name);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-        for profile in ["debug", "release"] {
-            let candidate = cwd.join("target").join(profile).join(&triple_name);
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    std::iter::once(dir.join("mailvault-fm-helper"))
+        .chain(dir.ancestors().map(|a| a.join("src-tauri/helpers/mailvault-fm-helper")))
+        .find(|c| c.is_file())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -677,10 +648,9 @@ mod tests {
 
     #[tokio::test]
     async fn apple_fm_answers_or_refuses_within_its_own_timeout_never_via_the_endpoint_path() {
-        // Runs the real sidecar on a checkout that has one built (this repo
-        // ships `src-tauri/binaries/mailvault-fm-helper-*`, see
-        // docs/plans' Phase 3a-bis probe); skips cleanly everywhere else
-        // rather than asserting on a binary that may not exist.
+        // Runs the real sidecar on a checkout that has one built
+        // (`npm run build:fm-helper`); skips cleanly everywhere else rather
+        // than asserting on a binary that may not exist.
         let Some(_helper) = find_fm_helper_binary() else {
             eprintln!("skipping apple_fm_answers_or_refuses_within_its_own_timeout: no fm-helper binary in this checkout");
             return;

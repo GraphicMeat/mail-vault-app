@@ -9,6 +9,7 @@ const RELEASE_DIR = process.env.BUILD_TARGET
   : resolve(ROOT, 'target/release');
 const APP_BUNDLE = resolve(RELEASE_DIR, 'bundle/macos/MailVault.app');
 const DAEMON_BIN = resolve(APP_BUNDLE, 'Contents/MacOS/mailvault-daemon');
+const FM_HELPER_BIN = resolve(APP_BUNDLE, 'Contents/MacOS/mailvault-fm-helper');
 
 const bundleExists = existsSync(APP_BUNDLE);
 
@@ -36,6 +37,18 @@ describe('Post-Build DMG Smoke Tests', () => {
       encoding: 'utf-8',
     });
     expect(result.trim()).toBe('');
+  });
+
+  it('Apple Intelligence helper sits next to the daemon, signed, both arches', () => {
+    if (!bundleExists) {
+      console.log('Skipping: app bundle not found');
+      return;
+    }
+    // The daemon only looks next to itself; absent = "Apple FM helper not found".
+    expect(existsSync(FM_HELPER_BIN)).toBe(true);
+    execFileSync('codesign', ['-v', '--strict', FM_HELPER_BIN]);
+    const archs = execFileSync('lipo', ['-archs', FM_HELPER_BIN], { encoding: 'utf-8' });
+    expect(archs.trim().split(/\s+/).sort()).toEqual(['arm64', 'x86_64']);
   });
 
   it('packaged daemon declares itself background-only', () => {

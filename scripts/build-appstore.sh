@@ -228,6 +228,19 @@ if [ -f "$DAEMON_PATH" ]; then
     echo "   ✓ Signed daemon binary (app-sandbox + inherit)"
 fi
 
+# Same for the Foundation Models helper the daemon spawns: every executable in
+# a MAS bundle must be sandboxed, and without inherit it aborts at spawn.
+FM_HELPER_PATH="$APP_PATH/Contents/MacOS/mailvault-fm-helper"
+if [ ! -f "$FM_HELPER_PATH" ]; then
+    echo -e "${RED}❌ mailvault-fm-helper missing from the bundle${NC}"
+    exit 1
+fi
+codesign --force --options runtime --timestamp \
+    --entitlements "$DAEMON_ENTITLEMENTS" \
+    --sign "$APP_SIGNING_IDENTITY" \
+    "$FM_HELPER_PATH"
+echo "   ✓ Signed Foundation Models helper (app-sandbox + inherit)"
+
 # Sign any frameworks
 for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
     if [ -d "$framework" ]; then
@@ -271,6 +284,12 @@ if [ -f "$DAEMON_PATH" ]; then
     fi
     echo "   ✓ mailvault-daemon carries com.apple.security.inherit"
 fi
+
+if ! codesign -d --entitlements - "$FM_HELPER_PATH" 2>/dev/null | grep -q "com.apple.security.inherit"; then
+    echo -e "${RED}❌ mailvault-fm-helper is not signed with com.apple.security.inherit; it would abort at spawn${NC}"
+    exit 1
+fi
+echo "   ✓ mailvault-fm-helper carries com.apple.security.inherit"
 
 # Create installer package
 echo ""
