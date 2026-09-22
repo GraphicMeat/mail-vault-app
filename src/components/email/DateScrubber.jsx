@@ -137,6 +137,8 @@ export function useDateScrubber({
     : []), [enabled, buckets, activeHist, totalEmails]);
 
   const [jumping, setJumping] = useState(null);
+  const jumpingRef = useRef(null);
+  jumpingRef.current = jumping;
   const [pendingSeq, setPendingSeq] = useState(0);
   const genRef = useRef(0);
   const pendingRef = useRef(null);
@@ -169,7 +171,13 @@ export function useDateScrubber({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) return undefined;
-    const cancel = () => { pendingRef.current = null; };
+    // The user taking over the list stops a running load and its landing.
+    const cancel = () => {
+      if (!pendingRef.current && !jumpingRef.current) return;
+      genRef.current++;
+      pendingRef.current = null;
+      setJumping(null);
+    };
     el.addEventListener('wheel', cancel, { passive: true });
     el.addEventListener('pointerdown', cancel, { passive: true });
     el.addEventListener('keydown', cancel, { passive: true });
@@ -227,8 +235,20 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   const dragRef = useRef(null);
   const bucketsRef = useRef(buckets);
   bucketsRef.current = buckets;
+  const virtualizerRef = useRef(virtualizer);
+  virtualizerRef.current = virtualizer;
+
+  const syncCurrent = useCallback(() => {
+    const el = scrollRef.current;
+    const item = el ? virtualizerRef.current.getVirtualItemForOffset?.(el.scrollTop) : null;
+    const b = bucketAtIndex(bucketsRef.current, item ? item.index : 0);
+    setCurrentKey(b ? b.key : null);
+  }, [scrollRef]);
+  // Rows paged in or arriving move the months without a scroll event.
+  useEffect(() => { syncCurrent(); }, [buckets, syncCurrent]);
 
   // Scroll: current month and pill position, rAF-throttled; visibility timers.
+  // Subscribed once: re-subscribing would drop the hide timers mid-flight.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return undefined;
@@ -237,9 +257,7 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
     let pillTimer = null;
     const frame = () => {
       raf = 0;
-      const item = virtualizer.getVirtualItemForOffset?.(el.scrollTop);
-      const b = bucketAtIndex(bucketsRef.current, item ? item.index : 0);
-      setCurrentKey(b ? b.key : null);
+      syncCurrent();
       const pill = pillRef.current;
       if (pill && el.scrollHeight > 0) {
         const vh = el.clientHeight;
@@ -266,7 +284,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
       setNear(r.right - (el.offsetWidth - el.clientWidth) - e.clientX <= EDGE_PX);
     };
     const onLeave = () => setNear(false);
-    frame();
     measure();
     el.addEventListener('scroll', onScroll, { passive: true });
     el.addEventListener('pointermove', onMove, { passive: true });
@@ -282,7 +299,7 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
       el.removeEventListener('pointerleave', onLeave);
       ro?.disconnect();
     };
-  }, [scrollRef, virtualizer, buckets]);
+  }, [scrollRef, syncCurrent]);
 
   const currentIdx = segments.findIndex(s => s.key === currentKey);
   const current = segments[currentIdx] || null;
@@ -395,6 +412,7 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
     const to = { ArrowDown: from + 1, PageDown: from + 1, ArrowUp: from - 1, PageUp: from - 1, Home: 0, End: last }[e.key];
     if (to === undefined) return;
     e.preventDefault();
+    e.stopPropagation(); // not the global list shortcuts too
     onJump(segments[Math.max(0, Math.min(last, to))]);
   };
   useEffect(() => () => { if (moveRaf.current) cancelAnimationFrame(moveRaf.current); }, []);
