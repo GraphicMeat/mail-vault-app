@@ -86,7 +86,10 @@ export function ScheduledFolderModal({ onClose }) {
 
   useEffect(() => { loadRows().catch(err => setError(String(err?.message || err))); }, [loadRows]);
 
-  const visible = rows.filter(r => r.status !== 'cancelled');
+  // A message that went out belongs in Sent, not in a list of things still
+  // waiting to happen -- and a cancelled one never happened at all. What stays
+  // is what still needs the user: queued, sending, and failed.
+  const visible = rows.filter(r => r.status !== 'cancelled' && r.status !== 'sent');
 
   const startReschedule = (row) => {
     setReschedulingId(row.id);

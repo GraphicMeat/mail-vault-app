@@ -299,27 +299,18 @@ describe('Scheduled Send', function () {
     const raw = await fetchSentSource(addedUid);
     expect(raw).toContain(subject);
 
-    // The row is deliberately kept (scheduledStore.test.js: "sendNow replaces
-    // the row with whatever the daemon answers", status `sent`) — it drops out
-    // of the ACTIONABLE set instead of the DOM: no Edit/Reschedule/Cancel/Send
-    // buttons left on it, and it no longer counts toward the sidebar badge.
+    // A sent message belongs in Sent, not in a list of things still waiting
+    // to happen. The store keeps the row (the daemon's answer is the truth of
+    // what happened); the list stops showing it.
     await browser.waitUntil(async () => {
       const row = (await scheduledRows()).find((r) => r.id === id);
       return row?.status === 'sent';
     }, { timeout: 30_000, interval: 500, timeoutMsg: `row ${id} never reached status "sent"` });
 
-    // Both halves of "kept, but no longer actionable" — proven together so
-    // neither half is vacuous: an absent row would make the button count 0
-    // too, which alone would prove nothing.
-    await browser.waitUntil(async () => {
-      const buttons = await browser.execute((rid) =>
-        document.querySelectorAll(`[data-testid="scheduled-row-${rid}"] button`).length, id);
-      return buttons === 0;
-    }, {
+    await browser.waitUntil(async () => (await rowText(id)) === null, {
       timeout: 15_000, interval: 300,
-      timeoutMsg: `row ${id} still shows action buttons after reaching status "sent"`,
+      timeoutMsg: `row ${id} is still listed in Scheduled after it was sent`,
     });
-    expect(await rowText(id)).not.toBe(null);
   });
 
   it('cancelling a queued row removes it from the list and it never sends', async function () {
