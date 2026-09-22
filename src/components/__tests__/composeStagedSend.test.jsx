@@ -28,6 +28,7 @@ const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.ho
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listen(...a) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
+vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'main' }) }));
 // maildir_store/maildir_delete/local_index_remove now route through
 // transport.js (Task 2.1); delegate to the same `invoke` mock so
 // storedUids() and every existing assertion below still see them.

@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (name, cb) => { listeners[name] = cb; return () => { delete listeners[name]; }; }),
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args) => invoke(...args) }));
+vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'main' }) }));
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });

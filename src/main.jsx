@@ -2,15 +2,18 @@ import './e2eMotion';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
-import App from './App';
 import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import './styles/index.css';
 
+const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
+const App = React.lazy(() => import('./App'));
+const ComposeWindow = React.lazy(() => import('./components/ComposeWindow').then(m => ({ default: m.ComposeWindow })));
+
 // Listen to the webview's path-monitor events. Cheap, and the only signal that
 // arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
-wireConnectivityEvents();
+if (!isComposeWindow) wireConnectivityEvents();
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //
@@ -22,7 +25,7 @@ wireConnectivityEvents();
 // entirely — dropping not just the language but every setting the user saved.
 // An eager call here cost the seeded `listPaneSize` in a screenshot run before
 // anyone noticed it was costing real users their whole settings file.
-useSettingsStore.persist?.onFinishHydration?.(() => {
+if (!isComposeWindow) useSettingsStore.persist?.onFinishHydration?.(() => {
   setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
 });
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
@@ -210,7 +213,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           matching @media block in styles/index.css. */}
       <MotionConfig reducedMotion="user">
         <SplashDismisser>
-          <App />
+          <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : <App />}</React.Suspense>
         </SplashDismisser>
       </MotionConfig>
     </ErrorBoundary>

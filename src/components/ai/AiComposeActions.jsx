@@ -95,7 +95,7 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
       // the draft it was meant to improve — treat it the same as a failure
       // and leave both the draft and the preview alone.
       if (!result?.trim()) { setError(t('ai.actions.generateFailed')); return; }
-      if (provider.type === 'endpoint') setAiSettings({ endpointConsented: true });
+      if (provider.type === 'endpoint') await setAiSettings({ endpointConsented: true });
       setPending(null);
       onResult(pending.actionId, result);
     } catch {

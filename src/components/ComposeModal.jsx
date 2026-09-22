@@ -7,77 +7,24 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { formatDateTime } from '../utils/dateFormat';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
-import * as api from '../services/api';
-import { ensureFreshToken } from '../services/authUtils';
-import * as db from '../services/db';
-import { RichTextEditor, insertImages, textToHtml, htmlToText, inlineComposeSpacing } from './RichTextEditor';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
+import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
-import { findSentMailboxPath } from '../utils/sentFolder';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
-import { extractInlineImages } from '../utils/inlineImages';
-import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
+import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
-import { markAnswered, markForwarded } from '../services/workflows/messageMutations';
 import { t, useT  } from '../i18n/index.js';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
-import { send } from '../services/transport';
 import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
-import { useScheduledStore } from '../stores/scheduledStore';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
-import { isPastLocalTime, zonedTimeToEpoch } from '../utils/scheduledTime';
+import { isPastLocalTime } from '../utils/scheduledTime';
 import { AiComposeActions } from './ai/AiComposeActions';
-
-// Find the Sent mailbox path for a specific account.
-// Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
-// or localized name → tier 3 server-side ensure/CREATE (Thunderbird-style).
-// On tier 3 success, the resolved path is persisted to the account so future
-// sends skip the probe. Returns { path, account } where account reflects
-// any persisted override.
-async function resolveSentMailboxForAccount(account) {
-  const accountId = account.id;
-  const { activeAccountId, mailboxes } = useMailStore.getState();
-  let list = activeAccountId === accountId && mailboxes?.length ? mailboxes : null;
-  if (!list) {
-    list = await db.getCachedMailboxes(accountId).catch(() => null);
-  }
-  const localHit = findSentMailboxPath(list, account.sentFolderOverride || null);
-  if (localHit) return { path: localHit, account };
-
-  // Tier 3: probe/create on server
-  try {
-    const path = await api.ensureSentMailbox(account);
-    if (path) {
-      const updated = { ...account, sentFolderOverride: path };
-      await db.saveAccount(updated).catch(err => {
-        console.warn('[ComposeModal] failed to persist sentFolderOverride:', err);
-      });
-      useMailStore.setState(s => ({
-        accounts: (s.accounts || []).map(a => a.id === accountId ? { ...a, sentFolderOverride: path } : a),
-      }));
-      // Refresh mailbox tree so sidebar/Zustand reflect any newly-created Sent folder.
-      try {
-        const freshBoxes = await api.fetchMailboxes(updated);
-        if (Array.isArray(freshBoxes) && freshBoxes.length) {
-          await db.saveMailboxes?.(accountId, freshBoxes).catch(() => {});
-          useMailStore.setState(s => ({
-            mailboxes: s.activeAccountId === accountId ? freshBoxes : s.mailboxes,
-          }));
-        }
-      } catch (err) {
-        console.warn('[ComposeModal] post-ensure mailbox refresh failed:', err);
-      }
-      return { path, account: updated };
-    }
-  } catch (err) {
-    console.warn('[ComposeModal] ensureSentMailbox failed:', err);
-  }
-  return { path: null, account };
-}
+import { createComposeSend, scheduleCompose } from '../services/composeSend';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId }) {
@@ -173,7 +120,7 @@ const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule }) {
   const t = useT();
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
@@ -227,6 +174,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const actionReplyTo = replyTo || initialData?._replyTo || null;
 
   const [sending, setSending] = useState(false);
+  const [detaching, setDetaching] = useState(false);
   const [error, setError] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -235,13 +183,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [quotedHtml, setQuotedHtml] = useState('');
   const [contextHtml, setContextHtml] = useState('');
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
+  const [contextWidth, setContextWidth] = useState(320);
+  const [contentWidth, setContentWidth] = useState(Infinity);
+  const [composeSize, setComposeSize] = useState(() => initialData?._composeSize || null);
   // WebKit reports a null relatedTarget on dragleave, so the old
   // `contains(relatedTarget)` check never worked — count enter/leave instead.
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const [composeDelay, setComposeDelay] = useState(null); // null = use global
+  const [composeDelay, setComposeDelay] = useState(() => initialData?._composeDelay ?? null); // null = use global
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
-  const [scheduleDraft, setScheduleDraft] = useState(() => ({
+  const [scheduleDraft, setScheduleDraft] = useState(() => initialData?._scheduleDraft || ({
     localTime: '',
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
@@ -249,8 +200,48 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
   const scheduleRef = useRef(null);
+  const contentRef = useRef(null);
+  const shellRef = useRef(null);
   const onSaveStateRef = useRef(onSaveState);
   useEffect(() => { onSaveStateRef.current = onSaveState; }, [onSaveState]);
+
+  const setComposeShellRef = useCallback((node) => {
+    dialogRef.current = node;
+    shellRef.current = node;
+  }, [dialogRef]);
+
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node) return undefined;
+    const measure = () => {
+      if (node.clientWidth) setContentWidth(node.clientWidth);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (detached || !shellRef.current || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      // The CSS resize handle reports a content box. Persisting that value as
+      // the next border-box style width subtracts the border on every pass.
+      // Use the rendered border box so observing then restoring is stable.
+      const borderBox = Array.isArray(entry.borderBoxSize) ? entry.borderBoxSize[0] : entry.borderBoxSize;
+      const width = borderBox?.inlineSize || shellRef.current?.offsetWidth;
+      const height = borderBox?.blockSize || shellRef.current?.offsetHeight;
+      if (!width || !height) return;
+      setComposeSize(previous => (
+        previous && Math.abs(previous.width - width) < 1 && Math.abs(previous.height - height) < 1
+          ? previous
+          : { width: Math.round(width), height: Math.round(height) }
+      ));
+    });
+    observer.observe(shellRef.current);
+    return () => observer.disconnect();
+  }, [detached]);
 
   // ── Autosaved draft (see services/localDrafts.js) ──
   // The vault draft this window owns. The uid is allocated on the first save
@@ -260,7 +251,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const draftMailboxRef = useRef(initialData?._draftMailbox || null);
   // Which account currently holds it: picking a different From moves the draft
   // to that account's Drafts folder instead of leaving a copy behind.
-  const draftAccountRef = useRef(initialData?._accountId || null);
+  const draftAccountRef = useRef(initialData?._draftAccountId || initialData?._accountId || null);
   const lastSavedRef = useRef(null);
   // Saves are serialised: maildir_store deletes-then-writes one uid, so two
   // overlapping saves of the same draft can interleave into a lost write.
@@ -369,9 +360,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     // toggle AND append the original a second time at send.
     if (mode !== 'forward') {
       setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
-      setContextHtml(fullContextHtml);
-      setShowContext(composeContextVisible);
     }
+    // A forward already carries its original in the outgoing body, but people
+    // still need the complete source/thread while editing. Keep that reading
+    // panel independent so it never duplicates the forwarded wire content.
+    setContextHtml(fullContextHtml);
+    setShowContext(composeContextVisible);
 
     const replyBody = templateBody == null
       ? signatureHtml
@@ -419,7 +413,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         })));
       }
     }
-  }, [mode, replyTo, initialData, templateBody, selectedAccountId, composeContextVisible]);
+  // composeContextVisible is the default for a newly opened reply. Toggling
+  // it while this draft is active must not rerun this initializer and erase
+  // the text the person is currently writing.
+  }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
 
   // Mine each account's Sent cache so the From list offers every address the
   // mailbox can actually send from, not just its login.
@@ -435,6 +432,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   }, [rawAccounts]);
 
   const handleChange = (e) => {
+    if (detaching) return;
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     setError(null);
@@ -443,6 +441,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // Shared by the file picker, the modal-wide drop fallback, the dashed attach
   // strip, and non-image files dropped on the editor.
   const addFiles = (files) => {
+    if (detaching) return;
     for (const file of files) {
       // Read file as base64
       const reader = new FileReader();
@@ -461,6 +460,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   const handleFileSelect = (e) => {
+    if (detaching) return;
     addFiles(Array.from(e.target.files || []));
     // Reset input
     if (fileInputRef.current) {
@@ -469,12 +469,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   const handleDrop = (e) => {
+    if (detaching) return;
     e.preventDefault();
     e.stopPropagation();
     addFiles(Array.from(e.dataTransfer?.files || []));
   };
 
   const removeAttachment = (index) => {
+    if (detaching) return;
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -487,6 +489,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     let disposed = false;
     const stops = [];
     const onDrop = async ({ paths = [], position } = {}) => {
+      if (detaching) return;
       dragDepth.current = 0;
       setDragging(false);
       const point = toClientPoint(position, {
@@ -508,13 +511,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         setError(String(e?.message ?? e));
       }
     };
+    const target = { target: getCurrentWebviewWindow().label };
     Promise.all([
-      listen('tauri://drag-enter', () => setDragging(true)),
-      listen('tauri://drag-leave', () => setDragging(false)),
-      listen('tauri://drag-drop', (ev) => onDrop(ev.payload)),
+      listen('tauri://drag-enter', () => { if (!detaching) setDragging(true); }, target),
+      listen('tauri://drag-leave', () => { if (!detaching) setDragging(false); }, target),
+      listen('tauri://drag-drop', (ev) => onDrop(ev.payload), target),
     ]).then((fns) => { if (disposed) fns.forEach(f => f()); else stops.push(...fns); }).catch(() => {});
     return () => { disposed = true; stops.forEach(f => f()); };
-  }, []);
+  }, [detaching]);
   
   // Close templates dropdown on click outside or Escape
   useEffect(() => {
@@ -562,6 +566,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   }, [showSchedulePicker]);
 
   const insertTemplate = (template) => {
+    if (detaching) return;
     const editor = editorRef.current;
     if (editor) {
       // Insert template content as HTML at cursor position
@@ -578,545 +583,73 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setShowTemplates(false);
   };
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
+    if (detaching) return;
     const name = templateName.trim();
     if (!name) return;
-    addEmailTemplate(name, htmlToText(formData.body));
+    const body = htmlToText(formData.body);
+    try {
+      if (onAddTemplate) await onAddTemplate({ name, body });
+      else addEmailTemplate(name, body);
+    } catch (err) {
+      setError(err?.message || String(err));
+      return;
+    }
     setTemplateName('');
     setSavingTemplate(false);
     setShowTemplates(false);
   };
 
-  // Build the outgoing message the same way a normal send and a scheduled
-  // send both need it — identity, inline-image handling, quoted-content
-  // composition and Sent-folder resolution must never drift between the two
-  // paths (several of the lines below carry their own scar tissue about
-  // exactly that). `sendFn` below and `handleSchedule` are its only callers.
-  const buildOutgoingPayload = async (freshAccount) => {
-    // Get display name from settings or account
-    const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
-    // Send-as override: the outgoing identity only. Credentials stay bound
-    // to freshAccount.email, so this never touches auth. Applied to BOTH
-    // the build_mime and the send call — if they drift, the staged .eml
-    // and the message that actually leaves carry different From headers.
-    const fromAddress = composeFrom || freshAccount.email;
-    const sendAsEmail = fromAddress !== freshAccount.email ? fromAddress : '';
-
-    // Inline pictures leave as cid: parts — Gmail/Outlook.com strip data: URIs.
-    // Only the outgoing copy is rewritten; composeState.initialData.body keeps
-    // the data URIs so an undone/minimized draft still renders the picture.
-    const inline = extractInlineImages(formData.body);
-
-    // Prepare attachments for nodemailer
-    const emailAttachments = [
-      ...attachments.map(att => ({
-        filename: att.filename,
-        content: att.content,
-        encoding: 'base64',
-        contentType: att.contentType
-      })),
-      ...inline.attachments.map(a => ({
-        filename: a.filename,
-        content: a.content,
-        encoding: 'base64',
-        contentType: a.contentType,
-        cid: a.cid,
-      })),
-    ];
-
-    // Combine compose body with quoted content for the sent email.
-    // Only what was typed here gets the editor's spacing inlined — the
-    // quoted part is someone else's markup and keeps its own.
-    const composed = inlineComposeSpacing(inline.html);
-    const fullHtml = quotedHtml
-      ? composed + '<hr><blockquote>' + quotedHtml + '</blockquote>'
-      : composed;
-    // The text part is rendered from the same HTML the recipient reads.
-    const fullText = quotedHtml
-      ? htmlToText(formData.body) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
-      : htmlToText(formData.body);
-
-    // Resolve the account's Sent folder once — used for both local
-    // Maildir archival (where we write the raw .eml so the email is
-    // visible/retrievable even if the server never sees it) and for the
-    // subsequent server-side IMAP APPEND.
-    const isGraph = freshAccount.oauth2Transport === 'graph';
-    const resolved = await resolveSentMailboxForAccount(freshAccount);
-    const sentFolderPath = resolved.path;
-    const accountForSend = resolved.account;
-    const sentMailbox = isGraph ? null : sentFolderPath;
-
-    const outgoingPayload = {
-      to: formData.to,
-      cc: formData.cc || undefined,
-      bcc: formData.bcc || undefined,
-      subject: formData.subject,
-      text: fullText,
-      html: fullHtml,
-      inReplyTo: formData.inReplyTo || undefined,
-      references: formData.references || undefined,
-      attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
-    };
-
-    return { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, outgoingPayload };
-  };
-
-  const handleSend = async (e) => {
-    e.preventDefault();
-
-    if (!formData.to.trim()) {
-      setError(t('compose.pleaseEnterLeastOneRecipient'));
-      return;
-    }
-
-    if (!selectedAccount) {
-      setError(t('compose.noAccountSelected'));
-      return;
-    }
+  const handleSend = async (event) => {
+    event.preventDefault();
+    if (detaching) return;
+    if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
+    if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
 
     setSending(true);
     setError(null);
-
     try {
-      // Capture compose state for undo
-      const composeState = {
-        mode,
-        replyTo: actionReplyTo,
-        initialData: composeSnapshot(),
-      };
-
-      // The ONE staged identity of this outbox item: the vault uid the copy is
-      // written under, and the bytes (with their Message-ID) that go on the
-      // wire. Allocated on the first attempt and reused by every retry —
-      // `retryOutbox` re-runs this exact closure, Rust mints a fresh Message-ID
-      // on every `smtp_build_mime`, and the uid is a fresh clock read, so
-      // rebuilding per attempt left the previous attempt's .eml and index entry
-      // orphaned in the vault and put two copies of one message on the wire
-      // that no recipient can pair up.
-      let staged = null;
-
-      // The actual send function
-      const sendFn = async () => {
-        // Refresh OAuth2 token if needed before sending
-        const freshAccount = await ensureFreshToken(selectedAccount);
-        if (!freshAccount) throw new Error('Could not refresh account credentials');
-
-        const { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, outgoingPayload } =
-          await buildOutgoingPayload(freshAccount);
-
-        // Quote/angle-aware: '"Doe, John" <j@d.com>' is ONE recipient.
-        const parseAddresses = (raw) => splitRecipients(raw).map(s => ({ address: s, name: '' }));
-
-        const pseudoUid = staged ? staged.uid : Math.floor(Date.now() / 1000);
-        // Local archive target: must be a non-empty string — Maildir dirs use
-        // it as the mailbox folder name. Default to literal 'Sent' so the
-        // .eml lands under <data>/Maildir/<account>/Sent/cur/.
-        const localMailbox = sentFolderPath || 'Sent';
-        const invoke = window.__TAURI__?.core?.invoke;
-
-        // ── STAGE 1: archive raw MIME locally as DRAFT ──
-        // Build the RFC2822 bytes via Rust so we can store them BEFORE SMTP.
-        // Failure here is fatal — the whole point is to have a safety copy.
-        let builtMime = staged?.mime;
-        if (!builtMime) {
-          try {
-            builtMime = await api.buildOutgoingMime(
-              { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-              outgoingPayload
-            );
-          } catch (err) {
-            console.error('[compose:build_mime_fail]', err);
-            throw new Error('Failed to build outgoing MIME: ' + (err?.message || err));
-          }
-          console.log('[compose:build_mime_ok]', {
-            account: freshAccount.email,
-            bytes: builtMime?.rawSize,
-            messageId: builtMime?.messageId,
-          });
-        }
-        staged = { uid: pseudoUid, mime: builtMime };
-
-        if (invoke && builtMime?.rawBase64) {
-          try {
-            await send('maildir_store', {
-              accountId: freshAccount.id,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-              rawSourceBase64: builtMime.rawBase64,
-              flags: ['draft', 'seen'],
-            });
-            console.log('[compose:stage_local]', {
-              account: freshAccount.email,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-              bytes: builtMime.rawSize,
-              messageId: builtMime.messageId,
-            });
-          } catch (err) {
-            console.error('[compose:stage_local_fail]', err);
-            throw new Error('Could not archive outgoing email locally: ' + (err?.message || err));
-          }
-        }
-
-        const indexBase = {
-          uid: pseudoUid,
-          from: { address: fromAddress, name: displayName },
-          to: parseAddresses(formData.to),
-          subject: formData.subject,
-          date: new Date().toISOString(),
-          // Regular attachments only — an inline picture must not give the
-          // Sent row a paperclip.
-          has_attachments: attachments.length > 0,
-          message_id: builtMime?.messageId || null,
-          in_reply_to: formData.inReplyTo || null,
-          // Array shape, like every other local-index producer.
-          references: parseReferenceList(formData.references).length
-            ? parseReferenceList(formData.references)
-            : null,
-          snippet: htmlToText(formData.body).slice(0, 200),
-        };
-        if (invoke) {
-          try {
-            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
-              ...indexBase,
-              flags: ['draft', 'seen'],
-              source: 'local_draft',
-            }]);
-            console.log('[compose:index_draft_ok]', { uid: pseudoUid, mailbox: localMailbox });
-          } catch (err) {
-            console.warn('[compose:index_draft_fail]', err);
-          }
-        }
-
-        // ── STAGE 2: subscribe to Rust's server-APPEND completion, then
-        // refresh the Sent headers so the real server UID replaces the
-        // optimistic one (and Message-ID dedupe hides the synthetic copy).
-        //
-        // BEFORE the send, not after it. Rust spawns the Sent APPEND the
-        // instant SMTP returns, and this subscription costs two IPC round
-        // trips (the dynamic import, then `listen`) — so against a fast server
-        // the event was emitted before anything was listening for it, and the
-        // whole tail silently never ran: the local staged copy stayed in the
-        // Maildir, the optimistic row was never replaced, and the Sent view was
-        // never re-read from the server. A server on loopback is not exotic
-        // (Proton Mail Bridge, and the e2e mock); the race was simply invisible
-        // while nothing in the suite could complete a send.
-        let unlistenAppend = null;
-        // Registered before the send but ALLOWED TO ACT only after the local
-        // side of the send is finished. The event can land while STAGE 4 is
-        // still re-archiving the .eml and the Sent row has not been inserted
-        // yet — a cleanup that ran then would delete a copy that is written
-        // again a moment later, and leave the optimistic row it was supposed to
-        // take out. Both halves of the race, one gate.
-        let markLocalStageDone;
-        const localStageDone = new Promise((resolve) => { markLocalStageDone = resolve; });
-        try {
-          const { listen } = await import('@tauri-apps/api/event');
-          let handled = false;
-          const unlisten = await listen('send-server-append-complete', async (event) => {
-            const p = event.payload || {};
-            // Rust emits `account.email` as accountId (ImapConfig has no `id` field).
-            if (p.accountId !== freshAccount.email && p.accountId !== freshAccount.id) {
-              console.log('[compose:server_append_event_skip]', {
-                eventAccountId: p.accountId,
-                expectEmail: freshAccount.email,
-                expectId: freshAccount.id,
-              });
-              return;
-            }
-            if (handled) return;
-            handled = true;
-            await localStageDone;
-            console.log('[compose:server_append_event]', p);
-            if (p.ok && p.verify) {
-              console.log('[compose:server_append_verify]', {
-                existsBefore: p.verify.existsBefore,
-                existsAfter: p.verify.existsAfter,
-                delta: p.verify.delta,
-                foundUid: p.verify.foundUid,
-                serverMessageIdHeader: p.messageIdHeader,
-              });
-              if (p.verify.delta <= 0) {
-                console.error('[compose:server_append_no_delta] server reported no EXISTS change — APPEND was silently rejected or routed elsewhere');
-              }
-              if (!p.verify.foundUid && p.messageIdHeader) {
-                console.warn('[compose:server_append_search_miss] UID SEARCH could not find Message-ID — server may not index it or stored in different folder');
-              }
-            }
-            unlisten();
-
-            // Server-side copy exists — remove the pre-SMTP local Maildir
-            // staged entry so the UI doesn't show both (local pseudoUid and
-            // server UID). Per Q2=c policy: local copy is a safety net while
-            // the server round-trip is pending; once server confirms, the
-            // server copy is canonical.
-            if (p.ok && invoke) {
-              try {
-                await send('maildir_delete', {
-                  accountId: freshAccount.id,
-                  mailbox: localMailbox,
-                  uid: pseudoUid,
-                });
-                await send('local_index_remove', {
-                  accountId: freshAccount.id,
-                  mailbox: localMailbox,
-                  uid: pseudoUid,
-                });
-                console.log('[compose:local_cleanup_ok]', {
-                  account: freshAccount.email,
-                  mailbox: localMailbox,
-                  uid: pseudoUid,
-                });
-              } catch (err) {
-                console.warn('[compose:local_cleanup_fail]', err);
-              }
-              // Also drop the in-memory optimistic entry so the list view
-              // rebuilds clean after loadSentHeaders re-populates from server.
-              useMailStore.setState(s => ({
-                sentEmails: (s.sentEmails || []).filter(
-                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
-                ),
-                emails: (s.emails || []).filter(
-                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
-                ),
-                localEmails: (s.localEmails || []).filter(
-                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
-                ),
-              }));
-            }
-
-            const st = useMailStore.getState();
-            console.log('[compose:refresh_start]', {
-              account: freshAccount.email,
-              mailbox: sentFolderPath,
-              server_ok: p.ok,
-            });
-            try {
-              await st.loadSentHeaders?.(freshAccount.id);
-            } catch (err) {
-              console.warn('[compose:refresh_loadSent_fail]', err);
-            }
-            if (
-              sentFolderPath &&
-              st.activeAccountId === freshAccount.id &&
-              st.activeMailbox === sentFolderPath
-            ) {
-              try {
-                await st.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true });
-              } catch (err) {
-                console.warn('[compose:refresh_activate_fail]', err);
-              }
-            }
-            const finalSent = useMailStore.getState().sentEmails || [];
-            const messageIdMatch = builtMime?.messageId
-              ? finalSent.some(e => !e._optimistic && e.messageId === builtMime.messageId)
-              : false;
-            console.log('[compose:refresh_done]', {
-              account: freshAccount.email,
-              mailbox: sentFolderPath,
-              sent_count: finalSent.length,
-              messageId_matched_server: messageIdMatch,
-            });
-          });
-          // Armed once the send is over — a 30s timer started HERE would expire
-          // mid-send on a large attachment (the SMTP timeout scales to 600s).
-          unlistenAppend = unlisten;
-        } catch (err) {
-          console.warn('[compose:event_listen_fail]', err);
-          // Fallback to the original 8s reconcile.
-          setTimeout(() => {
-            const st = useMailStore.getState();
-            st.loadSentHeaders?.(freshAccount.id);
-          }, 8000);
-        }
-
-        // ── STAGE 3: SMTP send ──
-        let sendResult;
-        try {
-          sendResult = await api.sendEmail(
-            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-            outgoingPayload,
-            sentMailbox
-          );
-          console.log('[compose:smtp_ok]', {
-            account: freshAccount.email,
-            smtpMessageId: sendResult?.messageId,
-          });
-          // Tell the server the original was answered / forwarded, the way
-          // every other client on the account does. Fire-and-forget: the send
-          // has already happened and a flag must never fail it.
-          if (mode === 'reply' || mode === 'replyAll') markAnswered(actionReplyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
-          else if (mode === 'forward') markForwarded(actionReplyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
-
-          // New composes default to the identity that actually sent last.
-          useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
-          // It left the building: the Drafts copy is not a draft any more.
-          // Only after SMTP succeeded — a failed send keeps its draft, which is
-          // what the outbox bubble restores from.
-          // The refs outlive the unmounted window. Read AFTER the last
-          // autosave settles, or a message sent seconds after it was typed
-          // deletes a draft the save is still writing.
-          await saveChainRef.current.catch(() => {});
-          if (draftUidRef.current && draftMailboxRef.current) {
-            await deleteLocalDraft({
-              accountId: draftAccountRef.current || freshAccount.id,
-              mailbox: draftMailboxRef.current,
-              uid: draftUidRef.current,
-            });
-            draftUidRef.current = null;
-          }
-          // Safety: unsubscribe 30s after the send, even if the event never fires.
-          setTimeout(() => { try { unlistenAppend?.(); } catch {} }, 30000);
-        } catch (err) {
-          console.error('[compose:smtp_fail]', err);
-          // Nothing was sent, so no APPEND event is coming.
-          try { unlistenAppend?.(); } catch {}
-          markLocalStageDone();
-          // Local draft survives — user can retry via outbox bubble.
-          throw err;
-        }
-
-        // ── STAGE 4: re-archive locally as SENT ──
-        // Overwrite the .eml file: flags transition D→A. maildir_store
-        // removes the old file for this UID and writes the new one.
-        if (invoke && builtMime?.rawBase64) {
-          try {
-            await send('maildir_store', {
-              accountId: freshAccount.id,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-              rawSourceBase64: builtMime.rawBase64,
-              flags: ['archived', 'seen'],
-            });
-            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
-              ...indexBase,
-              flags: ['archived', 'seen'],
-              source: 'local_sent',
-            }]);
-            console.log('[compose:mark_sent_local]', {
-              account: freshAccount.email,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-            });
-          } catch (err) {
-            console.warn('[compose:mark_sent_local_fail]', err);
-          }
-        }
-
-        // The Sent row, now that the message has actually left.
-        //
-        // It goes in HERE, after SMTP, not before it. Staged ahead of the send
-        // it claimed a message was in your Sent folder while it was still on
-        // the wire — and a send that failed left that claim standing for the
-        // session: `_mergeOptimisticSent` keeps an optimistic entry the server
-        // never returns, and no outbox path (retry, cancel, dismiss) removes
-        // it. The safety net is the vault copy above, written BEFORE SMTP and
-        // untouched by this; a failed send keeps that, its Drafts autosave and
-        // the outbox bubble, and claims nothing.
-        //
-        // Built FROM `indexBase`, not beside it. Written out by hand it lost
-        // the two fields threading runs on (`in_reply_to`, `references`), and
-        // the row was then an orphan "Re: …": a second row in the list, and
-        // nothing the open thread would take.
-        const optimistic = {
-          ...indexBase,
-          cc: parseAddresses(formData.cc),
-          bcc: parseAddresses(formData.bcc),
-          internal_date: indexBase.date,
-          internalDate: indexBase.date,
-          messageId: indexBase.message_id,
-          // Same headers, under the names buildThreads and the reader read.
-          inReplyTo: indexBase.in_reply_to,
-          hasAttachments: indexBase.has_attachments,
-          read: true,
-          flags: ['\\Seen'],
-          _accountId: freshAccount.id,
-          _optimistic: true,
-          _localStaged: true,
-        };
-        useMailStore.setState(s => {
-          const dedupById = (list) => (optimistic.messageId
-            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
-            : (list || []));
-          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
-          if (
-            sentFolderPath &&
-            s.activeAccountId === freshAccount.id &&
-            s.activeMailbox === sentFolderPath
-          ) {
-            updates.emails = [optimistic, ...dedupById(s.emails)];
-            updates.totalEmails = (s.totalEmails || 0) + 1;
-          }
-          return updates;
-        });
-        useMailStore.getState().updateSortedEmails?.();
-        console.log('[compose:sent_row_insert]', {
-          account: freshAccount.email,
-          uid: pseudoUid,
-          messageId: builtMime?.messageId,
-        });
-        // The local side is complete — the APPEND handler may run now.
-        markLocalStageDone();
-
-      };
-
-      // Queue send (may delay if undo send is enabled)
-      useMailStore.getState().queueSend(composeState, sendFn, composeDelay);
-      onClose();
+      await saveChainRef.current.catch(() => {});
+      const snapshot = latestSnapshotRef.current();
+      if (onQueueSend) {
+        await onQueueSend(snapshot, snapshot._composeDelay);
+      } else {
+        const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
+        const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
+        useMailStore.getState().queueSend(
+          composeState,
+          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings }),
+          snapshot._composeDelay,
+        );
+        onClose();
+      }
     } catch (err) {
-      setError(err.message || 'Failed to send email');
+      setError(err.message || t("scheduled.errors.scheduleFailed"));
     } finally {
       setSending(false);
     }
   };
 
-  // Schedule instead of sending now: same payload-building path as a normal
-  // send (buildOutgoingPayload above), minus the local Sent-folder staging
-  // and optimistic-row machinery — scheduling never touches Sent, the daemon
-  // does that when it actually fires. `scheduled.create` freezes the MIME
-  // itself, so there is no undo-send delay to queue through.
   const handleSchedule = async () => {
-    if (!formData.to.trim()) { setError(t('compose.pleaseEnterLeastOneRecipient')); return; }
-    if (!selectedAccount) { setError(t('compose.noAccountSelected')); return; }
-    // Refused HERE ONLY — never in what the daemon fires, where "already
-    // past" is the normal catch-up case and must send.
+    if (detaching) return;
+    if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
+    if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
     if (!scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz)) return;
 
     setSending(true);
     setError(null);
     try {
-      const freshAccount = await ensureFreshToken(selectedAccount);
-      if (!freshAccount) throw new Error('Could not refresh account credentials');
-
-      const { displayName, sendAsEmail, accountForSend, sentMailbox, outgoingPayload } =
-        await buildOutgoingPayload(freshAccount);
-
-      await useScheduledStore.getState().create({
-        accountId: freshAccount.id,
-        account: { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-        email: outgoingPayload,
-        localTime: scheduleDraft.localTime,
-        tz: scheduleDraft.tz,
-        fireAt: zonedTimeToEpoch(scheduleDraft.localTime, scheduleDraft.tz),
-        sentMailbox,
-      });
-
-      // No longer a live draft — same cleanup as a real send's success path,
-      // so the outbox/Drafts bubble does not also claim this message.
       await saveChainRef.current.catch(() => {});
-      if (draftUidRef.current && draftMailboxRef.current) {
-        await deleteLocalDraft({
-          accountId: draftAccountRef.current || freshAccount.id,
-          mailbox: draftMailboxRef.current,
-          uid: draftUidRef.current,
-        });
-        draftUidRef.current = null;
+      const snapshot = latestSnapshotRef.current();
+      if (onSchedule) {
+        await onSchedule(snapshot);
+      } else {
+        const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
+        await scheduleCompose({ snapshot, account: selectedAccount, settings });
+        onClose();
       }
-
-      setShowSchedulePicker(false);
-      onClose();
     } catch (err) {
-      setError(err.message || t('scheduled.errors.scheduleFailed'));
+      setError(err.message || t("scheduled.errors.scheduleFailed"));
     } finally {
       setSending(false);
     }
@@ -1148,15 +681,23 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       _showContext: showContext,
       _replyTo: replyTo || initialData?._replyTo || null,
       _accountId: selectedAccountId,
-      _fromAddress: pickedFrom,
+      _fromAddress: composeFrom,
+      _draftAccountId: draftAccountRef.current || selectedAccountId,
       _baseline: initialSnapshot.current,
       _draftUid: draftUidRef.current,
       _draftMailbox: draftMailboxRef.current,
+      _composeDelay: composeDelay,
+      _composeSize: composeSize,
+      _scheduleDraft: scheduleDraft,
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, composeDelay, composeSize, scheduleDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
+  if (snapshotRef) snapshotRef.current = async () => {
+    await saveChainRef.current.catch(() => {});
+    return latestSnapshotRef.current();
+  };
   const publishSnapshot = useCallback(() => {
     if (!aliveRef.current) return;
     publishedSnapshotRef.current = true;
@@ -1169,7 +710,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   );
   const sessionSignature = JSON.stringify([
     formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
-    attachments, quotedHtml, contextHtml, showContext, selectedAccountId, pickedFrom,
+    attachments, quotedHtml, contextHtml, showContext, selectedAccountId, pickedFrom, composeDelay, composeSize, scheduleDraft,
   ]);
 
   // Keep the UI session current independently of the vault draft write. App
@@ -1280,17 +821,19 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       if (!uid || !mailbox) return undefined;
       return deleteLocalDraft({ accountId, mailbox, uid });
     });
+    return saveChainRef.current;
   }, [selectedAccountId]);
 
   /** Close for good: the vault copy goes with the window. */
-  const closeDiscarding = useCallback(() => {
-    discardDraft();
-    onClose();
-  }, [discardDraft, onClose]);
+  const closeDiscarding = useCallback(async () => {
+    await discardDraft();
+    (onDiscard || onClose)();
+  }, [discardDraft, onClose, onDiscard]);
 
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const confirmClose = () => {
+    if (detaching) return;
     if (hasUserContent) {
       setShowDiscardDialog(true);
       return;
@@ -1304,6 +847,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // capture-phase + stopPropagation, so it preempts this handler.
   useEffect(() => {
     const handleKey = (e) => {
+      if (detaching) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (e.key !== 'Escape') return;
       // This modal owns Escape while it is mounted. App's global shortcut
       // (window, bubble phase — runs after this document listener) would
@@ -1321,7 +869,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [showDiscardDialog, hasUserContent, onClose, onMinimize]);
+  }, [detaching, showDiscardDialog, hasUserContent, onClose, onMinimize]);
 
   // Did the gesture that produced this click START on the backdrop?
   //
@@ -1334,6 +882,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
   // Backdrop click: minimize if has content, close if empty
   const handleBackdropClick = () => {
+    if (detaching) return;
     if (hasUserContent && onMinimize) {
       handleMinimize();
     } else {
@@ -1351,11 +900,64 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   // Save editor state before minimizing so it persists across unmount/remount
-  const handleMinimize = () => {
+  const handleMinimize = async () => {
+    if (detaching) return;
+    const snapshot = snapshotRef?.current ? await snapshotRef.current() : latestSnapshotRef.current();
     if (onSaveState) {
-      publishSnapshot();
+      onSaveState(snapshot);
     }
-    if (onMinimize) onMinimize();
+    if (onMinimize) onMinimize(snapshot);
+  };
+
+  const handleDetach = async () => {
+    if (!onDetach || sending || detaching) return;
+    setDetaching(true);
+    setSending(true);
+    let transferred = false;
+    try {
+      // Do not hand a draft to another webview while a previous disk write can
+      // still finish behind it. The snapshot is read after that chain settles
+      // so its mailbox identity is the resolved one.
+      // This uid is minted by the main webview before a blank draft crosses
+      // into a native child. Each webview otherwise owns its own counter and
+      // two blank windows opened in the same second can collide on first save.
+      if (!draftUidRef.current) draftUidRef.current = newDraftUid();
+      await saveChainRef.current.catch(() => {});
+      await onDetach(latestSnapshotRef.current());
+      transferred = true;
+    } catch (err) {
+      setError(err?.message || 'Could not open compose window');
+    } finally {
+      // The exiting source can remain mounted while AnimatePresence waits for
+      // its animation. Keep it inert after a successful handoff so only the
+      // native child can own the draft and its autosave chain.
+      if (!transferred) {
+        setSending(false);
+        setDetaching(false);
+      }
+    }
+  };
+
+  const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
+  const effectiveContextWidth = Math.min(contextWidth, Math.max(240, contentWidth - 324));
+  const composeWindowStyle = {
+    ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
+    ...(detaching ? { pointerEvents: 'none' } : {}),
+  };
+  const resizeComposeWindow = (event) => {
+    const { key, shiftKey } = event;
+    const widthDelta = key === 'ArrowLeft' ? -24 : key === 'ArrowRight' ? 24 : 0;
+    const heightDelta = shiftKey && key === 'ArrowUp' ? -24 : shiftKey && key === 'ArrowDown' ? 24 : 0;
+    if (!widthDelta && !heightDelta) return;
+    event.preventDefault();
+    const current = composeSize || {
+      width: shellRef.current?.clientWidth || 640,
+      height: shellRef.current?.clientHeight || 520,
+    };
+    setComposeSize({
+      width: Math.max(320, Math.min(window.innerWidth - 32, current.width + widthDelta)),
+      height: Math.max(320, Math.min(window.innerHeight - 32, current.height + heightDelta)),
+    });
   };
 
   return (
@@ -1363,9 +965,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onMouseDown={(e) => { pressedOnBackdrop.current = e.target === e.currentTarget; }}
+      className={detached ? 'h-screen w-screen bg-mail-bg' : 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'}
+      onMouseDown={(e) => { if (!detaching) pressedOnBackdrop.current = e.target === e.currentTarget; }}
       onClick={(e) => {
+        if (detaching) return;
         if (e.target !== e.currentTarget || !pressedOnBackdrop.current) return;
         handleBackdropClick();
       }}
@@ -1375,18 +978,21 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
-        ref={dialogRef}
+        ref={setComposeShellRef}
+        inert={detaching || sending ? '' : undefined}
+        style={composeWindowStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         data-dragging={dragging ? 'true' : 'false'}
+        aria-busy={detaching || undefined}
         className={`compose-window bg-mail-surface border rounded-2xl
-                   w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden
+                   ${detached ? 'compose-window-detached h-screen w-screen border-0 rounded-none' : 'w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] relative'} flex flex-col overflow-hidden
                    ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
-        onDragEnter={(e) => { if (!hasFiles(e)) return; dragDepth.current += 1; setDragging(true); }}
-        onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-        onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }}
+        onDragEnter={(e) => { if (detaching || !hasFiles(e)) return; dragDepth.current += 1; setDragging(true); }}
+        onDragOver={(e) => { if (detaching || !hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+        onDragLeave={() => { if (detaching) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }}
         // Capture phase: the editor's handleDrop stops propagation in the bubble
         // phase, so a bubble-phase reset would never run for editor drops.
         // The reset itself waits for the next task. A browser-dispatched event
@@ -1394,11 +1000,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         // setState here would be committed — and the attach strip unmounted —
         // before the strip's own onDrop is dispatched; React then drops an
         // event whose target is no longer mounted, and the file never arrives.
-        onDropCapture={() => { dragDepth.current = 0; setTimeout(() => setDragging(false), 0); }}
-        onDrop={handleDrop}
+        onDropCapture={() => { if (!detaching) { dragDepth.current = 0; setTimeout(() => setDragging(false), 0); } }}
+        onDrop={detaching ? undefined : handleDrop}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+        <div ref={contentRef} data-testid="compose-content" className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+        <div data-testid="compose-main" className="flex flex-1 min-h-0 min-w-[268px] flex-col overflow-hidden">
+        {/* Header stays with the composer so the reading context is a true
+            sibling of the complete working surface, not only its editor. */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border shrink-0">
           <h2 id={titleId} className="font-semibold text-mail-text">{getTitle()}</h2>
           <div className="flex items-center gap-1">
             {onMinimize && (
@@ -1407,6 +1016,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 title={t('common.minimize')}
               >
                 <Minimize2 size={16} className="text-mail-text-muted" />
+              </Button>
+            )}
+            {onDetach && !detached && (
+              <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
+                onClick={handleDetach} title="Open in new window" data-testid="compose-detach">
+                <Maximize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
             <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
@@ -1422,6 +1037,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         <form
           onSubmit={handleSend}
           onKeyDown={(e) => {
+            if (detaching) {
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
             // Enter in text inputs must NOT submit the form — autocomplete
             // selection with Enter would otherwise send an empty/incomplete
             // email. Shift+Enter is the explicit send shortcut.
@@ -1448,6 +1068,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     data-testid="compose-from"
                     value={`${selectedAccountId} ${composeFrom}`}
                     onChange={(e) => {
+                      if (detaching) return;
                       const [accountId, address] = e.target.value.split(' ');
                       setSelectedAccountId(accountId);
                       setPickedFrom(address);
@@ -1607,6 +1228,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               editorRef={editorRef}
               onFiles={addFiles}
               onUpdate={(html) => {
+                if (detaching) return;
                 if (replyTemplateApplied.current) replyTemplateCurrentBody.current = html;
                 setFormData(prev => ({ ...prev, body: html }));
                 setError(null);
@@ -1628,39 +1250,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             >
               <Paperclip size={16} />
               <span>{t('compose.dropHereAttachFile')}</span>
-            </div>
-          )}
-
-          {/* The full source remains reading context. The selected excerpt is
-              only the outgoing quote and never changes this panel. */}
-          {contextHtml && (
-            <div className={`border-t border-mail-border lg:border-t-0 ${showContext ? 'lg:border-l lg:w-80 lg:shrink-0 lg:overflow-y-auto' : ''}`}>
-              <button
-                type="button"
-                data-testid="compose-context-toggle"
-                aria-pressed={showContext}
-                aria-expanded={showContext}
-                onClick={() => {
-                  const next = !showContext;
-                  setShowContext(next);
-                  setComposeContextVisible?.(next);
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted
-                          hover:bg-mail-surface-hover transition-colors"
-              >
-                <ChevronRight
-                  size={14}
-                  className={`transition-transform ${showContext ? 'rotate-90' : ''}`}
-                />
-                <span>{t('compose.showHideOriginalMessage', { action: showContext ? t('settings.backup.verify.hide') : t('compose.show') })}</span>
-              </button>
-              {showContext && (
-                <div data-testid="compose-context-panel" className="px-4 pb-3 max-h-[35vh] overflow-y-auto lg:max-h-none">
-                  <div data-testid="compose-quoted" className="pt-2">
-                    <QuotedOriginal html={contextHtml} />
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1860,7 +1449,70 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               </div>
             </div>
           </div>
-        </form>
+          </form>
+          </div>
+
+          {contextHtml && <>
+            <button
+              type="button"
+              data-testid="compose-resize"
+              role="separator"
+              tabIndex={0}
+              aria-orientation="vertical"
+              aria-label="Resize original message panel"
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                event.preventDefault();
+                setContextWidth(width => Math.max(240, Math.min(560, width + (event.key === 'ArrowLeft' ? -20 : 20))));
+              }}
+              className={`w-1 shrink-0 bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
+            />
+            <aside
+              data-testid="compose-context"
+              style={showContext && !contextCollapsed ? { width: effectiveContextWidth } : undefined}
+              className={`shrink-0 flex flex-col min-h-0 overflow-hidden ${showContext && !contextCollapsed ? 'border-l border-mail-border compose-context-aside' : 'w-12'}`}
+            >
+              <button
+                type="button"
+                data-testid="compose-context-toggle"
+                aria-pressed={showContext}
+                aria-expanded={showContext && !contextCollapsed}
+                aria-label={t('compose.showHideOriginalMessage', { action: showContext && !contextCollapsed ? t('settings.backup.verify.hide') : t('compose.show') })}
+                onClick={async () => {
+                  const next = !showContext;
+                  setShowContext(next);
+                  try {
+                    if (onContextVisibleChange) await onContextVisibleChange(next);
+                    else setComposeContextVisible?.(next);
+                  } catch (err) {
+                    setShowContext(!next);
+                    setError(err?.message || String(err));
+                  }
+                }}
+                className="w-full shrink-0 flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted hover:bg-mail-surface-hover transition-colors"
+              >
+                <ChevronRight size={14} className={`transition-transform ${showContext ? 'rotate-90' : ''}`} />
+                {showContext && !contextCollapsed && <span>{t('compose.showHideOriginalMessage', { action: t('settings.backup.verify.hide') })}</span>}
+              </button>
+              {showContext && !contextCollapsed && (
+                <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
+                  <div data-testid="compose-quoted" className="pt-2"><QuotedOriginal html={contextHtml} /></div>
+                </div>
+              )}
+            </aside>
+          </>}
+          </div>
+          {!detached && (
+            <button
+              type="button"
+              data-testid="compose-window-resize"
+              role="separator"
+              tabIndex={0}
+              aria-label="Resize compose window. Arrow keys change width; Shift plus Arrow keys change height."
+              onKeyDown={resizeComposeWindow}
+              className="compose-window-resize"
+            ><span aria-hidden="true">↘</span></button>
+          )}
       </motion.div>
 
       {/* Discard confirmation. Above the compose window it belongs to. */}

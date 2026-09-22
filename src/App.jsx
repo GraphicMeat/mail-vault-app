@@ -75,6 +75,11 @@ import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
 import { tErr, t as tr, useT  } from './i18n/index.js';
+import { invoke } from '@tauri-apps/api/core';
+import { emitTo, listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { createComposeWindowOwner } from './services/composeWindow';
+import { createComposeSend, scheduleCompose } from './services/composeSend';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -259,6 +264,13 @@ function App() {
   const layoutMode = windowWidth < 768 ? 'two-column' : userLayoutMode;
   const [composeWindows, setComposeWindows] = useState([]);
   const composeIdRef = useRef(0);
+  const composeWindowOwnerRef = useRef(null);
+  const focusNativeCompose = useCallback(async (label) => {
+    const native = await WebviewWindow.getByLabel(label);
+    if (!native) return;
+    await native.unminimize();
+    await native.setFocus();
+  }, []);
 
   // UI session is separate from settings and the vault draft. Hydrate before
   // persisting so an empty first render cannot replace disk state.
@@ -285,11 +297,14 @@ function App() {
   const openCompose = useCallback((state = {}) => {
     setComposeWindows(prev => {
       const already = prev.find(w => sameReply(w, state));
-      if (already) return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
+      if (already) {
+        if (already.detached && already.nativeLabel) void focusNativeCompose(already.nativeLabel).catch(() => {});
+        return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
+      }
       composeIdRef.current += 1;
       return [...prev, { id: composeIdRef.current, minimized: false, ...state }];
     });
-  }, []);
+  }, [focusNativeCompose]);
 
   const closeCompose = useCallback((id) => {
     setComposeWindows(prev => prev.filter(w => w.id !== id));
@@ -308,11 +323,80 @@ function App() {
     }));
   }, []);
 
-  const restoreCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.map(w => w.id === id
-      ? { ...w, initialData: w.snapshot || w.initialData, minimized: false }
-      : w));
+  const patchComposeWindow = useCallback((id, patch) => {
+    setComposeWindows(prev => prev.map(window => window.id === id ? { ...window, ...patch } : window));
   }, []);
+
+  if (!composeWindowOwnerRef.current) {
+    composeWindowOwnerRef.current = createComposeWindowOwner({
+      open: async ({ composeId, token }) => {
+        const label = await invoke('open_compose_window', { composeId, token });
+        const native = await WebviewWindow.getByLabel(label);
+        if (!native) throw new Error(tr('errors.composeWindowClosed'));
+        await native.once('tauri://destroyed', () => composeWindowOwnerRef.current?.recoverLabel(label, token));
+        return label;
+      },
+      emitTo,
+      update: (id, patch) => patchComposeWindow(id, patch),
+      remove: id => setComposeWindows(prev => prev.filter(window => window.id !== id)),
+      close: label => WebviewWindow.getByLabel(label).then(window => window?.destroy()).catch(() => {}),
+      queueSend: async (snapshot, delay, session, scheduled) => {
+        const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
+        if (!account) throw new Error(tr('compose.noAccountSelected'));
+        const replyTo = snapshot._replyTo || null;
+        const settings = { displayName: useSettingsStore.getState().getDisplayName(snapshot._accountId) || account.name || account.email };
+        if (scheduled) {
+          await scheduleCompose({ snapshot, account, settings });
+          return;
+        }
+        const composeState = { mode: session.mode, replyTo, initialData: snapshot };
+        useMailStore.getState().queueSend(
+          composeState,
+          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings }),
+          snapshot._composeDelay ?? delay,
+        );
+      },
+      settings: {
+        composeContextVisible: value => {
+          const store = useSettingsStore.getState();
+          store.setComposeContextVisible(value);
+          return { composeContextVisible: useSettingsStore.getState().composeContextVisible };
+        },
+        addEmailTemplate: value => {
+          const store = useSettingsStore.getState();
+          store.addEmailTemplate(value.name, value.body);
+          return { emailTemplates: useSettingsStore.getState().emailTemplates };
+        },
+        spellcheckEnabled: value => {
+          const store = useSettingsStore.getState();
+          store.setSpellcheckEnabled(value);
+          return { spellcheckEnabled: useSettingsStore.getState().spellcheckEnabled };
+        },
+        aiSettings: value => {
+          const store = useSettingsStore.getState();
+          store.setAiSettings(value);
+          return { aiSettings: useSettingsStore.getState().aiSettings };
+        },
+      },
+    });
+  }
+  useEffect(() => {
+    let unlisten;
+    let disposed = false;
+    listen('compose-window-request', ({ payload }) => composeWindowOwnerRef.current?.receive(payload)).then(stop => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
+  const restoreCompose = useCallback((id) => {
+    setComposeWindows(prev => prev.map(w => {
+      if (w.id !== id) return w;
+      if (w.detached && w.nativeLabel) void focusNativeCompose(w.nativeLabel).catch(() => {});
+      return { ...w, initialData: w.snapshot || w.initialData, minimized: false };
+    }));
+  }, [focusNativeCompose]);
 
   // Clicking a draft row in the Drafts folder reopens it here rather than in
   // the viewer (services/localDrafts.js does the reading; a service cannot
@@ -348,11 +432,11 @@ function App() {
   }, [openCompose]);
 
   // Backwards-compatible helpers
-  const composeState = composeWindows.find(w => !w.minimized) || null;
+  const composeState = composeWindows.find(w => !w.minimized && !w.detached) || null;
   const setComposeState = useCallback((val) => {
     if (val === null) {
       // Close the active (non-minimized) window
-      setComposeWindows(prev => prev.filter(w => w.minimized));
+      setComposeWindows(prev => prev.filter(w => w.minimized || w.detached));
     } else {
       openCompose(val);
     }
@@ -1101,7 +1185,7 @@ function App() {
       <ChunkErrorBoundary name="Compose">
       <Suspense fallback={null}>
       <AnimatePresence>
-        {composeWindows.filter(w => !w.minimized).map(w => (
+        {composeWindows.filter(w => !w.minimized && !w.detached).map(w => (
           <ComposeModal
             key={w.id}
             mode={w.mode || 'new'}
@@ -1111,6 +1195,20 @@ function App() {
             onClose={() => closeCompose(w.id)}
             onMinimize={() => minimizeCompose(w.id)}
             onSaveState={(data) => saveComposeState(w.id, data)}
+            onDetach={async data => composeWindowOwnerRef.current.detach({
+              id: w.id,
+              mode: w.mode || 'new',
+              snapshot: { ...data, _composeWindowId: w.id },
+              context: {
+                accounts: useMailStore.getState().accounts,
+                activeAccountId: useMailStore.getState().activeAccountId,
+                // JSON cloning takes a read-only settings snapshot and omits
+                // Zustand actions. The child can therefore render current
+                // preferences without ever receiving main-window writers.
+                theme: JSON.parse(JSON.stringify(useThemeStore.getState())),
+                settings: JSON.parse(JSON.stringify(useSettingsStore.getState())),
+              },
+            })}
           />
         ))}
       </AnimatePresence>

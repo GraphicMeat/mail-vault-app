@@ -38,12 +38,15 @@ vi.mock('framer-motion', () => ({
 // the quote and its text part, so they stay real.
 vi.mock('../RichTextEditor', async (importOriginal) => ({
   ...(await importOriginal()),
-  RichTextEditor: ({ editorRef }) => {
+  RichTextEditor: ({ editorRef, content, onUpdate }) => {
     const ref = React.useRef(null);
     React.useEffect(() => {
       editorRef.current = { chain: () => ({ focus: () => ({ run: () => ref.current?.focus() }) }) };
     }, [editorRef]);
-    return React.createElement('div', { ref, tabIndex: -1, 'data-testid': 'editor-stub' });
+    return React.createElement('div', {
+      ref, tabIndex: -1, 'data-testid': 'editor-stub', 'data-content': content,
+      onClick: () => onUpdate('<p>Typed body survives setting changes</p>'),
+    });
   },
 }));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
@@ -125,7 +128,7 @@ const original = {
 };
 
 function openReply(replyTo) {
-  render(<ComposeModal mode="reply" replyTo={replyTo} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+  return render(<ComposeModal mode="reply" replyTo={replyTo} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
 }
 
 async function expandQuote() {
@@ -144,6 +147,9 @@ beforeEach(() => {
   delete document.documentElement.dataset.quoteRan;
   mail.sentEmails = [];
   mail.emails = [];
+  settings.sendAsAddresses = {};
+  settings.lastComposeIdentity = null;
+  settings.composeContextVisible = true;
   buildOutgoingMime.mockClear();
   saveLocalDraft.mockReset();
   saveLocalDraft.mockResolvedValue(undefined);
@@ -151,6 +157,50 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the quoted original in a reply', () => {
+  it('freezes the configured default From address into the queued snapshot', async () => {
+    settings.sendAsAddresses = { 'acct-1': 'alias@example.test' };
+    const onQueueSend = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onQueueSend={onQueueSend} />);
+
+    fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+
+    await waitFor(() => expect(onQueueSend).toHaveBeenCalled());
+    expect(onQueueSend.mock.calls[0][0]._fromAddress).toBe('alias@example.test');
+  });
+
+  it('freezes editing and Escape while a detached window request is pending, then recovers on failure', async () => {
+    let rejectDetach;
+    const onDetach = vi.fn(() => new Promise((_resolve, reject) => { rejectDetach = reject; }));
+    const onClose = vi.fn();
+    render(<ComposeModal mode="new" initialData={{ to: 'before@example.test', body: '<p>Body</p>', _baseline: null }}
+      onClose={onClose} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    fireEvent.click(await screen.findByTestId('compose-detach'));
+    await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(true);
+
+    const to = screen.getByTestId('compose-to');
+    fireEvent.change(to, { target: { value: 'after@example.test' } });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(to.value).toBe('before@example.test');
+    expect(onClose).not.toHaveBeenCalled();
+
+    rejectDetach(new Error('Native window unavailable'));
+    await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
+    expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(false);
+    expect(to.value).toBe('before@example.test');
+  });
+
+  it('allocates an owner draft uid before an empty compose detaches', async () => {
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    fireEvent.click(await screen.findByTestId('compose-detach'));
+    await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
+    expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftUid: 1, _draftAccountId: 'acct-1' });
+  });
+
   it('does not publish an autosave snapshot after unmount', async () => {
     let resolveSave;
     saveLocalDraft.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }));
@@ -215,6 +265,41 @@ describe('the quoted original in a reply', () => {
     expect(screen.queryByTestId('compose-context-panel')).toBeNull();
   });
 
+  it('does not reinitialize a typed reply when the global context default changes', async () => {
+    const view = openReply(original);
+    fireEvent.click(screen.getByTestId('editor-stub'));
+    expect(screen.getByTestId('editor-stub').getAttribute('data-content')).toContain('Typed body survives');
+
+    settings.composeContextVisible = false;
+    view.rerender(<ComposeModal mode="reply" replyTo={original} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+
+    expect(screen.getByTestId('editor-stub').getAttribute('data-content')).toContain('Typed body survives');
+  });
+
+  it('keeps full original context beside the complete composer, not below its editor', async () => {
+    openReply(original);
+    const shell = await screen.findByTestId('compose-content');
+    const composer = screen.getByTestId('compose-main');
+    const context = screen.getByTestId('compose-context');
+
+    expect(composer.parentElement).toBe(shell);
+    expect(context.parentElement).toBe(shell);
+    expect(screen.getByRole('heading', { name: 'Reply' }).closest('[data-testid="compose-main"]')).toBe(composer);
+    expect(screen.getByTestId('compose-send').closest('[data-testid="compose-main"]')).toBe(composer);
+  });
+
+  it('offers an accessible keyboard resize control for an embedded composer', async () => {
+    openReply(original);
+    const resize = await screen.findByTestId('compose-resize');
+    expect(resize.getAttribute('role')).toBe('separator');
+    expect(resize.getAttribute('aria-orientation')).toBe('vertical');
+    expect(resize.tabIndex).toBe(0);
+    const windowResize = screen.getByTestId('compose-window-resize');
+    expect(windowResize.getAttribute('role')).toBe('separator');
+    fireEvent.keyDown(windowResize, { key: 'ArrowRight' });
+    expect(screen.getByTestId('compose-modal').style.width).toBe('664px');
+  });
+
   it('moves forward Tab from Subject into the editor but leaves Shift-Tab native', async () => {
     openReply(original);
     const subject = await screen.findByTestId('compose-subject');
@@ -240,6 +325,12 @@ describe('the quoted original in a reply', () => {
     const shown = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
     expect(shown.body.textContent).toContain('Quote request');
     expect(shown.body.textContent).toContain('Second message');
+  });
+
+  it('keeps reading context available while forwarding without adding a second outgoing quote', async () => {
+    render(<ComposeModal mode="forward" replyTo={original} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    expect(await screen.findByTestId('compose-context-panel')).not.toBeNull();
+    expect(screen.getByTestId('compose-quoted')).not.toBeNull();
   });
 
   it('quotes a plain-text original as the characters it holds', async () => {

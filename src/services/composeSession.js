@@ -23,7 +23,7 @@ export async function loadComposeSession() {
     const raw = await safeStorage.getItem(KEY);
     const windows = raw ? JSON.parse(raw) : [];
     return Array.isArray(windows)
-      ? windows.filter(unfinished).map(window => ({ ...window, minimized: true }))
+      ? windows.filter(unfinished).map(window => ({ ...window, minimized: true, detached: false, nativeLabel: undefined }))
       : [];
   } catch { return []; }
 }
@@ -32,7 +32,7 @@ export function saveComposeSession(windows) {
   const drafts = windows
     .map(window => ({ ...window, initialData: window.snapshot || window.initialData, snapshot: undefined }))
     .filter(unfinished)
-    .map(window => ({ ...window, minimized: true }));
+    .map(window => ({ ...window, minimized: true, detached: false, nativeLabel: undefined }));
   if (!drafts.length) return clearComposeSession();
   safeStorage.setItem(KEY, JSON.stringify(drafts));
 }

@@ -44,6 +44,7 @@ function ensureLoaded() {
 
 // Save all cached data to Tauri filesystem
 function saveToDisk() {
+  if (!writesEnabled) return;
   if (!invoke) return;
   try {
     const obj = {};
@@ -59,9 +60,25 @@ function saveToDisk() {
 
 // Debounced save — avoids excessive disk writes
 let saveTimer = null;
+// The detached compose bundle imports the same persisted stores, but its
+// snapshot is intentionally partial. Decide before Zustand can hydrate so it
+// can never overwrite the main window's settings file during child startup.
+let writesEnabled = typeof window === 'undefined'
+  || !new URLSearchParams(window.location?.search || '').has('compose');
 function debouncedSave() {
+  if (!writesEnabled) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(saveToDisk, 500);
+}
+
+// Detached compose receives a settings snapshot from its owner. It may read
+// defaults but must never serialize its partial webview cache over main state.
+export function setSafeStorageWriteEnabled(enabled) {
+  writesEnabled = Boolean(enabled);
+  if (!writesEnabled && saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
 }
 
 export const safeStorage = {

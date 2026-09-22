@@ -28,6 +28,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Embedded compose is deliberately a native CSS resize surface: it needs no
+   drag bookkeeping and works with every desktop webview. The keyboard divider
+   beside its reading context covers users who cannot use the resize corner. */
+.compose-window {
+  container-type: inline-size;
+  container-name: compose;
+  resize: both;
+  min-width: 320px;
+  min-height: 320px;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+}
+
+.compose-context-aside {
+  resize: horizontal;
+  min-width: 240px;
+  max-width: min(560px, 55vw);
+}
+
+.compose-window-detached { resize: none; max-width: none; max-height: none; }
+
+.compose-window-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  color: var(--mail-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: nwse-resize;
+  opacity: .75;
+  pointer-events: none;
+}
+.compose-window-resize:hover,
+.compose-window-resize:focus-visible { color: var(--mail-accent-text); opacity: 1; outline: 1px solid var(--mail-accent); outline-offset: 1px; }
+
 /* Virtual scroll row positioning */
 .virtual-row {
   position: absolute;
@@ -1198,8 +1236,13 @@ input[type="range"]::-moz-range-thumb:hover {
 .compose-addresses > div > div { min-width: 0; }
 .compose-editor { min-height: 200px; background: var(--mail-bg); }
 .compose-footer { flex-wrap: wrap; }
-.compose-footer > div { flex-shrink: 0; }
-.compose-footer > div:last-child { margin-left: auto; }
+.compose-footer > div { flex-shrink: 0; min-width: 0; }
+.compose-footer > div:last-child { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+@container compose (max-width: 564px) {
+  .compose-context-aside { resize: none; }
+  .compose-footer { padding: 10px 12px; gap: 8px; }
+  .compose-footer > div:last-child { width: 100%; margin-left: 0; }
+}
 /* Shared sample content follows the selected Chat topic, which fills one pane. */
 .sample-chat { min-width: 0; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
 .sample-chat-heading { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--mail-border); }

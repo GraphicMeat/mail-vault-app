@@ -64,8 +64,13 @@ function Toolbar({ editor }) {
   // Just the preference. Retracting the underlines already on screen is the
   // editor's job, below — re-entering the editable does not do it, whatever
   // the previous comment here claimed.
-  const toggleSpellcheck = useCallback(() => {
-    setSpellcheckEnabled(!spellcheckEnabled);
+  const toggleSpellcheck = useCallback(async () => {
+    try {
+      await setSpellcheckEnabled(!spellcheckEnabled);
+    } catch {
+      // Detached compose displays the bridge failure above the editor. The
+      // local preference stays unchanged until main acknowledges it.
+    }
   }, [spellcheckEnabled, setSpellcheckEnabled]);
 
   const S = 15;
