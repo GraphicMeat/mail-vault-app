@@ -7,11 +7,14 @@ import { avoidReserved, vaultDirName } from '../unifiedHelpers.js';
 // runs the same on every CI host regardless of OS.
 describe('avoidReserved (Win32 reserved-name suffixing, mirrors the Rust side)', () => {
   it('suffixes reserved device names, with or without an extension, any case', () => {
-    for (const name of ['CON', 'con', 'PRN', 'AUX', 'NUL', 'COM1', 'com9', 'LPT1', 'lpt9', 'CON.txt']) {
+    for (const name of ['CON', 'con', 'PRN', 'AUX', 'NUL', 'COM1', 'com9', 'LPT1', 'lpt9', 'CON.txt', 'CON .txt']) {
       const out = avoidReserved(name);
       expect(out).not.toBe(name);
-      expect(out.endsWith('_')).toBe(true);
+      expect(out.split('.')[0].endsWith('_')).toBe(true);
     }
+    // `CON.txt_` would still be the device; the extension also survives.
+    expect(avoidReserved('CON.txt')).toBe('CON_.txt');
+    expect(avoidReserved('nul.tar.gz')).toBe('nul_.tar.gz');
   });
 
   it('suffixes a trailing dot or space, which Win32 silently strips', () => {

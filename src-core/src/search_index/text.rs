@@ -21,25 +21,30 @@ pub fn vault_dir_name(mailbox: &str) -> String {
 /// Win32 reserved device names, and names Win32 silently rewrites.
 ///
 /// `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9` and `LPT1`-`LPT9` cannot be used
-/// as a path component at all, in any case, with or without an extension. A
-/// trailing dot or space is stripped by the API rather than rejected, which
-/// would quietly collide two mailboxes onto one directory. Both get one
-/// trailing `_`, which is not a name any of the rules reject.
+/// as a path component at all, in any case, with or without an extension, and
+/// Win32 ignores trailing spaces before the extension (`CON .txt` is the
+/// device too). The `_` goes on the stem, before the first dot: `CON.txt_`
+/// would still be `CON` plus an extension, while `CON_.txt` is an ordinary
+/// file that keeps its extension (and so the app that opens it).
+///
+/// A trailing dot or space is stripped by the API rather than rejected, which
+/// would quietly collide two mailboxes onto one directory; it gets one
+/// trailing `_`.
 ///
 /// Platform-independent so it can be tested anywhere; only called under
 /// `cfg(windows)`, because on unix it would rename directories that already
 /// exist.
 pub fn avoid_reserved(name: &str) -> String {
     const DEVICES: [&str; 4] = ["CON", "PRN", "AUX", "NUL"];
-    let stem = name.split_once('.').map_or(name, |(head, _)| head);
-    let upper = stem.to_ascii_uppercase();
+    let (stem, rest) = name.split_at(name.find('.').unwrap_or(name.len()));
+    let upper = stem.trim_end_matches(' ').to_ascii_uppercase();
     let numbered = |prefix: &str| {
         upper.strip_prefix(prefix).is_some_and(|rest| {
             rest.len() == 1 && matches!(rest.as_bytes()[0], b'1'..=b'9')
         })
     };
     if DEVICES.contains(&upper.as_str()) || numbered("COM") || numbered("LPT") {
-        return format!("{name}_");
+        return format!("{stem}_{rest}");
     }
     if name.ends_with('.') || name.ends_with(' ') {
         return format!("{name}_");
@@ -202,11 +207,15 @@ mod tests {
     #[test]
     fn reserved_windows_names_get_a_suffix() {
         // Reserved device names, with or without an extension, any case.
-        for name in ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1", "lpt9", "CON.txt"] {
+        for name in ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1", "lpt9", "CON.txt", "CON .txt"] {
             let out = avoid_reserved(name);
             assert_ne!(out, name, "{name} must not survive unchanged");
-            assert!(out.ends_with('_'), "{name} -> {out}");
+            let stem = out.split('.').next().unwrap_or_default();
+            assert!(stem.ends_with('_'), "{name} -> {out}: the suffix belongs on the stem");
         }
+        // `CON.txt_` would still be the device; the extension also survives.
+        assert_eq!(avoid_reserved("CON.txt"), "CON_.txt");
+        assert_eq!(avoid_reserved("nul.tar.gz"), "nul_.tar.gz");
         // A trailing dot or space is silently stripped by Win32 and would make
         // two mailboxes collide on one directory.
         assert_eq!(avoid_reserved("Inbox."), "Inbox._");

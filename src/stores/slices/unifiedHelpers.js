@@ -408,15 +408,19 @@ const RESERVED_DEVICES = new Set(['CON', 'PRN', 'AUX', 'NUL']);
 // (not folded into `vaultDirName`) so it can be unit-tested on any platform
 // without mocking `navigator`.
 export function avoidReserved(name) {
-  const stem = name.includes('.') ? name.slice(0, name.indexOf('.')) : name;
-  const upper = stem.toUpperCase();
+  const dot = name.indexOf('.');
+  const stem = dot === -1 ? name : name.slice(0, dot);
+  const rest = dot === -1 ? '' : name.slice(dot);
+  // Win32 ignores trailing spaces before the extension: `CON .txt` is CON.
+  const upper = stem.replace(/ +$/, '').toUpperCase();
   const numbered = (prefix) => {
     if (!upper.startsWith(prefix)) return false;
     const rest = upper.slice(prefix.length);
     return rest.length === 1 && rest >= '1' && rest <= '9';
   };
   if (RESERVED_DEVICES.has(upper) || numbered('COM') || numbered('LPT')) {
-    return `${name}_`;
+    // On the stem: `CON.txt_` would still be the device.
+    return `${stem}_${rest}`;
   }
   if (name.endsWith('.') || name.endsWith(' ')) {
     return `${name}_`;
@@ -424,7 +428,7 @@ export function avoidReserved(name) {
   return name;
 }
 
-function isWindowsPlatform() {
+export function isWindowsPlatform() {
   return typeof navigator !== 'undefined'
     && (navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows'));
 }
