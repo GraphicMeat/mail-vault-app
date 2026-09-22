@@ -26,10 +26,22 @@ vi.mock('../../../stores/mailStore', () => ({
   },
 }));
 
-const mockGetEmailHeaders = vi.fn(async (accountId, mailbox) => cachedByKey[`${accountId}|${mailbox}`] ?? null);
+// The baseline reads the cache's meta and uid listing, never its rows: this
+// runs for every account on every scheduled refresh.
+const mockGetEmailHeaders = vi.fn();
+const mockGetEmailHeadersMeta = vi.fn(async (accountId, mailbox) => {
+  const entry = cachedByKey[`${accountId}|${mailbox}`];
+  return entry ? { totalEmails: entry.totalEmails, totalCached: entry.uids.length } : null;
+});
+const mockListCachedUids = vi.fn(async (accountId, mailbox) => {
+  const entry = cachedByKey[`${accountId}|${mailbox}`];
+  return entry ? { uids: entry.uids, changed: [] } : null;
+});
 const mockFetchEmails = vi.fn();
 vi.mock('../../db', () => ({
   getEmailHeaders: (...a) => mockGetEmailHeaders(...a),
+  getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
+  listCachedUids: (...a) => mockListCachedUids(...a),
   saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
   getCachedMailboxes: vi.fn().mockResolvedValue([]),
 }));
@@ -73,11 +85,13 @@ vi.mock('../../../stores/settingsStore', () => ({
 const { refreshAllAccounts } = await import('../refreshAccounts');
 
 const header = (uid, extra = {}) => ({ uid, subject: `msg ${uid}`, flags: ['\\Seen'], ...extra });
-const cacheEntry = (uids, totalEmails) => ({ emails: uids.map(u => header(u)), totalEmails });
+const cacheEntry = (uids, totalEmails) => ({ uids, totalEmails });
 
 beforeEach(() => {
   cachedByKey = {};
   mockGetEmailHeaders.mockClear();
+  mockGetEmailHeadersMeta.mockClear();
+  mockListCachedUids.mockClear();
   mockFetchEmails.mockReset();
   state = {
     accounts: [{ id: 'acct-1', email: 'me@example.com' }],
@@ -105,6 +119,9 @@ describe('the active account (the open list)', () => {
     const { perAccountResults } = await refreshAllAccounts();
 
     expect(perAccountResults).toEqual([]);
+    // Short of the folder by its meta alone, so the uids are never listed.
+    expect(mockGetEmailHeadersMeta).toHaveBeenCalledWith('acct-1', 'INBOX');
+    expect(mockListCachedUids).not.toHaveBeenCalled();
   });
 
   it('counts only what the complete cache did not hold', async () => {
@@ -129,6 +146,8 @@ describe('the active account (the open list)', () => {
       newestSubject: 'hello',
       newestSender: 'Rokas',
     });
+    expect(mockListCachedUids).toHaveBeenCalledWith('acct-1', 'INBOX');
+    expect(mockGetEmailHeaders).not.toHaveBeenCalled();
   });
 });
 
@@ -144,6 +163,23 @@ describe('a background account (the disk cache)', () => {
     mockFetchEmails.mockResolvedValue({
       emails: Array.from({ length: 900 }, (_, i) => header(i + 1)),
       total: 900,
+      hasMore: false,
+    });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+
+  // A failed listing is "unknown", not "nothing cached": every fetched header
+  // would read as an arrival.
+  it('announces nothing when the uid listing fails', async () => {
+    backgroundAccount();
+    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2], 2);
+    mockListCachedUids.mockResolvedValueOnce(null);
+    mockFetchEmails.mockResolvedValue({
+      emails: [header(3), header(2), header(1)],
+      total: 3,
       hasMore: false,
     });
 
@@ -173,5 +209,6 @@ describe('a background account (the disk cache)', () => {
       newestSender: 'bank@example.com',
       newestSubject: 'statement',
     });
+    expect(mockGetEmailHeaders).not.toHaveBeenCalled();
   });
 });

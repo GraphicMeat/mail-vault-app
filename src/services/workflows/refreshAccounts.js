@@ -28,11 +28,20 @@ import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 // complete: as many cached headers as the server says the folder holds. While
 // a backfill is still running nothing is announced, which is right — none of
 // those messages arrived.
+//
+// Counted from the cache's meta and uid listing, never its rows: this runs for
+// every account on every scheduled refresh, and reading whole mailboxes of
+// header rows into the webview to collect their uids was tens of MB a tick.
+// An incomplete cache needs no listing — callers only read `uids` when complete.
 async function arrivalBaseline(accountId, mailbox) {
-  const cached = await db.getEmailHeaders(accountId, mailbox).catch(() => null);
-  const uids = new Set(cached?.emails?.map(e => e.uid) || []);
-  const total = cached?.totalEmails ?? 0;
-  return { uids, complete: total > 0 && uids.size >= total };
+  const incomplete = { uids: new Set(), complete: false };
+  const meta = await db.getEmailHeadersMeta(accountId, mailbox).catch(() => null);
+  const total = meta?.totalEmails ?? 0;
+  if (!(total > 0) || (meta.totalCached ?? 0) < total) return incomplete;
+  const listing = await db.listCachedUids(accountId, mailbox).catch(() => null);
+  if (!listing) return incomplete;
+  const uids = new Set(listing.uids);
+  return { uids, complete: uids.size >= total };
 }
 
 // `from` is an object ({name, address}), and interpolating it into the banner
