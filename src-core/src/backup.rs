@@ -661,8 +661,9 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                 };
                                 let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
                                 let filename = crate::vault_files::build_maildir_filename(uid, &["archived".to_string()]);
-                                // Both writes held across the same gate the
-                                // per-file archive write uses: a stalled
+                                // Each write held under the same gate the
+                                // per-file archive write uses (once each, off
+                                // the runtime workers): a stalled
                                 // external drive would hold every task it
                                 // polls if this ran on a runtime worker, and a
                                 // vault move started mid-run must see this
@@ -674,7 +675,6 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                 let (account, mailbox) = (account_id.clone(), mailbox_path.clone());
                                 let mirror_write: Option<Result<(), String>> = tokio::task::spawn_blocking(
                                     move || -> Result<Option<Result<(), String>>, String> {
-                                        let mut mirror_result: Option<Result<(), String>> = None;
                                         // Mailbox lock, then the gate (lock order);
                                         // the row lands right after the vault write.
                                         registry.serialized(&account, &mailbox, || gate(&mut || {
@@ -686,17 +686,25 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                                 return Err(format!("write .eml: {}", e));
                                             }
                                             registry.upsert(&account, &mailbox, uid, &written);
-                                            mirror_result = mirror_to.clone().map(|dir| {
-                                                std::fs::create_dir_all(&dir)
+                                            Ok(())
+                                        }))?;
+                                        // The mirror under a gate of its own, outside
+                                        // the mailbox lock: a slow external drive must
+                                        // not hold up the folder's other writers. A
+                                        // refusal is a failed mirror write, counted.
+                                        Ok(mirror_to.as_ref().map(|dir| {
+                                            let mut written: Result<(), String> = Ok(());
+                                            let gated = gate(&mut || {
+                                                written = std::fs::create_dir_all(dir)
                                                     .map_err(|e| format!("external mkdir failed: {}", e))
                                                     .and_then(|()| {
                                                         std::fs::write(dir.join(&filename), &raw_bytes)
                                                             .map_err(|e| format!("external write failed: {}", e))
-                                                    })
+                                                    });
+                                                Ok(())
                                             });
-                                            Ok(())
-                                        }))?;
-                                        Ok(mirror_result)
+                                            gated.and(written)
+                                        }))
                                     },
                                 )
                                 .await
@@ -971,7 +979,6 @@ async fn backup_graph_folder(
                         let registry = Arc::clone(&ctx.archive_ctx.registry);
                         let (account, mbox) = (ctx.account_id.clone(), mailbox.clone());
                         let mirror_write = tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
-                            let mut mirror_result = None;
                             // Mailbox lock, then the gate (lock order); the row
                             // lands right after the vault write.
                             registry.serialized(&account, &mbox, || gate(&mut || {
@@ -983,12 +990,20 @@ async fn backup_graph_folder(
                                     return Err(format!("write .eml: {e}"));
                                 }
                                 registry.upsert(&account, &mbox, uid, &written);
-                                mirror_result = mirror_to.clone().map(|dir| std::fs::create_dir_all(&dir)
-                                    .map_err(|e| format!("external mkdir failed: {e}"))
-                                    .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}"))));
                                 Ok(())
                             }))?;
-                            Ok(mirror_result)
+                            // The mirror under a gate of its own, outside the
+                            // mailbox lock; a refusal is a failed mirror write.
+                            Ok(mirror_to.as_ref().map(|dir| {
+                                let mut written: Result<(), String> = Ok(());
+                                let gated = gate(&mut || {
+                                    written = std::fs::create_dir_all(dir)
+                                        .map_err(|e| format!("external mkdir failed: {e}"))
+                                        .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}")));
+                                    Ok(())
+                                });
+                                gated.and(written)
+                            }))
                         }).await.map_err(|e| format!("message write panicked: {e}"))??;
                         in_vault.insert(uid);
                         match mirror_write {

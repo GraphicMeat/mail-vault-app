@@ -511,9 +511,10 @@ async fn fetch_and_store(
         move || -> Result<(String, bool, u64), String> {
             use std::fs;
 
-            // The per-file write, held across `create_dir_all` through both
-            // writes (app and mirror), not merely checked before them (Phase
-            // 2 Task 2.6 review I1). `gate`'s inner `FnMut` returns
+            // Each write is held under the gate across its `create_dir_all`
+            // and the write itself, not merely checked before them (Phase 2
+            // Task 2.6 review I1); the vault write and the mirror write take
+            // it once each. `gate`'s inner `FnMut` returns
             // `Result<(), String>`, so this closure reports its findings by
             // writing into the three pre-declared variables below instead of
             // returning them, the same shape `vault_files::clear_cache` and
@@ -522,12 +523,14 @@ async fn fetch_and_store(
             let mut external_copy_failed = false;
             let mut write_ms: u64 = 0;
 
+            // Both writes together: the mirror is the external drive, and how
+            // long the pair takes is the only honest reading of how the drive
+            // the user is backing up to is actually behaving.
+            let mut started = std::time::Instant::now();
+
             // The mailbox's registry lock first, then the gate (the lock
             // order), so a delete of this uid never lands between the write
             // and its row.
-            // ponytail: the lock also spans the mirror write, so one run's
-            // five tasks write one at a time; split it out if a slow mirror
-            // ever makes that the bottleneck.
             registry.serialized(&account_key, &mailbox_owned, || gate(&mut || {
                 fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
 
@@ -538,10 +541,7 @@ async fn fetch_and_store(
                 }
 
                 filename = vault_files::build_maildir_filename(uid, &flags);
-                // Both writes together: the mirror is the external drive, and how
-                // long the pair takes is the only honest reading of how the drive
-                // the user is backing up to is actually behaving.
-                let started = std::time::Instant::now();
+                started = std::time::Instant::now();
                 // Atomic: a kill (or a drive that vanishes) mid-write must not leave
                 // a half file behind for the next run's resume scan to trust.
                 let written = cur_dir.join(&filename);
@@ -551,9 +551,16 @@ async fn fetch_and_store(
                     return Err(format!("write .eml: {}", e));
                 }
                 registry.upsert(&account_key, &mailbox_owned, uid, &written);
+                Ok(())
+            }))?;
 
-                // Also write to backup location if configured
-                if let Some(backup_dir) = &mirror {
+            // Also write to backup location if configured. Under the gate of
+            // its own but outside the mailbox lock: a slow external drive must
+            // not hold up the folder's other writers. The vault copy has
+            // landed, so a refusal here is a failed external copy, not a
+            // failed message.
+            if let Some(backup_dir) = &mirror {
+                let mirrored = gate(&mut || {
                     match fs::create_dir_all(backup_dir) {
                         Ok(()) => {
                             // Same Maildir name as the app copy so flags survive a
@@ -571,11 +578,15 @@ async fn fetch_and_store(
                             external_copy_failed = true;
                         }
                     }
+                    Ok(())
+                });
+                if let Err(e) = mirrored {
+                    warn!("archive_emails: external copy refused for UID {}: {}", uid, e);
+                    external_copy_failed = true;
                 }
+            }
 
-                write_ms = started.elapsed().as_millis() as u64;
-                Ok(())
-            }))?;
+            write_ms = started.elapsed().as_millis() as u64;
 
             Ok((filename, external_copy_failed, write_ms))
         },
