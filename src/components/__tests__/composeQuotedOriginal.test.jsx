@@ -41,7 +41,12 @@ vi.mock('../RichTextEditor', async (importOriginal) => ({
   RichTextEditor: ({ editorRef }) => {
     const ref = React.useRef(null);
     React.useEffect(() => {
-      editorRef.current = { chain: () => ({ focus: () => ({ run: () => ref.current?.focus() }) }) };
+      // `state.doc` is real enough for signatureCaretPos: Tab out of the
+      // subject reads the document to find the signature separator.
+      editorRef.current = {
+        state: { doc: { forEach: () => {} } },
+        chain: () => ({ focus: () => ({ run: () => ref.current?.focus() }) }),
+      };
     }, [editorRef]);
     return React.createElement('div', { ref, tabIndex: -1, 'data-testid': 'editor-stub' });
   },

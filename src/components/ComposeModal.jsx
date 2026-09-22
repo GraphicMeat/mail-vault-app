@@ -31,6 +31,7 @@ import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, zonedTimeToEpoch } from '../utils/scheduledTime';
 import { AiComposeActions } from './ai/AiComposeActions';
+import { signatureCaretPos } from '../utils/signatureCaret';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -1530,7 +1531,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     const editor = editorRef.current;
                     if (editor?.chain) {
                       e.preventDefault();
-                      editor.chain().focus().run();
+                      editor.chain().focus(signatureCaretPos(editor.state.doc) ?? 'start').run();
                     }
                   }
                 }}
