@@ -1,5 +1,6 @@
 mod attachment_extract;
 mod auth;
+mod auto_tag_worker;
 mod backup_zip;
 mod channel;
 pub mod classification;
@@ -383,6 +384,12 @@ async fn daemon_main() {
         std::time::Duration::from_secs(30),
     );
 
+    // Auto Tags' standing worker shares this Notify with `idle` (its own
+    // "new mail" signal) so an IDLE wake-up sweeps auto-tag rules too,
+    // without idle_watch needing to know DaemonState exists yet.
+    let auto_tag_worker = auto_tag_worker::AutoTagWorkerState::default();
+    idle.set_auto_tag_notify(Arc::clone(&auto_tag_worker.notify));
+
     let events = events::EventBus::new(events::CAPACITY);
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
@@ -422,6 +429,7 @@ async fn daemon_main() {
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
+        auto_tag_worker,
     });
 
     // Custody, before the socket exists (Task 2.9b Step 1): a route that
@@ -475,6 +483,12 @@ async fn daemon_main() {
     // (the normal case — the daemon dies with the app in on-demand mode),
     // then sleeps until the next fire_at or a wake from handlers::scheduled.
     scheduled_send_worker::start(Arc::clone(&state));
+
+    // Auto Tags' standing worker: sweeps enabled rules over newly-cached
+    // headers on every wake from a sync/IDLE arrival (see `idle`'s
+    // `set_auto_tag_notify` above and `handlers::handle_sync_now`) — never
+    // polls the vault on its own.
+    auto_tag_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));

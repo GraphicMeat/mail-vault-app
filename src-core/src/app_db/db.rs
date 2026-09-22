@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -139,6 +139,66 @@ CREATE TABLE scheduled_sends (
   updated_at  INTEGER NOT NULL
 );
 CREATE INDEX scheduled_sends_due ON scheduled_sends(status, fire_at);
+";
+
+/// Auto Tags (Phase 4). `constraints` is a deterministic prefilter (JSON —
+/// see `app_db::auto_tags::Constraints`) evaluated in Rust before any model
+/// ever sees the message. `allow_remote` is the privacy opt-in: a rule
+/// without it can never be evaluated through `llm::Provider::Endpoint`.
+/// `provider` is the JSON-encoded `llm::Provider` (daemon-only type — this
+/// store treats it as an opaque blob) the STANDING worker evaluates the rule
+/// through; absent/null defaults to on-device (`LocalGguf`), matching the
+/// privacy default. `enabled_at` is when the rule most recently turned on:
+/// the worker only ever considers mail that arrived at or after it, so
+/// flipping a rule on never retroactively floods the model with years of
+/// history — that is what the explicit, bounded `.backfill` is for.
+///
+/// `auto_tag_backfills` records what a backfill batch assigned — including
+/// the tag it assigned, frozen at batch time — so it can be undone even if
+/// the rule's own `tag_id` is edited later: `msg_key` is
+/// `app_db::identity::msg_key`, same as `tag_assignments`.
+///
+/// `auto_tag_decisions` is the worker's dedupe: the idea behind
+/// `classification_queue`'s own "never re-ask about a message with a result
+/// already on record" (`classification.rs`'s `enqueue_inner` skips anything
+/// `load_classifications` already has), scoped per rule here because several
+/// rules can independently be mid-decision on the same message at once. A
+/// row is written for EVERY outcome, match or not — that is what makes it a
+/// decision rather than a cache.
+const SCHEMA_V4: &str = "
+CREATE TABLE auto_tag_rules (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  instruction    TEXT NOT NULL,
+  constraints    TEXT NOT NULL,
+  tag_id         TEXT NOT NULL,
+  inbox_action   TEXT NOT NULL,
+  min_confidence REAL NOT NULL,
+  allow_remote   INTEGER NOT NULL DEFAULT 0,
+  provider       TEXT NOT NULL DEFAULT 'null',
+  enabled        INTEGER NOT NULL DEFAULT 0,
+  enabled_at     INTEGER,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE TABLE auto_tag_backfills (
+  batch_id   TEXT NOT NULL,
+  rule_id    TEXT NOT NULL,
+  tag_id     TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  msg_key    TEXT NOT NULL,
+  at         INTEGER NOT NULL,
+  PRIMARY KEY (batch_id, account_id, msg_key)
+);
+CREATE INDEX auto_tag_backfills_batch ON auto_tag_backfills(batch_id);
+CREATE TABLE auto_tag_decisions (
+  rule_id    TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  msg_key    TEXT NOT NULL,
+  matched    INTEGER NOT NULL,
+  at         INTEGER NOT NULL,
+  PRIMARY KEY (rule_id, account_id, msg_key)
+);
 ";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -275,6 +335,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 4 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V4} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4');"
+            ))
+            .map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -339,10 +405,10 @@ mod tests {
     fn open_creates_the_schema_and_is_idempotent() {
         let dir = scratch("create");
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("4"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -363,10 +429,20 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM classifications", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
-        for table in ["tags", "tag_assignments", "fields", "field_values", "views", "scheduled_sends"] {
+        for table in [
+            "tags",
+            "tag_assignments",
+            "fields",
+            "field_values",
+            "views",
+            "scheduled_sends",
+            "auto_tag_rules",
+            "auto_tag_backfills",
+            "auto_tag_decisions",
+        ] {
             let found: i64 = conn
                 .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
                 .unwrap();
@@ -393,13 +469,45 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0)).unwrap();
-        assert_eq!(kept, 1, "the v2 row must survive the v3 migration");
+        assert_eq!(kept, 1, "the v2 row must survive the v3+v4 migration");
         let found: i64 = conn
             .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scheduled_sends'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(found, 1, "scheduled_sends is missing after the migration");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v4 adds Auto Tags on top of a v3 store (`scheduled_sends`, in main as
+    /// of `1cd8f0dc`) without losing what v3 already held — same shape as the
+    /// v1-gains-v2 and v2-gains-v3 tests above.
+    #[test]
+    fn a_v3_store_gains_auto_tags_and_keeps_its_rows() {
+        let dir = scratch("v3");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '3');
+                 INSERT INTO scheduled_sends(id, account_id, mailbox, uid, envelope, local_time, tz, fire_at, status, created_at, updated_at)
+                 VALUES ('s1', 'acct', 'Scheduled', 1, '{{}}', '2026-09-22T09:00', 'UTC', 0, 'queued', 0, 0);"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM scheduled_sends", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v3 row must survive the v4 migration");
+        for table in ["auto_tag_rules", "auto_tag_backfills", "auto_tag_decisions"] {
+            let found: i64 = conn
+                .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
+                .unwrap();
+            assert_eq!(found, 1, "{table} is missing after the migration");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

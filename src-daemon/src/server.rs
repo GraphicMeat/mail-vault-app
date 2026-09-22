@@ -175,6 +175,11 @@ pub struct DaemonState {
     /// (create/reschedule/cancel), same shape `classification`'s `notify`
     /// wakes its own worker.
     pub scheduled_send: crate::scheduled_send_worker::ScheduledSendState,
+    /// Auto Tags' wake signal — woken by the same "new mail arrived" points
+    /// that already feed the classification path (`handle_sync_now`,
+    /// `idle_watch`), shared with `idle` via `IdleWatchers::set_auto_tag_notify`
+    /// so an IDLE wake-up sweeps auto-tag rules too.
+    pub auto_tag_worker: crate::auto_tag_worker::AutoTagWorkerState,
 }
 
 /// Start the daemon socket server.
@@ -439,6 +444,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::tags::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::auto_tags::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::views::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -547,6 +555,8 @@ impl DaemonState {
             Arc::clone(&net),
             std::time::Duration::from_millis(50),
         );
+        let auto_tag_worker = crate::auto_tag_worker::AutoTagWorkerState::default();
+        idle.set_auto_tag_notify(Arc::clone(&auto_tag_worker.notify));
         let events = crate::events::EventBus::new(crate::events::CAPACITY);
         let custody = crate::custody::CustodyState::default();
         // Production opens custody at startup, before the socket is bound, and
@@ -594,6 +604,7 @@ impl DaemonState {
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
+            auto_tag_worker,
         })
     }
 }

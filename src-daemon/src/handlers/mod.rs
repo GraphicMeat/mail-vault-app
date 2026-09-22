@@ -19,6 +19,7 @@ use tracing::{error, info};
 
 pub(crate) mod ai;
 pub(crate) mod archive;
+pub(crate) mod auto_tags;
 pub(crate) mod backup;
 pub(crate) mod backup_zip;
 pub(crate) mod cache;
@@ -96,10 +97,17 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     tokio::spawn(async move {
         let result = state.sync_engine.run_ticket(ticket, &account, &mailbox_clone).await;
 
-        // Auto-trigger heuristic classification after successful sync (if enabled)
-        if auto_classify && result.success && result.new_emails > 0 {
-            info!("[sync] Enqueuing post-sync classification for {}", account_id);
-            enqueue_for_classification(Arc::clone(&state), &account_id, classification::QueueTier::New).await;
+        if result.success && result.new_emails > 0 {
+            // Auto Tags' standing worker: the same "new mail arrived" signal
+            // classification enqueues on below, but unconditional — auto-tag
+            // rules are not gated by the classification feature's own toggle.
+            state.auto_tag_worker.wake();
+
+            // Auto-trigger heuristic classification after successful sync (if enabled)
+            if auto_classify {
+                info!("[sync] Enqueuing post-sync classification for {}", account_id);
+                enqueue_for_classification(Arc::clone(&state), &account_id, classification::QueueTier::New).await;
+            }
         }
 
         // Cold or partly-filled cache (a restored/migrated mailbox, or one the

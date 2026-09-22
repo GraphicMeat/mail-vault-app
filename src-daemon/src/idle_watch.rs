@@ -53,6 +53,12 @@ pub struct IdleWatchers {
     /// First wait after a failure; doubles to `BACKOFF_CAP`. 30 s in
     /// production, 50 ms in tests.
     backoff_base: Duration,
+    /// Auto Tags' wake signal (`auto_tag_worker::AutoTagWorkerState::notify`),
+    /// set once after both this and `DaemonState` exist (`OnceLock` rather
+    /// than a constructor param, since `IdleWatchers` is built before
+    /// `DaemonState` is). Absent only in a test that never wires it — every
+    /// wake is then simply a no-op, never a panic.
+    auto_tag_notify: std::sync::OnceLock<Arc<tokio::sync::Notify>>,
 }
 
 impl IdleWatchers {
@@ -68,7 +74,14 @@ impl IdleWatchers {
             net,
             tasks: tokio::sync::Mutex::new(HashMap::new()),
             backoff_base,
+            auto_tag_notify: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Share Auto Tags' wake signal so an IDLE arrival sweeps auto-tag rules
+    /// too, exactly like a manual `sync.now` does (`handlers::handle_sync_now`).
+    pub fn set_auto_tag_notify(&self, notify: Arc<tokio::sync::Notify>) {
+        let _ = self.auto_tag_notify.set(notify);
     }
 
     /// Register an account. Re-registering the same config is a no-op — the app
@@ -215,6 +228,15 @@ impl IdleWatchers {
                                 result.arrivals,
                                 result.updated_flags,
                             );
+                            // Same signal Auto Tags' worker wakes on for a
+                            // manual sync (`handlers::handle_sync_now`) — an
+                            // IDLE arrival must not need a second, separate
+                            // trigger to be swept.
+                            if result.arrivals > 0 {
+                                if let Some(notify) = self.auto_tag_notify.get() {
+                                    notify.notify_one();
+                                }
+                            }
                         } else {
                             // Re-idle anyway: the 5-minute timer covers a sync
                             // that failed, and dropping the watch would cost

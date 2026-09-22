@@ -9,6 +9,7 @@
 //! The mail itself is not here: that lives in the vault, in `custody.db` and
 //! the `.eml` files.
 
+pub mod auto_tags;
 pub mod classify;
 pub mod db;
 pub mod identity;
