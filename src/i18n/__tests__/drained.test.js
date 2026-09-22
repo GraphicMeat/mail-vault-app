@@ -14,15 +14,21 @@ function audit(mode, files) {
     execFileSync('node', [AUDIT, mode, ...files], { encoding: 'utf8' });
     return '';
   } catch (e) {
-    return e.stdout || String(e);
+    // A crashed audit prints nothing to stdout. Handing its error text to the
+    // parser read as "zero findings" and passed.
+    if (!e.stdout) throw e;
+    return e.stdout;
   }
 }
 
 // `strings` mode prints one unindented "path  (N)" header per file, then one
-// indented `JSON.stringify(x)` line per finding under it (see i18n-audit.mjs's
-// own console.log calls) — never a raw newline, since JSON.stringify escapes
-// them, so every finding is exactly one line here regardless of how many
-// source lines its JSX text node spanned.
+// indented `LINE JSON.stringify(x)` line per finding under it (see
+// i18n-audit.mjs's own console.log calls) — never a raw newline, since
+// JSON.stringify escapes them, so every finding is exactly one line here
+// regardless of how many source lines its JSX text node spanned. This once
+// kept only lines STARTING with `"`, missed the line-number prefix, read zero
+// findings and passed whatever the audit said; the test below now also checks
+// the count against the audit's own total.
 function parseFindings(output) {
   const findings = [];
   let file = null;
@@ -32,13 +38,13 @@ function parseFindings(output) {
       file = header ? header[1] : null; // null on the trailing "strings: N finding(s)" line
       continue;
     }
-    const trimmed = line.trim();
-    if (file && trimmed.startsWith('"')) findings.push({ file, string: JSON.parse(trimmed) });
+    const finding = /^\s+(?:\d+\s+)?(".*")$/.exec(line);
+    if (file && finding) findings.push({ file, string: JSON.parse(finding[1]) });
   }
   return findings;
 }
 
-// audit-baseline.json is KNOWN, pre-existing debt (see the comment at its own
+// audit-baseline.json lists deliberate exceptions (see the comment at its own
 // top) — a ceiling, not a target. This checks the current findings are a
 // SUBSET of it: anything already listed is free, anything new fails. Counted,
 // not just a Set, so a second copy of an already-known string pasted into the
@@ -58,7 +64,10 @@ function newFindings(current, known) {
 
 describe('the whole app stays drained', () => {
   it('adds no hardcoded JSX strings beyond the known baseline', () => {
-    const current = parseFindings(audit('strings', []));
+    const output = audit('strings', []);
+    const current = parseFindings(output);
+    // NaN when the summary line is missing or reworded, which fails too.
+    expect(current.length).toBe(output ? Number(/^strings: (\d+) finding/m.exec(output)?.[1]) : 0);
     const fresh = newFindings(current, baseline.findings);
     expect(fresh.map((f) =>
       `${f.file}: hardcoded string ${JSON.stringify(f.string)} — wrap it in t(), or if ` +
