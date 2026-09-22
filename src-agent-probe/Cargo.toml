@@ -1,0 +1,13 @@
+[package]
+name = "mailvault-agent-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Throwaway: exists only to answer "can this bundle register a sandboxed
+# LaunchAgent, and can that agent reach the app group container". Delete it
+# once the daemon itself runs as the agent.
+[dependencies]
+chrono = "0.4"
+dirs = "5"
+mailvault-core = { path = "../src-core" }

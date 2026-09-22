@@ -3837,6 +3837,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mailvault-agent-probe"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dirs 5.0.1",
+ "mailvault-core",
+]
+
+[[package]]
 name = "mailvault-core"
 version = "0.1.0"
 dependencies = [

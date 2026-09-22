@@ -259,6 +259,25 @@ if [ -f "$BUNDLED_DAEMON" ] && [ -f "$PREBUILT_DAEMON" ]; then
     echo "   ✓ Replaced mailvault-daemon ($(file -b "$BUNDLED_DAEMON"))"
 fi
 
+# ── Agent-registration probe (throwaway) ───────────────────────────
+# Answers two things only a signed bundle can: whether SMAppService.register()
+# clears "Operation not permitted" when the agent's program is itself
+# sandboxed, and whether a launchd-started agent — which gets its OWN
+# container, not the app's — can reach the group container the daemon's socket
+# would have to move to. Delete this block once the daemon runs as the agent.
+echo ""
+echo -e "${YELLOW}🧪 Staging agent-registration probe...${NC}"
+PROBE_AGENT_DIR="$APP_PATH/Contents/Library/LaunchAgents"
+mkdir -p "$PROBE_AGENT_DIR"
+cargo build --release -p mailvault-agent-probe --target aarch64-apple-darwin
+cargo build --release -p mailvault-agent-probe --target x86_64-apple-darwin
+lipo -create -output "$PROBE_AGENT_DIR/mailvault-agent-probe" \
+    "target/aarch64-apple-darwin/release/mailvault-agent-probe" \
+    "target/x86_64-apple-darwin/release/mailvault-agent-probe"
+chmod +x "$PROBE_AGENT_DIR/mailvault-agent-probe"
+cp "src-tauri/LaunchAgents/com.mailvault.app.probe.plist" "$PROBE_AGENT_DIR/"
+echo "   ✓ Staged mailvault-agent-probe + com.mailvault.app.probe.plist"
+
 # ── Sign ───────────────────────────────────────────────────────────
 
 echo ""
@@ -337,6 +356,21 @@ if [ -f "$DAEMON_PATH" ]; then
         --sign "$SIGNING_ID" $KEYCHAIN_ARG \
         "$DAEMON_PATH"
     echo "   ✓ Signed daemon binary (with expanded daemon entitlements)"
+fi
+
+# Sign the probe agent sandboxed. This is the entire point of it: a sandboxed
+# app may not ask launchd to run a binary that is not itself sandboxed.
+PROBE_PATH="$APP_PATH/Contents/Library/LaunchAgents/mailvault-agent-probe"
+if [ -f "$PROBE_PATH" ]; then
+    codesign --force --options runtime --timestamp \
+        --entitlements "src-agent-probe/entitlements.plist" \
+        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+        "$PROBE_PATH"
+    if ! codesign -d --entitlements :- "$PROBE_PATH" 2>/dev/null | grep -q "app-sandbox"; then
+        echo -e "${RED}❌ mailvault-agent-probe is not sandboxed; registration will fail with EPERM${NC}"
+        exit 1
+    fi
+    echo "   ✓ Signed agent probe (app-sandbox + app group)"
 fi
 
 # Sign the Foundation Models helper WITHOUT entitlements: the daemon spawns it

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The point of the probe. A sandboxed app may not ask launchd to run a
+         binary that is NOT sandboxed: that would escape the app's own sandbox,
+         and macOS answers "Operation not permitted". Microsoft Teams, which is
+         sandboxed and does register bundled agents, signs its agents exactly
+         this way. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- A launchd-started agent gets its OWN container, not the app's, so the
+         group container is the only directory both can reach. The probe exists
+         to prove it can, before the daemon's socket is moved there. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.mailvault</string>
+    </array>
+</dict>
+</plist>
