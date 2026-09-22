@@ -860,6 +860,7 @@ fn save_attachment_to(
 
     fs::write(&dest_path, &decoded)
         .map_err(|e| format!("Failed to write file: {}", e))?;
+    mailvault_core::fsx::mark_from_internet(std::path::Path::new(&dest_path));
 
     info!("Attachment saved to: {}", dest_path);
     Ok(dest_path)

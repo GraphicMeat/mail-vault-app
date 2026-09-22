@@ -30,6 +30,25 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Mark a file written from an email as downloaded from the Internet (the
+/// Mark-of-the-Web), the way browsers and Outlook do: an NTFS alternate data
+/// stream `Zone.Identifier` with `ZoneId=3`. Without it, opening a cached
+/// `.exe`/`.bat`/`.js`/`.lnk` runs it with no SmartScreen or Attachment
+/// Manager prompt. No-op off Windows.
+///
+/// Errors are ignored: FAT/exFAT and network shares have no streams, and a
+/// missing mark must not cost the user the file.
+pub fn mark_from_internet(path: &Path) {
+    #[cfg(windows)]
+    {
+        let mut ads = path.as_os_str().to_owned();
+        ads.push(":Zone.Identifier");
+        let _ = fs::write(ads, "[ZoneTransfer]\r\nZoneId=3\r\n");
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+}
+
 /// `<name>` → `<name>.pre-db-<stamp>`: how a JSON file that has been imported
 /// into a SQLite store is put beyond every reader's reach without deleting it.
 /// The same convention `custody::import` uses for the vault's legacy files.
@@ -116,6 +135,21 @@ mod tests {
         write_atomic(&path, b"hello").unwrap();
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_marked_file_carries_zone_3() {
+        let dir = scratch("motw");
+        let path = dir.join("invoice.exe");
+        write_atomic(&path, b"MZ").unwrap();
+
+        mark_from_internet(&path);
+
+        let zone = std::fs::read_to_string(dir.join("invoice.exe:Zone.Identifier")).unwrap();
+        assert!(zone.contains("ZoneId=3"), "{zone}");
+        assert_eq!(std::fs::read(&path).unwrap(), b"MZ", "the mark must not touch the content");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

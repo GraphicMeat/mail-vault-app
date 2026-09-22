@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::fsx::write_atomic;
+use crate::fsx::{mark_from_internet, write_atomic};
 use crate::maildir::{self, find_by_uid, vault_filename_uid};
 use crate::vault_eml::{
     collect_attachment_parts, is_real_attachment, parse_eml_bytes, parse_eml_bytes_light,
@@ -624,6 +624,7 @@ fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u
     fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
     let body = part.get_body_raw().map_err(|e| format!("Failed to get attachment body: {}", e))?;
     write_atomic(&dest, &body).map_err(|e| format!("Failed to write file: {}", e))?;
+    mark_from_internet(&dest);
     Ok(dest)
 }
 
@@ -757,6 +758,7 @@ fn export_attachments_in(
         let body = part.get_body_raw().map_err(|e| format!("Failed to read attachment body: {}", e))?;
         let dest = next_free(&dir.join(safe_leaf(&part_filename(part))));
         write_atomic(&dest, &body).map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
+        mark_from_internet(&dest);
         files.push(dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
     }
 
