@@ -1804,11 +1804,13 @@ fn read_daemon_pid_file(path: &Path) -> Option<DaemonPid> {
 /// `tasklist` reports the shipped filename.
 fn is_daemon_exe_name(file_name: &str) -> bool {
     let name = file_name.strip_suffix(" (deleted)").unwrap_or(file_name);
-    let name = if name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".exe") {
-        &name[..name.len() - 4]
-    } else {
-        name
-    };
+    // `name[name.len() - 4..]` would be a byte-index slice and panics when
+    // that index lands inside a multi-byte character (e.g. a CJK-named
+    // binary reusing a stale pid). `str::get` returns `None` instead of
+    // panicking when the index isn't a char boundary, and a boundary valid
+    // for the tail slice is equally valid for the matching head slice below.
+    let has_exe_suffix = name.len() >= 4 && name.get(name.len() - 4..).is_some_and(|suffix| suffix.eq_ignore_ascii_case(".exe"));
+    let name = if has_exe_suffix { &name[..name.len() - 4] } else { name };
     name == "mailvault-daemon"
 }
 
@@ -1840,6 +1842,29 @@ fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
         .is_some_and(|s| is_daemon_exe_name(&s))
 }
 
+/// This app is `windows_subsystem = "windows"` in release, so any child we
+/// spawn that is itself a console-subsystem binary (`tasklist`, `taskkill`)
+/// would otherwise allocate and flash a fresh console window. `CREATE_NO_WINDOW`
+/// (0x08000000) suppresses that, std-only, no new dependency.
+#[cfg(windows)]
+fn suppress_console_window(cmd: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+/// Shared `tasklist /FI "PID eq <pid>" /FO CSV /NH` invocation behind
+/// `pid_is_mailvault_daemon` and `pid_is_dead`, both of which are polled in
+/// tight loops so this runs often enough that the console-suppression above
+/// matters.
+#[cfg(windows)]
+fn tasklist_for_pid(pid: DaemonPid) -> std::io::Result<std::process::Output> {
+    let mut cmd = std::process::Command::new("tasklist");
+    cmd.args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]);
+    suppress_console_window(&mut cmd);
+    cmd.output()
+}
+
 /// Windows has no `proc_pidpath`/`/proc`; shell out to `tasklist` and read the
 /// image name off its one CSV row for `pid`, the same approach `main.rs`
 /// already uses for `get_os_version` (`cmd /C ver`) and reveal-in-Explorer.
@@ -1847,7 +1872,7 @@ fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
 fn pid_is_mailvault_daemon(pid: DaemonPid) -> bool {
     // Treat any failure to even run `tasklist` as "not the daemon" — this
     // guards an irreversible kill, so "unsure" must mean "do not kill".
-    let Ok(output) = std::process::Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output() else {
+    let Ok(output) = tasklist_for_pid(pid) else {
         return false;
     };
     // No match: `tasklist` prints an `INFO:`-prefixed line (still exit 0)
@@ -1885,7 +1910,7 @@ fn pid_is_dead(pid: DaemonPid) -> bool {
 /// orphan is already gone.
 #[cfg(windows)]
 fn pid_is_dead(pid: DaemonPid) -> bool {
-    let Ok(output) = std::process::Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output() else {
+    let Ok(output) = tasklist_for_pid(pid) else {
         return false;
     };
     !String::from_utf8_lossy(&output.stdout).lines().next().is_some_and(|line| line.starts_with('"'))
@@ -2419,15 +2444,26 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
                         {
                             // Windows has no weaker-than-forced-kill signal, so
                             // there is no SIGTERM-then-wait step to collapse
-                            // into: unix's two identity checks (once before
-                            // SIGTERM, once again before SIGKILL) become one
-                            // here, because nothing — no wait, no signal — runs
-                            // between the match guard above (which just
-                            // confirmed `pid_is_mailvault_daemon(pid)`) and the
-                            // forced kill below. That guard IS the re-check
-                            // immediately before the one irreversible action.
+                            // into: the guard above (`pid_is_mailvault_daemon`)
+                            // is only the decision to try — it is what governs
+                            // whether we log and attempt a kill at all. The
+                            // real safety property is the two ANDed `/FI`
+                            // filters below: the guard's own `tasklist` spawn
+                            // and this `taskkill` spawn each cost tens of
+                            // milliseconds, unlike unix's immediate kill(2)
+                            // syscall, so the guard's answer can be stale by
+                            // the time the kill actually runs. Passing both
+                            // "PID eq <pid>" and "IMAGENAME eq mailvault-daemon.exe"
+                            // makes taskkill itself re-verify identity
+                            // atomically at the instant it terminates the
+                            // process — it kills only a process that is still
+                            // both this pid and this image name right then, no
+                            // separate re-check of our own needed.
                             warn!("orphan daemon (pid {pid}) did not clear its socket/pid after daemon.shutdown; forcing termination with taskkill /F");
-                            let _ = std::process::Command::new("taskkill").args(["/PID", &pid.to_string(), "/F"]).output();
+                            let mut cmd = std::process::Command::new("taskkill");
+                            cmd.args(["/F", "/FI", &format!("PID eq {pid}"), "/FI", &format!("IMAGENAME eq {DAEMON_EXE}")]);
+                            suppress_console_window(&mut cmd);
+                            let _ = cmd.output();
                             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
                             while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
                                 std::thread::sleep(std::time::Duration::from_millis(50));
@@ -3740,6 +3776,14 @@ mod tests {
         assert!(!crate::is_daemon_exe_name("mailvault-daemon-old"));
         assert!(!crate::is_daemon_exe_name("mailvault-daemon-old.exe"));
         assert!(!crate::is_daemon_exe_name(""));
+    }
+
+    #[test]
+    fn is_daemon_exe_name_does_not_panic_on_a_non_ascii_name() {
+        // A stale pid file naming a reused pid can point at any executable —
+        // a byte-index slice on the last 4 bytes must not panic when that
+        // index lands inside a multi-byte character.
+        assert!(!crate::is_daemon_exe_name("日本"));
     }
 
     #[test]
