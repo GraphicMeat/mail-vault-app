@@ -41,13 +41,16 @@
  * for test (d) - no new fixture, no `slowFetch` fault of this spec's own
  * (wdio.conf.js and mockImap.js are read-only for this task).
  *
- * Archive has no such fault on any account, so test (c)'s cancellation
- * instead races the daemon's own 5-permit semaphore (`Semaphore::new(5)` in
- * `src-core/src/archive.rs`): a batch bigger than 5 always leaves some UIDs
- * queued on a permit, and the archive-only Cancel button is wired to fire
- * the instant the FIRST `archive-progress` completion reaches this page -
- * inside the browser's own event loop, with no WebDriver round trip in the
- * critical path - so the cancel lands as early as a real click ever could.
+ * Archive has no such fault on any account, and adding one would tax every
+ * other spec sharing the account (faults are per-server and permanent), so
+ * test (c) slows archive from its OWN fixture instead: batch C's bodies are
+ * padded (BODY_PAD_C), so each item's FETCH + vault write really costs
+ * something. Against the daemon's 5-permit semaphore (`Semaphore::new(5)` in
+ * `src-core/src/archive.rs`) that leaves most UIDs queued on a permit while
+ * the cancel flies, and the archive-only Cancel is wired to fire the instant
+ * the FIRST `archive-progress` completion reaches this page - inside the
+ * browser's own event loop, with no WebDriver round trip in the critical
+ * path - so the cancel lands as early as a real click ever could.
  *
  * ── Fixtures ─────────────────────────────────────────────────────────────
  * Three disjoint batches, APPENDed straight to yoda's INBOX with ImapFlow
@@ -79,14 +82,30 @@ const PREFIX_C = 'Archive daemon cancel'; // (c): cancelled mid-flight
 const PREFIX_D = 'Bulk delete daemon';    // (d): the N4 regression
 
 const COUNT_A = 6;
-// > the 5-permit semaphore, so cancel always has a queued tail. 10 was not
-// enough in practice: two rounds of fast loopback FETCH+disk-write finish
-// well inside the RPC round trip cancel_archive itself needs, so the whole
-// batch completed before the flag ever landed (a GREEN run measured 10/10
-// completed - the cancel had no queued tail left to catch). 30 gives 6
-// rounds through the semaphore, a comfortable margin over that round trip.
+// The race test (c) has to win is R (the browser's cancel: event handler ->
+// Tauri invoke -> daemon RPC -> `cancel` flag stored) against W, the time the
+// queued tail takes to drain: W ~= (COUNT_C / 5) * T, with 5 the daemon's
+// permit count and T one message's FETCH + disk write.
+//
+// COUNT_C is NOT the lever. It was tried at 10 (red), then 30 (green then,
+// red on a faster machine in 2026-09) - each bump buys a linear margin over a
+// round trip nobody can size from the outcome, because a run that completes
+// the whole batch only proves W < R, never by how much.
+//
+// T is the lever, and this spec owns it outright: batch C's bodies are padded
+// to BODY_PAD_C bytes, so every one of its items pays a real loopback
+// transfer plus a real disk write instead of finishing in a few ms. That puts
+// ~COUNT_C - 5 uids still parked on `sem.acquire()` when the flag lands, and
+// makes both halves of (c)'s assertion mechanical rather than timed: the
+// cancel is FIRED BY the first completion, so `completed > 0` holds by
+// construction, and the padded tail cannot drain inside R.
+//
+// If (c) ever goes red again, raise BODY_PAD_C, not COUNT_C. (Batches A and D
+// stay unpadded: nothing about them is timed, and `before()` waits for every
+// seeded body to reach the store, so padding them would only cost run time.)
 const COUNT_C = 30;
 const COUNT_D = 6;
+const BODY_PAD_C = 256 * 1024;
 
 describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   this.timeout(240_000);
@@ -113,7 +132,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     }
   }
 
-  const rfc822 = (subject, date) => Buffer.from([
+  const rfc822 = (subject, date, pad = 0) => Buffer.from([
     'From: Archiver <archiver@mock.test>',
     `To: ${YODA}`,
     `Subject: ${subject}`,
@@ -123,6 +142,10 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     'Content-Type: text/plain; charset=utf-8',
     '',
     `${subject} - body`,
+    // Filler, not decoration: see BODY_PAD_C. Plain ASCII so no transfer
+    // encoding is implied and the byte count on the wire is the byte count
+    // written to the vault.
+    ...(pad > 0 ? ['x'.repeat(pad)] : []),
     '',
   ].join('\r\n'));
 
@@ -130,7 +153,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
    *  return their real server-assigned uids paired with their subjects.
    *  `anchor` is the newest message's date; the rest step one second older
    *  each, so within a batch the order is stable and unique. */
-  async function seedBatch(prefix, count, anchor = new Date()) {
+  async function seedBatch(prefix, count, anchor = new Date(), pad = 0) {
     const base = anchor.getTime();
     return withYoda(async (client) => {
       const lock = await client.getMailboxLock('INBOX');
@@ -139,7 +162,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
         for (let i = 1; i <= count; i++) {
           const subject = `${prefix} ${i}`;
           const date = new Date(base - i * 1000);
-          await client.append('INBOX', rfc822(subject, date), [], date);
+          await client.append('INBOX', rfc822(subject, date, pad), [], date);
           // Re-queried rather than trusted off APPEND's own return, same as
           // connected-delete-reader-race.test.js's `seed()`.
           const [uid] = await client.search({ subject }, { uid: true });
@@ -388,7 +411,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     expect(pidBefore).toBeGreaterThan(0);
 
     batchA = await seedBatch(PREFIX_A, COUNT_A);
-    batchC = await seedBatch(PREFIX_C, COUNT_C);
+    batchC = await seedBatch(PREFIX_C, COUNT_C, new Date(), BODY_PAD_C);
     // Dated yesterday, not "now" like A/C: the bulk modal's date-range
     // presets are the only way to reach its selection at all (Next is gated
     // on `selectedRange`, not on a plain row checkbox - see
@@ -474,10 +497,10 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
 
     // Fires the instant the first real completion (or error) for THIS run
     // reaches the page - inside the browser's own event loop, no WebDriver
-    // round trip on the critical path. With COUNT_C (30) > the daemon's
-    // 5-permit semaphore, several uids are still queued on a permit at that
-    // instant, which is exactly what a naive un-cancellable run would race
-    // past and this cancel must catch.
+    // round trip on the critical path. With COUNT_C > the daemon's 5-permit
+    // semaphore and every batch-C body padded to BODY_PAD_C, most uids are
+    // still queued on a permit at that instant, which is exactly what a naive
+    // un-cancellable run would race past and this cancel must catch.
     await browser.executeAsync((accountId, mailbox, done) => {
       window.__ARCHIVE_C_CANCELLED__ = false;
       window.__TAURI__.event.listen('archive-progress', (e) => {
