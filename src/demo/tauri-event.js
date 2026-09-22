@@ -9,3 +9,6 @@ export async function emit(event, payload) {
   for (const callback of []) callback({ payload });
   return demoBackend.invoke('demo_emit_event', { event, payload });
 }
+
+// Detached compose windows do not exist in the browser demo.
+export async function emitTo() {}
