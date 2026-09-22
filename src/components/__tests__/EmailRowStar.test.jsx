@@ -26,7 +26,11 @@ vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadR
 vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: ({ info }) => info?.count ? <span data-testid="tracker-alert-icon" /> : null }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
-vi.mock('../RowQuickActions', () => ({ RowQuickActions: () => null }));
+// Renders the one hover action the rows own a handler for, so the archive case
+// below can press it.
+vi.mock('../RowQuickActions', () => ({
+  RowQuickActions: ({ onArchive }) => <button data-testid="row-archive" onClick={onArchive} />,
+}));
 vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
   describeMessageState: () => ({ tone: 'local' }),
@@ -63,8 +67,8 @@ const rowProps = () => ({
 });
 
 const variants = [
-  ['EmailRow', (e) => <EmailRow email={e} {...rowProps()} />],
-  ['CompactEmailRow', (e) => <CompactEmailRow email={e} {...rowProps()} />],
+  ['EmailRow', (e, props = rowProps()) => <EmailRow email={e} {...props} />],
+  ['CompactEmailRow', (e, props = rowProps()) => <CompactEmailRow email={e} {...props} />],
 ];
 
 afterEach(cleanup);
@@ -106,6 +110,23 @@ for (const [name, renderRow] of variants) {
       // key is its bare uid.
       expect(toggleFlagged).toHaveBeenCalledWith(42);
       expect(onSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  // The compact row kept calling a `saveEmailLocally` it no longer bound after
+  // the quick-action rework; the ReferenceError was swallowed by QuickActions,
+  // so the default row layout's Archive did nothing at all.
+  describe(`${name} — archive`, () => {
+    it('archives this row through the bulk action and brackets it with the saving state', async () => {
+      const props = rowProps();
+      const e = email();
+      render(renderRow(e, props));
+
+      fireEvent.click(screen.getByTestId('row-archive'));
+      await vi.waitFor(() => expect(props.onStopSaving).toHaveBeenCalled());
+
+      expect(props.actions.saveEmailsLocally).toHaveBeenCalledWith([e]);
+      expect(props.onStartSaving).toHaveBeenCalled();
     });
   });
 }

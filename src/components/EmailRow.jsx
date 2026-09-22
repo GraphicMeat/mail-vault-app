@@ -223,7 +223,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   const handleSave = async (e) => {
     e.stopPropagation();
     onStartSaving(rowId);
-    try { await saveEmailLocally(email.uid); } finally { onStopSaving(rowId); }
+    try { await actions.saveEmailsLocally([email]); } finally { onStopSaving(rowId); }
   };
 
   // A row in an outgoing folder names who the message went TO — in Sent the
