@@ -492,10 +492,7 @@ async fn fetch_and_store(
     let (in_reply_to, references) = parse_threading_headers(&raw_bytes);
 
     // Generate snippet from text body
-    let snippet = email.text.as_deref()
-        .unwrap_or("")
-        .chars().take(150).collect::<String>()
-        .replace('\n', " ").replace('\r', "");
+    let snippet = crate::vault_eml::preview_snippet(email.text.as_deref());
 
     // Every fs call below is synchronous std::fs. On a runtime worker, an
     // external drive that Time Machine is reading blocks that worker — and with

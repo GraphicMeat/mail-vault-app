@@ -264,6 +264,28 @@ pub fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result
     })
 }
 
+/// The list preview of a body: its first 150 chars, line breaks flattened.
+/// Shared by the archive runner's reply and the vault registry's light rows.
+pub fn preview_snippet(text: Option<&str>) -> String {
+    text.unwrap_or("").chars().take(150).collect::<String>().replace('\n', " ").replace('\r', "")
+}
+
+/// The vault registry's stored row for one message: `LightEmail` without
+/// `text`, `html` and `flags` (the index's `row_json` shape), plus `snippet`.
+/// Flags are not stored because the file name carries them; the reader stamps
+/// `flags` and `isArchived` from the current name. `None` when it is not mail.
+pub fn light_row_json(raw: &[u8], uid: u32) -> Option<String> {
+    let email = parse_eml_bytes_light(raw, uid, Vec::new()).ok()?;
+    let snippet = preview_snippet(email.text.as_deref());
+    let mut row = serde_json::to_value(&email).ok()?;
+    let obj = row.as_object_mut()?;
+    for k in ["text", "html", "flags"] {
+        obj.remove(k);
+    }
+    obj.insert("snippet".into(), snippet.into());
+    serde_json::to_string(&row).ok()
+}
+
 /// Read and light-parse `uid` from `hint`, a path the caller already knows
 /// (a listing, an index row). If there is no hint or it no longer reads, look
 /// the uid up once in `cur_dir`. A file that reads but does not parse is `None`.
@@ -454,6 +476,26 @@ pub fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_light_row_has_no_body_or_flags_and_carries_the_snippet() {
+        let long = "x".repeat(200);
+        let raw = format!("From: A <a@x.test>\r\nSubject: Hi\r\n\r\nline one\r\nline two {long}");
+        let row: serde_json::Value = serde_json::from_str(&light_row_json(raw.as_bytes(), 7).unwrap()).unwrap();
+        assert_eq!(row["uid"], 7);
+        assert_eq!(row["subject"], "Hi");
+        for k in ["text", "html", "flags"] {
+            assert!(row.get(k).is_none(), "{k} stays out of the stored row");
+        }
+        let snippet = row["snippet"].as_str().unwrap();
+        assert!(snippet.starts_with("line one line two"), "{snippet}");
+        assert!(!snippet.contains('\r') && !snippet.contains('\n'));
+        assert!(snippet.chars().count() <= 150);
+        // 150 chars are taken first, so the stripped `\r` counted toward them.
+        let flat = preview_snippet(Some(&format!("a\r\nb{long}")));
+        assert_eq!(flat, format!("a b{}", "x".repeat(146)));
+        assert_eq!(preview_snippet(None), "");
+    }
 
     #[test]
     fn a_vault_file_name_reports_its_flags_by_both_names() {

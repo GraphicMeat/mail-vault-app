@@ -91,11 +91,11 @@ fn db_err(e: rusqlite::Error) -> String {
     e.to_string()
 }
 
-struct DiskFile {
-    uid: u32,
-    filename: String,
-    size: i64,
-    mtime_ns: i64,
+pub(crate) struct DiskFile {
+    pub(crate) uid: u32,
+    pub(crate) filename: String,
+    pub(crate) size: i64,
+    pub(crate) mtime_ns: i64,
 }
 
 struct Row {
@@ -144,7 +144,13 @@ fn subdirs(path: &Path) -> std::io::Result<Vec<String>> {
 /// included: the caller never mistakes that for "every message deleted" (a
 /// folder that is gone is `prune_missing_dirs`'s job).
 fn list_cur(cur: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
-    let entries = std::fs::read_dir(cur).ok()?;
+    read_cur(cur).ok()
+}
+
+/// `list_cur` with the `read_dir` error kept, for the vault registry: there a
+/// missing `cur` is a verified-empty folder, and only other errors are unknown.
+pub(crate) fn read_cur(cur: &Path) -> std::io::Result<(HashMap<u32, DiskFile>, HashSet<u32>)> {
+    let entries = std::fs::read_dir(cur)?;
     let mut files = HashMap::new();
     let mut unstatted = HashSet::new();
     for entry in entries.flatten() {
@@ -164,7 +170,7 @@ fn list_cur(cur: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
         let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
         files.entry(uid).or_insert(DiskFile { uid, filename, size, mtime_ns });
     }
-    Some((files, unstatted))
+    Ok((files, unstatted))
 }
 
 /// The connection at a later lock point, only if it is still the database
