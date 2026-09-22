@@ -103,12 +103,13 @@ pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<Pat
 }
 
 /// The uid a message filename carries by the external mirror's rule: the text
-/// before the first `:`, `.` or `_`. The mirror has held
-/// `<uid>:2,<flags>[.eml]`, legacy `<uid>.eml` and `<uid>_<flags>.eml`. Looser
-/// than `vault_filename_uid` (it also takes `07.eml` and `+7.eml`), which is
-/// what every mirror check has always matched.
+/// before the first `:`, `;`, `.` or `_`. The mirror has held
+/// `<uid>:2,<flags>[.eml]` (`;`-spelled on Windows, same as every other vault
+/// name), legacy `<uid>.eml` and `<uid>_<flags>.eml`. Looser than
+/// `vault_filename_uid` (it also takes `07.eml` and `+7.eml`), which is what
+/// every mirror check has always matched.
 pub fn mirror_filename_uid(name: &str) -> Option<u32> {
-    name.split(|c: char| c == ':' || c == '.' || c == '_').next()?.parse().ok()
+    name.split(|c: char| c == ':' || c == ';' || c == '.' || c == '_').next()?.parse().ok()
 }
 
 /// Every file in `dir` keyed by `mirror_filename_uid`, in ONE directory pass,
@@ -1326,6 +1327,11 @@ mod tests {
             ("_meta.json", None),
             (".4711:2,S.eml.tmp-1", None),
             ("", None),
+            // Finding 1 (final fix wave): every vault/mirror filename on
+            // Windows is `;`-spelled (`INFO_SEP`), so the split set must
+            // include it too, exactly as `vault_filename_uid` already does.
+            ("12;2,S.eml", Some(12)),
+            ("12;2,S", Some(12)),
         ];
         let wrong: Vec<_> = cases.iter()
             .filter(|(name, want)| mirror_filename_uid(name) != *want)
