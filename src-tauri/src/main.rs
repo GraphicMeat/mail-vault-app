@@ -1917,16 +1917,31 @@ fn spawn_detached_daemon() -> Result<(), String> {
 fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
     // Already running?
     if mailvault_core::transport::is_listening(socket_path) {
-        // Quick liveness check: can we actually connect? (Same defect as the
-        // `.exists()` probes above: a raw unix `UnixStream::connect` here
-        // doesn't compile on Windows. `transport::connect_sync` is the
-        // cross-platform blocking client Task 3 built for exactly this.)
-        if mailvault_core::transport::connect_sync(socket_path, std::time::Duration::from_secs(1)).is_ok() {
-            return Ok(());
+        // Quick liveness check: can we actually connect? Unix-only, and
+        // deliberately not `transport::connect_sync`: a unix socket *file*
+        // can go stale (a crashed daemon leaves it behind), so this second,
+        // real connect disambiguates "the path exists" from "something is
+        // actually listening" — `connect_sync` would additionally have added
+        // a read/write timeout and a `try_clone` (a `dup`) that the bare
+        // `connect` never had, changing this unix path's failure modes for
+        // no reason. On Windows there is no such residue: a named pipe
+        // simply isn't enumerable once no server holds it, so `is_listening`
+        // above (which already enumerates `\\.\pipe\`, see
+        // `transport::is_listening`'s doc comment) is the complete answer.
+        // Do NOT "restore" an open-based probe here for symmetry: it would
+        // open the pipe, consuming the daemon's one waiting instance per
+        // call and misreading `ERROR_PIPE_BUSY` or the accept/re-arm gap as
+        // "down" — exactly what `transport::is_listening` exists to avoid.
+        #[cfg(unix)]
+        {
+            if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
+                return Ok(());
+            }
+            // Stale socket — remove it
+            let _ = std::fs::remove_file(socket_path);
         }
-        // Stale socket — remove it (a no-op on Windows: an unaccepted pipe
-        // name isn't a filesystem entry to unlink)
-        let _ = std::fs::remove_file(socket_path);
+        #[cfg(windows)]
+        return Ok(());
     }
 
     let mut guard = DAEMON_CHILD.lock().map_err(|e| e.to_string())?;
