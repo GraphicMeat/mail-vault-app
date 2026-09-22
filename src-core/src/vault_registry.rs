@@ -203,8 +203,12 @@ impl VaultRegistry {
         }
     }
 
-    /// Called after every write and invalidate, with no lock held. Set once;
-    /// a second call is ignored.
+    /// Called after every write and invalidate, with no registry lock held
+    /// but possibly under the caller's: a writer or a generation repair runs
+    /// inside `serialized`, so the per-mailbox lock can be held. The callback
+    /// must therefore never read the registry synchronously (a verify would
+    /// wait on that lock); the daemon's index nudge and sweep are channel
+    /// sends. Set once; a second call is ignored.
     pub fn set_on_change(&self, f: Box<dyn Fn(Scope) + Send + Sync>) {
         let _ = self.on_change.set(f);
     }
@@ -260,11 +264,18 @@ impl VaultRegistry {
                         // No connection lock is held here: parsing is the slow part.
                         let raw = match std::fs::read(cur.join(&filename)) {
                             Ok(raw) => raw,
-                            Err(e) => {
-                                // Only a vanished name means the disk changed; a
-                                // file that exists but will not read is skipped.
-                                unreadable |= e.kind() == std::io::ErrorKind::NotFound;
+                            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                                // A vanished name: the disk changed under us.
+                                unreadable = true;
                                 continue;
+                            }
+                            Err(e) => {
+                                // The message is there but will not read (EIO,
+                                // EACCES). Leaving it out would answer "not
+                                // held"; only non-mail files may be left out.
+                                warn!("vault_registry: read {account}/{dir}/{filename}: {e}");
+                                self.store_parsed(&account, &dir, &parsed);
+                                return None;
                             }
                         };
                         self.parses.fetch_add(1, Ordering::SeqCst);
@@ -293,13 +304,28 @@ impl VaultRegistry {
         }
     }
 
-    /// The file holding `uid`, or `None` when the mailbox holds no such uid or
-    /// cannot be verified. See `with_resolved` for reads that recover.
-    pub fn resolve(&self, root: &Path, account: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
+    /// The file holding `uid`: `Some(Some(path))`, `Some(None)` when the
+    /// verified mailbox does not hold it, `None` when the mailbox cannot be
+    /// verified or read (unknown, never absent). See `with_resolved` for reads
+    /// that recover.
+    pub fn resolve(&self, root: &Path, account: &str, mailbox: &str, uid: u32) -> Option<Option<PathBuf>> {
         let (account, dir) = key(account, mailbox);
         self.ensure_verified(root, &account, &dir)?;
-        let filename = self.live_rows(&account, &dir, Some(&[uid]))?.pop()?.1;
-        Some(cur_dir(root, &account, &dir).join(filename))
+        let row = self.live_rows(&account, &dir, Some(&[uid]))?.pop();
+        Some(row.map(|r| cur_dir(root, &account, &dir).join(r.1)))
+    }
+
+    /// What the registry already knows about `uid`, without listing: `None`
+    /// while the mailbox is not verified (or the read failed), `Some(None)`
+    /// for a verified miss, `Some(Some(filename))` for a live row. Takes no
+    /// mailbox lock, so a writer holding the vault gate may call it (the lock
+    /// order puts the mailbox lock before the gate).
+    pub fn known(&self, account: &str, mailbox: &str, uid: u32) -> Option<Option<String>> {
+        let (account, dir) = key(account, mailbox);
+        if !self.is_verified(&account, &dir) {
+            return None;
+        }
+        Some(self.live_rows(&account, &dir, Some(&[uid]))?.pop().map(|r| r.1))
     }
 
     /// Resolve `uid` and run `f` on its path. An `f` error of kind `NotFound`
@@ -319,9 +345,12 @@ impl VaultRegistry {
         let (account_k, dir) = key(account, mailbox);
         let mut retried = false;
         loop {
-            self.ensure_verified(root, &account_k, &dir).ok_or_else(|| Error::other("vault folder could not be listed"))?;
-            // A verified miss is absent: no relisting for it.
-            let path = self.resolve(root, account, mailbox, uid).ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+            let path = match self.resolve(root, account, mailbox, uid) {
+                Some(Some(path)) => path,
+                // A verified miss is absent: no relisting for it.
+                Some(None) => return Err(ErrorKind::NotFound.into()),
+                None => return Err(Error::other("vault folder could not be listed or read")),
+            };
             match f(&path) {
                 Err(e) if e.kind() == ErrorKind::NotFound && !retried => {
                     retried = true;
@@ -334,15 +363,23 @@ impl VaultRegistry {
 
     /// A writer put `path` (a file in the mailbox's `cur`) in place for `uid`.
     /// Stats it and records it with no light row. A failed stat invalidates.
+    ///
+    /// The stat and the seq are taken under the connection lock. Taken before
+    /// it, an upsert that queued behind a delete of the same uid would write
+    /// its live row after the delete's tombstone, and `uid_sets` (which never
+    /// opens a file) would call the deleted message saved all session. Under
+    /// the lock it finds the file gone and invalidates instead. Callers still
+    /// serialize same-mailbox writers (`serialized`) for the mirror case: a
+    /// delete that unlinks first and writes its tombstone after a re-store.
     pub fn upsert(&self, account: &str, mailbox: &str, uid: u32, path: &Path) {
         let (account, dir) = key(account, mailbox);
-        let (Ok(meta), Some(filename)) = (std::fs::metadata(path), path.file_name().map(|n| n.to_string_lossy().into_owned())) else {
+        let Some(filename) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
             return self.invalidate_dir(&account, &dir);
         };
-        let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-        let mtime = mtime_ns(&meta);
-        let seq = self.next_seq();
-        self.write(&account, &dir, |conn| {
+        self.write(&account, &dir, |conn, seq| {
+            let Ok(meta) = std::fs::metadata(path) else { return Ok(false) };
+            let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
+            let mtime = mtime_ns(&meta);
             conn.execute(
                 "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
                  ON CONFLICT (account_id, vault_dir, uid) DO UPDATE SET filename = excluded.filename, size = excluded.size,
@@ -358,8 +395,7 @@ impl VaultRegistry {
     /// invalidates, since the registry did not know the file.
     pub fn rename(&self, account: &str, mailbox: &str, uid: u32, new_filename: &str) {
         let (account, dir) = key(account, mailbox);
-        let seq = self.next_seq();
-        self.write(&account, &dir, |conn| {
+        self.write(&account, &dir, |conn, seq| {
             conn.execute(
                 "UPDATE files SET filename = ?4, seq = ?5 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND filename IS NOT NULL",
                 params![account, dir, uid, new_filename, seq],
@@ -375,8 +411,7 @@ impl VaultRegistry {
             return;
         }
         let (account, dir) = key(account, mailbox);
-        let seq = self.next_seq();
-        self.write(&account, &dir, |conn| {
+        self.write(&account, &dir, |conn, seq| {
             let tx = conn.transaction()?;
             {
                 let mut st = tx.prepare_cached(
@@ -438,12 +473,13 @@ impl VaultRegistry {
         self.changed(Scope::Mailbox { account: account.to_string(), vault_dir: dir.to_string() });
     }
 
-    /// One row write. `op` returns whether it touched what it meant to; a
-    /// miss or an error invalidates, so a failed write never leaves a stale
-    /// verified answer behind.
-    fn write(&self, account: &str, dir: &str, op: impl FnOnce(&mut Connection) -> rusqlite::Result<bool>) {
+    /// One row write. `op` gets the connection and a seq taken under its
+    /// lock, so rows land in seq order. It returns whether it touched what it
+    /// meant to; a miss or an error invalidates, so a failed write never
+    /// leaves a stale verified answer behind.
+    fn write(&self, account: &str, dir: &str, op: impl FnOnce(&mut Connection, i64) -> rusqlite::Result<bool>) {
         let result = match guard(&self.conn).as_mut() {
-            Some(conn) => op(conn),
+            Some(conn) => op(conn, self.next_seq()),
             None => Ok(false),
         };
         match result {
@@ -556,9 +592,9 @@ impl VaultRegistry {
     /// the light row; any other change clears it.
     pub(crate) fn apply_listing(&self, account: &str, dir: &str, listing: Listing) -> bool {
         let Listing { files, unstatted, s0, e0 } = listing;
-        let seq = self.next_seq();
         let mut conn_guard = guard(&self.conn);
         let Some(conn) = conn_guard.as_mut() else { return false };
+        let seq = self.next_seq();
         let result = (|| -> rusqlite::Result<bool> {
             let tx = conn.transaction()?;
             let rows: HashMap<u32, (Option<String>, i64, i64, i64)> = {
@@ -704,7 +740,7 @@ mod tests {
         let f = fixture();
         let path = put(&f, MB, "3:2,S.eml");
         let reg = VaultRegistry::open(&f.app, &f.root);
-        assert!(reg.resolve(&f.root, ACCT, MB, 3).is_some());
+        assert!(reg.resolve(&f.root, ACCT, MB, 3).unwrap().is_some());
         assert_eq!(reg.listing_count(), 1);
 
         fs::remove_file(&path).unwrap();
@@ -713,7 +749,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
         assert_eq!(calls, 1, "the relisting finds it absent, so no second open");
         assert_eq!(reg.listing_count(), 2);
-        assert!(reg.resolve(&f.root, ACCT, MB, 3).is_none());
+        assert_eq!(reg.resolve(&f.root, ACCT, MB, 3), Some(None));
         assert_eq!(row_count(&reg, 3), 0, "the row is gone");
         assert_eq!(reg.listing_count(), 2);
     }
@@ -723,7 +759,7 @@ mod tests {
         let f = fixture();
         let path = put(&f, MB, "5:2,.eml");
         let reg = VaultRegistry::open(&f.app, &f.root);
-        assert!(reg.resolve(&f.root, ACCT, MB, 5).is_some());
+        assert!(reg.resolve(&f.root, ACCT, MB, 5).unwrap().is_some());
         fs::rename(&path, cur(&f, MB).join("5:2,S.eml")).unwrap();
         let bytes = reg.with_resolved(&f.root, ACCT, MB, 5, |p| fs::read(p)).unwrap();
         assert!(!bytes.is_empty());
@@ -732,6 +768,84 @@ mod tests {
         let err = reg.with_resolved(&f.root, ACCT, MB, 5, |_| -> std::io::Result<()> { Err(std::io::ErrorKind::InvalidData.into()) });
         assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
         assert_eq!(reg.listing_count(), 2);
+    }
+
+    /// Unknown is not absent: a mailbox that cannot be verified, or a row read
+    /// that fails, is an error of another kind than `NotFound`, so a caller
+    /// never reads "could not tell" as "gone".
+    #[test]
+    fn with_resolved_reports_unknown_apart_from_absent() {
+        let f = fixture();
+        put(&f, MB, "5:2,.eml");
+        let file_cur = cur(&f, "Broken");
+        fs::create_dir_all(file_cur.parent().unwrap()).unwrap();
+        fs::write(&file_cur, b"not a dir").unwrap();
+        let reg = VaultRegistry::open(&f.app, &f.root);
+
+        let err = reg.with_resolved(&f.root, ACCT, "Broken", 5, |p| fs::read(p)).unwrap_err();
+        assert_ne!(err.kind(), std::io::ErrorKind::NotFound, "an unlistable folder is unknown");
+        assert_eq!(reg.resolve(&f.root, ACCT, "Broken", 5), None);
+
+        let err = reg.with_resolved(&f.root, ACCT, MB, 6, |p| fs::read(p)).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound, "a verified miss is absent");
+
+        *guard(&reg.conn) = None; // the row read itself fails
+        assert_eq!(reg.resolve(&f.root, ACCT, MB, 5), None);
+        let err = reg.with_resolved(&f.root, ACCT, MB, 5, |p| fs::read(p)).unwrap_err();
+        assert_ne!(err.kind(), std::io::ErrorKind::NotFound, "a failed read is unknown");
+    }
+
+    /// A message that is there but will not read is not left out of the
+    /// answer: the whole answer is unknown.
+    #[cfg(unix)]
+    #[test]
+    fn a_held_file_that_will_not_read_makes_light_rows_unknown() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = fixture();
+        put(&f, MB, "1:2,.eml");
+        let locked = put(&f, MB, "2:2,.eml");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        let rows = reg.light_rows(&f.root, ACCT, MB, None);
+        let as_root = fs::read(&locked).is_ok();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+        if as_root {
+            return; // permissions aren't enforced, nothing to prove
+        }
+        assert_eq!(rows, None);
+        assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap().len(), 2, "readable again, answered again");
+    }
+
+    /// Two writers of one uid queued on the connection: an upsert whose file
+    /// a delete unlinked must never land as a live row after the delete's
+    /// tombstone, whichever of the two gets the connection first. Fails on a
+    /// stat and seq taken before the lock (about half the rounds each).
+    #[test]
+    fn an_upsert_queued_behind_a_delete_never_resurrects_the_file() {
+        let f = fixture();
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        for round in 0..40u32 {
+            let uid = 100 + round;
+            let path = put(&f, MB, &format!("{uid}:2,.eml"));
+            let held = guard(&reg.conn); // both writers queue behind this
+            std::thread::scope(|s| {
+                let (reg, path) = (&reg, &path);
+                s.spawn(move || reg.upsert(ACCT, MB, uid, path));
+                // Long enough for an upsert that stats before the lock to have stat'ed.
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                fs::remove_file(path).unwrap();
+                s.spawn(move || reg.remove(ACCT, MB, &[uid]));
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                drop(held);
+            });
+            let live: Option<Option<String>> = guard(&reg.conn)
+                .as_ref()
+                .unwrap()
+                .query_row("SELECT filename FROM files WHERE uid = ?1", [uid], |r| r.get(0))
+                .optional()
+                .unwrap();
+            assert_eq!(live.flatten(), None, "round {round}: uid {uid} is live with no file on disk");
+        }
     }
 
     #[test]
@@ -754,7 +868,7 @@ mod tests {
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
-        assert!(reg.resolve(&f.root, ACCT, MB, 9).is_none(), "a verified miss is absent, no scan");
+        assert_eq!(reg.resolve(&f.root, ACCT, MB, 9), Some(None), "a verified miss is absent, no scan");
         assert_eq!(reg.listing_count(), 1);
     }
 
@@ -808,7 +922,7 @@ mod tests {
         reg.remove(ACCT, MB, &[3]);
         assert!(reg.apply_listing(&account, &dir, listing));
         assert_eq!(saved(&reg, &f, MB), vec![4]);
-        assert!(reg.resolve(&f.root, ACCT, MB, 3).is_none());
+        assert_eq!(reg.resolve(&f.root, ACCT, MB, 3), Some(None));
         // The tombstone goes once a later listing shows the file absent.
         reg.invalidate(ACCT, MB);
         assert_eq!(saved(&reg, &f, MB), vec![4]);
