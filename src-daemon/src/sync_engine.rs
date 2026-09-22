@@ -1101,11 +1101,19 @@ struct CacheCtx {
 }
 
 impl CacheCtx {
+    /// Times the custody lock like `custody::with_conn` does: this holds the
+    /// same connection directly.
+    #[track_caller]
     fn with_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>) -> Result<Option<T>, String> {
         let Some(attached) = self.db.as_ref() else { return Ok(None) };
+        let (caller, asked) = (std::panic::Location::caller(), std::time::Instant::now());
         let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
+        let acquired = std::time::Instant::now();
         let Some(conn) = guard.as_ref() else { return Ok(None) };
-        f(conn).map(Some)
+        let result = f(conn).map(Some);
+        drop(guard);
+        crate::custody::note_lock_timing(caller, asked, acquired);
+        result
     }
 
     /// Everything a sync step needs to know about what is already cached.
@@ -1136,6 +1144,7 @@ impl CacheCtx {
     /// it has nowhere to put what it fetched. Failing is the point: the old
     /// sidecar files were a second place to land, and silently writing to
     /// neither would leave the mailbox looking uncached forever.
+    #[track_caller]
     fn require_db<T>(
         &self,
         f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>,

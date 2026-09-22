@@ -129,10 +129,17 @@ impl ContactsState {
     }
 
     /// Run `f` against the custody store, or `None` when none is attached.
+    /// Times the custody lock like `custody::with_conn` does.
+    #[track_caller]
     fn with_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> T) -> Option<T> {
         let attached = self.db.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
+        let (caller, asked) = (std::panic::Location::caller(), std::time::Instant::now());
         let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
-        guard.as_ref().map(f)
+        let acquired = std::time::Instant::now();
+        let result = guard.as_ref().map(f);
+        drop(guard);
+        crate::custody::note_lock_timing(caller, asked, acquired);
+        result
     }
 
     /// Load the persisted index for one account into memory. Idempotent.

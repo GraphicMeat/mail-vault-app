@@ -271,11 +271,18 @@ pub fn with_conn<T>(state: &DaemonState, f: impl FnOnce(&Connection) -> Result<T
         None => Err(format!("custody store unavailable: {}", g(&st.error).clone().unwrap_or_else(|| "closed".into()))),
     };
     drop(guard);
+    note_lock_timing(caller, asked, acquired);
+    result
+}
+
+/// The slow-lock log line, shared with the two holders that lock the same
+/// connection directly instead of through `with_conn` (sync's `CacheCtx`,
+/// the contacts index). Call after the guard is dropped.
+pub fn note_lock_timing(caller: &std::panic::Location<'_>, asked: Instant, acquired: Instant) {
     let (wait, hold) = (acquired - asked, acquired.elapsed());
     if wait >= SLOW_LOCK_WAIT || hold >= SLOW_LOCK_HOLD {
         warn!("[custody] lock slow at {caller}: waited {} ms, held {} ms", wait.as_millis(), hold.as_millis());
     }
-    result
 }
 
 /// The live write counter (Task 3.6 Step 4). `insights.rs` reads this fresh
