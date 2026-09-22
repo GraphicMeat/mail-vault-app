@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
 import { initScheduledSend } from './stores/scheduledStore';
+import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
@@ -925,6 +926,8 @@ function App() {
           // Loads the queue, recomputes every queued row's fireAt against the
           // current tz rules, and subscribes to live status updates.
           initScheduledSend();
+          // Loads Auto Tag rules and subscribes to backfill progress/completion.
+          initAutoTags();
         }).catch((err) => {
           console.error('[App] Full init failed:', err);
           clearTimeout(failsafe);

@@ -17,6 +17,9 @@ import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/load
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { emailScopeKey, _resolveMailboxPath } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
+import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
+import { useTagStore, requestRowTags } from '../tagStore';
+import { useAutoTagStore } from '../autoTagStore';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -205,6 +208,11 @@ export function deriveDisplayRows({
   activeAccountId = null,
   activeMailbox = null,
   deleteTombstones = null,
+  // Auto Tags (Phase 4) "hide from Inbox" — both null by default, so a
+  // caller that never passes them (most of this file's own tests) gets
+  // exactly today's behavior. See filterHiddenFromInbox.
+  hiddenTagIds = null,
+  tagsByRow = null,
 }) {
   // In unified inbox, UIDs collide across accounts — use compound key for dedup
   const uidKey = unifiedInbox
@@ -256,6 +264,9 @@ export function deriveDisplayRows({
   // the rows shown. Archived copies stay visible — the local vault outranks
   // the server's opinion about a message it hasn't actually removed.
   result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
+
+  // Auto Tags "hide from Inbox" (Phase 4) — see filterHiddenFromInbox.
+  result = filterHiddenFromInbox(result, { hiddenTagIds, tagsByRow, unifiedInbox, activeMailbox, activeAccountId });
 
   // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
   // hydration on account/folder switch must not resurrect them.
@@ -341,6 +352,27 @@ export const createMessageListSlice = (set, get) => ({
   updateSortedEmails: () => {
     const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids, unifiedInbox, activeAccountId, activeMailbox, mailboxScope, deleteTombstones, _sortedEmailsFingerprint } = get();
 
+    // Auto Tags "hide from Inbox" (Phase 4): gated on an actual hide rule
+    // existing, so the common case (feature unused) pays nothing extra —
+    // no tagStore read, no fingerprint change, no prefetch loop below.
+    const hiddenTagIds = useAutoTagStore.getState().hiddenTagIds();
+    const tagsByRow = hiddenTagIds.size ? useTagStore.getState().byRow : null;
+    if (hiddenTagIds.size) {
+      // A row's tags load lazily (TagChips fetches per rendered row), which
+      // would let a hidden-tag message flash into view before its tags are
+      // known. Prefetch the whole loaded list instead of waiting for it to
+      // render — requestRowTags already dedupes/batches into one RPC.
+      // ponytail: still one round-trip of "briefly visible" on a fresh
+      // load until the prefetch answers; a server-side prefilter would
+      // close that, not worth it for a locally-cached header lookup.
+      for (const e of emails) if (rowMailbox(e, unifiedInbox, activeMailbox) === 'INBOX') {
+        requestRowTags(e, { accountId: e._accountId || activeAccountId, mailbox: 'INBOX' });
+      }
+      for (const e of localEmails) if (rowMailbox(e, unifiedInbox, activeMailbox) === 'INBOX') {
+        requestRowTags(e, { accountId: e._accountId || activeAccountId, mailbox: 'INBOX' });
+      }
+    }
+
     // Fingerprint check: skip if the input set hasn't materially changed.
     //
     // The string alone is not enough to decide that. It describes every
@@ -364,13 +396,15 @@ export const createMessageListSlice = (set, get) => ({
       && _sortedInputs.archivedEmailIds === archivedEmailIds
       && _sortedInputs.savedEmailIds === savedEmailIds
       && _sortedInputs.serverUids === serverUids
-      && _sortedInputs.deleteTombstones === deleteTombstones;
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
+      && _sortedInputs.deleteTombstones === deleteTombstones
+      && _sortedInputs.tagsByRow === tagsByRow;
+    const hiddenTagKey = hiddenTagIds.size ? [...hiddenTagIds].sort().join(',') : '';
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}-${hiddenTagKey}`;
     if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
     const result = deriveDisplayRows({
       emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids,
-      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones,
+      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow,
     });
 
     // Apply persisted link safety alerts from settingsStore. Keyed by
@@ -462,7 +496,7 @@ export const createMessageListSlice = (set, get) => ({
 
     _chatEmailsFingerprint = '';
     _threadsFingerprint = '';
-    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones };
+    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones, tagsByRow };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 

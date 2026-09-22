@@ -9,6 +9,8 @@ import { createComposeSlice } from './slices/composeSlice';
 import { createUndoSlice } from './slices/undoSlice';
 import { createSyncSlice } from './slices/syncSlice';
 import { createUiSlice } from './slices/uiSlice';
+import { useTagStore } from './tagStore';
+import { useAutoTagStore } from './autoTagStore';
 
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
@@ -78,4 +80,17 @@ window.addEventListener('offline', () => {
     connectionErrorType: 'offline',
     connectionError: t('store.mailStore.networkOffline'),
   });
+});
+
+// ── Auto Tags "hide from Inbox" (Phase 4) ──────────────────────────────
+// A row's tags load asynchronously (the prefetch in updateSortedEmails,
+// TagChips rendering a row) and a rule's enabled/hide state can flip while
+// the Inbox is open — re-derive the list when either changes. Gated on an
+// actual hide rule existing so accounts with the feature off (the default)
+// see no extra recompute on every ordinary tag-store write.
+useTagStore.subscribe(() => {
+  if (useAutoTagStore.getState().hiddenTagIds().size) useMailStore.getState().updateSortedEmails();
+});
+useAutoTagStore.subscribe((state, prev) => {
+  if (state.rules !== prev.rules) useMailStore.getState().updateSortedEmails();
 });

@@ -15,6 +15,8 @@
   "app.mail",
   "app.re",
   "app.vault",
+  "autoTag.name",
+  "autoTag.no",
   "bugReport.graphicMeat",
   "bulk.ops.start",
   "bulk.save.messages",
