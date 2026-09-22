@@ -22,7 +22,9 @@ function session(markup, saved, blocked = false) {
 
 describe('website language selection', () => {
   it.each(LOCALES)('renders the correct selector and language destinations for $dir', locale => {
-    const dom = new JSDOM(render(source, 'docs.html', locale, {}));
+    const dom = new JSDOM(render(source, 'docs.html', locale, {
+      cc856b4b4277: 'Choisissez votre langue, English selected',
+    }));
     const picker = dom.window.document.querySelector('.mv-language');
     expect(picker.querySelector('.mv-language-name').textContent).toBe(locale.name);
     expect(picker.querySelector('.mv-language-code').textContent).toBe(locale.dir.toUpperCase());
@@ -30,6 +32,7 @@ describe('website language selection', () => {
     expect(picker.querySelector('[aria-current="page"]').hreflang).toBe(locale.hreflang);
     expect(picker.querySelector('[hreflang="en"]').getAttribute('href')).toBe('/docs.html');
     expect(picker.querySelector('[hreflang="fr"]').getAttribute('href')).toBe('/fr/docs.html');
+    expect(picker.querySelector('summary').getAttribute('aria-label')).toBe('Choisissez votre langue');
     dom.window.close();
   });
   it('restores French on an English entry page with query and anchor intact', () => {

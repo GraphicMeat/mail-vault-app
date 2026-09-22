@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
   <meta property="og:title" content="저장소와 볼트 — MailVault FAQ">
   <meta property="og:description" content="MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.">
-  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault: 새 메일을 위한 공간을 만드세요. 이전 메일은 보관하세요. macOS와 Linux용 무료 앱이며 앱 미리보기도 제공합니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="저장소와 볼트 — MailVault FAQ">
   <meta name="twitter:description" content="MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.">
-  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault: 새 메일을 위한 공간을 만드세요. 이전 메일은 보관하세요. macOS와 Linux용 무료 앱이며 앱 미리보기도 제공합니다.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "메일은 어디에 저장됩니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
+        "text": "볼트는 Mac 또는 Linux 컴퓨터에 있는 Maildir 형식으로 정리된 표준 .eml 파일 폴더입니다. 이메일당 파일 하나이며 데이터베이스가 필요 없습니다. macOS에서는 MailVault가 샌드박스 처리되므로 폴더는 ~/Library/Application Support가 아니라 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/에 있습니다. Linux에서는 .deb 패키지의 경우 ~/.local/share/com.mailvault.app/에, Snap의 경우 ~/snap/mailvault/current/.local/share/com.mailvault.app/에 있습니다. ~/Library는 Finder에서 숨겨지고 Spotlight가 색인화하지 않으므로, 드라이브에서 com.mailvault.app을 검색해도 아무것도 찾지 못할 수 있습니다. Finder에서 Shift + Command + G를 누르고 ~/Library를 입력하거나, Finder의 이동 메뉴를 열 때 Option을 누르거나, 홈 폴더에서 Command + J를 눌러 라이브러리 폴더 보기를 선택하세요. MailVault는 설정, 백업 및 복원, 백업 설정, 메일 저장 위치에서도 사용 중인 폴더를 보여 줍니다. 데이터는 컴퓨터를 떠나거나 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 널리 지원되는 이메일 형식이므로 Apple Mail, Thunderbird, Outlook 또는 EML을 지원하는 다른 앱에서 이메일을 열 수 있습니다. MailVault에 묶이지 않습니다."
       }
     },
     {
@@ -100,7 +100,7 @@
       "name": "외부 백업 위치(두 번째 사본)란 무엇입니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so apps that support EML can read the message files. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
+        "text": "MailVault는 언제나 앱 자체 저장소에 작동 사본을 보관합니다. 여기서 메일을 읽고, 검색하고, 엽니다. 외부 백업 위치는 선택한 드라이브의 두 번째 독립 사본을 더합니다. 외장 SSD, NAS 공유 또는 동기화 폴더를 선택할 수 있습니다. 백업 실행 중 작동 사본과 동시에 같은 .eml 및 Maildir 구조로 기록되므로 EML을 지원하는 앱이 메시지 파일을 읽을 수 있습니다. 앱은 일상적으로 이 사본을 읽지 않으며 콜드 스토리지입니다. 서버에서 삭제하거나 MailVault에서 제거한 이메일도 외부 사본에는 남습니다. 설정의 백업에서 ‘두 번째 사본 — 외부 콜드 스토리지’를 지정하세요. macOS에서 MailVault는 폴더의 보안 범위 책갈피를 저장하므로 재시작과 앱 업데이트 뒤에도 접근이 유지됩니다. 상태 배지는 준비됨, 재승인 필요, 사용할 수 없음 또는 접근 거부를 표시하고 재승인은 한 번의 클릭으로 할 수 있습니다. 백업 중 드라이브를 분리해도 작동 사본은 계속 성공하며 MailVault는 외부 사본에 저장하지 못한 메시지 수를 보고합니다. 다음 실행에서 그 메시지를 복사합니다."
       }
     }
   ]
@@ -145,21 +145,21 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
-<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
 
   <!-- Navigation -->
   <header class="mv-header">
 <div class="mv-wrap mv-nav">
-<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
-<nav class="mv-navlinks" aria-label="Main navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">Help</a>
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">도움말</a>
 <a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a></nav>
 <div class="mv-navtools">
 <details class="mv-language" translate="no">
-<summary aria-label="Choose language, 한국어 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
 <ul>
 <li><a data-i18n-abs href="/faq/storage-and-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
@@ -182,11 +182,11 @@
 </li>
 </ul>
 </details>
-<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
 <a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
 <details class="mv-mobile-menu">
 <summary>메뉴</summary>
-<nav aria-label="Mobile navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">Help</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">Download free</a>
+<nav aria-label="모바일 탐색"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">도움말</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
 </nav>
 </details>
 </div>
@@ -215,7 +215,7 @@
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">메일은 어디에 저장됩니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
+              <p class="mb-4">볼트는 Mac 또는 Linux 컴퓨터에서 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일</a>을 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식으로 정리한 폴더입니다. 이메일당 파일 하나이며 데이터베이스가 필요 없습니다. 데이터는 컴퓨터를 떠나거나 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 널리 지원되는 이메일 형식이므로 Apple Mail, Thunderbird, Outlook 또는 EML을 지원하는 다른 앱에서 이메일을 열 수 있습니다. MailVault에 묶이지 않습니다.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">정확한 폴더</p>
               <p class="mb-2">MailVault는 샌드박스 앱이므로 macOS에서 볼트는 앱 자체의 컨테이너 안에 있습니다 &mdash; 대부분이 먼저 찾아보는 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> 바로 아래가 아닙니다:</p>
@@ -340,17 +340,17 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
-<p>Read your mail. Keep your mail.</p>
+<p>메일을 읽고, 메일을 보관하세요.</p>
 </div>
-<nav aria-label="Explore MailVault"><a href="/ko/use-cases.html">Use cases</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">What’s new</a><a href="/ko/mentioned-in.html">Mentions</a><a href="/ko/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
-<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
 <div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
 </div>
 </div>
@@ -359,6 +359,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=3"></script>
+<script defer src="/assets/english-site.js?v=20260922-acquisition"></script>
 </body>
 </html>

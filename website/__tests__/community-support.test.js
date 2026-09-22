@@ -2,8 +2,12 @@ import { it, expect } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-async function setup(ok) {
- const dom = new JSDOM(readFileSync('website/index.html','utf8'), {url:'https://mailvaultapp.com',runScripts:'outside-only'});
+async function setup(ok, { copy, label, voted } = {}) {
+ let markup = readFileSync('website/index.html','utf8');
+ if (copy) markup = markup.replace(/(<script id="mv-runtime-copy" type="application\/json">)[\s\S]*?(<\/script>)/, `$1${JSON.stringify(copy)}$2`);
+ if (label) markup = markup.replace(/(<span id="vote-label">)[^<]*/, `$1${label}`);
+ const dom = new JSDOM(markup, {url:'https://mailvaultapp.com',runScripts:'outside-only'});
+ if (voted) dom.window.localStorage.setItem('mailvault-voted','true');
  let posts=0;
  dom.window.fetch=async (url,options) => {
   if(options?.method==='POST') posts++;
@@ -29,5 +33,19 @@ it('does not record failed votes and allows retry',async()=>{
  expect(button.disabled).toBe(false);
  expect(dom.window.document.getElementById('vote-status').textContent).toContain('try again');
  button.click();await settle();expect(posts()).toBe(2);
+ dom.window.close();
+});
+it('uses localized vote copy without replacing the initial translated label',async()=>{
+ const copy = {
+  voteThanks: 'Merci pour votre soutien !',
+  voteAlreadyCounted: 'Votre vote a déjà été compté. Merci !',
+  voteSupporting: 'Merci de soutenir MailVault !',
+  voteSendError: 'Impossible d’envoyer votre vote. Réessayez bientôt.',
+ };
+ const {dom,button}=await setup(true,{copy,label:'Je le veux !'});
+ expect(dom.window.document.getElementById('vote-label').textContent).toBe('Je le veux !');
+ button.click(); await settle();
+ expect(dom.window.document.getElementById('vote-label').textContent).toBe(copy.voteThanks);
+ expect(dom.window.document.getElementById('vote-status').textContent).toBe(copy.voteSupporting);
  dom.window.close();
 });

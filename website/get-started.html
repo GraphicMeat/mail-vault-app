@@ -42,7 +42,7 @@
 
 
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
   <!-- i18n:alternates -->
@@ -58,7 +58,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/get-started.html">
   <!-- /i18n:alternates -->
 </head>
-<body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Skip to content</a>
+<body class="mv-site min-h-screen" data-acquisition-page="setup"><a class="mv-skip" href="#main">Skip to content</a>
 <header class="mv-header">
 <div class="mv-wrap mv-nav">
 <div class="mv-brand-family"><a class="mv-brand" href="/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
@@ -101,9 +101,10 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 <main id="main">
 <section class="mv-page-hero mv-wrap mv-start-hero">
-<p class="mv-eyebrow">A place for the mail you want to keep</p>
-<h1>Let’s get you set up.</h1>
-<p class="mv-lead">Download MailVault, connect your email, and make your first archive.</p>
+<p class="mv-eyebrow">A free email client for macOS and Linux</p>
+<h1>Download MailVault.</h1>
+<p class="mv-lead">Choose the installer for your computer, then connect your email and make your first archive.</p>
+<div class="mv-actions mv-start-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Download for macOS</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Get it from the Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" href="#platforms">See download options</a></div>
 <div class="mv-intent" aria-live="polite">
 <p data-plan-copy="free">Free includes reading, replying, and archiving without a subscription.</p>
 <p class="mv-early-pricing" data-plan-copy="yearly" hidden>Early Bird &amp; Family Pricing for now</p><p class="mv-early-pricing" data-plan-copy="monthly" hidden>Early Bird &amp; Family Pricing for now</p><p data-plan-copy="yearly" hidden>You’ve chosen Premium yearly: <span data-mv-price="{yearly}/year">$25/year</span>, with a 14-day trial for first-time yearly subscribers. Start it in the app after downloading.</p>
@@ -117,18 +118,18 @@
 <div class="mv-download-options">
 <article data-platform="mac">
 <h3>macOS</h3>
-<p>One download for Apple Silicon and Intel. macOS 11 or later.</p><a class="mv-button" data-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download for macOS</a>
+<p>One download for Apple Silicon and Intel. macOS 11 or later.</p><a class="mv-button" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download for macOS</a>
 <p class="mv-small">Open the .dmg, then drag MailVault into Applications.</p>
 </article>
 <article data-platform="linux">
 <h3>Linux</h3>
-<p>Ubuntu 22.04+ / Debian 12+, on Intel, AMD, or ARM.</p><a class="mv-button mv-secondary" data-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener">Get it from the Snap Store ↗</a>
-<p class="mv-linux-links"><a data-download="amd64" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download .deb (Intel / AMD)</a><a data-download="arm64" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download .deb (ARM)</a>
+<p>Ubuntu 22.04+ / Debian 12+, on Intel, AMD, or ARM.</p><a class="mv-button mv-secondary" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener">Get it from the Snap Store ↗</a>
+<p class="mv-linux-links"><a data-download="amd64" data-acquisition-download="amd64" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download .deb (Intel / AMD)</a><a data-download="arm64" data-acquisition-download="arm64" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download .deb (ARM)</a>
 </p>
 </article>
 </div>
 <p class="mv-small" data-download-status role="status">Loading direct download links. The buttons also work through the release page.</p>
-<p><a class="mv-text-link" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" rel="noopener">All release files and installation notes ↗</a>
+<p><a class="mv-text-link" data-acquisition-download="fallback" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" rel="noopener">All release files and installation notes ↗</a>
 </p>
 </div>
 <aside class="mv-install-help">
@@ -190,7 +191,8 @@
 <p>
 </p>
 </dialog>
-<script defer src="/assets/english-site.js?v=3">
+<script id="mv-runtime-copy" type="application/json">{"releaseReady":"Latest release: {release}. Direct download links are ready.","releasePartial":"Some downloads open the latest release page. Choose the file for your computer there.","releaseFallback":"Direct links could not load. The download buttons open the latest release page instead; choose the file for your computer there."}</script>
+<script defer src="/assets/english-site.js?v=20260922-acquisition">
 </script>
 <script defer src="/pricing-localize.js?v=20260905-savings">
 </script>

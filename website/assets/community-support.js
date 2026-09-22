@@ -3,11 +3,15 @@
   const button = document.getElementById('want-this-btn');
   if (!button) return;
   const status = document.getElementById('vote-status');
+  const label = document.getElementById('vote-label');
+  let runtimeCopy = {};
+  try { runtimeCopy = JSON.parse(document.querySelector('#mv-runtime-copy')?.textContent || '{}'); } catch (_) {}
+  const runtimeText = (key, fallback) => runtimeCopy[key] || fallback;
   let voted = false;
   try { voted = localStorage.getItem('mailvault-voted') === 'true'; } catch (_) {}
   function reflectVote() {
     button.setAttribute('aria-pressed', String(voted));
-    document.getElementById('vote-label').textContent = voted ? 'Thanks for the love!' : 'I want this!';
+    if (voted) label.textContent = runtimeText('voteThanks', 'Thanks for the love!');
   }
   function count(id, value) {
     if (!Number.isInteger(value) || value < 0) return;
@@ -25,7 +29,7 @@
   json('https://api.github.com/repos/GraphicMeat/mail-vault-app')
     .then(data => count('github-stars', data.stargazers_count)).catch(() => {});
   button.addEventListener('click', async () => {
-    if (voted) { status.textContent = 'Your heart has already been counted. Thank you!'; return; }
+    if (voted) { status.textContent = runtimeText('voteAlreadyCounted', 'Your heart has already been counted. Thank you!'); return; }
     button.disabled = true;
     status.textContent = '';
     try {
@@ -35,8 +39,8 @@
       voted = true;
       try { localStorage.setItem('mailvault-voted', 'true'); } catch (_) {}
       reflectVote();
-      status.textContent = 'Thank you for supporting MailVault!';
-    } catch (_) { status.textContent = 'Couldn’t send your heart. Please try again shortly.'; }
+      status.textContent = runtimeText('voteSupporting', 'Thank you for supporting MailVault!');
+    } catch (_) { status.textContent = runtimeText('voteSendError', 'Couldn’t send your heart. Please try again shortly.'); }
     finally { button.disabled = false; }
   });
 })();

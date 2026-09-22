@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
   <meta property="og:title" content="存储与你的保险库 — MailVault 常见问题">
   <meta property="og:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
-  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault：为新邮件腾出空间，保留旧邮件。macOS 和 Linux 免费使用，并可预览应用。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="存储与你的保险库 — MailVault 常见问题">
   <meta name="twitter:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
-  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault：为新邮件腾出空间，保留旧邮件。macOS 和 Linux 免费使用，并可预览应用。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "我的邮件存在哪里？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
+        "text": "你的保险库是按 Maildir 格式组织的标准 .eml 文件夹——位于 Mac 或 Linux 电脑上——每封邮件一个文件，无需数据库。在 macOS 上，MailVault 受沙盒保护，因此文件夹位于 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而非 ~/Library/Application Support。在 Linux 上，.deb 包位于 ~/.local/share/com.mailvault.app/，Snap 则位于 ~/snap/mailvault/current/.local/share/com.mailvault.app/。Finder 中的 ~/Library 是隐藏的，Spotlight 不会索引它，因此在驱动器中搜索 com.mailvault.app 找不到任何内容：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或在打开 Finder 的“前往”菜单时按住 Option，或在主文件夹中按 Command + J 并勾选“显示资源库文件夹”。MailVault 也会在“设置 → Backup & Restore → Backup Settings → Where your mail is stored”下显示正在使用的文件夹。你的数据绝不会离开电脑，也绝不会上传到任何云服务。由于 .eml 是广泛支持的邮件格式，你可以用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件——绝不会被锁定在 MailVault 中。"
       }
     },
     {
@@ -100,7 +100,7 @@
       "name": "什么是外部备份位置（第二份副本）？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so apps that support EML can read the message files. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
+        "text": "MailVault 始终会在应用自己的存储中保留一份可用的邮件副本——这正是你阅读、搜索和打开的内容。外部备份位置会在你选择的驱动器上增加第二份独立副本：外接 SSD、NAS 共享或同步文件夹。它会在备份运行时与工作副本同时写入，采用相同的 .eml 和 Maildir 布局，因此支持 EML 的应用可以读取邮件文件。应用日常不会读取它，它属于冷存储：服务器上删除的邮件，或在 MailVault 中移除的邮件，都会保留在外部副本中。在“设置 → Backup”中，在“Second copy — external cold storage”下进行设置。在 macOS 上，MailVault 会为该文件夹存储安全范围书签，使访问能跨重启和应用更新保持有效；状态徽章会显示 Ready、Needs reauthorization、Unavailable 或 Access denied，重新授权只需点击一次。若备份时驱动器未连接，工作副本仍会成功，MailVault 会报告有多少邮件未能写入外部副本；下一次运行会将它们复制过去。"
       }
     }
   ]
@@ -145,21 +145,21 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
-<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
 
   <!-- Navigation -->
   <header class="mv-header">
 <div class="mv-wrap mv-nav">
-<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
-<nav class="mv-navlinks" aria-label="Main navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a>
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">帮助</a>
 <a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a></nav>
 <div class="mv-navtools">
 <details class="mv-language" translate="no">
-<summary aria-label="Choose language, 简体中文 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
 <ul>
 <li><a data-i18n-abs href="/faq/storage-and-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
@@ -182,11 +182,11 @@
 </li>
 </ul>
 </details>
-<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
 <a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
 <details class="mv-mobile-menu">
 <summary>菜单</summary>
-<nav aria-label="Mobile navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">Download free</a>
+<nav aria-label="移动端导航"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">帮助</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
 </nav>
 </details>
 </div>
@@ -215,7 +215,7 @@
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我的邮件存在哪里？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
+              <p class="mb-4">你的保险库是 Mac 或 Linux 电脑上的标准<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>文件夹，采用<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>格式组织——每封邮件一个文件，无需数据库。你的数据绝不会离开电脑，也绝不会上传到任何云服务。由于 .eml 是广泛支持的邮件格式，你可以用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件——绝不会被锁定在 MailVault 中。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">确切的文件夹</p>
               <p class="mb-2">MailVault 是沙盒应用，因此在 macOS 上保险库位于应用自己的容器内 &mdash; 而不是大多数人首先查看的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> 下：</p>
@@ -340,17 +340,17 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
-<p>Read your mail. Keep your mail.</p>
+<p>阅读你的邮件。保留你的邮件。</p>
 </div>
-<nav aria-label="Explore MailVault"><a href="/zh/use-cases.html">Use cases</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">What’s new</a><a href="/zh/mentioned-in.html">Mentions</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
-<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
 <div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
 </div>
 </div>
@@ -359,6 +359,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=3"></script>
+<script defer src="/assets/english-site.js?v=20260922-acquisition"></script>
 </body>
 </html>

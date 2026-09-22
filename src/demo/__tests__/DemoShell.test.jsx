@@ -2,7 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { DemoShell } from '../DemoShell.jsx';
+import { DemoShell, trackDemoAcquisition } from '../DemoShell.jsx';
 import { useSettingsStore } from '../../stores/settingsStore.js';
 import { demoTranslate } from '../translations.js';
 
@@ -30,6 +30,24 @@ afterEach(() => {
 });
 
 describe('DemoShell guided tour', () => {
+  it('records anonymous demo actions only on the production hostname', () => {
+    const tracker = vi.fn();
+    trackDemoAcquisition('demo_download', { hostname:'mailvaultapp.com', tracker });
+    expect(tracker).toHaveBeenCalledExactlyOnceWith('demo_download', { page_version:'homepage-en-20260922' });
+    expect(() => trackDemoAcquisition('demo_tour_start', { hostname:'127.0.0.1' })).not.toThrow();
+  });
+
+  it('queues production demo events until the tracker loads', () => {
+    const previous = window.gm;
+    delete window.gm;
+    trackDemoAcquisition('demo_open', { hostname:'mailvaultapp.com' });
+    expect(window.gm.q).toEqual([['demo_open', { page_version:'homepage-en-20260922' }]]);
+    const tracker = vi.fn();
+    window.gm.q.forEach(args => tracker(...args));
+    expect(tracker).toHaveBeenCalledExactlyOnceWith('demo_open', { page_version:'homepage-en-20260922' });
+    if (previous) window.gm = previous; else delete window.gm;
+  });
+
   it('follows the active app language and localizes return paths', () => {
     useSettingsStore.setState({ language: 'de', localeEpoch: 1 });
     render(<DemoShell><p>Mailbox</p></DemoShell>);

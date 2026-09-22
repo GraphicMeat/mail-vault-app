@@ -22,6 +22,18 @@ export function isMobileDemoDevice() {
     && typeof screen !== 'undefined' && Math.min(screen.width || Infinity, screen.height || Infinity) <= 1024;
 }
 
+export function trackDemoAcquisition(name, { hostname = globalThis.location?.hostname, tracker = globalThis.window?.gm } = {}) {
+  if (!['mailvaultapp.com', 'www.mailvaultapp.com'].includes(hostname)) return;
+  try {
+    if (!tracker && globalThis.window) {
+      tracker = (...args) => { tracker.q.push(args); };
+      tracker.q = [];
+      globalThis.window.gm = tracker;
+    }
+    tracker?.(name, { page_version: 'homepage-en-20260922' });
+  } catch { /* the demo must remain usable without analytics */ }
+}
+
 // Classify by action first, then use the active language's terms. Keeping
 // these phrases grouped prevents short words such as French "lu" from
 // matching unrelated controls and keeps "Senders" separate from "Send".
@@ -183,6 +195,8 @@ export function DemoShell({ children }) {
     meta.content = description;
   }, [locale]);
 
+  useEffect(() => { trackDemoAcquisition('demo_open'); }, []);
+
   const tour = TOUR[tourStep];
   const explanation = customExplanation || copy(explanationKey);
   const tourCopy = useMemo(() => copy(tour.key), [locale, tour.key]);
@@ -304,8 +318,8 @@ export function DemoShell({ children }) {
         </div>
         <nav className="demo-actions" aria-label={demoTranslate(locale, 'actions.aria')}>
           <a href={demoSitePath('/', locale)} className="demo-link"><ExternalLink size={14} /> {demoTranslate(locale, 'actions.site')}</a>
-          <a href={demoSitePath('/get-started.html?plan=free', locale)} className="demo-link"><ExternalLink size={14} /> {demoTranslate(locale, 'actions.download')}</a>
-          <button type="button" data-testid="demo-tour" className="demo-button demo-tour-button" onClick={() => { tourNavigatingRef.current = false; setTourStep(0); setTourOpen(true); }}><Play size={14} /> {demoTranslate(locale, 'actions.tour')}</button>
+          <a href={demoSitePath('/get-started.html?plan=free', locale)} className="demo-link demo-download" onClick={() => trackDemoAcquisition('demo_download')}><ExternalLink size={14} /> {demoTranslate(locale, 'actions.download')}</a>
+          <button type="button" data-testid="demo-tour" className="demo-button demo-tour-button" onClick={() => { trackDemoAcquisition('demo_tour_start'); tourNavigatingRef.current = false; setTourStep(0); setTourOpen(true); }}><Play size={14} /> {demoTranslate(locale, 'actions.tour')}</button>
           <button type="button" data-testid="demo-reset" className="demo-button" onClick={reset}><RotateCcw size={14} /> {demoTranslate(locale, 'actions.reset')}</button>
           <button type="button" className="demo-icon-button" aria-label={demoTranslate(locale, panelOpen ? 'actions.hideExplanation' : 'actions.showExplanation')} onClick={() => setPanelOpen(open => !open)}><Info size={16} /></button>
         </nav>

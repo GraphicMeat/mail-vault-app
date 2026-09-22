@@ -1,73 +1,85 @@
-# English acquisition review
+# Homepage acquisition review
 
-English-only update for human review. Do not rebuild translations until approved.
+## Approved release — 22 September 2026
 
-## Review pages
+The user approved the English preview and authorized localization and deployment.
+Terra implements; Astra independently verifies. The verified release was prepared on
+`codex/homepage-conversion`, based on main `bce79891`. Newer unrelated upstream
+work is preserved. Publishing uses the existing website deployment workflow;
+production evidence is recorded in the task’s release ledger.
 
-- Homepage: http://192.168.68.64:3080/
-- Pricing: http://192.168.68.64:3080/pricing.html
-- Yearly setup: http://192.168.68.64:3080/get-started.html?plan=yearly
-- Monthly setup: http://192.168.68.64:3080/get-started.html?plan=monthly
+Preview: http://127.0.0.1:3080/ (English and all eight supported locales).
+The local review server disables analytics and rejects POST requests. No installer,
+newsletter subscription, vote, or checkout was initiated during browser review.
 
-The Mac mini preview uses a separate copy at
-`/Users/unicorn/sites/mailvault-english-review-20260905`, served on port 3080.
-The PID and log files are in `/Users/unicorn/sites/` with the same prefix.
-The server script is `mailvault-english-review-20260905-server.py` there.
-To stop this preview, inspect the PID file/process and terminate that process.
-No production deployment or desktop application changes were made.
+## Changes
 
-For a local preview from the repository root:
+The homepage presents the full email client: reading, replying, searching, and
+several inbox views, alongside deliberate local archiving. Three real product
+examples show inbox views, mismatched web links/sender warnings, and archive state.
+Premium features are labeled explicitly; detailed support stories follow product
+examples.
 
-```sh
-python3 scripts/preview-website.py --directory website --port 3080
-```
+The Mac hero resolves to the current trusted GitHub installer. Linux uses the Snap
+Store, with adjacent access to other formats. Unsupported devices retain a generic
+setup route. Setup puts installer actions before plan instructions, preserving
+Free/monthly/yearly intent, trial eligibility, billing, and cancellation language.
+Downloading neither starts a trial nor transfers a plan to the desktop app.
 
-The review server rejects form submissions and disables website analytics.
-Only public pricing is read from the live API. Release downloads still link to
-real public installers. It sends no signup, checkout, or purchase request.
+Demo Download remains visible on small screens, and tour surfaces use opaque theme
+colors. Localized links, billing choices, release status, newsletter feedback, vote
+feedback, and accessible language labels retain the chosen language. JS/CSS URLs
+are versioned so cached assets do not mask the release.
 
-## Implementation
+All eight dictionaries cover the current English corpus. The inherited missing
+copy on homepage/setup/pricing was translated as part of this release. Generated
+locale pages, sitemap, search indexes, and screenshots use the existing pipeline.
+Root `index.html` exactly matches `website/index.html`; its large diff replaces an
+outdated legacy copy. No new dependencies, backend/billing changes, or desktop mail
+behavior are included.
 
-`index.html`, `pricing.html`, and `get-started.html` use the English-only
-`assets/english-site.css` and `assets/english-site.js`. The shared compiled CSS,
-translated pages, and locale dictionaries are unchanged.
-
-The setup URL preserves free/yearly/monthly intent across refresh and bookmark.
-There is no supported billing deep link in the current desktop app, so setup
-explicitly directs the visitor to Settings → Billing. Downloading does not start
-a trial. Trial eligibility and final charges are confirmed during app checkout.
-
-Currency localization uses the existing pricing-localize.js endpoint contract.
-Price elements for both billing periods remain in the DOM so async localization
-and period switching work in either order. Failed pricing requests keep USD
-fallbacks; failed release requests keep usable GitHub release-page links.
-
-Production counts the existing anonymous pricing_view and download_click events.
-Download clicks are counted on actual platform download links on the setup page,
-not on the intermediate homepage CTA. Existing backend checkout_created and
-sub_activated counters remain unchanged. Historical download comparisons should
-account for the former hero handler omission. No user-level attribution or app
-telemetry has been introduced.
+First-party events are production-only: `home_cta`, `setup_view`, `download_action`,
+`demo_open`, `demo_download`, and `demo_tour_start`, with
+`page_version: homepage-en-20260922`. Properties identify placement, plan, platform,
+and file/store/fallback destinations without user identifiers. The legacy download
+counter covers actual installer/store controls, so historical comparisons must
+account for that instrumentation change. No app telemetry or user-level attribution
+was added.
 
 ## Verification
 
-- `npx vitest run website/__tests__/english-acquisition.test.js`
-- `node /Users/Rokas/.agents/skills/impeccable/scripts/detect.mjs --json website/index.html website/pricing.html website/get-started.html`
-- Browser: desktop and 390×844 mobile, light/dark themes, monthly/yearly handoff,
-  actual release URLs, localized prices, mobile menu, screenshot dialog and
-  Escape/focus restoration. Width checks at 320, 768, and 1024 pixels found no
-  horizontal overflow on setup. Mobile-size checks preserve the browser's desktop
-  user agent; physical-device installation was not exercised.
+- Independent Astra verification passed with no remaining P1/P2 findings:
+  125 website/demo tests and 23 localization pipeline tests passed.
+- All eight locale dictionaries pass 2181/2181. Generated verification passes for
+  400 pages, 19760 internal links, and 2744 responsive image references.
+- English-equal placeholder translations were corrected and independently
+  rechecked; all homepage/setup runtime messages are translated. The 256 translated
+  acquisition markup blocks preserve tags, links, and required attributes.
+- Demo and CSS builds passed. Root/homepage equality and whitespace checks passed.
+- English homepage/setup and demo were checked at desktop, 390px, and 320px widths
+  in both themes. Download controls stayed visible; screenshot dialogs supported
+  Escape and restored focus. Opaque demo tour surfaces were independently checked.
+- Japanese, German, and French homepage/setup passed actual nested viewport checks
+  at 1280, 390, and 320px, with no horizontal overflow. Translated CTA and language
+  labels remained readable. These retain the browser's desktop user agent;
+  physical-device installation was not tested. Platform routing has focused tests.
+- A hermetic test against the actual public analytics script confirmed exactly one
+  `setup_view` after initialization, with localized path, selected plan, and release
+  marker. It sent no production analytics.
+- Local preview screenshot aliases use existing published assets. Deployment
+  regenerates all 36 localized preview images through the normal CI workflow.
 
-## After approval
+Final browser review also verified Portuguese homepage/yearly setup and the
+corrected French help copy. Production verification is recorded in the task’s
+publishing ledger. This release does not itself establish a conversion improvement;
+compare supported-device
+cohorts over complete subsequent windows and separate deployment probes from buyers.
 
-Update the localization pipeline's shared navigation to reflect the compact
-selector, extract new page copy and interaction strings, translate, and rebuild
-locale pages. The new setup page currently exists only in English; its language
-menu leads to existing localized homepages until translated setup pages exist.
-Rebuild the search index and sitemap as part of that approved publishing pass.
-Do not claim automatic desktop plan transfer without implementing and shipping a
-supported billing deep link in the app.
+## Earlier English reviews — historical
+
+The entries below describe earlier work, not this preview's location, current
+verification totals, or deployment status. The former September 5 Mac mini preview
+at `192.168.68.64:3080` is not the current review target.
 
 ## Studio branding and sharing card
 

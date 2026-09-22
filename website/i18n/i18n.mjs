@@ -448,11 +448,17 @@ function applyEdits(src, edits) {
 const ESC = (s) => s.replace(/&(?![a-zA-Z#][a-zA-Z0-9]*;)/g, '&amp;');
 
 export function render(html, pageRel, loc, dict) {
-  // The header picker is untranslated UI, but its selected locale is page-specific.
+  const tr = (s) => {
+    const v = dict[keyOf(s)];
+    return (typeof v === 'string' && v.trim()) ? v : normalize(s);
+  };
+  // Keep the picker label generic so the translated source string does not claim
+  // that English is selected on every generated page.
+  const pickerLabel = tr('Choose language, English selected').replace(/[，,、].*$/, '');
   html = html.replace(/<details class="mv-language"[\s\S]*?<\/details>/g, picker => picker
     .replace(/(<span class="mv-language-name">)[^<]*/, `$1${loc.name}`)
     .replace(/(<span class="mv-language-code"[^>]*>)[^<]*/, `$1${loc.dir.toUpperCase()}`)
-    .replace(/Choose language, English selected/g, `Choose language, ${loc.name} selected`)
+    .replace(/Choose language, English selected/g, pickerLabel)
     .replace(/ aria-current="page"/g, '')
     .replace(/<a\b[^>]*>/g, link => {
       const current = link.includes(`hreflang="${loc.hreflang}"`);
@@ -461,11 +467,6 @@ export function render(html, pageRel, loc, dict) {
     }));
   const { texts, tags, jsonlds, blocks } = scan(html);
   const edits = [];
-  const tr = (s) => {
-    const v = dict[keyOf(s)];
-    return (typeof v === 'string' && v.trim()) ? v : normalize(s);
-  };
-
   for (const t of texts) {
     if (!isTranslatable(t.raw)) continue;
     const lead = t.raw.match(/^\s*/)[0];

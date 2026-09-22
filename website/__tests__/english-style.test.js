@@ -19,7 +19,7 @@ describe('English visual rollout',()=>{
    const locale=d.querySelector('.mv-language a[hreflang="de"]');
    const alternate=d.querySelector('link[hreflang="de"]');
    if(alternate) expect(locale.getAttribute('href'),p).toBe(new URL(alternate.href).pathname);
-   for(const script of d.querySelectorAll('script:not([src]):not([type="application/ld+json"])')) new Script(script.textContent,{filename:p});
+   for(const script of d.querySelectorAll('script:not([src]):not([type="application/ld+json"]):not([type="application/json"])')) new Script(script.textContent,{filename:p});
   }
  });
  it('keeps local stylesheet and script dependencies resolvable',()=>{

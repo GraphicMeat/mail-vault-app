@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>疑难解答 — MailVault 常见问题</title>
-  <meta name="description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
+  <meta name="description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,8 +13,8 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta property="og:title" content="疑难解答 — MailVault 常见问题">
-  <meta property="og:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
-  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
+  <meta property="og:image:alt" content="MailVault：为新邮件腾出空间，保留旧邮件。macOS 和 Linux 免费使用，并可预览应用。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -24,8 +24,8 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="疑难解答 — MailVault 常见问题">
-  <meta name="twitter:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
-  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
+  <meta name="twitter:image:alt" content="MailVault：为新邮件腾出空间，保留旧邮件。macOS 和 Linux 免费使用，并可预览应用。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -73,10 +73,10 @@
     },
     {
       "@type": "Question",
-      "name": "I added a folder on the server — how soon does MailVault show it?",
+      "name": "我在服务器上新建了文件夹 — MailVault 多久会显示它？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault keeps a copy of your folder list on disk, so folders appear instantly when you open an account, and it refreshes that list from the server at most once every ten minutes. If you create, rename or delete a folder in webmail or another client, MailVault picks the change up the next time it opens that account or you click a folder in the sidebar, once the ten minutes have passed — so a new folder normally shows up within ten minutes. Restarting the app does not make it faster, because the cached list is stored on disk and survives a restart. The Refresh button reloads the messages in the folder you are reading; the folder list follows its own ten-minute check. Subfolders need no setup: MailVault draws the hierarchy from the paths the server reports, so a new subfolder appears nested under its parent, and folders for accounts you are not looking at are refreshed in the background on the same schedule."
+        "text": "MailVault 会将文件夹列表保存在磁盘上，所以你打开账户时文件夹会立即出现；它最多每十分钟从服务器更新一次列表。你在网页邮箱或其他客户端中新建、重命名或删除文件夹后，十分钟过去后，下一次打开该账户或点击侧边栏中的文件夹时，MailVault 就会获取这一变化，因此新文件夹通常会在十分钟内出现。重启应用不会更快，因为缓存列表保存在磁盘上，重启后仍在。刷新按钮会重新加载你正在阅读的文件夹中的邮件；文件夹列表按自己的十分钟周期更新。子文件夹无需设置：MailVault 根据服务器报告的路径绘制层级结构，因此新的子文件夹会显示在其父文件夹下；你当前没有查看的账户的文件夹也会按同一计划在后台更新。"
       }
     }
   ]
@@ -121,21 +121,21 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/troubleshooting.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
-<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
 
   <!-- Navigation -->
   <header class="mv-header">
 <div class="mv-wrap mv-nav">
-<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
-<nav class="mv-navlinks" aria-label="Main navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a>
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">帮助</a>
 <a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a></nav>
 <div class="mv-navtools">
 <details class="mv-language" translate="no">
-<summary aria-label="Choose language, 简体中文 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
 <ul>
 <li><a data-i18n-abs href="/faq/troubleshooting.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
@@ -158,11 +158,11 @@
 </li>
 </ul>
 </details>
-<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
 <a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
 <details class="mv-mobile-menu">
 <summary>菜单</summary>
-<nav aria-label="Mobile navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">Download free</a>
+<nav aria-label="移动端导航"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">帮助</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
 </nav>
 </details>
 </div>
@@ -184,7 +184,7 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">疑难解答</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。</p>
 
       <div class="space-y-4">
 
@@ -260,19 +260,19 @@
         </article>
 
         <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">I added a folder on the server &mdash; how soon does MailVault show it?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我在服务器上新建了文件夹 &mdash; MailVault 多久会显示它？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
-                <strong>Within ten minutes.</strong> MailVault keeps a copy of your folder list on disk so the sidebar fills in the moment you open an account, and it re-reads the list from the server at most once every ten minutes. Create, rename or delete a folder in webmail or another mail client, and MailVault picks the change up the next time it opens that account or you click a folder in the sidebar &mdash; once those ten minutes have passed.
+                <strong>十分钟内。</strong>MailVault 会将文件夹列表保存在磁盘上，因此你一打开账户，侧边栏就会显示内容；它最多每十分钟从服务器重新读取一次列表。你在网页邮箱或其他邮件客户端中新建、重命名或删除文件夹后，十分钟过去后，下一次打开该账户或点击侧边栏中的文件夹时，MailVault 就会获取这一变化。
               </p>
               <p>
-                <strong>Restarting does not hurry it along.</strong> The cached list is on disk, not in memory, so it survives a quit and relaunch. Waiting out the ten minutes and then clicking any folder is the fastest way to see a change you just made.
+                <strong>重启不会让它更快。</strong>缓存的列表保存在磁盘上，不在内存中，因此退出再打开后仍会保留。等满十分钟后点击任意文件夹，是看到刚刚修改内容的最快方式。
               </p>
               <p>
-                <strong>The Refresh button is about messages, not folders.</strong> It reloads the mail in the folder you are reading. The folder list runs on its own ten-minute check, which is why a brand new folder can stay hidden for a few minutes after a refresh.
+                <strong>刷新按钮针对的是邮件，不是文件夹。</strong>它会重新加载你正在阅读的文件夹中的邮件。文件夹列表按自己的十分钟周期检查，所以刷新后新建的文件夹仍可能隐藏几分钟。
               </p>
               <p>
-                <strong>Subfolders need no setup.</strong> MailVault builds the tree from the paths the server reports, so a new subfolder turns up nested under its parent with the right name and position. Accounts you are not currently reading are refreshed in the background on the same schedule, a couple at a time, so switching to one rarely shows you a stale list.
+                <strong>子文件夹无需设置。</strong>MailVault 根据服务器报告的路径建立树状结构，因此新的子文件夹会以正确的名称和位置显示在其父文件夹下。你当前没有阅读的账户也按相同的计划在后台更新，每次处理几个，因此切换过去时很少会看到过时的列表。
               </p>
             </div>
         </article>
@@ -299,17 +299,17 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
-<p>Read your mail. Keep your mail.</p>
+<p>阅读你的邮件。保留你的邮件。</p>
 </div>
-<nav aria-label="Explore MailVault"><a href="/zh/use-cases.html">Use cases</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">What’s new</a><a href="/zh/mentioned-in.html">Mentions</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
-<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
 <div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
 </div>
 </div>
@@ -318,6 +318,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=3"></script>
+<script defer src="/assets/english-site.js?v=20260922-acquisition"></script>
 </body>
 </html>
