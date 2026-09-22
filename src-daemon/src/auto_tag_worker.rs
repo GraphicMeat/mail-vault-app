@@ -15,7 +15,7 @@
 //! function `.preview`/`.backfill` use — so the `allow_remote` privacy gate
 //! lives in exactly one place no matter which of the three calls it.
 
-use crate::handlers::auto_tags::{evaluate, load_candidates, now_secs, provider_from_rule, should_assign};
+use crate::handlers::auto_tags::{evaluate, load_candidates, now_secs, provider_from_rule};
 use crate::handlers::common::blocking;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
@@ -164,7 +164,16 @@ async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, 
             continue;
         }
         let verdict = evaluate(&provider, &state.inference, rule, &c.candidate).await;
-        let matched = should_assign(&verdict, rule.min_confidence);
+        // A decision is recorded only when the model actually answered. An
+        // Err here is "we could not ask" -- no model downloaded yet, an
+        // endpoint that timed out, a remote provider this rule may not use --
+        // and writing that down as a "no" would retire the message forever:
+        // `undecided` treats any row as decided, so the mail that arrived
+        // before the model was installed would never be judged at all.
+        let Ok(answer) = verdict else {
+            continue;
+        };
+        let matched = auto_tags::meets_threshold(answer, rule.min_confidence);
 
         let app_dir = state.app_dir.clone();
         let rule_id = rule.id.clone();
@@ -268,8 +277,10 @@ mod tests {
         sweep(&s).await;
 
         assert_eq!(tag_count(&s).await, 0, "a refused evaluation must never assign");
-        // Proof the worker actually ran the rule through `evaluate` (and got
-        // refused) rather than silently skipping it: a decision landed.
+        // And it must not be written down as a "no" either: the rule was
+        // refused its provider, which says nothing about the message. The row
+        // stays undecided so that fixing the rule judges this mail rather
+        // than skipping it forever.
         let app_dir = s.app_dir.clone();
         let rule_id = rule.id.clone();
         let target = Target { account_id: "a".into(), msg_key: "u:INBOX:1".into() };
@@ -277,7 +288,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(still_undecided.is_empty(), "the refusal itself must be recorded as a decision");
+        assert_eq!(still_undecided.len(), 1, "a refusal is not a verdict and must leave the message undecided");
     }
 
     #[tokio::test]
@@ -329,7 +340,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_sweep_never_asks_about_the_same_message_twice() {
+    async fn a_sweep_that_cannot_reach_a_model_decides_nothing_and_stays_retryable() {
         let s = st();
         seed_header(&s, "a", "INBOX", 1, "Your receipt", "billing@shop.example");
         let tag = tag_named(&s, "Receipts").await;
@@ -337,11 +348,14 @@ mod tests {
         backdate(&s, &rule.id).await;
 
         sweep(&s).await;
-        sweep(&s).await; // a second wake with nothing new must not re-ask.
+        sweep(&s).await;
 
-        // `LocalGguf` with no model loaded fails instantly and deterministically
-        // (see `llm.rs`'s own tests), so this proves at most one decision was
-        // ever written rather than the worker looping on the same message.
+        // `LocalGguf` with no model downloaded fails instantly and
+        // deterministically (see `llm.rs`'s own tests) — the state a fresh
+        // install is in. Nothing may be assigned, and nothing may be written
+        // down: a message judged "no" because there was no model to ask would
+        // never be reconsidered once one is installed.
+        assert_eq!(tag_count(&s).await, 0, "no model means no assignment");
         let app_dir = s.app_dir.clone();
         let rule_id = rule.id.clone();
         let target = Target { account_id: "a".into(), msg_key: "u:INBOX:1".into() };
@@ -358,7 +372,7 @@ mod tests {
         .await
         .unwrap()
         .unwrap();
-        assert_eq!(decided_count, 1, "one row, not one per sweep");
+        assert_eq!(decided_count, 0, "an unanswerable sweep records no verdict");
     }
 
     #[tokio::test]

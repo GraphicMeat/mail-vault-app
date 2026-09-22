@@ -28,11 +28,37 @@ use tracing::{info, warn};
 #[derive(Default)]
 pub struct ScheduledSendState {
     pub notify: tokio::sync::Notify,
+    /// Rows this process is dialling out for right now. `scheduled.send_now`
+    /// deliberately skips the `fire_at` gate, so a click that lands in the
+    /// same tick the row becomes due would otherwise hand the same frozen
+    /// message to two senders -- the recipient gets it twice, and no status
+    /// in the database can say so afterwards.
+    in_flight: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl ScheduledSendState {
     pub fn wake(&self) {
         self.notify.notify_one();
+    }
+
+    /// `Some(guard)` when this call is the one that gets to send `id`, and
+    /// `None` when another already holds it. The guard releases on drop, so a
+    /// panic in the send path cannot strand the row.
+    fn claim(&self, id: &str) -> Option<InFlight<'_>> {
+        let mut held = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
+        held.insert(id.to_string()).then(|| InFlight { state: self, id: id.to_string() })
+    }
+}
+
+struct InFlight<'a> {
+    state: &'a ScheduledSendState,
+    id: String,
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        let mut held = self.state.in_flight.lock().unwrap_or_else(|e| e.into_inner());
+        held.remove(&self.id);
     }
 }
 
@@ -170,6 +196,10 @@ enum Outcome {
 pub(crate) async fn attempt_row(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) {
     let app_dir = state.app_dir.clone();
     let id = row.id.clone();
+    let Some(_in_flight) = state.scheduled_send.claim(&id) else {
+        info!("[scheduled-send] {id} is already being sent; not sending it twice");
+        return;
+    };
     let gate = app_db::with(&app_dir, |c| {
         scheduled::set_status(c, &id, "sending", "")?;
         scheduled::attempt_before_send(c, &id)
