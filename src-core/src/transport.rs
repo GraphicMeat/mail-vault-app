@@ -34,9 +34,38 @@ pub fn endpoint(ipc_dir: &Path) -> PathBuf {
 #[cfg(windows)]
 pub fn endpoint(_ipc_dir: &Path) -> PathBuf {
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_string());
+    PathBuf::from(format!(r"\\.\pipe\mailvault-{}", windows_pipe_name(&user)))
+}
+
+/// FNV-1a over the raw bytes. Not `std::collections::hash_map::DefaultHasher`:
+/// its output is explicitly unspecified across Rust versions, and the app and
+/// the daemon are two separately compiled binaries that must land on the same
+/// pipe name from the same username, so the hash has to be a fixed algorithm,
+/// not "whatever this toolchain happens to do today".
+#[cfg(any(windows, test))]
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+/// The sanitized username, for readability, plus a hex hash of the *raw*
+/// username, for correctness: periods and spaces are legal in Windows account
+/// names and the sanitizer strips both, so `bob.smith` and `bobsmith` — or
+/// `John Doe` and `JohnDoe` — would otherwise sanitize to the same string and
+/// collide on one pipe. The second user to connect would then be talking to
+/// the first user's daemon, get its own token rejected, and see a permanently
+/// unreachable daemon indistinguishable from "not running". Compiled outside
+/// `cfg(windows)` too (see the `cfg` on this and `fnv1a`) so the collision
+/// case can be asserted on darwin.
+#[cfg(any(windows, test))]
+fn windows_pipe_name(user: &str) -> String {
     let safe: String = user.chars().filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect();
     let safe = if safe.is_empty() { "default".to_string() } else { safe };
-    PathBuf::from(format!(r"\\.\pipe\mailvault-{safe}"))
+    format!("{safe}-{:x}", fnv1a(user.as_bytes()))
 }
 
 /// Is a daemon serving this endpoint right now?
@@ -64,8 +93,18 @@ pub fn is_listening(endpoint: &Path) -> bool {
 #[cfg(windows)]
 pub fn is_listening(endpoint: &Path) -> bool {
     let Some(name) = endpoint.file_name() else { return false };
-    if let Ok(entries) = std::fs::read_dir(r"\\.\pipe\") {
-        return entries.flatten().any(|e| e.file_name() == name);
+    match std::fs::read_dir(r"\\.\pipe\") {
+        Ok(entries) => return entries.flatten().any(|e| e.file_name() == name),
+        Err(e) => {
+            // The happy path just stopped working silently otherwise: this
+            // branch falls through to the open-based probe the design review
+            // rejected for routine use (it consumes the daemon's one waiting
+            // instance). Nothing else marks that a Windows build is on the
+            // fallback path instead of the enumeration one, so a first
+            // tester on a machine where this errors would have no way to
+            // tell the two modes apart without this line.
+            tracing::warn!("transport::is_listening: read_dir(\\\\.\\pipe\\) failed, falling back to an open probe: {e}");
+        }
     }
     match std::fs::OpenOptions::new().read(true).write(true).open(endpoint) {
         Ok(_) => true,
@@ -129,5 +168,14 @@ mod tests {
         let path = dir.path().join("mv.sock");
         let _l = std::os::unix::net::UnixListener::bind(&path).unwrap();
         assert!(is_listening(&path));
+    }
+
+    #[test]
+    fn two_usernames_that_sanitize_identically_still_get_different_pipe_names() {
+        // Periods and spaces are legal in Windows account names and the
+        // sanitizer strips both, so these pairs collide after sanitizing —
+        // the raw-username hash is what has to keep them apart.
+        assert_ne!(windows_pipe_name("bob.smith"), windows_pipe_name("bobsmith"));
+        assert_ne!(windows_pipe_name("John Doe"), windows_pipe_name("JohnDoe"));
     }
 }

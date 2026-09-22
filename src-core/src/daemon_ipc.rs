@@ -63,27 +63,56 @@ pub fn call(endpoint: &Path, token: &str, method: &str, params: Value, timeout: 
 /// exit closes it), so a dead daemon leaks nothing. A **wedged** one is the
 /// problem: every caller that times out retries on `next_backoff`, and each
 /// retry parks another thread holding another pipe handle against a server
-/// that serves one instance at a time. `IN_FLIGHT` caps that — past the cap the
-/// call fails fast with the same error it would have returned anyway, so the
-/// caller's own retry ladder is unchanged and no new thread is created.
+/// that serves one instance at a time. `MAX_LIVE_CALLS` guards against that
+/// runaway case — see its doc comment, it is not a concurrency limit.
 #[cfg(windows)]
 pub fn call(endpoint: &Path, token: &str, method: &str, params: Value, timeout: Duration) -> Result<Value, CallError> {
     use std::sync::atomic::{AtomicUsize, Ordering};
-    /// Enough for the handful of concurrent RPCs the app really makes; past it
-    /// the daemon is not answering and more threads will not change that.
-    const MAX_PARKED: usize = 4;
-    static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
-    if IN_FLIGHT.load(Ordering::SeqCst) >= MAX_PARKED {
+    /// Holds one slot of `LIVE_CALLS` for as long as the worker thread that
+    /// made it is alive, and releases it in `Drop` — on the thread's normal
+    /// return *and* if `call_blocking` panics — so a slot can never leak.
+    struct LiveCallGuard(&'static AtomicUsize);
+    impl LiveCallGuard {
+        fn new(counter: &'static AtomicUsize) -> Self {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Self(counter)
+        }
+    }
+    impl Drop for LiveCallGuard {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    /// This is a runaway guard, not a concurrency limit. Healthy concurrency
+    /// here is a handful of calls, but a long-running one legitimately holds
+    /// a slot for its entire duration — a vault copy passes a 6-hour timeout
+    /// (`main.rs`), `vault_adopt` passes 600s — so the count of calls in
+    /// flight at any moment is not a proxy for anything being wrong. 64 is
+    /// picked to sit well above any real combination of those, so it only
+    /// trips when something is genuinely wedged (every caller retrying via
+    /// `next_backoff` against a daemon that never answers), at which point
+    /// more threads would not help anyway and failing fast is the same
+    /// outcome the caller would have reached on its own.
+    ///
+    /// The load-then-increment is a soft cap, not a hard one: two threads can
+    /// both read a count just under the limit and both proceed, so the real
+    /// ceiling can briefly overshoot by a small amount. That is fine for a
+    /// runaway guard sized this far from real usage; it would not be fine for
+    /// an actual concurrency limit.
+    const MAX_LIVE_CALLS: usize = 64;
+    static LIVE_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    if LIVE_CALLS.load(Ordering::SeqCst) >= MAX_LIVE_CALLS {
         return Err(unreachable("daemon is not answering; earlier calls are still waiting"));
     }
-    IN_FLIGHT.fetch_add(1, Ordering::SeqCst);
 
     let (tx, rx) = std::sync::mpsc::channel();
     let (endpoint, token, method) = (endpoint.to_path_buf(), token.to_string(), method.to_string());
     std::thread::spawn(move || {
+        let _guard = LiveCallGuard::new(&LIVE_CALLS);
         let result = call_blocking(&endpoint, &token, &method, params, timeout);
-        IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
         let _ = tx.send(result);
     });
     match rx.recv_timeout(timeout) {
