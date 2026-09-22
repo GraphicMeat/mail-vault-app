@@ -20,15 +20,16 @@
 //! stamps a fresh `seq`, and applying a listing leaves any row stamped after
 //! the listing began alone. `remove` leaves a tombstone (`filename = NULL`) so
 //! there is a `seq` to fence even for a uid the registry never held. Every
-//! invalidate bumps `epoch`; a listing that raced one is applied but does not
-//! mark the mailbox verified.
+//! invalidate bumps that mailbox's generation (`invalidate_all` a global
+//! one); a listing that raced one is applied but does not mark the mailbox
+//! verified.
 //!
 //! Lock order: per-mailbox lock, then the vault gate (repair only), then
 //! custody, then the registry connection. The connection is never held across
 //! a listing or a parse.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::UNIX_EPOCH;
 
@@ -71,21 +72,36 @@ pub enum Scope {
 
 type Key = (String, String);
 
-/// One listing of a mailbox's `cur`, with the `seq` and `epoch` read before
+/// One listing of a mailbox's `cur`, with the `seq` and generations read before
 /// `read_dir` started.
 pub(crate) struct Listing {
     files: HashMap<u32, DiskFile>,
     unstatted: HashSet<u32>,
     s0: i64,
-    e0: u64,
+    e0: (u64, u64),
+}
+
+/// The verified mailboxes and the generations that fence them, under one
+/// mutex so an invalidate can never land between a verify's check and its
+/// insert. Per mailbox, so a flag change elsewhere never fails this verify.
+#[derive(Default)]
+struct Verified {
+    set: HashSet<Key>,
+    all: u64,
+    gens: HashMap<Key, u64>,
+}
+
+impl Verified {
+    fn epoch(&self, key: &Key) -> (u64, u64) {
+        (self.all, self.gens.get(key).copied().unwrap_or(0))
+    }
 }
 
 pub struct VaultRegistry {
     conn: Mutex<Option<Connection>>,
-    verified: Mutex<HashSet<Key>>,
+    verified: Mutex<Verified>,
     mailbox_locks: Mutex<HashMap<Key, Arc<Mutex<()>>>>,
     seq: AtomicI64,
-    epoch: AtomicU64,
     on_change: OnceLock<Box<dyn Fn(Scope) + Send + Sync>>,
     listings: AtomicUsize,
     parses: AtomicUsize,
@@ -178,10 +194,9 @@ impl VaultRegistry {
             .unwrap_or(0);
         VaultRegistry {
             conn: Mutex::new(conn),
-            verified: Mutex::new(HashSet::new()),
+            verified: Mutex::new(Verified::default()),
             mailbox_locks: Mutex::new(HashMap::new()),
             seq: AtomicI64::new(seq),
-            epoch: AtomicU64::new(0),
             on_change: OnceLock::new(),
             listings: AtomicUsize::new(0),
             parses: AtomicUsize::new(0),
@@ -243,9 +258,14 @@ impl VaultRegistry {
                     Some(json) => json,
                     None => {
                         // No connection lock is held here: parsing is the slow part.
-                        let Ok(raw) = std::fs::read(cur.join(&filename)) else {
-                            unreadable = true;
-                            continue;
+                        let raw = match std::fs::read(cur.join(&filename)) {
+                            Ok(raw) => raw,
+                            Err(e) => {
+                                // Only a vanished name means the disk changed; a
+                                // file that exists but will not read is skipped.
+                                unreadable |= e.kind() == std::io::ErrorKind::NotFound;
+                                continue;
+                            }
                         };
                         self.parses.fetch_add(1, Ordering::SeqCst);
                         let json = light_row_json(&raw, uid).unwrap_or_else(|| UNPARSEABLE.to_string());
@@ -382,8 +402,8 @@ impl VaultRegistry {
     pub fn invalidate_all(&self) {
         {
             let mut verified = guard(&self.verified);
-            self.epoch.fetch_add(1, Ordering::SeqCst);
-            verified.clear();
+            verified.all += 1;
+            verified.set.clear();
         }
         self.changed(Scope::All);
     }
@@ -405,14 +425,15 @@ impl VaultRegistry {
     }
 
     fn is_verified(&self, account: &str, dir: &str) -> bool {
-        guard(&self.verified).contains(&(account.to_string(), dir.to_string()))
+        guard(&self.verified).set.contains(&(account.to_string(), dir.to_string()))
     }
 
     fn invalidate_dir(&self, account: &str, dir: &str) {
         {
+            let key = (account.to_string(), dir.to_string());
             let mut verified = guard(&self.verified);
-            self.epoch.fetch_add(1, Ordering::SeqCst);
-            verified.remove(&(account.to_string(), dir.to_string()));
+            *verified.gens.entry(key.clone()).or_default() += 1;
+            verified.set.remove(&key);
         }
         self.changed(Scope::Mailbox { account: account.to_string(), vault_dir: dir.to_string() });
     }
@@ -516,7 +537,7 @@ impl VaultRegistry {
     /// `None`: unknown.
     pub(crate) fn list_mailbox(&self, root: &Path, account: &str, dir: &str) -> Option<Listing> {
         let s0 = self.seq.load(Ordering::SeqCst);
-        let e0 = self.epoch.load(Ordering::SeqCst);
+        let e0 = guard(&self.verified).epoch(&(account.to_string(), dir.to_string()));
         self.listings.fetch_add(1, Ordering::SeqCst);
         let (files, unstatted) = match read_cur(&cur_dir(root, account, dir)) {
             Ok(listing) => listing,
@@ -589,9 +610,10 @@ impl VaultRegistry {
                 return false;
             }
         };
+        let key = (account.to_string(), dir.to_string());
         let mut verified = guard(&self.verified);
-        if complete && self.epoch.load(Ordering::SeqCst) == e0 {
-            verified.insert((account.to_string(), dir.to_string()));
+        if complete && verified.epoch(&key) == e0 {
+            verified.set.insert(key);
             true
         } else {
             false
@@ -805,6 +827,21 @@ mod tests {
         assert_eq!(reg.listing_count(), 1);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
         assert_eq!(reg.listing_count(), 2, "the next read listed again");
+    }
+
+    #[test]
+    fn an_invalidate_of_another_mailbox_does_not_fence_this_one() {
+        let f = fixture();
+        put(&f, MB, "1:2,.eml");
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        let (account, dir) = key(ACCT, MB);
+        let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
+        reg.invalidate(ACCT, "Other");
+        reg.rename(ACCT, "Other", 7, "7:2,S.eml"); // a miss: invalidates Other
+        assert!(reg.apply_listing(&account, &dir, listing));
+        let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
+        reg.invalidate_all();
+        assert!(!reg.apply_listing(&account, &dir, listing), "invalidate_all fences every mailbox");
     }
 
     #[test]
