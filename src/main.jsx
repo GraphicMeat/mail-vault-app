@@ -87,6 +87,15 @@ if (import.meta.env.VITE_E2E === '1') {
   // like a wrong answer from the DOM. A spec that cannot see whether the daemon
   // was even routed in this run passes vacuously, so expose the routing state
   // together with the two reads that depend on it.
+  // The header pipeline keeps its own copy of a mailbox's rows alive while the
+  // body phase runs, and a memory reading cannot say whose bytes those are:
+  // the store's list, the pipeline's copy and the parse that produced both look
+  // identical from outside the process. The held count IS the attribution.
+  import('./services/EmailPipelineManager').then(({ pipelineManager }) => {
+    window.__PIPELINES__ = () => [...pipelineManager.pipelines.entries()].map(([id, p]) => ({
+      id, phase: p._phase, queued: p._queue?.length ?? 0, held: p._lastLoadedEmails?.length ?? 0,
+    }));
+  });
   Promise.all([import('./services/transport.js'), import('./services/db')])
     .then(([transport, db]) => {
       window.__DB_PROBE__ = {

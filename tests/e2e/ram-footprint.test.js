@@ -81,6 +81,7 @@ const listState = () => browser.execute(() => {
     accountId: s.activeAccountId, mailbox: s.activeMailbox,
     loaded: s.emails?.length ?? null, total: s.totalEmails ?? null,
     hasMore: !!s.hasMoreEmails, cacheMB: Math.round((s.cacheCurrentSizeMB || 0) * 10) / 10,
+    pipelines: window.__PIPELINES__?.() ?? null,
   } : null;
 });
 
@@ -150,7 +151,13 @@ describe('memory footprint', () => {
     // whole mailbox in one response.
     sample('before switching to the big account', { state: await listState() });
     await switchToFolder('big@mock.test', 'INBOX');
-    sample('right after the big account switch', { state: await listState() });
+    // The spike lives inside the first sync, so one sample either side of it
+    // cannot say what allocated. Watch it at 5 s while it happens, with the
+    // pipeline's held-row count alongside.
+    for (let i = 0; i < 20; i++) {
+      sample(`sync +${i * 5}s`, { state: await listState() });
+      await browser.pause(5000);
+    }
 
     const bigState = await drainWholeMailbox(25 * 60_000);
     sample(`big INBOX drained (${BIG} fixture)`, { state: bigState });
