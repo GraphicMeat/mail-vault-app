@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "ブラウザーシミュレーション実行中",
   "settings.daemon.demoCheck": "ブラウザーシミュレーションを確認",
   "settings.daemon.demoAboutTab": "デモのメール、保管庫、グラフの処理はすべてこのブラウザータブ内で完結します。",
-  "settings.daemon.demoAboutNoHelper": "ヘルパープロセス、ネットワークアカウント、ネイティブストレージは使用しません。"
+  "settings.daemon.demoAboutNoHelper": "ヘルパープロセス、ネットワークアカウント、ネイティブストレージは使用しません。",
+  "explorer.allMessages": "すべてのメッセージ",
+  "errors.searchFailed": "検索に失敗しました。もう一度お試しください。"
 }

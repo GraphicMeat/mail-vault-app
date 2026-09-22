@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "Browser simulation active",
   "settings.daemon.demoCheck": "Check browser simulation",
   "settings.daemon.demoAboutTab": "All demo mail, vault and chart work stays in this browser tab.",
-  "settings.daemon.demoAboutNoHelper": "No helper process, network account or native storage is used."
+  "settings.daemon.demoAboutNoHelper": "No helper process, network account or native storage is used.",
+  "explorer.allMessages": "All messages",
+  "errors.searchFailed": "Search failed. Try again."
 }

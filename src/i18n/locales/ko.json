@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "브라우저 시뮬레이션 사용 중",
   "settings.daemon.demoCheck": "브라우저 시뮬레이션 확인",
   "settings.daemon.demoAboutTab": "데모 메일, 보관함, 차트 작업은 모두 이 브라우저 탭 안에서만 이루어집니다.",
-  "settings.daemon.demoAboutNoHelper": "도우미 프로세스, 네트워크 계정, 네이티브 저장소는 사용하지 않습니다."
+  "settings.daemon.demoAboutNoHelper": "도우미 프로세스, 네트워크 계정, 네이티브 저장소는 사용하지 않습니다.",
+  "explorer.allMessages": "모든 메시지",
+  "errors.searchFailed": "검색에 실패했습니다. 다시 시도하세요."
 }

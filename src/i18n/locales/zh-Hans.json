@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "浏览器模拟已启用",
   "settings.daemon.demoCheck": "检查浏览器模拟",
   "settings.daemon.demoAboutTab": "所有演示邮件、保险库和图表操作都只在此浏览器标签页中进行。",
-  "settings.daemon.demoAboutNoHelper": "不使用助手进程、网络账户或本机存储。"
+  "settings.daemon.demoAboutNoHelper": "不使用助手进程、网络账户或本机存储。",
+  "explorer.allMessages": "所有邮件",
+  "errors.searchFailed": "搜索失败。请重试。"
 }

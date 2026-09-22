@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "Simulazione nel browser attiva",
   "settings.daemon.demoCheck": "Verifica la simulazione",
   "settings.daemon.demoAboutTab": "Tutte le email, la cassaforte e i grafici della demo restano in questa scheda del browser.",
-  "settings.daemon.demoAboutNoHelper": "Non vengono usati processi helper, account di rete né archiviazione nativa."
+  "settings.daemon.demoAboutNoHelper": "Non vengono usati processi helper, account di rete né archiviazione nativa.",
+  "explorer.allMessages": "Tutti i messaggi",
+  "errors.searchFailed": "Ricerca non riuscita. Riprova."
 }

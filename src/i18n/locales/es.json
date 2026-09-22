@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "Simulación en el navegador activa",
   "settings.daemon.demoCheck": "Comprobar la simulación",
   "settings.daemon.demoAboutTab": "Todo el correo, la bóveda y los gráficos de la demo se quedan en esta pestaña del navegador.",
-  "settings.daemon.demoAboutNoHelper": "No se usa ningún proceso auxiliar, cuenta de red ni almacenamiento nativo."
+  "settings.daemon.demoAboutNoHelper": "No se usa ningún proceso auxiliar, cuenta de red ni almacenamiento nativo.",
+  "explorer.allMessages": "Todos los mensajes",
+  "errors.searchFailed": "La búsqueda falló. Inténtalo de nuevo."
 }

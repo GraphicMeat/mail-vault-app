@@ -449,7 +449,7 @@ function EmailHtmlBody({ html }) {
     <iframe
       ref={iframeRef}
       sandbox="allow-same-origin"
-      style={{ width: '100%', height: t('settings.cleanup.px', { height }), border: 'none' }}
+      style={{ width: '100%', height, border: 'none' }}
       title={t('timeCapsule.snapshotEmailBody')}
     />
   );

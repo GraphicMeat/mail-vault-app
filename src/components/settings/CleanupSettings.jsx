@@ -193,7 +193,7 @@ function CleanupHtmlBody({ html }) {
     <iframe
       ref={ref}
       sandbox="allow-same-origin"
-      style={{ width: '100%', height: t('settings.cleanup.px', { height }), border: 'none' }}
+      style={{ width: '100%', height, border: 'none' }}
       title={t('settings.cleanup.emailPreview')}
     />
   );

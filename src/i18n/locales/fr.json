@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "Simulation dans le navigateur active",
   "settings.daemon.demoCheck": "Vérifier la simulation",
   "settings.daemon.demoAboutTab": "Tous les e-mails, le coffre et les graphiques de la démo restent dans cet onglet du navigateur.",
-  "settings.daemon.demoAboutNoHelper": "Aucun processus assistant, compte réseau ni stockage natif n’est utilisé."
+  "settings.daemon.demoAboutNoHelper": "Aucun processus assistant, compte réseau ni stockage natif n’est utilisé.",
+  "explorer.allMessages": "Tous les messages",
+  "errors.searchFailed": "La recherche a échoué. Réessayez."
 }

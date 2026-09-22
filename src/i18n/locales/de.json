@@ -2732,5 +2732,7 @@
   "settings.daemon.demoActive": "Browsersimulation aktiv",
   "settings.daemon.demoCheck": "Browsersimulation prüfen",
   "settings.daemon.demoAboutTab": "Alle Demo-Mails, der Tresor und die Diagramme bleiben in diesem Browser-Tab.",
-  "settings.daemon.demoAboutNoHelper": "Es werden kein Helferprozess, kein Netzwerkkonto und kein nativer Speicher verwendet."
+  "settings.daemon.demoAboutNoHelper": "Es werden kein Helferprozess, kein Netzwerkkonto und kein nativer Speicher verwendet.",
+  "explorer.allMessages": "Alle Nachrichten",
+  "errors.searchFailed": "Suche fehlgeschlagen. Versuchen Sie es erneut."
 }
