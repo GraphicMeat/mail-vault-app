@@ -600,12 +600,11 @@ fn mailbox_tree(value: &Value, account: &str, result: &mut BTreeMap<String, Loca
 }
 fn file_uid(path: &Path) -> Option<u32> {
     let name = path.file_name()?.to_str()?;
-    name.split(':')
-        .next()?
-        .strip_suffix(".eml")
-        .unwrap_or(name.split(':').next()?)
-        .parse()
-        .ok()
+    // `mailvault_core::maildir::is_info_sep`: `:` on unix, `;` on Windows
+    // (a colon is illegal in a Win32 filename). A plain `split(':')` returns
+    // the whole filename on Windows and every uid parse fails silently.
+    let head = name.split(mailvault_core::maildir::is_info_sep).next()?;
+    head.strip_suffix(".eml").unwrap_or(head).parse().ok()
 }
 fn metadata(snapshot: &mut Snapshot, location: &mut Location, raw: &Value) {
     location.uid_validity = raw

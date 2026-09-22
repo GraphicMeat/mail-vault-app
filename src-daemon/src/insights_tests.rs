@@ -810,3 +810,14 @@ fn insights_read_detects_a_custody_write_landing_during_the_page_parse() {
         .unwrap_err();
     assert_eq!(err["code"], "snapshotStale", "{err}");
 }
+
+#[test]
+fn file_uid_reads_the_same_uid_under_either_info_separator() {
+    for name in ["7:2,S.eml", "7;2,S.eml", "7:2,.eml", "7;2,.eml", "7.eml"] {
+        assert_eq!(
+            file_uid(Path::new(name)),
+            Some(7),
+            "{name} must parse as uid 7"
+        );
+    }
+}
