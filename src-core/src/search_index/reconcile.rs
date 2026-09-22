@@ -156,10 +156,12 @@ pub(crate) fn read_cur(cur: &Path) -> std::io::Result<(HashMap<u32, DiskFile>, H
     // An error mid-iteration ends the listing (the Unix `ReadDir` stops after
     // one), so it is the whole listing's error, never a shorter folder:
     // `flatten()` here once turned a truncated listing into verified truth
-    // that pruned every row after the break. Not injectable in a test (no
+    // that pruned every row after the break. Re-kinded to `Other`, because
+    // the registry reads `NotFound` as "no cur, an empty folder", which is
+    // only true of the `read_dir` open above. Not injectable in a test (no
     // way to fail `readdir` part-way on a real directory), hence this note.
     for entry in entries {
-        let entry = entry?;
+        let entry = entry.map_err(std::io::Error::other)?;
         let filename = entry.file_name().to_string_lossy().into_owned();
         let Some(uid) = vault_filename_uid(&filename) else { continue };
         let Ok(meta) = entry.metadata() else {

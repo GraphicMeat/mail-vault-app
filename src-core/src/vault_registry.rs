@@ -816,36 +816,41 @@ mod tests {
         assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap().len(), 2, "readable again, answered again");
     }
 
-    /// Two writers of one uid queued on the connection: an upsert whose file
-    /// a delete unlinked must never land as a live row after the delete's
-    /// tombstone, whichever of the two gets the connection first. Fails on a
-    /// stat and seq taken before the lock (about half the rounds each).
+    /// A delete that got the connection first (its tombstone written while
+    /// the upsert waits on the lock) must never be overwritten by the queued
+    /// upsert's live row. Deterministic: the test writes the tombstone itself
+    /// through the held connection, so the upsert always runs second. Red
+    /// when the stat and seq are taken before the lock (the upsert saw the
+    /// file and writes it back), green when they are taken under it.
     #[test]
     fn an_upsert_queued_behind_a_delete_never_resurrects_the_file() {
         let f = fixture();
         let reg = VaultRegistry::open(&f.app, &f.root);
-        for round in 0..40u32 {
-            let uid = 100 + round;
-            let path = put(&f, MB, &format!("{uid}:2,.eml"));
-            let held = guard(&reg.conn); // both writers queue behind this
-            std::thread::scope(|s| {
-                let (reg, path) = (&reg, &path);
-                s.spawn(move || reg.upsert(ACCT, MB, uid, path));
-                // Long enough for an upsert that stats before the lock to have stat'ed.
-                std::thread::sleep(std::time::Duration::from_millis(5));
-                fs::remove_file(path).unwrap();
-                s.spawn(move || reg.remove(ACCT, MB, &[uid]));
-                std::thread::sleep(std::time::Duration::from_millis(5));
-                drop(held);
-            });
-            let live: Option<Option<String>> = guard(&reg.conn)
-                .as_ref()
+        let path = put(&f, MB, "7:2,.eml");
+        let held = guard(&reg.conn);
+        std::thread::scope(|s| {
+            let (reg, path) = (&reg, &path);
+            s.spawn(move || reg.upsert(ACCT, MB, 7, path));
+            // Long enough for an upsert that stats before the lock to have stat'ed.
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            fs::remove_file(path).unwrap();
+            held.as_ref()
                 .unwrap()
-                .query_row("SELECT filename FROM files WHERE uid = ?1", [uid], |r| r.get(0))
-                .optional()
+                .execute(
+                    "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row) VALUES (?1, ?2, 7, NULL, 0, 0, ?3, NULL)
+                     ON CONFLICT (account_id, vault_dir, uid) DO UPDATE SET filename = NULL, light_row = NULL, seq = excluded.seq",
+                    params![ACCT, MB, reg.next_seq()],
+                )
                 .unwrap();
-            assert_eq!(live.flatten(), None, "round {round}: uid {uid} is live with no file on disk");
-        }
+            drop(held);
+        });
+        let live: Option<Option<String>> = guard(&reg.conn)
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT filename FROM files WHERE uid = 7", [], |r| r.get(0))
+            .optional()
+            .unwrap();
+        assert_eq!(live.flatten(), None, "uid 7 is live with no file on disk");
     }
 
     #[test]
