@@ -256,11 +256,29 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   }
 
   /** The scrollable list container, the same heuristic
-   *  connected-unified-archive-thread.test.js's `clickThreadRow` uses. */
+   *  connected-unified-archive-thread.test.js's `clickThreadRow` uses.
+   *
+   *  Picks the div with the LARGEST scrollable range, not the first one that
+   *  merely clears a loose threshold. The Scheduled Send sidebar entry
+   *  (Sidebar.jsx) made `.sidebar-navigation-scroll` (a genuine
+   *  `overflow-y: auto` container, earlier in DOM order than the email list)
+   *  satisfy the old "clientHeight>200, scrollHeight>clientHeight+200" test
+   *  once it held one more row than fit its own viewport - so this helper
+   *  started scrolling the SIDEBAR instead of the 52-row email list, and
+   *  `findAndToggleRow` could never reach rows past whatever the sidebar's own
+   *  ~220px of scroll room happened to reveal underneath. The email list's
+   *  scrollable range is always far bigger than a handful of sidebar rows, so
+   *  taking the max range instead of the first match is robust to any future
+   *  sidebar growth too, not just this one entry. */
   function scrollListBy(fraction) {
     return browser.execute((frac) => {
-      const list = [...document.querySelectorAll('div')]
-        .find((d) => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+      let list = null;
+      let bestRange = 200;
+      for (const d of document.querySelectorAll('div')) {
+        if (d.clientHeight <= 200) continue;
+        const range = d.scrollHeight - d.clientHeight;
+        if (range > bestRange) { bestRange = range; list = d; }
+      }
       if (!list) return null;
       const max = list.scrollHeight - list.clientHeight;
       if (frac === 0) { list.scrollTop = 0; return { scrollTop: 0, max }; }

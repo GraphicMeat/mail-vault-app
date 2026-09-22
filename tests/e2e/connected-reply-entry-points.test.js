@@ -136,7 +136,11 @@ async function openSingleRow(subject) {
         if (row) { row.click(); return true; }
         // Not in the rendered window — page the virtual list and retry.
         const list = [...document.querySelectorAll('div')]
-          .find(d => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+        // The list is the div with the LARGEST scrollable range, not the
+        // first one over a threshold: the sidebar scrolls too once it holds
+        // one row more than fits, and it comes first in DOM order.
+        .filter(d => d.clientHeight > 200 && d.scrollHeight - d.clientHeight > 200)
+        .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
         if (list) list.scrollTop = list.scrollTop > 0 ? 0 : list.scrollTop + list.clientHeight;
         return false;
       }, subject);
@@ -166,7 +170,11 @@ async function openThread(subject) {
           && (r.textContent || '').includes(subj));
         if (row) { row.click(); return true; }
         const list = [...document.querySelectorAll('div')]
-          .find(d => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+        // The list is the div with the LARGEST scrollable range, not the
+        // first one over a threshold: the sidebar scrolls too once it holds
+        // one row more than fits, and it comes first in DOM order.
+        .filter(d => d.clientHeight > 200 && d.scrollHeight - d.clientHeight > 200)
+        .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
         if (list) list.scrollTop = list.scrollTop > 0 ? 0 : list.scrollTop + list.clientHeight;
         return false;
       }, subject);

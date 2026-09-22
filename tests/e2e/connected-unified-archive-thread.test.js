@@ -59,7 +59,11 @@ describe('All inboxes — Archive All on a thread from another account', functio
         && (r.textContent || '').includes(subj));
     if (rows[n]) { rows[n].click(); return true; }
     const list = [...document.querySelectorAll('div')]
-      .find((d) => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+        // The list is the div with the LARGEST scrollable range, not the
+        // first one over a threshold: the sidebar scrolls too once it holds
+        // one row more than fits, and it comes first in DOM order.
+        .filter(d => d.clientHeight > 200 && d.scrollHeight - d.clientHeight > 200)
+        .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
     if (list) {
       const next = list.scrollTop + list.clientHeight;
       list.scrollTop = next >= list.scrollHeight - list.clientHeight ? 0 : next;
