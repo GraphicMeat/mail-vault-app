@@ -15,7 +15,7 @@ vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: id => harness.cacheMailboxes[id] || [],
 }));
 
-const { useViewStore, viewLabel } = await import('../viewStore');
+const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } = await import('../viewStore');
 const { useSearchStore } = await import('../searchStore.js');
 const { useFieldStore } = await import('../fieldStore');
 
@@ -244,5 +244,88 @@ describe('what a view is called', () => {
     await useViewStore.getState().saveView({ ...MINE, name: 'Unpaid' });
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(harness.daemonCall.mock.calls.map(([method]) => method)).toContain('views.evaluate');
+  });
+});
+
+/// The cap lives in one place because there are two doors: the + on the Views
+/// page and "save this search as a view". Hiding a button is never the guard.
+describe('how many views a plan keeps', () => {
+  const full = [STARRED, MINE, { ...MINE, id: 'v2' }];
+
+  it('counts every view, starters included', () => {
+    expect(MAX_FREE_VIEWS).toBe(3);
+    expect(viewLimitReached(full, false)).toBe(true);
+    expect(viewLimitReached(full.slice(0, 2), false)).toBe(false);
+  });
+
+  it('never stops a paid account', () => {
+    expect(viewLimitReached([...full, { ...MINE, id: 'v3' }], true)).toBe(false);
+  });
+
+  it('refuses a new view at the cap, and writes nothing', async () => {
+    useViewStore.setState({ views: full });
+    harness.daemonCall.mockResolvedValue(full);
+    const reply = await useViewStore.getState().createView({ ...MINE, id: 'v9' }, false);
+    expect(reply).toEqual({ ok: false, reason: 'limit' });
+    expect(harness.daemonCall.mock.calls.map(([method]) => method)).not.toContain('views.save');
+  });
+
+  /// A Settings window opens with an empty list. Deciding the cap on what this
+  /// window happens to have loaded handed a full account one more view — the
+  /// sidebar's + arrives before the first `views.list` has even answered.
+  it('asks the daemon what is stored rather than trusting an unloaded list', async () => {
+    useViewStore.setState({ views: [] });
+    harness.daemonCall.mockResolvedValue(full);
+    const reply = await useViewStore.getState().createView({ ...MINE, id: 'v9' }, false);
+    expect(reply).toEqual({ ok: false, reason: 'limit' });
+    expect(harness.daemonCall.mock.calls[0][0]).toBe('views.list');
+    expect(harness.daemonCall.mock.calls.map(([method]) => method)).not.toContain('views.save');
+  });
+
+  it('makes the view when there is room', async () => {
+    useViewStore.setState({ views: full.slice(0, 2) });
+    harness.daemonCall.mockResolvedValue(full.slice(0, 2));
+    const reply = await useViewStore.getState().createView({ ...MINE, id: 'v9' }, false);
+    expect(reply.ok).toBe(true);
+    expect(harness.daemonCall.mock.calls.map(([method]) => method)).toContain('views.save');
+  });
+});
+
+describe('the builder preview', () => {
+  it('asks the index about a definition that was never saved', async () => {
+    harness.daemonCall.mockResolvedValue({ available: true, rows: [row(1)], total: 1 });
+    const reply = await useViewStore.getState().previewDef({ starred: true }, 5);
+    expect(reply).toMatchObject({ available: true, total: 1 });
+    const [method, params] = harness.daemonCall.mock.calls[0];
+    expect(method).toBe('views.evaluate');
+    expect(params).toMatchObject({ def: { starred: true }, limit: 5 });
+    expect(params.viewId).toBeUndefined();
+  });
+
+  /// A panel inside Settings must not repaint the mail list behind it.
+  it('shows its rows to nobody but itself', async () => {
+    harness.daemonCall.mockResolvedValue({ available: true, rows: [row(1)], total: 1 });
+    await useViewStore.getState().previewDef({ starred: true });
+    expect(useSearchStore.getState().searchActive).toBe(false);
+    expect(useViewStore.getState().activeViewId).toBeNull();
+  });
+
+  /// Zero is a claim about the mail. An index that could not answer has made
+  /// no claim at all.
+  it('reports that the index could not answer rather than no matches', async () => {
+    harness.daemonCall.mockResolvedValue({ available: false, reason: 'building' });
+    const reply = await useViewStore.getState().previewDef({});
+    expect(reply).toMatchObject({ available: false, reason: 'building', total: 0 });
+  });
+
+  /// Preview runs on its own generation: a keystroke in Settings must not
+  /// cancel the view somebody has open on the mail screen.
+  it('does not cancel a view that is being opened', async () => {
+    useViewStore.setState({ views: [MINE] });
+    harness.daemonCall.mockResolvedValue({ available: true, rows: [row(2)], total: 1 });
+    const opening = useViewStore.getState().openView(MINE);
+    await useViewStore.getState().previewDef({ starred: true });
+    expect(await opening).toBe(true);
+    expect(useViewStore.getState().activeViewId).toBe('v1');
   });
 });

@@ -21,8 +21,12 @@ vi.mock('../../stores/viewStore', async () => {
   const actual = await vi.importActual('../../stores/viewStore');
   return { useViewStore, viewLabel: actual.viewLabel };
 });
-vi.mock('../ViewEditor', () => ({
-  ViewEditor: ({ view }) => React.createElement('div', { 'data-testid': `view-editor-${view.id}` }),
+let useSettingsStoreMock;
+vi.mock('../../stores/settingsStore', () => ({
+  useSettingsStore: Object.assign(selector => useSettingsStoreMock(selector), {
+    getState: () => useSettingsStoreMock.getState(),
+    setState: (...args) => useSettingsStoreMock.setState(...args),
+  }),
 }));
 
 const { SidebarViews } = await import('../SidebarViews');
@@ -36,8 +40,13 @@ beforeEach(() => {
     counts: { 'builtin-starred': 4 },
     activeViewId: null,
     unavailableReason: null,
+    pendingNew: false,
     openView: vi.fn(async () => true),
     closeView: vi.fn(),
+  }));
+  useSettingsStoreMock = create(set => ({
+    viewsSectionCollapsed: false,
+    toggleViewsSection: () => set(state => ({ viewsSectionCollapsed: !state.viewsSectionCollapsed })),
   }));
 });
 afterEach(cleanup);
@@ -82,15 +91,19 @@ describe('the Views section', () => {
     expect(screen.queryByText('Receipts')).toBeNull();
   });
 
-  it('opens the editor for the view whose pencil was pressed', () => {
-    render(<SidebarViews />);
+  /// A filter is changed on the Views page, where the builder can show what
+  /// the change would find. Editing it from here rewrote the list under the
+  /// person reading it.
+  it('sends the pencil to the Views page instead of editing in place', () => {
+    const onOpenSettings = vi.fn();
+    render(<SidebarViews onOpenSettings={onOpenSettings} />);
     fireEvent.click(screen.getByTestId('view-edit-v1'));
-    expect(screen.getByTestId('view-editor-v1')).toBeTruthy();
-    expect(screen.queryByTestId('view-editor-builtin-starred')).toBeNull();
+    expect(onOpenSettings).toHaveBeenCalledWith('views');
+    expect(screen.queryByTestId('view-editor-form')).toBeNull();
   });
 
   it('editing does not open the view', () => {
-    render(<SidebarViews />);
+    render(<SidebarViews onOpenSettings={vi.fn()} />);
     fireEvent.click(screen.getByTestId('view-edit-v1'));
     expect(useViewStoreMock.getState().openView).not.toHaveBeenCalled();
   });
@@ -98,5 +111,28 @@ describe('the Views section', () => {
   it('the collapsed rail offers no editor', () => {
     render(<SidebarViews collapsed />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
+  });
+
+  /// The + is the accounts + : it makes one, rather than only showing the
+  /// place where one could be made.
+  it('asks the Views page for a new view', () => {
+    const onOpenSettings = vi.fn();
+    render(<SidebarViews onOpenSettings={onOpenSettings} />);
+    fireEvent.click(screen.getByTestId('view-new'));
+    expect(useViewStoreMock.getState().pendingNew).toBe(true);
+    expect(onOpenSettings).toHaveBeenCalledWith('views');
+  });
+
+  it('folds the list away and keeps the heading', () => {
+    render(<SidebarViews />);
+    fireEvent.click(screen.getByTestId('views-fold'));
+    expect(useSettingsStoreMock.getState().viewsSectionCollapsed).toBe(true);
+  });
+
+  it('shows no rows while folded', () => {
+    useSettingsStoreMock.setState({ viewsSectionCollapsed: true });
+    render(<SidebarViews />);
+    expect(screen.queryByTestId('view-row-v1')).toBeNull();
+    expect(screen.getByTestId('views-fold').getAttribute('aria-expanded')).toBe('false');
   });
 });

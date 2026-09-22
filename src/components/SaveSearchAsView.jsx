@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Bookmark } from 'lucide-react';
-import { useViewStore } from '../stores/viewStore';
+import { useViewStore, MAX_FREE_VIEWS } from '../stores/viewStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useTagStore } from '../stores/tagStore';
 import { useT } from '../i18n/index.js';
 
@@ -9,11 +10,15 @@ import { useT } from '../i18n/index.js';
 export function SaveSearchAsView() {
   const t = useT();
   const tags = useTagStore(state => state.tags);
-  const saveView = useViewStore(state => state.saveView);
+  // The same door the + on the Views page goes through: the cap is decided in
+  // one place, or saving a search would quietly be the way around it.
+  const createView = useViewStore(state => state.createView);
   const openView = useViewStore(state => state.openView);
   const defFromSearch = useViewStore(state => state.defFromSearch);
+  const premium = useSettingsStore(state => hasPremiumAccess(state.billingProfile));
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [refused, setRefused] = useState(false);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -27,9 +32,11 @@ export function SaveSearchAsView() {
       builtin: null,
       def: defFromSearch(tags),
     };
+    const reply = await createView(view, premium);
+    if (!reply.ok) { setRefused(true); return; }
     setOpen(false);
     setName('');
-    await saveView(view);
+    setRefused(false);
     await openView(view);
   };
 
@@ -46,5 +53,6 @@ export function SaveSearchAsView() {
       aria-label={t('views.saveSearch')} placeholder={t('views.saveSearch')}
       onChange={event => setName(event.target.value)} />
     <button type="submit">{t('common.save')}</button>
+    {refused && <p role="status" data-testid="save-view-refused">{t('views.limitReached', { max: MAX_FREE_VIEWS })}</p>}
   </form>;
 }

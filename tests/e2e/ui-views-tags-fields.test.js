@@ -9,7 +9,10 @@
  *   2. their names are translated in the app (the daemon stores none),
  *   3. opening one names it in the list header,
  *   4. the Fields tab in Mail preferences answers a fields.list,
- *   5. a grouping chosen in the view editor is stored and read back.
+ *   5. a grouping chosen in the view builder is stored and read back.
+ *
+ * The builder lives on the Views page in Settings, not in the sidebar: the
+ * sidebar opens views and nothing else.
  */
 
 import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
@@ -25,6 +28,20 @@ describe('Saved views, tags and custom fields', function () {
   beforeEach(function () {
     if (appState !== 'ready') this.skip();
   });
+
+  /// Open one view's builder on the Views page in Settings. The sidebar's
+  /// pencil leads here rather than editing under the list being read, so every
+  /// edit below goes through Settings.
+  async function openViewBuilder(viewId) {
+    await openSettings();
+    await browser.pause(400);
+    await clickSettingsNav('Views');
+    await browser.waitUntil(async () => browser.execute(id => !!document.querySelector(`[data-testid="views-row-${id}"]`), viewId),
+      { timeout: 15000, timeoutMsg: `the Views page never listed ${viewId} — did views.list answer?` });
+    await browser.execute(id => document.querySelector(`[data-testid="views-row-${id}"]`)?.click(), viewId);
+    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
+      { timeout: 10000, timeoutMsg: 'the view builder never opened' });
+  }
 
   it('shows the starter views the daemon seeded', async function () {
     const rows = await browser.waitUntil(async () => {
@@ -62,13 +79,11 @@ describe('Saved views, tags and custom fields', function () {
     expect(title.length).toBeGreaterThan(0);
   });
 
-  /// The editor writes through the daemon and the sidebar reads back from it,
-  /// so a name that survives a reload was really stored.
-  it('renames a view from the sidebar, and the name sticks', async function () {
+  /// The builder writes through the daemon and the sidebar reads back from
+  /// it, so a name that survives the round trip was really stored.
+  it('renames a view from the Views page, and the sidebar shows it', async function () {
     const renamed = `Starred ${Date.now()}`;
-    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click());
-    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
-      { timeout: 10000, timeoutMsg: 'the view editor never opened' });
+    await openViewBuilder('builtin-starred');
 
     await browser.execute((name) => {
       const input = document.querySelector('[data-testid="view-name"]');
@@ -77,6 +92,7 @@ describe('Saved views, tags and custom fields', function () {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
     }, renamed);
+    await closeSettings();
 
     const label = await browser.waitUntil(async () => {
       const text = await browser.execute(() => document.querySelector('[data-testid="view-row-builtin-starred"]')?.textContent?.trim() || '');
@@ -85,10 +101,7 @@ describe('Saved views, tags and custom fields', function () {
     expect(label).toContain(renamed);
 
     // Put it back: the starter carries no name of its own.
-    await browser.execute(() => {
-      document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click();
-    });
-    await browser.pause(300);
+    await openViewBuilder('builtin-starred');
     await browser.execute(() => {
       const input = document.querySelector('[data-testid="view-name"]');
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -96,15 +109,28 @@ describe('Saved views, tags and custom fields', function () {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
     });
+    await closeSettings();
   });
 
-  /// The editor's grouping control is the one new affordance a headless run
+  /// The sidebar's pencil is a way through to the builder, not a builder.
+  it('sends the sidebar pencil to the Views page instead of editing in place', async function () {
+    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click());
+    await browser.waitUntil(async () => browser.execute(() => {
+      const page = document.querySelector('[data-testid="settings-content"]');
+      return page?.dataset.page === 'views';
+    }), { timeout: 15000, timeoutMsg: 'the pencil never opened the Views page' });
+    const inlineEditor = await browser.execute(() => !!document.querySelector('.sidebar-view-entry [data-testid="view-editor-form"]'));
+    expect(inlineEditor).toBe(false);
+    await closeSettings();
+  });
+
+  /// The builder's grouping control is the one new affordance a headless run
   /// can reach: it needs no account and no schema. Saving it and reading it
-  /// back off a reopened editor proves the daemon stored `def.group`.
+  /// back off a reopened builder proves the daemon stored `def.group`.
   it('saves a grouping on a view, and reads it back from the daemon', async function () {
-    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-attachments"]')?.click());
+    await openViewBuilder('builtin-attachments');
     await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-group"]')),
-      { timeout: 10000, timeoutMsg: 'the view editor never offered a grouping' });
+      { timeout: 10000, timeoutMsg: 'the view builder never offered a grouping' });
 
     const options = await browser.execute(() => Array.from(document.querySelectorAll('[data-testid="view-group"] option'))
       .map(node => node.value));
@@ -118,15 +144,16 @@ describe('Saved views, tags and custom fields', function () {
       select.dispatchEvent(new Event('change', { bubbles: true }));
       document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
     });
+    await browser.waitUntil(async () => browser.execute(() => !document.querySelector('[data-testid="view-group"]')),
+      { timeout: 10000, timeoutMsg: 'the builder never closed after saving' });
+    await closeSettings();
 
     // Reopening reads the stored view, not the form that was just closed.
-    await browser.waitUntil(async () => browser.execute(() => !document.querySelector('[data-testid="view-group"]')),
-      { timeout: 10000, timeoutMsg: 'the editor never closed after saving' });
-    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-attachments"]')?.click());
+    await openViewBuilder('builtin-attachments');
     const stored = await browser.waitUntil(async () => {
       const value = await browser.execute(() => document.querySelector('[data-testid="view-group"]')?.value ?? null);
       return value === null ? false : value;
-    }, { timeout: 10000, timeoutMsg: 'the editor never reopened' });
+    }, { timeout: 10000, timeoutMsg: 'the builder never reopened' });
     expect(stored).toBe('sender');
 
     // Put it back: a starter groups by nothing.
@@ -137,6 +164,7 @@ describe('Saved views, tags and custom fields', function () {
       select.dispatchEvent(new Event('change', { bubbles: true }));
       document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
     });
+    await closeSettings();
   });
 
   it('offers the custom field editor, and it answers', async function () {
