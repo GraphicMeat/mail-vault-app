@@ -17,7 +17,7 @@ function Harness({ onJump, loading = null, itemForOffset = () => ({ index: 0 }) 
   const virtualizer = { getVirtualItemForOffset: itemForOffset, scrollToIndex: vi.fn() };
   return (
     <div style={{ position: 'relative' }}>
-      <div ref={scrollRef} />
+      <div ref={scrollRef} data-testid="scroller" />
       <DateScrubber scrollRef={scrollRef} virtualizer={virtualizer} buckets={buckets}
         segments={segments} onJump={onJump} loading={loading} />
     </div>
@@ -66,6 +66,14 @@ describe('DateScrubber', () => {
     const itemForOffset = (offset) => ({ index: offset >= MONTH_HEADER_H ? 2 : 1 });
     render(<Harness onJump={() => {}} itemForOffset={itemForOffset} />);
     expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('February 2021');
+  });
+
+  it('shows the rail on scroll without letting it take clicks meant for the rows', () => {
+    render(<Harness onJump={() => {}} />);
+    fireEvent.scroll(screen.getByTestId('scroller'));
+    const rail = screen.getByRole('slider');
+    expect(rail.className).toContain('opacity-100');
+    expect(rail.className).toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
   it('draws a month header band', () => {

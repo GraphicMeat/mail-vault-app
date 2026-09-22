@@ -12,7 +12,9 @@ import { bucketAtIndex, monthBuckets, railSegments, reachedMonth, rowDate } from
 
 export const MONTH_HEADER_H = 26;
 const RAIL_W = 28;
-const EDGE_PX = 24;
+// Narrower than the gap to a row's right-edge buttons (Quick actions sits
+// 12px in), so aiming at a row control never arms the rail over it.
+const EDGE_PX = 12;
 const RAIL_IDLE_MS = 1200;
 const PILL_IDLE_MS = 800;
 const PENDING_MS = 1500;
@@ -419,6 +421,9 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   useEffect(() => () => { if (moveRaf.current) cancelAnimationFrame(moveRaf.current); }, []);
 
   const railVisible = scrolling || near || hover !== null || dragging || !!loading;
+  // Scrolling only shows the rail; it takes clicks once the pointer is at the
+  // edge or on it, so a click on a row just after a scroll still hits the row.
+  const railLive = near || hover !== null || dragging || !!loading;
   const pillVisible = pillOn || dragging || !!loading;
   const parts = pillSeg && pillSeg.kind !== 'older'
     ? monthYearFormatter().formatToParts(new Date(pillSeg.y, pillSeg.m - 1, 1))
@@ -451,9 +456,8 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
         aria-valuenow={Math.max(0, currentIdx)} aria-valuetext={segLabel(current, older)}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp} onPointerLeave={onPointerLeave} onKeyDown={onKeyDown}
-        className={`absolute touch-none select-none rounded-full bg-mail-surface/80 outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-mail-accent ${railVisible
-          ? 'pointer-events-auto opacity-100'
-          : 'pointer-events-none opacity-0 focus-visible:pointer-events-auto focus-visible:opacity-100'}`}
+        className={`absolute touch-none select-none rounded-full bg-mail-surface/80 outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-mail-accent ${railVisible ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100'} ${railLive
+          ? 'pointer-events-auto' : 'pointer-events-none focus-visible:pointer-events-auto'}`}
         style={{ top: MONTH_HEADER_H + 6, bottom: 6, right: gutter, width: RAIL_W }}>
         <div className="absolute inset-y-0 right-[13px] w-px bg-mail-border" />
         {tail && (
