@@ -196,43 +196,79 @@ pub fn store(
     Ok(true)
 }
 
-pub fn read(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<ParsedEmail>, String> {
-    let cur_dir = cur_path(root, account_id, mailbox);
-    let file_path = match find_by_uid(&cur_dir, uid) {
-        Some(p) => p,
-        None => return Ok(None),
-    };
-    let filename = file_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let flags = parse_flags_from_filename(&filename);
-    let raw = fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))?;
-    let email = parse_eml_bytes(&raw, uid, flags)?;
-    Ok(Some(email))
+/// `uid`'s file name and bytes, found through the registry: a verified
+/// mailbox answers from its rows with no directory scan, and a stored name
+/// that no longer opens relists the mailbox once (`with_resolved`).
+/// `Ok(None)`: the verified mailbox does not hold `uid`. `Err`: the mailbox
+/// could not be verified (unknown, never absent), or the file will not read.
+pub fn read_resolved(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, Vec<u8>)>, String> {
+    use std::io::ErrorKind;
+    // Only NotFound goes back to `with_resolved` (it means "relist and
+    // retry"); any other read error is the file's own and stays inside.
+    let read = reg.with_resolved(root, account_id, mailbox, uid, |path| {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        match fs::read(path) {
+            Err(e) if e.kind() == ErrorKind::NotFound => Err(e),
+            other => Ok((name, other)),
+        }
+    });
+    match read {
+        Ok((name, Ok(raw))) => Ok(Some((name, raw))),
+        Ok((_, Err(e))) => Err(format!("Failed to read .eml file: {}", e)),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-pub fn read_light(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<LightEmail>, String> {
-    let cur_dir = cur_path(root, account_id, mailbox);
-    let file_path = match find_by_uid(&cur_dir, uid) {
-        Some(p) => p,
-        None => return Ok(None),
-    };
-    let filename = file_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let flags = parse_flags_from_filename(&filename);
-    let raw = fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))?;
-    let email = parse_eml_bytes_light(&raw, uid, flags)?;
-    Ok(Some(email))
+/// `read_resolved` for readers that answer a missing message with an error.
+pub fn read_eml(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Vec<u8>, String> {
+    read_resolved(reg, root, account_id, mailbox, uid)?
+        .map(|(_, raw)| raw)
+        .ok_or_else(|| format!("Email UID {} not found", uid))
 }
 
-/// One slot per requested uid, in request order: `None` when the vault has no
-/// `<uid>:` file or it does not parse. The folder is listed once
-/// (`uid_file_map`); resolving each uid with `find_by_uid` rescanned the whole
-/// directory per uid, quadratic over a folder.
-pub fn read_light_batch(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<Option<LightEmail>> {
+pub fn read(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<ParsedEmail>, String> {
+    let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+    parse_eml_bytes(&raw, uid, parse_flags_from_filename(&name)).map(Some)
+}
+
+pub fn read_light(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<LightEmail>, String> {
+    let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+    parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).map(Some)
+}
+
+/// One slot per requested uid, in request order: `None` when the vault does
+/// not hold the uid, or its file will not read or parse. `Err` when the
+/// mailbox cannot be verified: unknown, never a row of empty slots.
+pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<Option<LightEmail>>, String> {
+    let held: HashSet<u32> = reg
+        .files(root, account_id, mailbox)
+        .ok_or_else(|| "vault folder could not be listed or read".to_string())?
+        .into_iter()
+        .map(|(uid, _, _)| uid)
+        .collect();
+    Ok(uids
+        .iter()
+        .map(|&uid| {
+            if !held.contains(&uid) {
+                return None;
+            }
+            let (name, raw) = read_resolved(reg, root, account_id, mailbox, uid).ok()??;
+            parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok()
+        })
+        .collect())
+}
+
+/// The folder listed once from disk, for callers that hold the vault gate
+/// and so may not take the registry's per-mailbox lock (the lock order puts
+/// it first): `mail_search`'s no-index scan.
+pub fn read_light_batch_on_disk(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<Option<LightEmail>> {
     let cur_dir = cur_path(root, account_id, mailbox);
     let files = maildir::uid_file_map(&cur_dir);
     read_light_listed(&cur_dir, &files, uids)
 }
 
-/// `read_light_batch` against a listing taken earlier. A uid the listing
+/// `read_light_batch_on_disk` against a listing taken earlier. A uid the listing
 /// lacks must never reach `read_light_at`: passing it a hint of `None` would
 /// make it fall back to `find_file_by_uid`, one full directory rescan per
 /// missing uid — exactly the quadratic cost the listing exists to remove.
@@ -242,11 +278,9 @@ fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uids: &[u32]
         .collect()
 }
 
-pub fn read_attachment(root: &Path, account_id: &str, mailbox: &str, uid: u32, attachment_index: usize) -> Result<String, String> {
+pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, attachment_index: usize) -> Result<String, String> {
     use base64::Engine;
-    let cur_dir = cur_path(root, account_id, mailbox);
-    let file_path = find_by_uid(&cur_dir, uid).ok_or_else(|| format!("Email UID {} not found", uid))?;
-    let raw = fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))?;
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
     let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
 
     let mut attach_parts: Vec<&mailparse::ParsedMail> = Vec::new();
@@ -263,9 +297,9 @@ pub fn read_attachment(root: &Path, account_id: &str, mailbox: &str, uid: u32, a
 /// parsed once. One slot per requested index, in request order, `None` where
 /// that one part could not be read (out of range, undecodable body); a
 /// message that cannot be found, read or parsed is an `Err` for the call.
-pub fn read_attachments(root: &Path, account_id: &str, mailbox: &str, uid: u32, indices: &[usize]) -> Result<Vec<Option<String>>, String> {
+pub fn read_attachments(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, indices: &[usize]) -> Result<Vec<Option<String>>, String> {
     use base64::Engine;
-    let raw = read_eml(&cur_path(root, account_id, mailbox), uid)?;
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
     let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
@@ -274,14 +308,15 @@ pub fn read_attachments(root: &Path, account_id: &str, mailbox: &str, uid: u32, 
         .collect())
 }
 
-pub fn read_raw_source(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<String, String> {
+pub fn read_raw_source(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<String, String> {
     use base64::Engine;
-    let cur_dir = cur_path(root, account_id, mailbox);
-    let file_path = find_by_uid(&cur_dir, uid).ok_or_else(|| format!("Email UID {} not found", uid))?;
-    let raw = fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))?;
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
     Ok(base64::engine::general_purpose::STANDARD.encode(&raw))
 }
 
+/// One directory scan. Only for a writer already holding the mailbox's lock
+/// (`scheduled`'s uid allocation), which may not verify; routes ask the
+/// registry.
 pub fn exists(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> bool {
     let cur_dir = cur_path(root, account_id, mailbox);
     find_by_uid(&cur_dir, uid).is_some()
@@ -296,7 +331,30 @@ pub struct MaildirEmailSummary {
     pub size: u64,
 }
 
-pub fn list(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&str>) -> Result<Vec<MaildirEmailSummary>, String> {
+fn summary(uid: u32, name: &str, size: u64, require_flag: Option<&str>) -> Option<MaildirEmailSummary> {
+    let flags = parse_flags_from_filename(name);
+    if let Some(required) = require_flag {
+        if !flags.iter().any(|f| f == required) {
+            return None;
+        }
+    }
+    let is_archived = flags.iter().any(|f| f == "archived");
+    Some(MaildirEmailSummary { uid, flags, is_archived, size })
+}
+
+/// The mailbox's messages from the registry, by uid: listed from disk once
+/// per session. `Err` when the mailbox cannot be verified (unknown, never
+/// empty); a missing `cur` is an empty folder.
+pub fn list(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&str>) -> Result<Vec<MaildirEmailSummary>, String> {
+    let files = reg
+        .files(root, account_id, mailbox)
+        .ok_or_else(|| "Failed to read Maildir: vault folder could not be listed or read".to_string())?;
+    Ok(files.iter().filter_map(|(uid, name, size)| summary(*uid, name, *size, require_flag)).collect())
+}
+
+/// `list` from one directory pass, for callers that hold the vault gate and
+/// so may not take the registry's per-mailbox lock (`mail_search`'s scan).
+pub fn list_on_disk(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&str>) -> Result<Vec<MaildirEmailSummary>, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
     if !cur_dir.exists() {
         info!("maildir_list: cur_dir does not exist: {:?} (require_flag={:?})", cur_dir, require_flag);
@@ -309,18 +367,8 @@ pub fn list(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let Some(uid) = vault_filename_uid(&name) else { continue };
-
-        let flags = parse_flags_from_filename(&name);
-        let is_archived = flags.iter().any(|f| f == "archived");
-
-        if let Some(required) = require_flag {
-            if !flags.iter().any(|f| f == required) {
-                continue;
-            }
-        }
-
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        results.push(MaildirEmailSummary { uid, flags, is_archived, size });
+        results.extend(summary(uid, &name, size, require_flag));
     }
 
     if require_flag.is_some() {
@@ -331,9 +379,29 @@ pub fn list(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&
 
 /// Removes the vault file for `uid`, if there is one. Returns whether a file
 /// was removed (the caller nudges the index only then).
+/// The file for `uid` as a writer holding the mailbox's lock sees it: the
+/// registry's row on a verified mailbox (no scan, and a verified miss is
+/// absent), else one directory scan. A row whose file is gone invalidates the
+/// mailbox and falls back to the scan. Never a verifying read: the caller
+/// holds the lock a verify would take.
+fn locate(reg: &VaultRegistry, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
+    match reg.known(account_id, mailbox, uid) {
+        Some(Some(name)) => {
+            let path = cur_dir.join(name);
+            if path.exists() {
+                return Some(path);
+            }
+            reg.invalidate(account_id, mailbox);
+            find_by_uid(cur_dir, uid)
+        }
+        Some(None) => None,
+        None => find_by_uid(cur_dir, uid),
+    }
+}
+
 pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
-    if let Some(path) = find_by_uid(&cur_dir, uid) {
+    if let Some(path) = locate(reg, &cur_dir, account_id, mailbox, uid) {
         fs::remove_file(&path).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
         reg.remove(account_id, mailbox, &[uid]);
         info!("Deleted email UID {} from {:?}", uid, path);
@@ -346,7 +414,7 @@ pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str,
 /// whether a rename happened (the old and new names can already agree).
 pub fn set_flags(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
-    let old_path = match find_by_uid(&cur_dir, uid) {
+    let old_path = match locate(reg, &cur_dir, account_id, mailbox, uid) {
         Some(p) => p,
         None => return Err(format!("E_UID_NOT_IN_MAILDIR: Email UID {} not found in Maildir", uid)),
     };
@@ -740,16 +808,10 @@ fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u
     Ok(dest)
 }
 
-fn read_eml(cur_dir: &Path, uid: u32) -> Result<Vec<u8>, String> {
-    let file_path = find_by_uid(cur_dir, uid).ok_or_else(|| format!("Email UID {} not found", uid))?;
-    fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))
-}
-
-/// Write one attachment part to the cache (a no-op when it is there already)
-/// and return its path.
-fn cache_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<PathBuf, String> {
-    let raw = read_eml(cur_dir, uid)?;
-    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+/// Write one attachment part of `raw` (the message's bytes) to the cache (a
+/// no-op when it is there already) and return its path.
+fn cache_attachment_in(cache_dir: &Path, raw: &[u8], account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<PathBuf, String> {
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
     let part = parts.get(index)
@@ -760,9 +822,8 @@ fn cache_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailb
 /// The cached path of one attachment part, if the file exists.
 // ponytail: parses the .eml for the part's filename on every mount check;
 // pass the name from the viewer if that ever shows up in a profile.
-fn cached_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<PathBuf>, String> {
-    let raw = read_eml(cur_dir, uid)?;
-    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+fn cached_attachment_in(cache_dir: &Path, raw: &[u8], account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<PathBuf>, String> {
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
     let part = parts.get(index)
@@ -772,18 +833,19 @@ fn cached_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mail
 }
 
 /// Write one attachment part to the cache and return its absolute path.
-pub fn cache_attachment(root: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<String, String> {
+/// `raw` is the message, read by the caller (`read_eml`) before it takes the
+/// vault gate: the lock order puts the registry's mailbox lock first.
+pub fn cache_attachment(root: &Path, raw: &[u8], account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<String, String> {
     let cache_dir = root.join("attachment_cache");
-    let cur_dir = cur_path(root, account_id, mailbox);
-    let path = cache_attachment_in(&cache_dir, &cur_dir, account_id, mailbox, uid, index)?;
+    let path = cache_attachment_in(&cache_dir, raw, account_id, mailbox, uid, index)?;
     Ok(path.to_string_lossy().to_string())
 }
 
 /// The cached path of one attachment part, if the file exists.
-pub fn cached_attachment_path(root: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<String>, String> {
+pub fn cached_attachment_path(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<String>, String> {
     let cache_dir = root.join("attachment_cache");
-    let cur_dir = cur_path(root, account_id, mailbox);
-    Ok(cached_attachment_in(&cache_dir, &cur_dir, account_id, mailbox, uid, index)?
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    Ok(cached_attachment_in(&cache_dir, &raw, account_id, mailbox, uid, index)?
         .map(|p| p.to_string_lossy().to_string()))
 }
 
@@ -836,6 +898,7 @@ fn next_free(path: &Path) -> PathBuf {
 /// name is never written into, a `(n)` sibling is created instead, so two
 /// exports of two messages never merge.
 pub fn export_attachments(
+    reg: &VaultRegistry,
     root: &Path,
     account_id: &str,
     mailbox: &str,
@@ -843,11 +906,15 @@ pub fn export_attachments(
     indices: &[usize],
     dest_dir: &Path,
 ) -> Result<ExportedAttachments, String> {
-    export_attachments_in(&cur_path(root, account_id, mailbox), uid, indices, dest_dir)
+    if indices.is_empty() {
+        return Err("No attachments to export".to_string());
+    }
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    export_attachments_in(&raw, uid, indices, dest_dir)
 }
 
 fn export_attachments_in(
-    cur_dir: &Path,
+    raw: &[u8],
     uid: u32,
     indices: &[usize],
     dest_dir: &Path,
@@ -855,8 +922,7 @@ fn export_attachments_in(
     if indices.is_empty() {
         return Err("No attachments to export".to_string());
     }
-    let raw = read_eml(cur_dir, uid)?;
-    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
 
@@ -1154,13 +1220,15 @@ mod tests {
         fs::write(cur.join("+7:2,S.eml"), b"x").unwrap();
         fs::write(cur.join("7:2,S.eml"), b"x").unwrap();
 
-        let listed = list(root, "acct", "INBOX", None).unwrap();
+        let (_app, reg) = registry(root);
+        let listed = list(&reg, root, "acct", "INBOX", None).unwrap();
         assert_eq!(listed.len(), 1, "only the canonical name is a vault row");
         assert_eq!(listed[0].uid, 7);
+        let on_disk = list_on_disk(root, "acct", "INBOX", None).unwrap();
+        assert_eq!(on_disk.len(), 1, "only the canonical name is a vault row");
 
         let mut uids = HashSet::new();
         uids.insert(7u32);
-        let (_app, reg) = registry(root);
         let removed = delete_maildir_files(&reg, root, "acct", "INBOX", &uids);
         assert_eq!(removed, 1);
         assert!(!cur.join("7:2,S.eml").exists());
@@ -1279,7 +1347,10 @@ mod tests {
         fs::write(cur.join("12.eml"), light_batch_eml("legacy")).unwrap(); // no colon: not a vault row
         fs::write(cur.join("14:2,.eml"), b"\xff\xfe not mime at all").unwrap();
 
-        let out = read_light_batch(root, "acct", "INBOX", &[9, 404, 5, 12, 14]);
+        let (_app, reg) = registry(root);
+        let out = read_light_batch(&reg, root, "acct", "INBOX", &[9, 404, 5, 12, 14]).unwrap();
+        let on_disk = read_light_batch_on_disk(root, "acct", "INBOX", &[9, 404, 5, 12, 14]);
+        assert_eq!(serde_json::to_value(&out).unwrap(), serde_json::to_value(&on_disk).unwrap());
         assert_eq!(out.len(), 5);
         let nine = out[0].as_ref().expect("uid 9");
         assert_eq!(nine.uid, 9);
@@ -1301,7 +1372,8 @@ mod tests {
             fs::write(cur.join(format!("{uid}:2,S.eml")), light_batch_eml(&format!("m{uid}"))).unwrap();
         }
         let uids: Vec<u32> = (0..=41).rev().collect();
-        let batch = read_light_batch(root, "acct", "INBOX", &uids);
+        let (_app, reg) = registry(root);
+        let batch = read_light_batch(&reg, root, "acct", "INBOX", &uids).unwrap();
         for (i, uid) in uids.iter().enumerate() {
             let single = find_by_uid(&cur, *uid).and_then(|p| {
                 let name = p.file_name()?.to_string_lossy().to_string();
@@ -1385,6 +1457,10 @@ R0lGODlhAQABAAAAACw=\r\n\
         (dir, cur, dir_path_cache())
     }
 
+    fn eml_at(cur: &Path, uid: u32) -> Vec<u8> {
+        fs::read(find_by_uid(cur, uid).unwrap()).unwrap()
+    }
+
     fn dir_path_cache() -> PathBuf {
         tempfile::tempdir().unwrap().keep().join("attachment_cache")
     }
@@ -1396,11 +1472,11 @@ R0lGODlhAQABAAAAACw=\r\n\
     #[test]
     fn cache_attachment_writes_the_part_once() {
         let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        let path = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
         assert_eq!(leaf(&path), "acct_INBOX_7_0_report.pdf");
         assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.4\n");
 
-        let again = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        let again = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
         assert_eq!(again, path);
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
     }
@@ -1410,7 +1486,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let raw = String::from_utf8(multipart_with_attachment()).unwrap()
             .replace("filename=\"report.pdf\"", "filename=\"../../escape.pdf\"");
         let (_d, cur, cache) = maildir_with(&[(7, raw.as_bytes())]);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        let path = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
         assert_eq!(path.parent().unwrap(), cache);
         assert_eq!(leaf(&path), "acct_INBOX_7_0_escape.pdf");
     }
@@ -1418,9 +1494,9 @@ R0lGODlhAQABAAAAACw=\r\n\
     #[test]
     fn cached_attachment_in_reports_only_what_exists() {
         let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
-        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), None);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), Some(path));
+        assert_eq!(cached_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap(), None);
+        let path = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
+        assert_eq!(cached_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap(), Some(path));
     }
 
     #[test]
@@ -1432,14 +1508,15 @@ R0lGODlhAQABAAAAACw=\r\n\
 
         // Parts: 0 photo, 1 inline logo, 2 tracking pixel. Request order, a
         // repeat and an out-of-range index all keep their own slot.
-        let got = read_attachments(root.path(), "acct", "INBOX", 9, &[2, 1, 7, 1]).unwrap();
+        let (_app, reg) = registry(root.path());
+        let got = read_attachments(&reg, root.path(), "acct", "INBOX", 9, &[2, 1, 7, 1]).unwrap();
 
-        let one = |i| read_attachment(root.path(), "acct", "INBOX", 9, i).unwrap();
+        let one = |i| read_attachment(&reg, root.path(), "acct", "INBOX", 9, i).unwrap();
         assert_eq!(got, vec![Some(one(2)), Some(one(1)), None, Some(one(1))]);
         assert_eq!(got[1].as_deref(), Some("iVBORw0KGgo="));
-        assert!(read_attachment(root.path(), "acct", "INBOX", 9, 7).is_err());
+        assert!(read_attachment(&reg, root.path(), "acct", "INBOX", 9, 7).is_err());
 
-        let missing = read_attachments(root.path(), "acct", "INBOX", 8, &[0]).unwrap_err();
+        let missing = read_attachments(&reg, root.path(), "acct", "INBOX", 8, &[0]).unwrap_err();
         assert_eq!(missing, "Email UID 8 not found");
     }
 
@@ -1451,7 +1528,7 @@ R0lGODlhAQABAAAAACw=\r\n\
 
         // Index 0 is the photo; 1 and 2 are the inline logo and the tracking
         // pixel the viewer filters out and therefore never asks for.
-        let r = export_attachments_in(&cur, 9, &[0], &dest).unwrap();
+        let r = export_attachments_in(&eml_at(&cur, 9), 9, &[0], &dest).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string()]);
         assert_eq!(Path::new(&r.dir), dest);
@@ -1465,8 +1542,8 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let first = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
-        let second = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
+        let first = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let second = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
 
         assert_eq!(Path::new(&first.dir), dest);
         assert_eq!(leaf(Path::new(&second.dir)), "Attachments (1)");
@@ -1483,7 +1560,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Photo");
 
-        let r = export_attachments_in(&cur, 9, &[0, 1], &dest).unwrap();
+        let r = export_attachments_in(&eml_at(&cur, 9), 9, &[0, 1], &dest).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string(), "photo (1).png".to_string()]);
     }
@@ -1496,7 +1573,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let r = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
+        let r = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
 
         assert_eq!(r.files, vec!["escape.pdf".to_string()]);
         assert!(dest.join("escape.pdf").exists());
@@ -1507,7 +1584,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn export_refuses_an_index_the_message_does_not_have() {
         let (_d, cur, _c) = maildir_with(&[(7, &multipart_with_attachment())]);
         let out = tempfile::tempdir().unwrap();
-        let err = export_attachments_in(&cur, 7, &[5], &out.path().join("A")).unwrap_err();
+        let err = export_attachments_in(&eml_at(&cur, 7), 7, &[5], &out.path().join("A")).unwrap_err();
         assert!(err.contains("out of range"), "{err}");
     }
 

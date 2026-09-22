@@ -144,53 +144,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    // Under the registry's per-mailbox lock, so a verify never
-                    // lists the folder mid-repair.
-                    let report = with_mailbox_write(&state, &account_id, &mailbox, |root| -> Result<maildir::GenerationRepair, String> {
-                        let (cached_uv, cached_total) =
-                            daemon_custody::with_conn(&state, |c| cache::sync_meta(c, &account_id, &mailbox))
-                                .unwrap_or((None, None));
-                        let Some(uid_validity) = cached_uv else {
-                            return Ok(maildir::GenerationRepair::default());
-                        };
-                        let mailbox_dir = vault_files::cur_path(root, &account_id, &mailbox)
-                            .parent()
-                            .map(|p| p.to_path_buf())
-                            .ok_or_else(|| "Maildir path has no parent".to_string())?;
-                        if maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
-                            return Ok(maildir::GenerationRepair { generation: uid_validity, ..Default::default() });
-                        }
-                        let (id_to_uid, cached) =
-                            daemon_custody::with_conn(&state, |c| cache::message_id_map(c, &account_id, &mailbox))
-                                .unwrap_or_default();
-                        let total = cached_total.unwrap_or(0);
-                        if total == 0 || cached < total {
-                            info!(
-                                "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
-                                account_id, mailbox, cached, total,
-                            );
-                            return Ok(maildir::GenerationRepair::default());
-                        }
-                        let protected = match daemon_custody::with_conn(&state, |c| entries::local_uids(c, &account_id, &mailbox)) {
-                            Ok(uids) => uids,
-                            Err(e) => {
-                                warn!("maildir_repair_generation: {}/{} skipped, {}", account_id, mailbox, e);
-                                return Ok(maildir::GenerationRepair::default());
-                            }
-                        };
-                        let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
-                        // Files were renamed or set aside wholesale: the next
-                        // read relists the folder. The change hook nudges the index.
-                        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
-                            state.vault_registry.invalidate(&account_id, &mailbox);
-                        }
-                        if !report.rebound.is_empty() || !report.orphaned.is_empty() {
-                            if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remap(c, &account_id, &mailbox, &report.rebound, &report.orphaned)) {
-                                warn!("maildir_repair_generation: custody remap failed: {}", e);
-                            }
-                        }
-                        Ok(report)
-                    })?;
+                    let report = repair_generation_for(&state, &account_id, &mailbox)?;
                     serde_json::to_value(report).map_err(|e| e.to_string())
                 })
                 .await
@@ -229,6 +183,61 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             )
         }
         _ => return None,
+    })
+}
+
+/// Re-keys the mailbox's vault files onto the server's current UIDVALIDITY
+/// when the stored generation disagrees (`maildir::repair_generation`), and
+/// remaps custody to match. Runs under the registry's per-mailbox lock (so a
+/// verify never lists the folder mid-repair) and the vault gate. The caller
+/// must not hold either, and must call any verifying registry read after
+/// this returns, never inside it. A repair that moved anything invalidates
+/// the mailbox, so the next read relists it.
+pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<maildir::GenerationRepair, String> {
+    with_mailbox_write(state, account_id, mailbox, |root| -> Result<maildir::GenerationRepair, String> {
+        let (cached_uv, cached_total) =
+            daemon_custody::with_conn(state, |c| cache::sync_meta(c, account_id, mailbox))
+                .unwrap_or((None, None));
+        let Some(uid_validity) = cached_uv else {
+            return Ok(maildir::GenerationRepair::default());
+        };
+        let mailbox_dir = vault_files::cur_path(root, account_id, mailbox)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .ok_or_else(|| "Maildir path has no parent".to_string())?;
+        if maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
+            return Ok(maildir::GenerationRepair { generation: uid_validity, ..Default::default() });
+        }
+        let (id_to_uid, cached) =
+            daemon_custody::with_conn(state, |c| cache::message_id_map(c, account_id, mailbox))
+                .unwrap_or_default();
+        let total = cached_total.unwrap_or(0);
+        if total == 0 || cached < total {
+            info!(
+                "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
+                account_id, mailbox, cached, total,
+            );
+            return Ok(maildir::GenerationRepair::default());
+        }
+        let protected = match daemon_custody::with_conn(state, |c| entries::local_uids(c, account_id, mailbox)) {
+            Ok(uids) => uids,
+            Err(e) => {
+                warn!("maildir_repair_generation: {}/{} skipped, {}", account_id, mailbox, e);
+                return Ok(maildir::GenerationRepair::default());
+            }
+        };
+        let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
+        // Files were renamed or set aside wholesale: the next
+        // read relists the folder. The change hook nudges the index.
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
+            state.vault_registry.invalidate(account_id, mailbox);
+        }
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() {
+            if let Err(e) = daemon_custody::with_conn(state, |c| entries::remap(c, account_id, mailbox, &report.rebound, &report.orphaned)) {
+                warn!("maildir_repair_generation: custody remap failed: {}", e);
+            }
+        }
+        Ok(report)
     })
 }
 

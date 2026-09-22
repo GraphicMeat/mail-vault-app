@@ -2541,8 +2541,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // 200). The old Tauri commands they replace had no budget at all, so
         // 30s (bounding what used to be unbounded) can time out a large
         // archive on a slow drive that used to just run slow and succeed.
+        // `vault_uid_sets` replaces `maildir_list` and lists a mailbox once
+        // per session; `vault_light_rows` parses every never-parsed file of
+        // a mailbox on its first call.
         "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache"
-        | "maildir_read_light_batch" | "maildir_list" => {
+        | "maildir_read_light_batch" | "maildir_list" | "vault_uid_sets" | "vault_light_rows" => {
             Some(Duration::from_secs(120))
         }
 
@@ -3991,7 +3994,7 @@ mod tests {
         // uids in one unchunked call, a full MIME parse per file.
         for method in [
             "load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache",
-            "maildir_read_light_batch", "maildir_list",
+            "maildir_read_light_batch", "maildir_list", "vault_uid_sets", "vault_light_rows",
         ] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
         }

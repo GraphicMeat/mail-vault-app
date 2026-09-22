@@ -307,13 +307,14 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
         Err(e) => return Outcome::Transient(e),
         Ok(r) => r,
     };
-    let raw_b64 = match vault_files::read_raw_source(&root, &row.account_id, &row.mailbox, row.uid) {
+    // Resolving can list the mailbox and reads SQLite: off the runtime.
+    let (read_state, account_id, mailbox, uid) = (Arc::clone(state), row.account_id.clone(), row.mailbox.clone(), row.uid);
+    let read = crate::handlers::common::blocking(move || {
+        vault_files::read_eml(&read_state.vault_registry, &root, &account_id, &mailbox, uid)
+    });
+    let raw = match read.await.and_then(|r| r) {
         Ok(b) => b,
         Err(e) => return Outcome::Terminal(format!("The scheduled message could not be found: {e}")),
-    };
-    let raw = match vault_files::decode_raw_source(&raw_b64) {
-        Ok(b) => b,
-        Err(e) => return Outcome::Terminal(format!("The scheduled message is corrupt: {e}")),
     };
 
     match smtp::send_raw(&account, &stored.envelope, raw).await {

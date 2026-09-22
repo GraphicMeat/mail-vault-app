@@ -821,7 +821,7 @@ async fn run_local_lane(
                         return Err("cancelled".into());
                     }
                     let root = vault_root(&state_for_blocking)?;
-                    let summaries = vault_files::list(
+                    let summaries = vault_files::list_on_disk(
                         &root,
                         &folder_for_blocking.account_id,
                         &folder_for_blocking.mailbox,
@@ -831,7 +831,7 @@ async fn run_local_lane(
                         .iter()
                         .map(|summary| summary.uid)
                         .collect::<Vec<_>>();
-                    let emails = vault_files::read_light_batch(
+                    let emails = vault_files::read_light_batch_on_disk(
                         &root,
                         &folder_for_blocking.account_id,
                         &folder_for_blocking.mailbox,

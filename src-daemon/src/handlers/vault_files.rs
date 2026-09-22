@@ -35,7 +35,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let email = vault_files::read(&root, &account_id, &mailbox, uid)?;
+                    let email = vault_files::read(&state.vault_registry, &root, &account_id, &mailbox, uid)?;
                     serde_json::to_value(email).map_err(|e| e.to_string())
                 })
                 .await
@@ -51,7 +51,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let email = vault_files::read_light(&root, &account_id, &mailbox, uid)?;
+                    let email = vault_files::read_light(&state.vault_registry, &root, &account_id, &mailbox, uid)?;
                     serde_json::to_value(email).map_err(|e| e.to_string())
                 })
                 .await
@@ -67,7 +67,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let batch = vault_files::read_light_batch(&root, &account_id, &mailbox, &uids);
+                    let batch = vault_files::read_light_batch(&state.vault_registry, &root, &account_id, &mailbox, &uids)?;
                     serde_json::to_value(batch).map_err(|e| e.to_string())
                 })
                 .await
@@ -83,7 +83,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    vault_files::read_raw_source(&root, &account_id, &mailbox, uid).map(Value::String)
+                    vault_files::read_raw_source(&state.vault_registry, &root, &account_id, &mailbox, uid).map(Value::String)
                 })
                 .await
                 .and_then(|r| r),
@@ -99,7 +99,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    vault_files::read_attachment(&root, &account_id, &mailbox, uid, index).map(Value::String)
+                    vault_files::read_attachment(&state.vault_registry, &root, &account_id, &mailbox, uid, index).map(Value::String)
                 })
                 .await
                 .and_then(|r| r),
@@ -117,7 +117,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let parts = vault_files::read_attachments(&root, &account_id, &mailbox, uid, &indices)?;
+                    let parts = vault_files::read_attachments(&state.vault_registry, &root, &account_id, &mailbox, uid, &indices)?;
                     serde_json::to_value(parts).map_err(|e| e.to_string())
                 })
                 .await
@@ -133,10 +133,62 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    Ok(Value::Bool(vault_files::exists(&root, &account_id, &mailbox, uid)))
+                    // A verified miss is `false` with no fs access; a held row
+                    // costs one stat, so a file gone since the verify relists
+                    // once instead of answering "saved" all session. A mailbox
+                    // that cannot be verified is an error, never "not saved".
+                    let found = state.vault_registry.with_resolved(&root, &account_id, &mailbox, uid, |p| std::fs::metadata(p).map(|_| ()));
+                    match found {
+                        Ok(()) => Ok(Value::Bool(true)),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Value::Bool(false)),
+                        Err(e) => Err(e.to_string()),
+                    }
                 })
                 .await
                 .and_then(|r| r),
+            )
+        }
+        // What the vault holds, from the registry: `{saved, archived}` uids,
+        // ascending. `null` (unknown, never empty) when the vault is
+        // unreachable, the generation repair fails, or the folder cannot be
+        // listed. The repair runs first, under the mailbox lock, so the
+        // answer is keyed by the server's current UIDVALIDITY.
+        "vault_uid_sets" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || {
+                    let answer = registry_read(&state, &account_id, &mailbox, |root| {
+                        state.vault_registry.uid_sets(root, &account_id, &mailbox)
+                    });
+                    answer.map_or(Value::Null, |(saved, archived)| serde_json::json!({ "saved": saved, "archived": archived }))
+                })
+                .await,
+            )
+        }
+        // The light rows (headers, attachment list, `snippet`, no body) of
+        // `uids`, or of the whole mailbox when `uids` is absent or null.
+        // `null` in the same cases as `vault_uid_sets`. A row never parsed
+        // before is parsed here once and stored.
+        "vault_light_rows" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uids = match params.get("uids") {
+                None | Some(Value::Null) => None,
+                Some(_) => Some(req!(vec_arg::<u32>(&id, params, "uids"))),
+            };
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || {
+                    let rows = registry_read(&state, &account_id, &mailbox, |root| {
+                        state.vault_registry.light_rows(root, &account_id, &mailbox, uids.as_deref())
+                    });
+                    rows.map_or(Value::Null, Value::Array)
+                })
+                .await,
             )
         }
         "maildir_list" => {
@@ -148,7 +200,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let list = vault_files::list(&root, &account_id, &mailbox, require_flag.as_deref())?;
+                    let list = vault_files::list(&state.vault_registry, &root, &account_id, &mailbox, require_flag.as_deref())?;
                     serde_json::to_value(list).map_err(|e| e.to_string())
                 })
                 .await
@@ -199,7 +251,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
-                    let path = vault_files::cached_attachment_path(&root, &account_id, &mailbox, uid, index)?;
+                    let path = vault_files::cached_attachment_path(&state.vault_registry, &root, &account_id, &mailbox, uid, index)?;
                     serde_json::to_value(path).map_err(|e| e.to_string())
                 })
                 .await
@@ -223,7 +275,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let out = vault_files::export_attachments(
-                        &root, &account_id, &mailbox, uid, &indices, std::path::Path::new(&dest_dir),
+                        &state.vault_registry, &root, &account_id, &mailbox, uid, &indices, std::path::Path::new(&dest_dir),
                     )?;
                     serde_json::to_value(out).map_err(|e| e.to_string())
                 })
@@ -243,7 +295,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| vault_files::cache_attachment(root, &account_id, &mailbox, uid, index)).map(Value::String)
+                    // The message is read first, outside the gate: resolving it
+                    // can verify the mailbox, and the lock order puts the
+                    // registry's mailbox lock before the gate.
+                    let raw = vault_files::read_eml(&state.vault_registry, &vault_root(&state)?, &account_id, &mailbox, uid)?;
+                    with_vault_write(&state, |root| vault_files::cache_attachment(root, &raw, &account_id, &mailbox, uid, index)).map(Value::String)
                 })
                 .await
                 .and_then(|r| r),
@@ -410,6 +466,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         _ => return None,
     })
+}
+
+/// The two registry read routes' shared shape: the vault must be reachable,
+/// the generation repair runs (it takes and releases the mailbox lock), and
+/// only then `read`, outside every lock, may verify. `None` for each failure:
+/// the routes answer `null`, never an error the caller could read as empty.
+fn registry_read<T>(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
+    let root = vault_root(state).ok()?;
+    if let Err(e) = crate::handlers::custody::repair_generation_for(state, account_id, mailbox) {
+        tracing::warn!("vault read {account_id}/{mailbox}: generation repair failed: {e}");
+        return None;
+    }
+    read(&root)
 }
 
 #[cfg(test)]
@@ -705,6 +774,158 @@ mod tests {
         let arr = r.result.unwrap();
         assert_eq!(arr[0]["uid"], json!(7));
         assert_eq!(arr[0]["isArchived"], json!(false));
+        assert_eq!(arr[0]["flags"], json!([]));
+        let on_disk = fs::metadata(vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,.eml")).unwrap().len();
+        assert_eq!(arr[0]["size"], json!(on_disk), "size comes from the registry's size column");
+    }
+
+    // ── Task 3: registry read routes ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn the_registry_read_routes_answer_null_when_the_vault_is_unreachable() {
+        for closed in [false, true] {
+            let (t, s) = st(closed);
+            seed_email(t.path(), "acc", "INBOX", 7);
+            s.vault_closed.store(closed, std::sync::atomic::Ordering::SeqCst);
+            let params = json!({"accountId": "acc", "mailbox": "INBOX"});
+            assert_eq!(call(&s, "vault_uid_sets", params.clone()).await.result, Some(Value::Null), "closed={closed}");
+            assert_eq!(call(&s, "vault_light_rows", params).await.result, Some(Value::Null), "closed={closed}");
+            assert_eq!(s.vault_registry.listing_count(), 0, "nothing was listed");
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_uid_sets_answers_from_one_listing_per_session() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 9, "rawSourceBase64": b64(b"From: a@b.com\r\n\r\nx"), "flags": ["archived"]})).await;
+        let params = json!({"accountId": "acc", "mailbox": "INBOX"});
+        assert_eq!(call(&s, "vault_uid_sets", params.clone()).await.result, Some(json!({"saved": [7, 9], "archived": [9]})));
+        assert_eq!(s.vault_registry.listing_count(), 1);
+        assert_eq!(call(&s, "vault_uid_sets", params).await.result, Some(json!({"saved": [7, 9], "archived": [9]})));
+        assert_eq!(s.vault_registry.listing_count(), 1, "the second answer lists nothing");
+    }
+
+    #[tokio::test]
+    async fn vault_light_rows_answers_the_requested_uids_or_the_whole_mailbox() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        seed_email(t.path(), "acc", "INBOX", 8);
+        let r = call(&s, "vault_light_rows", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [8, 404]})).await;
+        let rows = r.result.unwrap();
+        let rows = rows.as_array().unwrap();
+        assert_eq!(rows.len(), 1, "a uid the vault does not hold is left out");
+        assert_eq!(rows[0]["uid"], json!(8));
+        assert_eq!(rows[0]["subject"], json!("hi"));
+        assert_eq!(rows[0]["isArchived"], json!(false));
+        assert!(rows[0].get("text").is_none(), "light rows carry no body");
+
+        for params in [json!({"accountId": "acc", "mailbox": "INBOX"}), json!({"accountId": "acc", "mailbox": "INBOX", "uids": null})] {
+            let rows = call(&s, "vault_light_rows", params).await.result.unwrap();
+            let uids: Vec<u64> = rows.as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+            assert_eq!(uids, vec![7, 8]);
+        }
+        assert_eq!(s.vault_registry.listing_count(), 1);
+    }
+
+    /// A `.uidvalidity` that disagrees with the header cache: the route runs
+    /// the repair first, so its answer is keyed by the rebound uid, never the
+    /// file's pre-repair name.
+    #[tokio::test]
+    async fn the_registry_read_routes_run_the_generation_repair_before_answering() {
+        for method in ["vault_uid_sets", "vault_light_rows"] {
+            let (t, s) = st(true);
+            let _ = crate::custody::open_into(&s);
+            let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+            fs::create_dir_all(&cur).unwrap();
+            fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+            maildir::write_generation(cur.parent().unwrap(), 1).unwrap();
+            let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<m@x.test>"}]});
+            crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+
+            let r = call(&s, method, json!({"accountId": "acc", "mailbox": "INBOX"})).await.result.unwrap();
+            if method == "vault_uid_sets" {
+                assert_eq!(r, json!({"saved": [5], "archived": []}));
+            } else {
+                let uids: Vec<u64> = r.as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+                assert_eq!(uids, vec![5], "{method}");
+            }
+            assert_eq!(maildir::read_generation(cur.parent().unwrap()), Some(2));
+        }
+    }
+
+    /// Once its mailbox is verified, a single-message question never lists
+    /// the folder: a file planted behind the registry's back is invisible to
+    /// every per-uid route (a directory scan would find it), and the listing
+    /// count does not move.
+    #[tokio::test]
+    async fn a_single_message_read_on_a_verified_mailbox_does_no_directory_scan() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let params = json!({"accountId": "acc", "mailbox": "INBOX"});
+        assert_eq!(call(&s, "vault_uid_sets", params).await.result, Some(json!({"saved": [7], "archived": []})));
+        assert_eq!(s.vault_registry.listing_count(), 1);
+
+        seed_email(t.path(), "acc", "INBOX", 8);
+        let p8 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 8});
+        assert_eq!(call(&s, "maildir_exists", p8.clone()).await.result, Some(json!(false)));
+        assert_eq!(call(&s, "maildir_read", p8.clone()).await.result, Some(Value::Null));
+        assert_eq!(call(&s, "maildir_read_light", p8.clone()).await.result, Some(Value::Null));
+        assert_eq!(call(&s, "maildir_read_raw_source", p8.clone()).await.error.unwrap().message, "Email UID 8 not found");
+        let r = call(&s, "maildir_read_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 8, "attachmentIndex": 0})).await;
+        assert_eq!(r.error.unwrap().message, "Email UID 8 not found");
+        let r = call(&s, "maildir_read_light_batch", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [8, 7]})).await.result.unwrap();
+        assert_eq!(r[0], Value::Null);
+        assert_eq!(r[1]["uid"], json!(7));
+        let r = call(&s, "maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 8, "flags": ["seen"]})).await;
+        assert!(r.error.unwrap().message.starts_with("E_UID_NOT_IN_MAILDIR:"));
+        let r = call(&s, "maildir_list", json!({"accountId": "acc", "mailbox": "INBOX", "requireFlag": null})).await.result.unwrap();
+        assert_eq!(r.as_array().unwrap().len(), 1);
+
+        let p7 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
+        assert_eq!(call(&s, "maildir_exists", p7.clone()).await.result, Some(json!(true)));
+        assert_eq!(call(&s, "maildir_read", p7).await.result.unwrap()["uid"], json!(7));
+        assert_eq!(s.vault_registry.listing_count(), 1, "no route listed the folder again");
+    }
+
+    /// A stored name that no longer opens (renamed behind the registry's
+    /// back) is the one case a read relists: once, then it answers.
+    #[tokio::test]
+    async fn a_read_whose_stored_name_vanished_relists_once_and_answers() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let p7 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
+        assert_eq!(call(&s, "maildir_exists", p7.clone()).await.result, Some(json!(true)));
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::rename(cur.join("7:2,.eml"), cur.join("7:2,S.eml")).unwrap();
+        let r = call(&s, "maildir_read_light", p7).await.result.unwrap();
+        assert_eq!(r["flags"], json!(["seen", "\\Seen"]));
+        assert_eq!(s.vault_registry.listing_count(), 2);
+
+        // Removed behind its back: `maildir_exists` stats the held row, so it
+        // answers false rather than "saved" for the rest of the session.
+        fs::remove_file(cur.join("7:2,S.eml")).unwrap();
+        let p7 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
+        assert_eq!(call(&s, "maildir_exists", p7).await.result, Some(json!(false)));
+        assert_eq!(s.vault_registry.listing_count(), 3);
+    }
+
+    /// A folder that cannot be listed is unknown, never absent: the per-uid
+    /// routes error (JS `isEmailSaved` reads an error as not saved, and
+    /// `getArchivedEmailIds` as unknown), and the new routes answer null.
+    #[tokio::test]
+    async fn an_unlistable_folder_is_unknown_not_absent() {
+        let (t, s) = st(true);
+        let mailbox_dir = vault_files::cur_path(t.path(), "acc", "INBOX").parent().unwrap().to_path_buf();
+        fs::create_dir_all(&mailbox_dir).unwrap();
+        fs::write(mailbox_dir.join("cur"), b"not a directory").unwrap();
+        let p = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
+        assert!(call(&s, "maildir_exists", p.clone()).await.error.is_some());
+        assert!(call(&s, "maildir_read", p.clone()).await.error.is_some(), "never null: null is a verified miss");
+        assert!(call(&s, "maildir_read_light", p).await.error.is_some());
+        assert!(call(&s, "maildir_list", json!({"accountId": "acc", "mailbox": "INBOX", "requireFlag": "archived"})).await.error.is_some());
+        assert!(call(&s, "maildir_read_light_batch", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [7]})).await.error.is_some());
+        assert_eq!(call(&s, "vault_uid_sets", json!({"accountId": "acc", "mailbox": "INBOX"})).await.result, Some(Value::Null));
     }
 
     #[tokio::test]

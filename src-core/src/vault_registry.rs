@@ -242,6 +242,24 @@ impl VaultRegistry {
         Some((rows.into_iter().map(|r| r.0).collect(), archived))
     }
 
+    /// `(uid, filename, size)` of every file the mailbox holds, by uid. `None`
+    /// when the mailbox cannot be verified.
+    pub fn files(&self, root: &Path, account: &str, mailbox: &str) -> Option<Vec<(u32, String, u64)>> {
+        let (account, dir) = key(account, mailbox);
+        self.ensure_verified(root, &account, &dir)?;
+        let conn_guard = guard(&self.conn);
+        let conn = conn_guard.as_ref()?;
+        conn.prepare_cached(
+            "SELECT uid, filename, size FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND filename IS NOT NULL ORDER BY uid",
+        )
+        .and_then(|mut st| {
+            st.query_map(params![account, dir], |r| Ok((r.get(0)?, r.get(1)?, u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0))))?
+                .collect()
+        })
+        .map_err(|e| warn!("vault_registry: read {account}/{dir}: {e}"))
+        .ok()
+    }
+
     /// The light rows (headers, attachment list, `snippet`, no body) for
     /// `uids` in request order, or the whole mailbox by uid. `uid`, `flags` and
     /// `isArchived` come from the current file name. Uids not held, and files
