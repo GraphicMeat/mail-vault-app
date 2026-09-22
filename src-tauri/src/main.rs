@@ -2792,7 +2792,7 @@ async fn rpc_attempt_inner(socket_path: &Path, token: &str, method: &str, params
         Err(e) => return RpcOutcome::Unavailable { message: e.to_string(), retryable: false },
     };
 
-    let resp: serde_json::Value = match serde_json::from_str(&resp_line) {
+    let mut resp: serde_json::Value = match serde_json::from_str(&resp_line) {
         Ok(v) => v,
         Err(e) => return RpcOutcome::Direct(format!("Invalid RPC response: {e}")),
     };
@@ -2801,7 +2801,9 @@ async fn rpc_attempt_inner(socket_path: &Path, token: &str, method: &str, params
         return RpcOutcome::Direct(map_rpc_error(error, method));
     }
 
-    RpcOutcome::Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
+    // Take the result out of the parsed reply instead of deep-copying it; a
+    // missing result (or a non-object reply) still reads as Null.
+    RpcOutcome::Ok(resp.get_mut("result").map(serde_json::Value::take).unwrap_or(serde_json::Value::Null))
 }
 
 #[tauri::command]
@@ -4309,6 +4311,35 @@ mod tests {
         match rpc_attempt(&path, "tok", "some_new_method", &serde_json::json!({}), None).await {
             RpcOutcome::Direct(msg) => assert_eq!(msg, "errors.daemonOutdated"),
             other => panic!("expected Direct(errors.daemonOutdated), got {other:?}"),
+        }
+    }
+
+    /// The reply's `result` is moved out, not copied: a present result comes
+    /// back whole, and a missing or null one reads as Null.
+    #[tokio::test]
+    async fn rpc_attempt_returns_the_result_or_null_when_absent() {
+        for (reply, expected) in [
+            (&b"{\"result\":{\"a\":[1,2]}}\n"[..], serde_json::json!({"a": [1, 2]})),
+            (&b"{\"result\":null}\n"[..], serde_json::Value::Null),
+            (&b"{}\n"[..], serde_json::Value::Null),
+        ] {
+            let (_dir, path) = tmp_socket_path();
+            let listener = tokio::net::UnixListener::bind(&path).unwrap();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+                let (stream, _) = listener.accept().await.unwrap();
+                let (r, mut w) = stream.into_split();
+                let mut lines = BufReader::new(r).lines();
+                let _auth_line = lines.next_line().await.unwrap();
+                w.write_all(b"{}\n").await.unwrap();
+                let _request_line = lines.next_line().await.unwrap();
+                w.write_all(reply).await.unwrap();
+            });
+
+            match rpc_attempt(&path, "tok", "sync.now", &serde_json::json!({}), None).await {
+                RpcOutcome::Ok(v) => assert_eq!(v, expected),
+                other => panic!("expected Ok({expected}), got {other:?}"),
+            }
         }
     }
 
