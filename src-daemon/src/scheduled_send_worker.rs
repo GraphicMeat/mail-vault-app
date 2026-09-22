@@ -43,14 +43,16 @@ impl ScheduledSendState {
 
     /// `Some(guard)` when this call is the one that gets to send `id`, and
     /// `None` when another already holds it. The guard releases on drop, so a
-    /// panic in the send path cannot strand the row.
-    fn claim(&self, id: &str) -> Option<InFlight<'_>> {
+    /// panic in the send path cannot strand the row. `scheduled.update` takes
+    /// the same claim while it replaces a row's message, so an edit and a send
+    /// can never overlap.
+    pub(crate) fn claim(&self, id: &str) -> Option<InFlight<'_>> {
         let mut held = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
         held.insert(id.to_string()).then(|| InFlight { state: self, id: id.to_string() })
     }
 }
 
-struct InFlight<'a> {
+pub(crate) struct InFlight<'a> {
     state: &'a ScheduledSendState,
     id: String,
 }
@@ -193,13 +195,34 @@ enum Outcome {
 /// the crate: `handlers::scheduled`'s `scheduled.send_now` calls this
 /// directly (skipping `due()`'s `fire_at` gate, never its retry/idempotency
 /// gate) so "fire now" is the same send path, not a second one.
-pub(crate) async fn attempt_row(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) {
+pub(crate) async fn attempt_row(state: &Arc<DaemonState>, snapshot: &scheduled::ScheduledSend) {
     let app_dir = state.app_dir.clone();
-    let id = row.id.clone();
+    let id = snapshot.id.clone();
     let Some(_in_flight) = state.scheduled_send.claim(&id) else {
         info!("[scheduled-send] {id} is already being sent; not sending it twice");
         return;
     };
+    // The row as it is now, read under the claim. `snapshot` came from a
+    // `due()` batch read before the rows ahead of it spent seconds each on
+    // SMTP; a cancel, an edit or a reschedule that landed meanwhile has to
+    // win, not be overwritten by `sending` and sent from a stale envelope.
+    let row = match app_db::with(&app_dir, |c| scheduled::get(c, &id)) {
+        Ok(Some(row)) => row,
+        Ok(None) => return,
+        Err(e) => {
+            warn!("[scheduled-send] could not re-read {id} before sending: {e}");
+            return;
+        }
+    };
+    if !matches!(row.status.as_str(), "queued" | "sending" | "failed") {
+        return;
+    }
+    // Moved later since the batch was read: not due any more. (`send_now`
+    // hands in a fresh read, so its own `fire_at` never differs.)
+    if row.fire_at != snapshot.fire_at && row.fire_at > now_ms() {
+        return;
+    }
+    let row = &row;
     let gate = app_db::with(&app_dir, |c| {
         scheduled::set_status(c, &id, "sending", "")?;
         scheduled::attempt_before_send(c, &id)

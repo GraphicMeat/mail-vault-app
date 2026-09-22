@@ -41,7 +41,7 @@ vi.mock('../../stores/mailStore', () => ({
 
 const {
   resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, discardDraftFor, newDraftUid,
-  setComposeOpener, openLocalDraft, draftToInitialData,
+  setComposeOpener, openLocalDraft, draftToInitialData, scheduledEmlToInitialData,
 } = await import('../localDrafts');
 const { _resetArchivedGroupsForTest, getArchivedGroup } = await import('../../stores/slices/messageListSlice');
 
@@ -286,6 +286,84 @@ describe('draftToInitialData', () => {
     const data = shape({ eml: { ...eml, html: null, text: 'line one\n<b>not markup</b>' } });
     // Escaped, not injected — and the line breaks the user typed are kept.
     expect(data.body).toBe('line one<br>&lt;b&gt;not markup&lt;/b&gt;');
+  });
+});
+
+describe('scheduledEmlToInitialData', () => {
+  // What buildOutgoingPayload froze: a picture pasted into the body went out
+  // as a cid: part, a file the user attached as an ordinary attachment.
+  const RAW = [
+    'From: alias@example.com',
+    'To: you@example.com',
+    'Subject: Later',
+    'In-Reply-To: <parent@example.com>',
+    'References: <root@example.com>',
+    ' <parent@example.com>',
+    'Content-Type: multipart/mixed; boundary="b"',
+    '',
+    '--b',
+  ].join('\r\n');
+  const row = {
+    id: 'row-1', accountId: 'acct-1', mailbox: 'Scheduled', uid: 7,
+    envelope: JSON.stringify({ from: 'alias@example.com', to: 'you@example.com', cc: '', bcc: 'hidden@example.com' }),
+    localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius', status: 'queued',
+  };
+  const eml = {
+    subject: 'Later',
+    from: { address: 'alias@example.com', name: 'Me' },
+    to: [{ address: 'you@example.com' }],
+    cc: [],
+    bcc: [{ address: 'hidden@example.com' }],
+    html: '<p>Look</p><img src="cid:pic-1@mailvault.inline" alt="inline-1.png">',
+    text: 'Look',
+    attachments: [
+      { filename: 'inline-1.png', contentType: 'image/png', size: 4, contentId: '<pic-1@mailvault.inline>', content: 'iVBORw==' },
+      { filename: 'terms.pdf', contentType: 'application/pdf', size: 8, contentId: null, content: 'JVBERi0=' },
+    ],
+    rawSource: btoa(RAW),
+  };
+
+  it('shows pictures in the body again and lists only the real files', () => {
+    const data = scheduledEmlToInitialData({ row, eml });
+    expect(data.body).toBe('<p>Look</p><img src="data:image/png;base64,iVBORw==" alt="inline-1.png">');
+    expect(data.attachments).toEqual([
+      { filename: 'terms.pdf', contentType: 'application/pdf', size: 8, content: 'JVBERi0=', isFromOriginal: true },
+    ]);
+    expect(data.to).toBe('you@example.com');
+    expect(data.bcc).toBe('hidden@example.com');
+    expect(data.subject).toBe('Later');
+  });
+
+  /// The vault parse drops In-Reply-To and References; a scheduled reply that
+  /// lost them would no longer thread for its recipient.
+  it('keeps the threading headers, from the vault\'s base64 and the demo\'s plain text alike', () => {
+    for (const rawSource of [eml.rawSource, RAW]) {
+      const data = scheduledEmlToInitialData({ row, eml: { ...eml, rawSource } });
+      expect(data.inReplyTo).toBe('<parent@example.com>');
+      expect(data.references).toBe('<root@example.com> <parent@example.com>');
+    }
+    expect(scheduledEmlToInitialData({ row, eml: { ...eml, rawSource: undefined } })).toMatchObject({ inReplyTo: '', references: '' });
+  });
+
+  /// Adopting the .eml's uid would make autosave overwrite the frozen message
+  /// and a later Send or Schedule delete it.
+  it('edits the row, never the frozen .eml in the Scheduled mailbox', () => {
+    const data = scheduledEmlToInitialData({ row, eml });
+    expect(data).not.toHaveProperty('_draftUid');
+    expect(data).not.toHaveProperty('_draftMailbox');
+    expect(data._editScheduledId).toBe('row-1');
+    expect(data._editScheduledRow).toEqual({ accountId: 'acct-1', localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' });
+    expect(data._scheduleDraft).toEqual({ localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' });
+    expect(data._accountId).toBe('acct-1');
+    expect(data._fromAddress).toBe('alias@example.com');
+  });
+
+  /// Opening it is not an edit: the window must not read as dirty (and write
+  /// a Drafts copy, and ask to discard) until something actually changes.
+  it('opens pristine: the baseline is exactly what it opens with', () => {
+    const data = scheduledEmlToInitialData({ row, eml });
+    expect(data._baseline).toEqual({ to: data.to, subject: data.subject, body: data.body });
+    expect(data.attachments.every(att => att.isFromOriginal)).toBe(true);
   });
 });
 

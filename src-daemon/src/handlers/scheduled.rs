@@ -31,6 +31,9 @@ macro_rules! req {
 /// something the caller chooses.
 const MAILBOX: &str = "Scheduled";
 const DRAFT_FLAGS: [&str; 3] = ["archived", "seen", "draft"];
+/// What `update` answers when an edit arrives for a row that is no longer
+/// waiting. The app maps the `E_` code to its catalog (`tErr`).
+const NOT_EDITABLE: &str = "E_SCHEDULED_NOT_EDITABLE: This scheduled email is already being sent or is no longer scheduled";
 
 fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
     params
@@ -174,14 +177,29 @@ fn create(
 /// `rebuild` replaces the `.eml` in place (same uid, `vault_files::store`'s
 /// `overwrite` semantics) and its envelope, `reschedule` changes
 /// `local_time`/`tz`/`fire_at` — and a caller may pass both in one call.
+///
+/// A rebuild is someone saving an edited scheduled email, which may have
+/// fired while they typed. It holds the worker's own in-flight claim from the
+/// status check to the last write, so the worker cannot start sending half
+/// way through, and it refuses a row the worker holds or has already moved on
+/// from: a fresh `.eml` under a `sent` row is a message that never goes out
+/// behind a reply that says it was saved.
 fn update(
     state: &Arc<DaemonState>,
     row_id: &str,
     rebuild: Option<(ImapConfig, OutgoingEmail, Option<String>)>,
     reschedule: Option<(String, String, i64)>,
 ) -> Result<Value, String> {
+    let _claim = if rebuild.is_some() {
+        Some(state.scheduled_send.claim(row_id).ok_or_else(|| NOT_EDITABLE.to_string())?)
+    } else {
+        None
+    };
     let existing = app_db::with(&state.app_dir, |c| scheduled::get(c, row_id))?
         .ok_or_else(|| format!("No scheduled send {row_id}"))?;
+    if rebuild.is_some() && !matches!(existing.status.as_str(), "queued" | "failed") {
+        return Err(NOT_EDITABLE.to_string());
+    }
 
     if let Some((account, email, sent_mailbox)) = rebuild {
         let built = smtp::build_draft_mime(&account, &email)?;
@@ -399,6 +417,110 @@ mod tests {
             !mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid),
             "a sent row's frozen .eml must be removed"
         );
+    }
+
+    fn edit_params(id: &str, to: &str) -> Value {
+        json!({
+            "id": id,
+            "account": account_json(),
+            "email": {"to": to, "subject": "Later, edited", "text": "edited body"},
+            "localTime": "2026-10-02T10:00",
+            "tz": "Europe/Vilnius",
+            "fireAt": 9_999_999_999_999i64,
+        })
+    }
+
+    fn frozen_bytes(s: &Arc<DaemonState>, uid: u32) -> Option<String> {
+        mailvault_core::vault_files::read_raw_source(&s.data_dir, "acc1", "Scheduled", uid).ok()
+    }
+
+    fn stored(s: &Arc<DaemonState>, id: &str) -> mailvault_core::app_db::scheduled::ScheduledSend {
+        mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::scheduled::get(c, id)).unwrap().unwrap()
+    }
+
+    /// Saving an edit replaces the row's message and envelope in place: same
+    /// id, same uid, new recipients and time.
+    #[tokio::test]
+    async fn an_edit_replaces_a_queued_rows_message_and_time() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+        let before = frozen_bytes(&s, uid).expect("frozen .eml");
+
+        let updated = call(&s, "scheduled.update", edit_params(&id, "someone.else@example.com")).await;
+
+        assert_eq!(updated["id"], json!(id));
+        assert_eq!(updated["uid"], json!(uid));
+        assert_eq!(updated["status"], json!("queued"));
+        assert_eq!(updated["localTime"], json!("2026-10-02T10:00"));
+        assert!(stored(&s, &id).envelope.contains("someone.else@example.com"), "the envelope must carry the new recipient");
+        assert_ne!(frozen_bytes(&s, uid).expect("frozen .eml"), before, "the .eml must be the edited message");
+    }
+
+    /// A row that fired while the user was editing: the edit is refused with
+    /// the code the app maps to a catalog key, and nothing is rewritten.
+    #[tokio::test]
+    async fn an_edit_of_a_sent_or_cancelled_row_is_refused_and_writes_nothing() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+        let before = frozen_bytes(&s, uid);
+        mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::scheduled::set_status(c, &id, "sent", "")).unwrap();
+
+        let resp = route(&s, "scheduled.update", &edit_params(&id, "x@example.com"), json!(1)).await.expect("routed");
+        let err = resp.error.expect("an edit of a sent row must be refused").message;
+        assert!(err.starts_with("E_SCHEDULED_NOT_EDITABLE:"), "{err}");
+        assert_eq!(frozen_bytes(&s, uid), before, "a refused edit must not rewrite the .eml");
+        let after = stored(&s, &id);
+        assert_eq!(after.status, "sent");
+        assert!(!after.envelope.contains("x@example.com"));
+
+        let cancelled = call(&s, "scheduled.create", create_params("acc1")).await;
+        let cid = cancelled["id"].as_str().unwrap().to_string();
+        call(&s, "scheduled.cancel", json!({"id": cid})).await;
+        let resp = route(&s, "scheduled.update", &edit_params(&cid, "x@example.com"), json!(1)).await.expect("routed");
+        assert!(resp.error.expect("an edit of a cancelled row must be refused").message.starts_with("E_SCHEDULED_NOT_EDITABLE:"));
+        assert_eq!(stored(&s, &cid).status, "cancelled", "a refused edit must not re-arm the row");
+    }
+
+    /// The worker holds the claim for as long as it is sending: an edit that
+    /// arrives then is refused rather than written under a send in progress.
+    #[tokio::test]
+    async fn an_edit_while_the_worker_holds_the_row_is_refused() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+        let before = frozen_bytes(&s, uid);
+
+        let held = s.scheduled_send.claim(&id).expect("free");
+        let resp = route(&s, "scheduled.update", &edit_params(&id, "x@example.com"), json!(1)).await.expect("routed");
+        assert!(resp.error.expect("refused while claimed").message.starts_with("E_SCHEDULED_NOT_EDITABLE:"));
+        assert_eq!(frozen_bytes(&s, uid), before);
+        drop(held);
+
+        call(&s, "scheduled.update", edit_params(&id, "x@example.com")).await;
+        assert!(s.scheduled_send.claim(&id).is_some(), "the edit must release the claim when it is done");
+    }
+
+    /// The worker reads a whole `due()` batch, then sends it row by row. A
+    /// row cancelled while the rows ahead of it were sending must stay
+    /// cancelled, not be flipped to `sending` from the stale batch copy.
+    #[tokio::test]
+    async fn the_worker_does_not_send_a_stale_copy_of_a_cancelled_row() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let stale = stored(&s, &id);
+        call(&s, "scheduled.cancel", json!({"id": id})).await;
+
+        crate::scheduled_send_worker::attempt_row(&s, &stale).await;
+
+        let after = stored(&s, &id);
+        assert_eq!(after.status, "cancelled");
+        assert_eq!(after.attempts, 0, "a skipped row must not count as a try");
     }
 
     #[tokio::test]

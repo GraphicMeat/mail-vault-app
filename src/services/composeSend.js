@@ -228,6 +228,14 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       await api.sendEmail(
         { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined }, outgoingPayload, sentMailbox,
       );
+      // An edited scheduled email sent now instead: its row must not fire as
+      // well. It stayed queued until here, so an undo or a failed send still
+      // left it holding the message. Never thrown: the mail is already out,
+      // and an error would offer a Retry that sends it twice.
+      if (snapshot._editScheduledId) {
+        await useScheduledStore.getState().cancel(snapshot._editScheduledId)
+          .catch(err => console.warn('[composeSend] could not cancel the edited scheduled send:', err));
+      }
       const original = snapshot._replyTo || replyTo;
       if (mode === 'reply' || mode === 'replyAll') markAnswered(original).catch(err => console.warn('[composeSend] \\Answered not set:', err));
       else if (mode === 'forward') markForwarded(original).catch(err => console.warn('[composeSend] $Forwarded not set:', err));
@@ -275,7 +283,10 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
   };
 }
 
-/** Create a daemon schedule from the same frozen snapshot used by immediate send. */
+/**
+ * Create a daemon schedule from the same frozen snapshot used by immediate
+ * send, or save an edited scheduled email (`_editScheduledId`) over its row.
+ */
 export async function scheduleCompose({ snapshot, account, settings = {} }) {
   const schedule = snapshot._scheduleDraft;
   if (!schedule?.localTime || !schedule?.tz) throw new Error(t('errors.composeMissingSchedule'));
@@ -283,15 +294,31 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
   if (!freshAccount) throw new Error(t('errors.composeRefreshAccount'));
   const { displayName, sendAsEmail, accountForSend, sentMailbox, outgoingPayload } =
     await buildOutgoingPayload({ snapshot, account: freshAccount, settings });
-  await useScheduledStore.getState().create({
-    accountId: freshAccount.id,
+  const fields = {
     account: { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
     email: outgoingPayload,
     localTime: schedule.localTime,
     tz: schedule.tz,
     fireAt: zonedTimeToEpoch(schedule.localTime, schedule.tz),
     sentMailbox,
-  });
+  };
+  const store = useScheduledStore.getState();
+  const editId = snapshot._editScheduledId;
+  if (editId && snapshot._editScheduledRow?.accountId === freshAccount.id) {
+    // Replaced in place, so the old message holds its slot until the new one
+    // is saved. The daemon refuses once the row has fired (a catalog-keyed
+    // E_ code), which leaves the compose window open with everything in it.
+    await store.replace(editId, fields);
+  } else {
+    await store.create({ accountId: freshAccount.id, ...fields });
+    // A row belongs to the account whose vault holds its .eml, so an edit
+    // moved to another From account is a new row; the old one goes only once
+    // that exists.
+    if (editId) {
+      await store.cancel(editId)
+        .catch(err => console.warn('[composeSend] could not cancel the replaced scheduled send:', err));
+    }
+  }
   if (snapshot._draftUid && snapshot._draftMailbox) {
     await deleteLocalDraft({ accountId: snapshot._draftAccountId || snapshot._accountId || freshAccount.id, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid });
   }

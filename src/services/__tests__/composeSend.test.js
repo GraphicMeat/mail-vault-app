@@ -7,7 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   invoke, sendEmail, buildOutgoingMime, appendLocalIndex, deleteLocalDraft, markAnswered, markForwarded, createSchedule, ensureFreshToken,
+  replaceSchedule, cancelSchedule,
 } = vi.hoisted(() => ({
+  replaceSchedule: vi.fn().mockResolvedValue(undefined),
+  cancelSchedule: vi.fn().mockResolvedValue(undefined),
   invoke: vi.fn().mockResolvedValue(undefined),
   sendEmail: vi.fn(),
   buildOutgoingMime: vi.fn(),
@@ -49,7 +52,11 @@ vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ setLastComposeIdentity: vi.fn() }) },
 }));
 vi.mock('../../stores/scheduledStore', () => ({
-  useScheduledStore: { getState: () => ({ create: (...args) => createSchedule(...args) }) },
+  useScheduledStore: { getState: () => ({
+    create: (...args) => createSchedule(...args),
+    replace: (...args) => replaceSchedule(...args),
+    cancel: (...args) => cancelSchedule(...args),
+  }) },
 }));
 vi.mock('../../components/RichTextEditor', () => ({
   htmlToText: html => (html || '').replace(/<[^>]*>/g, ''),
@@ -79,6 +86,10 @@ beforeEach(() => {
   markForwarded.mockClear();
   createSchedule.mockReset();
   createSchedule.mockResolvedValue(undefined);
+  replaceSchedule.mockReset();
+  replaceSchedule.mockResolvedValue(undefined);
+  cancelSchedule.mockReset();
+  cancelSchedule.mockResolvedValue(undefined);
   ensureFreshToken.mockReset();
   ensureFreshToken.mockImplementation(async item => item);
   const state = mailStore.useMailStore.getState();
@@ -124,6 +135,35 @@ describe('createComposeSend', () => {
     });
   });
 
+  /// An edited scheduled email sent now instead: the row it came from must not
+  /// fire as well, but only once the mail is really out.
+  it('cancels the edited scheduled row only after the send succeeds', async () => {
+    const edited = { ...snapshot, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } };
+    sendEmail.mockRejectedValueOnce(new Error('offline'));
+    const sendFn = createComposeSend({ snapshot: edited, mode: 'new', replyTo: null, account });
+
+    await expect(sendFn()).rejects.toThrow('offline');
+    expect(cancelSchedule).not.toHaveBeenCalled();
+
+    sendEmail.mockResolvedValueOnce({ messageId: '<one@example.test>' });
+    await sendFn();
+    expect(cancelSchedule).toHaveBeenCalledWith('row-1');
+  });
+
+  it('does not fail a send that went out when cancelling the old row fails', async () => {
+    sendEmail.mockResolvedValue({ messageId: '<one@example.test>' });
+    cancelSchedule.mockRejectedValueOnce(new Error('daemon unavailable'));
+    const edited = { ...snapshot, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } };
+
+    await expect(createComposeSend({ snapshot: edited, mode: 'new', replyTo: null, account })()).resolves.toBeUndefined();
+  });
+
+  it('never cancels a scheduled row for an ordinary send', async () => {
+    sendEmail.mockResolvedValue({ messageId: '<one@example.test>' });
+    await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();
+    expect(cancelSchedule).not.toHaveBeenCalled();
+  });
+
   it('deletes a draft from its original account after the sender changes', async () => {
     sendEmail.mockResolvedValue({ messageId: '<one@example.test>' });
     const sender = { id: 'acct-b', email: 'sender-b@example.test', name: 'Sender B' };
@@ -157,5 +197,51 @@ describe('scheduleCompose', () => {
       .rejects.toThrow('daemon unavailable');
 
     expect(deleteLocalDraft).not.toHaveBeenCalled();
+  });
+
+  const editSnapshot = (accountId = 'acct-1') => ({
+    ...snapshot,
+    _scheduleDraft: { localTime: '2026-10-02T10:00', tz: 'Europe/Vilnius' },
+    _editScheduledId: 'row-1',
+    _editScheduledRow: { accountId, localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' },
+  });
+
+  /// Saving an edit replaces the row it came from, never schedules a second
+  /// copy beside it, and still drops the autosaved draft.
+  it('saves an edited scheduled email over its own row', async () => {
+    await scheduleCompose({ snapshot: editSnapshot(), account, settings: { displayName: 'Alias name' } });
+
+    expect(createSchedule).not.toHaveBeenCalled();
+    expect(cancelSchedule).not.toHaveBeenCalled();
+    expect(replaceSchedule).toHaveBeenCalledWith('row-1', expect.objectContaining({
+      account: expect.objectContaining({ email: 'me@example.test', fromEmail: 'alias@example.test' }),
+      email: expect.objectContaining({ to: 'recipient@example.test', subject: 'A subject' }),
+      localTime: '2026-10-02T10:00', tz: 'Europe/Vilnius', fireAt: expect.any(Number), sentMailbox: 'Sent',
+    }));
+    expect(deleteLocalDraft).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'Drafts', uid: 42 });
+  });
+
+  it('keeps everything when the daemon refuses the edit because the row already fired', async () => {
+    replaceSchedule.mockRejectedValueOnce(new Error('E_SCHEDULED_NOT_EDITABLE: already being sent'));
+
+    await expect(scheduleCompose({ snapshot: editSnapshot(), account })).rejects.toThrow('E_SCHEDULED_NOT_EDITABLE');
+
+    expect(createSchedule).not.toHaveBeenCalled();
+    expect(deleteLocalDraft).not.toHaveBeenCalled();
+  });
+
+  /// A row is bound to the account whose vault holds it: an edit moved to
+  /// another From account is a new row, and the old one goes only after.
+  it('schedules an edit moved to another account as a new row, then cancels the old one', async () => {
+    const order = [];
+    createSchedule.mockImplementationOnce(async () => { order.push('create'); });
+    cancelSchedule.mockImplementationOnce(async () => { order.push('cancel'); });
+
+    await scheduleCompose({ snapshot: editSnapshot('acct-other'), account });
+
+    expect(replaceSchedule).not.toHaveBeenCalled();
+    expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acct-1' }));
+    expect(cancelSchedule).toHaveBeenCalledWith('row-1');
+    expect(order).toEqual(['create', 'cancel']);
   });
 });

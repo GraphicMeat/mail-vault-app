@@ -71,6 +71,28 @@ describe('scheduledStore', () => {
     expect(useScheduledStore.getState().rows).toEqual([rescheduled]);
   });
 
+  /// Saving an edited scheduled email: the whole rebuild (account, email,
+  /// sentMailbox) and the time go over the SAME row id in one call.
+  it('replaces a row in place through scheduled.update, rebuild and time together', async () => {
+    const replaced = { ...ROW, envelope: '{"to":"y@example.com"}', localTime: '2026-11-01T09:00' };
+    mockDaemonCall.mockResolvedValueOnce(replaced);
+    useScheduledStore.setState({ rows: [ROW] });
+    const fields = {
+      account: { email: 'a1' }, email: { to: 'y@example.com' }, sentMailbox: 'Sent',
+      localTime: '2026-11-01T09:00', tz: 'Europe/Vilnius', fireAt: 123,
+    };
+    await useScheduledStore.getState().replace('r1', fields);
+    expect(mockDaemonCall).toHaveBeenCalledWith('scheduled.update', { id: 'r1', ...fields });
+    expect(useScheduledStore.getState().rows).toEqual([replaced]);
+  });
+
+  it('leaves the row alone when the daemon refuses the replacement', async () => {
+    mockDaemonCall.mockRejectedValueOnce(new Error('E_SCHEDULED_NOT_EDITABLE: already sent'));
+    useScheduledStore.setState({ rows: [ROW] });
+    await expect(useScheduledStore.getState().replace('r1', { account: {}, email: {} })).rejects.toThrow('E_SCHEDULED_NOT_EDITABLE');
+    expect(useScheduledStore.getState().rows).toEqual([ROW]);
+  });
+
   it('marks a row cancelled locally — the RPC answers null either way', async () => {
     mockDaemonCall.mockResolvedValueOnce(null);
     useScheduledStore.setState({ rows: [ROW] });

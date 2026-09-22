@@ -7,7 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { formatDateTime } from '../utils/dateFormat';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
@@ -15,14 +15,14 @@ import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser'
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
-import { t, useT  } from '../i18n/index.js';
+import { t, useT, tErr, getLocale } from '../i18n/index.js';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
-import { isPastLocalTime } from '../utils/scheduledTime';
+import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos } from '../utils/signatureCaret';
@@ -688,7 +688,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         onClose();
       }
     } catch (err) {
-      setError(err.message || t("scheduled.errors.scheduleFailed"));
+      // tErr: saving an edit over a row that already fired comes back as the
+      // daemon's E_SCHEDULED_NOT_EDITABLE code. The window stays open either
+      // way, holding the message.
+      setError(err?.message ? tErr(err) : t("scheduled.errors.scheduleFailed"));
     } finally {
       setSending(false);
     }
@@ -728,6 +731,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       _composeDelay: composeDelay,
       _composeSize: composeSize,
       _scheduleDraft: scheduleDraft,
+      // Which scheduled email this window is an edit of (localDrafts.js's
+      // scheduledEmlToInitialData). Carried through every snapshot like
+      // `_scheduleDraft`, so a minimize, undo or detach still replaces that
+      // row instead of scheduling a second copy.
+      ...(initialData?._editScheduledId && {
+        _editScheduledId: initialData._editScheduledId,
+        _editScheduledRow: initialData._editScheduledRow,
+      }),
     };
   }, [formData, attachments, quotedHtml, contextHtml, showContext, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, composeDelay, composeSize, scheduleDraft]);
 
@@ -1102,6 +1113,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           className="flex-1 min-h-0 flex flex-col overflow-hidden"
         >
           <div className="compose-scroll">
+          {initialData?._editScheduledRow && (
+            <p data-testid="compose-editing-scheduled"
+              className="px-5 py-2 flex items-center gap-1.5 text-xs text-mail-text-muted bg-mail-accent/5 border-b border-mail-border">
+              <Clock size={12} className="shrink-0" aria-hidden="true" />
+              {t('scheduled.compose.editing', {
+                time: formatWallClock(initialData._editScheduledRow.localTime, getLocale()),
+                tz: initialData._editScheduledRow.tz,
+              })}
+            </p>
+          )}
           <div className="compose-addresses px-5 py-3 space-y-1 border-b border-mail-border">
             {/* From — shown whenever there is a choice to make, which on a
                 single account means it has an override or a mined alias. */}

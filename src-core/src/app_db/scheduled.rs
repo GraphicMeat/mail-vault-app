@@ -128,13 +128,16 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<ScheduledSend>, String>
 
 /// Reschedule and/or re-arm a row a user edited. A `failed` or `cancelled`
 /// row is un-stuck back to `queued` by this — rescheduling it *is* the user
-/// asking for it to fire again; a `sent` row is left alone, there is nothing
-/// left to schedule.
+/// asking for it to fire again, so it also gets a fresh `attempts` count: a
+/// row that failed by running out of tries would otherwise hit the ceiling
+/// on its very next firing and fail again without being sent. A `sent` row
+/// is left alone, there is nothing left to schedule.
 pub fn update_schedule(conn: &Connection, id: &str, local_time: &str, tz: &str, fire_at: i64) -> Result<(), String> {
     conn.execute(
         "UPDATE scheduled_sends
          SET local_time = ?2, tz = ?3, fire_at = ?4, updated_at = ?5,
-             status = CASE WHEN status IN ('failed', 'cancelled') THEN 'queued' ELSE status END
+             status = CASE WHEN status IN ('failed', 'cancelled') THEN 'queued' ELSE status END,
+             attempts = CASE WHEN status IN ('failed', 'cancelled') THEN 0 ELSE attempts END
          WHERE id = ?1",
         params![id, local_time, tz, fire_at, now_ms()],
     )
@@ -419,11 +422,19 @@ mod tests {
     fn rescheduling_a_failed_row_re_arms_it_but_leaves_a_sent_row_alone() {
         let c = conn();
         seed(&c, "failed", 1000);
+        for _ in 0..MAX_ATTEMPTS {
+            bump_attempt(&c, "failed").unwrap();
+        }
         set_status(&c, "failed", "failed", "boom").unwrap();
         update_schedule(&c, "failed", "2026-10-01T09:00", "Europe/Vilnius", 9999).unwrap();
         let row = get(&c, "failed").unwrap().unwrap();
         assert_eq!(row.status, "queued", "rescheduling asks for another try");
         assert_eq!(row.fire_at, 9999);
+        assert_eq!(row.attempts, 0, "a re-armed row starts its retry ladder over");
+        assert!(
+            matches!(attempt_before_send(&c, "failed").unwrap(), AttemptOutcome::Send { attempt: 1 }),
+            "a row that had used up its tries must be sendable again once rescheduled"
+        );
 
         seed(&c, "sent", 1000);
         set_status(&c, "sent", "sent", "").unwrap();

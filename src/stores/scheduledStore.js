@@ -30,12 +30,20 @@ export const useScheduledStore = create((set, get) => ({
     return row;
   },
 
-  /// Date/tz only — never touches the frozen .eml. Editing the CONTENT of a
-  /// scheduled send is cancel-and-recompose (see ComposeModal's Edit action),
-  /// not a rebuild through here: `scheduled.update`'s rebuild branch needs a
-  /// full account+email pair this store never carries for an existing row.
+  /// Date/tz only — never touches the frozen .eml. Editing the content goes
+  /// through `replace` below.
   reschedule: async (id, { localTime, tz, fireAt }) => {
     const row = await daemonCall('scheduled.update', { id, localTime, tz, fireAt });
+    set(state => ({ rows: state.rows.map(r => (r.id === id ? row : r)) }));
+    return row;
+  },
+
+  /// Save an edited scheduled email over its row: same id, new frozen .eml,
+  /// envelope and time (composeSend.js's scheduleCompose). The daemon refuses
+  /// with `E_SCHEDULED_NOT_EDITABLE` once the row is being sent, was sent or
+  /// was cancelled, and then nothing here changes.
+  replace: async (id, { account, email, sentMailbox, localTime, tz, fireAt }) => {
+    const row = await daemonCall('scheduled.update', { id, account, email, sentMailbox, localTime, tz, fireAt });
     set(state => ({ rows: state.rows.map(r => (r.id === id ? row : r)) }));
     return row;
   },

@@ -18,6 +18,7 @@ import { useMailStore } from '../stores/mailStore';
 import { _resolveMailboxPath } from '../stores/slices/unifiedHelpers';
 import { addArchivedGroupUid } from '../stores/slices/messageListSlice';
 import { send } from './transport';
+import { getRealAttachments, replaceCidUrls } from './attachmentUtils';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -190,6 +191,73 @@ export function draftToInitialData({ accountId, mailbox, uid, entry, eml }) {
     // a new one and leaving the old row behind.
     _draftUid: uid,
     _draftMailbox: mailbox,
+  };
+}
+
+// `maildir_read` parses no In-Reply-To or References, so a scheduled reply's
+// threading survives only in the raw headers. `rawSource` is base64 from the
+// vault and plain text from the browser demo backend (base64 has no ':').
+function _threadingHeaders(rawSource) {
+  let raw = rawSource || '';
+  // ponytail: the first 48 KB of the message; a header block longer than that
+  // loses whatever threading lines sit past it.
+  if (!raw.includes(':')) { try { raw = atob(raw.slice(0, 65536)); } catch { return {}; } }
+  const head = raw.split(/\r?\n\r?\n/, 1)[0].replace(/\r?\n[ \t]+/g, ' ');
+  const header = name => head.match(new RegExp(`^${name}:[ \\t]*(.*)$`, 'im'))?.[1].trim() || '';
+  return { inReplyTo: header('In-Reply-To'), references: header('References') };
+}
+
+/**
+ * Compose `initialData` for a scheduled email opened for editing, read from
+ * its frozen .eml in the vault's `Scheduled` mailbox. `row` is the
+ * `scheduled.list` row.
+ *
+ * Unlike a draft, the window does NOT adopt the uid and mailbox it was read
+ * from: `_draftUid`/`_draftMailbox` would make autosave overwrite the frozen
+ * message and a later Send or Schedule delete it. The row keeps the message
+ * until a replacement is saved over it (`_editScheduledId`, composeSend.js),
+ * so closing the window loses nothing.
+ */
+export function scheduledEmlToInitialData({ row, eml }) {
+  let envelope = {};
+  try { envelope = JSON.parse(row.envelope) || {}; } catch { /* the .eml's own From below */ }
+  // The frozen message went through buildOutgoingPayload, which turned every
+  // picture in the body into a cid: part. In the editor they are data: URIs
+  // again, and they are not files the user attached.
+  const html = eml.html || '';
+  const body = html
+    ? replaceCidUrls(html, eml.attachments)
+    : (eml.text ? _escapeHtml(eml.text).replace(/\r?\n/g, '<br>') : '');
+  const to = _addressList(eml.to);
+  const subject = eml.subject || '';
+  return {
+    to,
+    cc: _addressList(eml.cc),
+    bcc: _addressList(eml.bcc),
+    subject,
+    body,
+    ..._threadingHeaders(eml.rawSource),
+    // `isFromOriginal` + `_baseline`: opening it is not a change. Without them
+    // the window reads as dirty at once, autosaves a Drafts copy of a message
+    // that is still scheduled, and asks to discard on a close that changed
+    // nothing.
+    attachments: getRealAttachments(eml.attachments, html).map(att => ({
+      filename: att.filename,
+      contentType: att.contentType,
+      size: att.size,
+      content: att.content,
+      isFromOriginal: true,
+    })),
+    _baseline: { to, subject, body },
+    _accountId: row.accountId,
+    _fromAddress: envelope.from || eml.from?.address || '',
+    _scheduleDraft: { localTime: row.localTime, tz: row.tz },
+    _editScheduledId: row.id,
+    // What the row held when it was opened: the account it is bound to (the
+    // daemon cannot move a row to another account's vault) and the time the
+    // compose notice names, which the picker's `_scheduleDraft` stops being
+    // as soon as it is touched.
+    _editScheduledRow: { accountId: row.accountId, localTime: row.localTime, tz: row.tz },
   };
 }
 
