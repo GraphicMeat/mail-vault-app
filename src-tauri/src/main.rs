@@ -1386,10 +1386,10 @@ impl Default for UpdateCheckGuard {
     fn default() -> Self { Self(AtomicBool::new(false)) }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 type PendingUpdate = std::sync::Mutex<Option<tauri_plugin_updater::Update>>;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 #[tauri::command]
 async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> {
     let state = handle.state::<PendingUpdate>();
@@ -1513,7 +1513,7 @@ fn set_update_track(handle: tauri::AppHandle, track: String) -> Result<(), Strin
 
 /// Shared update check logic for both manual menu trigger and startup auto-check.
 /// `show_no_update` controls whether to show a dialog when already up-to-date.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_updater::UpdaterExt;
     use tauri_plugin_dialog::DialogExt;
@@ -2827,11 +2827,12 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — Sparkle on macOS (non-MAS), tauri-plugin-updater on Linux.
-    // MAS builds (`appstore`, no `sparkle` feature) get updates via the App Store.
+    // Updater plugins — Sparkle on macOS (non-MAS), tauri-plugin-updater on
+    // Linux and Windows. MAS builds (`appstore`, no `sparkle` feature) get
+    // updates via the App Store.
     #[cfg(all(target_os = "macos", feature = "sparkle"))]
     let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     // No `ImapPool` in this process at all any more: Task 5.4b moved the
@@ -2848,7 +2849,7 @@ fn main() {
         .manage(mailto::PendingMailto::default())
         .manage(notification_open::PendingNotificationOpen::default());
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     let builder = builder.manage(PendingUpdate::default());
 
     let app = builder

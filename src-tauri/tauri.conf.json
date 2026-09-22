@@ -85,12 +85,14 @@
       "app",
       "dmg",
       "appimage",
-      "deb"
+      "deb",
+      "nsis"
     ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "webviewInstallMode": { "type": "downloadBootstrapper" }
     }
   },
   "plugins": {

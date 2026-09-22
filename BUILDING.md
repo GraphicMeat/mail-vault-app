@@ -257,9 +257,19 @@ sudo spctl --master-disable
   npm run tauri:build -- --target universal-apple-darwin
   ```
 
-### Windows (future)
-- Will require Visual Studio Build Tools
-- Update `tauri.conf.json` targets to include "msi" or "nsis"
+### Windows
+- Target triple: `x86_64-pc-windows-msvc`.
+- The daemon sidecar must be named `mailvault-daemon-x86_64-pc-windows-msvc.exe` in `src-tauri/binaries/` — Tauri appends the target triple to the `externalBin` name itself.
+- Bundle target is `nsis` (see `tauri.conf.json`'s `bundle.targets`).
+- There is no CI job for Windows yet, and no code signing (`certificateThumbprint` stays `null`) — both are out of scope until a later task sets them up.
+- A vault written on macOS or Linux uses `:` in its `.eml` filenames (colon is valid on those filesystems) and **cannot be opened on Windows at all**, where `:` is an illegal filename character. Copying a vault across is a one-way trip from Windows to unix, never the other way.
+- Cross-compiling from macOS to check Windows compiles (no toolchain, no execution — proves compilation only, nothing about runtime behavior since nobody has run this build):
+  ```bash
+  brew install llvm
+  cargo install cargo-xwin
+  rustup target add x86_64-pc-windows-msvc
+  cargo xwin check --target x86_64-pc-windows-msvc -p mailvault-core -p mailvault-daemon
+  ```
 
 ### Linux (future)
 - Will require webkit2gtk and related libraries
