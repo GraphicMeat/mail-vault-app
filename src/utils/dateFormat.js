@@ -152,6 +152,23 @@ export function formatDateLong(dateInput) {
   return new Intl.DateTimeFormat(_locale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
 }
 
+/** Cached "March 2021" formatter in the app locale (one per locale). */
+const _monthYearFmt = new Map();
+export function monthYearFormatter() {
+  const loc = _locale();
+  let fmt = _monthYearFmt.get(loc);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(loc, { month: 'long', year: 'numeric' });
+    _monthYearFmt.set(loc, fmt);
+  }
+  return fmt;
+}
+
+/** "March 2021" for month `m` (1-12) of year `y`. */
+export function formatMonthYear(y, m) {
+  return monthYearFormatter().format(new Date(y, m - 1, 1));
+}
+
 export function formatEmailDate(dateStr) {
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return '';

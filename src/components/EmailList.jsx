@@ -25,6 +25,8 @@ import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
 import { ExplorerView } from './ExplorerView';
 import { LEGEND_ENTRIES } from './email/stateLegend.jsx';
+import { DateScrubber, MonthHeader, MONTH_HEADER_H, useDateScrubber, useMonthBuckets } from './email/DateScrubber';
+import { bucketAtIndex, firstRowOfMonth } from '../utils/dateBuckets';
 import {
   RefreshCw,
   HardDrive,
@@ -798,16 +800,29 @@ function EmailListComponent({ stacked = false }) {
     enabled: !isExplorer && emailListGrouping === 'sender',
   });
 
+  // Date scrubber (list mode only): a header band on each month's first row.
+  // Heights change, indices do not — rows stay 1:1 with threadedDisplay.
+  const monthList = useMonthBuckets(threadedDisplay, !isExplorer && emailListGrouping !== 'sender');
+  const showScrubber = monthList.length >= 2;
+  const monthHeaders = useMemo(() => (showScrubber ? firstRowOfMonth(monthList) : EMPTY_SET), [showScrubber, monthList]);
+
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (i) => (monthHeaders.has(i) ? ROW_HEIGHT + MONTH_HEADER_H : ROW_HEIGHT),
     getItemKey: getChronoItemKey,
     overscan: 5,
     enabled: !isExplorer && emailListGrouping !== 'sender',
   });
 
-  useEffect(() => { virtualizer.measure(); }, [virtualizer, ROW_HEIGHT]);
+  useEffect(() => { virtualizer.measure(); }, [virtualizer, ROW_HEIGHT, monthHeaders]);
+
+  // After the measure above: a jump's scroll must land on the new heights.
+  const scrubber = useDateScrubber({
+    enabled: showScrubber, buckets: monthList, virtualizer, scrollRef: scrollContainerRef, rowCount,
+    accountId: activeAccountId, mailbox: activeMailbox, viewMode, totalEmails, loadedCount: sortedEmails.length,
+    histogramEligible: windowIsPartial && !unifiedInbox && activeMailbox !== 'UNIFIED' && !searchActive && !unreadOnly,
+  });
 
   // Diagnostic: trace loading spinner condition
   useEffect(() => {
@@ -1095,6 +1110,7 @@ function EmailListComponent({ stacked = false }) {
       </AnimatePresence>
 
       {/* Email List */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollContainerRef}
         onTouchStart={handleTouchStart}
@@ -1497,6 +1513,7 @@ function EmailListComponent({ stacked = false }) {
                       transform: `translateY(${vr.start}px)`,
                     }}
                   >
+                    {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
                     <ThreadRowComponent
                       key={rowId}
                       rowId={rowId}
@@ -1538,6 +1555,7 @@ function EmailListComponent({ stacked = false }) {
                   data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
                   className={item.type === 'thread-member' ? 'thread-member' : undefined}
                 >
+                  {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
                   <RowComponent
                     key={item.email.uid}
                     rowId={item.email.uid}
@@ -1566,6 +1584,11 @@ function EmailListComponent({ stacked = false }) {
             })}
           </div>
         )}
+      </div>
+      {showScrubber && !showSkeleton && (
+        <DateScrubber scrollRef={scrollContainerRef} virtualizer={virtualizer} buckets={monthList}
+          segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} />
+      )}
       </div>
 
       {/* View Mode Legend — three glyphs and one modifier, each explaining
