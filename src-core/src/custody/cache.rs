@@ -89,16 +89,31 @@ pub fn load_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<Opti
     serde_json::to_string(&value).map(Some).map_err(|e| e.to_string())
 }
 
+/// Uids per `IN (...)`: under SQLITE_MAX_VARIABLE_NUMBER on every build
+/// (999 before SQLite 3.32), with the two scope parameters on top.
+const UID_CHUNK: usize = 900;
+
+/// The cached headers of `uids`, newest first (`sort_ms DESC, uid DESC`, the
+/// same order as `load_headers`). Queried in chunks: one `IN (...)` holding
+/// every uid fails past SQLite's bound-parameter limit.
 pub fn load_by_uids(conn: &Connection, account: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<Value>, String> {
-    if uids.is_empty() { return Ok(Vec::new()); }
-    let marks = std::iter::repeat_n("?", uids.len()).collect::<Vec<_>>().join(",");
-    let sql = format!("SELECT header_json FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks}) ORDER BY sort_ms DESC, uid DESC");
-    let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.to_string().into()];
-    args.extend(uids.iter().map(|u| i64::from(*u).into()));
-    let mut stmt = conn.prepare(&sql).map_err(err)?;
-    let rows = stmt.query_map(params_from_iter(args), |r| r.get::<_, String>(0)).map_err(err)?
-        .collect::<Result<Vec<_>, _>>().map_err(err)?;
-    Ok(rows.into_iter().filter_map(|s| serde_json::from_str(&s).ok()).collect())
+    // Deduplicated so a uid repeated across two chunks is not returned twice
+    // (a single `IN` matched it once).
+    let mut wanted = uids.to_vec();
+    wanted.sort_unstable();
+    wanted.dedup();
+    let mut rows: Vec<(i64, u32, String)> = Vec::new();
+    for chunk in wanted.chunks(UID_CHUNK) {
+        let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT sort_ms, uid, header_json FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks})");
+        let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.to_string().into()];
+        args.extend(chunk.iter().map(|u| i64::from(*u).into()));
+        let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+        let found = stmt.query_map(params_from_iter(args), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?, r.get::<_, String>(2)?))).map_err(err)?;
+        for row in found { rows.push(row.map_err(err)?); }
+    }
+    rows.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    Ok(rows.into_iter().filter_map(|(_, _, s)| serde_json::from_str(&s).ok()).collect())
 }
 
 pub fn list_uids(conn: &Connection, account: &str, mailbox: &str, since_ms: Option<f64>) -> Result<Value, String> {
@@ -347,6 +362,37 @@ mod tests {
                 {"ym": "2020-12", "count": 1},
             ])
         );
+    }
+
+    /// Past SQLite's bound-parameter limit (32766) a single `IN (...)`
+    /// failed outright; the chunked query returns every row, deduplicated,
+    /// in the one `sort_ms DESC, uid DESC` order across chunk boundaries.
+    #[test]
+    fn load_by_uids_returns_every_row_in_order_past_the_parameter_limit() {
+        let (_t, mut c) = store();
+        let tx = c.transaction().unwrap();
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a','INBOX',?1,?2,0,?3)"
+            ).unwrap();
+            // sort_ms repeats every 1000 uids, so ties exercise the uid DESC tiebreak.
+            for uid in 1..=40_000u32 {
+                stmt.execute(params![uid, i64::from(uid % 1000), json!({"uid": uid}).to_string()]).unwrap();
+            }
+        }
+        tx.commit().unwrap();
+        insert(&c, "a", "Archive", 5, 5_000);
+
+        let mut uids: Vec<u32> = (1..=40_000).rev().collect();
+        uids.push(7); // a duplicate
+        uids.push(50_000); // not cached
+        let got = load_by_uids(&c, "a", "INBOX", &uids).unwrap()
+            .iter().map(|v| v["uid"].as_u64().unwrap() as u32).collect::<Vec<_>>();
+
+        let mut expected: Vec<u32> = (1..=40_000).collect();
+        expected.sort_by(|a, b| (b % 1000).cmp(&(a % 1000)).then(b.cmp(a)));
+        assert_eq!(got.len(), 40_000);
+        assert_eq!(got, expected);
     }
 
     #[test]
