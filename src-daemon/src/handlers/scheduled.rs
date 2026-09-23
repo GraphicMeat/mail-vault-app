@@ -34,7 +34,8 @@ macro_rules! req {
 const MAILBOX: &str = "Scheduled";
 const DRAFT_FLAGS: [&str; 3] = ["archived", "seen", "draft"];
 /// What `update` answers when an edit arrives for a row that is no longer
-/// waiting. The app maps the `E_` code to its catalog (`tErr`).
+/// waiting, and `cancel` for a row being or already sent. The app maps the
+/// `E_` code to its catalog (`tErr`).
 const NOT_EDITABLE: &str = "E_SCHEDULED_NOT_EDITABLE: This scheduled email is already being sent or is no longer scheduled";
 
 fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
@@ -233,13 +234,25 @@ fn update(
     json_of(row)
 }
 
-/// Mark cancelled and remove the frozen `.eml`. Best-effort on the file: a
-/// schedule already sent (or a previous cancel that failed midway through)
+/// Mark cancelled and remove the frozen `.eml`, under the worker's in-flight
+/// claim like an edit (`update`): a row being sent, or already sent, is
+/// refused, never relabelled `cancelled` over a message that went out (and
+/// the app, told it was cancelled, would schedule a second copy). A row
+/// already cancelled, or gone, is Ok, so a retried cancel is harmless.
+/// Best-effort on the file: a previous cancel that failed midway through
 /// leaves nothing there to remove, and that is not this call's problem.
 fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, String> {
+    let Some(_claim) = state.scheduled_send.claim(row_id) else {
+        return Err(NOT_EDITABLE.to_string());
+    };
     let Some(row) = app_db::with(&state.app_dir, |c| scheduled::get(c, row_id))? else {
         return Ok(Value::Null);
     };
+    match row.status.as_str() {
+        "cancelled" => return Ok(Value::Null),
+        "sending" | "sent" => return Err(NOT_EDITABLE.to_string()),
+        _ => {}
+    }
     let _ = with_mailbox_write(state, &row.account_id, &row.mailbox, |root| {
         Ok(vault_files::delete(&state.vault_registry, root, &row.account_id, &row.mailbox, row.uid).unwrap_or(false))
     });
@@ -282,6 +295,15 @@ async fn send_now(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespo
     };
     if !matches!(row.status.as_str(), "queued" | "failed") {
         return RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Cannot send a schedule that is {}", row.status));
+    }
+    // Retry on a `failed` row is the user asking for another round of tries:
+    // one that failed by using them all up would hit the ceiling again on
+    // this very attempt, unsent. (A no-op on a `queued` row.)
+    let app_dir = state.app_dir.clone();
+    let reset_id = row.id.clone();
+    match blocking(move || app_db::with(&app_dir, |c| scheduled::reset_failed_attempts(c, &reset_id))).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) | Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
     }
 
     scheduled_send_worker::attempt_row(state, &row).await;
@@ -383,6 +405,53 @@ mod tests {
         );
     }
 
+    /// Cancel is checked like an edit: a row already sending or sent, or one
+    /// the worker holds, is refused with the edit's code and left as it was.
+    /// Relabelling it `cancelled` hid a message that went out, and let the
+    /// app schedule a second copy beside it.
+    #[tokio::test]
+    async fn cancel_refuses_a_row_that_is_sending_sent_or_held_by_the_worker() {
+        let s = st();
+        for status in ["sending", "sent"] {
+            let row = call(&s, "scheduled.create", create_params("acc1")).await;
+            let id = row["id"].as_str().unwrap().to_string();
+            let uid = row["uid"].as_u64().unwrap() as u32;
+            mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::scheduled::set_status(c, &id, status, "")).unwrap();
+
+            let resp = route(&s, "scheduled.cancel", &json!({"id": id}), json!(1)).await.expect("routed");
+            let err = resp.error.unwrap_or_else(|| panic!("cancel of a {status} row must be refused")).message;
+            assert!(err.starts_with("E_SCHEDULED_NOT_EDITABLE:"), "{err}");
+            assert_eq!(stored(&s, &id).status, status);
+            assert!(frozen_bytes(&s, uid).is_some(), "a refused cancel must not remove the .eml");
+        }
+
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+        let held = s.scheduled_send.claim(&id).expect("free");
+        let resp = route(&s, "scheduled.cancel", &json!({"id": id}), json!(1)).await.expect("routed");
+        assert!(resp.error.expect("refused while claimed").message.starts_with("E_SCHEDULED_NOT_EDITABLE:"));
+        assert_eq!(stored(&s, &id).status, "queued");
+        assert!(frozen_bytes(&s, uid).is_some());
+        drop(held);
+
+        call(&s, "scheduled.cancel", json!({"id": id})).await;
+        assert_eq!(stored(&s, &id).status, "cancelled");
+        assert!(s.scheduled_send.claim(&id).is_some(), "a cancel must release the claim when it is done");
+    }
+
+    /// The app retries a cancel after a create that failed (an edit moved to
+    /// another account cancels its old row first): the second one is Ok.
+    #[tokio::test]
+    async fn cancelling_a_cancelled_row_again_is_a_quiet_no_op() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        call(&s, "scheduled.cancel", json!({"id": id})).await;
+        call(&s, "scheduled.cancel", json!({"id": id})).await;
+        assert_eq!(stored(&s, &id).status, "cancelled");
+    }
+
     #[tokio::test]
     async fn cancelling_an_unknown_id_is_a_quiet_no_op() {
         let s = st();
@@ -399,27 +468,8 @@ mod tests {
     #[tokio::test]
     async fn create_then_send_now_delivers_and_cleans_up() {
         let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
-        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
-        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
-
-        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
         let s = st();
-
-        let creds_path = s.app_dir.join("credentials.json");
-        let account_json = json!({
-            "email": "luke@mock.test",
-            "password": "hunter2",
-            "imapHost": server.host(),
-            "imapPort": server.port(),
-            "smtpHost": server.host(),
-            "smtpPort": server.smtp_port(),
-            "smtpSecure": false,
-        })
-        .to_string();
-        let mut blob = std::collections::HashMap::new();
-        blob.insert("acc1".to_string(), account_json);
-        std::fs::write(&creds_path, serde_json::to_string(&blob).unwrap()).unwrap();
-        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds_path);
+        let server = serve_acc1(&s);
 
         let mut params = create_params("acc1");
         params["sentMailbox"] = json!("Sent");
@@ -449,6 +499,63 @@ mod tests {
             !mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid),
             "a sent row's frozen .eml must be removed"
         );
+    }
+
+    /// Retry on a row that failed by using up its tries must really try
+    /// again. Reschedule and Edit give a row a fresh count, but they are
+    /// Premium: for a free user Retry is the only way out, and it went
+    /// straight back to `failed` without sending.
+    #[tokio::test]
+    async fn send_now_retries_a_row_that_failed_on_its_last_try() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1(&s);
+
+        let mut params = create_params("acc1");
+        params["sentMailbox"] = json!("Sent");
+        let row = call(&s, "scheduled.create", params).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        mailvault_core::app_db::with(&s.app_dir, |c| {
+            c.execute(
+                "UPDATE scheduled_sends SET status = 'failed', attempts = ?2 WHERE id = ?1",
+                rusqlite::params![id, mailvault_core::app_db::scheduled::MAX_ATTEMPTS],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+        })
+        .unwrap();
+
+        let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
+        assert_eq!(server.sent_messages().len(), 1, "commands: {:?}", server.smtp_commands());
+    }
+
+    /// A mock server that `acc1` resolves to through the
+    /// `MAILVAULT_TEST_CREDENTIALS` file bypass. The caller holds
+    /// `test_env_lock` and removes that var when done.
+    fn serve_acc1(s: &Arc<DaemonState>) -> MockImap {
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+
+        let creds_path = s.app_dir.join("credentials.json");
+        let account_json = json!({
+            "email": "luke@mock.test",
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(),
+            "smtpSecure": false,
+        })
+        .to_string();
+        let mut blob = std::collections::HashMap::new();
+        blob.insert("acc1".to_string(), account_json);
+        std::fs::write(&creds_path, serde_json::to_string(&blob).unwrap()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds_path);
+        server
     }
 
     fn edit_params(id: &str, to: &str) -> Value {

@@ -145,6 +145,19 @@ pub fn update_schedule(conn: &Connection, id: &str, local_time: &str, tz: &str, 
     .map_err(|e| e.to_string())
 }
 
+/// A fresh `attempts` count for a `failed` row the user retries, for the
+/// same reason `update_schedule` gives one to a rescheduled row: a row that
+/// failed by running out of tries would otherwise hit the ceiling on its very
+/// next attempt and fail again unsent. Any other status is left alone.
+pub fn reset_failed_attempts(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE scheduled_sends SET attempts = 0, updated_at = ?2 WHERE id = ?1 AND status = 'failed'",
+        params![id, now_ms()],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 /// Undo a `bump_attempt` (via `attempt_before_send`) when the attempt never
 /// actually happened — the row turned out to be offline, not sent-and-failed.
 /// Floors at 0 so a release racing another one (or called on a row that was
@@ -223,7 +236,9 @@ pub fn delete(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM scheduled_sends WHERE id = ?1", [id]).map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// The zone of the newest schedule (any status) whose envelope `to` holds
+/// The zone of the newest schedule (any status, by when it was created:
+/// `updated_at` moves whenever a row is sent or has its fire time recomputed)
+/// whose envelope `to` holds
 /// `address`, compared case-insensitively on the bare address: Scheduled
 /// Send's suggestion for someone who has never written to us. `cc`/`bcc` do
 /// not count, the zone was picked for whoever the email was to. Nothing
@@ -233,7 +248,7 @@ pub fn last_tz_for(conn: &Connection, address: &str) -> Result<Option<String>, S
     let mut stmt = conn
         .prepare(
             "SELECT envelope, tz FROM scheduled_sends WHERE envelope LIKE '%' || ?1 || '%'
-             ORDER BY updated_at DESC, created_at DESC",
+             ORDER BY created_at DESC, rowid DESC",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
@@ -479,10 +494,10 @@ mod tests {
         assert_eq!(get(&c, "sent").unwrap().unwrap().status, "sent", "a sent row is not un-sent");
     }
 
-    /// `updated_at` set by hand: two inserts in a row can share a millisecond.
-    fn schedule(c: &Connection, id: &str, envelope: serde_json::Value, tz: &str, updated_at: i64) {
+    /// Both stamps set by hand: two inserts in a row can share a millisecond.
+    fn schedule(c: &Connection, id: &str, envelope: serde_json::Value, tz: &str, created_at: i64) {
         insert(c, id, "acct", "Scheduled", 1, &envelope.to_string(), "2026-10-01T09:00", tz, 1000).unwrap();
-        c.execute("UPDATE scheduled_sends SET updated_at = ?2 WHERE id = ?1", params![id, updated_at]).unwrap();
+        c.execute("UPDATE scheduled_sends SET created_at = ?2, updated_at = ?2 WHERE id = ?1", params![id, created_at]).unwrap();
     }
 
     #[test]
@@ -494,10 +509,29 @@ mod tests {
         // Newer, but he was only copied, or only a substring of the address.
         schedule(&c, "cc", serde_json::json!({"to": "carol@example.com", "cc": "bob@example.com"}), "Asia/Tokyo", 500);
         schedule(&c, "sub", serde_json::json!({"to": "notbob@example.com"}), "Asia/Tokyo", 600);
+        // The older one went out since. Sending touches `updated_at`, and
+        // that is not when the zone was picked.
+        set_status(&c, "old", "sent", "").unwrap();
 
         assert_eq!(last_tz_for(&c, "bob@example.com").unwrap().as_deref(), Some("America/New_York"));
         assert_eq!(last_tz_for(&c, "alice@example.com").unwrap().as_deref(), Some("America/New_York"));
         assert_eq!(last_tz_for(&c, "nobody@example.com").unwrap(), None);
+    }
+
+    #[test]
+    fn resetting_a_failed_rows_attempts_lets_it_send_again_and_leaves_other_rows_alone() {
+        let c = conn();
+        seed(&c, "failed", 1000);
+        while attempt_before_send(&c, "failed").unwrap() != AttemptOutcome::CeilingExceeded {}
+        assert_eq!(get(&c, "failed").unwrap().unwrap().status, "failed");
+        reset_failed_attempts(&c, "failed").unwrap();
+        assert_eq!(get(&c, "failed").unwrap().unwrap().attempts, 0);
+        assert_eq!(attempt_before_send(&c, "failed").unwrap(), AttemptOutcome::Send { attempt: 1 });
+
+        seed(&c, "queued", 1000);
+        bump_attempt(&c, "queued").unwrap();
+        reset_failed_attempts(&c, "queued").unwrap();
+        assert_eq!(get(&c, "queued").unwrap().unwrap().attempts, 1, "only a failed row is reset");
     }
 
     #[test]
