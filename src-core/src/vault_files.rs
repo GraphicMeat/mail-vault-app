@@ -238,8 +238,9 @@ pub fn read_light(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &
 }
 
 /// One slot per requested uid, in request order: `None` when the vault does
-/// not hold the uid, or its file will not read or parse. `Err` when the
-/// mailbox cannot be verified: unknown, never a row of empty slots.
+/// not hold the uid (a verified miss), or its file does not parse as mail.
+/// `Err` when the mailbox cannot be verified or relisted, or a held file will
+/// not read: unknown, never a row of empty slots.
 pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<Option<LightEmail>>, String> {
     let held: HashSet<u32> = reg
         .files(root, account_id, mailbox)
@@ -247,16 +248,15 @@ pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mail
         .into_iter()
         .map(|(uid, _, _)| uid)
         .collect();
-    Ok(uids
-        .iter()
+    uids.iter()
         .map(|&uid| {
             if !held.contains(&uid) {
-                return None;
+                return Ok(None);
             }
-            let (name, raw) = read_resolved(reg, root, account_id, mailbox, uid).ok()??;
-            parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok()
+            let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+            Ok(parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok())
         })
-        .collect())
+        .collect()
 }
 
 /// The folder listed once from disk, for callers that hold the vault gate
@@ -1360,6 +1360,33 @@ mod tests {
         assert!(out[1].is_none(), "missing uid");
         assert_eq!(out[2].as_ref().expect("uid 5").text.as_deref().map(str::trim), Some("body of five"));
         assert!(out[3].is_none(), "legacy name without colon stays invisible, as before");
+    }
+
+    /// A held file that will not read is unknown, not an empty slot: the
+    /// whole batch errors. A verified miss stays an empty slot.
+    #[cfg(unix)]
+    #[test]
+    fn batch_errors_on_a_held_file_that_will_not_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("5:2,S.eml"), light_batch_eml("five")).unwrap();
+        let locked = cur.join("7:2,S.eml");
+        fs::write(&locked, light_batch_eml("seven")).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let (_app, reg) = registry(root);
+        let out = read_light_batch(&reg, root, "acct", "INBOX", &[5, 7, 9]);
+        let as_root = fs::read(&locked).is_ok();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+        if as_root {
+            return; // permissions aren't enforced, nothing to prove
+        }
+        assert!(out.is_err(), "an unreadable held file must not read as an empty slot");
+        let out = read_light_batch(&reg, root, "acct", "INBOX", &[5, 7, 9]).unwrap();
+        assert!(out[0].is_some() && out[1].is_some());
+        assert!(out[2].is_none(), "a verified miss is an empty slot");
     }
 
     #[test]
