@@ -570,7 +570,7 @@ mod tests {
     }
 
     fn frozen_bytes(s: &Arc<DaemonState>, uid: u32) -> Option<String> {
-        mailvault_core::vault_files::read_raw_source(&s.data_dir, "acc1", "Scheduled", uid).ok()
+        mailvault_core::vault_files::read_raw_source(&s.vault_registry, &s.data_dir, "acc1", "Scheduled", uid).ok()
     }
 
     fn stored(s: &Arc<DaemonState>, id: &str) -> mailvault_core::app_db::scheduled::ScheduledSend {
