@@ -1015,6 +1015,8 @@
   "premium.list.title": "프리미엄에 포함된 것",
   "premium.migration.blurb": "폴더 매핑과 눈으로 확인하는 진행률과 함께 IMAP 계정 사이로 메일을 옮깁니다.",
   "premium.migration.title": "사서함 이전",
+  "premium.scheduledSend.blurb": "원하는 날짜와 시간에, 어느 시간대로든 이메일을 보냅니다. 받는 사람의 시간대는 그 사람의 마지막 이메일에서 추천됩니다. 최대 5분의 보내기 지연은 계속 무료입니다.",
+  "premium.scheduledSend.title": "예약 발송",
   "premium.serverChange.blurb": "새 호스트를 한 번만 입력하면 IMAP과 SMTP가 검증되고, 보관함을 업로드할 수 있으며, DNS 점검이 전달 문제를 알려 줍니다.",
   "premium.serverChange.title": "안내형 서버 변경",
   "premium.timeCapsule.blurb": "사서함의 특정 시점 스냅숏입니다. 과거 어느 날짜의 모습 그대로 살펴볼 수 있습니다.",

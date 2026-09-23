@@ -1015,6 +1015,8 @@
   "premium.list.title": "Was Premium umfasst",
   "premium.migration.blurb": "Verschiebe Mail zwischen IMAP-Konten, mit Ordnerzuordnung und sichtbarem Fortschritt.",
   "premium.migration.title": "Postfach-Umzug",
+  "premium.scheduledSend.blurb": "Sende eine E-Mail zu Datum und Uhrzeit deiner Wahl in jeder Zeitzone; die Zeitzone des Empfängers wird aus seiner letzten E-Mail vorgeschlagen. Bis zu 5 Minuten Sendeverzögerung bleiben kostenlos.",
+  "premium.scheduledSend.title": "Geplanter Versand",
   "premium.serverChange.blurb": "Neuen Host einmal eintragen: IMAP und SMTP werden geprüft, dein Tresor kann hochgeladen werden, und eine DNS-Prüfung warnt vor Zustellproblemen.",
   "premium.serverChange.title": "Geführter Serverwechsel",
   "premium.timeCapsule.blurb": "Schnappschüsse eines Postfachs zu einem Zeitpunkt. Sieh es so an, wie es an einem früheren Tag stand.",

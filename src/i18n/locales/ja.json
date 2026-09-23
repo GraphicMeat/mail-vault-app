@@ -1015,6 +1015,8 @@
   "premium.list.title": "Premium に含まれるもの",
   "premium.migration.blurb": "IMAP アカウント間でメールを移せます。フォルダの対応付けと、目で追える進捗つき。",
   "premium.migration.title": "メールボックスの移行",
+  "premium.scheduledSend.blurb": "日付と時刻を指定し、どのタイムゾーンでもメールを送信できます。相手のタイムゾーンは最後に届いたメールから提案されます。最大 5 分の送信の遅延は引き続き無料です。",
+  "premium.scheduledSend.title": "送信の予約",
   "premium.serverChange.blurb": "新しいホストを一度入力するだけ。IMAP と SMTP を検証し、保管庫をアップロードでき、DNS チェックが配信の問題を警告します。",
   "premium.serverChange.title": "ガイド付きサーバー変更",
   "premium.timeCapsule.blurb": "メールボックスのある時点のスナップショット。過去の任意の日付の状態のまま閲覧できます。",

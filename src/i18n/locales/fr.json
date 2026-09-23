@@ -1015,6 +1015,8 @@
   "premium.list.title": "Ce que comprend Premium",
   "premium.migration.blurb": "Déplacez du courrier entre comptes IMAP, avec correspondance des dossiers et progression visible.",
   "premium.migration.title": "Migration de boîte mail",
+  "premium.scheduledSend.blurb": "Envoyez un e-mail à la date et à l'heure de votre choix, dans n'importe quel fuseau horaire, celui du destinataire étant suggéré d'après son dernier e-mail. Retarder un envoi de 5 minutes au plus reste gratuit.",
+  "premium.scheduledSend.title": "Envoi programmé",
   "premium.serverChange.blurb": "Saisissez le nouvel hôte une fois : IMAP et SMTP sont vérifiés, votre coffre peut être renvoyé, et un contrôle DNS alerte sur les problèmes de remise.",
   "premium.serverChange.title": "Changement de serveur guidé",
   "premium.timeCapsule.blurb": "Des instantanés datés d'une boîte. Parcourez-la telle qu'elle était à n'importe quelle date passée.",

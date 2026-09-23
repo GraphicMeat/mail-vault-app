@@ -12,7 +12,7 @@ import { shotUrl } from './premiumShots.js';
  * the gallery is reachable without resetting onboarding.
  *
  * Tiles on the left, one screenshot and one paragraph on the right, and
- * previous/next so the ten features can be walked through without aiming at a
+ * previous/next so the features can be walked through without aiming at a
  * tile. The detail column is a fixed height on purpose: the blurbs differ by
  * several lines, and letting the column size to its content moved the Continue
  * button up and down under the pointer as you browsed.
@@ -48,8 +48,9 @@ export function PremiumGallery() {
     <div className="grid md:grid-cols-[200px_minmax(0,1fr)] gap-4 items-start">
       {/* No cap and no scroller: a capped list hid the last two features
           behind a scrollbar nobody looked for — "Five devices" went unnoticed
-          entirely. Twelve tiles are shorter than the detail column beside them, so
-          showing all of them costs no height. */}
+          entirely. In German the full list now runs ~30px past the detail
+          column: a little height, fixed while browsing, so Continue still
+          never moves. */}
       <div className="space-y-1">
         {PREMIUM_FEATURES.map((f, i) => {
           const TileIcon = f.icon;

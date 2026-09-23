@@ -2,10 +2,7 @@
   "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Recherche indexée instantanée dans les e-mails stockés localement</strong> — les résultats proviennent de l'index privé de votre coffre, même hors connexion</span>",
   "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Recherche multidossier plus rapide</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — recherchez jusqu’à cinq boîtes serveur et dossiers locaux non indexés à la fois, avec le niveau de concurrence de votre choix</span>",
   "d3a6f92e8981": "Voir les 17 fonctionnalités",
-  "6a8492b29242": "Voir les 12 fonctionnalités",
-  "b11668f8a640": "Tout ce que contient Gratuit, plus ces 13 fonctions. Sélectionnez-en une pour voir comment elle marche.",
   "2966eb8bc710": "Recherche multidossier plus rapide",
-  "b4eeaa045260": "Les mêmes 13 fonctions que celles présentées au premier lancement de l’application. Ouvrez une fonction pour l’explorer.",
   "2987dae0bc04": "recherchez jusqu’à cinq boîtes serveur et dossiers locaux non indexés à la fois, avec le niveau de concurrence de votre choix",
   "58a81e55d8f5": "Cliquez sur une bulle pour voir les messages correspondants et les lire sans quitter la page.",
   "139290f7723a": "La carte des expéditeurs : l'aire de la bulle indique le volume, la distance le temps écoulé depuis le dernier message.",
@@ -149,5 +146,16 @@
   "a525185c67a2": "Merci pour votre soutien !",
   "a3962292769b": "Votre vote a déjà été compté. Merci !",
   "1e7eccd72fb2": "Merci de soutenir MailVault !",
-  "0e0a78755666": "Votre vote n’a pas pu être envoyé. Réessayez bientôt."
+  "0e0a78755666": "Votre vote n’a pas pu être envoyé. Réessayez bientôt.",
+  "256fe1f688c7": "Envoi programmé",
+  "fab5c787d68e": "7 questions",
+  "66ef432d7448": "Envoyer un e-mail à une date et une heure précises dans n’importe quel fuseau horaire, le fuseau suggéré du destinataire et la gestion du dossier Programmés.",
+  "c1ff134fbddb": "L’envoi programmé est-il gratuit ?",
+  "4ff7b59486e6": "Qu’est-ce que l’envoi programmé ?",
+  "076300615fa0": "Puis-je programmer un e-mail dans le fuseau horaire de quelqu’un d’autre ?",
+  "735f2025250e": "Comment MailVault connaît-il le fuseau horaire du destinataire ?",
+  "1b3b7fe4ad64": "Comment modifier, reprogrammer ou annuler un e-mail programmé ?",
+  "cc2b4c6d9c68": "MailVault doit-il être ouvert pour qu’un e-mail programmé parte ?",
+  "846d314f9619": "Que deviennent les e-mails programmés si mon abonnement prend fin ?",
+  "75d6266680e9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Envoi programmé</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> : choisissez la date, l’heure et le fuseau horaire exacts d’envoi d’un e-mail, avec le fuseau du destinataire suggéré pour vous. <a href=\"#scheduled-send\" class=\"text-primary-500 hover:text-primary-600 underline\">Comment ça marche</a></span>"
 }

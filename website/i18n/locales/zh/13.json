@@ -2,10 +2,7 @@
   "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>即时搜索本地存储邮件的索引</strong> — 即使离线，结果也来自您保管库中的私有索引</span>",
   "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>更快的多文件夹搜索</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — 可按您选择的并发级别，同时搜索最多五个服务器邮箱和未编入索引的本地文件夹</span>",
   "d3a6f92e8981": "查看全部 17 项功能",
-  "6a8492b29242": "查看全部 12 项功能",
-  "b11668f8a640": "免费版的一切，再加上这 13 项功能。选择其中一项，看看它怎么运作。",
   "2966eb8bc710": "更快的多文件夹搜索",
-  "b4eeaa045260": "与应用初次引导中介绍的 13 项功能相同。打开某项功能即可了解它。",
   "2987dae0bc04": "可按您选择的并发级别，同时搜索最多五个服务器邮箱和未编入索引的本地文件夹",
   "58a81e55d8f5": "点击任意气泡即可查看背后的邮件，并在不离开页面的情况下阅读。",
   "139290f7723a": "发件人地图：气泡面积代表数量，距离代表距上一封邮件过去了多久。",
@@ -149,5 +146,16 @@
   "a525185c67a2": "感谢你的支持！",
   "a3962292769b": "你的爱心已经计入。谢谢！",
   "1e7eccd72fb2": "感谢你支持 MailVault！",
-  "0e0a78755666": "无法发送你的爱心。请稍后重试。"
+  "0e0a78755666": "无法发送你的爱心。请稍后重试。",
+  "256fe1f688c7": "定时发送",
+  "fab5c787d68e": "7 个问题",
+  "66ef432d7448": "在任意时区按确切的日期和时间发送邮件、收件人时区推荐，以及管理“定时发送”文件夹。",
+  "c1ff134fbddb": "定时发送免费吗？",
+  "4ff7b59486e6": "什么是定时发送？",
+  "076300615fa0": "可以按别人的时区定时发送吗？",
+  "735f2025250e": "MailVault 怎么知道收件人的时区？",
+  "1b3b7fe4ad64": "如何修改、重新安排或取消定时邮件？",
+  "cc2b4c6d9c68": "定时邮件要发出，MailVault 必须开着吗？",
+  "846d314f9619": "订阅结束后，定时邮件会怎样？",
+  "75d6266680e9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>定时发送</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>：为邮件选择确切的发送日期、时间和时区，并自动推荐收件人的时区。<a href=\"#scheduled-send\" class=\"text-primary-500 hover:text-primary-600 underline\">查看说明</a></span>"
 }

@@ -1015,6 +1015,8 @@
   "premium.list.title": "What Premium includes",
   "premium.migration.blurb": "Move mail between IMAP accounts with folder mapping and progress you can watch.",
   "premium.migration.title": "Mailbox migration",
+  "premium.scheduledSend.blurb": "Send an email at an exact date and time in any time zone, with the recipient's zone suggested from their last email. Delaying a send by up to 5 minutes stays free.",
+  "premium.scheduledSend.title": "Scheduled Send",
   "premium.serverChange.blurb": "Enter a new host once: IMAP and SMTP are verified, your vault can be uploaded, and a DNS check warns about delivery problems.",
   "premium.serverChange.title": "Guided server change",
   "premium.timeCapsule.blurb": "Point-in-time snapshots of a mailbox. Browse it as it stood on any earlier date.",

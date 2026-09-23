@@ -2,10 +2,7 @@
   "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Ricerca indicizzata istantanea nella posta salvata localmente</strong> — i risultati provengono dall'indice privato del vault, anche offline</span>",
   "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Ricerca più rapida in più cartelle</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — cerca fino a cinque caselle server e cartelle locali non indicizzate alla volta, con il livello di concorrenza che scegli</span>",
   "d3a6f92e8981": "Vedi tutte le 17 funzionalità",
-  "6a8492b29242": "Vedi tutte le 12 funzionalità",
-  "b11668f8a640": "Tutto quello che c’è in Gratuito, più queste 13 funzioni. Selezionane una per vedere come funziona.",
   "2966eb8bc710": "Ricerca più rapida in più cartelle",
-  "b4eeaa045260": "Le stesse 13 funzioni che trovi nell’introduzione dell’app. Apri una funzione per esplorarla.",
   "2987dae0bc04": "cerca fino a cinque caselle server e cartelle locali non indicizzate alla volta, con il livello di concorrenza che scegli",
   "58a81e55d8f5": "Fai clic su una bolla qualsiasi per vedere i messaggi che ci stanno dietro e leggerli senza lasciare la pagina.",
   "139290f7723a": "La mappa dei mittenti: l’area della bolla è il volume, la distanza è il tempo passato dall’ultimo messaggio.",
@@ -149,5 +146,16 @@
   "a525185c67a2": "Grazie per il tuo affetto!",
   "a3962292769b": "Il tuo cuore è già stato conteggiato. Grazie!",
   "1e7eccd72fb2": "Grazie per sostenere MailVault!",
-  "0e0a78755666": "Non è stato possibile inviare il tuo cuore. Riprova tra poco."
+  "0e0a78755666": "Non è stato possibile inviare il tuo cuore. Riprova tra poco.",
+  "256fe1f688c7": "Invio programmato",
+  "fab5c787d68e": "7 domande",
+  "66ef432d7448": "Inviare un’email a una data e un’ora precise in qualsiasi fuso orario, il fuso suggerito del destinatario e la gestione della cartella Programmati.",
+  "c1ff134fbddb": "L’invio programmato è gratuito?",
+  "4ff7b59486e6": "Che cos’è l’invio programmato?",
+  "076300615fa0": "Posso programmare un’email nel fuso orario di un’altra persona?",
+  "735f2025250e": "Come fa MailVault a sapere il fuso orario del destinatario?",
+  "1b3b7fe4ad64": "Come modifico, riprogrammo o annullo un’email programmata?",
+  "cc2b4c6d9c68": "MailVault deve essere aperto perché un’email programmata parta?",
+  "846d314f9619": "Cosa succede alle email programmate se il mio abbonamento finisce?",
+  "75d6266680e9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Invio programmato</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: scegli data, ora e fuso orario esatti in cui parte un’email, con il fuso del destinatario suggerito per te. <a href=\"#scheduled-send\" class=\"text-primary-500 hover:text-primary-600 underline\">Come funziona</a></span>"
 }

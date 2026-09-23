@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Envio agendado | MailVault FAQ</title>
+  <meta name="description" content="Como funciona o envio agendado do MailVault: escolha data, hora e fuso horário exatos, deixe o MailVault sugerir o fuso do destinatário e gerencie os e-mails agendados. O que é Premium e o que continua grátis.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/faq/scheduled-send.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq/scheduled-send.html">
+  <meta property="og:title" content="Envio agendado | MailVault FAQ">
+  <meta property="og:description" content="Como funciona o envio agendado do MailVault: escolha data, hora e fuso horário exatos, deixe o MailVault sugerir o fuso do destinatário e gerencie os e-mails agendados. O que é Premium e o que continua grátis.">
+  <meta property="og:image:alt" content="MailVault: abra espaço para novos e-mails. Guarde os antigos. Gratuito para macOS e Linux, com uma prévia do app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Envio agendado | MailVault FAQ">
+  <meta name="twitter:description" content="Como funciona o envio agendado do MailVault: escolha data, hora e fuso horário exatos, deixe o MailVault sugerir o fuso do destinatário e gerencie os e-mails agendados. O que é Premium e o que continua grátis.">
+  <meta name="twitter:image:alt" content="MailVault: abra espaço para novos e-mails. Guarde os antigos. Gratuito para macOS e Linux, com uma prévia do app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "O que é o envio agendado?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O envio agendado guarda um e-mail que você escreveu e o envia na data e hora que você escolher, no fuso horário que você escolher. Ao escrever, clique na seta ao lado de Enviar para abrir Agendar envio, escolha a data e a hora, confira o fuso horário logo abaixo e clique em Agendar. Amanhã às 8h e Segunda-feira às 8h preenchem o horário com um clique, no fuso horário escolhido."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso agendar um e-mail no fuso horário de outra pessoa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim, em qualquer fuso horário. A lista mostra cada fuso com o deslocamento UTC, por exemplo (UTC-04:00) New York, e você pode buscar por cidade ou por deslocamento: digite +2 para ver os fusos duas horas à frente do UTC. As cidades aparecem com o nome em inglês, por exemplo Sao Paulo. O deslocamento mostrado é o que vale no momento do envio, então um envio depois de uma mudança de horário aparece com o rótulo certo. Abaixo dos campos, o MailVault mostra a hora atual onde você está e no fuso escolhido, e quando o e-mail vai sair no seu próprio horário. Você pode conferir um envio às 8:00 em Nova York com o seu relógio antes de agendar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como o MailVault sabe o fuso horário do destinatário?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ele sugere um, e você sempre pode escolher outro. Todo e-mail traz o deslocamento UTC de quem o enviou, então o MailVault lê o deslocamento do último e-mail que o primeiro destinatário mandou para você e escolhe o fuso horário correspondente. Uma nota abaixo do campo informa que a sugestão veio do último e-mail dele. Um mesmo deslocamento pode valer para vários lugares, então confira a cidade. Se a pessoa nunca escreveu para você, o MailVault usa o fuso que você escolheu da última vez que agendou um e-mail para ela. Sem nenhum dos dois, ele começa pelo seu próprio fuso horário. Um fuso que você mesmo escolheu nunca é substituído."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como altero, reagendo ou cancelo um e-mail agendado?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Os e-mails agendados esperam na pasta Agendados da barra lateral. Clique em um para abri-lo na janela de escrita e mudar os destinatários, o texto ou o horário. Ele continua agendado como estava até você salvar as alterações. Cada e-mail da pasta também tem botões para Reagendar, Cancelar ou Enviar agora."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault precisa estar aberto para um e-mail agendado sair?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não, se ele puder continuar rodando em segundo plano. Os e-mails agendados são enviados pelo auxiliar em segundo plano do MailVault. Ative Continuar em execução em segundo plano em Configurações › Serviço em segundo plano e o auxiliar continua rodando depois que você sai e inicia quando você faz login, então os e-mails saem na hora certa mesmo com o app fechado. Se essa configuração estiver desativada, ou se a sua cópia do MailVault não puder continuar rodando em segundo plano, um e-mail agendado sai na próxima vez que você abrir o MailVault. A pasta Agendados mostra qual é o seu caso e leva até a configuração."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que é grátis e o que precisa do Premium?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Agendar um e-mail para data e hora definidas faz parte do Premium. Atrasar um envio em até 5 minutos é grátis: por e-mail com o menu ao lado de Enviar, ou para todos os e-mails com Atraso no envio nas Configurações. Sem o Premium, o painel Agendar envio avisa isso e oferece Fazer upgrade. Veja o que o Premium inclui."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que acontece com os e-mails agendados se minha assinatura acabar?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Eles saem mesmo assim no horário que você definiu. Para editar ou reagendar é preciso ter o Premium de novo, mas você ainda pode enviar um agora ou cancelá-lo na pasta Agendados."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Início",
+      "item": "https://mailvaultapp.com/pt-br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/pt-br/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Envio agendado",
+      "item": "https://mailvaultapp.com/pt-br/faq/scheduled-send.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/scheduled-send.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/scheduled-send.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/pt-br/" aria-label="Página inicial do MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegação principal"><a href="/pt-br/#how-it-works">Como funciona</a><a href="/pt-br/features.html">Recursos</a><a href="/pt-br/pricing.html">Preços</a><a href="/pt-br/blog.html">Blog</a><a href="/pt-br/docs.html">Ajuda</a>
+<a href="/demo/?lang=pt-BR" target="_blank" rel="noopener" aria-label="Abrir a demonstração do MailVault em uma nova janela">Demonstração</a></nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Escolha o idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Português (Brasil)</span><span class="mv-language-code" aria-hidden="true">PT-BR</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/faq/scheduled-send.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/faq/scheduled-send.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/faq/scheduled-send.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/faq/scheduled-send.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/faq/scheduled-send.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/faq/scheduled-send.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/faq/scheduled-send.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/faq/scheduled-send.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/faq/scheduled-send.html" lang="pt-BR" hreflang="pt-BR" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Alternar tema de cores" title="Alternar tema de cores"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/pt-br/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary>Menu</summary>
+<nav aria-label="Navegação móvel"><a href="/pt-br/#how-it-works">Como funciona</a><a href="/pt-br/features.html">Recursos</a><a href="/pt-br/pricing.html">Preços</a><a href="/pt-br/blog.html">Blog</a><a href="/pt-br/docs.html">Ajuda</a><a href="/demo/?lang=pt-BR" target="_blank" rel="noopener" aria-label="Abrir a demonstração do MailVault em uma nova janela">Experimentar a demonstração</a><a href="/pt-br/get-started.html?plan=free">Baixar grátis</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- Content -->
+  <main id="main" class="pt-32 pb-20">
+    <div class="mv-wrap mv-directory">
+
+      <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/pt-br/" class="hover:text-primary-500 transition-colors">Início</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Envio agendado</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Envio agendado</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Escreva um e-mail agora e deixe o MailVault enviá-lo em data e hora exatas, em qualquer fuso horário. Agendar faz parte do Premium; um atraso no envio de até 5 minutos é grátis.</p>
+
+      <div class="space-y-4">
+
+        <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O que é o envio agendado?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>O envio agendado guarda um e-mail que você escreveu e o envia na data e hora que você escolher, no fuso horário que você escolher. Ao escrever, clique na seta ao lado de <strong>Enviar</strong> para abrir <strong>Agendar envio</strong>, escolha a data e a hora, confira o fuso horário logo abaixo e clique em <strong>Agendar</strong>.</p>
+              <p><strong>Amanhã às 8h</strong> e <strong>Segunda-feira às 8h</strong> preenchem o horário com um clique, no fuso horário escolhido.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/premium-scheduled-send-720.webp 720w, /screenshots/pt-br/premium-scheduled-send-1440.webp 1440w, /screenshots/pt-br/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/premium-scheduled-send-light-1440.webp" srcset="/screenshots/pt-br/premium-scheduled-send-light-720.webp 720w, /screenshots/pt-br/premium-scheduled-send-light-1440.webp 1440w, /screenshots/pt-br/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Nova mensagem no MailVault com o painel Agendar envio aberto: uma resposta marcada para 8:00 em Nova York, com o fuso sugerido pelo último e-mail do destinatário" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Uma resposta agendada para as 8:00 em Nova York, com o fuso horário sugerido pelo último e-mail do destinatário.</figcaption>
+            </figure>
+        </article>
+
+        <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso agendar um e-mail no fuso horário de outra pessoa?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Sim, em qualquer fuso horário. A lista mostra cada fuso com o deslocamento UTC, por exemplo <strong>(UTC-04:00) New York</strong>, e você pode buscar por cidade ou por deslocamento: digite <strong>+2</strong> para ver os fusos duas horas à frente do UTC. As cidades aparecem com o nome em inglês, por exemplo Sao Paulo. O deslocamento mostrado é o que vale no momento do envio, então um envio depois de uma mudança de horário aparece com o rótulo certo.</p>
+              <p>Abaixo dos campos, o MailVault mostra a hora atual onde você está e no fuso escolhido, e quando o e-mail vai sair no seu próprio horário. Você pode conferir um envio às 8:00 em Nova York com o seu relógio antes de agendar.</p>
+            </div>
+        </article>
+
+        <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Como o MailVault sabe o fuso horário do destinatário?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Ele sugere um, e você sempre pode escolher outro. Todo e-mail traz o deslocamento UTC de quem o enviou, então o MailVault lê o deslocamento do último e-mail que o primeiro destinatário mandou para você e escolhe o fuso horário correspondente. Uma nota abaixo do campo informa que a sugestão veio do último e-mail dele. Um mesmo deslocamento pode valer para vários lugares, então confira a cidade.</p>
+              <p>Se a pessoa nunca escreveu para você, o MailVault usa o fuso que você escolheu da última vez que agendou um e-mail para ela. Sem nenhum dos dois, ele começa pelo seu próprio fuso horário. Um fuso que você mesmo escolheu nunca é substituído.</p>
+            </div>
+        </article>
+
+        <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Como altero, reagendo ou cancelo um e-mail agendado?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Os e-mails agendados esperam na pasta <strong>Agendados</strong> da barra lateral. Clique em um para abri-lo na janela de escrita e mudar os destinatários, o texto ou o horário. Ele continua agendado como estava até você salvar as alterações.</p>
+              <p>Cada e-mail da pasta também tem botões para <strong>Reagendar</strong>, <strong>Cancelar</strong> ou <strong>Enviar agora</strong>.</p>
+            </div>
+        </article>
+
+        <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O MailVault precisa estar aberto para um e-mail agendado sair?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Não, se ele puder continuar rodando em segundo plano. Os e-mails agendados são enviados pelo auxiliar em segundo plano do MailVault. Ative <strong>Continuar em execução em segundo plano</strong> em Configurações &rsaquo; <strong>Serviço em segundo plano</strong> e o auxiliar continua rodando depois que você sai e inicia quando você faz login, então os e-mails saem na hora certa mesmo com o app fechado.</p>
+              <p>Se essa configuração estiver desativada, ou se a sua cópia do MailVault não puder continuar rodando em segundo plano, um e-mail agendado sai na próxima vez que você abrir o MailVault. A pasta Agendados mostra qual é o seu caso e leva até a configuração.</p>
+            </div>
+        </article>
+
+        <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O que é grátis e o que precisa do Premium?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Agendar um e-mail para data e hora definidas faz parte do Premium. Atrasar um envio em até 5 minutos é grátis: por e-mail com o menu ao lado de <strong>Enviar</strong>, ou para todos os e-mails com <strong>Atraso no envio</strong> nas Configurações.</p>
+              <p>Sem o Premium, o painel Agendar envio avisa isso e oferece <strong>Fazer upgrade</strong>. <a href="/pt-br/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">Veja o que o Premium inclui</a>.</p>
+            </div>
+        </article>
+
+        <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O que acontece com os e-mails agendados se minha assinatura acabar?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Eles saem mesmo assim no horário que você definiu. Para editar ou reagendar é preciso ter o Premium de novo, mas você ainda pode enviar um agora ou cancelá-lo na pasta Agendados.</p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/pt-br/faq.html" class="text-primary-500 hover:underline">Voltar para todos os temas das perguntas frequentes</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Ainda tem dúvidas?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Pergunte no GitHub
+          </a>
+          <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Fale conosco
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/pt-br/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Leia seu e-mail. Guarde seu e-mail.</p>
+</div>
+<nav aria-label="Explore o MailVault"><a href="/pt-br/use-cases.html">Casos de uso</a><a href="/pt-br/blog.html">Blog</a><a href="/changelog.html">Novidades</a><a href="/pt-br/mentioned-in.html">Menções</a><a href="/pt-br/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código no GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidade ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Fale com a equipe ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Feito pela <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidade</a><a href="/terms.html">Termos</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=20260922-acquisition"></script>
+</body>
+</html>

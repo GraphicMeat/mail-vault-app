@@ -1015,6 +1015,8 @@
   "premium.list.title": "高级版包含什么",
   "premium.migration.blurb": "在 IMAP 账户之间搬运邮件，带文件夹映射和可见的进度。",
   "premium.migration.title": "邮箱迁移",
+  "premium.scheduledSend.blurb": "在你选定的日期和时间、按任意时区发送邮件，并根据收件人最近一封来信推荐其时区。最多 5 分钟的发送延迟仍然免费。",
+  "premium.scheduledSend.title": "定时发送",
   "premium.serverChange.blurb": "只需填一次新主机：IMAP 和 SMTP 会被验证，你的保险库可以上传回去，DNS 检查还会提示投递问题。",
   "premium.serverChange.title": "引导式更换服务器",
   "premium.timeCapsule.blurb": "邮箱在某一时刻的快照。按过去任意日期的样子浏览它。",

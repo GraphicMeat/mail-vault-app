@@ -70,6 +70,14 @@
         "@type": "Answer",
         "text": "はい。MailVaultで開いたメールはすべて、トラッキングピクセルの有無を検査します。トラッキングピクセルとは、マーケティングメールが仕込む1×1の見えない画像で、いつ開封したか、何回開いたか、どのIPアドレスとどのクライアントから開いたかを送信者に報告します。ピクセルを含むメールには件名の横に小さな目のアイコンが表示され、それをクリックすると、追跡している会社名と、そのピクセルが呼び出すはずだった正確なURLがわかります。検出は誰でも無料で使えます。MailVault Premiumではさらに、メッセージを表示する前にHTMLからそのビーコンを取り除くので、リクエストは一度も送られず、送信者には何も伝わりません。既知のトラッキング用エンドポイントは500件近くがアプリに同梱されており、この一覧はリリースのたびに更新されます。実行時にサーバーから取得することはありません。"
       }
+    },
+    {
+      "@type": "Question",
+      "name": "送信の予約は無料ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "日時を指定してメールを予約するのは Premium の機能です。最大 5 分の送信の遅延は無料で、メールごとなら送信の横のメニューから、すべてのメールなら設定の送信の遅延から使えます。すでに予約したメールは、サブスクリプションが終了しても送信されます。"
+      }
     }
   ]
 }
@@ -191,6 +199,13 @@
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはメールのトラッキングピクセルをブロックできますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               はい。MailVaultが開くすべてのメッセージは、トラッキングピクセルの有無を調べられます — 宣伝メールが、開封したこと、その回数、IPアドレス、使っているクライアントを知らせるために使う、隠れた1x1の画像です。それを持つメッセージには件名の横に小さな目のしるしが現れ、クリックすると追跡している会社の名前と、そのピクセルが呼び出すはずだった正確なURLが表示されます。検出はどなたも無料です。MailVault Premiumはさらに、メッセージが描画される前にそのビーコンをHTMLから取り除くので、要求そのものが行われず、送信者には何も伝わりません。500近い既知の追跡エンドポイントがアプリに同梱されており、この一覧はリリースのたびに更新されます。実行時にサーバーから取得することは決してありません。<a href="/ja/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">仕組みと前後の違いをご覧ください</a>。
+            </p>
+        </article>
+
+        <article id="is-scheduled-send-free" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">送信の予約は無料ですか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              日時を指定してメールを予約するのは Premium の機能です。最大 5 分の送信の遅延は無料で、メールごとなら<strong>送信</strong>の横のメニューから、すべてのメールなら設定の<strong>送信の遅延</strong>から使えます。すでに予約したメールは、サブスクリプションが終了しても送信されます。<a href="/ja/faq/scheduled-send.html" class="text-primary-500 hover:text-primary-600 underline">送信の予約の仕組み</a>。
             </p>
         </article>
 

@@ -2,10 +2,7 @@
   "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Sofortige indexierte Suche in lokal gespeicherten E-Mails</strong> — Ergebnisse kommen aus dem privaten Index in Ihrem Tresor, auch offline</span>",
   "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Schnellere Suche in mehreren Ordnern</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — Durchsuchen Sie bis zu fünf Server-Postfächer und nicht indexierte lokale Ordner gleichzeitig, mit einer von Ihnen festgelegten Parallelität</span>",
   "d3a6f92e8981": "Alle 17 Funktionen anzeigen",
-  "6a8492b29242": "Alle 12 Funktionen anzeigen",
-  "b11668f8a640": "Alles aus Kostenlos, plus diese 13 Funktionen. Wähle eine aus, um zu sehen, wie sie funktioniert.",
   "2966eb8bc710": "Schnellere Suche in mehreren Ordnern",
-  "b4eeaa045260": "Dieselben 13 Funktionen, die dir die App beim Einrichten zeigt. Öffne eine Funktion, um sie zu erkunden.",
   "2987dae0bc04": "Durchsuchen Sie bis zu fünf Server-Postfächer und nicht indexierte lokale Ordner gleichzeitig, mit einer von Ihnen festgelegten Parallelität",
   "58a81e55d8f5": "Klicke auf eine Blase, um die E-Mails dahinter zu sehen und sie zu lesen, ohne die Seite zu verlassen.",
   "139290f7723a": "Die Absenderkarte: Die Fläche einer Blase ist die Menge, der Abstand die Zeit seit der letzten E-Mail.",
@@ -149,5 +146,16 @@
   "a525185c67a2": "Danke für deine Unterstützung!",
   "a3962292769b": "Deine Stimme wurde bereits gezählt. Danke!",
   "1e7eccd72fb2": "Danke, dass du MailVault unterstützt!",
-  "0e0a78755666": "Deine Stimme konnte nicht gesendet werden. Bitte versuche es in Kürze erneut."
+  "0e0a78755666": "Deine Stimme konnte nicht gesendet werden. Bitte versuche es in Kürze erneut.",
+  "256fe1f688c7": "Geplanter Versand",
+  "fab5c787d68e": "7 Fragen",
+  "66ef432d7448": "Eine E-Mail zu einem genauen Datum und einer genauen Uhrzeit in jeder Zeitzone senden, die vorgeschlagene Zeitzone des Empfängers und der Ordner Geplant.",
+  "c1ff134fbddb": "Ist der geplante Versand kostenlos?",
+  "4ff7b59486e6": "Was ist der geplante Versand?",
+  "076300615fa0": "Kann ich eine E-Mail in der Zeitzone einer anderen Person planen?",
+  "735f2025250e": "Woher kennt MailVault die Zeitzone des Empfängers?",
+  "1b3b7fe4ad64": "Wie bearbeite ich eine geplante E-Mail, plane sie neu oder breche sie ab?",
+  "cc2b4c6d9c68": "Muss MailVault geöffnet sein, damit eine geplante E-Mail versendet wird?",
+  "846d314f9619": "Was passiert mit geplanten E-Mails, wenn mein Abo endet?",
+  "75d6266680e9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Geplanter Versand</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: Wähle das genaue Datum, die Uhrzeit und die Zeitzone, zu der eine E-Mail rausgeht; die Zeitzone des Empfängers wird dir vorgeschlagen. <a href=\"#scheduled-send\" class=\"text-primary-500 hover:text-primary-600 underline\">So funktioniert es</a></span>"
 }

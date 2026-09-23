@@ -17,6 +17,13 @@ describe('premium gallery', () => {
     expect(screen.getByTestId('premium-detail').dataset.feature).toBe('fast-multi-folder-search');
   });
 
+  it('shows scheduled send with its own screenshot', () => {
+    render(<PremiumGallery />);
+    fireEvent.click(screen.getByTestId('premium-tile-scheduled-send'));
+    expect(screen.getByTestId('premium-detail').dataset.feature).toBe('scheduled-send');
+    expect(screen.getByTestId('premium-shot').getAttribute('src')).toMatch(/premium-scheduled-send-1440/);
+  });
+
   it('shows every catalog feature', () => {
     render(<PremiumGallery />);
     for (const f of PREMIUM_FEATURES) {

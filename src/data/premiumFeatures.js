@@ -1,6 +1,6 @@
 import {
   CalendarClock, ShieldCheck, Sparkles, Clock, EyeOff,
-  Trash2, ArrowLeftRight, Server, Image, Timer, Monitor, FileSearch, Gauge,
+  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge,
 } from 'lucide-react';
 
 /**
@@ -11,7 +11,8 @@ import {
  *
  * `tab` is a `SettingsPage` TAB id and is what the Open button navigates to.
  * `null` means the feature has no settings surface: export-as-image lives in
- * the email viewer, and the device allowance is a property of the plan itself.
+ * the email viewer, Scheduled Send in Compose, and the device allowance is a
+ * property of the plan itself.
  * `shot` is the basename under `src/assets/premium/<locale>/`.
  */
 export const PREMIUM_FEATURES = Object.freeze([
@@ -25,6 +26,7 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'server-change',    icon: Server,         titleKey: 'premium.serverChange.title',    blurbKey: 'premium.serverChange.blurb',    shot: 'premium-server-change',    tab: 'accounts' },
   { id: 'export-image',     icon: Image,          titleKey: 'premium.exportImage.title',     blurbKey: 'premium.exportImage.blurb',     shot: 'premium-export-image',     tab: null },
   { id: 'focus-session',    icon: Timer,          titleKey: 'premium.focusSession.title',    blurbKey: 'premium.focusSession.blurb',    shot: 'premium-focus-session',    tab: null },
+  { id: 'scheduled-send',   icon: AlarmClock,     titleKey: 'premium.scheduledSend.title',   blurbKey: 'premium.scheduledSend.blurb',   shot: 'premium-scheduled-send',   tab: null },
   { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
   { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: null,                       tab: 'storage' },
   { id: 'fast-multi-folder-search', icon: Gauge, titleKey: 'premium.fastMultiFolderSearch.title', blurbKey: 'premium.fastMultiFolderSearch.blurb', shot: null, tab: 'storage' },

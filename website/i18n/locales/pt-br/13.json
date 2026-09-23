@@ -2,10 +2,7 @@
   "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Pesquisa indexada instantânea nos e-mails salvos localmente</strong> — os resultados vêm do índice privado do seu cofre, mesmo offline</span>",
   "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Pesquisa mais rápida em várias pastas</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — pesquise até cinco caixas do servidor e pastas locais não indexadas ao mesmo tempo, com o nível de simultaneidade que você escolher</span>",
   "d3a6f92e8981": "Ver todos os 17 recursos",
-  "6a8492b29242": "Ver todos os 12 recursos",
-  "b11668f8a640": "Tudo o que há no Grátis, mais estes 13 recursos. Selecione um para ver como funciona.",
   "2966eb8bc710": "Pesquisa mais rápida em várias pastas",
-  "b4eeaa045260": "Os mesmos 13 recursos que você encontra na introdução do app. Abra um recurso para explorá-lo.",
   "2987dae0bc04": "pesquise até cinco caixas do servidor e pastas locais não indexadas ao mesmo tempo, com o nível de simultaneidade que você escolher",
   "58a81e55d8f5": "Clique em qualquer bolha para ver as mensagens por trás dela e lê-las sem sair da página.",
   "139290f7723a": "O mapa de remetentes: a área da bolha é o volume, a distância é o tempo desde a última mensagem.",
@@ -149,5 +146,16 @@
   "a525185c67a2": "Obrigado pelo carinho!",
   "a3962292769b": "Seu coração já foi contado. Obrigado!",
   "1e7eccd72fb2": "Obrigado por apoiar o MailVault!",
-  "0e0a78755666": "Não foi possível enviar seu coração. Tente de novo daqui a pouco."
+  "0e0a78755666": "Não foi possível enviar seu coração. Tente de novo daqui a pouco.",
+  "256fe1f688c7": "Envio agendado",
+  "fab5c787d68e": "7 perguntas",
+  "66ef432d7448": "Enviar um e-mail em data e hora exatas em qualquer fuso horário, o fuso sugerido do destinatário e o gerenciamento da pasta Agendados.",
+  "c1ff134fbddb": "O envio agendado é grátis?",
+  "4ff7b59486e6": "O que é o envio agendado?",
+  "076300615fa0": "Posso agendar um e-mail no fuso horário de outra pessoa?",
+  "735f2025250e": "Como o MailVault sabe o fuso horário do destinatário?",
+  "1b3b7fe4ad64": "Como altero, reagendo ou cancelo um e-mail agendado?",
+  "cc2b4c6d9c68": "O MailVault precisa estar aberto para um e-mail agendado sair?",
+  "846d314f9619": "O que acontece com os e-mails agendados se minha assinatura acabar?",
+  "75d6266680e9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Envio agendado</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: escolha a data, a hora e o fuso horário exatos em que um e-mail sai, com o fuso do destinatário sugerido para você. <a href=\"#scheduled-send\" class=\"text-primary-500 hover:text-primary-600 underline\">Como funciona</a></span>"
 }
