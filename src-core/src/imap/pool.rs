@@ -58,10 +58,15 @@ fn conn_key(config: &ImapConfig) -> String {
 /// on first use and nothing else, so it is the one failure worth trying again;
 /// a tagged `NO`/`BAD` is the server's answer and repeating it changes nothing.
 pub fn is_connection_lost(err: &str) -> bool {
-    const NEEDLES: [&str; 7] = [
+    const NEEDLES: [&str; 8] = [
         "connection lost", // async_imap::error::Error::ConnectionLost
         "connection reset",
         "connection aborted",
+        // Windows' WSAECONNABORTED renders as "An established connection was
+        // aborted by the software in your host machine" — the same failure
+        // unix surfaces as ECONNRESET/"connection reset", but worded with an
+        // extra "was" that the needle above does not catch.
+        "connection was aborted",
         "connection closed", // the TLS layer: "closed via error" / "closed gracefully"
         "broken pipe",
         "unexpected end of file",
