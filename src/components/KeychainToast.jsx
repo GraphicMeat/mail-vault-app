@@ -32,6 +32,10 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
       if (s === 'denied' || s === 'cancelled' || s === 'timed_out' || s === 'unavailable') {
         setStatus(s);
         setVisible(true);
+      } else if (s === 'granted' || s === 'empty') {
+        // A later read that answered: the keychain gate's recovery re-reads
+        // once it clears, and a failure from before it is no longer true.
+        setVisible(false);
       }
     };
     // Check current state on mount

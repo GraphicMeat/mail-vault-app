@@ -48,6 +48,8 @@ tauri-plugin-webdriver-automation = { version = "0.1", optional = true }
 cocoa = "0.26"
 objc = "0.2"
 keyring = { version = "3", features = ["apple-native"] }
+# get_credentials reads with keychain prompts off (the daemon's unlock card owns them).
+security-framework = "3"
 tauri-plugin-sparkle-updater = { version = "0.2", optional = true }
 # objc2 core is unconditional: notification_open.rs (UNUserNotificationCenter)
 # and iap.rs (StoreKit) need it on every macOS build. StoreKit bindings

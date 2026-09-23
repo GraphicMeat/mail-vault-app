@@ -256,6 +256,11 @@ impl KeychainGate {
 
     /// The first reason an item blocked with sticks until that item clears.
     pub(crate) fn block(&self, item: &'static str, reason: &'static str) {
+        self.block_with_status(item, reason, None);
+    }
+
+    /// `block`, with the OSStatus macOS answered, for the log line.
+    fn block_with_status(&self, item: &'static str, reason: &'static str, os_status: Option<i32>) {
         {
             let mut blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
             if blocked.iter().any(|b| b.item == item) {
@@ -271,7 +276,8 @@ impl KeychainGate {
                 return;
             }
         }
-        warn!("[keychain] blocked ({item}: {reason}); sync and scheduled sends wait for an unlock");
+        let status = os_status.map(|c| format!(", OSStatus {c}")).unwrap_or_default();
+        warn!("[keychain] blocked ({item}: {reason}{status}); sync and scheduled sends wait for an unlock");
         let Some(bus) = self.events.get() else { return };
         if !bus.emit("keychain-status", json!({"blocked": true, "reason": reason})) {
             self.banner();
@@ -342,8 +348,14 @@ fn read_entry(entry: &Entry, item: &'static str, interactive: bool) -> keyring::
             Ok(None)
         }
         Err(e) => {
-            if let Some(reason) = mailvault_core::keychain::keychain_block_reason(os_status(&e), false) {
-                GATE.block(item, reason);
+            let code = os_status(&e);
+            if interactive {
+                // Quiet probes fail every 5 s while blocked; only a read that
+                // could prompt is worth a line.
+                warn!("[keychain] {item} read failed: {e} (OSStatus {code:?})");
+            }
+            if let Some(reason) = mailvault_core::keychain::keychain_block_reason(code, false) {
+                GATE.block_with_status(item, reason, code);
             }
             Err(e)
         }
@@ -445,17 +457,83 @@ where
 /// not started again; a quiet probe's read is waited out first. `ok`
 /// once no item is blocked: each read settles its own item, and a failure
 /// unlocking cannot fix (a corrupt blob, nothing stored) is not the gate's.
+///
+/// First it unlocks the default keychain itself, with macOS's unlock dialog:
+/// after the user cancels a prompt, macOS does not prompt that process again
+/// for the item reads, so without this an Unlock could never bring one back.
 pub(crate) async fn retry() -> Value {
-    let _ = tokio::join!(
-        guarded(CREDENTIALS_KEY, blob_read(true), RETRY_TIMEOUT),
-        guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(true), RETRY_TIMEOUT),
-    );
-    let status = GATE.status();
+    let unlock = tokio::time::timeout(RETRY_TIMEOUT, UNLOCK.read(true, |_| unlock_default_keychain()));
+    let reads = async {
+        let _ = tokio::join!(
+            guarded(CREDENTIALS_KEY, blob_read(true), RETRY_TIMEOUT),
+            guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(true), RETRY_TIMEOUT),
+        );
+    };
+    retry_with(&GATE, async { unlock.await.unwrap_or_else(|_| Err("timeout".to_string())) }, reads).await
+}
+
+/// The unlock dialog, one at a time however often Unlock is pressed.
+static UNLOCK: SingleFlight<()> = SingleFlight::new();
+
+/// `retry` with the unlock and the reads passed in, so the order is testable
+/// without a keychain. `unlock` answers `Err(reason)` when the user cancelled
+/// or it failed; the reads never start then.
+async fn retry_with(
+    gate: &KeychainGate,
+    unlock: impl std::future::Future<Output = Result<(), String>>,
+    reads: impl std::future::Future<Output = ()>,
+) -> Value {
+    if let Err(reason) = unlock.await {
+        return json!({"ok": false, "reason": reason});
+    }
+    reads.await;
+    let status = gate.status();
     if status["blocked"] == true {
+        warn!("[keychain] retry: still blocked ({})", status["reason"]);
         json!({"ok": false, "reason": status["reason"]})
     } else {
         json!({"ok": true})
     }
+}
+
+/// Unlocks the default (login) keychain with macOS's own dialog, only when it
+/// is locked: `SecKeychainGetStatus` says so first, so an unlocked keychain
+/// never shows a dialog. `Err` is the reason for the card ("denied" on a
+/// cancel). Under the same lock as the reads, so a quiet probe cannot have
+/// prompts switched off while the dialog is meant to show.
+#[cfg(target_os = "macos")]
+fn unlock_default_keychain() -> Result<(), String> {
+    use std::ffi::c_void;
+    #[link(name = "Security", kind = "framework")]
+    extern "C" {
+        // NULL keychain = the default keychain, for both.
+        fn SecKeychainGetStatus(keychain: *const c_void, status: *mut u32) -> i32;
+        fn SecKeychainUnlock(keychain: *const c_void, password_length: u32, password: *const c_void, use_password: u8) -> i32;
+    }
+    const UNLOCKED: u32 = 1; // kSecUnlockStateStatus
+
+    with_interaction(true, || {
+        let mut state = 0u32;
+        // SAFETY: plain out-parameter call on the default keychain.
+        let code = unsafe { SecKeychainGetStatus(std::ptr::null(), &mut state) };
+        if code == 0 && state & UNLOCKED != 0 {
+            return Ok(());
+        }
+        // SAFETY: usePassword false, so no password pointer is read; macOS
+        // shows its own unlock dialog.
+        let code = unsafe { SecKeychainUnlock(std::ptr::null(), 0, std::ptr::null(), 0) };
+        if code == 0 {
+            return Ok(());
+        }
+        let reason = mailvault_core::keychain::keychain_block_reason(Some(code), false).unwrap_or("error");
+        warn!("[keychain] retry: unlocking the default keychain failed ({reason}, OSStatus {code})");
+        Err(reason.to_string())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn unlock_default_keychain() -> Result<(), String> {
+    Ok(())
 }
 
 /// The daemon's own banner, for when the gate closes with no app open.
@@ -753,6 +831,37 @@ mod tests {
         assert_eq!(probes.load(Ordering::SeqCst), 4);
         assert_eq!(prompted.load(Ordering::SeqCst), 0);
         watcher.abort();
+    }
+
+    /// Unlock brings macOS's dialog back before any item read (a process that
+    /// cancelled a prompt is not prompted again by the reads), and a cancelled
+    /// dialog answers at once without reading.
+    #[tokio::test]
+    async fn retry_unlocks_the_keychain_before_it_reads() {
+        let order = std::sync::Mutex::new(Vec::new());
+        let gate = KeychainGate::new();
+        let result = retry_with(
+            &gate,
+            async { order.lock().unwrap().push("unlock"); Ok(()) },
+            async { order.lock().unwrap().push("read") },
+        )
+        .await;
+        assert_eq!(*order.lock().unwrap(), vec!["unlock", "read"]);
+        assert_eq!(result, json!({"ok": true}));
+
+        order.lock().unwrap().clear();
+        gate.block("blob", "timeout");
+        let result = retry_with(
+            &gate,
+            async { order.lock().unwrap().push("unlock"); Err("denied".to_string()) },
+            async { order.lock().unwrap().push("read") },
+        )
+        .await;
+        assert_eq!(*order.lock().unwrap(), vec!["unlock"], "a cancelled unlock reads nothing");
+        assert_eq!(result, json!({"ok": false, "reason": "denied"}));
+
+        let result = retry_with(&gate, async { Ok(()) }, async {}).await;
+        assert_eq!(result, json!({"ok": false, "reason": "timeout"}), "unlocked, but an item still refuses");
     }
 
     /// Only the read that finds the gate clear may prompt; once blocked,

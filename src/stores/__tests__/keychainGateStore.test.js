@@ -99,7 +99,7 @@ describe('keychainGateStore', () => {
     expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('unlocks with the daemon\'s own read alone when that answers', async () => {
+  it('unlocks with exactly one keychain.retry and no read of its own', async () => {
     gate().apply({ blocked: true, reason: 'timeout' });
     mockDaemonCall.mockResolvedValue({ ok: true });
     await gate().unlock();
@@ -107,6 +107,7 @@ describe('keychainGateStore', () => {
     expect(mockDaemonCall).toHaveBeenCalledTimes(1);
     expect(mockDaemonCall).toHaveBeenCalledWith('keychain.retry');
     expect(mockGetAccounts).not.toHaveBeenCalled();
+    expect(mockClearCache).not.toHaveBeenCalled();
     expect(gate()).toMatchObject({ blocked: false, unlocking: false, error: null });
     expect(mockRetry).toHaveBeenCalledTimes(1);
 
@@ -115,20 +116,15 @@ describe('keychainGateStore', () => {
     expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('asks the foreground app to prompt only when the keychain is locked, then retries once', async () => {
+  it('shows why when the keychain stays locked, still with one call', async () => {
     gate().apply({ blocked: true, reason: 'locked' });
-    mockGetAccounts.mockResolvedValue([]);
-    mockDaemonCall.mockResolvedValueOnce({ ok: false, reason: 'locked' }).mockResolvedValueOnce({ ok: true });
+    mockDaemonCall.mockResolvedValue({ ok: false, reason: 'locked' });
     await gate().unlock();
 
-    expect(mockClearCache).toHaveBeenCalledTimes(1);
-    expect(mockDaemonCall).toHaveBeenCalledTimes(2);
-    const [first, second] = mockDaemonCall.mock.invocationCallOrder;
-    const foreground = mockGetAccounts.mock.invocationCallOrder[0];
-    expect(first).toBeLessThan(foreground);
-    expect(foreground).toBeLessThan(second);
-    expect(gate()).toMatchObject({ blocked: false, unlocking: false, error: null });
-    expect(mockRetry).toHaveBeenCalledTimes(1);
+    expect(mockDaemonCall).toHaveBeenCalledTimes(1);
+    expect(mockGetAccounts).not.toHaveBeenCalled();
+    expect(mockClearCache).not.toHaveBeenCalled();
+    expect(gate()).toMatchObject({ blocked: true, unlocking: false, error: 'locked' });
   });
 
   it('keeps the card up with the reason when the daemon still cannot read', async () => {

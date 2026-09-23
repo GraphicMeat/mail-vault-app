@@ -453,10 +453,31 @@ async fn store_credentials(credentials: std::collections::HashMap<String, String
     }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
+/// The app's credential read never raises macOS's keychain prompt: the
+/// daemon's unlock card owns that, once per blocked episode, and two prompts
+/// at launch (this read's and the daemon's) were the live bug. A read that
+/// would need one fails fast with errSecInteractionNotAllowed and reports
+/// "unavailable"; once the card's unlock clears the gate, the app's recovery
+/// reads again and succeeds. An item this app created never needs a prompt
+/// for the app itself, so first run is unaffected. The switch is process-wide,
+/// hence the lock around switch, read and restore.
+fn quiet_get_password(entry: &Entry) -> keyring::Result<String> {
+    #[cfg(target_os = "macos")]
+    {
+        static SWITCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _held = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
+        // Restores prompts on drop, before the lock is released.
+        let _quiet = security_framework::os::macos::keychain::SecKeychain::disable_user_interaction();
+        entry.get_password()
+    }
+    #[cfg(not(target_os = "macos"))]
+    entry.get_password()
+}
+
 // Get all credentials as a single JSON object from keychain.
 // Returns a structured result with status so the frontend can distinguish
 // granted/denied/cancelled/timed_out/empty/unavailable outcomes.
-// Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
+// Async: runs on a background thread so a slow keychain never blocks the main thread
 #[tauri::command]
 async fn get_credentials() -> Result<serde_json::Value, String> {
     info!("=== GET CREDENTIALS START ===");
@@ -478,7 +499,7 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
         let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
             .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
-        match entry.get_password() {
+        match quiet_get_password(&entry) {
             Ok(json) => {
                 let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
                     .map_err(|e| format!("Failed to parse credentials: {}", e))?;
@@ -497,6 +518,8 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
                 // Map platform errors to stable statuses
                 let status = if err_debug.contains("NoEntry") || err_str.contains("not found") || err_str.contains("No password found") {
                     "empty" // No entry exists yet — first launch
+                } else if err_str.contains("interaction is not allowed") {
+                    "unavailable" // Quiet read of a locked or unapproved item: the daemon's unlock card handles it
                 } else if err_str.contains("denied") || err_str.contains("not allowed") || err_debug.contains("Denied") {
                     "denied"
                 } else if err_str.contains("cancel") || err_debug.contains("Cancel") || err_str.contains("user canceled") {
@@ -532,7 +555,7 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
             let retry_future = tokio::task::spawn_blocking(move || {
                 let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
                     .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
-                let json = entry.get_password()
+                let json = quiet_get_password(&entry)
                     .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
                 let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
                     .map_err(|e| format!("Failed to parse credentials: {}", e))?;

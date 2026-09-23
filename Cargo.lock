@@ -3811,6 +3811,7 @@ dependencies = [
  "open",
  "rand 0.9.4",
  "reqwest 0.12.28",
+ "security-framework 3.7.0",
  "serde",
  "serde_json",
  "signal-hook",

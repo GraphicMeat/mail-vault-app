@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import * as db from '../services/db';
 import { retryKeychainAccess } from '../services/workflows/retryKeychainAccess';
 import { notify } from './focusStore';
 import { t } from '../i18n/index.js';
@@ -42,19 +41,12 @@ export const useKeychainGateStore = create((set, get) => ({
     if (get().unlocking) return;
     set({ unlocking: true, error: null });
     try {
-      // The daemon's own read first: the user is here to answer its prompt,
-      // and that is the only prompt in the common case. No client-side budget
-      // on a dotted daemon method (reply_timeout in src-tauri/src/main.rs), so
-      // the daemon's own 120s clock is the limit.
-      let result = await daemonCall('keychain.retry');
-      if (!result?.ok && result?.reason === 'locked') {
-        // A locked keychain will not prompt for a background process. A read
-        // by the foreground app makes macOS ask for the password; the cache
-        // and a past refusal would both skip that read, so both are cleared.
-        db.clearCredentialsCache();
-        await db.getAccounts();
-        result = await daemonCall('keychain.retry');
-      }
+      // One call: the daemon unlocks the keychain with macOS's own dialog if
+      // it is locked, then reads with prompts allowed. The app never prompts
+      // itself (its reads are quiet), so there is no second path to try. No
+      // client-side budget on a dotted daemon method (reply_timeout in
+      // src-tauri/src/main.rs), so the daemon's own 120s clock is the limit.
+      const result = await daemonCall('keychain.retry');
       if (!result?.ok) {
         set({ unlocking: false, error: result?.reason || 'error' });
         return;
