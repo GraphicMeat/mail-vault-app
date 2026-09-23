@@ -103,17 +103,21 @@ describe('demo mailbox backend', () => {
     const backend = createDemoBackend();
     const target = backend.snapshot().messages.find(message => message.custody === 'server');
     await backend.invoke('maildir_store', { accountId: target.accountId, mailbox: target.mailbox, uid: target.uid, rawSourceBase64: target.rawSourceBase64, flags: ['archived'] });
-    const sets = await backend.invoke('vault_uid_sets', { accountId: target.accountId, mailbox: target.mailbox });
+    // The app's path: a DAEMON_OWNED name arrives as daemon_rpc.
+    const sets = await backend.invoke('daemon_rpc', { method: 'vault_uid_sets', params: { accountId: target.accountId, mailbox: target.mailbox } });
     expect(sets.saved).toContain(target.uid);
     expect(sets.archived).toContain(target.uid);
     expect([...sets.saved].sort((a, b) => a - b)).toEqual(sets.saved);
 
-    const rows = await backend.invoke('vault_light_rows', { accountId: target.accountId, mailbox: target.mailbox, uids: [target.uid, 987654321] });
+    const rows = await backend.invoke('daemon_rpc', { method: 'vault_light_rows', params: { accountId: target.accountId, mailbox: target.mailbox, uids: [target.uid, 987654321] } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ uid: target.uid, isArchived: true });
     expect(typeof rows[0].snippet).toBe('string');
     expect(rows[0]).not.toHaveProperty('text');
     expect(rows[0]).not.toHaveProperty('html');
+    await backend.invoke('vault_apply_flags', { accountId: target.accountId, mailbox: target.mailbox, changes: [{ uid: target.uid, flags: ['\\Seen'] }] });
+    const [seen] = await backend.invoke('vault_light_rows', { accountId: target.accountId, mailbox: target.mailbox, uids: [target.uid] });
+    expect(seen.flags).toEqual(expect.arrayContaining(['seen', '\\Seen']));
     const all = await backend.invoke('vault_light_rows', { accountId: target.accountId, mailbox: target.mailbox });
     expect(all.map(row => row.uid)).toEqual(sets.saved);
   });

@@ -162,15 +162,16 @@ export const createUiSlice = (set, get) => ({
             const vault = await db.getVaultUidSets(activeAccountId, activeMailbox);
             let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
             if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-            // The reads yielded: a folder switched to since owns the store now.
-            const live = get();
-            if (live.unifiedInbox || live.activeAccountId !== activeAccountId || live.activeMailbox !== activeMailbox) return;
             // I-5: a failed read (`null`) keeps this group's own last-known
             // ids rather than adopting "nothing is archived", and
             // archivedEmailIds becomes the union of exactly this one group,
             // so narrowing out of unified inbox drops every other account's
-            // ids instead of leaving the whole stale union in place.
+            // ids instead of leaving the whole stale union in place. The map
+            // is keyed by group, so it takes the answer whatever the view.
             setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
+            // The reads yielded: a folder switched to since owns the store now.
+            const live = get();
+            if (live.unifiedInbox || live.activeAccountId !== activeAccountId || live.activeMailbox !== activeMailbox) return;
             const archivedEmailIds = deriveArchivedUnion(live.archivedEmailIds, [[activeAccountId, activeMailbox]]);
             set({
               savedEmailIds: vault?.saved ?? live.savedEmailIds,

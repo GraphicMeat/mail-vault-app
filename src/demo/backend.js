@@ -837,7 +837,9 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       }
       case 'vault_light_rows': {
         const rows = args.uids == null ? local(accountId, mailbox).sort((a, b) => a.uid - b.uid) : args.uids.map(uid => find({ accountId, mailbox, uid })).filter(row => row?.vaultPresent);
-        return rows.map(row => { const { text, html, ...rest } = header(row); return { ...rest, snippet: row.snippet || String(text || '').slice(0, 150), uid: row.uid, flags: [...(row.vaultFlags || [])], isArchived: (row.vaultFlags || []).includes('archived') }; });
+        // Flags as parse_flags_from_filename gives them: the vault words and the IMAP names both.
+        const imapNames = { seen: '\\Seen', flagged: '\\Flagged', replied: '\\Answered' };
+        return rows.map(row => { const { text, html, ...rest } = header(row); const words = row.vaultFlags || []; return { ...rest, snippet: row.snippet || String(text || '').slice(0, 150), uid: row.uid, flags: [...words, ...words.map(word => imapNames[word]).filter(Boolean)], isArchived: words.includes('archived') }; });
       }
       case 'maildir_read': case 'maildir_read_light': { const row = find({ accountId, mailbox, uid: args.uid }); return row && row.vaultPresent ? clone(row) : null; }
       case 'maildir_read_light_batch': return (args.uids || []).map(uid => { const row = find({ accountId, mailbox, uid }); return row && row.vaultPresent ? header(row) : null; });
