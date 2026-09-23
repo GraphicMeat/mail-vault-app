@@ -39,10 +39,9 @@
  */
 
 import { ImapFlow } from 'imapflow';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
+import { daemonExecutable, hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -298,16 +297,7 @@ describe('Restore (local vault -> server) through the daemon (Task 4.10)', funct
   it('(d) NEGATIVE: with no daemon connection, count_local_folder reports errors.daemonUnavailable instead of hanging, and no restore-progress arrives', async function () {
     const before = daemonPid(browser.testDataDir);
     expect(before).toBeGreaterThan(0);
-    let fullCmd;
-    try {
-      fullCmd = execFileSync('ps', ['-p', String(before), '-o', 'command='], { encoding: 'utf8' }).trim();
-    } catch {
-      throw new Error(`daemon.pid names ${before} but no such process exists; refusing to kill by name`);
-    }
-    if (!fullCmd.includes('mailvault-daemon')) {
-      throw new Error(`daemon.pid names ${before} but its command line ("${fullCmd}") is not mailvault-daemon; refusing to touch it`);
-    }
-    const binPath = fullCmd.split(/\s+/)[0];
+    const binPath = daemonExecutable(before);
 
     const eventsBefore = (await rawEvents('restore-progress')).length;
 

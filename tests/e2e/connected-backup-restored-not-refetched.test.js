@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_SEP } from './mockImap.js';
 
 const VADER = 'vader@mock.test';
 const FOLDER = 'Matrix';
@@ -52,14 +52,14 @@ const eml = (uid) => [
 
 /** The vault's rule: `<uid>:` exactly. */
 const vaultNames = (dir, uid) =>
-  existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}:`)) : [];
+  existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}${INFO_SEP}`)) : [];
 
 /** The mirror's rule: the text before the first ':', '.' or '_'. */
 const mirrorNames = (dir, uid) =>
-  existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:._]/)[0] === String(uid)) : [];
+  existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:;._]/)[0] === String(uid)) : [];
 
 /** The Maildir flag letters of a vault name: `4:2,AS.eml` -> `AS`. */
-const flagLetters = (name) => (name.split(':2,')[1] || '').replace(/\.eml$/, '');
+const flagLetters = (name) => (name.split(/[:;]2,/)[1] || '').replace(/\.eml$/, '');
 
 /** `browser.execute` does not await a Promise; `executeAsync` does. */
 function invoke(cmd, args) {

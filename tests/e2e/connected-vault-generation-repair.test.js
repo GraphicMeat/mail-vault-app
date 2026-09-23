@@ -20,7 +20,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const OTHER = 'vader@mock.test';
@@ -96,11 +96,11 @@ describe('Vault — UID generation repair', function () {
     mkdirSync(cur, { recursive: true });
     // The right message, filed under a uid from the dead generation.
     writeFileSync(
-      join(cur, `${MISFILED_UID}:2,S.eml`),
+      join(cur, `${MISFILED_UID}${INFO_PREFIX}S.eml`),
       eml(target.messageId.replace(/^<|>$/g, ''), 'Misfiled by the previous server'),
     );
     // A message the current server has never had.
-    writeFileSync(join(cur, `${GONE_UID}:2,.eml`), eml(GONE_MESSAGE_ID, 'Left behind by the previous server'));
+    writeFileSync(join(cur, `${GONE_UID}${INFO_PREFIX}.eml`), eml(GONE_MESSAGE_ID, 'Left behind by the previous server'));
 
     // The reissue itself: the vault says it is keyed under a generation the
     // mailbox no longer reports.
@@ -117,7 +117,7 @@ describe('Vault — UID generation repair', function () {
     // Positive control: every assertion below is about files moving, and an
     // absence assertion proves nothing until the container is proven populated.
     expect(target).not.toBe(null);
-    expect(existsSync(join(cur, `${GONE_UID}:2,.eml`)) || existsSync(join(mailboxDir, 'orphaned'))).toBe(true);
+    expect(existsSync(join(cur, `${GONE_UID}${INFO_PREFIX}.eml`)) || existsSync(join(mailboxDir, 'orphaned'))).toBe(true);
   });
 
   it('has a header cache complete enough to prove a message is gone', async function () {
@@ -135,19 +135,19 @@ describe('Vault — UID generation repair', function () {
 
   it('re-keys a vault file the server still has onto its current uid', async function () {
     await browser.waitUntil(
-      async () => !existsSync(join(cur, `${MISFILED_UID}:2,S.eml`)),
+      async () => !existsSync(join(cur, `${MISFILED_UID}${INFO_PREFIX}S.eml`)),
       { timeout: 30_000, interval: 500, timeoutMsg: 'The misfiled vault file was never re-keyed' },
     );
     // Flags and timestamp ride along; only the uid changes.
-    expect(existsSync(join(cur, `${target.uid}:2,S.eml`))).toBe(true);
+    expect(existsSync(join(cur, `${target.uid}${INFO_PREFIX}S.eml`))).toBe(true);
   });
 
   it('sets aside a vault file the server does not have, without deleting it', function () {
-    expect(existsSync(join(cur, `${GONE_UID}:2,.eml`))).toBe(false);
+    expect(existsSync(join(cur, `${GONE_UID}${INFO_PREFIX}.eml`))).toBe(false);
     const orphans = readdirSync(join(mailboxDir, 'orphaned'));
-    expect(orphans.some((f) => f.startsWith(`${GONE_UID}:`))).toBe(true);
+    expect(orphans.some((f) => f.startsWith(`${GONE_UID}${INFO_SEP}`))).toBe(true);
     // The mail itself survives — this is a vault, not a cache.
-    const kept = readFileSync(join(mailboxDir, 'orphaned', orphans.find((f) => f.startsWith(`${GONE_UID}:`))), 'utf8');
+    const kept = readFileSync(join(mailboxDir, 'orphaned', orphans.find((f) => f.startsWith(`${GONE_UID}${INFO_SEP}`))), 'utf8');
     expect(kept).toContain(GONE_MESSAGE_ID);
   });
 

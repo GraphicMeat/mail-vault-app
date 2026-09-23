@@ -14,6 +14,7 @@ import {
   HTML_COLLISION_SUBJECT,
   HTML_COLLISION_MARKER,
   DARK_HEADING_ID,
+  appDataDir,
 } from './mockImap.js';
 
 /**
@@ -610,9 +611,12 @@ describe('Email Viewer — a body fetch whose connection dies', function () {
   const DIES = 'Flaky message 9301';
   const LOADS = 'Flaky message 9302';
 
-  // The app's own log, on the runner's disk under the spec's HOME.
+  // The app's own log, on the runner's disk under the spec's HOME: Tauri's
+  // log dir on macOS, `<app data>/logs` elsewhere (src-tauri `get_log_dir`).
   const appLog = () => {
-    const dir = join(browser.testDataDir, 'Library/Logs/com.mailvault.app');
+    const dir = process.platform === 'darwin'
+      ? join(browser.testDataDir, 'Library/Logs/com.mailvault.app')
+      : join(appDataDir(browser.testDataDir), 'logs');
     if (!existsSync(dir)) return '';
     return readdirSync(dir)
       .map((f) => readFileSync(join(dir, f), 'utf-8'))

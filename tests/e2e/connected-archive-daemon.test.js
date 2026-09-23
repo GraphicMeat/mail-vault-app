@@ -69,7 +69,7 @@ import { ImapFlow } from 'imapflow';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
+import { appDataDir, MOCK_PASSWORD, INFO_SEP } from './mockImap.js';
 import { clickSelectionAction } from './selectionBar.js';
 
 const YODA = 'yoda@mock.test';
@@ -398,7 +398,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   const eachEmlExists = (uids) => {
     if (!existsSync(curDir())) return false;
     const names = readdirSync(curDir());
-    return uids.every((uid) => names.some((n) => n.startsWith(`${uid}:`)));
+    return uids.every((uid) => names.some((n) => n.startsWith(`${uid}${INFO_SEP}`)));
   };
 
   before(async function () {

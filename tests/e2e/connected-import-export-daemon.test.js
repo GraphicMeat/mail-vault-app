@@ -61,9 +61,9 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
+import { daemonExecutable, hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { openTab } from './mockBilling.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const NEW_ACCOUNT_EMAIL = 'imported-new-account@mock.test';
@@ -131,7 +131,9 @@ function buildBackupZip(destZipPath, { accountEmail, mailbox, files }) {
     writeFileSync(join(root, 'manifest.json'), JSON.stringify({
       version: 2, exportedAt: new Date().toISOString(), accounts: [{ email: accountEmail }], settings: null,
     }));
-    execFileSync('zip', ['-rq', destZipPath, 'mailvault-backup'], { cwd: staging });
+    // Windows has no `zip`; its bundled bsdtar writes a zip archive with `-a`.
+    if (process.platform === 'win32') execFileSync('tar', ['-a', '-cf', destZipPath, 'mailvault-backup'], { cwd: staging });
+    else execFileSync('zip', ['-rq', destZipPath, 'mailvault-backup'], { cwd: staging });
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
@@ -227,7 +229,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     buildBackupZip(newZip, {
       accountEmail: NEW_ACCOUNT_EMAIL,
       mailbox: 'INBOX',
-      files: [{ name: '1:2,A.eml', body: emlBody('Imported new-account message', 'new-account-1') }],
+      files: [{ name: `1${INFO_PREFIX}A.eml`, body: emlBody('Imported new-account message', 'new-account-1') }],
     });
 
     const resp = await daemonRpc('import_backup', { sourcePath: newZip });
@@ -247,7 +249,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     // Round-trip, byte-for-byte: import_backup preserves whatever flags the
     // exported filename already carried (decision 3's note that this path
     // needs no fix, unlike import_mbox).
-    expect(written).toContain(':2,A');
+    expect(written).toContain(`${INFO_PREFIX}A`);
 
     const events = await rawEvents('import-progress');
     expect(events.some((e) => e.payload.active === false)).toBe(true);
@@ -261,7 +263,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     buildBackupZip(repeatZip, {
       accountEmail: LUKE,
       mailbox: 'INBOX',
-      files: [{ name: '999001:2,A.eml', body: emlBody('Repeat known-account message', 'repeat-known-1') }],
+      files: [{ name: `999001${INFO_PREFIX}A.eml`, body: emlBody('Repeat known-account message', 'repeat-known-1') }],
     });
 
     const accountsPath = join(appDataDir(browser.testDataDir), 'accounts.json');
@@ -334,7 +336,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
 
     // Verified against src-core/src/vault_files.rs's own flag_chars mapping
     // ("archived" | "a" => flag_chars.push('A')) rather than assumed.
-    expect(written).toMatch(/:2,[A-Za-z]*A[A-Za-z]*\.eml$/);
+    expect(written).toMatch(/[:;]2,[A-Za-z]*A[A-Za-z]*\.eml$/);
 
     const before = readdirSync(cur).length;
     const cleared = await daemonRpc('maildir_clear_cache', { accountId: lukeId, mailbox: 'INBOX' });
@@ -354,19 +356,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
   it('(g) NEGATIVE: with no daemon connection, export_backup reports errors.daemonUnavailable instead of hanging, and no export-progress arrives', async function () {
     const before = daemonPid(browser.testDataDir);
     expect(before).toBeGreaterThan(0);
-    let fullCmd;
-    try {
-      fullCmd = execFileSync('ps', ['-p', String(before), '-o', 'command='], { encoding: 'utf8' }).trim();
-    } catch {
-      throw new Error(`daemon.pid names ${before} but no such process exists; refusing to kill by name`);
-    }
-    if (!fullCmd.includes('mailvault-daemon')) {
-      throw new Error(`daemon.pid names ${before} but its command line ("${fullCmd}") is not mailvault-daemon; refusing to touch it`);
-    }
-    // The FIRST token is the executable path: `ensure_daemon_socket`
-    // (src-tauri/src/main.rs) spawns it with `Command::new(&daemon_bin)` and
-    // no arguments.
-    const binPath = fullCmd.split(/\s+/)[0];
+    const binPath = daemonExecutable(before);
 
     const eventsBefore = (await rawEvents('export-progress')).length;
 

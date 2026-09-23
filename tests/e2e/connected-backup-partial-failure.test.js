@@ -29,7 +29,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_SEP } from './mockImap.js';
 
 const YODA = 'yoda@mock.test';
 const FOLDER = 'Bokelmu&Awg-hle';   // the wire name — what SELECT and the mirror use
@@ -59,7 +59,7 @@ describe('Backup — a message the server refuses is a partial run, not a failed
   function findByUid(dir, uid) {
     if (!existsSync(dir)) return null;
     for (const name of readdirSync(dir)) {
-      if (name.startsWith(`${uid}:`) || name === `${uid}.eml`) return name;
+      if (name.startsWith(`${uid}${INFO_SEP}`) || name === `${uid}.eml`) return name;
     }
     return null;
   }

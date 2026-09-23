@@ -39,10 +39,9 @@
  */
 
 import { ImapFlow } from 'imapflow';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
+import { daemonExecutable, hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { openTab, setPremium } from './mockBilling.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
 
@@ -551,16 +550,7 @@ describe('Account migration through the daemon (Task 4.10)', function () {
   it('(e) NEGATIVE: with no daemon connection, start_migration reports errors.daemonUnavailable instead of hanging, and no migration-progress arrives', async function () {
     const before = daemonPid(browser.testDataDir);
     expect(before).toBeGreaterThan(0);
-    let fullCmd;
-    try {
-      fullCmd = execFileSync('ps', ['-p', String(before), '-o', 'command='], { encoding: 'utf8' }).trim();
-    } catch {
-      throw new Error(`daemon.pid names ${before} but no such process exists; refusing to kill by name`);
-    }
-    if (!fullCmd.includes('mailvault-daemon')) {
-      throw new Error(`daemon.pid names ${before} but its command line ("${fullCmd}") is not mailvault-daemon; refusing to touch it`);
-    }
-    const binPath = fullCmd.split(/\s+/)[0];
+    const binPath = daemonExecutable(before);
 
     const eventsBefore = (await rawEvents('migration-progress')).length;
 

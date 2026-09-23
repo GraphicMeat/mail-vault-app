@@ -32,7 +32,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 import { serverFlags, storeFlag } from './rawImap.js';
 import { clickSelectionAction } from './selectionBar.js';
 
@@ -46,7 +46,7 @@ const VADER = 'vader@mock.test';
 function nameOf(dir, uid) {
   if (!existsSync(dir)) return null;
   for (const name of readdirSync(dir)) {
-    if (name.startsWith(`${uid}:`) || name === `${uid}.eml`) return name;
+    if (name.startsWith(`${uid}${INFO_SEP}`) || name === `${uid}.eml`) return name;
   }
   return null;
 }
@@ -90,8 +90,8 @@ async function indexFlags(accountId, mailbox, uid) {
   return entry ? entry.flags : null;
 }
 
-const SEEN_NAME = (uid) => new RegExp(`^${uid}:2,[A-Z]*S[A-Z]*(\\.eml)?$`);
-const UNSEEN_NAME = (uid) => new RegExp(`^${uid}:2,[A-Z]*(\\.eml)?$`);
+const SEEN_NAME = (uid) => new RegExp(`^${uid}${INFO_PREFIX}[A-Z]*S[A-Z]*(\\.eml)?$`);
+const UNSEEN_NAME = (uid) => new RegExp(`^${uid}${INFO_PREFIX}[A-Z]*(\\.eml)?$`);
 const isSeenName = (name, uid) => !!name && SEEN_NAME(uid).test(name);
 const isUnseenName = (name, uid) => !!name && UNSEEN_NAME(uid).test(name) && !isSeenName(name, uid);
 

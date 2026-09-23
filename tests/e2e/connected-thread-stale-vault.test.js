@@ -22,7 +22,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails } from './helpers.js';
-import { appDataDir, CROSS_FOLDER_SUBJECT, CROSS_FOLDER_INBOX_BODY } from './mockImap.js';
+import { appDataDir, CROSS_FOLDER_SUBJECT, CROSS_FOLDER_INBOX_BODY, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -127,7 +127,7 @@ describe('Thread body — vault copy under a reissued UID', function () {
     const cur = join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'INBOX', 'cur');
     mkdirSync(cur, { recursive: true });
     // `find_by_uid` (src-core/src/maildir.rs) matches on the `<uid>:` prefix.
-    stalePath = join(cur, `${target.uid}:seen:0.eml`);
+    stalePath = join(cur, `${target.uid}${INFO_SEP}seen${INFO_SEP}0.eml`);
     writeFileSync(stalePath, staleEml(LUKE));
   });
 

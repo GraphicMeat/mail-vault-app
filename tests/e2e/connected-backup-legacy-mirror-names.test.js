@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const VADER = 'vader@mock.test';
 const FOLDER = 'Matrix';
@@ -58,14 +58,14 @@ const eml = (messageId, subject) => [
 
 /** The vault's rule: `<uid>:` exactly. */
 const vaultNames = (dir, uid) =>
-  existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}:`)) : [];
+  existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}${INFO_SEP}`)) : [];
 
 /** The mirror's rule: the text before the first ':', '.' or '_'. */
 const mirrorNames = (dir, uid) =>
-  existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:._]/)[0] === String(uid)) : [];
+  existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:;._]/)[0] === String(uid)) : [];
 
 /** The Maildir flag letters of a vault name: `4:2,AS.eml` -> `AS`. */
-const flagLetters = (name) => (name.split(':2,')[1] || '').replace(/\.eml$/, '');
+const flagLetters = (name) => (name.split(/[:;]2,/)[1] || '').replace(/\.eml$/, '');
 
 /** `browser.execute` does not await a Promise; `executeAsync` does. */
 function invoke(cmd, args) {
@@ -119,26 +119,26 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     // shapes: the pre-sync has nothing to copy either way; the flag catch-up
     // marks both archived. (A server uid only the mirror holds is
     // connected-backup-restored-not-refetched's case.)
-    writeFileSync(join(cur, '3:2,.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
+    writeFileSync(join(cur, `3${INFO_PREFIX}.eml`), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
     writeFileSync(join(mirror, '3.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
-    writeFileSync(join(cur, '4:2,S.eml'), eml(`mock-4-${VADER}`, 'Vader matrix 4'));
+    writeFileSync(join(cur, `4${INFO_PREFIX}S.eml`), eml(`mock-4-${VADER}`, 'Vader matrix 4'));
     writeFileSync(join(mirror, '4_S.eml'), eml(`mock-4-${VADER}`, 'Vader matrix 4'));
     // Server uid 6 on the mirror as `6.eml`, holding a message the generation
     // repair set aside: the pre-sync must not restore it, so the backup fetches
     // uid 6 into the vault, and its mirror write has to see `6.eml` as uid 6.
     writeFileSync(join(mirror, '6.eml'), eml(SET_ASIDE_ID, 'Set aside by the repair'));
-    writeFileSync(join(orphaned, '6:2,.eml'), eml(SET_ASIDE_ID, 'Set aside by the repair'));
+    writeFileSync(join(orphaned, `6${INFO_PREFIX}.eml`), eml(SET_ASIDE_ID, 'Set aside by the repair'));
 
     writeFileSync(join(mirror, `${MIRROR_LEGACY}.eml`), eml(`legacy-${MIRROR_LEGACY}@old-host.test`, 'Legacy mirror name'));
-    writeFileSync(join(mirror, `${MIRROR_FLAGGED}:2,F.eml`), eml(`flagged-${MIRROR_FLAGGED}@old-host.test`, 'Flagged mirror name'));
-    writeFileSync(join(cur, `${VAULT_ONLY}:2,S.eml`), eml(`vault-only-${VAULT_ONLY}@mock.test`, 'Vault only'));
-    writeFileSync(join(cur, `${BOTH_LEGACY}:2,S.eml`), eml(`both-${BOTH_LEGACY}@mock.test`, 'On both sides'));
+    writeFileSync(join(mirror, `${MIRROR_FLAGGED}${INFO_PREFIX}F.eml`), eml(`flagged-${MIRROR_FLAGGED}@old-host.test`, 'Flagged mirror name'));
+    writeFileSync(join(cur, `${VAULT_ONLY}${INFO_PREFIX}S.eml`), eml(`vault-only-${VAULT_ONLY}@mock.test`, 'Vault only'));
+    writeFileSync(join(cur, `${BOTH_LEGACY}${INFO_PREFIX}S.eml`), eml(`both-${BOTH_LEGACY}@mock.test`, 'On both sides'));
     writeFileSync(join(mirror, `${BOTH_LEGACY}.eml`), eml(`both-${BOTH_LEGACY}@mock.test`, 'On both sides'));
 
     // A stale vault copy of server uid 1 under a flag name the server never
     // gave it, and a body that is not the server's. Re-archiving uid 1 has to
     // replace it, not add a second file beside it.
-    writeFileSync(join(cur, '1:2,F.eml'), eml('stale-copy@old-host.test', 'Stale vault copy'));
+    writeFileSync(join(cur, `1${INFO_PREFIX}F.eml`), eml('stale-copy@old-host.test', 'Stale vault copy'));
 
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     if (loc?.__error) throw new Error(`backup_save_external_location: ${loc.__error}`);
@@ -149,7 +149,7 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
   });
 
   it('re-archiving a uid replaces the vault copy that was already there', async function () {
-    expect(vaultNames(cur, 1)).toEqual(['1:2,F.eml']);
+    expect(vaultNames(cur, 1)).toEqual([`1${INFO_PREFIX}F.eml`]);
 
     // Task 3.5: archive_emails moved to the daemon, no longer a native
     // Tauri command, reach it through daemon_rpc like every other
@@ -170,7 +170,7 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
 
     const names = vaultNames(cur, 1);
     expect(names).toHaveLength(1);
-    expect(names[0]).not.toBe('1:2,F.eml');
+    expect(names[0]).not.toBe(`1${INFO_PREFIX}F.eml`);
     expect(readFileSync(join(cur, names[0]), 'utf8')).toContain('Subject: Vader matrix 1');
   });
 
@@ -186,9 +186,9 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
   });
 
   it('restores each legacy mirror name under the vault name, and mirrors the vault-only file under its own', function () {
-    expect(vaultNames(cur, MIRROR_LEGACY)).toEqual([`${MIRROR_LEGACY}:2,A.eml`]);
-    expect(vaultNames(cur, MIRROR_FLAGGED)).toEqual([`${MIRROR_FLAGGED}:2,AF.eml`]);
-    expect(mirrorNames(mirror, VAULT_ONLY)).toEqual([`${VAULT_ONLY}:2,S.eml`]);
+    expect(vaultNames(cur, MIRROR_LEGACY)).toEqual([`${MIRROR_LEGACY}${INFO_PREFIX}A.eml`]);
+    expect(vaultNames(cur, MIRROR_FLAGGED)).toEqual([`${MIRROR_FLAGGED}${INFO_PREFIX}AF.eml`]);
+    expect(mirrorNames(mirror, VAULT_ONLY)).toEqual([`${VAULT_ONLY}${INFO_PREFIX}S.eml`]);
     expect(mirrorNames(mirror, BOTH_LEGACY)).toEqual([`${BOTH_LEGACY}.eml`]);
     // uid 1 reached the vault by re-archiving, and the mirror by the pre-sync.
     expect(readFileSync(join(mirror, mirrorNames(mirror, 1)[0]), 'utf8')).toContain('Subject: Vader matrix 1');
@@ -196,8 +196,8 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
 
   it('marks every vault copy the backup counted as archived', function () {
     // Both were already on both sides, so only the flag catch-up can name them.
-    expect(vaultNames(cur, 3)).toEqual(['3:2,A.eml']);
-    expect(vaultNames(cur, 4)).toEqual(['4:2,AS.eml']);
+    expect(vaultNames(cur, 3)).toEqual([`3${INFO_PREFIX}A.eml`]);
+    expect(vaultNames(cur, 4)).toEqual([`4${INFO_PREFIX}AS.eml`]);
     for (const uid of SERVER_UIDS) {
       const names = vaultNames(cur, uid);
       expect(names).toHaveLength(1);
@@ -206,7 +206,7 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     // The catch-up walks the SERVER's uids, so a vault-only uid the server
     // never had is not promoted — it gains `A` the next time the mirror
     // restores it.
-    expect(vaultNames(cur, VAULT_ONLY)).toEqual([`${VAULT_ONLY}:2,S.eml`]);
+    expect(vaultNames(cur, VAULT_ONLY)).toEqual([`${VAULT_ONLY}${INFO_PREFIX}S.eml`]);
   });
 
   it('keeps the mirror copy the repair set aside instead of writing a second uid 6 beside it', function () {

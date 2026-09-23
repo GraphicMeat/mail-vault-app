@@ -21,9 +21,8 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { waitForApp } from './helpers.js';
+import { daemonExecutable, waitForApp } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 /** The daemon writes this file at `get_data_dir()/daemon.pid` (src-daemon/src/main.rs),
@@ -95,18 +94,8 @@ describe('Daemon channel', function () {
     expect(before).toBeGreaterThan(0);
 
     // Never kill by name/pattern: confirm this exact pid is a live
-    // mailvault-daemon process before signalling it. `comm=` is the bare
-    // executable name (no args), so a path-prefixed launch still matches via
-    // `endsWith`. `ps -p` exits non-zero (throws) when the pid is already
-    // gone — that IS a review-relevant fact, not a script bug, so report it
-    // instead of letting `execFileSync`'s generic "Command failed" surface.
-    let comm;
-    try {
-      comm = execFileSync('ps', ['-p', String(before), '-o', 'comm='], { encoding: 'utf8' }).trim();
-    } catch {
-      throw new Error(`daemon.pid names ${before} but no such process exists; refusing to kill by name`);
-    }
-    expect(comm.endsWith('mailvault-daemon')).toBe(true);
+    // mailvault-daemon process before signalling it (throws otherwise).
+    expect(daemonExecutable(before).replace(/\.exe$/, '').endsWith('mailvault-daemon')).toBe(true);
 
     const reconnectsBefore = (await events('daemon-reconnected')).length;
     process.kill(before, 'SIGKILL');

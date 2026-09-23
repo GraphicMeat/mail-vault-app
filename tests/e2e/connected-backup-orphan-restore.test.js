@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -60,7 +60,7 @@ const eml = (messageId, subject) => [
 /** The Maildir name holding this uid, whatever flag suffix it carries. */
 function findByUid(dir, uid) {
   if (!existsSync(dir)) return null;
-  const prefix = `${uid}:`;
+  const prefix = `${uid}${INFO_SEP}`;
   const legacy = `${uid}.eml`;
   for (const name of readdirSync(dir)) {
     if (name.startsWith(prefix) || name === legacy) return name;
@@ -106,11 +106,11 @@ describe('Backup pre-sync — orphaned messages stay orphaned', function () {
 
     // The repair's verdict: this message's Message-ID matched no uid the
     // current server issues, so it was moved out of the uid namespace.
-    writeFileSync(join(orphaned, `${SET_ASIDE_UID}:2,.eml`), eml(SET_ASIDE_ID, 'Set aside by the repair'));
+    writeFileSync(join(orphaned, `${SET_ASIDE_UID}${INFO_PREFIX}.eml`), eml(SET_ASIDE_ID, 'Set aside by the repair'));
     // The mirror still holds that same message under the old uid.
-    writeFileSync(join(mirror, `${SET_ASIDE_UID}:2,.eml`), eml(SET_ASIDE_ID, 'Set aside by the repair'));
+    writeFileSync(join(mirror, `${SET_ASIDE_UID}${INFO_PREFIX}.eml`), eml(SET_ASIDE_ID, 'Set aside by the repair'));
     // ...alongside one the repair never touched, which must still come home.
-    writeFileSync(join(mirror, `${RESTORABLE_UID}:2,S.eml`), eml(RESTORABLE_ID, 'Only copy left'));
+    writeFileSync(join(mirror, `${RESTORABLE_UID}${INFO_PREFIX}S.eml`), eml(RESTORABLE_ID, 'Only copy left'));
 
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     console.log('[backup-orphan] backup_save_external_location ->', JSON.stringify(loc));

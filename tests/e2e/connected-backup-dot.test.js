@@ -38,7 +38,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { CROSS_FOLDER_SUBJECT } from './mockImap.js';
+import { CROSS_FOLDER_SUBJECT, INFO_PREFIX } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -169,11 +169,11 @@ describe('The backup-drive dot', function () {
     mkdirSync(mirror, { recursive: true });
     // ONLY the INBOX side. luke's Sent mirror is deliberately absent, which is
     // a scanned-and-empty answer, not an unknown one.
-    writeFileSync(join(mirror, `${MIRRORED_UID}:2,.eml`), eml(MIRRORED_UID));
+    writeFileSync(join(mirror, `${MIRRORED_UID}${INFO_PREFIX}.eml`), eml(MIRRORED_UID));
     mkdirSync(join(backupRoot, LUKE, 'Sent', 'cur'), { recursive: true });
     const archiveMirror = join(backupRoot, LUKE, 'Archive', 'cur');
     mkdirSync(archiveMirror, { recursive: true });
-    writeFileSync(join(archiveMirror, `${ARCHIVE_UID}:2,.eml`), eml(ARCHIVE_UID));
+    writeFileSync(join(archiveMirror, `${ARCHIVE_UID}${INFO_PREFIX}.eml`), eml(ARCHIVE_UID));
 
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
     console.log('[backup-dot] backup_save_external_location ->', JSON.stringify(loc));

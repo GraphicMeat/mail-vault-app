@@ -6,8 +6,11 @@
  * so nothing here has to protect real accounts from the suite.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+
+const EXE = process.platform === 'win32' ? '.exe' : '';
 
 // ---------------------------------------------------------------------------
 // Wait helpers
@@ -222,6 +225,38 @@ export async function clickSettingsNav(label) {
  * `settings-page` with the active dialog role counts as open.
  */
 /**
+ * The executable path of `pid`, after proving it is a mailvault-daemon.
+ *
+ * Never kill by name/pattern: the NEGATIVE cases confirm the exact pid from
+ * daemon.pid is a live daemon before signalling it, and throw rather than
+ * touch anything else.
+ */
+export function daemonExecutable(pid) {
+  let exe, command;
+  try {
+    if (process.platform === 'win32') {
+      const out = execFileSync('powershell', ['-NoProfile', '-Command',
+        `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}"; if ($p) { $p.ExecutablePath; $p.CommandLine }`],
+      { encoding: 'utf8', windowsHide: true }).trim().split(/\r?\n/);
+      [exe, command] = out;
+      if (!command) throw new Error('gone');
+    } else {
+      // The FIRST token is the executable path: `ensure_daemon_socket`
+      // (src-tauri/src/main.rs) spawns it with `Command::new(&daemon_bin)`
+      // and no arguments.
+      command = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim();
+      exe = command.split(/\s+/)[0];
+    }
+  } catch {
+    throw new Error(`daemon.pid names ${pid} but no such process exists; refusing to kill by name`);
+  }
+  if (!command.includes('mailvault-daemon')) {
+    throw new Error(`daemon.pid names ${pid} but its command line ("${command}") is not mailvault-daemon; refusing to touch it`);
+  }
+  return exe;
+}
+
+/**
  * Hide every binary the daemon could be respawned from, not only the one that
  * is running.
  *
@@ -240,7 +275,7 @@ export async function clickSettingsNav(label) {
 export function hideDaemonBinaries(runningBinPath) {
   const candidates = new Set([runningBinPath]);
   for (const profile of ['debug', 'release']) {
-    candidates.add(join(process.cwd(), 'target', profile, 'mailvault-daemon'));
+    candidates.add(join(process.cwd(), 'target', profile, `mailvault-daemon${EXE}`));
   }
   const moved = [];
   for (const path of candidates) {

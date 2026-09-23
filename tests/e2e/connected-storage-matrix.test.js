@@ -82,7 +82,7 @@ import {
   waitForApp, reloadApp, waitForEmails,
   clickSidebarItem, folderHeaderText, switchToFolder, churnAccounts,
 } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_SEP } from './mockImap.js';
 import { DatabaseSync } from 'node:sqlite';
 import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
 
@@ -108,7 +108,7 @@ describe('Storage matrix diagnostics', function () {
 
   function findByUid(dir, uid) {
     if (!existsSync(dir)) return null;
-    const prefix = `${uid}:`;
+    const prefix = `${uid}${INFO_SEP}`;
     const legacy = `${uid}.eml`;
     for (const name of readdirSync(dir)) {
       if (name.startsWith(prefix) || name === legacy) return name;

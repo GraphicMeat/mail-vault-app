@@ -46,12 +46,12 @@ describe('Vault — daemon/Tauri contract', function () {
     try { names = readdirSync(cur); } catch { return new Map(); }
     const out = new Map();
     for (const name of names) {
-      const head = name.split(':')[0];
+      const head = name.split(/[:;]/)[0];
       if (!/^\d+$/.test(head)) continue;
       out.set(Number(head), {
         name,
         // Tauri's own format. The daemon's would not match, which is the point.
-        archived: /:2,[A-Z]*A/.test(name),
+        archived: /[:;]2,[A-Z]*A/.test(name),
         eml: name.endsWith('.eml'),
         size: statSync(join(cur, name)).size,
       });

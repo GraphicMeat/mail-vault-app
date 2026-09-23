@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, runBackupAndWait, startBackup } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const ACCOUNT_ID = '7f3c2a1e-9b4d-4c8e-a6f1-0d5e8b2c4a17';
 const EMAIL = 'ledger-owner@outlook-mock.test';
@@ -100,16 +100,16 @@ describe('Outlook backup files every message under its ledger uid', function () 
   const readLedger = (mailbox) => JSON.parse(readFileSync(ledgerPath(mailbox), 'utf8'));
 
   /** Files for `uid` under the vault rule (`<uid>:` exactly). */
-  const vaultNames = (dir, uid) => (existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}:`)) : []);
+  const vaultNames = (dir, uid) => (existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith(`${uid}${INFO_SEP}`)) : []);
   /** Files for `uid` under the mirror rule (text before the first ':', '.' or '_'). */
-  const mirrorNames = (dir, uid) => (existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:._]/)[0] === String(uid)) : []);
+  const mirrorNames = (dir, uid) => (existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:;._]/)[0] === String(uid)) : []);
   /** The Message-ID in the one file for `uid`, or a description of why there is not exactly one. */
   const messageIdAt = (dir, uid, names) => {
     const found = names(dir, uid);
     if (found.length !== 1) return `${found.length} files for uid ${uid}`;
     return readFileSync(join(dir, found[0]), 'utf8').match(/^Message-ID: (<[^>]+>)/m)?.[1] ?? 'no Message-ID';
   };
-  const seedFile = (mailbox, uid, m) => writeFileSync(join(cur(mailbox), `${uid}:2,.eml`), m.mime);
+  const seedFile = (mailbox, uid, m) => writeFileSync(join(cur(mailbox), `${uid}${INFO_PREFIX}.eml`), m.mime);
   const seedLedger = (mailbox, content) => {
     mkdirSync(join(root, 'email_cache', cacheBase(ACCOUNT_ID, mailbox)), { recursive: true });
     writeFileSync(ledgerPath(mailbox), content);
@@ -221,7 +221,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
   it('never gives new mail a uid a file already holds, and leaves that file alone', function () {
     expect(messageIdAt(cur('Archive'), 8, vaultNames)).toBe(ARCHIVE_NEW.internetMessageId);
     expect(messageIdAt(mirror('Archive'), 8, mirrorNames)).toBe(ARCHIVE_NEW.internetMessageId);
-    expect(readFileSync(join(cur('Archive'), '7:2,.eml'), 'utf8')).toBe(newestFirst(ARCHIVE)[5].mime);
+    expect(readFileSync(join(cur('Archive'), `7${INFO_PREFIX}.eml`), 'utf8')).toBe(newestFirst(ARCHIVE)[5].mime);
     expect(readLedger('Archive')['8']).toBe(ARCHIVE_NEW.id);
     expect(readLedger('Archive')['7']).toBe(undefined);
   });
@@ -243,7 +243,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(firstRun.error_message).toMatch(/ledger/i);
     expect(firstRun.error_message).toMatch(/^Receipts was not backed up: /);
     expect(readFileSync(ledgerPath('Receipts'), 'utf8')).toBe('{"1":"graph-receipts-m1",');
-    expect(readdirSync(cur('Receipts'))).toEqual(['1:2,.eml']);
+    expect(readdirSync(cur('Receipts'))).toEqual([`1${INFO_PREFIX}.eml`]);
   });
 
   it('downloads exactly the three arrivals and nothing else', function () {

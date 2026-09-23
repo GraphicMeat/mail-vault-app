@@ -128,7 +128,8 @@ async function drainWholeMailbox(timeoutMs) {
   }
 }
 
-describe('memory footprint', () => {
+// pgrep + /usr/bin/vmmap: the footprint it reports is a macOS measurement.
+(process.platform === 'darwin' ? describe : describe.skip)('memory footprint', () => {
   before(async () => {
     await waitForApp();
     await waitForEmails();

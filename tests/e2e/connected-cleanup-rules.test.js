@@ -75,7 +75,7 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
-import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
+import { appDataDir, MOCK_PASSWORD, INFO_SEP } from './mockImap.js';
 import { waitForApp, waitForEmails, closeSettings } from './helpers.js';
 import { openTab, setPremium } from './mockBilling.js';
 
@@ -456,7 +456,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     expect(existsSync(stamp)).toBe(true);
 
     const named = (dir) =>
-      (existsSync(dir) ? readdirSync(dir) : []).filter((f) => f.startsWith(`${victimUid}:`));
+      (existsSync(dir) ? readdirSync(dir) : []).filter((f) => f.startsWith(`${victimUid}${INFO_SEP}`));
     // Still where the app can see it, and not in the holding area it cannot.
     expect(named(join(vaultDir, 'cur')).length).toBeGreaterThan(0);
     expect(named(join(vaultDir, 'orphaned'))).toEqual([]);
