@@ -56,6 +56,26 @@ describe('KeychainUnlockCard', () => {
     expect(card.className).toMatch(/fixed/);
   });
 
+  it('shakes when the user clicks anywhere else, and not for clicks on itself', () => {
+    render(<div><button data-testid="elsewhere">x</button><KeychainUnlockCard /></div>);
+    act(() => useKeychainGateStore.getState().apply({ blocked: true, reason: 'locked' }));
+    const nudge = () => screen.getByTestId(CARD).querySelector('[data-nudge]');
+    expect(nudge().getAttribute('data-nudge')).toBe('0');
+    expect(nudge().className).not.toMatch(/animate-nudge/);
+
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    expect(nudge().getAttribute('data-nudge')).toBe('1');
+    expect(nudge().className).toMatch(/animate-nudge/);
+
+    fireEvent.pointerDown(screen.getByTestId('keychain-unlock'));
+    expect(nudge().getAttribute('data-nudge')).toBe('1');
+
+    // Readable again: the card is gone and clicks no longer count.
+    act(() => useKeychainGateStore.getState().apply({ blocked: false }));
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
   it('offers no way to dismiss it', () => {
     render(<KeychainUnlockCard />);
     act(() => useKeychainGateStore.getState().apply({ blocked: true, reason: 'locked' }));

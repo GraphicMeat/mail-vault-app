@@ -41,7 +41,8 @@ export default {
       animation: {
         'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
         'slide-in': 'slide-in 0.3s ease-out',
-        'fade-in': 'fade-in 0.2s ease-out'
+        'fade-in': 'fade-in 0.2s ease-out',
+        'nudge': 'nudge 0.5s ease-in-out'
       },
       keyframes: {
         'pulse-soft': {
@@ -55,6 +56,16 @@ export default {
         'fade-in': {
           '0%': { opacity: 0 },
           '100%': { opacity: 1 }
+        },
+        // A shake with a warning-coloured ring, for a card the user is
+        // clicking past (KeychainUnlockCard).
+        'nudge': {
+          '0%, 100%': { transform: 'translateX(0)', boxShadow: '0 0 0 0 transparent' },
+          '15%': { transform: 'translateX(-6px) rotate(-1deg)', boxShadow: '0 0 0 3px var(--mail-warning)' },
+          '30%': { transform: 'translateX(6px) rotate(1deg)' },
+          '45%': { transform: 'translateX(-4px)' },
+          '60%': { transform: 'translateX(4px)', boxShadow: '0 0 0 3px var(--mail-warning)' },
+          '75%': { transform: 'translateX(-2px)' }
         }
       }
     },
