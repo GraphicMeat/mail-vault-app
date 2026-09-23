@@ -136,7 +136,11 @@ pub fn merge(conn: &Connection, cfg: &AppConfig, account_map: &HashMap<String, S
                     min_confidence: rule.min_confidence,
                     allow_remote: rule.allow_remote,
                     provider: rule.provider.clone(),
-                    enabled: rule.enabled,
+                    // Always land disabled, whatever the file says: an enabled
+                    // rule arms the standing auto-tag worker, which would send
+                    // mail (and the target's own AI key) to the source
+                    // machine's endpoint before the user has consented here.
+                    enabled: false,
                 },
             )?;
             rule_names.push(created.name);
@@ -295,6 +299,7 @@ mod tests {
         assert_eq!(rules[0].tag_id, dst_work.id);
         assert_eq!(rules[0].constraints.from_domain.as_deref(), Some("work.example"));
         assert_eq!(rules[0].inbox_action, InboxAction::Hide);
+        assert!(!rules[0].enabled, "an imported rule must land disabled even though the source rule was enabled");
 
         assert_eq!(report, MergeReport { tags_added: 1, fields_added: 1, views_added: 1, rules_added: 1 });
     }
