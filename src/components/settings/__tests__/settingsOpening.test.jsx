@@ -33,7 +33,12 @@ function openSettings() {
   render(<ChunkErrorBoundary name="Settings"><Suspense fallback={<p>Loading settings</p>}>
     <SettingsPage onClose={() => {}} />
   </Suspense></ChunkErrorBoundary>);
-  return screen.findByRole('heading', { name: 'Color & theme' }, { timeout: 5000 });
+  // The first call in this file cold-loads SettingsPage's whole lazy chunk
+  // graph. On a Windows box a 5s budget flaked here -- reproduced both alone
+  // (5150ms, just over) and under full-suite contention (every test in this
+  // file, not just the cold one). Widened well past what a warm run needs
+  // (macOS/Linux resolve in well under 1s) rather than tuned to the margin.
+  return screen.findByRole('heading', { name: 'Color & theme' }, { timeout: 20000 });
 }
 
 it('opens the complete default Settings screen and applies its palette controls', async () => {
