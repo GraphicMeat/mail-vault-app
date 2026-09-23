@@ -7,15 +7,14 @@
 //!
 //! Three very different mechanisms, one toggle:
 //!
-//! * **macOS** — `SMAppService`. Developer ID registers the bundled LaunchAgent
-//!   (`Contents/Library/LaunchAgents/com.mailvault.app.daemon.plist`), so
-//!   launchd runs the *daemon* with no UI at all. The label has to sit under
-//!   the app's bundle id or macOS answers `NotFound` — see
-//!   `mailvault_core::autostart::APP_BUNDLE_ID`. The App Store build cannot: its
-//!   sidecar is signed `app-sandbox` + `com.apple.security.inherit`, and a
-//!   binary with `inherit` aborts unless its sandboxed parent spawned it —
-//!   launchd is not that parent. There it falls back to registering the app
-//!   itself, which spawns the daemon the way it always has.
+//! * **macOS** — `SMAppService.mainApp`, in both channels: the app opens at
+//!   login and spawns the daemon the way it always has. The bundled LaunchAgent
+//!   (`com.mailvault.app.daemon.plist`) cannot be registered yet. Developer ID
+//!   refused it with EPERM because a sandboxed app may not hand launchd an
+//!   unsandboxed program; the App Store sidecar is signed
+//!   `com.apple.security.inherit`, which aborts unless its sandboxed parent
+//!   spawned it. Running the daemon as the agent needs it sandboxed on its own,
+//!   and so its socket and vault moved to the `group.com.mailvault` container.
 //! * **Linux** — an XDG autostart `.desktop`. Refused under snap confinement.
 //! * **Windows** — the `HKCU` Run key. The daemon's IPC is a Unix socket, so
 //!   nothing on Windows can start today; this is here so the switch is already
@@ -94,19 +93,13 @@ mod imp {
     /// by name rather than with `class!`, which would abort there.
     fn service() -> Option<Retained<AnyObject>> {
         let cls = AnyClass::get(c"SMAppService")?;
-        unsafe {
-            // The App Store sidecar carries `com.apple.security.inherit` and
-            // aborts unless the sandboxed app spawned it, so launchd may not
-            // start it directly — register the app instead.
-            #[cfg(feature = "appstore")]
-            let svc: Option<Retained<AnyObject>> = msg_send![cls, mainAppService];
-            #[cfg(not(feature = "appstore"))]
-            let svc: Option<Retained<AnyObject>> = {
-                let name = NSString::from_str(core::AGENT_PLIST_NAME);
-                msg_send![cls, agentServiceWithPlistName: &*name]
-            };
-            svc
-        }
+        // Both channels register the app, never the daemon agent: the app is
+        // sandboxed, and a sandboxed app asking launchd to run an unsandboxed
+        // program gets EPERM (SMAppServiceErrorDomain, code 1). The App Store
+        // sidecar is worse still — `inherit` aborts unless the app spawned it.
+        // ponytail: the app opens at login and spawns the daemon; a UI-less
+        // agent needs the daemon sandboxed + moved to the group container.
+        unsafe { msg_send![cls, mainAppService] }
     }
 
     /// Whether this build actually ships the agent plist. See the `NotFound`
