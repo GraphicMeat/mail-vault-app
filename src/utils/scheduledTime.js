@@ -29,6 +29,14 @@ function partsIn(tz, ms) {
   return Object.fromEntries(formatter(tz, 'parts').formatToParts(ms).map(p => [p.type, p.value]));
 }
 
+// ms east of UTC in `tz` at instant `ms`: its wall clock read as if it were
+// UTC, minus the instant. Short by `ms`'s sub-second part, as the parts stop
+// at seconds.
+function offsetMsAt(tz, ms) {
+  const p = partsIn(tz, ms);
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+}
+
 const pad = (n) => String(n).padStart(2, '0');
 
 /**
@@ -45,13 +53,8 @@ const pad = (n) => String(n).padStart(2, '0');
  */
 export function zonedTimeToEpoch(localTime, tz) {
   const guess = Date.parse(`${localTime}:00Z`);
-  const offsetAt = (ms) => {
-    const parts = partsIn(tz, ms);
-    const asIfUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
-    return asIfUtc - ms; // ms east of UTC at this instant
-  };
-  const offset1 = offsetAt(guess);
-  const offset2 = offsetAt(guess - offset1);
+  const offset1 = offsetMsAt(tz, guess);
+  const offset2 = offsetMsAt(tz, guess - offset1);
   // ponytail: a spring-forward gap (the wall-clock minute this asked for does
   // not exist) has no "right" answer; this lands on the post-transition
   // instant rather than looping. Upgrade if a report ever needs the other side.
@@ -103,14 +106,14 @@ export function presetNextMonday8am(tz, now = Date.now()) {
  * `tz`'s offset from UTC at instant `ms`: `{ minutes, text: '+02:00' }`.
  * At an instant, not "now": New York is -04:00 in September and -05:00 after
  * the first Sunday of November, and the label must match the send.
+ *
+ * From the wall-clock parts, not `timeZoneName: 'longOffset'`: that is
+ * WebKit 15.4+, and on an older macOS WKWebView it throws RangeError.
  */
 export function utcOffsetAt(tz, ms) {
-  const name = formatter(tz, 'longOffset').formatToParts(ms).find(p => p.type === 'timeZoneName')?.value || '';
-  // "GMT+05:30"; a bare "GMT" is +00:00. U+2212 in case a runtime prints a real minus.
-  const m = /([+\-\u2212])(\d{2}):(\d{2})/.exec(name);
-  if (!m) return { minutes: 0, text: '+00:00' };
-  const sign = m[1] === '+' ? '+' : '-';
-  return { minutes: (sign === '+' ? 1 : -1) * (+m[2] * 60 + +m[3]), text: `${sign}${m[2]}:${m[3]}` };
+  const minutes = Math.round(offsetMsAt(tz, ms) / 60000) || 0; // no -0 for UTC
+  const abs = Math.abs(minutes);
+  return { minutes, text: `${minutes < 0 ? '-' : '+'}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}` };
 }
 
 /** "America/New_York" -> "New York": the last segment, the way people say it. */

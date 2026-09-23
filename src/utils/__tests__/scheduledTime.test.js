@@ -136,6 +136,25 @@ describe('utcOffsetAt', () => {
     expect(utcOffsetAt('UTC', WED_LATE_UTC)).toEqual({ minutes: 0, text: '+00:00' });
     expect(utcOffsetAt('Asia/Kolkata', WED_LATE_UTC)).toEqual({ minutes: 330, text: '+05:30' });
   });
+
+  // `timeZoneName: 'longOffset'` is WebKit 15.4+, and the app runs on macOS
+  // 11: an older WKWebView throws RangeError on it, which took the whole
+  // schedule panel down. Zones no other test here formats, as formatters are
+  // cached per zone.
+  it('works where Intl has no longOffset', () => {
+    const Real = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = function DateTimeFormat(locale, options) {
+      if (options?.timeZoneName === 'longOffset') throw new RangeError('timeZoneName must be short or long');
+      return new Real(locale, options);
+    };
+    try {
+      expect(utcOffsetAt('Asia/Kathmandu', WED_LATE_UTC)).toEqual({ minutes: 345, text: '+05:45' });
+      expect(utcOffsetAt('America/St_Johns', Date.UTC(2026, 0, 15, 12))).toEqual({ minutes: -210, text: '-03:30' });
+      expect(utcOffsetAt('Etc/GMT', WED_LATE_UTC + 999)).toEqual({ minutes: 0, text: '+00:00' });
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
+  });
 });
 
 describe('zoneCity', () => {
