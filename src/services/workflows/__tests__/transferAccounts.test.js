@@ -24,7 +24,8 @@ vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => h.settings, setState: (...a) => mockSetSettings(...a) },
 }));
 vi.mock('../../../stores/themeStore', () => ({ useThemeStore: { getState: () => ({ theme: 'dark', setTheme: vi.fn() }) } }));
-vi.mock('../../../stores/safeStorage', () => ({ flushSafeStorage: vi.fn(async () => {}) }));
+const mockFlush = vi.fn(async () => {});
+vi.mock('../../../stores/safeStorage', () => ({ flushSafeStorage: (...a) => mockFlush(...a) }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '9.9.9' }));
 
 const { exportTransfer, applyImport, planImport } = await import('../transferAccounts');
@@ -61,7 +62,7 @@ describe('applyImport', () => {
 
     expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
     expect(mockSaveAccounts.mock.calls[0][0].map(a => a.id)).toEqual(['a', 'b', 'c']);
-    expect(res).toEqual({ imported: 3, aiKeyError: false });
+    expect(res).toEqual({ imported: 3, aiKeyError: false, settingsError: false });
     expect(mockDaemonCall).not.toHaveBeenCalled();
   });
 
@@ -107,9 +108,26 @@ describe('applyImport', () => {
     const res = await applyImport(b, { selectedIds: ['b'], applyAppSettings: true });
 
     expect(mockSaveAccounts.mock.calls[0][0].map(a => a.id)).toEqual(['b']);
-    expect(res).toEqual({ imported: 1, aiKeyError: true });
+    expect(res).toEqual({ imported: 1, aiKeyError: true, settingsError: false });
     expect(mockDaemonCall.mock.calls[0][1].accountMap).toEqual({ b: 'b' });
     expect(mockDaemonCall.mock.calls[0][1].aiEndpointKey).toBe('sk-test');
+  });
+});
+
+describe('applyImport soft failures', () => {
+  it('resolves with settingsError when the settings file write fails, still running apply_config', async () => {
+    mockFlush.mockRejectedValueOnce('Failed to write settings: disk full');
+    const res = await applyImport(bundleOf([acct('a', 'a@x.test')]), { selectedIds: ['a'], applyAppSettings: true });
+    expect(res).toEqual({ imported: 1, aiKeyError: false, settingsError: true });
+    expect(mockDaemonCall.mock.calls.map(([m]) => m)).toEqual(['transfer.apply_config']);
+  });
+
+  it('passes an E_KEYCHAIN_WRITE rejection from saveAccounts straight through, applying nothing', async () => {
+    mockSaveAccounts.mockRejectedValueOnce(new Error('E_KEYCHAIN_WRITE: Failed to store credentials'));
+    await expect(applyImport(bundleOf([acct('a', 'a@x.test')]), { selectedIds: ['a'], applyAppSettings: true }))
+      .rejects.toThrow(/^E_KEYCHAIN_WRITE: /);
+    expect(mockSetSettings).not.toHaveBeenCalled();
+    expect(mockDaemonCall).not.toHaveBeenCalled();
   });
 });
 

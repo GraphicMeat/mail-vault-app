@@ -64,12 +64,14 @@ export function collectSettings(accountIds) {
  * not in it are dropped. Globals and theme only with `applyGlobal`.
  * `existingIds` seeds an empty account order so imported accounts land after
  * the ones already here instead of jumping to the top.
- * Resolves only after the settings file is written: the caller reloads next.
+ * Resolves only after the settings file write has settled: the caller reloads
+ * next. Never throws for a failed write (accounts are already saved by then);
+ * returns `{ settingsError: true }` so the UI can warn instead.
  */
 export async function applySettings(snapshot, idMap, { applyGlobal, existingIds = [] } = {}) {
   const s = useSettingsStore.getState();
   const remap = map => Object.fromEntries(
-    Object.entries(map || {}).filter(([id]) => idMap[id]).map(([id, value]) => [idMap[id], value]));
+    Object.entries(map || {}).filter(([id]) => Object.hasOwn(idMap, id)).map(([id, value]) => [idMap[id], value]));
   const acct = snapshot.accountSettings || {};
 
   const patch = {};
@@ -98,5 +100,11 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
 
   useSettingsStore.setState(patch);
   if (applyGlobal && snapshot.theme) useThemeStore.getState().setTheme(snapshot.theme);
-  await flushSafeStorage();
+  try {
+    await flushSafeStorage();
+    return { settingsError: false };
+  } catch (e) {
+    console.warn('[transfer] settings file write failed:', String(e?.message ?? e));
+    return { settingsError: true };
+  }
 }

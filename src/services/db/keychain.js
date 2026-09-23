@@ -114,8 +114,10 @@ async function _processKeychainQueue() {
     // Take the latest write (skip stale intermediate writes)
     const pending = _keychainWriteQueue.splice(0);
     const latest = pending[pending.length - 1];
-    // Resolve all earlier pending writes silently
-    for (let i = 0; i < pending.length - 1; i++) pending[i].resolve();
+    // Earlier pending writes are skipped, but their callers must not hear
+    // "stored" before a write that carries their data has actually landed
+    // (a caller may reload the window next): settle them with the latest.
+    const collapsed = pending.slice(0, -1);
 
     let retries = 0;
     const maxRetries = 3;
@@ -125,6 +127,7 @@ async function _processKeychainQueue() {
         keychainCache = latest.data;
         console.log('[db.js] Keychain saved for', Object.keys(latest.data).length, 'account(s)');
         latest.resolve();
+        collapsed.forEach(w => w.resolve());
         break;
       } catch (error) {
         retries++;
@@ -134,6 +137,7 @@ async function _processKeychainQueue() {
         } else {
           console.error('[db.js] Keychain write failed after all retries:', error);
           latest.reject(error);
+          collapsed.forEach(w => w.reject(error));
         }
       }
     }

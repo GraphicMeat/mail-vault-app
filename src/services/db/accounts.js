@@ -184,17 +184,39 @@ export async function saveAccounts(accounts) {
   const data = await loadKeychain();
   const status = keychainSession.getStatus();
   if (status !== 'granted' && status !== 'empty') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+  const prior = new Map(accounts.map(a => [a.id, data[a.id]]));
   for (const account of accounts) data[account.id] = JSON.stringify(account);
-  await saveKeychain(data);
-
-  const file = await readAccountsFile();
-  for (const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } of accounts) {
-    const idx = file.findIndex(a => a.id === acctData.id);
-    if (idx >= 0) file[idx] = { ...file[idx], ...acctData };
-    else file.push(acctData);
+  try {
+    await saveKeychain(data);
+  } catch (error) {
+    // The caller will be told the import failed, so a later write built from
+    // this shared cache (token refresh) must not persist these accounts.
+    for (const [id, value] of prior) {
+      if (value === undefined) delete data[id];
+      else data[id] = value;
+    }
+    throw accountsWriteError(error);
   }
-  await writeAccountsFile(file);
+
+  try {
+    const file = await readAccountsFile();
+    for (const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } of accounts) {
+      const idx = file.findIndex(a => a.id === acctData.id);
+      if (idx >= 0) file[idx] = { ...file[idx], ...acctData };
+      else file.push(acctData);
+    }
+    await writeAccountsFile(file);
+  } catch (error) {
+    throw accountsWriteError(error);
+  }
   console.log('[db.js] saveAccounts stored', accounts.length, 'account(s)');
+}
+
+// The keychain queue rejects with store_credentials' raw Rust string and
+// plugin-fs with its own; callers map on an E_* prefix.
+function accountsWriteError(error) {
+  const message = String(error?.message ?? error);
+  return new Error(message.startsWith('E_') ? message : `${keychainSession.E_KEYCHAIN_WRITE}: ${message}`);
 }
 
 export async function getAccountsWithoutPasswords() {

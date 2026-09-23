@@ -22,6 +22,8 @@
  * it to a catalog key.
  */
 export const E_KEYCHAIN_UNAVAILABLE = 'E_KEYCHAIN_UNAVAILABLE';
+/** Error code prefix for "writing the accounts (keychain or accounts.json) failed". */
+export const E_KEYCHAIN_WRITE = 'E_KEYCHAIN_WRITE';
 
 let _status = 'idle';
 let _message = null;

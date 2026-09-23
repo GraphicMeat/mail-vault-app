@@ -875,11 +875,11 @@ fn read_file_base64(path: String) -> Result<String, String> {
     if !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("mvtransfer")) {
         return Err("E_TRANSFER_FORMAT: not a .mvtransfer file".to_string());
     }
-    let len = fs::metadata(p).map_err(|e| format!("Failed to read file: {e}"))?.len();
+    let len = fs::metadata(p).map_err(|e| format!("E_TRANSFER_READ: {e}"))?.len();
     if len > MAX_BYTES {
         return Err("E_TRANSFER_FORMAT: file too large".to_string());
     }
-    let bytes = fs::read(p).map_err(|e| format!("Failed to read file: {e}"))?;
+    let bytes = fs::read(p).map_err(|e| format!("E_TRANSFER_READ: {e}"))?;
     info!("read_file_base64: {} bytes", bytes.len());
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }

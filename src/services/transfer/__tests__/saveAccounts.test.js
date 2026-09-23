@@ -15,7 +15,7 @@ vi.mock('../../db/keychain.js', () => ({
   loadKeychain: (...a) => mockLoadKeychain(...a),
   saveKeychain: (...a) => mockSaveKeychain(...a),
 }));
-vi.mock('../../keychainSession.js', () => ({ getStatus: () => h.status, E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE' }));
+vi.mock('../../keychainSession.js', () => ({ getStatus: () => h.status, E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE', E_KEYCHAIN_WRITE: 'E_KEYCHAIN_WRITE' }));
 vi.mock('../../transport.js', () => ({ send: vi.fn(async () => ({})) }));
 vi.mock('../../graphConfig.js', () => ({ isPersonalMicrosoftEmail: () => false }));
 vi.mock('../../../i18n/index.js', () => ({ t: (k) => k }));
@@ -36,8 +36,12 @@ const incoming = [
 ];
 
 beforeEach(() => {
-  mockSaveKeychain.mockClear();
-  mockWriteTextFile.mockClear();
+  mockSaveKeychain.mockReset();
+  mockSaveKeychain.mockImplementation(async () => {});
+  mockWriteTextFile.mockReset();
+  mockWriteTextFile.mockImplementation(async () => {});
+  mockLoadKeychain.mockReset();
+  mockLoadKeychain.mockImplementation(async () => h.cache);
 });
 
 describe('saveAccounts', () => {
@@ -73,5 +77,32 @@ describe('saveAccounts', () => {
     h.cache = {};
     await saveAccounts(incoming);
     expect(Object.keys(mockSaveKeychain.mock.calls[0][0]).sort()).toEqual(['a', 'b']);
+  });
+
+  it('reads the keychain status only AFTER loadKeychain resolves (the read is what sets it)', async () => {
+    h.status = 'idle';
+    h.cache = {};
+    mockLoadKeychain.mockImplementation(async () => { h.status = 'granted'; return h.cache; });
+    await saveAccounts(incoming);
+    expect(mockLoadKeychain).toHaveBeenCalledTimes(1); // initDB already ran: this is saveAccounts' own read
+    expect(mockSaveKeychain).toHaveBeenCalledTimes(1);
+  });
+
+  it('wraps a failed keychain write as E_KEYCHAIN_WRITE and takes its accounts back out of the shared cache', async () => {
+    h.status = 'granted';
+    const before = { old: JSON.stringify({ id: 'old', email: 'old@x.test', password: 'keep' }) };
+    h.cache = { ...before };
+    mockSaveKeychain.mockRejectedValueOnce('Failed to store credentials: errSecInteractionNotAllowed');
+
+    await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: Failed to store credentials/);
+    expect(h.cache).toEqual(before); // a later token-refresh write cannot persist a or b
+    expect(mockWriteTextFile).not.toHaveBeenCalled();
+  });
+
+  it('wraps a failed accounts.json write as E_KEYCHAIN_WRITE', async () => {
+    h.status = 'granted';
+    h.cache = {};
+    mockWriteTextFile.mockRejectedValueOnce(new Error('disk full'));
+    await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: disk full$/);
   });
 });

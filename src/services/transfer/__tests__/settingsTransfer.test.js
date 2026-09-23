@@ -93,6 +93,19 @@ describe('applySettings', () => {
     expect(h.flush).toHaveBeenCalledTimes(1);
   });
 
+  it('never maps an id through an inherited property of idMap', async () => {
+    const snap = { accountSettings: { signatures: { constructor: { html: 'proto sig' }, toString: { html: 'x' } } } };
+    await applySettings(snap, {}, { applyGlobal: false });
+    expect(h.settings.signatures).toEqual({ A: { html: 'sig A' }, B: { html: 'sig B' } });
+    expect(Object.keys(h.settings.signatures)).not.toContain('function Object() { [native code] }');
+  });
+
+  it('reports a failed settings file write as settingsError instead of throwing', async () => {
+    h.flush.mockRejectedValueOnce('Failed to write settings: disk full');
+    await expect(applySettings(snapshot, { X: 'X2' }, { applyGlobal: true })).resolves.toEqual({ settingsError: true });
+    await expect(applySettings(snapshot, { X: 'X2' }, { applyGlobal: true })).resolves.toEqual({ settingsError: false });
+  });
+
   it('seeds an empty order from the existing accounts so imports do not jump to the top', async () => {
     h.settings.accountOrder = [];
     await applySettings(snapshot, { X: 'X2' }, { applyGlobal: false, existingIds: ['A', 'B'] });

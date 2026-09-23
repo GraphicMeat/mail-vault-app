@@ -43,22 +43,20 @@ function ensureLoaded() {
 }
 
 // Save all cached data to Tauri filesystem
-// Returns the write's promise so flushSafeStorage() can await it; the
-// debounced path ignores it.
-function saveToDisk() {
-  if (!writesEnabled) return Promise.resolve();
-  if (!invoke) return Promise.resolve();
-  try {
-    const obj = {};
-    for (const [key, value] of cache.entries()) {
-      try { obj[key] = JSON.parse(value); } catch { obj[key] = value; }
-    }
-    return invoke('write_settings_json', { data: JSON.stringify(obj) })
-      .catch(e => console.warn('[safeStorage] Failed to write settings:', e));
-  } catch (e) {
-    console.warn('[safeStorage] Failed to serialize settings:', e);
-    return Promise.resolve();
+// Rejects when the write fails, so flushSafeStorage() can report it.
+async function writeToDisk() {
+  if (!writesEnabled) return;
+  if (!invoke) return;
+  const obj = {};
+  for (const [key, value] of cache.entries()) {
+    try { obj[key] = JSON.parse(value); } catch { obj[key] = value; }
   }
+  await invoke('write_settings_json', { data: JSON.stringify(obj) });
+}
+
+// The debounced path: warns on failure and never rejects.
+function saveToDisk() {
+  return writeToDisk().catch(e => console.warn('[safeStorage] Failed to write settings:', e));
 }
 
 // Debounced save — avoids excessive disk writes
@@ -88,11 +86,12 @@ export function setSafeStorageWriteEnabled(enabled) {
 // caller about to reload the window (account transfer import) would otherwise
 // lose whatever the debounce had not yet saved. One write covers every
 // persisted store (settings and theme share this cache). A no-op in windows
-// whose writes are disabled (detached compose/settings).
+// whose writes are disabled (detached compose/settings). REJECTS when the
+// write fails, so the caller can tell the user their settings did not land.
 export async function flushSafeStorage() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   await ensureLoaded(); // never write a cache that is missing on-disk keys
-  await saveToDisk();
+  await writeToDisk();
 }
 
 export const safeStorage = {
