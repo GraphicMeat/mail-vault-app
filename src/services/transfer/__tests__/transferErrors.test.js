@@ -29,6 +29,19 @@ describe('transferErrorKey', () => {
     expect(TRANSFER_PASSWORD_MIN).toBe(12);
   });
 
+  it.each([
+    [new Error('errors.daemonUnavailable'), 'errors.daemonUnavailable'],
+    [new Error('errors.daemonOutdated'), 'errors.daemonOutdated'],
+  ])('maps a raw Tauri-layer daemon key %s to itself, not the generic wrapper', (err, key) => {
+    expect(transferErrorKey(err)).toEqual({ key, values: {} });
+    expect(has(key)).toBe(true);
+  });
+
+  it('keeps the "may already be added" wording for a daemon failure during apply', () => {
+    expect(transferErrorKey(new Error('errors.daemonUnavailable'), { applying: true }).key).toBe('settings.transfer.errors.partial');
+    expect(transferErrorKey(new Error('errors.daemonOutdated'), { applying: true }).key).toBe('settings.transfer.errors.partial');
+  });
+
   it('falls back to the generic message', () => {
     expect(transferErrorKey(new Error('daemon gone'))).toEqual({ key: 'settings.transfer.errors.generic', values: { message: 'daemon gone' } });
     expect(transferErrorKey(undefined).key).toBe('settings.transfer.errors.generic');

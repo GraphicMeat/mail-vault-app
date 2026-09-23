@@ -13,6 +13,12 @@ const BY_PREFIX = [
   ['E_KEYCHAIN_UNAVAILABLE', 'settings.transfer.errors.keychain'],
   ['E_KEYCHAIN_WRITE', 'settings.transfer.errors.keychainWrite'],
   ['E_TRANSFER_PASSWORD', 'settings.transfer.passwordHint'],
+  // The Tauri layer (daemon_rpc) rejects with these as the literal message,
+  // already a catalog key under `errors.*` (see transport.js) — map to
+  // themselves instead of falling to the generic "Something went wrong: ..."
+  // wrapper, which would show the raw key untranslated.
+  ['errors.daemonUnavailable', 'errors.daemonUnavailable'],
+  ['errors.daemonOutdated', 'errors.daemonOutdated'],
 ];
 
 /**
