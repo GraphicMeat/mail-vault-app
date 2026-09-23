@@ -9,6 +9,7 @@ mod common;
 
 use common::{config_for, eml, pool};
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
+use mailvault_core::maildir::INFO_PREFIX;
 use mailvault_core::vault_registry::VaultRegistry;
 use mock_imap::state::Mailbox;
 use mock_imap::{MockImap, Scenario};
@@ -207,7 +208,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
     // A pre-existing vault file for uid 1 under a different flag letter than
     // the freshly fetched (unflagged) message will get, so the fresh write's
     // filename cannot collide with it.
-    std::fs::write(dir.join("1:2,S.eml"), b"stale").unwrap();
+    std::fs::write(dir.join(&format!("1{INFO_PREFIX}S.eml")), b"stale").unwrap();
 
     let ctx = Arc::new(ArchiveCtx {
         root: root.path().to_path_buf(),
@@ -235,7 +236,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
     assert_eq!(result.completed, 1);
     let names = file_names(&dir);
     assert!(
-        names.contains(&"1:2,S.eml".to_string()),
+        names.contains(&format!("1{INFO_PREFIX}S.eml")),
         "remove_existing=false must never look the uid up to remove it: {names:?}"
     );
     assert_eq!(names.len(), 2, "the stale file and the fresh write both survive: {names:?}");
@@ -251,7 +252,7 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
     let (_app, registry) = registry_for(root.path());
     let dir = cur_dir(root.path(), "acct", "INBOX");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("1:2,S.eml"), b"stale").unwrap();
+    std::fs::write(dir.join(&format!("1{INFO_PREFIX}S.eml")), b"stale").unwrap();
 
     let ctx = Arc::new(ArchiveCtx {
         root: root.path().to_path_buf(),
@@ -275,7 +276,7 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
     assert_eq!(result.completed, 1);
     let names = file_names(&dir);
     assert!(
-        !names.contains(&"1:2,S.eml".to_string()),
+        !names.contains(&format!("1{INFO_PREFIX}S.eml")),
         "remove_existing=true replaces the stale file it finds: {names:?}"
     );
     assert_eq!(names.len(), 1, "only the fresh write remains: {names:?}");

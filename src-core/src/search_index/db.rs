@@ -367,6 +367,7 @@ pub fn db_size_bytes(vault_root: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::INFO_PREFIX;
 
     #[test]
     fn open_creates_schema_with_exclusive_wal() {
@@ -401,7 +402,7 @@ mod tests {
                  {SCHEMA_V1}{SCHEMA_V2}
                  INSERT INTO meta(key, value) VALUES ('schema_version', '2');
                  INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc)
-                   VALUES ('a', 'INBOX', 7, '7:2,FS.eml', 0, 0, 0),
+                   VALUES ('a', 'INBOX', 7, '7{INFO_PREFIX}FS.eml', 0, 0, 0),
                           ('a', 'INBOX', 8, '8.eml', 0, 0, 0);"
             ))
             .unwrap();
@@ -583,8 +584,8 @@ mod tests {
         let conn = open(tmp.path()).unwrap();
         assert_eq!(counts(&conn), IndexCounts { indexed: 0, total: 0 });
         conn.execute("INSERT INTO mailbox_scan VALUES ('a','INBOX',1,6), ('a','Archive',1,4)", []).unwrap();
-        conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',1,'1:2,.eml',1,1,1,1)", []).unwrap();
-        conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',2,'2:2,.eml',1,1,1,0)", []).unwrap();
+        conn.execute(&format!("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',1,'1{INFO_PREFIX}.eml',1,1,1,1)"), []).unwrap();
+        conn.execute(&format!("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',2,'2{INFO_PREFIX}.eml',1,1,1,0)"), []).unwrap();
         assert_eq!(counts(&conn), IndexCounts { indexed: 1, total: 10 });
     }
 

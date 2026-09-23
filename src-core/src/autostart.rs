@@ -239,6 +239,23 @@ fn quote(path: &str) -> String {
 mod tests {
     use super::*;
 
+    /// `exec_command` is used by both the Linux `.desktop` `Exec=` line and the
+    /// Windows registry Run value (`src-tauri/src/autostart.rs`), so its tests
+    /// exercise a genuinely cross-platform function -- only the fixture paths
+    /// were unix-spelled, and `Path::is_absolute()` rejects a bare `/...` path
+    /// on Windows (no drive letter), which made `exec_command` return
+    /// `Err(NoStableExecutable)` and the `.unwrap()` panic. One unix-style
+    /// fragment renders as an absolute path on either platform, so the same
+    /// literal drives both the input and the expected output.
+    #[cfg(windows)]
+    fn abs(p: &str) -> String {
+        format!("C:{}", p.replace('/', "\\"))
+    }
+    #[cfg(not(windows))]
+    fn abs(p: &str) -> String {
+        p.to_string()
+    }
+
     /// Every bundled agent that works on a real Mac prefixes its label with the
     /// app's bundle id (com.openai.chat -> com.openai.chat-helper,
     /// com.microsoft.teams2 -> com.microsoft.teams2.agent). Ours did not, and
@@ -307,8 +324,8 @@ mod tests {
 
     #[test]
     fn the_exec_line_carries_the_daemon_only_flag() {
-        let cmd = exec_command(Path::new("/usr/bin/mailvault"), None).unwrap();
-        assert_eq!(cmd, "/usr/bin/mailvault --daemon-only");
+        let cmd = exec_command(Path::new(&abs("/usr/bin/mailvault")), None).unwrap();
+        assert_eq!(cmd, format!("{} --daemon-only", abs("/usr/bin/mailvault")));
     }
 
     /// The whole reason `$APPIMAGE` is threaded through: `current_exe()` inside
@@ -316,25 +333,25 @@ mod tests {
     #[test]
     fn an_appimage_writes_the_appimage_path_not_the_mount_point() {
         let cmd = exec_command(
-            Path::new("/tmp/.mount_MailVaXY12/usr/bin/mailvault"),
-            Some("/home/rokas/Apps/MailVault.AppImage"),
+            Path::new(&abs("/tmp/.mount_MailVaXY12/usr/bin/mailvault")),
+            Some(&abs("/home/rokas/Apps/MailVault.AppImage")),
         )
         .unwrap();
-        assert_eq!(cmd, "/home/rokas/Apps/MailVault.AppImage --daemon-only");
+        assert_eq!(cmd, format!("{} --daemon-only", abs("/home/rokas/Apps/MailVault.AppImage")));
     }
 
     /// `$APPIMAGE` is set to an empty string by some launchers; that is "not an
     /// AppImage", not "an AppImage at the empty path".
     #[test]
     fn an_empty_appimage_variable_falls_back_to_the_executable() {
-        let cmd = exec_command(Path::new("/usr/bin/mailvault"), Some("   ")).unwrap();
-        assert_eq!(cmd, "/usr/bin/mailvault --daemon-only");
+        let cmd = exec_command(Path::new(&abs("/usr/bin/mailvault")), Some("   ")).unwrap();
+        assert_eq!(cmd, format!("{} --daemon-only", abs("/usr/bin/mailvault")));
     }
 
     #[test]
     fn a_path_with_spaces_is_quoted() {
-        let cmd = exec_command(Path::new("/opt/Mail Vault/mailvault"), None).unwrap();
-        assert_eq!(cmd, "\"/opt/Mail Vault/mailvault\" --daemon-only");
+        let cmd = exec_command(Path::new(&abs("/opt/Mail Vault/mailvault")), None).unwrap();
+        assert_eq!(cmd, format!("\"{}\" --daemon-only", abs("/opt/Mail Vault/mailvault")));
     }
 
     /// A relative `current_exe()` means the entry would resolve against
@@ -420,6 +437,14 @@ mod tests {
         assert_eq!(linux_supported(Some("")), Ok(()));
     }
 
+    /// `config_home`/`XDG_CONFIG_HOME` is a Linux/XDG-only concept (only called
+    /// from the `#[cfg(target_os = "linux")]` autostart path in
+    /// `src-tauri/src/autostart.rs`; Windows has no equivalent and uses the
+    /// registry Run key instead), and the fixtures are unix-spelled absolute
+    /// paths, which `Path::is_absolute()` does not recognize on Windows (no
+    /// drive letter). Gated to the platforms XDG actually applies to, rather
+    /// than rewritten, since there is no Windows XDG-equivalent path to test.
+    #[cfg(unix)]
     #[test]
     fn config_home_prefers_an_absolute_xdg_override() {
         let home = Path::new("/home/rokas");

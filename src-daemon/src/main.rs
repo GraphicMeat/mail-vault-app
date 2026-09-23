@@ -674,10 +674,11 @@ mod tests {
     /// must not rename anything in that fallback.
     #[test]
     fn the_startup_eml_sweep_renames_nothing_when_the_vault_is_unreachable() {
+        let prefix = mailvault_core::maildir::INFO_PREFIX;
         let dir = scratch("eml-sweep");
         let cur = dir.join("Maildir").join("acct").join("INBOX").join("cur");
         std::fs::create_dir_all(&cur).unwrap();
-        let legacy = cur.join("7:2,S");
+        let legacy = cur.join(format!("7{prefix}S"));
         std::fs::write(&legacy, b"From: a@b\r\n\r\nx").unwrap();
 
         let skipped = startup_eml_migration(&dir, false);
@@ -686,7 +687,7 @@ mod tests {
 
         let ran = startup_eml_migration(&dir, true);
         assert_eq!(ran.renamed, 1);
-        assert!(cur.join("7:2,S.eml").exists());
+        assert!(cur.join(format!("7{prefix}S.eml")).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -773,7 +774,7 @@ mod tests {
             serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
         )
         .unwrap();
-        std::fs::remove_dir_all(&vault).unwrap();
+        let _ = std::fs::remove_dir_all(&vault);
 
         assert_eq!(resolve_mail_dir(&app), (app.clone(), false));
         let _ = std::fs::remove_dir_all(&app);
@@ -827,7 +828,7 @@ mod tests {
         let app = scratch("loc-missing-app");
         let vault = scratch("loc-missing-vault");
         std::fs::write(app.join("vault-meta.json"), serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string()).unwrap();
-        std::fs::remove_dir_all(&vault).unwrap();
+        let _ = std::fs::remove_dir_all(&vault);
 
         let info = resolve_vault_location(&app);
         assert!(!info.ok);

@@ -1,4 +1,5 @@
 use super::*;
+use mailvault_core::maildir::INFO_PREFIX;
 use serde_json::json;
 use std::{fs, io::Cursor, path::PathBuf};
 fn write(root: &Path, name: &str, value: Value) -> PathBuf {
@@ -162,14 +163,14 @@ fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
     );
     let eml = dir
         .path()
-        .join("Maildir/account-b/Projects_2026/cur/9:2,AS");
+        .join(format!("Maildir/account-b/Projects_2026/cur/9{INFO_PREFIX}AS"));
     fs::create_dir_all(eml.parent().unwrap()).unwrap();
     fs::write(
         eml,
         "From: me@example.test\r\nMessage-ID: <old@test>\r\n\r\nbody",
     )
     .unwrap();
-    let saved = dir.path().join("Maildir/account-a/INBOX/cur/7:2,AS");
+    let saved = dir.path().join(format!("Maildir/account-a/INBOX/cur/7{INFO_PREFIX}AS"));
     fs::create_dir_all(saved.parent().unwrap()).unwrap();
     fs::write(saved,"From: ana@example.test\r\nMessage-ID: <older-than-reused-uid@test>\r\nSubject: old\r\n\r\nbody").unwrap();
     let state = InsightsSnapshots::default();
@@ -317,7 +318,7 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
 }
 
 fn eml(root: &Path, account: &str, uid: u32) -> PathBuf {
-    let path = root.join(format!("Maildir/{account}/INBOX/cur/{uid}:2,S"));
+    let path = root.join(format!("Maildir/{account}/INBOX/cur/{uid}{INFO_PREFIX}S"));
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(
         &path,
@@ -478,7 +479,7 @@ fn insights_legacy_cache_and_unresolved_vault_folder_are_readable_without_guessi
     );
     let eml = dir
         .path()
-        .join("Maildir/account-b/Ambiguous_Name/cur/12:2,AS");
+        .join(format!("Maildir/account-b/Ambiguous_Name/cur/12{INFO_PREFIX}AS"));
     fs::create_dir_all(eml.parent().unwrap()).unwrap();
     fs::write(eml,"From: Ana <ana@example.test>\r\nTo: me@example.test\r\nDate: Tue, 08 Sep 2026 23:00:00 +0000\r\nList-Id: <list.example.test>\r\n\r\nprivate body").unwrap();
     let state = InsightsSnapshots::default();
@@ -513,9 +514,9 @@ fn insights_skips_symlink_escapes() {
     let custody = store(dir.path());
     let outside = tempfile::tempdir().unwrap();
     folder(dir.path(), &custody);
-    let outside_eml = outside.path().join("1:2,S");
+    let outside_eml = outside.path().join(format!("1{INFO_PREFIX}S"));
     fs::write(&outside_eml, "From: ana@example.test\r\nMessage-ID: <m1@test>\r\n\r\nbody").unwrap();
-    let inside = dir.path().join("Maildir/account-a/INBOX/cur/1:2,S");
+    let inside = dir.path().join(format!("Maildir/account-a/INBOX/cur/1{INFO_PREFIX}S"));
     fs::create_dir_all(inside.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(&outside_eml, &inside).unwrap();
     let state = InsightsSnapshots::default();
@@ -610,7 +611,7 @@ fn insights_vault_uses_index_original_date_when_raw_header_has_none() {
             json!({"uid":17,"messageId":"<sent@test>","source":"local_sent","date":"Tue, 08 Sep 2026 23:00:00 +0000"}),
         ],
     );
-    let eml = dir.path().join("Maildir/account-a/Sent/cur/17:2,AS");
+    let eml = dir.path().join(format!("Maildir/account-a/Sent/cur/17{INFO_PREFIX}AS"));
     fs::create_dir_all(eml.parent().unwrap()).unwrap();
     fs::write(
         eml,
@@ -638,7 +639,7 @@ fn insights_does_not_read_a_symlinked_uid_generation() {
     cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
     let folder = dir.path().join("Maildir/account-a/INBOX");
     fs::create_dir_all(folder.join("cur")).unwrap();
-    fs::write(folder.join("cur/1:2,AS"), "From: a@test\r\n\r\nbody").unwrap();
+    fs::write(folder.join(format!("cur/1{INFO_PREFIX}AS")), "From: a@test\r\n\r\nbody").unwrap();
     fs::write(outside.path().join("generation"), "404").unwrap();
     std::os::unix::fs::symlink(
         outside.path().join("generation"),
@@ -715,7 +716,7 @@ fn insights_rejects_conflicting_index_identity_even_when_message_id_matches() {
                 "messageDate": date, "receivedAt": "2026-09-08T14:00:00Z", "source": "local_sent", "serverAbsent": true
             })],
         );
-        let eml = dir.path().join("Maildir/account-a/Archive/cur/17:2,AS");
+        let eml = dir.path().join(format!("Maildir/account-a/Archive/cur/17{INFO_PREFIX}AS"));
         fs::create_dir_all(eml.parent().unwrap()).unwrap();
         fs::write(eml, "From: current@example.test\r\nMessage-ID: <shared@test>\r\nSubject: Current subject\r\nDate: Wed, 09 Sep 2026 12:00:00 +0000\r\n\r\nbody").unwrap();
         let state = InsightsSnapshots::default();

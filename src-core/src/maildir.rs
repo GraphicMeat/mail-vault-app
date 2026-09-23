@@ -831,10 +831,10 @@ mod tests {
         let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
         fs::create_dir_all(&cur).unwrap();
         // Pre-migration files (no `.eml`) in both filename formats we ship.
-        fs::write(cur.join("101:2,S"), b"A").unwrap();
+        fs::write(cur.join(format!("101{INFO_PREFIX}S")), b"A").unwrap();
         fs::write(cur.join("102:seen:1700000000"), b"B").unwrap();
         // Already-migrated sibling — must be left alone.
-        fs::write(cur.join("103:2,S.eml"), b"C").unwrap();
+        fs::write(cur.join(format!("103{INFO_PREFIX}S.eml")), b"C").unwrap();
         // Non-message file — must be left alone.
         fs::write(cur.join("local-index.json"), b"{}").unwrap();
 
@@ -843,9 +843,9 @@ mod tests {
         assert_eq!(s1.already_ok, 1);
         assert_eq!(s1.skipped_non_message, 1);
         assert_eq!(s1.errors, 0);
-        assert!(cur.join("101:2,S.eml").exists());
+        assert!(cur.join(format!("101{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("102:seen:1700000000.eml").exists());
-        assert!(cur.join("103:2,S.eml").exists());
+        assert!(cur.join(format!("103{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("local-index.json").exists());
 
         // Second run — version marker must short-circuit it.
@@ -871,12 +871,12 @@ mod tests {
         let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
         fs::create_dir_all(&cur).unwrap();
         fs::write(dir.join("Maildir").join(MAILDIR_VERSION_FILE), b"2").unwrap();
-        fs::write(cur.join("201:2,S"), b"A").unwrap();
+        fs::write(cur.join(format!("201{INFO_PREFIX}S")), b"A").unwrap();
 
         let s = migrate_add_eml_extension(&dir);
 
         assert_eq!(s.renamed, 1);
-        assert!(cur.join("201:2,S.eml").exists());
+        assert!(cur.join(format!("201{INFO_PREFIX}S.eml")).exists());
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -944,10 +944,10 @@ mod tests {
 
         // uid 1 and uid 5 both need to move, and 1's new uid is 5 — the
         // collision the two-phase rename exists for.
-        fs::write(cur.join("1:2,S.eml"), eml("moved@host.test", "one")).unwrap();
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), eml("moved@host.test", "one")).unwrap();
         fs::write(cur.join("5:seen:1700000000.eml"), eml("stays@host.test", "five")).unwrap();
-        fs::write(cur.join("9:2,.eml"), eml("gone@host.test", "nine")).unwrap();
-        fs::write(cur.join("12:2,.eml"), b"Subject: no id\r\n\r\nbody".to_vec()).unwrap();
+        fs::write(cur.join(format!("9{INFO_PREFIX}.eml")), eml("gone@host.test", "nine")).unwrap();
+        fs::write(cur.join(format!("12{INFO_PREFIX}.eml")), b"Subject: no id\r\n\r\nbody".to_vec()).unwrap();
         // Not a message — must be left exactly where it is.
         fs::write(cur.join("notes.txt"), b"keep me").unwrap();
         // A real reissue: the vault says which generation it is keyed under and
@@ -973,16 +973,16 @@ mod tests {
         assert!(r.orphaned.contains(&12));
 
         // Flags and timestamp survive the re-key; only the uid changes.
-        assert!(cur.join("5:2,S.eml").exists());
+        assert!(cur.join(format!("5{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("7:seen:1700000000.eml").exists());
-        assert!(!cur.join("1:2,S.eml").exists());
+        assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("notes.txt").exists());
         // No half-renamed leftovers.
         assert!(fs::read_dir(&cur).unwrap().flatten()
             .all(|e| !e.file_name().to_string_lossy().ends_with(REGEN_SUFFIX)));
 
         // The re-keyed file is the one that moved, not the one that was already there.
-        assert_eq!(read_message_id(&cur.join("5:2,S.eml")), Some("moved@host.test".into()));
+        assert_eq!(read_message_id(&cur.join(format!("5{INFO_PREFIX}S.eml"))), Some("moved@host.test".into()));
 
         assert_eq!(orphan_stats(&mailbox).count, 2);
         assert_eq!(read_generation(&mailbox), Some(605297894));
@@ -1010,8 +1010,8 @@ mod tests {
         let cur = mailbox.join("cur");
         fs::create_dir_all(&cur).unwrap();
 
-        fs::write(cur.join("07:2,S.eml"), eml("zero-pad@host.test", "a")).unwrap();
-        fs::write(cur.join("+7:2,S.eml"), eml("plus@host.test", "b")).unwrap();
+        fs::write(cur.join(format!("07{INFO_PREFIX}S.eml")), eml("zero-pad@host.test", "a")).unwrap();
+        fs::write(cur.join(format!("+7{INFO_PREFIX}S.eml")), eml("plus@host.test", "b")).unwrap();
         write_generation(&mailbox, 1).unwrap();
 
         let id_to_uid: HashMap<String, u32> = [
@@ -1024,8 +1024,8 @@ mod tests {
         assert_eq!(r.errors, 0);
         assert!(r.rebound.is_empty(), "a non-canonical name must never be rebound: {:?}", r.rebound);
         assert!(r.orphaned.is_empty(), "a non-canonical name must never be orphaned either: {:?}", r.orphaned);
-        assert!(cur.join("07:2,S.eml").exists());
-        assert!(cur.join("+7:2,S.eml").exists());
+        assert!(cur.join(format!("07{INFO_PREFIX}S.eml")).exists());
+        assert!(cur.join(format!("+7{INFO_PREFIX}S.eml")).exists());
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1038,8 +1038,8 @@ mod tests {
         let cur = mailbox.join("cur");
         fs::create_dir_all(&cur).unwrap();
 
-        fs::write(cur.join("1:2,.eml"), eml("dupe@host.test", "first")).unwrap();
-        fs::write(cur.join("2:2,.eml"), eml("dupe@host.test", "second")).unwrap();
+        fs::write(cur.join(format!("1{INFO_PREFIX}.eml")), eml("dupe@host.test", "first")).unwrap();
+        fs::write(cur.join(format!("2{INFO_PREFIX}.eml")), eml("dupe@host.test", "second")).unwrap();
         // A reissue, not a first open: the collision policy is what is on trial.
         write_generation(&mailbox, 1).unwrap();
 
@@ -1051,7 +1051,7 @@ mod tests {
         assert_eq!(r.rebound.len(), 1);
         assert_eq!(r.orphaned.len(), 1);
         assert_eq!(r.errors, 0);
-        assert!(cur.join("4:2,.eml").exists());
+        assert!(cur.join(format!("4{INFO_PREFIX}.eml")).exists());
         assert_eq!(orphan_stats(&mailbox).count, 1);
 
         let _ = fs::remove_dir_all(&dir);
@@ -1067,7 +1067,7 @@ mod tests {
         let cur = mailbox.join("cur");
         fs::create_dir_all(&cur).unwrap();
 
-        fs::write(cur.join("1:2,S.eml"), eml("later@host.test", "one")).unwrap();
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), eml("later@host.test", "one")).unwrap();
         // Stamped under the generation the server has just replaced - the only
         // case that sets a file aside, and so the only way to get an orphan to
         // recover from.
@@ -1086,9 +1086,9 @@ mod tests {
         let r2 = repair_generation(&mailbox, 3, &id_to_uid, &HashSet::new());
         assert_eq!(r2.recovered, vec![11]);
         assert_eq!(r2.errors, 0);
-        assert!(cur.join("11:2,S.eml").exists(), "recovered file keeps its .eml name");
+        assert!(cur.join(format!("11{INFO_PREFIX}S.eml")).exists(), "recovered file keeps its .eml name");
         assert_eq!(orphan_stats(&mailbox).count, 0);
-        assert_eq!(read_message_id(&cur.join("11:2,S.eml")), Some("later@host.test".into()));
+        assert_eq!(read_message_id(&cur.join(format!("11{INFO_PREFIX}S.eml"))), Some("later@host.test".into()));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1103,8 +1103,8 @@ mod tests {
 
         // A message composed here and never accepted by a server. It is in no
         // sidecar and never will be, so the Message-ID join can only miss it.
-        fs::write(cur.join("900:2,S.eml"), eml("composed-here@mailvault", "draft")).unwrap();
-        fs::write(cur.join("3:2,.eml"), eml("fromserver@host.test", "archived")).unwrap();
+        fs::write(cur.join(format!("900{INFO_PREFIX}S.eml")), eml("composed-here@mailvault", "draft")).unwrap();
+        fs::write(cur.join(format!("3{INFO_PREFIX}.eml")), eml("fromserver@host.test", "archived")).unwrap();
         // A reissue: uid 3 losing its place to a protected uid is the point,
         // and only a stamped-then-changed generation moves anything aside.
         write_generation(&mailbox, 7).unwrap();
@@ -1116,8 +1116,8 @@ mod tests {
         let r = repair_generation(&mailbox, 8, &id_to_uid, &protected);
 
         // The composed message keeps its uid and its place in the mailbox.
-        assert!(cur.join("900:2,S.eml").exists());
-        assert_eq!(read_message_id(&cur.join("900:2,S.eml")), Some("composed-here@mailvault".into()));
+        assert!(cur.join(format!("900{INFO_PREFIX}S.eml")).exists());
+        assert_eq!(read_message_id(&cur.join(format!("900{INFO_PREFIX}S.eml"))), Some("composed-here@mailvault".into()));
         assert!(!r.orphaned.contains(&900));
 
         // Its uid was reserved, so the server message that wanted 900 could not
@@ -1142,8 +1142,8 @@ mod tests {
         // backup wrote, opened for the first time. uid 77 is the vault's whole
         // reason to exist - a message the server no longer has, because a
         // cleanup rule, the user, or another client deleted it.
-        fs::write(cur.join("77:2,S.eml"), eml("deleted-from-server@host.test", "kept")).unwrap();
-        fs::write(cur.join("3:2,.eml"), eml("still-there@host.test", "alive")).unwrap();
+        fs::write(cur.join(format!("77{INFO_PREFIX}S.eml")), eml("deleted-from-server@host.test", "kept")).unwrap();
+        fs::write(cur.join(format!("3{INFO_PREFIX}.eml")), eml("still-there@host.test", "alive")).unwrap();
 
         let id_to_uid: HashMap<String, u32> =
             [("still-there@host.test".to_string(), 3u32)].into_iter().collect();
@@ -1156,8 +1156,8 @@ mod tests {
         assert!(r.rebound.is_empty());
 
         // Both files still where the app lists, searches and exports them.
-        assert!(cur.join("77:2,S.eml").exists());
-        assert!(cur.join("3:2,.eml").exists());
+        assert!(cur.join(format!("77{INFO_PREFIX}S.eml")).exists());
+        assert!(cur.join(format!("3{INFO_PREFIX}.eml")).exists());
         assert!(!mailbox.join(ORPHAN_DIR).exists());
         assert_eq!(orphan_stats(&mailbox).count, 0);
         assert_eq!(read_generation(&mailbox), Some(5));
@@ -1176,7 +1176,7 @@ mod tests {
         // Unstamped, and uid 4 names one message here and another one on the
         // server. That is a reissue a legacy vault never recorded, and keeping
         // the file would answer "uid 4 is archived" about the wrong message.
-        fs::write(cur.join("4:2,S.eml"), eml("from-the-old-server@host.test", "old")).unwrap();
+        fs::write(cur.join(format!("4{INFO_PREFIX}S.eml")), eml("from-the-old-server@host.test", "old")).unwrap();
 
         let id_to_uid: HashMap<String, u32> =
             [("someone-else@host.test".to_string(), 4u32)].into_iter().collect();
@@ -1185,7 +1185,7 @@ mod tests {
         assert_eq!(r.orphaned, vec![4]);
         assert_eq!(r.kept, 0);
         assert_eq!(r.errors, 0);
-        assert!(!cur.join("4:2,S.eml").exists());
+        assert!(!cur.join(format!("4{INFO_PREFIX}S.eml")).exists());
         assert_eq!(orphan_stats(&mailbox).count, 1);
         assert_eq!(read_generation(&mailbox), Some(6));
 
@@ -1202,14 +1202,14 @@ mod tests {
 
         // The control for the two above: same file, same map, and the one
         // difference is a stamp naming a generation the server has replaced.
-        fs::write(cur.join("77:2,S.eml"), eml("deleted-from-server@host.test", "gone")).unwrap();
+        fs::write(cur.join(format!("77{INFO_PREFIX}S.eml")), eml("deleted-from-server@host.test", "gone")).unwrap();
         write_generation(&mailbox, 4).unwrap();
 
         let r = repair_generation(&mailbox, 5, &HashMap::new(), &HashSet::new());
         assert_eq!(r.orphaned, vec![77]);
         assert_eq!(r.kept, 0);
         assert_eq!(r.errors, 0);
-        assert!(!cur.join("77:2,S.eml").exists());
+        assert!(!cur.join(format!("77{INFO_PREFIX}S.eml")).exists());
         assert_eq!(orphan_stats(&mailbox).count, 1);
         assert_eq!(read_generation(&mailbox), Some(5));
 
@@ -1235,23 +1235,27 @@ mod tests {
     fn uid_file_map_keys_colon_names_only() {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        for name in ["7:2,S.eml", "12:2,.eml", "300:2,AF.eml", "12.eml", "13_S.eml", "not-a-uid:2,.eml", "_meta.json"] {
-            fs::write(cur.join(name), b"x").unwrap();
+        for name in [format!("7{INFO_PREFIX}S.eml"), format!("12{INFO_PREFIX}.eml"), format!("300{INFO_PREFIX}AF.eml"), "12.eml".to_string(), "13_S.eml".to_string(), format!("not-a-uid{INFO_PREFIX}.eml"), "_meta.json".to_string()] {
+            fs::write(cur.join(&name), b"x").unwrap();
         }
         let map = uid_file_map(cur);
         let mut keys: Vec<u32> = map.keys().copied().collect();
         keys.sort();
         assert_eq!(keys, vec![7, 12, 300]);
-        assert_eq!(map[&12].file_name().unwrap().to_str().unwrap(), "12:2,.eml");
-        assert_eq!(map[&300].file_name().unwrap().to_str().unwrap(), "300:2,AF.eml");
+        assert_eq!(map[&12].file_name().unwrap().to_str().unwrap(), format!("12{INFO_PREFIX}.eml"));
+        assert_eq!(map[&300].file_name().unwrap().to_str().unwrap(), format!("300{INFO_PREFIX}AF.eml"));
     }
 
     #[test]
     fn uid_file_map_agrees_with_find_by_uid() {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        for name in ["1:2,S.eml", "10:2,.eml", "101:2,F.eml", "1010.eml", "07:2,S.eml", "+8:2,S.eml", "3:2,S.eml", "3:2,FS.eml"] {
-            fs::write(cur.join(name), b"x").unwrap();
+        for name in [
+            format!("1{INFO_PREFIX}S.eml"), format!("10{INFO_PREFIX}.eml"), format!("101{INFO_PREFIX}F.eml"),
+            "1010.eml".to_string(), format!("07{INFO_PREFIX}S.eml"), format!("+8{INFO_PREFIX}S.eml"),
+            format!("3{INFO_PREFIX}S.eml"), format!("3{INFO_PREFIX}FS.eml"),
+        ] {
+            fs::write(cur.join(&name), b"x").unwrap();
         }
         let map = uid_file_map(cur);
         for uid in [1u32, 10, 101, 1010, 5, 3, 7, 8] {
@@ -1262,16 +1266,16 @@ mod tests {
     #[test]
     fn vault_filename_uid_is_find_by_uids_rule() {
         let cases = [
-            ("7:2,S.eml", Some(7)),
-            ("0:2,.eml", Some(0)),
-            ("4294967295:2,.eml", Some(u32::MAX)),
-            ("4294967296:2,.eml", None),
-            ("07:2,.eml", None),
-            ("+7:2,.eml", None),
-            ("7.eml", None),
-            (":2,.eml", None),
-            ("7a:2,.eml", None),
-            (".4711:2,S.eml.tmp-1", None),
+            (format!("7{INFO_PREFIX}S.eml"), Some(7)),
+            (format!("0{INFO_PREFIX}.eml"), Some(0)),
+            (format!("4294967295{INFO_PREFIX}.eml"), Some(u32::MAX)),
+            (format!("4294967296{INFO_PREFIX}.eml"), None),
+            (format!("07{INFO_PREFIX}.eml"), None),
+            (format!("+7{INFO_PREFIX}.eml"), None),
+            ("7.eml".to_string(), None),
+            (format!("{INFO_PREFIX}.eml"), None),
+            (format!("7a{INFO_PREFIX}.eml"), None),
+            (format!(".4711{INFO_PREFIX}S.eml.tmp-1"), None),
         ];
         let wrong: Vec<_> = cases.iter()
             .filter(|(name, want)| vault_filename_uid(name) != *want)
@@ -1293,7 +1297,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
         let n = 20_000u32;
-        for uid in 1..=n { fs::write(cur.join(format!("{uid}:2,S.eml")), b"x").unwrap(); }
+        for uid in 1..=n { fs::write(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), b"x").unwrap(); }
         let uids: Vec<u32> = (1..=n).collect();
 
         let t = std::time::Instant::now();
@@ -1346,7 +1350,7 @@ mod tests {
         let entries = fs::read_dir(dir).ok()?;
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            let head = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+            let head = name.split(|c: char| is_info_sep(c) || c == '.' || c == '_').next().unwrap_or("");
             if head.parse::<u32>().ok() == Some(uid) {
                 return Some(entry.path());
             }
@@ -1359,11 +1363,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         for name in [
-            "12:2,S.eml", "13:2,F", "14.eml", "15_S.eml", "07.eml", "+8.eml", "17",
-            "16.eml", "16:2,F.eml", "4294967296.eml", "_meta.json", "not-a-uid.eml",
-            ".4711:2,S.eml.tmp-1",
+            format!("12{INFO_PREFIX}S.eml"), format!("13{INFO_PREFIX}F"), "14.eml".to_string(), "15_S.eml".to_string(),
+            "07.eml".to_string(), "+8.eml".to_string(), "17".to_string(),
+            "16.eml".to_string(), format!("16{INFO_PREFIX}F.eml"), "4294967296.eml".to_string(), "_meta.json".to_string(), "not-a-uid.eml".to_string(),
+            format!(".4711{INFO_PREFIX}S.eml.tmp-1"),
         ] {
-            fs::write(dir.join(name), b"x").unwrap();
+            fs::write(dir.join(&name), b"x").unwrap();
         }
         fs::create_dir(dir.join("18")).unwrap();
 
@@ -1423,17 +1428,18 @@ mod tests {
         // Where the vault's `<uid>:` rule and the mirror's split on ':', '.'
         // or '_' read a name differently, the sides disagree about the uid.
         for name in [
-            "1:2,S.eml", "2:2,F.eml", "07:2,S.eml", "+8:2,.eml", "12.eml", "13_S.eml",
-            "16:2,S.eml", "16:2,FS.eml", "18", ".4711:2,S.eml.tmp-1", "_meta.json",
+            format!("1{INFO_PREFIX}S.eml"), format!("2{INFO_PREFIX}F.eml"), format!("07{INFO_PREFIX}S.eml"), format!("+8{INFO_PREFIX}.eml"),
+            "12.eml".to_string(), "13_S.eml".to_string(),
+            format!("16{INFO_PREFIX}S.eml"), format!("16{INFO_PREFIX}FS.eml"), "18".to_string(), format!(".4711{INFO_PREFIX}S.eml.tmp-1"), "_meta.json".to_string(),
         ] {
-            fs::write(cur.join(name), b"x").unwrap();
+            fs::write(cur.join(&name), b"x").unwrap();
         }
-        fs::create_dir(cur.join("19:2,S.eml")).unwrap();
+        fs::create_dir(cur.join(format!("19{INFO_PREFIX}S.eml"))).unwrap();
         for name in [
-            "1.eml", "3:2,S.eml", "4.eml", "5_S.eml", "07.eml", "+8.eml", "13:2,S.eml",
-            "16.eml", "4294967296.eml", "not-a-uid.eml", ".4711:2,S.eml.tmp-1", "_meta.json",
+            "1.eml".to_string(), format!("3{INFO_PREFIX}S.eml"), "4.eml".to_string(), "5_S.eml".to_string(), "07.eml".to_string(), "+8.eml".to_string(), format!("13{INFO_PREFIX}S.eml"),
+            "16.eml".to_string(), "4294967296.eml".to_string(), "not-a-uid.eml".to_string(), format!(".4711{INFO_PREFIX}S.eml.tmp-1"), "_meta.json".to_string(),
         ] {
-            fs::write(mirror.join(name), b"x").unwrap();
+            fs::write(mirror.join(&name), b"x").unwrap();
         }
         fs::create_dir(mirror.join("20")).unwrap();
 
@@ -1458,7 +1464,7 @@ mod tests {
     #[test]
     fn a_listed_path_still_on_disk_is_used_as_is() {
         let tmp = tempfile::tempdir().unwrap();
-        let listed = tmp.path().join("7:2,S.eml");
+        let listed = tmp.path().join(format!("7{INFO_PREFIX}S.eml"));
         fs::write(&listed, b"x").unwrap();
         assert_eq!(find_listed_by_uid(tmp.path(), 7, &listed), Some(listed));
     }
@@ -1467,19 +1473,19 @@ mod tests {
     fn a_file_renamed_after_the_listing_is_found_again() {
         // A flag change renames the file between the listing and the lookup.
         let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("70:2,S.eml"), b"other uid").unwrap();
-        fs::write(tmp.path().join("7:2,FS.eml"), b"x").unwrap();
+        fs::write(tmp.path().join(format!("70{INFO_PREFIX}S.eml")), b"other uid").unwrap();
+        fs::write(tmp.path().join(format!("7{INFO_PREFIX}FS.eml")), b"x").unwrap();
         assert_eq!(
-            find_listed_by_uid(tmp.path(), 7, &tmp.path().join("7:2,S.eml")),
-            Some(tmp.path().join("7:2,FS.eml")),
+            find_listed_by_uid(tmp.path(), 7, &tmp.path().join(format!("7{INFO_PREFIX}S.eml"))),
+            Some(tmp.path().join(format!("7{INFO_PREFIX}FS.eml"))),
         );
     }
 
     #[test]
     fn a_file_deleted_after_the_listing_is_gone() {
         let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("70:2,S.eml"), b"other uid").unwrap();
-        assert_eq!(find_listed_by_uid(tmp.path(), 7, &tmp.path().join("7:2,S.eml")), None);
+        fs::write(tmp.path().join(format!("70{INFO_PREFIX}S.eml")), b"other uid").unwrap();
+        assert_eq!(find_listed_by_uid(tmp.path(), 7, &tmp.path().join(format!("7{INFO_PREFIX}S.eml"))), None);
     }
 
     /// A vault file, named the way build_maildir_filename names them.
@@ -1494,7 +1500,7 @@ mod tests {
     #[test]
     fn a_file_whose_message_id_matches_is_verified() {
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
 
         let mut expected = HashMap::new();
         // The caller's angle brackets must not decide the answer.
@@ -1511,7 +1517,7 @@ mod tests {
         // The uid is present, so the old presence-only check called this proof
         // and the caller deleted the server's only copy of a@host.test.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), "12:2,S", Some("<somethingelse@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<somethingelse@host.test>"));
 
         let mut expected = HashMap::new();
         expected.insert(12u32, "<a@host.test>".to_string());
@@ -1536,8 +1542,8 @@ mod tests {
         // No expected id, and a file that carries none: presence alone verifies,
         // which is what every caller before this change relied on.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
-        write_vault_msg(tmp.path(), "13:2,S", None);
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}S"), None);
 
         let mut expected = HashMap::new();
         expected.insert(13u32, "<a@host.test>".to_string());
@@ -1554,8 +1560,8 @@ mod tests {
         // nothing to compare a Message-ID against, so the header parse must
         // not run at all, not just be ignored once it does.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
-        write_vault_msg(tmp.path(), "13:2,S", Some("<b@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}S"), Some("<b@host.test>"));
 
         READ_MESSAGE_ID_CALLS.with(|c| c.set(0));
         let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], None);
@@ -1575,8 +1581,8 @@ mod tests {
     #[test]
     fn a_file_renamed_after_the_listing_is_still_checked_against_its_message_id() {
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), "12:2,FS", Some("<somethingelse@host.test>"));
-        let listing = HashMap::from([(12u32, tmp.path().join("12:2,S"))]);
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}FS"), Some("<somethingelse@host.test>"));
+        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}S")))]);
         let expected = HashMap::from([(12u32, "<a@host.test>".to_string())]);
 
         let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], Some(&expected));
@@ -1588,7 +1594,7 @@ mod tests {
     #[test]
     fn a_file_deleted_after_the_listing_is_missing_not_verified() {
         let tmp = tempfile::tempdir().unwrap();
-        let listing = HashMap::from([(12u32, tmp.path().join("12:2,S"))]);
+        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}S")))]);
 
         let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], None);
         assert!(verified.is_empty(), "the caller deletes the server copy of whatever verifies");
@@ -1625,14 +1631,14 @@ mod tests {
     fn verify_copies_agrees_with_the_per_uid_lookup() {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        write_vault_msg(cur, "1:2,S.eml", Some("<one@host.test>"));
-        write_vault_msg(cur, "10:2,.eml", Some("<ten@host.test>"));
-        write_vault_msg(cur, "100:2,F.eml", Some("<swapped@host.test>"));
-        write_vault_msg(cur, "11:2,S.eml", None);
-        write_vault_msg(cur, "3:2,S.eml", Some("<three@host.test>"));
-        write_vault_msg(cur, "3:2,FS.eml", Some("<three-dup@host.test>"));
+        write_vault_msg(cur, &format!("1{INFO_PREFIX}S.eml"), Some("<one@host.test>"));
+        write_vault_msg(cur, &format!("10{INFO_PREFIX}.eml"), Some("<ten@host.test>"));
+        write_vault_msg(cur, &format!("100{INFO_PREFIX}F.eml"), Some("<swapped@host.test>"));
+        write_vault_msg(cur, &format!("11{INFO_PREFIX}S.eml"), None);
+        write_vault_msg(cur, &format!("3{INFO_PREFIX}S.eml"), Some("<three@host.test>"));
+        write_vault_msg(cur, &format!("3{INFO_PREFIX}FS.eml"), Some("<three-dup@host.test>"));
         // Not vault rows for find_by_uid, so not for verify either.
-        write_vault_msg(cur, "07:2,S.eml", Some("<seven@host.test>"));
+        write_vault_msg(cur, &format!("07{INFO_PREFIX}S.eml"), Some("<seven@host.test>"));
         write_vault_msg(cur, "9.eml", Some("<nine@host.test>"));
         write_vault_msg(cur, "20_S.eml", Some("<twenty@host.test>"));
 
@@ -1659,7 +1665,7 @@ mod tests {
         let cur = tmp.path();
         let n = 20_000u32;
         for uid in 1..=n {
-            fs::write(cur.join(format!("{uid}:2,S.eml")), format!("Message-ID: <{uid}@host.test>\r\n\r\nx")).unwrap();
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), format!("Message-ID: <{uid}@host.test>\r\n\r\nx")).unwrap();
         }
         let uids: Vec<u32> = (1..=n).collect();
         let expected: HashMap<u32, String> = uids.iter().map(|u| (*u, format!("<{u}@host.test>"))).collect();

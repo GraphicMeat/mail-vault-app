@@ -481,7 +481,7 @@ mod tests {
         let s = st();
         let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
         std::fs::create_dir_all(&cur_dir).unwrap();
-        std::fs::write(cur_dir.join("7:2,.eml"), b"already here").unwrap();
+        std::fs::write(cur_dir.join(format!("7{}.eml", mailvault_core::maildir::INFO_PREFIX)), b"already here").unwrap();
 
         let _g = mock_graph(vec![(200, raw_eml.to_string())]);
         let resp = call(
@@ -493,7 +493,7 @@ mod tests {
         assert_eq!(resp.result.expect("success")["success"], json!(true));
         // The pre-existing file must be untouched (`maildir_store_raw`
         // semantics: overwrite: false), not replaced with the fetched bytes.
-        assert_eq!(std::fs::read(cur_dir.join("7:2,.eml")).unwrap(), b"already here");
+        assert_eq!(std::fs::read(cur_dir.join(format!("7{}.eml", mailvault_core::maildir::INFO_PREFIX))).unwrap(), b"already here");
     }
 
     #[tokio::test]

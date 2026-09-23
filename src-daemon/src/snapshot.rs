@@ -453,15 +453,16 @@ mod tests {
     /// like `07:2,S.eml` parsed as uid 7 instead of being ignored.
     #[test]
     fn create_snapshot_from_maildir_reads_the_real_filename_shape() {
+        use mailvault_core::maildir::INFO_PREFIX;
         let dir = std::env::temp_dir().join(format!("mailvault-test-snap-maildir-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
         let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("7:2,AS.eml"), b"From: a@b\r\n\r\nx").unwrap();
-        fs::write(cur.join("9:2,.eml"), b"From: a@b\r\n\r\ny").unwrap();
+        fs::write(cur.join(format!("7{INFO_PREFIX}AS.eml")), b"From: a@b\r\n\r\nx").unwrap();
+        fs::write(cur.join(format!("9{INFO_PREFIX}.eml")), b"From: a@b\r\n\r\ny").unwrap();
         // Non-canonical: no other reader binds this to uid 7 either
         // (`vault_filename_uid`/`find_by_uid`) — the snapshot must not.
-        fs::write(cur.join("07:2,S.eml"), b"From: a@b\r\n\r\nz").unwrap();
+        fs::write(cur.join(format!("07{INFO_PREFIX}S.eml")), b"From: a@b\r\n\r\nz").unwrap();
 
         let info = create_snapshot_from_maildir(&dir, "acc1", "user@test.com").unwrap();
         let manifest = load_snapshot(&dir, "acc1", &info.filename).unwrap();

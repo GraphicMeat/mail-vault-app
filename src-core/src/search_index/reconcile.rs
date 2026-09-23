@@ -723,6 +723,7 @@ fn strip_bodies(conn: &Connection) -> rusqlite::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::INFO_PREFIX;
     use crate::search_index::db;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
@@ -794,7 +795,7 @@ mod tests {
 
     fn put_many(v: &Vault, n: u32) {
         for uid in 1..=n {
-            put(v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml(&format!("m{uid}"), "x"));
+            put(v, "a1", "INBOX", &format!("{uid}{INFO_PREFIX}.eml"), &eml(&format!("m{uid}"), "x"));
         }
     }
 
@@ -804,8 +805,8 @@ mod tests {
     #[test]
     fn indexes_new_files_and_skips_unchanged_ones() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,S.eml", &eml("Quarterly invoice", "the attached statement"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Lunch", "see you at noon"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}S.eml"), &eml("Quarterly invoice", "the attached statement"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Lunch", "see you at noon"));
         put(&v, "a1", "INBOX", "legacy.eml", &eml("ignored", "not a vault row"));
         let n = AtomicUsize::new(0);
         let s = run(&v, "a1", "INBOX", ON, &n);
@@ -820,11 +821,11 @@ mod tests {
     #[test]
     fn flag_rename_updates_filename_without_parsing() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Hello", "body"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Hello", "body"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         let cur = v.root.join("Maildir/a1/INBOX/cur");
-        std::fs::rename(cur.join("1:2,.eml"), cur.join("1:2,S.eml")).unwrap();
+        std::fs::rename(cur.join(format!("1{INFO_PREFIX}.eml")), cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((s.renamed, s.parsed), (1, 0));
         assert_eq!(n.load(Ordering::SeqCst), 1);
@@ -834,7 +835,7 @@ mod tests {
             .unwrap()
             .query_row("SELECT filename, flags FROM messages WHERE uid = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
             .unwrap();
-        assert_eq!(name, "1:2,S.eml");
+        assert_eq!(name, format!("1{INFO_PREFIX}S.eml"));
         // A star or a read receipt IS a rename, and a saved view filtering on
         // Starred reads this column. Leaving it at the parse-time value would
         // make every flag change invisible until the file was rewritten.
@@ -845,11 +846,11 @@ mod tests {
     fn a_removed_message_reports_the_identity_its_metadata_is_keyed_by() {
         let v = vault();
         let identified = "From: A <a@x.test>\r\nSubject: Gone soon\r\nMessage-ID: <gone@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
-        put(&v, "a1", "INBOX", "1:2,.eml", identified);
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Stays", "body"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), identified);
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Stays", "body"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
-        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/1:2,.eml")).unwrap();
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/1{INFO_PREFIX}.eml"))).unwrap();
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!(s.removed, 1);
         assert_eq!(s.removed_keys.len(), 1);
@@ -860,10 +861,10 @@ mod tests {
     fn a_message_with_no_message_id_still_reports_a_key_when_it_goes() {
         let v = vault();
         let raw = "From: A <a@x.test>\r\nSubject: No identity\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
-        put(&v, "a1", "INBOX", "5:2,.eml", raw);
+        put(&v, "a1", "INBOX", &format!("5{INFO_PREFIX}.eml"), raw);
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
-        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/5:2,.eml")).unwrap();
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/5{INFO_PREFIX}.eml"))).unwrap();
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!(s.removed_keys, vec!["u:INBOX:5".to_string()]);
     }
@@ -871,8 +872,8 @@ mod tests {
     #[test]
     fn an_indexed_message_carries_the_flags_its_file_name_spells() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,FS.eml", &eml("Starred", "body"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Plain", "body"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}FS.eml"), &eml("Starred", "body"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Plain", "body"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         let g = crate::search_index::lock(&v.db);
@@ -886,13 +887,13 @@ mod tests {
     #[test]
     fn rewritten_file_is_reparsed_and_deleted_file_is_removed() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Old subject 古い", "old words"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Goner 消える", "vanishing"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Old subject 古い", "old words"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Goner 消える", "vanishing"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((cjk_hits(&v, "\"古 い\""), cjk_hits(&v, "\"消 え る\"")), (1, 1));
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("New subject 新しい", "brand new longer words here"));
-        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/2:2,.eml")).unwrap();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("New subject 新しい", "brand new longer words here"));
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/2{INFO_PREFIX}.eml"))).unwrap();
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((s.parsed, s.removed), (1, 1));
         assert!(fts_hits(&v, "\"old words\"").is_empty());
@@ -908,7 +909,7 @@ mod tests {
     #[test]
     fn unparseable_file_is_recorded_once_and_not_retried() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", "no headers at all, no subject");
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), "no headers at all, no subject");
         let n = AtomicUsize::new(0);
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!(s.failed, 1);
@@ -924,14 +925,14 @@ mod tests {
     #[test]
     fn unreadable_file_is_recorded_and_not_reread_but_a_vanished_one_is_left() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "one"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "two"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Alpha", "one"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Beta", "two"));
         let cur = v.root.join("Maildir/a1/INBOX/cur");
-        std::fs::create_dir(cur.join("9:2,.eml")).unwrap(); // listed, never readable
+        std::fs::create_dir(cur.join(format!("9{INFO_PREFIX}.eml"))).unwrap(); // listed, never readable
         // Highest uid first: uid 2's parse deletes uid 1 after the listing saw it.
         let parse = |raw: &[u8], uid: u32, name: &str| {
             if uid == 2 {
-                let _ = std::fs::remove_file(cur.join("1:2,.eml"));
+                let _ = std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}.eml")));
             }
             fake_parse(raw, uid, name)
         };
@@ -954,9 +955,9 @@ mod tests {
     fn a_transient_read_error_is_retried_not_pinned() {
         use std::os::unix::fs::PermissionsExt;
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "readable"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "padlocked"));
-        let locked = v.root.join("Maildir/a1/INBOX/cur/2:2,.eml");
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Alpha", "readable"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Beta", "padlocked"));
+        let locked = v.root.join(format!("Maildir/a1/INBOX/cur/2{INFO_PREFIX}.eml"));
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
         let n = AtomicUsize::new(0);
         let s = run(&v, "a1", "INBOX", ON, &n);
@@ -980,9 +981,9 @@ mod tests {
     #[test]
     fn total_is_the_files_listed_per_folder_even_before_they_are_indexed() {
         let v = vault();
-        for uid in 1..=3 { put(&v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml("In", "x")); }
-        for uid in 1..=2 { put(&v, "a1", "Archive", &format!("{uid}:2,.eml"), &eml("Arc", "x")); }
-        put(&v, "a1", "Gone", "1:2,.eml", &eml("Gone", "x"));
+        for uid in 1..=3 { put(&v, "a1", "INBOX", &format!("{uid}{INFO_PREFIX}.eml"), &eml("In", "x")); }
+        for uid in 1..=2 { put(&v, "a1", "Archive", &format!("{uid}{INFO_PREFIX}.eml"), &eml("Arc", "x")); }
+        put(&v, "a1", "Gone", &format!("1{INFO_PREFIX}.eml"), &eml("Gone", "x"));
         for dir in ["INBOX", "Archive", "Gone"] {
             let s = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", dir, ON, &fake_parse, &|| false, &mut |_| {}).unwrap();
             assert!(s.interrupted);
@@ -1000,12 +1001,12 @@ mod tests {
     fn a_delete_reconciled_in_its_folder_alone_keeps_the_index_complete() {
         let v = vault();
         for dir in ["INBOX", "Archive"] {
-            for uid in 1..=2 { put(&v, "a1", dir, &format!("{uid}:2,.eml"), &eml(dir, "x")); }
+            for uid in 1..=2 { put(&v, "a1", dir, &format!("{uid}{INFO_PREFIX}.eml"), &eml(dir, "x")); }
         }
         let n = AtomicUsize::new(0);
         for dir in ["INBOX", "Archive"] { run(&v, "a1", dir, ON, &n); }
         assert_eq!(counts(&v), db::IndexCounts { indexed: 4, total: 4 });
-        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/2:2,.eml")).unwrap();
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/2{INFO_PREFIX}.eml"))).unwrap();
         run(&v, "a1", "INBOX", ON, &n); // a nudge: this folder only, no full pass
         assert_eq!(counts(&v), db::IndexCounts { indexed: 3, total: 3 });
     }
@@ -1013,7 +1014,7 @@ mod tests {
     #[test]
     fn bodies_off_indexes_headers_only_and_toggling_on_reparses() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Weekly report", "confidential numbers"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Weekly report", "confidential numbers"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", OFF, &n);
         assert!(fts_hits(&v, "\"confidential\"").is_empty());
@@ -1032,9 +1033,9 @@ mod tests {
     #[test]
     fn accounts_and_dirs_are_isolated_and_missing_dirs_pruned() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "one"));
-        put(&v, "a2", "INBOX", "1:2,.eml", &eml("Beta", "two"));
-        put(&v, "a2", "Projects_2026", "1:2,.eml", &eml("Gamma", "three"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Alpha", "one"));
+        put(&v, "a2", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Beta", "two"));
+        put(&v, "a2", "Projects_2026", &format!("1{INFO_PREFIX}.eml"), &eml("Gamma", "three"));
         let n = AtomicUsize::new(0);
         for (a, d) in list_vault_dirs(&v.root.join("Maildir")).unwrap() { run(&v, &a, &d, ON, &n); }
         let mut dirs = list_vault_dirs(&v.root.join("Maildir")).unwrap();
@@ -1073,7 +1074,7 @@ mod tests {
     #[test]
     fn keep_going_false_stops_between_batches_and_resumes() {
         let v = vault();
-        for uid in 1..=(BATCH as u32 + 20) { put(&v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml(&format!("m{uid}"), "x")); }
+        for uid in 1..=(BATCH as u32 + 20) { put(&v, "a1", "INBOX", &format!("{uid}{INFO_PREFIX}.eml"), &eml(&format!("m{uid}"), "x")); }
         let keep_running = AtomicBool::new(true);
         let parse = |raw: &[u8], uid: u32, name: &str| fake_parse(raw, uid, name);
         let stop_after_first_committed_batch = || keep_running.load(Ordering::SeqCst);
@@ -1095,7 +1096,7 @@ mod tests {
     fn invalidated_generation_while_waiting_for_commit_lock_skips_the_batch() {
         use std::sync::mpsc;
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("new", "body"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("new", "body"));
         let Vault { _tmp, root, db } = v;
         let shared = std::sync::Arc::new(db);
         let maildir = root.join("Maildir");
@@ -1184,7 +1185,7 @@ mod tests {
     #[test]
     fn cjk_table_gets_character_tokens() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("明日の会議について", "資料を添付します"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("明日の会議について", "資料を添付します"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         let g = crate::search_index::lock(&v.db);
@@ -1214,8 +1215,8 @@ mod tests {
     #[test]
     fn missing_cur_removes_nothing() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "one"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "two"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Alpha", "one"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Beta", "two"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         std::fs::remove_dir_all(v.root.join("Maildir/a1/INBOX/cur")).unwrap();
@@ -1270,7 +1271,7 @@ mod tests {
     #[test]
     fn bodies_off_defers_compaction_until_asked() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml_utf8("Weekly report", "confidential 機密 numbers"));
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_utf8("Weekly report", "confidential 機密 numbers"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((fts_hits(&v, "\"confidential\"").len(), cjk_hits(&v, "\"機 密\"")), (1, 1));
@@ -1302,7 +1303,7 @@ mod tests {
             let dir = ["INBOX", "Archive", "Sent"][(i % 3) as usize];
             let w = words[(i as usize) % words.len()];
             let body: String = (0..300).map(|k| words[(k * 7 + i as usize) % words.len()]).collect::<Vec<_>>().join(" ");
-            put(&v, "bench", dir, &format!("{i}:2,S.eml"), &eml_utf8(&format!("{w} update {i}"), &body));
+            put(&v, "bench", dir, &format!("{i}{INFO_PREFIX}S.eml"), &eml_utf8(&format!("{w} update {i}"), &body));
         }
         let t = Instant::now();
         let parse = |raw: &[u8], uid: u32, name: &str| fake_parse(raw, uid, name);
@@ -1330,7 +1331,7 @@ mod tests {
     fn commit_batch_writes_pending_attachment_rows_for_each_candidate() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             subject: "Invoice".into(),
             has_attachments: true,
@@ -1357,7 +1358,7 @@ mod tests {
     fn commit_batch_writes_no_attachment_rows_when_attachments_are_disabled() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 1 }],
             ..IndexDoc::default()
@@ -1371,7 +1372,7 @@ mod tests {
     fn reparsing_a_changed_message_replaces_its_attachment_rows() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc1 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "old.pdf".into(), mime: "application/pdf".into(), size: 1 }], ..IndexDoc::default() };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc1))]).unwrap();
         let doc2 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "new.pdf".into(), mime: "application/pdf".into(), size: 2 }], ..IndexDoc::default() };
@@ -1384,7 +1385,7 @@ mod tests {
     fn run_pending_extractions_fills_in_ok_text_and_rewrites_fts() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             subject: "Invoice".into(),
             attachment_candidates: vec![AttachmentMeta { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11 }],
@@ -1415,7 +1416,7 @@ mod tests {
     fn run_pending_extractions_with_bodies_off_drops_body_text_from_fts() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             subject: "Invoice".into(),
             body_text: "a very secret body about quokkas".into(),
@@ -1449,7 +1450,7 @@ mod tests {
     fn a_transient_extraction_error_leaves_the_row_pending() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
             ..IndexDoc::default()
@@ -1486,7 +1487,7 @@ mod tests {
     fn a_missing_file_leaves_the_row_pending_without_looping_forever_in_one_call() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
             ..IndexDoc::default()
@@ -1505,7 +1506,7 @@ mod tests {
     fn attachment_read_part_runs_without_holding_the_shared_connection() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
         let doc = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }], ..IndexDoc::default() };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
         let shared = Mutex::new(Some(conn));

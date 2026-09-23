@@ -237,7 +237,7 @@ mod tests {
         conn.execute(
             "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc)
              VALUES (?1,?2,?3,?4,0,0,?5,0)",
-            rusqlite::params![account, vault_dir, uid, format!("{uid}:2,S.eml"), message_id],
+            rusqlite::params![account, vault_dir, uid, format!("{uid}{}S.eml", mailvault_core::maildir::INFO_PREFIX), message_id],
         )
         .unwrap();
         *lock(&s.search_index.db) = Some(conn);

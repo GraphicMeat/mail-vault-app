@@ -305,6 +305,7 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::INFO_PREFIX;
     use crate::search_index::{db, reconcile::*, SharedConn};
     use std::sync::Mutex;
 
@@ -391,7 +392,7 @@ mod tests {
         for (acct, dir, uid, content) in files {
             let cur = root.join("Maildir").join(acct).join(dir).join("cur");
             std::fs::create_dir_all(&cur).unwrap();
-            std::fs::write(cur.join(format!("{uid}:2,.eml")), format!("Message-ID: <{acct}.{dir}.{uid}@x.test>\r\n{content}")).unwrap();
+            std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), format!("Message-ID: <{acct}.{dir}.{uid}@x.test>\r\n{content}")).unwrap();
         }
         for (a, d) in list_vault_dirs(&root.join("Maildir")).unwrap() {
             reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
@@ -404,7 +405,7 @@ mod tests {
     fn star(tmp: &tempfile::TempDir, db: &SharedConn, acct: &str, dir: &str, uid: u32, letters: &str) {
         let root = tmp.path().to_path_buf();
         let cur = root.join("Maildir").join(acct).join(dir).join("cur");
-        std::fs::rename(cur.join(format!("{uid}:2,.eml")), cur.join(format!("{uid}:2,{letters}.eml"))).unwrap();
+        std::fs::rename(cur.join(format!("{uid}{INFO_PREFIX}.eml")), cur.join(format!("{uid}{INFO_PREFIX}{letters}.eml"))).unwrap();
         reconcile_mailbox(db, &root.join("Maildir"), acct, dir, IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
     }
 
@@ -487,7 +488,7 @@ mod tests {
         let (tmp, db) = fixture();
         let root = tmp.path().to_path_buf();
         let cur = root.join("Maildir/luke/INBOX/cur");
-        std::fs::write(cur.join("9:2,.eml"), eml("No identity", "Ann <ann@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", "body")).unwrap();
+        std::fs::write(cur.join(format!("9{INFO_PREFIX}.eml")), eml("No identity", "Ann <ann@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", "body")).unwrap();
         reconcile_mailbox(&db, &root.join("Maildir"), "luke", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
         let keys = vec!["u:INBOX:9".to_string()];
         assert_eq!(uids(&db, SearchRequest { msg_keys: Some(keys), ..req("luke", "") }), vec![("INBOX".to_string(), 9)]);
@@ -525,7 +526,7 @@ mod tests {
         for uid in 1..=count {
             conn.execute(
                 "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES (?1, ?2, ?3, ?4, 1, 1, 1, ?5)",
-                rusqlite::params![account, vault_dir, uid, format!("{uid}:2,.eml"), body_state],
+                rusqlite::params![account, vault_dir, uid, format!("{uid}{INFO_PREFIX}.eml"), body_state],
             ).unwrap();
         }
     }

@@ -295,7 +295,8 @@ mod tests {
         let src = base.join("src");
         let dst = base.join("dst");
         fs::create_dir_all(src.join("Maildir/acc/INBOX/cur")).unwrap();
-        fs::write(src.join("Maildir/acc/INBOX/cur/1:2,S.eml"), b"hello world").unwrap();
+        let name = format!("Maildir/acc/INBOX/cur/1{}S.eml", crate::maildir::INFO_PREFIX);
+        fs::write(src.join(&name), b"hello world").unwrap();
 
         let (mut n, mut b) = (0usize, 0u64);
         copy_tree(&src, &dst, &mut n, &mut b).unwrap();
@@ -303,10 +304,10 @@ mod tests {
         assert_eq!(b, 11);
         verify_tree(&src, &dst).unwrap();
 
-        fs::write(dst.join("Maildir/acc/INBOX/cur/1:2,S.eml"), b"hel").unwrap();
+        fs::write(dst.join(&name), b"hel").unwrap();
         assert!(verify_tree(&src, &dst).is_err());
 
-        fs::remove_file(dst.join("Maildir/acc/INBOX/cur/1:2,S.eml")).unwrap();
+        fs::remove_file(dst.join(&name)).unwrap();
         assert!(verify_tree(&src, &dst).is_err());
 
         let _ = fs::remove_dir_all(&base);

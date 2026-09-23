@@ -484,6 +484,7 @@ fn registry_read<T>(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, r
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::maildir::INFO_PREFIX;
     use serde_json::json;
     use std::fs;
 
@@ -775,7 +776,7 @@ mod tests {
         assert_eq!(arr[0]["uid"], json!(7));
         assert_eq!(arr[0]["isArchived"], json!(false));
         assert_eq!(arr[0]["flags"], json!([]));
-        let on_disk = fs::metadata(vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,.eml")).unwrap().len();
+        let on_disk = fs::metadata(vault_files::cur_path(t.path(), "acc", "INBOX").join(format!("7{INFO_PREFIX}.eml"))).unwrap().len();
         assert_eq!(arr[0]["size"], json!(on_disk), "size comes from the registry's size column");
     }
 
@@ -838,7 +839,7 @@ mod tests {
             let _ = crate::custody::open_into(&s);
             let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
             fs::create_dir_all(&cur).unwrap();
-            fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+            fs::write(cur.join(format!("1{INFO_PREFIX}.eml")), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
             maildir::write_generation(cur.parent().unwrap(), 1).unwrap();
             let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<m@x.test>"}]});
             crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
@@ -897,14 +898,14 @@ mod tests {
         let p7 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
         assert_eq!(call(&s, "maildir_exists", p7.clone()).await.result, Some(json!(true)));
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
-        fs::rename(cur.join("7:2,.eml"), cur.join("7:2,S.eml")).unwrap();
+        fs::rename(cur.join(format!("7{INFO_PREFIX}.eml")), cur.join(format!("7{INFO_PREFIX}S.eml"))).unwrap();
         let r = call(&s, "maildir_read_light", p7).await.result.unwrap();
         assert_eq!(r["flags"], json!(["seen", "\\Seen"]));
         assert_eq!(s.vault_registry.listing_count(), 2);
 
         // Removed behind its back: `maildir_exists` stats the held row, so it
         // answers false rather than "saved" for the rest of the session.
-        fs::remove_file(cur.join("7:2,S.eml")).unwrap();
+        fs::remove_file(cur.join(format!("7{INFO_PREFIX}S.eml"))).unwrap();
         let p7 = json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7});
         assert_eq!(call(&s, "maildir_exists", p7).await.result, Some(json!(false)));
         assert_eq!(s.vault_registry.listing_count(), 3);
@@ -966,7 +967,7 @@ mod tests {
         let raw = b64(b"From: a@b.com\r\n\r\nbody");
         let r = call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": raw, "flags": ["seen"]})).await;
         assert!(r.error.is_none(), "{:?}", r.error);
-        assert!(vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,S.eml").exists());
+        assert!(vault_files::cur_path(t.path(), "acc", "INBOX").join(format!("7{INFO_PREFIX}S.eml")).exists());
         assert_eq!(
             rx.try_recv().unwrap(),
             mailvault_core::search_index::plan::Signal::Nudge { account_id: "acc".into(), vault_dir: "INBOX".into() }
@@ -994,7 +995,7 @@ mod tests {
         call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": b64(b"two"), "flags": ["flagged", "seen"]})).await;
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
-        assert_eq!(names, vec!["7:2,FS.eml"]);
+        assert_eq!(names, vec![format!("7{INFO_PREFIX}FS.eml")]);
     }
 
     #[tokio::test]
@@ -1013,7 +1014,7 @@ mod tests {
         let rx = signal_channel(&s);
         let r = call(&s, "maildir_delete", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
         assert!(r.error.is_none());
-        assert!(!vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,.eml").exists());
+        assert!(!vault_files::cur_path(t.path(), "acc", "INBOX").join(format!("7{INFO_PREFIX}.eml")).exists());
         assert!(rx.try_recv().is_ok(), "a real removal must nudge");
 
         // A second delete of the same (now absent) uid removes nothing and
@@ -1030,7 +1031,7 @@ mod tests {
         let r = call(&s, "maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "flags": ["seen", "flagged"]})).await;
         assert!(r.error.is_none(), "{:?}", r.error);
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
-        assert!(cur.join("7:2,FS.eml").exists());
+        assert!(cur.join(format!("7{INFO_PREFIX}FS.eml")).exists());
         assert!(rx.try_recv().is_ok(), "a real rename must nudge");
 
         // Re-applying the same flags is a no-rename no-op: no second nudge.
@@ -1046,16 +1047,16 @@ mod tests {
         let (t, s) = st(true);
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
-        fs::write(cur.join("2:2,AS.eml"), b"b").unwrap(); // archived: must survive
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
+        fs::write(cur.join(format!("2{INFO_PREFIX}AS.eml")), b"b").unwrap(); // archived: must survive
         let rx = signal_channel(&s);
 
         let r = call(&s, "maildir_clear_cache", json!({})).await;
         let v = r.result.unwrap();
         assert_eq!(v["deletedCount"], json!(1));
         assert_eq!(v["skippedArchived"], json!(1));
-        assert!(!cur.join("1:2,S.eml").exists());
-        assert!(cur.join("2:2,AS.eml").exists());
+        assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
+        assert!(cur.join(format!("2{INFO_PREFIX}AS.eml")).exists());
         assert_eq!(rx.try_recv().unwrap(), mailvault_core::search_index::plan::Signal::Sweep);
     }
 
@@ -1064,7 +1065,7 @@ mod tests {
         let (t, s) = st(true);
         let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,AS.eml"), b"a").unwrap(); // archived only
+        fs::write(cur.join(format!("1{INFO_PREFIX}AS.eml")), b"a").unwrap(); // archived only
         let rx = signal_channel(&s);
 
         call(&s, "maildir_clear_cache", json!({})).await;
@@ -1082,7 +1083,7 @@ mod tests {
         let r = call(&s, "maildir_migrate_json_to_eml", json!({})).await;
         let summary = r.result.unwrap();
         assert!(summary.as_str().unwrap().contains("Migrated: 1"), "{summary}");
-        assert!(cur.join("7:2,AS.eml").exists());
+        assert!(cur.join(format!("7{INFO_PREFIX}AS.eml")).exists());
         assert!(!cur.join("7.json").exists());
         // Inventory §4 pinned "never nudges" as a known gap. The .eml it
         // writes now invalidates the vault registry, whose change hook sweeps
@@ -1095,13 +1096,13 @@ mod tests {
         let (t, s) = st(true);
         let src_cur = vault_files::cur_path(t.path(), "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
-        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(src_cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
         let rx = signal_channel(&s);
 
         let r = call(&s, "maildir_migrate_email_dirs", json!({"accountMap": {"user@example.com": "uuid-123"}})).await;
         let v = r.result.unwrap();
         assert_eq!(v["migrated"], json!(1));
-        assert!(vault_files::cur_path(t.path(), "uuid-123", "INBOX").join("1:2,S.eml").exists());
+        assert!(vault_files::cur_path(t.path(), "uuid-123", "INBOX").join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert_eq!(rx.try_recv().unwrap(), mailvault_core::search_index::plan::Signal::Sweep);
     }
 

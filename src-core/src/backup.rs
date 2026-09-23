@@ -2112,15 +2112,16 @@ mod tests {
         std::fs::create_dir_all(&app).unwrap();
         std::fs::create_dir_all(&ext).unwrap();
 
-        std::fs::write(app.join("101:2,SF.eml"), b"seen+flagged").unwrap();
-        std::fs::write(ext.join("202:2,S.eml"), b"seen").unwrap();
+        let p = crate::maildir::INFO_PREFIX;
+        std::fs::write(app.join(format!("101{p}SF.eml")), b"seen+flagged").unwrap();
+        std::fs::write(ext.join(format!("202{p}S.eml")), b"seen").unwrap();
         std::fs::write(ext.join("303.eml"), b"legacy").unwrap();
 
         assert_eq!(sync_locations(&app, &ext).0, 3);
 
-        assert!(ext.join("101:2,SF.eml").exists(), "flags lost vault → mirror");
-        assert!(app.join("202:2,AS.eml").exists(), "flags lost mirror → vault");
-        assert!(app.join("303:2,A.eml").exists(), "legacy backup did not restore");
+        assert!(ext.join(format!("101{p}SF.eml")).exists(), "flags lost vault → mirror");
+        assert!(app.join(format!("202{p}AS.eml")).exists(), "flags lost mirror → vault");
+        assert!(app.join(format!("303{p}A.eml")).exists(), "legacy backup did not restore");
 
         // Second pass must be a no-op — no duplicates under either naming scheme.
         assert_eq!(sync_locations(&app, &ext).0, 0);
@@ -2143,11 +2144,12 @@ mod tests {
 
         // The repair read this message, found no uid for it on the current
         // server, and moved it aside.
-        std::fs::write(orphaned.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
+        let p = crate::maildir::INFO_PREFIX;
+        std::fs::write(orphaned.join(format!("4{p}.eml")), eml("strictseal@old-host.test")).unwrap();
         // The mirror still holds the same message under the same old uid.
-        std::fs::write(ext.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
+        std::fs::write(ext.join(format!("4{p}.eml")), eml("strictseal@old-host.test")).unwrap();
         // ...and a genuinely missing message the restore SHOULD bring back.
-        std::fs::write(ext.join("7:2,S.eml"), eml("still-on-this-server@mock.test")).unwrap();
+        std::fs::write(ext.join(format!("7{p}S.eml")), eml("still-on-this-server@mock.test")).unwrap();
 
         assert_eq!(sync_locations(&app, &ext).0, 1, "exactly one file should restore");
 
@@ -2171,8 +2173,9 @@ mod tests {
             std::fs::create_dir_all(dir).unwrap();
         }
 
-        std::fs::write(orphaned.join("4:2,.eml"), eml("set-aside@old-host.test")).unwrap();
-        std::fs::write(ext.join("9:2,.eml"), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
+        let p = crate::maildir::INFO_PREFIX;
+        std::fs::write(orphaned.join(format!("4{p}.eml")), eml("set-aside@old-host.test")).unwrap();
+        std::fs::write(ext.join(format!("9{p}.eml")), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
 
         assert_eq!(sync_locations(&app, &ext).0, 1);
         assert!(crate::vault_eml::find_file_by_uid(&app, 9).is_some());
@@ -2188,7 +2191,7 @@ mod tests {
         std::fs::create_dir_all(&app).unwrap();
         std::fs::create_dir_all(&ext).unwrap();
 
-        std::fs::write(ext.join("11:2,S.eml"), eml("fresh@mock.test")).unwrap();
+        std::fs::write(ext.join(format!("11{}S.eml", crate::maildir::INFO_PREFIX)), eml("fresh@mock.test")).unwrap();
 
         assert_eq!(sync_locations(&app, &ext).0, 1);
         assert!(crate::vault_eml::find_file_by_uid(&app, 11).is_some());
@@ -2202,7 +2205,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path().join("luke@mock.test").join("INBOX").join("cur");
         std::fs::create_dir_all(&cur).unwrap();
-        std::fs::write(cur.join("11:2,S.eml"), b"a").unwrap();
+        std::fs::write(cur.join(format!("11{}S.eml", crate::maildir::INFO_PREFIX)), b"a").unwrap();
         std::fs::write(cur.join("12.eml"), b"b").unwrap();
         std::fs::write(cur.join("13_S.eml"), b"c").unwrap();
         std::fs::write(cur.join("not-a-uid.eml"), b"d").unwrap();
@@ -2244,7 +2247,7 @@ mod tests {
             for entry in entries.flatten() {
                 if entry.path().is_dir() { continue; }
                 let name = entry.file_name().to_string_lossy().to_string();
-                let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
+                let uid_str = name.split(|c: char| c == crate::maildir::INFO_SEP || c == '.' || c == '_').next().unwrap_or(&name);
                 let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
                 if find_msg_file_by_uid(backup_dir, uid).is_some() { continue; }
                 let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
@@ -2257,7 +2260,7 @@ mod tests {
                 if entry.path().is_dir() { continue; }
                 let name = entry.file_name().to_string_lossy().to_string();
                 if !name.ends_with(".eml") { continue; }
-                let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
+                let uid_str = name.split(|c: char| c == crate::maildir::INFO_SEP || c == '.' || c == '_').next().unwrap_or(&name);
                 let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
                 if crate::vault_eml::find_file_by_uid(vault_cur_dir, uid).is_some() { continue; }
                 let ids = orphaned_ids.get_or_insert_with(|| orphaned_message_ids(vault_cur_dir));
@@ -2287,36 +2290,37 @@ mod tests {
         for dir in [&app, &orphaned, &ext] {
             fs::create_dir_all(dir).unwrap();
         }
+        let p = crate::maildir::INFO_PREFIX;
         for name in [
-            "101:2,SF.eml", // vault only: mirrored under its own name
-            "102:2,S",      // vault only, no extension: mirrored as .eml
-            "103_S.eml",    // legacy name in the vault: mirrored, then restored as 103:2,A.eml
-            "104:2,S.eml",  // mirror holds 104.eml: nothing moves
-            "105:2,F.eml",  // mirror holds 105_S.eml: nothing moves
-            "07:2,S.eml",   // mirror side reads 7, vault side does not
-            "300:2,S.eml",  // the mirror's directory named 300.eml counts as a copy
-            "notes.txt",
-            "_meta.json",
+            format!("101{p}SF.eml"), // vault only: mirrored under its own name
+            format!("102{p}S"),      // vault only, no extension: mirrored as .eml
+            "103_S.eml".to_string(), // legacy name in the vault: mirrored, then restored as 103:2,A.eml
+            format!("104{p}S.eml"),  // mirror holds 104.eml: nothing moves
+            format!("105{p}F.eml"),  // mirror holds 105_S.eml: nothing moves
+            format!("07{p}S.eml"),   // mirror side reads 7, vault side does not
+            format!("300{p}S.eml"),  // the mirror's directory named 300.eml counts as a copy
+            "notes.txt".to_string(),
+            "_meta.json".to_string(),
         ] {
-            fs::write(app.join(name), format!("app {}", name)).unwrap();
+            fs::write(app.join(&name), format!("app {}", name)).unwrap();
         }
         fs::create_dir_all(app.join("400")).unwrap();
         for name in [
-            "202:2,S.eml", // mirror only: restored with its flags, plus archived
-            "203.eml",     // legacy flagless: restored as 203:2,A.eml
-            "204_S.eml",   // legacy underscore: restored, flags not parsed
-            "205:2,F",     // no .eml: never restored
-            "08.eml",      // restored as 8:2,A.eml
-            "104.eml",
-            "105_S.eml",
-            "7:2,S.eml", // the vault's 07:2,S.eml is not uid 7: restored
-            ".4711:2,S.eml.tmp-1",
+            format!("202{p}S.eml"), // mirror only: restored with its flags, plus archived
+            "203.eml".to_string(),  // legacy flagless: restored as 203:2,A.eml
+            "204_S.eml".to_string(), // legacy underscore: restored, flags not parsed
+            format!("205{p}F"),     // no .eml: never restored
+            "08.eml".to_string(),   // restored as 8:2,A.eml
+            "104.eml".to_string(),
+            "105_S.eml".to_string(),
+            format!("7{p}S.eml"), // the vault's 07:2,S.eml is not uid 7: restored
+            format!(".4711{p}S.eml.tmp-1"),
         ] {
-            fs::write(ext.join(name), format!("ext {}", name)).unwrap();
+            fs::write(ext.join(&name), format!("ext {}", name)).unwrap();
         }
         fs::create_dir_all(ext.join("300.eml")).unwrap();
         fs::write(ext.join("206.eml"), eml("set-aside@old-host.test")).unwrap();
-        fs::write(orphaned.join("206:2,.eml"), eml("set-aside@old-host.test")).unwrap();
+        fs::write(orphaned.join(format!("206{p}.eml")), eml("set-aside@old-host.test")).unwrap();
         fs::write(ext.join("207.eml"), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
         (app, ext)
     }
@@ -2351,20 +2355,24 @@ mod tests {
         // The fixture has to reach the paths it claims to, or agreement is vacuous.
         let app_names: Vec<String> = listing(&new_app).into_iter().map(|(n, _)| n).collect();
         let ext_names: Vec<String> = listing(&new_ext).into_iter().map(|(n, _)| n).collect();
-        for name in ["202:2,AS.eml", "203:2,A.eml", "204:2,A.eml", "8:2,A.eml", "7:2,AS.eml", "103:2,A.eml", "207:2,A.eml"] {
-            assert!(app_names.contains(&name.to_string()), "not restored: {name} in {app_names:?}");
+        let p = crate::maildir::INFO_PREFIX;
+        for name in [
+            format!("202{p}AS.eml"), format!("203{p}A.eml"), format!("204{p}A.eml"), format!("8{p}A.eml"),
+            format!("7{p}AS.eml"), format!("103{p}A.eml"), format!("207{p}A.eml"),
+        ] {
+            assert!(app_names.contains(&name), "not restored: {name} in {app_names:?}");
         }
         for name in [
-            "206:2,.eml", "205:2,F.eml", "205:2,.eml", "104:2,.eml", "105:2,.eml",
-            "206:2,A.eml", "205:2,AF.eml", "104:2,A.eml", "105:2,A.eml",
+            format!("206{p}.eml"), format!("205{p}F.eml"), format!("205{p}.eml"), format!("104{p}.eml"), format!("105{p}.eml"),
+            format!("206{p}A.eml"), format!("205{p}AF.eml"), format!("104{p}A.eml"), format!("105{p}A.eml"),
         ] {
-            assert!(!app_names.contains(&name.to_string()), "restored but should not be: {name}");
+            assert!(!app_names.contains(&name), "restored but should not be: {name}");
         }
-        for name in ["101:2,SF.eml", "102:2,S.eml", "103_S.eml"] {
-            assert!(ext_names.contains(&name.to_string()), "not mirrored: {name} in {ext_names:?}");
+        for name in [format!("101{p}SF.eml"), format!("102{p}S.eml"), "103_S.eml".to_string()] {
+            assert!(ext_names.contains(&name), "not mirrored: {name} in {ext_names:?}");
         }
-        for name in ["104:2,S.eml", "105:2,F.eml", "07:2,S.eml", "300:2,S.eml"] {
-            assert!(!ext_names.contains(&name.to_string()), "mirrored but should not be: {name}");
+        for name in [format!("104{p}S.eml"), format!("105{p}F.eml"), format!("07{p}S.eml"), format!("300{p}S.eml")] {
+            assert!(!ext_names.contains(&name), "mirrored but should not be: {name}");
         }
     }
 
@@ -2377,10 +2385,11 @@ mod tests {
         let ext = tmp.path().join("ext");
         std::fs::create_dir_all(&app).unwrap();
         std::fs::create_dir_all(&ext).unwrap();
-        std::fs::write(app.join("209:2,S.eml"), b"a").unwrap();
+        let p = crate::maildir::INFO_PREFIX;
+        std::fs::write(app.join(format!("209{p}S.eml")), b"a").unwrap();
         std::fs::write(app.join("209_S.eml"), b"b").unwrap();
         std::fs::write(ext.join("208.eml"), b"c").unwrap();
-        std::fs::write(ext.join("208:2,S.eml"), b"d").unwrap();
+        std::fs::write(ext.join(format!("208{p}S.eml")), b"d").unwrap();
 
         assert_eq!(sync_locations(&app, &ext).0, 2);
 
@@ -2406,7 +2415,7 @@ mod tests {
         assert!(vault_uids_after_presync(&reg, "acct", "INBOX", &app, None).unwrap().is_empty());
 
         std::fs::create_dir_all(&app).unwrap();
-        std::fs::write(app.join("5:2,S.eml"), eml("in-the-vault@mock.test")).unwrap();
+        std::fs::write(app.join(format!("5{}S.eml", crate::maildir::INFO_PREFIX)), eml("in-the-vault@mock.test")).unwrap();
         assert_eq!(vault_uids_after_presync(&reg, "acct", "INBOX", &app, None).unwrap(), HashSet::from([5]));
     }
 
@@ -2438,12 +2447,12 @@ mod tests {
 
         crate::vault_files::store(&reg, root, "acct", "INBOX", 7, b"seven", &[], true).unwrap();
         vault_uids_after_presync(&reg, "acct", "INBOX", &cur, Some(&mirror)).unwrap();
-        assert!(mirror.join("7:2,.eml").exists(), "the vault-only uid went to the mirror");
+        assert!(mirror.join(format!("7{}.eml", crate::maildir::INFO_PREFIX)).exists(), "the vault-only uid went to the mirror");
         assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![7, 42], vec![42])));
         assert_eq!(reg.listing_count(), 2, "a mirror-only copy leaves the folder verified");
     }
 
-    fn seed_mirror(root: &Path, email: &str, mailbox: &str, names: &[&str]) {
+    fn seed_mirror(root: &Path, email: &str, mailbox: &str, names: &[String]) {
         let cur = root.join(email).join(mailbox).join("cur");
         std::fs::create_dir_all(&cur).unwrap();
         for n in names {
@@ -2455,19 +2464,22 @@ mod tests {
     fn purge_backup_files_removes_every_legacy_filename_shape() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let p = crate::maildir::INFO_PREFIX;
         // The three shapes the mirror has carried over its lifetime.
-        seed_mirror(root, "me@x.test", "INBOX.Spam", &["101:2,S.eml", "102.eml", "103_S.eml", "104:2,S.eml", "1010:2,S.eml"]);
+        seed_mirror(root, "me@x.test", "INBOX.Spam", &[
+            format!("101{p}S.eml"), "102.eml".to_string(), "103_S.eml".to_string(), format!("104{p}S.eml"), format!("1010{p}S.eml"),
+        ]);
 
         let uids: HashSet<u32> = [101u32, 102, 103].into_iter().collect();
         let removed = purge_backup_files(root, "me@x.test", "INBOX.Spam", &uids);
 
         let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
         assert_eq!(removed, 3);
-        assert!(!cur.join("101:2,S.eml").exists());
+        assert!(!cur.join(format!("101{p}S.eml")).exists());
         assert!(!cur.join("102.eml").exists());
         assert!(!cur.join("103_S.eml").exists());
-        assert!(cur.join("104:2,S.eml").exists());
-        assert!(cur.join("1010:2,S.eml").exists(), "1010 must survive a purge of 101");
+        assert!(cur.join(format!("104{p}S.eml")).exists());
+        assert!(cur.join(format!("1010{p}S.eml")).exists(), "1010 must survive a purge of 101");
     }
 
     #[test]
@@ -2510,7 +2522,7 @@ mod tests {
         let dd = tmp.path().join("data");
         let root = tmp.path().join("mirror");
         std::fs::create_dir_all(&dd).unwrap();
-        seed_mirror(&root, "me@x.test", "INBOX", &["4:2,S.eml"]);
+        seed_mirror(&root, "me@x.test", "INBOX", &[format!("4{}S.eml", crate::maildir::INFO_PREFIX)]);
 
         let mut q: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
         q.insert("malformed-no-pipe".to_string(), vec![1, 2]);
@@ -2520,7 +2532,7 @@ mod tests {
         let removed = drain_purge_queue(&dd, &root);
 
         assert_eq!(removed, 1, "the well-formed entry must still drain");
-        assert!(!root.join("me@x.test").join("INBOX").join("cur").join("4:2,S.eml").exists());
+        assert!(!root.join("me@x.test").join("INBOX").join("cur").join(format!("4{}S.eml", crate::maildir::INFO_PREFIX)).exists());
         assert!(
             !read_purge_queue(&dd).contains_key("malformed-no-pipe"),
             "a key with no '|' separator must be dropped, not left queued forever"

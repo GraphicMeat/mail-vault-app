@@ -706,7 +706,7 @@ mod tests {
         let dir = cur(f, mailbox);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
-        let uid = name.split(':').next().unwrap();
+        let uid = name.split(crate::maildir::INFO_SEP).next().unwrap();
         fs::write(&path, format!("From: a@x.test\r\nSubject: m{uid}\r\n\r\nbody of {uid}\r\n")).unwrap();
         path
     }
@@ -723,10 +723,10 @@ mod tests {
     #[test]
     fn an_upsert_after_verify_is_read_back_without_a_listing() {
         let f = fixture();
-        put(&f, MB, "1:2,S.eml");
+        put(&f, MB, &format!("1{}S.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
-        let path = put(&f, MB, "2:2,.eml");
+        let path = put(&f, MB, &format!("2{}.eml", crate::maildir::INFO_PREFIX));
         reg.upsert(ACCT, MB, 2, &path);
         assert_eq!(saved(&reg, &f, MB), vec![1, 2]);
         assert_eq!(reg.listing_count(), 1);
@@ -735,14 +735,14 @@ mod tests {
     #[test]
     fn a_flag_rename_moves_the_uid_to_archived_and_keeps_the_parse() {
         let f = fixture();
-        let old = put(&f, MB, "4:2,S.eml");
+        let old = put(&f, MB, &format!("4{}S.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let rows = reg.light_rows(&f.root, ACCT, MB, None).unwrap();
         assert_eq!(rows[0]["isArchived"], false);
         assert_eq!(reg.parse_count(), 1);
 
-        fs::rename(&old, cur(&f, MB).join("4:2,AS.eml")).unwrap();
-        reg.rename(ACCT, MB, 4, "4:2,AS.eml");
+        fs::rename(&old, cur(&f, MB).join(&format!("4{}AS.eml", crate::maildir::INFO_PREFIX))).unwrap();
+        reg.rename(ACCT, MB, 4, &format!("4{}AS.eml", crate::maildir::INFO_PREFIX));
 
         assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![4]));
         let rows = reg.light_rows(&f.root, ACCT, MB, Some(&[4])).unwrap();
@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn an_external_delete_is_found_by_the_failed_open_and_one_relisting() {
         let f = fixture();
-        let path = put(&f, MB, "3:2,S.eml");
+        let path = put(&f, MB, &format!("3{}S.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert!(reg.resolve(&f.root, ACCT, MB, 3).unwrap().is_some());
         assert_eq!(reg.listing_count(), 1);
@@ -775,10 +775,10 @@ mod tests {
     #[test]
     fn with_resolved_retries_once_on_a_file_renamed_behind_its_back() {
         let f = fixture();
-        let path = put(&f, MB, "5:2,.eml");
+        let path = put(&f, MB, &format!("5{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert!(reg.resolve(&f.root, ACCT, MB, 5).unwrap().is_some());
-        fs::rename(&path, cur(&f, MB).join("5:2,S.eml")).unwrap();
+        fs::rename(&path, cur(&f, MB).join(&format!("5{}S.eml", crate::maildir::INFO_PREFIX))).unwrap();
         let bytes = reg.with_resolved(&f.root, ACCT, MB, 5, |p| fs::read(p)).unwrap();
         assert!(!bytes.is_empty());
         assert_eq!(reg.listing_count(), 2);
@@ -794,7 +794,7 @@ mod tests {
     #[test]
     fn with_resolved_reports_unknown_apart_from_absent() {
         let f = fixture();
-        put(&f, MB, "5:2,.eml");
+        put(&f, MB, &format!("5{}.eml", crate::maildir::INFO_PREFIX));
         let file_cur = cur(&f, "Broken");
         fs::create_dir_all(file_cur.parent().unwrap()).unwrap();
         fs::write(&file_cur, b"not a dir").unwrap();
@@ -820,8 +820,8 @@ mod tests {
     fn a_held_file_that_will_not_read_is_left_out_and_tried_again() {
         use std::os::unix::fs::PermissionsExt;
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
-        let locked = put(&f, MB, "2:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
+        let locked = put(&f, MB, &format!("2{}.eml", crate::maildir::INFO_PREFIX));
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
         let reg = VaultRegistry::open(&f.app, &f.root);
         let rows = reg.light_rows(&f.root, ACCT, MB, None);
@@ -847,7 +847,7 @@ mod tests {
     fn an_upsert_queued_behind_a_delete_never_resurrects_the_file() {
         let f = fixture();
         let reg = VaultRegistry::open(&f.app, &f.root);
-        let path = put(&f, MB, "7:2,.eml");
+        let path = put(&f, MB, &format!("7{}.eml", crate::maildir::INFO_PREFIX));
         let held = guard(&reg.conn);
         std::thread::scope(|s| {
             let (reg, path) = (&reg, &path);
@@ -893,8 +893,8 @@ mod tests {
     #[test]
     fn uid_sets_never_reads_the_light_rows() {
         let f = fixture();
-        put(&f, MB, "1:2,S.eml");
-        put(&f, MB, "2:2,AS.eml");
+        put(&f, MB, &format!("1{}S.eml", crate::maildir::INFO_PREFIX));
+        put(&f, MB, &format!("2{}AS.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let want = Some((vec![1, 2], vec![2]));
         assert_eq!(reg.uid_sets(&f.root, ACCT, MB), want);
@@ -908,7 +908,7 @@ mod tests {
     #[test]
     fn a_mailbox_is_listed_once_per_session() {
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
         assert_eq!(saved(&reg, &f, MB), vec![1]);
@@ -919,18 +919,18 @@ mod tests {
     #[test]
     fn a_new_session_reconciles_with_the_disk_and_parses_only_the_new_file() {
         let f = fixture();
-        let one = put(&f, MB, "1:2,.eml");
-        let two = put(&f, MB, "2:2,.eml");
-        put(&f, MB, "3:2,.eml");
+        let one = put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
+        let two = put(&f, MB, &format!("2{}.eml", crate::maildir::INFO_PREFIX));
+        put(&f, MB, &format!("3{}.eml", crate::maildir::INFO_PREFIX));
         {
             let reg = VaultRegistry::open(&f.app, &f.root);
             assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap().len(), 3);
             assert_eq!(reg.parse_count(), 3);
         }
         fs::remove_file(&one).unwrap();
-        put(&f, MB, "4:2,.eml");
+        put(&f, MB, &format!("4{}.eml", crate::maildir::INFO_PREFIX));
         // fs::rename keeps the mtime: the registry must see a rename, not a new file.
-        fs::rename(&two, cur(&f, MB).join("2:2,S.eml")).unwrap();
+        fs::rename(&two, cur(&f, MB).join(&format!("2{}S.eml", crate::maildir::INFO_PREFIX))).unwrap();
 
         let reg = VaultRegistry::open(&f.app, &f.root);
         let rows = reg.light_rows(&f.root, ACCT, MB, None).unwrap();
@@ -944,11 +944,11 @@ mod tests {
     #[test]
     fn a_write_between_listing_and_apply_survives() {
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let (account, dir) = key(ACCT, MB);
         let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
-        let nine = put(&f, MB, "9:2,.eml");
+        let nine = put(&f, MB, &format!("9{}.eml", crate::maildir::INFO_PREFIX));
         reg.upsert(ACCT, MB, 9, &nine);
         assert!(reg.apply_listing(&account, &dir, listing));
         assert_eq!(saved(&reg, &f, MB), vec![1, 9]);
@@ -957,8 +957,8 @@ mod tests {
     #[test]
     fn a_remove_between_listing_and_apply_stays_removed() {
         let f = fixture();
-        let three = put(&f, MB, "3:2,.eml");
-        put(&f, MB, "4:2,.eml");
+        let three = put(&f, MB, &format!("3{}.eml", crate::maildir::INFO_PREFIX));
+        put(&f, MB, &format!("4{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let (account, dir) = key(ACCT, MB);
         let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
@@ -976,7 +976,7 @@ mod tests {
     #[test]
     fn an_invalidate_between_listing_and_apply_leaves_the_mailbox_unverified() {
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let (account, dir) = key(ACCT, MB);
         let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
@@ -990,12 +990,12 @@ mod tests {
     #[test]
     fn an_invalidate_of_another_mailbox_does_not_fence_this_one() {
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         let (account, dir) = key(ACCT, MB);
         let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
         reg.invalidate(ACCT, "Other");
-        reg.rename(ACCT, "Other", 7, "7:2,S.eml"); // a miss: invalidates Other
+        reg.rename(ACCT, "Other", 7, &format!("7{}S.eml", crate::maildir::INFO_PREFIX)); // a miss: invalidates Other
         assert!(reg.apply_listing(&account, &dir, listing));
         let listing = reg.list_mailbox(&f.root, &account, &dir).unwrap();
         reg.invalidate_all();
@@ -1006,7 +1006,7 @@ mod tests {
     fn a_garbage_db_is_recreated_on_disk_and_a_new_root_wipes_it() {
         let f = fixture();
         fs::write(f.app.join(DB_FILE), b"this is not sqlite at all, not even close").unwrap();
-        let path = put(&f, MB, "1:2,.eml");
+        let path = put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         {
             let reg = VaultRegistry::open(&f.app, &f.root);
             reg.upsert(ACCT, MB, 1, &path);
@@ -1026,10 +1026,10 @@ mod tests {
     #[test]
     fn mailboxes_sharing_a_directory_share_rows() {
         let f = fixture();
-        put(&f, "A/B", "1:2,.eml");
+        put(&f, "A/B", &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let reg = VaultRegistry::open(&f.app, &f.root);
         assert_eq!(saved(&reg, &f, "A/B"), vec![1]);
-        let path = put(&f, "A_B", "2:2,.eml");
+        let path = put(&f, "A_B", &format!("2{}.eml", crate::maildir::INFO_PREFIX));
         reg.upsert(ACCT, "A_B", 2, &path);
         assert_eq!(saved(&reg, &f, "A/B"), vec![1, 2]);
         assert_eq!(saved(&reg, &f, "A_B"), vec![1, 2]);
@@ -1043,7 +1043,7 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&seen);
         reg.set_on_change(Box::new(move |s| guard(&sink).push(s)));
-        let path = put(&f, "A/B", "1:2,.eml");
+        let path = put(&f, "A/B", &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         reg.upsert(ACCT, "A/B", 1, &path);
         reg.invalidate_all();
         let mb = Scope::Mailbox { account: ACCT.into(), vault_dir: "A_B".into() };
@@ -1053,10 +1053,10 @@ mod tests {
     #[test]
     fn an_unparseable_file_is_parsed_once_and_left_out() {
         let f = fixture();
-        put(&f, MB, "1:2,.eml");
+        put(&f, MB, &format!("1{}.eml", crate::maildir::INFO_PREFIX));
         let dir = cur(&f, MB);
         // mailparse refuses a header block that opens with a space.
-        fs::write(dir.join("2:2,.eml"), b" not mail\r\n\r\n").unwrap();
+        fs::write(dir.join(&format!("2{}.eml", crate::maildir::INFO_PREFIX)), b" not mail\r\n\r\n").unwrap();
         let reg = VaultRegistry::open(&f.app, &f.root);
         let first = reg.light_rows(&f.root, ACCT, MB, None).unwrap();
         let second = reg.light_rows(&f.root, ACCT, MB, None).unwrap();

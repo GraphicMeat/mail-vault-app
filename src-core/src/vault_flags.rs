@@ -495,6 +495,7 @@ pub struct AdoptReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::INFO_PREFIX;
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
@@ -584,8 +585,8 @@ mod tests {
     fn two_callers_of_apply_in_both_complete_under_the_one_writer_lock() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("1:2,.eml"), b"body").unwrap();
-        fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("1{INFO_PREFIX}.eml")), b"body").unwrap();
+        fs::write(d.cur.join(format!("2{INFO_PREFIX}.eml")), b"body").unwrap();
 
         let (first, second) = std::thread::scope(|scope| {
             let a = scope.spawn(|| apply_in(&f.reg, d, &[change(1, &["\\Seen"])]));
@@ -595,15 +596,15 @@ mod tests {
 
         assert_eq!(first.renamed, 1);
         assert_eq!(second.renamed, 1);
-        assert_eq!(names(&d.cur), vec!["1:2,S.eml", "2:2,S.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("1{INFO_PREFIX}S.eml"), format!("2{INFO_PREFIX}S.eml")]);
     }
 
     #[test]
     fn marking_read_renames_the_file_and_its_mirror_copy() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("7:2,A"), b"body").unwrap();
-        fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,A.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("7{INFO_PREFIX}A")), b"body").unwrap();
+        fs::write(d.mirror_cur.as_ref().unwrap().join(format!("7{INFO_PREFIX}A.eml")), b"body").unwrap();
 
         let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
@@ -611,8 +612,8 @@ mod tests {
         // `apply_files` itself only ever touches the two file copies.
         assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The legacy extension-less name converges on the current one.
-        assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
-        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,AS.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("7{INFO_PREFIX}AS.eml")]);
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec![format!("7{INFO_PREFIX}AS.eml")]);
     }
 
     /// The backup's catch-up over a copy the app auto-cached when the message
@@ -622,42 +623,42 @@ mod tests {
     fn a_change_asking_for_archived_puts_the_letter_on_the_vault_and_mirror_copies() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("9:2,.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("9{INFO_PREFIX}.eml")), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("9.eml"), b"body").unwrap();
 
         let applied = apply_in(&f.reg, d, &[change(9, &["\\Seen", "archived"])]);
 
         assert_eq!(applied.renamed, 1);
         assert_eq!(applied.mirrored, 1);
-        assert_eq!(names(&d.cur), vec!["9:2,AS.eml"]);
-        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["9:2,AS.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("9{INFO_PREFIX}AS.eml")]);
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec![format!("9{INFO_PREFIX}AS.eml")]);
     }
 
     #[test]
     fn marking_unread_takes_the_letter_off_again_and_leaves_the_rest_alone() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
-        fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,AS.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("7{INFO_PREFIX}AS.eml")), b"body").unwrap();
+        fs::write(d.mirror_cur.as_ref().unwrap().join(format!("7{INFO_PREFIX}AS.eml")), b"body").unwrap();
 
         let applied = apply_in(&f.reg, d, &[change(7, &[])]);
 
         assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The .eml suffix the file had is kept.
-        assert_eq!(names(&d.cur), vec!["7:2,A.eml"]);
-        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,A.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("7{INFO_PREFIX}A.eml")]);
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec![format!("7{INFO_PREFIX}A.eml")]);
     }
 
     #[test]
     fn a_change_the_copies_already_carry_is_a_no_op() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("7{INFO_PREFIX}AS.eml")), b"body").unwrap();
 
         let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied, Applied::default());
-        assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("7{INFO_PREFIX}AS.eml")]);
     }
 
     #[test]
@@ -680,22 +681,22 @@ mod tests {
         let applied = apply_in(&f.reg, d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied.mirrored, 1);
-        assert_eq!(names(mirror), vec!["7:2,S.eml"]);
+        assert_eq!(names(mirror), vec![format!("7{INFO_PREFIX}S.eml")]);
     }
 
     #[test]
     fn a_backup_reconcile_touches_only_the_copies_that_disagree() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("1:2,A.eml"), b"a").unwrap();
-        fs::write(d.cur.join("2:2,AS.eml"), b"b").unwrap();
-        fs::write(d.cur.join("3:2,AS.eml"), b"c").unwrap();
+        fs::write(d.cur.join(format!("1{INFO_PREFIX}A.eml")), b"a").unwrap();
+        fs::write(d.cur.join(format!("2{INFO_PREFIX}AS.eml")), b"b").unwrap();
+        fs::write(d.cur.join(format!("3{INFO_PREFIX}AS.eml")), b"c").unwrap();
 
         // The server: 1 was read elsewhere, 2 is as stored, 3 was marked unread.
         let applied = apply_in(&f.reg, d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])]);
 
         assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
-        assert_eq!(names(&d.cur), vec!["1:2,AS.eml", "2:2,AS.eml", "3:2,A.eml"]);
+        assert_eq!(names(&d.cur), vec![format!("1{INFO_PREFIX}AS.eml"), format!("2{INFO_PREFIX}AS.eml"), format!("3{INFO_PREFIX}A.eml")]);
     }
 
     /// `apply_everywhere` holds `WRITER` for one call spanning both halves: a
@@ -717,8 +718,8 @@ mod tests {
     fn writer_spans_the_custody_callback_not_just_the_file_rename() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("1:2,.eml"), b"body").unwrap();
-        fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
+        fs::write(d.cur.join(format!("1{INFO_PREFIX}.eml")), b"body").unwrap();
+        fs::write(d.cur.join(format!("2{INFO_PREFIX}.eml")), b"body").unwrap();
         const SLOW_MS: u64 = 150;
 
         let state = std::sync::atomic::AtomicU8::new(0);
@@ -761,7 +762,7 @@ mod tests {
         let f = fixture();
         let d = &f.dirs;
         let root = f._tmp.path();
-        fs::write(d.cur.join("7:2,A.eml"), b"From: a@x.test\r\nSubject: seven\r\n\r\nbody\r\n").unwrap();
+        fs::write(d.cur.join(format!("7{INFO_PREFIX}A.eml")), b"From: a@x.test\r\nSubject: seven\r\n\r\nbody\r\n").unwrap();
         let rows = f.reg.light_rows(root, "acct", "INBOX", None).unwrap();
         assert_eq!(rows[0]["flags"], serde_json::json!(["archived"]));
         assert_eq!((f.reg.listing_count(), f.reg.parse_count()), (1, 1));
@@ -769,7 +770,7 @@ mod tests {
         let applied = apply_everywhere(&f.reg, d, &[change(7, &["\\Seen", "\\Flagged"])], |_patch| Ok((0, 0)));
         assert_eq!(applied.renamed, 1);
 
-        assert_eq!(f.reg.resolve(root, "acct", "INBOX", 7), Some(Some(d.cur.join("7:2,AFS.eml"))));
+        assert_eq!(f.reg.resolve(root, "acct", "INBOX", 7), Some(Some(d.cur.join(format!("7{INFO_PREFIX}AFS.eml")))));
         let rows = f.reg.light_rows(root, "acct", "INBOX", Some(&[7])).unwrap();
         assert_eq!(rows[0]["subject"], "seven", "the light row survives the rename");
         assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "flagged", "seen", "\\Seen", "\\Flagged"]));
@@ -814,13 +815,13 @@ mod tests {
         // Only two of the three locations exist — no external mirror is configured.
         fs::create_dir_all(&from.cur).unwrap();
         fs::create_dir_all(&from.sidecar_dir).unwrap();
-        fs::write(from.cur.join("7:2,AS"), b"body").unwrap();
+        fs::write(from.cur.join(format!("7{INFO_PREFIX}AS")), b"body").unwrap();
         fs::write(sibling(&from), b"1").unwrap();
         fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
 
         assert_eq!(rename_dirs(&reg, &from, &to), (2, vec![]));
 
-        assert!(to.cur.join("7:2,AS").exists());
+        assert!(to.cur.join(format!("7{INFO_PREFIX}AS")).exists());
         // The whole mailbox directory moved, so its sibling files came along.
         assert!(sibling(&to).exists(), ".uidvalidity stayed behind");
         assert!(to.sidecar_dir.join("7.json").exists());
@@ -1008,7 +1009,7 @@ mod tests {
 
     fn seed_app_side(from: &Dirs) {
         fs::create_dir_all(&from.cur).unwrap();
-        fs::write(from.cur.join("1:2,S.eml"), b"body").unwrap();
+        fs::write(from.cur.join(format!("1{INFO_PREFIX}S.eml")), b"body").unwrap();
         fs::create_dir_all(&from.sidecar_dir).unwrap();
         fs::write(from.sidecar_dir.join("graph_id_map.json"), b"{\"1\":\"msg-1\"}").unwrap();
         fs::write(from.sidecar_dir.join("1.json"), b"{\"uid\":1}").unwrap();
@@ -1041,7 +1042,7 @@ mod tests {
         assert_eq!(out.app_moved, 2, "both of them app-side");
         assert_eq!(out.blocked, 0);
         assert!(out.failed.is_empty());
-        assert!(to.cur.join("1:2,S.eml").exists());
+        assert!(to.cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(to.sidecar_dir.join("graph_id_map.json").exists(), "the ledger travels with the sidecar dir");
         assert!(!from.cur.parent().unwrap().exists());
         assert!(!from.sidecar_dir.exists());
@@ -1071,7 +1072,7 @@ mod tests {
             vec![to.cur.parent().unwrap().display().to_string()],
             "names the vault dir that already existed"
         );
-        assert!(from.cur.join("1:2,S.eml").exists());
+        assert!(from.cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(from.sidecar_dir.join("graph_id_map.json").exists());
         assert!(!to.sidecar_dir.exists());
         assert_eq!(file_count(tmp.path()), before);
@@ -1087,7 +1088,7 @@ mod tests {
         fs::create_dir_all(&to.cur).unwrap(); // app side blocked
         let from_mirror = from.mirror_cur.clone().unwrap();
         fs::create_dir_all(&from_mirror).unwrap();
-        fs::write(from_mirror.join("1:2,S.eml"), b"mirror").unwrap();
+        fs::write(from_mirror.join(format!("1{INFO_PREFIX}S.eml")), b"mirror").unwrap();
         let before = file_count(tmp.path());
 
         let out = adopt_dirs(&reg, &from, &to);
@@ -1095,14 +1096,14 @@ mod tests {
         assert_eq!(out.moved, 1, "the mirror moved");
         assert_eq!(out.app_moved, 0, "the mirror is not the app side: the custody rows stay put");
         assert_eq!(out.blocked, 1, "the app side did not");
-        assert!(to.mirror_cur.clone().unwrap().join("1:2,S.eml").exists());
+        assert!(to.mirror_cur.clone().unwrap().join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(!from_mirror.exists());
-        assert!(from.cur.join("1:2,S.eml").exists());
+        assert!(from.cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert_eq!(file_count(tmp.path()), before);
 
         // A mirror whose destination now exists stays put.
         fs::create_dir_all(&from_mirror).unwrap();
-        fs::write(from_mirror.join("2:2,S.eml"), b"second").unwrap();
+        fs::write(from_mirror.join(format!("2{INFO_PREFIX}S.eml")), b"second").unwrap();
         let before2 = file_count(tmp.path());
         let out2 = adopt_dirs(&reg, &from, &to);
         assert_eq!(out2.moved, 0);
@@ -1112,7 +1113,7 @@ mod tests {
             "the mirror destination is named too: {:?}",
             out2.blocked_by
         );
-        assert!(from_mirror.join("2:2,S.eml").exists());
+        assert!(from_mirror.join(format!("2{INFO_PREFIX}S.eml")).exists());
         assert_eq!(file_count(tmp.path()), before2);
     }
 
@@ -1138,7 +1139,7 @@ mod tests {
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
         fs::create_dir_all(&from.cur).unwrap();
-        fs::write(from.cur.join("7:2,AS.eml"), b"body").unwrap();
+        fs::write(from.cur.join(format!("7{INFO_PREFIX}AS.eml")), b"body").unwrap();
         let saved = |mailbox: &str| reg.uid_sets(base, "a", mailbox).unwrap().0;
         assert_eq!(saved("Projects"), vec![7]);
         assert_eq!(saved("Work"), Vec::<u32>::new());
@@ -1173,7 +1174,7 @@ mod tests {
         // The mirror is not the vault: moving it alone invalidates nothing.
         let from_mirror = from.mirror_cur.clone().unwrap();
         fs::create_dir_all(&from_mirror).unwrap();
-        fs::write(from_mirror.join("2:2,S.eml"), b"mirror").unwrap();
+        fs::write(from_mirror.join(format!("2{INFO_PREFIX}S.eml")), b"mirror").unwrap();
         let out = adopt_dirs(&reg, &from, &to);
         assert_eq!((out.moved, out.app_moved), (1, 0));
         assert_eq!(saved("Sent"), vec![1]);

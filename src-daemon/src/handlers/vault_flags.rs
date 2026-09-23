@@ -242,6 +242,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::maildir::INFO_PREFIX;
     use mailvault_core::vault_files;
     use std::fs;
 
@@ -281,7 +282,7 @@ mod tests {
         assert_eq!(applied.renamed, 1);
         assert_eq!(applied.index_patched, 1);
         let cur = vault_files::cur_path(vault.path(), "acc", "INBOX");
-        assert_eq!(file_names(&cur), vec!["7:2,S.eml"]);
+        assert_eq!(file_names(&cur), vec![format!("7{INFO_PREFIX}S.eml")]);
         let text = daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap();
         let rows: Vec<Value> = serde_json::from_str(&text).unwrap();
         assert_eq!(rows[0]["flags"], serde_json::json!(["\\Seen"]));
@@ -496,7 +497,7 @@ mod tests {
         assert!(moved >= 2, "expected the maildir dir, the sidecar dir and the custody row to move: moved={moved}");
 
         let new_cur = vault_files::cur_path(vault.path(), "acc", "Work");
-        assert_eq!(file_names(&new_cur), vec!["1:2,.eml".to_string()]);
+        assert_eq!(file_names(&new_cur), vec![format!("1{INFO_PREFIX}.eml")]);
         let new_sidecar = mailvault_core::header_cache::sidecar_dir(vault.path(), "acc", "Work");
         assert!(new_sidecar.join("1.json").exists());
         assert_eq!(daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "Projects")).unwrap(), None);
@@ -518,7 +519,7 @@ mod tests {
         assert!(report.failed.is_empty());
 
         let new_cur = vault_files::cur_path(vault.path(), "acc", "Sent");
-        assert_eq!(file_names(&new_cur), vec!["1:2,.eml".to_string()]);
+        assert_eq!(file_names(&new_cur), vec![format!("1{INFO_PREFIX}.eml")]);
         assert!(daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "Sent")).unwrap().is_some());
     }
 

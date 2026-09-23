@@ -539,7 +539,8 @@ mod tests {
         let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
         let names: Vec<String> = std::fs::read_dir(&cur).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names.len(), 1);
-        assert!(names[0].contains(":2,") && names[0].split(":2,").nth(1).unwrap().starts_with('A'), "{:?}", names);
+        let prefix = mailvault_core::maildir::INFO_PREFIX;
+        assert!(names[0].contains(prefix) && names[0].split(prefix).nth(1).unwrap().starts_with('A'), "{:?}", names);
     }
 
     /// account_id joins a filesystem path the same way mailbox does; a

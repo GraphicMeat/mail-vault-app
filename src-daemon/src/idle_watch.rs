@@ -404,7 +404,7 @@ mod tests {
 
         watchers.shutdown().await;
         assert!(watchers.status().await.is_empty());
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -437,7 +437,7 @@ mod tests {
 
         assert_eq!(server.count_commands("IDLE"), 0, "it must not try IDLE at all");
         watchers.shutdown().await;
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -468,7 +468,7 @@ mod tests {
         .await;
 
         watchers.shutdown().await;
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -491,7 +491,7 @@ mod tests {
         assert_eq!(watchers.status().await[0].wakeups, 0);
 
         watchers.shutdown().await;
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -526,7 +526,7 @@ mod tests {
 
         watchers.unwatch("acc1").await;
         assert!(watchers.status().await.is_empty());
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A task that died without recording a `reason` (a panic, a stray abort)
@@ -571,6 +571,6 @@ mod tests {
         assert_eq!(watchers.status().await.len(), 1);
 
         watchers.shutdown().await;
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

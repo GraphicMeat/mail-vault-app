@@ -1294,6 +1294,7 @@ mod tests {
     use crate::ipc;
     use crate::server::{handle_request_for_test, DaemonState};
     use chrono::TimeZone;
+    use mailvault_core::maildir::INFO_PREFIX;
     use mailvault_core::search_index::{self as core_search, db};
     use mailvault_core::vault_eml::{LightAttachment, LightEmail, MaildirAddress};
     use serde_json::{json, Value};
@@ -1387,7 +1388,7 @@ mod tests {
         let cur = root.join("Maildir").join(account).join(safe).join("cur");
         std::fs::create_dir_all(&cur).unwrap();
         std::fs::write(
-            cur.join(format!("{uid}:2,.eml")),
+            cur.join(format!("{uid}{INFO_PREFIX}.eml")),
             format!(
                 "From: Sender <sender@example.test>\r\nTo: Me <me@example.test>\r\nSubject: {subject}\r\nDate: Tue, 15 Nov 1994 12:45:26 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
             ),
@@ -1421,9 +1422,9 @@ mod tests {
                 .and_then(|row| row["isArchived"].as_bool())
                 .unwrap_or(false)
             {
-                format!("{uid}:2,A.eml")
+                format!("{uid}{INFO_PREFIX}A.eml")
             } else {
-                format!("{uid}:2,.eml")
+                format!("{uid}{INFO_PREFIX}.eml")
             };
             conn.execute(
                 "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json) VALUES ('acct', ?1, ?2, ?3, 1, 1, NULL, ?4, 'sender@example.test', 'sender', ?5, '', 0, 1, ?6)",

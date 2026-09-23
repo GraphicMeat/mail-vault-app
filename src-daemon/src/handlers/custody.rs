@@ -355,7 +355,7 @@ mod tests {
         let _ = daemon_custody::open_into(&s);
         let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+        fs::write(cur.join(format!("1{}.eml", maildir::INFO_PREFIX)), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
         maildir::write_generation(cur.parent().unwrap(), 1).unwrap();
         let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<m@x.test>"}]});
         daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
@@ -380,7 +380,7 @@ mod tests {
         let _ = daemon_custody::open_into(&s);
         let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+        fs::write(cur.join(format!("1{}.eml", maildir::INFO_PREFIX)), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
         fs::create_dir_all(cur.parent().unwrap().join(maildir::GENERATION_FILE)).unwrap();
         let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<other@x.test>"}]});
         daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();

@@ -280,9 +280,10 @@ mod tests {
 
     fn index(s: &Arc<DaemonState>) {
         let conn = index_db::open(&s.data_dir).unwrap();
-        seed(&conn, 1, "1:2,FS.eml", "Starred one", false, "<one@x.test>");
-        seed(&conn, 2, "2:2,S.eml", "Plain two", true, "<two@x.test>");
-        seed(&conn, 3, "3:2,.eml", "Unread three", false, "<three@x.test>");
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        seed(&conn, 1, &format!("1{p}FS.eml"), "Starred one", false, "<one@x.test>");
+        seed(&conn, 2, &format!("2{p}S.eml"), "Plain two", true, "<two@x.test>");
+        seed(&conn, 3, &format!("3{p}.eml"), "Unread three", false, "<three@x.test>");
         index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
         *lock(&s.search_index.db) = Some(conn);
     }
@@ -298,13 +299,14 @@ mod tests {
         let s = st();
         {
             let conn = index_db::open(&s.data_dir).unwrap();
-            seed(&conn, 1, "1:2,S.eml", "Kept", false, "<one@x.test>");
+            let p = mailvault_core::maildir::INFO_PREFIX;
+            seed(&conn, 1, &format!("1{p}S.eml"), "Kept", false, "<one@x.test>");
             conn.execute(
                 "UPDATE messages SET vault_dir = 'Papierkorb' WHERE uid = 1",
                 [],
             )
             .unwrap();
-            seed(&conn, 2, "2:2,S.eml", "Also kept", false, "<two@x.test>");
+            seed(&conn, 2, &format!("2{p}S.eml"), "Also kept", false, "<two@x.test>");
             index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
             *lock(&s.search_index.db) = Some(conn);
         }

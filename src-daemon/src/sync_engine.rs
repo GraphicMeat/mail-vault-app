@@ -1431,7 +1431,7 @@ mod tests {
         assert_eq!(c.sidecar_count(), 0);
 
         drop(c);
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Task 2.7 (2.5 review I4): a sync write attempted while the vault is
@@ -1455,7 +1455,7 @@ mod tests {
         assert!(c.meta_and_count().0.is_none());
 
         drop(c);
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// With no custody store attached there is nowhere to cache into: the old
@@ -1469,7 +1469,7 @@ mod tests {
         let err = c.write_headers(&[test_header(1)]).unwrap_err();
         assert!(err.contains("custody store is not open"), "{err}");
         drop(c);
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     fn test_header(uid: u32) -> ImapEmailHeader {
@@ -1557,7 +1557,7 @@ mod tests {
         engine.backfilling.lock().await.insert(key);
         assert!(engine.is_backfilling("acc1").await, "in-flight key must read as in-flight");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The cap must read both the settings blob the app writes and the stat
@@ -1614,7 +1614,7 @@ mod tests {
         assert!(!result.success);
         assert!(result.error.unwrap().contains("Daily transfer cap reached"));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1784,7 +1784,7 @@ mod tests {
         assert_eq!(result.error.as_deref(), Some("No internet connection"));
         assert_eq!(cached_count(&engine, "INBOX"), 0, "nothing was fetched");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The control for the test above: same server, same code, open gate.
@@ -1800,7 +1800,7 @@ mod tests {
         assert!(!result.offline);
         assert_eq!(cached_count(&engine, "INBOX"), 3);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A sync that reaches the server is proof of connectivity — the gate must
@@ -1822,7 +1822,7 @@ mod tests {
         assert!(result.success, "sync failed: {:?}", result.error);
         assert!(net.is_online());
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A server that answers "no such mailbox" is not a connectivity failure.
@@ -1840,7 +1840,7 @@ mod tests {
         assert!(!result.offline, "a tagged NO is the server answering, not the network");
         assert!(net.is_online(), "the gate must not shut on a server refusal");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A dropped Wi-Fi must not cost the mailbox its backfill for the life of
@@ -1860,7 +1860,7 @@ mod tests {
             "a backfill that never dialled has not been proven unfetchable"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── Folder-name resolution ──────────────────────────────────────────
@@ -1890,7 +1890,7 @@ mod tests {
             4
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -1912,7 +1912,7 @@ mod tests {
         assert_eq!(result.mailbox, "Sent");
         assert_eq!(result.new_emails, 1);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -1927,7 +1927,7 @@ mod tests {
         let err = result.error.unwrap_or_default();
         assert!(err.contains("NONEXISTENT"), "unexpected error: {}", err);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// An alias survives for the life of the process. If the folder it points
@@ -1978,7 +1978,7 @@ mod tests {
         assert_eq!(result.mailbox, "Sent");
         assert_eq!(result.new_emails, 2);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The alias target vanished AND a real folder by the requested name now
@@ -2013,7 +2013,7 @@ mod tests {
         assert_eq!(result.mailbox, "Sent");
         assert_eq!(result.new_emails, 3);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -2031,7 +2031,7 @@ mod tests {
         assert_eq!(meta.total_emails, Some(30));
         assert_eq!(meta.uid_next, Some(31));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Task 2.3: the cold path used to always write `lastReconcile: null`
@@ -2067,7 +2067,7 @@ mod tests {
             "a cold sync with an unchanged UIDVALIDITY must not drop lastReconcile"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A warm cache must fetch only the arrivals — not re-page the mailbox.
@@ -2094,7 +2094,7 @@ mod tests {
             "a warm cache must not re-fetch headers it already has:\n{joined}"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// THE regression. Purelymail splices `* OK Still here` into a long untagged
@@ -2151,7 +2151,7 @@ mod tests {
             "a failed UID listing must not delete cached headers"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The quieter version of the same bug: the listing parses fine but is
@@ -2187,7 +2187,7 @@ mod tests {
             "a partial UID list must not be mistaken for server-side deletions"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Positive control: real server-side deletions DO get pruned. Without this,
@@ -2213,7 +2213,7 @@ mod tests {
         assert!(!cached.contains(&6));
         assert!(cached.contains(&8));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// What the app writes into the shared header-cache metadata. It owns
@@ -2260,7 +2260,7 @@ mod tests {
         );
         assert_eq!(cached_count(&engine, "INBOX"), 19);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The same disarm on a mailbox the cache only holds part of — the shape the
@@ -2296,7 +2296,7 @@ mod tests {
         assert!(!cached_uid_set(&engine, "INBOX").contains(&15), "expunged row must be pruned");
         assert_eq!(cached_count(&engine, "INBOX"), 10);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A reconcile that was NEEDED and did not complete must not advance the
@@ -2359,7 +2359,7 @@ mod tests {
         );
         assert_eq!(cached_count(&engine, "INBOX"), 10);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The cost ceiling on all of the above: a mailbox whose cache is merely
@@ -2409,7 +2409,7 @@ mod tests {
         );
         assert_eq!(cached_count(&engine, "INBOX"), 10, "nothing fetched, nothing pruned");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The sibling of the count baseline: the app writes `uidNext` into the same
@@ -2465,7 +2465,7 @@ mod tests {
             server.commands()
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The third key in that blob. The app writes `highestModseq` too, and the
@@ -2510,7 +2510,7 @@ mod tests {
             "the app moving the modseq marker must not make the change invisible"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A UIDVALIDITY change re-issues the whole UID space: every cached UID now
@@ -2536,7 +2536,7 @@ mod tests {
             "stale UID generation must be dropped, not merged"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A mailbox whose cache holds only part of the mailbox is invisible to the
@@ -2568,7 +2568,7 @@ mod tests {
         assert_eq!(cached_count(&engine, "INBOX"), 50, "backfill should complete the mailbox");
         assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A failed backfill must clear its in-flight flag. The app pauses its own
@@ -2591,7 +2591,7 @@ mod tests {
             "a failed backfill that keeps reporting in-flight strands the mailbox"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// One unreadable FETCH line used to fail the page and needed a reconnect
@@ -2642,7 +2642,7 @@ mod tests {
         assert_eq!(cached_count(&engine, "INBOX"), 2);
         assert!(engine.backfill_gave_up.lock().await.contains(&key));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Negative control for the test above: an error that is NOT the strict
@@ -2667,7 +2667,7 @@ mod tests {
             "a dropped connection is not a poisoned page — it must still give up"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── Dead pooled socket ──────────────────────────────────────────────
@@ -2686,7 +2686,7 @@ mod tests {
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
         let result = engine_for(&dir).sync_account(&account_for(&server), "INBOX").await;
         assert!(result.success, "probe sync failed: {:?}", result.error);
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
         server.count_commands("SELECT")
     }
 
@@ -2720,7 +2720,7 @@ mod tests {
             "the retry must open a NEW connection, not reuse the dead one"
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Negative control: with every SELECT dying the retry cannot succeed, so
@@ -2746,7 +2746,7 @@ mod tests {
         );
         assert_eq!(server.connection_count(), 2, "one attempt, one retry, no loop");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// THE regression behind the report. A socket the peer closed cleanly
@@ -2774,7 +2774,7 @@ mod tests {
         assert!(!result.success, "EOF on SELECT is not an empty mailbox");
         assert_eq!(cached_count(&engine, "INBOX"), 5, "a dead socket must not prune the cache");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── Ticketed sync.wait ──────────────────────────────────────────────
@@ -2819,7 +2819,7 @@ mod tests {
         assert_eq!(sent.mailbox, "Sent");
         assert_eq!(sent.new_emails, 2);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// `sync.now` and `sync.wait` are two round trips; the sync can finish in
@@ -2836,7 +2836,7 @@ mod tests {
         let result = engine.wait_for_ticket(ticket, 1000).await.expect("late wait");
         assert_eq!(result.new_emails, 4);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// THE regression. The old wait read the account's last completed result
@@ -2877,7 +2877,7 @@ mod tests {
         );
         assert!(engine.wait_for_ticket(t2, 5000).await.is_ok(), "and then answer when it lands");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// `sync.status` is what the app shows while a sync runs. Entering Syncing
@@ -2926,7 +2926,7 @@ mod tests {
 
         engine.wait_for_ticket(ticket, 5000).await.expect("the second sync must finish");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -2937,7 +2937,7 @@ mod tests {
         let err = engine.wait_for_ticket(4242, 10).await.unwrap_err();
         assert!(err.contains("Unknown sync ticket"), "unexpected error: {err}");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A capped sync returns before it connects. It still has to finish its
@@ -2987,7 +2987,7 @@ mod tests {
         assert_eq!(state.status, SyncStatus::Error);
         assert!(state.last_error.unwrap_or_default().contains("Daily transfer cap"));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── Characterization: the live delta paths nothing pinned ────────────
@@ -3031,7 +3031,7 @@ mod tests {
         .remove(0);
         assert_eq!(uid5["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Without CONDSTORE nothing would ever refresh read/star state on cached
@@ -3076,7 +3076,7 @@ mod tests {
         .remove(0);
         assert_eq!(uid5["flags"], serde_json::json!(["\\Seen"]));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A mailbox emptied server-side must leave nothing behind — the prune
@@ -3098,7 +3098,7 @@ mod tests {
         assert_eq!(cached_count(&engine, "INBOX"), 0, "every sidecar must go");
         assert_eq!(Some(cached_meta(&engine, "INBOX")).unwrap().total_emails, Some(0));
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A UIDNEXT gap wider than the range limit is cheaper as a page fetch than
@@ -3127,7 +3127,7 @@ mod tests {
         engine.backfill_mailbox(&account, "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 700, "backfill must finish what the page started");
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// The first sync of a mailbox writes its whole first page. None of it
@@ -3155,7 +3155,7 @@ mod tests {
         assert!(result.success, "sync failed: {:?}", result.error);
         assert_eq!(result.arrivals, 3);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── The change feed ─────────────────────────────────────────────────
@@ -3185,7 +3185,7 @@ mod tests {
         assert_eq!(g, g1 + 1);
         assert_eq!(recs[0].updated_flags, 3);
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// `gen` restarts at 0 in every new process, so after a daemon restart the
@@ -3207,6 +3207,6 @@ mod tests {
             started.elapsed()
         );
 
-        fs::remove_dir_all(&dir).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 }

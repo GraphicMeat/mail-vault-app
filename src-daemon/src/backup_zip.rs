@@ -666,7 +666,7 @@ mod tests {
         let zip_path = build_zip(
             dir.path(),
             "in.zip",
-            &[("mailvault-backup/emails/new@test.com/INBOX/1:2,A.eml", b"body")],
+            &[(format!("mailvault-backup/emails/new@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body")],
             &manifest_for(vec![BackupAccount { email: "new@test.com".into(), imap_server: Some("imap.test".into()), smtp_server: None }]),
         );
 
@@ -691,7 +691,7 @@ mod tests {
         let zip_path = build_zip(
             dir.path(),
             "in.zip",
-            &[("mailvault-backup/emails/known@test.com/INBOX/1:2,A.eml", b"body")],
+            &[(format!("mailvault-backup/emails/known@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body")],
             &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
         );
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
@@ -716,8 +716,8 @@ mod tests {
             dir.path(),
             "in.zip",
             &[
-                ("mailvault-backup/emails/known@test.com/INBOX/1:2,A.eml", b"body"),
-                ("mailvault-backup/emails/known@test.com/INBOX/x:2,A.eml", b"no uid"),
+                (format!("mailvault-backup/emails/known@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body"),
+                (format!("mailvault-backup/emails/known@test.com/INBOX/x{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"no uid"),
             ],
             &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
         );
@@ -746,8 +746,8 @@ mod tests {
             dir.path(),
             "in.zip",
             &[
-                ("mailvault-backup/emails/known@test.com/INBOX/1:2,A.eml", b"body1"),
-                ("mailvault-backup/emails/known@test.com/Archive/2:2,A.eml", b"body2"),
+                (format!("mailvault-backup/emails/known@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body1"),
+                (format!("mailvault-backup/emails/known@test.com/Archive/2{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body2"),
             ],
             &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
         );
@@ -794,7 +794,7 @@ mod tests {
         let zip_path = build_zip(
             dir.path(),
             "in.zip",
-            &[("mailvault-backup/emails/evil@test.com/INBOX/1:2,A.eml", b"body")],
+            &[(format!("mailvault-backup/emails/evil@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body")],
             &manifest_for(vec![BackupAccount { email: "evil@test.com".into(), imap_server: None, smtp_server: None }]),
         );
         let existing =
@@ -803,7 +803,8 @@ mod tests {
         let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 1);
         // The write must land under the sanitized id INSIDE the vault, not escape it.
-        let escaped = std::path::Path::new("/tmp/evil/INBOX/cur/1:2,A.eml");
+        let escaped_name = format!("/tmp/evil/INBOX/cur/1{}A.eml", mailvault_core::maildir::INFO_PREFIX);
+        let escaped = std::path::Path::new(&escaped_name);
         assert!(!escaped.exists(), "must not escape the vault root via account_id");
 
         // The sanitizer keeps '.', so the escaped-looking id becomes one
@@ -827,7 +828,7 @@ mod tests {
         let zip_path = build_zip(
             dir.path(),
             "in.zip",
-            &[("mailvault-backup/emails/known@test.com/INBOX/1:2,A.eml", b"body")],
+            &[(format!("mailvault-backup/emails/known@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX).as_str(), b"body")],
             &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
         );
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];

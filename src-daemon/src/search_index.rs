@@ -1290,6 +1290,8 @@ fn e2e_pause_after(_done: usize) {}
 
 #[cfg(test)]
 mod tests {
+    use mailvault_core::maildir::INFO_PREFIX;
+
     #[test]
     fn the_e2e_batch_pause_applies_only_to_full_batches_and_a_valid_setting() {
         use crate::search_index::batch_pause;
@@ -1309,7 +1311,7 @@ mod tests {
 
     #[test]
     fn adapter_builds_doc_from_the_app_parser() {
-        let doc = crate::search_index::index_doc_from_light(&eml_html(), 7, "7:2,S.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&eml_html(), 7, &format!("7{INFO_PREFIX}S.eml")).expect("parses");
         assert_eq!(doc.subject, "Quarterly numbers");
         assert_eq!(doc.from_addr, "ann@x.test");
         assert_eq!(doc.from_name, "Ann Lee");
@@ -1335,7 +1337,7 @@ mod tests {
     #[test]
     fn adapter_indexes_the_html_when_the_text_part_is_a_stub() {
         let html = "<p>Your <b>September statement</b> is ready.</p><p>Balance due: 1,240.00 by October 5.</p>";
-        let doc = crate::search_index::index_doc_from_light(&eml_alternative("View this email in your browser", html), 1, "1:2,.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&eml_alternative("View this email in your browser", html), 1, &format!("1{INFO_PREFIX}.eml")).expect("parses");
         assert!(doc.body_text.contains("September statement"), "{:?}", doc.body_text);
         assert!(doc.body_text.contains("Balance due"), "{:?}", doc.body_text);
     }
@@ -1343,13 +1345,13 @@ mod tests {
     #[test]
     fn adapter_keeps_the_text_part_when_it_says_more_than_the_html() {
         let plain = "Hi Bob, the full minutes of Tuesday's meeting are below, with every action item and owner.";
-        let doc = crate::search_index::index_doc_from_light(&eml_alternative(plain, "<p>See minutes</p>"), 1, "1:2,.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&eml_alternative(plain, "<p>See minutes</p>"), 1, &format!("1{INFO_PREFIX}.eml")).expect("parses");
         assert_eq!(doc.body_text.trim(), plain);
     }
 
     #[test]
     fn adapter_falls_back_to_html_when_the_text_part_is_whitespace() {
-        let doc = crate::search_index::index_doc_from_light(&eml_alternative("  \r\n\t", "<p>From <b>html</b></p>"), 1, "1:2,.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&eml_alternative("  \r\n\t", "<p>From <b>html</b></p>"), 1, &format!("1{INFO_PREFIX}.eml")).expect("parses");
         assert_eq!(doc.body_text, "From html");
     }
 
@@ -1364,7 +1366,7 @@ mod tests {
     #[test]
     fn adapter_lists_a_real_attachment_as_a_candidate() {
         let raw = eml_with_one_attachment();
-        let doc = crate::search_index::index_doc_from_light(&raw, 1, "1:2,.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&raw, 1, &format!("1{INFO_PREFIX}.eml")).expect("parses");
         assert_eq!(doc.attachment_candidates.len(), 1, "{:?}", doc.attachment_candidates);
         let candidate = &doc.attachment_candidates[0];
         assert_eq!(candidate.filename, "notes.txt");
@@ -1379,7 +1381,7 @@ mod tests {
 
     #[test]
     fn adapter_lists_no_candidates_for_a_message_with_no_attachments() {
-        let doc = crate::search_index::index_doc_from_light(&eml_html(), 7, "7:2,S.eml").expect("parses");
+        let doc = crate::search_index::index_doc_from_light(&eml_html(), 7, &format!("7{INFO_PREFIX}S.eml")).expect("parses");
         assert!(doc.attachment_candidates.is_empty(), "{:?}", doc.attachment_candidates);
     }
 
@@ -1390,7 +1392,7 @@ mod tests {
             hits: vec![SearchHit {
                 vault_dir: "INBOX".into(),
                 uid: 7,
-                filename: "7:2,AS.eml".into(),
+                filename: format!("7{INFO_PREFIX}AS.eml"),
                 message_id: Some("<seven@example>".into()),
                 row_json: r#"{"uid":7,"messageId":"<seven@example>","subject":"Indexed only"}"#.into(),
                 body_matched: true,
@@ -1415,7 +1417,7 @@ mod tests {
             hits: vec![SearchHit {
                 vault_dir: "INBOX".into(),
                 uid: 5,
-                filename: "5:2,.eml".into(),
+                filename: format!("5{INFO_PREFIX}.eml"),
                 message_id: Some("<indexed@x.test>".into()),
                 row_json: r#"{"uid":5,"messageId":"<indexed@x.test>","subject":"Indexed budget"}"#.into(),
                 body_matched: false,
@@ -1476,13 +1478,13 @@ mod tests {
             let conn = guard.as_ref().unwrap();
             // The row was parsed while the file was unread and unarchived; it has been renamed since.
             conn.execute(
-                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
-                 VALUES ('acct', 'INBOX', 3, '3:2,AS.eml', 1, 1, 1, 1, '{\"uid\":3,\"subject\":\"Budget\",\"isArchived\":false,\"hasAttachments\":true}')",
+                &"INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
+                 VALUES ('acct', 'INBOX', 3, '3:2,AS.eml', 1, 1, 1, 1, '{\"uid\":3,\"subject\":\"Budget\",\"isArchived\":false,\"hasAttachments\":true}')".replace(":2,", INFO_PREFIX),
                 [],
             ).unwrap();
             conn.execute(
-                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
-                 VALUES ('acct', 'Projects_2026', 5, '5:2,.eml', 1, 1, 1, 1, '{\"uid\":5,\"subject\":\"Nested\"}')",
+                &"INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
+                 VALUES ('acct', 'Projects_2026', 5, '5:2,.eml', 1, 1, 1, 1, '{\"uid\":5,\"subject\":\"Nested\"}')".replace(":2,", INFO_PREFIX),
                 [],
             ).unwrap();
         }
@@ -1592,7 +1594,7 @@ mod tests {
             bytes += eml.len();
             let cur = root.join("Maildir/bench").join(["INBOX", "Archive", "Sent"][(i % 3) as usize]).join("cur");
             std::fs::create_dir_all(&cur).unwrap();
-            std::fs::write(cur.join(format!("{i}:2,S.eml")), eml).unwrap();
+            std::fs::write(cur.join(format!("{i}{INFO_PREFIX}S.eml")), eml).unwrap();
         }
         println!("corpus n={N} avg_bytes={} write={:?}", bytes / N as usize, t.elapsed());
 
@@ -1646,7 +1648,7 @@ mod tests {
         let cur = root.join("Maildir").join(account).join(dir).join("cur");
         std::fs::create_dir_all(&cur).unwrap();
         for uid in 1..=n {
-            std::fs::write(cur.join(format!("{uid}:2,S.eml")), format!("From: a@x.test\r\nSubject: Seed {uid}\r\nMessage-ID: <{uid}@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody {uid}\r\n")).unwrap();
+            std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), format!("From: a@x.test\r\nSubject: Seed {uid}\r\nMessage-ID: <{uid}@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody {uid}\r\n")).unwrap();
         }
     }
 
@@ -1731,7 +1733,7 @@ mod tests {
         use mailvault_core::search_index::{db, lock, query::SearchRequest};
         let tmp = tempfile::tempdir().unwrap();
         seed(tmp.path(), "acct", "INBOX", 1);
-        let mail = tmp.path().join("Maildir/acct/INBOX/cur/1:2,S.eml");
+        let mail = tmp.path().join(format!("Maildir/acct/INBOX/cur/1{INFO_PREFIX}S.eml"));
         let mail_before = std::fs::read(&mail).unwrap();
         let sentinel = tmp.path().join("custody/search-recovery-sentinel.bin");
         std::fs::create_dir_all(sentinel.parent().unwrap()).unwrap();
@@ -1804,7 +1806,7 @@ mod tests {
         use mailvault_core::search_index::{db, query::SearchRequest};
         let tmp = tempfile::tempdir().unwrap();
         seed(tmp.path(), "acct", "INBOX", 1);
-        let mail = tmp.path().join("Maildir/acct/INBOX/cur/1:2,S.eml");
+        let mail = tmp.path().join(format!("Maildir/acct/INBOX/cur/1{INFO_PREFIX}S.eml"));
         let mail_before = std::fs::read(&mail).unwrap();
         let sentinel = tmp.path().join("custody/search-recovery-sentinel.bin");
         std::fs::create_dir_all(sentinel.parent().unwrap()).unwrap();
@@ -1966,9 +1968,9 @@ mod tests {
             fn image_ocr(&self, _bytes: &[u8], _mime: &str) -> Result<String, ExtractError> { unreachable!() }
         }
         fn with_pending_part(conn: &rusqlite::Connection) {
-            conn.execute("INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, has_attachments, body_state, row_json) VALUES ('acct', 'INBOX', 1, '1:2,.eml', 1, 1, 1, 1, 1, '{}')", []).unwrap();
+            conn.execute(&"INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, has_attachments, body_state, row_json) VALUES ('acct', 'INBOX', 1, '1:2,.eml', 1, 1, 1, 1, 1, '{}')".replace(":2,", INFO_PREFIX), []).unwrap();
             conn.execute("INSERT INTO attachments(message_row, part_index, filename, mime, size, state) VALUES (1, 0, 'report.pdf', 'application/pdf', 100, 'pending')", []).unwrap();
-            conn.execute("INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, subject_lc, body_state, row_json) VALUES ('acct', 'INBOX', 2, '2:2,.eml', 1, 1, 2, 'responsive indexed row', 1, '{\"subject\":\"Responsive indexed row\",\"from\":{\"name\":\"\",\"address\":\"sender@example.test\"},\"to\":[],\"cc\":[],\"bcc\":[]}')", []).unwrap();
+            conn.execute(&"INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, subject_lc, body_state, row_json) VALUES ('acct', 'INBOX', 2, '2:2,.eml', 1, 1, 2, 'responsive indexed row', 1, '{\"subject\":\"Responsive indexed row\",\"from\":{\"name\":\"\",\"address\":\"sender@example.test\"},\"to\":[],\"cc\":[],\"bcc\":[]}')".replace(":2,", INFO_PREFIX), []).unwrap();
             let indexed_row = conn.last_insert_rowid();
             conn.execute("INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, 'Responsive indexed row', '', '', '')", [indexed_row]).unwrap();
             db::meta_set(conn, db::FIRST_PASS_DONE, "1").unwrap();

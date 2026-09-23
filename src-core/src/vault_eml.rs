@@ -499,9 +499,10 @@ mod tests {
 
     #[test]
     fn a_vault_file_name_reports_its_flags_by_both_names() {
-        assert_eq!(parse_flags_from_filename("12:2,AS.eml"), vec!["archived", "seen", "\\Seen"]);
-        assert_eq!(parse_flags_from_filename("12:2,A"), vec!["archived"]);
-        assert_eq!(parse_flags_from_filename("12:2,FRS"), vec!["flagged", "replied", "seen", "\\Seen", "\\Flagged", "\\Answered"]);
+        use crate::maildir::INFO_PREFIX;
+        assert_eq!(parse_flags_from_filename(&format!("12{INFO_PREFIX}AS.eml")), vec!["archived", "seen", "\\Seen"]);
+        assert_eq!(parse_flags_from_filename(&format!("12{INFO_PREFIX}A")), vec!["archived"]);
+        assert_eq!(parse_flags_from_filename(&format!("12{INFO_PREFIX}FRS")), vec!["flagged", "replied", "seen", "\\Seen", "\\Flagged", "\\Answered"]);
     }
 
     // -- Fixtures --
@@ -947,15 +948,16 @@ iVBORw0KGgo=\r\n\
 
     #[test]
     fn read_light_at_survives_a_rename_after_the_listing() {
+        use crate::maildir::INFO_PREFIX;
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        std::fs::write(cur.join("7:2,FS.eml"), eml("seven")).unwrap();
+        std::fs::write(cur.join(format!("7{INFO_PREFIX}FS.eml")), eml("seven")).unwrap();
 
-        let seven = read_light_at(cur, 7, Some(&cur.join("7:2,S.eml"))).expect("stale hint falls back to the uid lookup");
+        let seven = read_light_at(cur, 7, Some(&cur.join(format!("7{INFO_PREFIX}S.eml")))).expect("stale hint falls back to the uid lookup");
         assert_eq!(seven.uid, 7);
         assert!(seven.flags.iter().any(|f| f == "\\Flagged"));
         assert!(seven.flags.iter().any(|f| f == "\\Seen"));
 
-        assert!(read_light_at(cur, 8, Some(&cur.join("8:2,.eml"))).is_none(), "no uid-8 file anywhere");
+        assert!(read_light_at(cur, 8, Some(&cur.join(format!("8{INFO_PREFIX}.eml")))).is_none(), "no uid-8 file anywhere");
     }
 }

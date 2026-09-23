@@ -497,7 +497,7 @@ mod tests {
         // Decoys: a message directory is never walked, a leftover tmp file is not an index.
         write(r, "maildir/acct-a/INBOX/cur/local-index.json", &json!([{"uid": 999, "source": "local"}]).to_string());
         write(r, "maildir/acct-a/INBOX/local-index.json.tmp", "[]");
-        write(r, "Maildir/acct-a/INBOX/cur/7:2,AS.eml", "From: a@x.test\r\n\r\nbody");
+        write(r, &format!("Maildir/acct-a/INBOX/cur/7{}AS.eml", crate::maildir::INFO_PREFIX), "From: a@x.test\r\n\r\nbody");
         write(r, "Maildir/acct-a/INBOX/archived_headers.json", &json!({"uid_count": 1, "emails": []}).to_string());
         tmp
     }

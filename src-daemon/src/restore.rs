@@ -316,13 +316,14 @@ mod tests {
 
     #[test]
     fn test_list_messages_in_dir() {
+        use mailvault_core::maildir::{INFO_PREFIX, INFO_SEP};
         let dir = std::env::temp_dir().join("mailvault-test-restore-list");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("10:2,S.eml"), b"a").unwrap();
-        std::fs::write(dir.join("2:2,.eml"), b"b").unwrap();
-        std::fs::write(dir.join("30:seen,flagged:1700000000.eml"), b"c").unwrap();
-        std::fs::write(dir.join("40:2,T.eml"), b"d").unwrap();
+        std::fs::write(dir.join(format!("10{INFO_PREFIX}S.eml")), b"a").unwrap();
+        std::fs::write(dir.join(format!("2{INFO_PREFIX}.eml")), b"b").unwrap();
+        std::fs::write(dir.join(format!("30{INFO_SEP}seen,flagged{INFO_SEP}1700000000.eml")), b"c").unwrap();
+        std::fs::write(dir.join(format!("40{INFO_PREFIX}T.eml")), b"d").unwrap();
         std::fs::write(dir.join("local-index.json"), b"{}").unwrap();
 
         let msgs = list_messages_in_dir(&dir);

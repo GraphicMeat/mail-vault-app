@@ -166,7 +166,7 @@ mod tests {
         let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
         let names: Vec<String> = std::fs::read_dir(&cur).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names.len(), 1);
-        assert!(names[0].contains(":2,A"), "{:?}", names);
+        assert!(names[0].contains(&format!("{}A", mailvault_core::maildir::INFO_PREFIX)), "{:?}", names);
     }
 
     #[tokio::test]

@@ -98,12 +98,14 @@ mod tests {
 
     #[test]
     fn a_temp_name_never_parses_as_a_maildir_uid() {
-        let tmp = temp_name(std::ffi::OsStr::new("4711:2,S.eml"), 3).to_string_lossy().to_string();
+        use crate::maildir::{INFO_PREFIX, INFO_SEP};
+        let orig = format!("4711{INFO_PREFIX}S.eml");
+        let tmp = temp_name(std::ffi::OsStr::new(&orig), 3).to_string_lossy().to_string();
         assert!(tmp.starts_with('.'), "temp must be a dotfile: {tmp}");
         // The rule every uid scanner uses: split on the first ':' '.' '_' and parse.
-        let head = tmp.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+        let head = tmp.split(|c: char| c == INFO_SEP || c == '.' || c == '_').next().unwrap_or("");
         assert!(head.parse::<u32>().is_err(), "an orphaned temp read as uid {head}");
-        assert!(!tmp.starts_with("4711:"), "find_file_by_uid would match it: {tmp}");
+        assert!(!tmp.starts_with(&format!("4711{INFO_SEP}")), "find_file_by_uid would match it: {tmp}");
     }
 
     fn scratch(name: &str) -> std::path::PathBuf {

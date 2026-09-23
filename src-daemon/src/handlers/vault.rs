@@ -221,6 +221,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 mod tests {
     use super::*;
     use crate::server::DaemonState;
+    use mailvault_core::maildir::INFO_PREFIX;
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -291,14 +292,14 @@ mod tests {
         let src = scratch("move-src");
         let dst = scratch("move-dst");
         std::fs::create_dir_all(src.join("Maildir")).unwrap();
-        std::fs::write(src.join("Maildir/1:2,S.eml"), b"hello").unwrap();
+        std::fs::write(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")), b"hello").unwrap();
         let state = DaemonState::for_test(src.clone(), app.clone(), true);
 
         let resp = route(&state, "vault_move_to", &json!({"path": dst.to_string_lossy()}), json!(1)).await.unwrap();
         let r = resp.result.expect("move must succeed");
         assert!(r["moveId"].as_str().is_some());
-        assert!(dst.join("Maildir/1:2,S.eml").exists(), "the file must have been copied");
-        assert!(src.join("Maildir/1:2,S.eml").exists(), "the source must not be deleted before finalize");
+        assert!(dst.join(format!("Maildir/1{INFO_PREFIX}S.eml")).exists(), "the file must have been copied");
+        assert!(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")).exists(), "the source must not be deleted before finalize");
 
         let _ = std::fs::remove_dir_all(&app);
         let _ = std::fs::remove_dir_all(&src);
@@ -311,7 +312,7 @@ mod tests {
         let src = scratch("finalize-src");
         let dst = scratch("finalize-dst");
         std::fs::create_dir_all(src.join("Maildir")).unwrap();
-        std::fs::write(src.join("Maildir/1:2,S.eml"), b"hello").unwrap();
+        std::fs::write(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")), b"hello").unwrap();
         let state = DaemonState::for_test(src.clone(), app.clone(), true);
 
         let move_resp = route(&state, "vault_move_to", &json!({"path": dst.to_string_lossy()}), json!(1)).await.unwrap();
@@ -333,7 +334,7 @@ mod tests {
         let src = scratch("abort-src");
         let dst = scratch("abort-dst");
         std::fs::create_dir_all(src.join("Maildir")).unwrap();
-        std::fs::write(src.join("Maildir/1:2,S.eml"), b"hello").unwrap();
+        std::fs::write(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")), b"hello").unwrap();
         let state = DaemonState::for_test(src.clone(), app.clone(), true);
 
         let move_resp = route(&state, "vault_move_to", &json!({"path": dst.to_string_lossy()}), json!(1)).await.unwrap();
@@ -342,8 +343,8 @@ mod tests {
         let fin = route(&state, "vault_move_finalize", &json!({"moveId": move_id, "commit": false}), json!(2)).await.unwrap();
         let r = fin.result.expect("an abort finalize must still succeed");
         assert_eq!(r["sourceRemoved"], json!(false));
-        assert!(src.join("Maildir/1:2,S.eml").exists(), "abort must leave the source intact");
-        assert!(dst.join("Maildir/1:2,S.eml").exists(), "abort leaves the stray copy at dst, same as the original code");
+        assert!(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")).exists(), "abort must leave the source intact");
+        assert!(dst.join(format!("Maildir/1{INFO_PREFIX}S.eml")).exists(), "abort leaves the stray copy at dst, same as the original code");
 
         let _ = std::fs::remove_dir_all(&app);
         let _ = std::fs::remove_dir_all(&src);

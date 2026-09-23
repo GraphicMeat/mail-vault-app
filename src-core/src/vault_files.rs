@@ -1074,6 +1074,7 @@ pub fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::INFO_PREFIX;
 
     /// A registry of its own per test, in a tempdir beside the vault.
     fn registry(root: &Path) -> (tempfile::TempDir, VaultRegistry) {
@@ -1085,8 +1086,8 @@ mod tests {
     #[test]
     fn a_vault_file_name_round_trips_through_the_builder() {
         assert_eq!(
-            build_maildir_filename(12, &parse_flags_from_filename("12:2,AS.eml")),
-            "12:2,AS.eml"
+            build_maildir_filename(12, &parse_flags_from_filename(&format!("12{INFO_PREFIX}AS.eml"))),
+            format!("12{INFO_PREFIX}AS.eml")
         );
     }
 
@@ -1128,11 +1129,11 @@ mod tests {
         let (_app, reg) = registry(tmp.path());
         let cur = &cur_path(tmp.path(), "acct", "INBOX");
         fs::create_dir_all(cur).unwrap();
-        fs::write(cur.join("101:2,S"), b"x").unwrap();
-        fs::write(cur.join("102:2,"), b"x").unwrap();
-        fs::write(cur.join("103:2,S"), b"x").unwrap();
+        fs::write(cur.join(format!("101{INFO_PREFIX}S")), b"x").unwrap();
+        fs::write(cur.join(format!("102{INFO_PREFIX}")), b"x").unwrap();
+        fs::write(cur.join(format!("103{INFO_PREFIX}S")), b"x").unwrap();
         // A uid that is a prefix of another must not be swept up.
-        fs::write(cur.join("1010:2,S"), b"x").unwrap();
+        fs::write(cur.join(format!("1010{INFO_PREFIX}S")), b"x").unwrap();
 
         let mut uids = HashSet::new();
         uids.insert(101u32);
@@ -1141,10 +1142,10 @@ mod tests {
         let removed = delete_maildir_files(&reg, tmp.path(), "acct", "INBOX", &uids);
 
         assert_eq!(removed, 2);
-        assert!(!cur.join("101:2,S").exists());
-        assert!(!cur.join("103:2,S").exists());
-        assert!(cur.join("102:2,").exists());
-        assert!(cur.join("1010:2,S").exists(), "1010 must survive a purge of 101");
+        assert!(!cur.join(format!("101{INFO_PREFIX}S")).exists());
+        assert!(!cur.join(format!("103{INFO_PREFIX}S")).exists());
+        assert!(cur.join(format!("102{INFO_PREFIX}")).exists());
+        assert!(cur.join(format!("1010{INFO_PREFIX}S")).exists(), "1010 must survive a purge of 101");
     }
 
     #[test]
@@ -1154,22 +1155,22 @@ mod tests {
         let (_app, reg) = registry(root);
         assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
         let cur = cur_path(root, "acct", "INBOX");
-        assert!(cur.join("7:2,S.eml").exists());
+        assert!(cur.join(format!("7{INFO_PREFIX}S.eml")).exists());
 
         // Overwrite with new flags: exactly one file survives.
         assert!(store(&reg, root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true).unwrap());
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
-        assert_eq!(names, vec!["7:2,FS.eml"]);
-        assert_eq!(fs::read(cur.join("7:2,FS.eml")).unwrap(), b"two");
+        assert_eq!(names, vec![format!("7{INFO_PREFIX}FS.eml")]);
+        assert_eq!(fs::read(cur.join(format!("7{INFO_PREFIX}FS.eml"))).unwrap(), b"two");
 
         // Storing the same flags again (same target filename) still leaves
         // exactly one file, holding the latest content.
         assert!(store(&reg, root, "acct", "INBOX", 7, b"three", &["flagged".to_string(), "seen".to_string()], true).unwrap());
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
-        assert_eq!(names, vec!["7:2,FS.eml"]);
-        assert_eq!(fs::read(cur.join("7:2,FS.eml")).unwrap(), b"three");
+        assert_eq!(names, vec![format!("7{INFO_PREFIX}FS.eml")]);
+        assert_eq!(fs::read(cur.join(format!("7{INFO_PREFIX}FS.eml"))).unwrap(), b"three");
     }
 
     #[test]
@@ -1180,15 +1181,15 @@ mod tests {
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         // Two files left behind for uid 7 by an earlier interrupted store.
-        fs::write(cur.join("7:2,S.eml"), b"old-a").unwrap();
-        fs::write(cur.join("7:2,AS.eml"), b"old-b").unwrap();
+        fs::write(cur.join(format!("7{INFO_PREFIX}S.eml")), b"old-a").unwrap();
+        fs::write(cur.join(format!("7{INFO_PREFIX}AS.eml")), b"old-b").unwrap();
 
         assert!(store(&reg, root, "acct", "INBOX", 7, b"new", &["flagged".to_string()], true).unwrap());
 
         let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
-        assert_eq!(names, vec!["7:2,F.eml"], "both stale files must be swept, not just one");
-        assert_eq!(fs::read(cur.join("7:2,F.eml")).unwrap(), b"new");
+        assert_eq!(names, vec![format!("7{INFO_PREFIX}F.eml")], "both stale files must be swept, not just one");
+        assert_eq!(fs::read(cur.join(format!("7{INFO_PREFIX}F.eml"))).unwrap(), b"new");
     }
 
     #[cfg(unix)]
@@ -1217,7 +1218,7 @@ mod tests {
             return; // running as root: permissions aren't enforced, nothing to prove
         }
         assert!(result.is_err());
-        assert_eq!(fs::read(cur.join("7:2,S.eml")).unwrap(), b"one", "the old file must survive a failed write");
+        assert_eq!(fs::read(cur.join(format!("7{INFO_PREFIX}S.eml"))).unwrap(), b"one", "the old file must survive a failed write");
     }
 
     #[test]
@@ -1226,9 +1227,9 @@ mod tests {
         let root = tmp.path();
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("07:2,S.eml"), b"x").unwrap();
-        fs::write(cur.join("+7:2,S.eml"), b"x").unwrap();
-        fs::write(cur.join("7:2,S.eml"), b"x").unwrap();
+        fs::write(cur.join(format!("07{INFO_PREFIX}S.eml")), b"x").unwrap();
+        fs::write(cur.join(format!("+7{INFO_PREFIX}S.eml")), b"x").unwrap();
+        fs::write(cur.join(format!("7{INFO_PREFIX}S.eml")), b"x").unwrap();
 
         let (_app, reg) = registry(root);
         let listed = list(&reg, root, "acct", "INBOX", None).unwrap();
@@ -1241,9 +1242,9 @@ mod tests {
         uids.insert(7u32);
         let removed = delete_maildir_files(&reg, root, "acct", "INBOX", &uids);
         assert_eq!(removed, 1);
-        assert!(!cur.join("7:2,S.eml").exists());
-        assert!(cur.join("07:2,S.eml").exists(), "leading zero must not be swept as uid 7");
-        assert!(cur.join("+7:2,S.eml").exists(), "leading + must not be swept as uid 7");
+        assert!(!cur.join(format!("7{INFO_PREFIX}S.eml")).exists());
+        assert!(cur.join(format!("07{INFO_PREFIX}S.eml")).exists(), "leading zero must not be swept as uid 7");
+        assert!(cur.join(format!("+7{INFO_PREFIX}S.eml")).exists(), "leading + must not be swept as uid 7");
     }
 
     #[test]
@@ -1275,15 +1276,15 @@ mod tests {
         // Planted behind the registry's back. A sweep would find it and skip;
         // on a verified mailbox the miss is authoritative and the store writes.
         let cur = cur_path(root, "acct", "INBOX");
-        fs::write(cur.join("5:2,S.eml"), b"planted").unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), b"planted").unwrap();
         assert!(store(&reg, root, "acct", "INBOX", 5, b"five", &[], false).unwrap(), "no directory sweep on a verified mailbox");
         assert!(!store(&reg, root, "acct", "INBOX", 1, b"again", &[], false).unwrap(), "a live row skips with no fs access");
-        assert_eq!(fs::read(cur.join("1:2,.eml")).unwrap(), b"one");
+        assert_eq!(fs::read(cur.join(format!("1{INFO_PREFIX}.eml"))).unwrap(), b"one");
 
         // Overwrite under new flags: the row's old name goes, the row follows.
         assert!(store(&reg, root, "acct", "INBOX", 1, b"two", &["archived".to_string()], true).unwrap());
-        assert!(!cur.join("1:2,.eml").exists());
-        assert_eq!(fs::read(cur.join("1:2,A.eml")).unwrap(), b"two");
+        assert!(!cur.join(format!("1{INFO_PREFIX}.eml")).exists());
+        assert_eq!(fs::read(cur.join(format!("1{INFO_PREFIX}A.eml"))).unwrap(), b"two");
 
         assert_eq!(sets(&reg, root), (vec![1, 5], vec![1]));
         assert_eq!(reg.listing_count(), 1, "every answer came from the registry");
@@ -1299,7 +1300,7 @@ mod tests {
 
         assert!(set_flags(&reg, root, "acct", "INBOX", 7, &["archived".to_string(), "seen".to_string()]).unwrap());
         assert_eq!(sets(&reg, root), (vec![7], vec![7]));
-        assert_eq!(reg.resolve(root, "acct", "INBOX", 7), Some(Some(cur_path(root, "acct", "INBOX").join("7:2,AS.eml"))));
+        assert_eq!(reg.resolve(root, "acct", "INBOX", 7), Some(Some(cur_path(root, "acct", "INBOX").join(format!("7{INFO_PREFIX}AS.eml")))));
 
         assert!(delete(&reg, root, "acct", "INBOX", 7).unwrap());
         assert_eq!(sets(&reg, root), (vec![], vec![]));
@@ -1333,7 +1334,7 @@ mod tests {
 
         // The listing is taken before this file exists.
         let files = maildir::uid_file_map(&cur);
-        fs::write(cur.join("7:2,S.eml"), light_batch_eml("seven")).unwrap();
+        fs::write(cur.join(format!("7{INFO_PREFIX}S.eml")), light_batch_eml("seven")).unwrap();
 
         let out = read_light_listed(&cur, &files, &[7]);
         assert!(
@@ -1352,10 +1353,10 @@ mod tests {
         let root = tmp.path();
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("5:2,S.eml"), light_batch_eml("five")).unwrap();
-        fs::write(cur.join("9:2,AF.eml"), light_batch_eml("nine")).unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), light_batch_eml("five")).unwrap();
+        fs::write(cur.join(format!("9{INFO_PREFIX}AF.eml")), light_batch_eml("nine")).unwrap();
         fs::write(cur.join("12.eml"), light_batch_eml("legacy")).unwrap(); // no colon: not a vault row
-        fs::write(cur.join("14:2,.eml"), b"\xff\xfe not mime at all").unwrap();
+        fs::write(cur.join(format!("14{INFO_PREFIX}.eml")), b"\xff\xfe not mime at all").unwrap();
 
         let (_app, reg) = registry(root);
         let out = read_light_batch(&reg, root, "acct", "INBOX", &[9, 404, 5, 12, 14]).unwrap();
@@ -1382,8 +1383,8 @@ mod tests {
         let root = tmp.path();
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("5:2,S.eml"), light_batch_eml("five")).unwrap();
-        let locked = cur.join("7:2,S.eml");
+        fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), light_batch_eml("five")).unwrap();
+        let locked = cur.join(format!("7{INFO_PREFIX}S.eml"));
         fs::write(&locked, light_batch_eml("seven")).unwrap();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
         let (_app, reg) = registry(root);
@@ -1407,7 +1408,7 @@ mod tests {
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
         for uid in 1..=40u32 {
-            fs::write(cur.join(format!("{uid}:2,S.eml")), light_batch_eml(&format!("m{uid}"))).unwrap();
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), light_batch_eml(&format!("m{uid}"))).unwrap();
         }
         let uids: Vec<u32> = (0..=41).rev().collect();
         let (_app, reg) = registry(root);
@@ -1490,7 +1491,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let cur = dir.path().join("cur");
         fs::create_dir_all(&cur).unwrap();
         for (uid, raw) in files {
-            fs::write(cur.join(format!("{}:2,S", uid)), raw).unwrap();
+            fs::write(cur.join(format!("{}{INFO_PREFIX}S", uid)), raw).unwrap();
         }
         (dir, cur, dir_path_cache())
     }
@@ -1672,8 +1673,8 @@ R0lGODlhAQABAAAAACw=\r\n\
         let root = root_dir.path();
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("5:2,S"), multipart_with_attachment()).unwrap();
-        fs::write(cur.join("9:2,S"), photo_with_inline_and_pixel()).unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}S")), multipart_with_attachment()).unwrap();
+        fs::write(cur.join(format!("9{INFO_PREFIX}S")), photo_with_inline_and_pixel()).unwrap();
 
         let closed = std::sync::atomic::AtomicBool::new(false);
         let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
@@ -1714,19 +1715,19 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
-        fs::write(cur.join("2:2,AS.eml"), b"b").unwrap(); // archived: kept
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
+        fs::write(cur.join(format!("2{INFO_PREFIX}AS.eml")), b"b").unwrap(); // archived: kept
         let orphan_dir = cur.parent().unwrap().join(maildir::ORPHAN_DIR);
         fs::create_dir_all(&orphan_dir).unwrap();
-        fs::write(orphan_dir.join("3:2,S.eml"), b"c").unwrap(); // orphaned: kept
+        fs::write(orphan_dir.join(format!("3{INFO_PREFIX}S.eml")), b"c").unwrap(); // orphaned: kept
 
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
         let result = clear_cache(&reg, root, &noop_gate).unwrap();
         assert_eq!(result.deleted_count, 1);
         assert_eq!(result.skipped_archived, 1);
-        assert!(!cur.join("1:2,S.eml").exists());
-        assert!(cur.join("2:2,AS.eml").exists());
-        assert!(orphan_dir.join("3:2,S.eml").exists());
+        assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
+        assert!(cur.join(format!("2{INFO_PREFIX}AS.eml")).exists());
+        assert!(orphan_dir.join(format!("3{INFO_PREFIX}S.eml")).exists());
     }
 
     /// Same order-probe shape as prefetch's I1 test: the gate must wrap each
@@ -1739,8 +1740,8 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root);
         let cur = cur_path(root, "acct", "INBOX");
         fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
-        fs::write(cur.join("2:2,S.eml"), b"b").unwrap();
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
+        fs::write(cur.join(format!("2{INFO_PREFIX}S.eml")), b"b").unwrap();
 
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
@@ -1772,7 +1773,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let summary = migrate_json_to_eml(&reg, root, &noop_gate).unwrap();
         assert!(summary.contains("Migrated: 1"), "{summary}");
         assert!(summary.contains("Skipped (no rawSource): 1"), "{summary}");
-        assert!(cur.join("7:2,AS.eml").exists());
+        assert!(cur.join(format!("7{INFO_PREFIX}AS.eml")).exists());
         assert!(!cur.join("7.json").exists());
         assert!(!cur.join("8.json").exists());
     }
@@ -1784,7 +1785,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root);
         let src_cur = cur_path(root, "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
-        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(src_cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
 
         let mut map = HashMap::new();
         map.insert("user@example.com".to_string(), "uuid-123".to_string());
@@ -1792,7 +1793,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let migrated = migrate_email_dirs(&reg, root, &map, &noop_gate).unwrap();
         assert_eq!(migrated, 1);
         let dst_cur = cur_path(root, "uuid-123", "INBOX");
-        assert!(dst_cur.join("1:2,S.eml").exists());
+        assert!(dst_cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(!root.join("Maildir").join("user@example.com").exists());
     }
 
@@ -1807,7 +1808,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root);
         let src_cur = cur_path(root, "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
-        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(src_cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
 
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
@@ -1821,7 +1822,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let err = migrate_email_dirs(&reg, root, &map, &gate).unwrap_err();
         assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
         let dst_cur = cur_path(root, "uuid-123", "INBOX");
-        assert!(dst_cur.join("1:2,S.eml").exists(), "the mailbox move itself already committed");
+        assert!(dst_cur.join(format!("1{INFO_PREFIX}S.eml")).exists(), "the mailbox move itself already committed");
         assert!(root.join("Maildir").join("user@example.com").exists(), "the source dir cleanup never ran");
     }
 
@@ -1900,7 +1901,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root);
         let src_cur = cur_path(root, "user@example.com", "INBOX");
         fs::create_dir_all(&src_cur).unwrap();
-        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(src_cur.join(format!("1{INFO_PREFIX}S.eml")), b"a").unwrap();
         let uid_sets = |account: &str| reg.uid_sets(root, account, "INBOX").unwrap().0;
         assert_eq!(uid_sets("user@example.com"), vec![1]);
         assert_eq!(uid_sets("uuid-123"), Vec::<u32>::new());

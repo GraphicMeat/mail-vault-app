@@ -464,7 +464,7 @@ mod tests {
 
     /// A vault file under `uid` holding the message named `name`.
     fn file(m: &Mailbox, uid: u32, name: &str) {
-        fs::write(m.cur.join(format!("{}:2,.eml", uid)), eml(&format!("{}@outlook.test", name))).unwrap();
+        fs::write(m.cur.join(format!("{}{}.eml", uid, crate::maildir::INFO_PREFIX)), eml(&format!("{}@outlook.test", name))).unwrap();
     }
 
     fn seed(m: &Mailbox, pairs: &[(u32, &str)]) {
@@ -664,10 +664,10 @@ mod tests {
         seed(&m, &names.iter().enumerate().map(|(i, n)| (i as u32 + 1, *n)).collect::<Vec<_>>());
         for (i, n) in names.iter().enumerate() { file(&m, i as u32 + 1, n); }
         file(&m, 7, "m1");
-        let seventh = fs::read(m.cur.join("7:2,.eml")).unwrap();
+        let seventh = fs::read(m.cur.join(format!("7{}.eml", crate::maildir::INFO_PREFIX))).unwrap();
         let uids = allocate(&m.ledger, &m.cur, &listed(&["new", "m6", "m5", "m4", "m3", "m2", "m1"])).unwrap();
         assert_eq!(uids, vec![8, 1, 2, 3, 4, 5, 6]);
-        assert_eq!(fs::read(m.cur.join("7:2,.eml")).unwrap(), seventh);
+        assert_eq!(fs::read(m.cur.join(format!("7{}.eml", crate::maildir::INFO_PREFIX))).unwrap(), seventh);
     }
 
     #[test]
@@ -676,7 +676,7 @@ mod tests {
         fs::write(m.cur.join("12.eml"), eml("legacy@outlook.test")).unwrap();
         let orphaned = m.cur.parent().unwrap().join(crate::maildir::ORPHAN_DIR);
         fs::create_dir_all(&orphaned).unwrap();
-        fs::write(orphaned.join("20:2,.eml"), eml("set-aside@outlook.test")).unwrap();
+        fs::write(orphaned.join(&format!("20{}.eml", crate::maildir::INFO_PREFIX)), eml("set-aside@outlook.test")).unwrap();
         let uids = allocate(&m.ledger, &m.cur, &[("g-n".to_string(), None)]).unwrap();
         assert_eq!(uids, vec![21]);
     }
@@ -776,7 +776,7 @@ mod tests {
         file(&m, 1, "m1");
         file(&m, 5, "m2");
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
-        fs::remove_file(m.cur.join("5:2,.eml")).unwrap();
+        fs::remove_file(m.cur.join(&format!("5{}.eml", crate::maildir::INFO_PREFIX))).unwrap();
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m2"])).unwrap(), vec![2]);
     }
 
@@ -910,12 +910,12 @@ mod tests {
     fn a_transient_message_id_read_error_is_retried_not_pinned_as_no_message_id() {
         let m = mailbox();
         file(&m, 1, "m1"); // unowned; ledger is empty
-        set_mode(&m.cur.join("1:2,.eml"), 0o000);
+        set_mode(&m.cur.join(&format!("1{}.eml", crate::maildir::INFO_PREFIX)), 0o000);
         // The scan runs (the listed id carries a Message-ID) but uid 1 can't be
         // read; a fresh uid is issued instead of adopting it.
         let uids = allocate(&m.ledger, &m.cur, &listed(&["a"])).unwrap();
         assert_eq!(uids, vec![2]);
-        set_mode(&m.cur.join("1:2,.eml"), 0o644);
+        set_mode(&m.cur.join(&format!("1{}.eml", crate::maildir::INFO_PREFIX)), 0o644);
         // Now readable: a later id sharing uid 1's Message-ID must still adopt
         // it, proving the earlier failed read was not cached as "no id".
         let entries = vec![("g-b".to_string(), Some("<m1@outlook.test>".to_string()))];
@@ -939,7 +939,7 @@ mod tests {
         fs::write(m.cur.join("30.eml"), eml("legacy@outlook.test")).unwrap();
         let orphaned = m.cur.parent().unwrap().join(crate::maildir::ORPHAN_DIR);
         fs::create_dir_all(&orphaned).unwrap();
-        fs::write(orphaned.join("20:2,.eml"), eml("set-aside@outlook.test")).unwrap();
+        fs::write(orphaned.join(&format!("20{}.eml", crate::maildir::INFO_PREFIX)), eml("set-aside@outlook.test")).unwrap();
         let uids = allocate(&m.ledger, &m.cur, &[("g-n".to_string(), None)]).unwrap();
         assert_eq!(uids, vec![31]);
     }
@@ -953,9 +953,9 @@ mod tests {
         file(&m, 1, "m1");
         file(&m, 2, "m2");
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
-        set_mode(&m.cur.join("2:2,.eml"), 0o000);
+        set_mode(&m.cur.join(&format!("2{}.eml", crate::maildir::INFO_PREFIX)), 0o000);
         let result = allocate(&m.ledger, &m.cur, &listed(&["m2"]));
-        set_mode(&m.cur.join("2:2,.eml"), 0o644);
+        set_mode(&m.cur.join(&format!("2{}.eml", crate::maildir::INFO_PREFIX)), 0o644);
         assert_eq!(result.unwrap(), vec![2]);
     }
 
@@ -968,7 +968,7 @@ mod tests {
         file(&m, 1, "m1");
         file(&m, 5, "m2");
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
-        fs::remove_file(m.cur.join("5:2,.eml")).unwrap();
+        fs::remove_file(m.cur.join(&format!("5{}.eml", crate::maildir::INFO_PREFIX))).unwrap();
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["other"])).unwrap(), vec![2]);
         file(&m, 5, "m3");
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m3"])).unwrap(), vec![5]);
@@ -987,7 +987,7 @@ mod tests {
         file(&m, 5, "m2");
         file(&m, 9, "keep");
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
-        fs::remove_file(m.cur.join("5:2,.eml")).unwrap();
+        fs::remove_file(m.cur.join(&format!("5{}.eml", crate::maildir::INFO_PREFIX))).unwrap();
         allocate(&m.ledger, &m.cur, &listed(&["other"])).unwrap();
         file(&m, 5, "m3");
         let entries = vec![("g-m3".to_string(), Some("<m3@outlook.test>".to_string()))];

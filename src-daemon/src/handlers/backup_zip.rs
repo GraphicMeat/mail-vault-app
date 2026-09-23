@@ -190,7 +190,7 @@ mod tests {
                     .as_bytes(),
             )
             .unwrap();
-            zip.start_file("mailvault-backup/emails/new@test.com/INBOX/1:2,A.eml", options).unwrap();
+            zip.start_file(format!("mailvault-backup/emails/new@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX), options).unwrap();
             zip.write_all(b"body").unwrap();
             zip.finish().unwrap();
         }
@@ -236,7 +236,7 @@ mod tests {
                     .as_bytes(),
             )
             .unwrap();
-            zip.start_file("mailvault-backup/emails/brand-new@test.com/INBOX/1:2,A.eml", options).unwrap();
+            zip.start_file(format!("mailvault-backup/emails/brand-new@test.com/INBOX/1{}A.eml", mailvault_core::maildir::INFO_PREFIX), options).unwrap();
             zip.write_all(b"body").unwrap();
             zip.finish().unwrap();
         }
