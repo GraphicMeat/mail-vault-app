@@ -294,7 +294,8 @@ pub fn reconcile_mailbox_guarded(
         }
         let mut docs = Vec::with_capacity(batch.len());
         for &file in batch {
-            let raw = match std::fs::read(cur.join(&file.filename)) {
+            let path = cur.join(&file.filename);
+            let raw = match std::fs::read(&path) {
                 Ok(raw) => raw,
                 // Renamed (a flag change) or deleted since the listing: recording it
                 // under the old name and stat would pin an empty body on a message
@@ -305,7 +306,15 @@ pub fn reconcile_mailbox_guarded(
                 }
                 // Never readable at this path (a directory, or a path through a file):
                 // recorded as unparseable, so it counts as indexed and is not re-read.
-                Err(e) if matches!(e.kind(), std::io::ErrorKind::IsADirectory | std::io::ErrorKind::NotADirectory) => {
+                // `IsADirectory`/`NotADirectory` is unix's EISDIR/ENOTDIR, reliably
+                // mapped by std; Windows opening a directory with plain `File::open`
+                // does not reliably land on either kind (observed: the read fails,
+                // but not with a kind this match caught, so the entry fell through to
+                // the catch-all below and was silently dropped forever instead of
+                // being recorded as unparseable-and-not-retried). `path.is_dir()` is
+                // the one check that is unambiguous on every platform regardless of
+                // which OS error a failed read happened to surface.
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::IsADirectory | std::io::ErrorKind::NotADirectory) || path.is_dir() => {
                     stats.failed += 1;
                     docs.push((file, None));
                     continue;
