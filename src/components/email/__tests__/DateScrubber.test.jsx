@@ -2,7 +2,7 @@
 
 import React, { useRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { DateScrubber, MonthHeader, MONTH_HEADER_H } from '../DateScrubber';
 import { monthBuckets, railSegments } from '../../../utils/dateBuckets';
 
@@ -34,6 +34,22 @@ describe('DateScrubber', () => {
     expect(rail.textContent).toContain('2021');
     expect(rail.textContent).toContain('2020');
     expect(screen.getByTestId('date-scrubber-pill').textContent).toBe('March 2021');
+  });
+
+  it('highlights the selected year without enlarging its label on hover', () => {
+    let frame;
+    vi.stubGlobal('requestAnimationFrame', callback => { frame = callback; return 1; });
+    try {
+      render(<Harness onJump={() => {}} />);
+      const rail = screen.getByRole('slider');
+      const year = within(rail).getByText('2021');
+      expect(year.className).toContain('text-mail-accent-text');
+      fireEvent.pointerMove(rail, { clientY: 0 });
+      frame?.();
+      expect(year.parentElement.style.transform).toBe('translateY(-50%)');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('jumps to the clicked month on press', () => {
