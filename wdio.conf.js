@@ -1,5 +1,5 @@
 import { resolve, join } from 'path';
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { spawn, execFileSync } from 'child_process';
 import {
@@ -64,6 +64,12 @@ const isolatedEnv = IS_WIN ? {
   APPDATA: join(testDataDir, 'AppData', 'Roaming'),
   WEBVIEW2_USER_DATA_FOLDER: join(testDataDir, 'AppData', 'Local', 'EBWebView'),
 } : { HOME: testDataDir };
+// Known folders such as Downloads are stored as `%USERPROFILE%\Downloads`, so
+// they follow the override too, but only if they exist: a missing one fails
+// to resolve ("unknown path") instead of being created.
+if (IS_WIN) {
+  for (const dir of ['Downloads', 'Documents']) mkdirSync(join(testDataDir, dir), { recursive: true });
+}
 
 /**
  * Windows pids of `mailvault.exe` at this run's binary, or (with `underRepo`)
