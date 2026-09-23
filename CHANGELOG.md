@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-09-23
+
 ### Added
 - **Jump to any month in your mail.** The message list now marks where each month begins, keeps the month you are reading pinned at the top, and shows a large date beside the scroll bar while you scroll. Move the pointer to the list's right edge for a timeline of years and months: click or drag to go straight there, including to months that have not been loaded yet, which MailVault pages in for you. The timeline also works from the keyboard.
 - **Send it later, in the time zone you mean.** Compose can schedule a message for a date and time in a zone you choose, and MailVault keeps the finished message in your vault until then. Date and time are one picker, the time zone list can be searched by city or UTC offset, and MailVault suggests the recipient's zone from their last email or from the zone you last scheduled for them. Scheduled mail has its own place in the sidebar: click a message there to edit it, and it stays scheduled as it was until you save the change. You can also move it to another time, send it now or cancel it. The wall clock you picked is what is stored, not the instant it happens to mean today, so a daylight-saving change between now and then does not move your send. The Scheduled folder explains when mail goes out while MailVault is closed and links to the setting for it; with the background helper off, a scheduled message goes out the next time MailVault runs. Scheduling for a set time, editing and rescheduling are part of Premium. Delaying a send by up to five minutes stays free, and sending now or cancelling what is already scheduled works on any plan.
