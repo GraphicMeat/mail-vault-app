@@ -1357,7 +1357,19 @@ export function resetAppState(home, accounts) {
   // because a spec that never launched leaves no daemon behind, the NEXT spec
   // resets cleanly and passes. That is what a suite failing on every OTHER
   // spec file is telling you.
-  rmSync(appDataDir(home), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  //
+  // Windows: a file the killed daemon or app held (app.db, custody.db) stays
+  // undeletable for a moment after the process is reported gone, and rmSync's
+  // own retries give up on it at once with EPERM. Wait it out here.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rmSync(appDataDir(home), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      break;
+    } catch (e) {
+      if (process.platform !== 'win32' || attempt >= 50) throw e;
+      sleepSync(200);
+    }
+  }
   return seedAccounts(home, accounts);
 }
 
