@@ -34,6 +34,7 @@ import { SettingsBubble } from './components/settings/SettingsBubble';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
+import { KeychainUnlockDialog } from './components/KeychainUnlockDialog';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
 import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -1414,6 +1415,7 @@ function App() {
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
+      <KeychainUnlockDialog />
       <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal
         && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
         && !pendingOperation && !exportTarget && !showExportSamples} />
