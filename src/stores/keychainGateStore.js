@@ -73,8 +73,12 @@ let _initialized = false;
 /// subscribed to, so the state is asked for at start and again on every
 /// `daemon-reconnected`, after the listeners are attached (VaultAlertBanner's
 /// pattern).
+///
+/// macOS only: the dialog explains the macOS Keychain and its prompts. Elsewhere
+/// the gate only closes on a read timing out, and the existing keychain toast
+/// already covers the app's own reads.
 export function initKeychainGate() {
-  if (_initialized) return;
+  if (_initialized || !/Mac/i.test(navigator.platform || navigator.userAgent || '')) return;
   _initialized = true;
   const ask = () => daemonCall('keychain.status')
     .then(status => useKeychainGateStore.getState().apply(status))

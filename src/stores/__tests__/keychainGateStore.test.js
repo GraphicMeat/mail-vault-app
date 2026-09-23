@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockDaemonCall = vi.fn();
 vi.mock('../../services/daemonClient', () => ({
@@ -31,7 +31,9 @@ beforeEach(() => {
   for (const m of [mockDaemonCall, mockGetAccounts, mockClearCache, mockRetry, mockNotify]) m.mockReset();
   for (const k of Object.keys(handlers)) delete handlers[k];
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Macintosh' });
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe('keychainGateStore', () => {
   it('asks keychain.status at start and again on every daemon reconnect', async () => {
@@ -44,6 +46,14 @@ describe('keychainGateStore', () => {
     handlers['daemon-reconnected']();
     await vi.waitFor(() => expect(gate().blocked).toBe(false));
     expect(mockDaemonCall).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays out of it off macOS, where the copy would name the wrong keychain', async () => {
+    vi.stubGlobal('navigator', { platform: 'Linux x86_64', userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' });
+    initKeychainGate();
+    await new Promise(r => setTimeout(r, 0));
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+    expect(handlers['keychain-status']).toBeUndefined();
   });
 
   it('follows the keychain-status event both ways', async () => {
