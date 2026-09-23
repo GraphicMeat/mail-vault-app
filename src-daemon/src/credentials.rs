@@ -40,7 +40,10 @@ fn test_credentials_path() -> Option<PathBuf> {
 
 /// Load the full credentials blob: `{ accountId: JSON-string-of-account }`,
 /// same shape `store_credentials`/`get_credentials` read and write.
-fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
+///
+/// `interactive`: whether macOS may show its prompt for this read (see
+/// `with_interaction`).
+fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, String> {
     if let Some(path) = test_credentials_path() {
         let json = std::fs::read_to_string(&path)
             .map_err(|e| format!("failed to read test credentials {:?}: {}", path, e))?;
@@ -50,7 +53,7 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 
     let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
         .map_err(|e| format!("failed to create keyring entry: {}", e))?;
-    let json = read_entry(&entry, CREDENTIALS_KEY)
+    let json = read_entry(&entry, CREDENTIALS_KEY, interactive)
         .map_err(|e| format!("failed to read keychain: {}", e))?
         .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))?;
     serde_json::from_str(&json).map_err(|e| format!("failed to parse credentials: {}", e))
@@ -65,7 +68,7 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 /// hang the guard exists to prevent.
 #[cfg(test)]
 fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
-    account_from_blob(&load_credentials_blob()?, account_id)
+    account_from_blob(&load_credentials_blob(true)?, account_id)
 }
 
 fn account_from_blob(credentials: &HashMap<String, String>, account_id: &str) -> Result<ImapConfig, String> {
@@ -90,38 +93,49 @@ fn account_from_blob(credentials: &HashMap<String, String>, account_id: &str) ->
 /// The blob is one keychain item, read by at most one thread at a time (see
 /// `SingleFlight`): every account's caller shares that read.
 pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<ImapConfig, String> {
-    let blob = guarded(CREDENTIALS_KEY, blob_read(), AI_KEY_TIMEOUT).await?;
+    let blob = guarded(CREDENTIALS_KEY, blob_read(may_prompt()), AI_KEY_TIMEOUT).await?;
     account_from_blob(&blob, account_id)
+}
+
+/// macOS's password prompt shows once per blocked episode: only a read that
+/// finds the gate clear (the one that discovers the problem) may raise it,
+/// plus `keychain.retry`, which the user asked for. Every other read while
+/// blocked fails fast instead of stacking prompts in the background.
+fn may_prompt() -> bool {
+    GATE.may_prompt()
 }
 
 /// A shared item read under `limit`. Giving up blocks that item as "timeout";
 /// the read itself keeps going and settles the item when it returns.
-async fn guarded<T: Clone>(key: &'static str, read: SharedRead<T>, limit: Duration) -> Result<T, String> {
+async fn guarded<T>(key: &'static str, read: impl std::future::Future<Output = Result<T, String>>, limit: Duration) -> Result<T, String> {
     tokio::time::timeout(limit, read).await.unwrap_or_else(|_| {
         GATE.block(key, "timeout");
         Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
     })
 }
 
-fn blob_read() -> SharedRead<HashMap<String, String>> {
+fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, String>, String>> {
     // The debug file bypass cannot hang on a prompt, and tests point it at
     // different files: its read is never shared with anyone else's.
     if test_credentials_path().is_some() {
-        return unshared(load_credentials_blob);
+        return unshared(move || load_credentials_blob(interactive)).boxed();
     }
-    BLOB_READ.run(load_credentials_blob)
+    BLOB_READ.read(interactive, load_credentials_blob).boxed()
 }
 
-fn ai_key_read() -> SharedRead<Option<String>> {
+fn ai_key_read(interactive: bool) -> BoxFuture<'static, Result<Option<String>, String>> {
     if test_ai_key_path().is_some() {
-        return unshared(resolve_ai_endpoint_key);
+        return unshared(move || resolve_ai_endpoint_key(interactive)).boxed();
     }
-    AI_KEY_READ.run(resolve_ai_endpoint_key)
+    AI_KEY_READ.read(interactive, resolve_ai_endpoint_key).boxed()
 }
 
 // ── Single-flight item reads ────────────────────────────────────────────────
 
-type SharedRead<T> = futures::future::Shared<futures::future::BoxFuture<'static, Result<T, String>>>;
+use futures::future::BoxFuture;
+use futures::FutureExt;
+
+type SharedRead<T> = futures::future::Shared<BoxFuture<'static, Result<T, String>>>;
 
 static BLOB_READ: SingleFlight<HashMap<String, String>> = SingleFlight::new();
 static AI_KEY_READ: SingleFlight<Option<String>> = SingleFlight::new();
@@ -134,7 +148,8 @@ static AI_KEY_READ: SingleFlight<Option<String>> = SingleFlight::new();
 /// callers (`sync.watch` for every account on reconnect) share one read, and
 /// `keychain.retry` joins a read still waiting on the prompt the user can see.
 pub(crate) struct SingleFlight<T> {
-    out: std::sync::Mutex<Option<SharedRead<T>>>,
+    /// The read out, and whether it may prompt.
+    out: std::sync::Mutex<Option<(bool, SharedRead<T>)>>,
 }
 
 impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
@@ -142,25 +157,46 @@ impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
         Self { out: std::sync::Mutex::new(None) }
     }
 
-    pub(crate) fn run(&'static self, read: impl FnOnce() -> Result<T, String> + Send + 'static) -> SharedRead<T> {
-        let mut out = self.out.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(read) = &*out {
-            return read.clone();
+    /// Join the read out for this item, or start one. A non-interactive caller
+    /// joins whatever is out. An interactive one joins only an interactive
+    /// read: behind a non-interactive one (which fails fast) it waits, then
+    /// starts its own, so a retry the user asked for always gets its prompt.
+    pub(crate) async fn read(
+        &'static self,
+        interactive: bool,
+        read: impl FnOnce(bool) -> Result<T, String> + Send + 'static,
+    ) -> Result<T, String> {
+        let mut read = Some(read);
+        loop {
+            let (answers, shared) = {
+                let mut out = self.out.lock().unwrap_or_else(|e| e.into_inner());
+                match &*out {
+                    Some((out_interactive, shared)) => (*out_interactive || !interactive, shared.clone()),
+                    None => {
+                        // Taken once: a caller that starts a read returns its result.
+                        let read = read.take().expect("a read is started at most once");
+                        let shared = unshared(move || {
+                            let result = read(interactive);
+                            // Released when the read really returns, never when
+                            // a caller gives up on it. Waits for the caller to
+                            // finish storing it below.
+                            *self.out.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                            result
+                        });
+                        *out = Some((interactive, shared.clone()));
+                        (true, shared)
+                    }
+                }
+            };
+            let result = shared.await;
+            if answers {
+                return result;
+            }
         }
-        let shared = unshared(move || {
-            let result = read();
-            // Released when the read really returns, never when a caller gives
-            // up on it. Waits for `run` to finish storing it below.
-            *self.out.lock().unwrap_or_else(|e| e.into_inner()) = None;
-            result
-        });
-        *out = Some(shared.clone());
-        shared
     }
 }
 
 fn unshared<T: Clone + Send + Sync + 'static>(read: impl FnOnce() -> Result<T, String> + Send + 'static) -> SharedRead<T> {
-    use futures::FutureExt;
     tokio::task::spawn_blocking(read)
         .map(|joined| joined.unwrap_or_else(|e| Err(format!("the keychain read panicked: {e}"))))
         .boxed()
@@ -257,12 +293,12 @@ impl KeychainGate {
         }
     }
 
-    /// Blocked items worth probing on a clock. Not a refused one: reading it
-    /// again asks macOS again, so the user who just chose Deny would get the
-    /// same prompt every few seconds. Unlock (`keychain.retry`) re-reads those.
-    fn items_to_probe(&self) -> Vec<&'static str> {
-        let blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
-        blocked.iter().filter(|b| b.reason != "denied").map(|b| b.item).collect()
+    fn may_prompt(&self) -> bool {
+        !self.is_blocked()
+    }
+
+    fn blocked_items(&self) -> Vec<&'static str> {
+        self.blocked.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|b| b.item).collect()
     }
 
     pub(crate) fn is_blocked(&self) -> bool {
@@ -292,9 +328,11 @@ impl KeychainGate {
 
 /// `get_password` with the gate kept in step for `item`: a read that answers,
 /// even with "nothing stored", clears it; one unlocking would fix blocks it.
-/// `Ok(None)` is `NoEntry`.
-fn read_entry(entry: &Entry, item: &'static str) -> keyring::Result<Option<String>> {
-    match entry.get_password() {
+/// `Ok(None)` is `NoEntry`. A non-interactive read of an item that needs a
+/// prompt fails with errSecInteractionNotAllowed, which leaves an already
+/// blocked item blocked with its first reason.
+fn read_entry(entry: &Entry, item: &'static str, interactive: bool) -> keyring::Result<Option<String>> {
+    match with_interaction(interactive, || entry.get_password()) {
         Ok(pw) => {
             GATE.clear(item);
             Ok(Some(pw))
@@ -310,6 +348,25 @@ fn read_entry(entry: &Entry, item: &'static str) -> keyring::Result<Option<Strin
             Err(e)
         }
     }
+}
+
+/// `read` with macOS's keychain prompts allowed or not. The switch
+/// (`SecKeychainSetUserInteractionAllowed`) is process-wide, so one lock spans
+/// switch, read and restore: a probe never silences an interactive read, and an
+/// interactive read never runs while a probe has prompts off. Single-flight
+/// keeps it to one waiting thread per item while a prompt is up.
+#[cfg(target_os = "macos")]
+fn with_interaction<R>(interactive: bool, read: impl FnOnce() -> R) -> R {
+    static SWITCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _held = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
+    // Restores prompts on drop, before the lock is released.
+    let _quiet = (!interactive).then(security_framework::os::macos::keychain::SecKeychain::disable_user_interaction);
+    read()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn with_interaction<R>(_interactive: bool, read: impl FnOnce() -> R) -> R {
+    read()
 }
 
 /// The `OSStatus` keyring boxed away, recoverable only before it is stringified.
@@ -342,35 +399,38 @@ const PROBE_EVERY: Duration = Duration::from_secs(5);
 /// `on_clear` runs when the gate empties (the scheduled worker's wake).
 pub(crate) fn start_watcher(on_clear: impl Fn() + Send + 'static) {
     tokio::spawn(async move {
-        probe(CREDENTIALS_KEY).await;
+        // The read that discovers a problem: the one allowed to prompt.
+        probe(CREDENTIALS_KEY, may_prompt()).await;
         watch(&GATE, probe, PROBE_EVERY, on_clear).await;
     });
 }
 
-async fn probe(item: &'static str) {
+async fn probe(item: &'static str, interactive: bool) {
     // The result does not matter here: the read settles its own item.
     let _ = match item {
-        CREDENTIALS_KEY => guarded(item, blob_read(), AI_KEY_TIMEOUT).await.map(|_| ()),
-        _ => guarded(item, ai_key_read(), AI_KEY_TIMEOUT).await.map(|_| ()),
+        CREDENTIALS_KEY => guarded(item, blob_read(interactive), AI_KEY_TIMEOUT).await.map(|_| ()),
+        _ => guarded(item, ai_key_read(interactive), AI_KEY_TIMEOUT).await.map(|_| ()),
     };
 }
 
 /// Sleeps while the gate is clear (no polling), and while it is blocked reads
-/// every probe-worthy item once per `every`.
+/// every blocked item once per `every`, never interactively: the one prompt of
+/// this episode is already up or already answered, and a probe that finds its
+/// read still out joins it.
 async fn watch<F, Fut>(gate: &KeychainGate, probe: F, every: Duration, on_clear: impl Fn())
 where
-    F: Fn(&'static str) -> Fut,
+    F: Fn(&'static str, bool) -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
     loop {
-        let items = gate.items_to_probe();
+        let items = gate.blocked_items();
         if items.is_empty() {
             gate.newly_blocked.notified().await;
             continue;
         }
         tokio::time::sleep(every).await;
         for item in items {
-            probe(item).await;
+            probe(item, false).await;
         }
         if !gate.is_blocked() {
             on_clear();
@@ -379,14 +439,16 @@ where
 }
 
 /// `keychain.retry`: both items the daemon reads, under a clock long enough
-/// for the user to answer macOS's prompt. A read of an item still out (parked
-/// on the prompt the user is looking at) is joined, not started again. `ok`
+/// for the user to answer macOS's prompt. The one kind of read besides the
+/// first that may raise that prompt, because the user asked. An interactive
+/// read still out (parked on the prompt the user is looking at) is joined,
+/// not started again; a quiet probe's read is waited out first. `ok`
 /// once no item is blocked: each read settles its own item, and a failure
 /// unlocking cannot fix (a corrupt blob, nothing stored) is not the gate's.
 pub(crate) async fn retry() -> Value {
     let _ = tokio::join!(
-        guarded(CREDENTIALS_KEY, blob_read(), RETRY_TIMEOUT),
-        guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(), RETRY_TIMEOUT),
+        guarded(CREDENTIALS_KEY, blob_read(true), RETRY_TIMEOUT),
+        guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(true), RETRY_TIMEOUT),
     );
     let status = GATE.status();
     if status["blocked"] == true {
@@ -501,7 +563,7 @@ fn store_ai_endpoint_key(key: &str) -> Result<(), String> {
 
 /// `Ok(None)` (not an error) means nothing has been stored yet — the normal
 /// state for an endpoint (e.g. Ollama) that needs no key at all.
-fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
+fn resolve_ai_endpoint_key(interactive: bool) -> Result<Option<String>, String> {
     if let Some(path) = test_ai_key_path() {
         return match std::fs::read_to_string(&path) {
             Ok(s) => Ok(Some(s)),
@@ -510,7 +572,7 @@ fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
         };
     }
     let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-    read_entry(&entry, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to read keychain: {e}"))
+    read_entry(&entry, AI_ENDPOINT_KEY_ENTRY, interactive).map_err(|e| format!("failed to read keychain: {e}"))
 }
 
 /// A keychain ACL can prompt the user and then block the reader until
@@ -520,7 +582,7 @@ fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
 /// wrappers instead, which mirror `scheduled_send_worker::resolve_credentials`'s
 /// spawn_blocking + timeout shape.
 pub async fn resolve_ai_endpoint_key_guarded() -> Result<Option<String>, String> {
-    guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(), AI_KEY_TIMEOUT).await
+    guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(may_prompt()), AI_KEY_TIMEOUT).await
 }
 
 pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
@@ -644,56 +706,77 @@ mod tests {
         assert_eq!(payloads(&mut rx), vec![json!({"blocked": false})]);
     }
 
-    /// Blocked: probes on the clock until the reader answers, then clears and
-    /// wakes. Clear: no probe at all until something blocks again.
+    /// Blocked: probes on the clock, never interactively, until the reader
+    /// answers, then clears and wakes. Clear: no probe at all until something
+    /// blocks again.
     #[tokio::test]
-    async fn the_watcher_probes_only_while_blocked() {
+    async fn the_watcher_probes_only_while_blocked_and_never_prompts() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let gate: &'static KeychainGate = Box::leak(Box::new(KeychainGate::new()));
         let probes: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+        let prompted: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
         let clears: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
         // The keychain answers on the third read.
-        let reader = move |item: &'static str| async move {
+        let reader = move |item: &'static str, interactive: bool| async move {
+            if interactive {
+                prompted.fetch_add(1, Ordering::SeqCst);
+            }
             if probes.fetch_add(1, Ordering::SeqCst) + 1 >= 3 {
                 gate.clear(item);
             }
         };
+        let until_clear = || async {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while gate.is_blocked() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+        };
 
-        gate.block("blob", "locked");
+        gate.block("blob", "timeout");
         let watcher = tokio::spawn(watch(gate, reader, Duration::from_millis(10), move || {
             clears.fetch_add(1, Ordering::SeqCst);
         }));
 
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while gate.is_blocked() {
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        })
-        .await
-        .expect("the watcher clears the gate once the reader answers");
+        until_clear().await.expect("the watcher clears the gate once the reader answers");
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(probes.load(Ordering::SeqCst), 3);
+        assert_eq!(prompted.load(Ordering::SeqCst), 0, "a probe while blocked must not raise macOS's prompt");
         assert_eq!(clears.load(Ordering::SeqCst), 1, "the clear wakes the scheduled worker once");
 
         tokio::time::sleep(Duration::from_millis(150)).await;
         assert_eq!(probes.load(Ordering::SeqCst), 3, "no polling while the gate is clear");
 
-        // A refused item is left to Unlock: probing it would re-prompt.
         gate.block("blob", "denied");
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        assert_eq!(probes.load(Ordering::SeqCst), 3, "a denied item is not probed on a clock");
-        gate.clear("blob");
+        until_clear().await.expect("a new block wakes the watcher");
+        assert_eq!(probes.load(Ordering::SeqCst), 4);
+        assert_eq!(prompted.load(Ordering::SeqCst), 0);
+        watcher.abort();
+    }
 
+    /// Only the read that finds the gate clear may prompt; once blocked,
+    /// background reads fail fast (`keychain.retry` passes `true` itself).
+    #[test]
+    fn only_a_read_that_finds_the_gate_clear_may_prompt() {
+        let gate = KeychainGate::new();
+        assert!(gate.may_prompt(), "the first read discovers the problem");
         gate.block("blob", "timeout");
+        assert!(!gate.may_prompt(), "later reads while blocked stay quiet");
+        gate.clear("blob");
+        assert!(gate.may_prompt());
+    }
+
+    type Started = std::sync::Arc<std::sync::Mutex<Vec<bool>>>;
+
+    async fn until_started(started: &Started, n: usize) {
         tokio::time::timeout(Duration::from_secs(5), async {
-            while gate.is_blocked() {
-                tokio::time::sleep(Duration::from_millis(5)).await;
+            while started.lock().unwrap().len() < n {
+                tokio::time::sleep(Duration::from_millis(2)).await;
             }
         })
         .await
-        .expect("a new block wakes the watcher");
-        assert_eq!(probes.load(Ordering::SeqCst), 4);
-        watcher.abort();
+        .expect("the read started");
     }
 
     /// A read parked on a prompt must not be joined by a second thread: the
@@ -701,33 +784,60 @@ mod tests {
     /// read starts only once that one has returned.
     #[tokio::test]
     async fn a_read_already_out_is_joined_not_started_again() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         let flight: &'static SingleFlight<u32> = Box::leak(Box::new(SingleFlight::new()));
-        let started = std::sync::Arc::new(AtomicUsize::new(0));
+        let started = Started::default();
         let (release, parked) = std::sync::mpsc::channel::<()>();
 
         let s = started.clone();
-        let first = flight.run(move || {
-            s.fetch_add(1, Ordering::SeqCst);
+        let first = tokio::spawn(flight.read(true, move |interactive| {
+            s.lock().unwrap().push(interactive);
             let _ = parked.recv();
             Ok(7)
-        });
+        }));
+        until_started(&started, 1).await;
         let s = started.clone();
-        let second = flight.run(move || {
-            s.fetch_add(1, Ordering::SeqCst);
+        let second = tokio::spawn(flight.read(false, move |interactive| {
+            s.lock().unwrap().push(interactive);
             Ok(8)
-        });
-        assert!(
-            tokio::time::timeout(Duration::from_millis(50), second.clone()).await.is_err(),
-            "the second caller waits on the parked read"
-        );
+        }));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!second.is_finished(), "the probe waits on the parked read");
 
         release.send(()).unwrap();
-        assert_eq!(first.await, Ok(7));
-        assert_eq!(second.await, Ok(7), "the second caller shares the first read's result");
-        assert_eq!(started.load(Ordering::SeqCst), 1, "one blocking thread, not two");
+        assert_eq!(first.await.unwrap(), Ok(7));
+        assert_eq!(second.await.unwrap(), Ok(7), "the probe shares the first read's result");
+        assert_eq!(*started.lock().unwrap(), vec![true], "one blocking thread, not two");
 
-        assert_eq!(flight.run(|| Ok(9)).await, Ok(9), "once it returned, the next read is a fresh one");
+        assert_eq!(flight.read(false, |_| Ok(9)).await, Ok(9), "once it returned, the next read is a fresh one");
+    }
+
+    /// A retry the user asked for gets its prompt even when a background
+    /// probe's quiet read is out: it waits that one out, then reads itself.
+    #[tokio::test]
+    async fn an_interactive_read_is_not_answered_by_a_quiet_one() {
+        let flight: &'static SingleFlight<u32> = Box::leak(Box::new(SingleFlight::new()));
+        let started = Started::default();
+        let (release, parked) = std::sync::mpsc::channel::<()>();
+
+        let s = started.clone();
+        let probe = tokio::spawn(flight.read(false, move |interactive| {
+            s.lock().unwrap().push(interactive);
+            let _ = parked.recv();
+            Ok(1)
+        }));
+        until_started(&started, 1).await;
+        let s = started.clone();
+        let retry = tokio::spawn(flight.read(true, move |interactive| {
+            s.lock().unwrap().push(interactive);
+            Ok(2)
+        }));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!retry.is_finished(), "one read per item at a time, even for a retry");
+
+        release.send(()).unwrap();
+        assert_eq!(probe.await.unwrap(), Ok(1));
+        assert_eq!(retry.await.unwrap(), Ok(2), "the retry's own read, not the probe's answer");
+        assert_eq!(*started.lock().unwrap(), vec![false, true]);
     }
 
     #[tokio::test]
