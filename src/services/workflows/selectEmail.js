@@ -540,12 +540,19 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       actualSource = 'server';
       get().addToCache(cacheKey, email, cacheLimitMB);
 
-      try {
-        const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
-        if (!isCurrent()) return;
-        publish({ savedEmailIds });
-      } catch (e) {
-        console.warn('[selectEmail] Failed to update saved IDs:', e);
+      // The daemon auto-cached the body it just fetched and said so: mark it
+      // saved off that answer, with no vault read. `email.uid` is the
+      // server's uid, the one the file was stored under (it can differ from
+      // `realUid`). Functional, against the live store: only a view that
+      // shows this folder takes it — in another single folder the same
+      // number names a different message.
+      if (email?.vaultCached) {
+        const savedUid = email.uid ?? realUid;
+        publish(s => {
+          const showsFolder = spansMailboxes(s) || (s.activeAccountId === accountId && s.activeMailbox === mailbox);
+          if (!showsFolder || s.savedEmailIds?.has(savedUid)) return {};
+          return { savedEmailIds: new Set([...(s.savedEmailIds || []), savedUid]) };
+        });
       }
 
       email = await _autoMarkRead(useMailStore, {
