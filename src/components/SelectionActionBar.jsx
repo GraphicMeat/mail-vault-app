@@ -53,7 +53,7 @@ export function SelectionActionBar() {
   const purgeSelectedEverywhere = useSelectionStore((s) =>
     s.purgeSelectedEverywhere
   );
-  const removeLocalEmail = useSelectionStore((s) => s.removeLocalEmail);
+  const removeLocalEmails = useSelectionStore((s) => s.removeLocalEmails);
   const getSelectionSummary = useSelectionStore((s) => s.getSelectionSummary);
   const localLabels = useTagStore((s) => s.tags) || EMPTY_ARRAY;
   const applyTagToRows = useTagStore((s) => s.applyTagToRows);
@@ -203,15 +203,15 @@ export function SelectionActionBar() {
 
   const handleUnarchive = async () => {
     const state = useMailStore.getState();
-    const selected = selectedRows.filter((email) => email.isArchived);
-    for (const email of selected) {
-      const location = resolveEmailLocation(email, state);
-      if (!location) continue;
-      try {
-        await removeLocalEmail(email.uid, location);
-      } catch (e) {
-        console.error(`Failed to unarchive email ${email.uid}:`, e);
-      }
+    // One call: grouped per (account, mailbox) into one vault delete each.
+    const targets = selectedRows
+      .filter((email) => email.isArchived)
+      .map((email) => ({ uid: email.uid, location: resolveEmailLocation(email, state) }))
+      .filter((target) => target.location);
+    try {
+      if (targets.length) await removeLocalEmails(targets);
+    } catch (e) {
+      console.error("Failed to unarchive the selection:", e);
     }
     clearSelection();
   };

@@ -144,6 +144,7 @@ function renderActions({ emails = [email()], exportEmails = emails, actions = {}
   const resolvedActions = {
     deleteEmailFromServer: vi.fn().mockResolvedValue({ uid: 42, trash: 'Trash', trashUid: 142 }),
     removeLocalEmail: vi.fn().mockResolvedValue(undefined),
+    removeLocalEmails: vi.fn().mockResolvedValue(undefined),
     saveEmailsLocally: vi.fn().mockResolvedValue(undefined),
     ...actions,
   };
@@ -210,10 +211,11 @@ describe('RowQuickActions', () => {
     fireEvent.click(screen.getByTestId('quick-action-unarchive'));
 
     expect(onRequestDelete).toHaveBeenCalledTimes(1);
-    expect(actions.removeLocalEmail).not.toHaveBeenCalled();
+    expect(actions.removeLocalEmails).not.toHaveBeenCalled();
     const [confirm] = onRequestDelete.mock.calls[0];
     await confirm();
-    expect(actions.removeLocalEmail).toHaveBeenCalledWith(8, { accountId: ACCOUNT_A.id, mailbox: 'INBOX' });
+    expect(actions.removeLocalEmails).toHaveBeenCalledWith([{ uid: 8, location: { accountId: ACCOUNT_A.id, mailbox: 'INBOX' } }]);
+    expect(actions.removeLocalEmail).not.toHaveBeenCalled();
   });
 
   it('preserves unrelated selection around mark-read and star actions', async () => {
@@ -332,11 +334,13 @@ describe('RowQuickActions', () => {
     expect(onRequestDelete).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       title: 'viewer.unarchiveEmail', confirmLabel: 'rowMenu.unarchive',
     }));
-    expect(actions.removeLocalEmail).not.toHaveBeenCalled();
+    expect(actions.removeLocalEmails).not.toHaveBeenCalled();
     await onRequestDelete.mock.calls[0][0]();
-    await waitFor(() => expect(actions.removeLocalEmail).toHaveBeenCalledTimes(2));
-
-    expect(actions.removeLocalEmail).toHaveBeenNthCalledWith(1, 21, { accountId: ACCOUNT_A.id, mailbox: 'INBOX' });
-    expect(actions.removeLocalEmail).toHaveBeenNthCalledWith(2, 21, { accountId: ACCOUNT_B.id, mailbox: 'Sent' });
+    // One batched call; each copy keeps its own exact location.
+    await waitFor(() => expect(actions.removeLocalEmails).toHaveBeenCalledTimes(1));
+    expect(actions.removeLocalEmails).toHaveBeenCalledWith([
+      { uid: 21, location: { accountId: ACCOUNT_A.id, mailbox: 'INBOX' } },
+      { uid: 21, location: { accountId: ACCOUNT_B.id, mailbox: 'Sent' } },
+    ]);
   });
 });

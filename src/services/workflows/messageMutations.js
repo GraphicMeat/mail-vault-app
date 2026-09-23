@@ -458,11 +458,10 @@ export async function saveSelectedLocally() {
 
 // ── removeLocalEmail workflow ──
 
-export async function removeLocalEmail(uidOrKey, location = null) {
-  const { useMailStore } = await import('../../stores/mailStore');
-  const get = () => useMailStore.getState();
-
-  const state = get();
+// Where one uid (or full key) to unarchive lives, or null when it cannot be
+// proven: an explicit location must agree with the key, and a bare uid in a
+// spanning view must name exactly one loaded (account, mailbox).
+function _removalContext(state, uidOrKey, location) {
   const parsed = _parseSelKey(uidOrKey);
   const explicit = location != null;
   let context = null;
@@ -474,7 +473,7 @@ export async function removeLocalEmail(uidOrKey, location = null) {
       || (parsed.accountId && parsed.accountId !== accountId)
       || (parsed.mailbox && parsed.mailbox !== mailbox)) {
       console.warn('[removeLocalEmail] refused an incomplete or conflicting location:', uidOrKey, location);
-      return;
+      return null;
     }
     context = { uid: parsed.uid, accountId, mailbox };
   } else if (parsed.accountId && parsed.mailbox) {
@@ -508,23 +507,64 @@ export async function removeLocalEmail(uidOrKey, location = null) {
     }
   }
 
-  if (!context) {
-    console.warn('[removeLocalEmail] refused an unresolved or ambiguous location:', uidOrKey);
-    return;
-  }
+  if (!context) console.warn('[removeLocalEmail] refused an unresolved or ambiguous location:', uidOrKey);
+  return context;
+}
 
-  const { uid } = context;
-  const { accountId, mailbox } = context;
-  const account = state.accounts?.find(item => item.id === accountId);
-  const localId = `${accountId}-${mailbox}-${uid}`;
+export async function removeLocalEmail(uidOrKey, location = null) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const context = _removalContext(useMailStore.getState(), uidOrKey, location);
+  if (!context) return;
+  const { uid, accountId, mailbox } = context;
 
-  await db.deleteLocalEmail(localId);
+  await db.deleteLocalEmail(`${accountId}-${mailbox}-${uid}`);
 
   try {
     await api.removeFromLocalIndex(accountId, mailbox, uid);
   } catch (e) {
     console.warn('[mailStore] Failed to remove the custody entry:', e);
   }
+
+  await _publishRemoval(useMailStore, { accountId, mailbox, uids: [uid] });
+}
+
+// ── removeLocalEmails: bulk unarchive ──
+//
+// `targets` are uids / full keys, or `{ uid, location }` (location may be
+// null, resolved the way removeLocalEmail resolves it). Grouped by location:
+// one `maildir_delete_many` per (account, mailbox), which prunes custody for
+// every uid too, then one vault read and one publish. The per-uid loop it
+// replaces paid a delete, a custody write, two vault reads and a publish per
+// message.
+export async function removeLocalEmails(targets) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const state = useMailStore.getState();
+  const groups = new Map();
+  for (const target of targets || []) {
+    const { uid, location = null } = target && typeof target === 'object' ? target : { uid: target };
+    const context = _removalContext(state, uid, location);
+    if (!context) continue;
+    const key = JSON.stringify([context.accountId, context.mailbox]);
+    if (!groups.has(key)) groups.set(key, { accountId: context.accountId, mailbox: context.mailbox, uids: [] });
+    groups.get(key).uids.push(context.uid);
+  }
+  for (const group of groups.values()) {
+    try {
+      await send('maildir_delete_many', { accountId: group.accountId, mailbox: group.mailbox, uids: group.uids.map(Number) });
+    } catch (e) {
+      // The read below reports what the vault still holds either way.
+      console.warn('[removeLocalEmails] vault delete failed:', group.accountId, group.mailbox, e);
+    }
+    await _publishRemoval(useMailStore, group);
+  }
+}
+
+// Re-read one (account, mailbox) after `uids` left its vault and fold it into
+// the view on screen now, which may not be the one the removal started in.
+async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
+  const get = () => useMailStore.getState();
+  const removed = new Set(uids.map(String));
+  const isRemoved = email => removed.has(String(email.uid));
 
   const [vault, storedLocalEmails] = await Promise.all([
     db.getVaultUidSets(accountId, mailbox),
@@ -533,10 +573,11 @@ export async function removeLocalEmail(uidOrKey, location = null) {
   // Unknown (`null`) falls through to the `??` fallbacks below, which keep
   // the store's own rows and ids minus the removed uid.
   const savedEmailIds = vault?.saved ?? null;
-  const targetLocalEmails = storedLocalEmails?.filter(email => String(email.uid) !== String(uid));
+  const targetLocalEmails = storedLocalEmails?.filter(email => !isRemoved(email));
   setArchivedGroup(accountId, mailbox, vault?.archived ?? null);
 
   const live = get();
+  const account = live.accounts?.find(item => item.id === accountId);
   const liveSpans = spansMailboxes(live);
   const liveRows = [
     ...(live.emails || []), ...(live.sortedEmails || []), ...(live.localEmails || []),
@@ -553,13 +594,13 @@ export async function removeLocalEmail(uidOrKey, location = null) {
     && live.accounts?.some(item => item.id === accountId);
   const targetInView = liveSpans && (inSubtree || inUnifiedFolder || liveRows.some(isTargetRow));
   const activeFolder = !liveSpans && live.activeAccountId === accountId && live.activeMailbox === mailbox;
-  const readerStillNames = selectionStillNames(get, { uid, accountId, mailbox });
+  const readerStillNames = uids.some(uid => selectionStillNames(get, { uid, accountId, mailbox }));
 
   if (activeFolder || targetInView) {
-    // Unknown keeps the store's ids minus the one just removed, the same
+    // Unknown keeps the store's ids minus the ones just removed, the same
     // fallback the rows take on the next line.
-    let nextSavedEmailIds = savedEmailIds ?? new Set([...(live.savedEmailIds || [])].filter(id => String(id) !== String(uid)));
-    let nextLocalEmails = targetLocalEmails ?? (live.localEmails || []).filter(email => !isTargetRow(email) || String(email.uid) !== String(uid));
+    let nextSavedEmailIds = savedEmailIds ?? new Set([...(live.savedEmailIds || [])].filter(id => !removed.has(String(id))));
+    let nextLocalEmails = targetLocalEmails ?? (live.localEmails || []).filter(email => !isTargetRow(email) || !isRemoved(email));
     let viewPairs = [[accountId, mailbox]];
 
     if (targetInView) {
@@ -576,15 +617,17 @@ export async function removeLocalEmail(uidOrKey, location = null) {
 
       const otherLocalEmails = (live.localEmails || []).filter(email => !isTargetRow(email));
       const remainingTargetEmails = targetLocalEmails ?? (live.localEmails || [])
-        .filter(email => isTargetRow(email) && String(email.uid) !== String(uid));
+        .filter(email => isTargetRow(email) && !isRemoved(email));
       nextLocalEmails = [
         ...otherLocalEmails,
         ...remainingTargetEmails.map(email => ({ ...email, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
       ];
       const refreshedSavedEmailIds = savedEmailIds ?? new Set();
       nextSavedEmailIds = new Set([...(live.savedEmailIds || []), ...refreshedSavedEmailIds]);
-      if (savedEmailIds != null && !refreshedSavedEmailIds.has(uid) && !otherLocalEmails.some(email => String(email.uid) === String(uid))) {
-        nextSavedEmailIds.delete(uid);
+      for (const uid of uids) {
+        if (savedEmailIds != null && !refreshedSavedEmailIds.has(uid) && !otherLocalEmails.some(email => String(email.uid) === String(uid))) {
+          nextSavedEmailIds.delete(uid);
+        }
       }
     }
 

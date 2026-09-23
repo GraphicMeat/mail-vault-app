@@ -31,6 +31,7 @@ import {
   saveEmailsLocally as _saveEmailsLocally,
   saveSelectedLocally as _saveSelectedLocally,
   removeLocalEmail as _removeLocalEmail,
+  removeLocalEmails as _removeLocalEmails,
   deleteEmailFromServer as _deleteEmailFromServer,
   markEmailReadStatus as _markEmailReadStatus,
   exportEmail as _exportEmail,
@@ -154,6 +155,7 @@ export const createAccountSlice = (set, get) => ({
 
   saveSelectedLocally: () => _saveSelectedLocally(),
   removeLocalEmail: (uid, location) => _removeLocalEmail(uid, location),
+  removeLocalEmails: (targets) => _removeLocalEmails(targets),
   deleteEmailFromServer: (uid, opts) => _deleteEmailFromServer(uid, opts),
   markEmailReadStatus: (uid, read) => _markEmailReadStatus(uid, read),
   exportEmail: (uid) => _exportEmail(uid),

@@ -142,7 +142,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
-const { removeLocalEmail: removeLocalEmailWorkflow } = await import('../messageMutations');
+const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');
 const { invalidateChatAndThreadCaches, _resetArchivedGroupsForTest, setArchivedGroup, getArchivedGroup } = await import('../../../stores/slices/messageListSlice');
 
@@ -1723,6 +1723,62 @@ describe('removeLocalEmail resolves one exact local copy', () => {
     expect(useMailStore.getState().savedEmailIds).toEqual(new Set([2]));
     expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([2]));
     expect(useMailStore.getState().selectedEmailId).toBe(2);
+  });
+});
+
+// Bulk unarchive used to loop removeLocalEmail: per message a delete, a
+// custody write, two vault reads and a publish. One call per folder now.
+describe('removeLocalEmails: one vault delete per (account, mailbox)', () => {
+  const deletes = () => mockSend.mock.calls.filter(([cmd]) => cmd === 'maildir_delete_many');
+
+  it('makes one delete call for k uids, one vault read, and one publish that drops them', async () => {
+    primeStore([], []);
+    const rows = [1, 2, 3].map(uid => ({ uid, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
+    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3]), archivedEmailIds: new Set([1, 2, 3]) });
+    mockGetSavedEmailIds.mockResolvedValueOnce(new Set([3]));
+    mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([3]));
+    mockGetLocalEmails.mockResolvedValueOnce([rows[2]]);
+
+    await removeLocalEmailsWorkflow([1, 2]);
+
+    expect(deletes()).toEqual([['maildir_delete_many', { accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]]);
+    // maildir_delete_many prunes custody itself: no per-uid delete or custody call.
+    expect(mockDeleteLocalEmail).not.toHaveBeenCalled();
+    expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
+    expect(mockGetArchivedEmailIds).toHaveBeenCalledTimes(1);
+    expect(mockGetLocalEmails).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([3]));
+    expect(useMailStore.getState().localEmails.map(e => e.uid)).toEqual([3]);
+  });
+
+  it('groups by location, one delete per folder, and refuses a target it cannot place', async () => {
+    primeStore([], []);
+    useMailStore.setState({ accounts: [ACCOUNT, OTHER_ACCOUNT] });
+
+    await removeLocalEmailsWorkflow([
+      { uid: 5, location: { accountId: ACCOUNT.id, mailbox: 'INBOX' } },
+      { uid: 6, location: { accountId: ACCOUNT.id, mailbox: 'INBOX' } },
+      { uid: 5, location: { accountId: OTHER_ACCOUNT.id, mailbox: 'Sent' } },
+      { uid: 7, location: { accountId: 'nobody', mailbox: 'INBOX' } },
+    ]);
+
+    expect(deletes()).toEqual([
+      ['maildir_delete_many', { accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [5, 6] }],
+      ['maildir_delete_many', { accountId: OTHER_ACCOUNT.id, mailbox: 'Sent', uids: [5] }],
+    ]);
+  });
+
+  it('an unknown vault read keeps the store minus the removed uids, never an empty set', async () => {
+    primeStore([], []);
+    const rows = [1, 2, 3].map(uid => ({ uid, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
+    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3]), archivedEmailIds: new Set([1, 2, 3]) });
+    mockGetArchivedEmailIds.mockResolvedValueOnce(null);
+    mockGetLocalEmails.mockResolvedValueOnce(null);
+
+    await removeLocalEmailsWorkflow([1, 2]);
+
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([3]));
+    expect(useMailStore.getState().localEmails.map(e => e.uid)).toEqual([3]);
   });
 });
 

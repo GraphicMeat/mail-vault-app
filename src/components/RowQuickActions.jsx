@@ -126,10 +126,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     const archived = emails.filter(email => email.isArchived);
     const localOnly = archived.some(isLocalOnly);
     onRequestDelete?.(async () => {
-      for (const email of archived) {
-        const location = resolveEmailLocation(email, useMailStore.getState());
-        if (location) await actions.removeLocalEmail(email.uid, location);
-      }
+      // One call: grouped per (account, mailbox) into one vault delete each.
+      const state = useMailStore.getState();
+      const targets = archived
+        .map(email => ({ uid: email.uid, location: resolveEmailLocation(email, state) }))
+        .filter(target => target.location);
+      if (targets.length) await actions.removeLocalEmails(targets);
     }, {
       title: t('viewer.unarchiveEmail'),
       description: localOnly ? t('viewer.emailOnlyExistsLocalArchive') : t('viewer.cachedCopyRemovedEmailStill'),

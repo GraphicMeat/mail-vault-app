@@ -204,13 +204,14 @@ function EmailListComponent({ stacked = false }) {
   // Shared row props — subscribed once in parent, passed to all rows via props
   const saveEmailLocally = useAccountStore(s => s.saveEmailLocally);
   const removeLocalEmail = useAccountStore(s => s.removeLocalEmail);
+  const removeLocalEmails = useAccountStore(s => s.removeLocalEmails);
   const deleteEmailFromServer = useAccountStore(s => s.deleteEmailFromServer);
   const saveEmailsLocally = useAccountStore(s => s.saveEmailsLocally);
   const toggleFlagged = useAccountStore(s => s.toggleFlagged);
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const accountColors = useSettingsStore(s => s.accountColors);
   // Stable actions ref — object identity doesn't change unless actions change (they don't)
-  const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally, toggleFlagged }), [saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally, toggleFlagged]);
+  const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged }), [saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged]);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
@@ -964,13 +965,11 @@ function EmailListComponent({ stacked = false }) {
 
     // Handle unarchive separately — not a bulk operation manager action
     if (action === 'unarchive') {
-      const { removeLocalEmail, archivedEmailIds } = useMailStore.getState();
-      // Only archived messages have anything to remove, and each call re-reads
-      // the whole local index — running it over a 15k selection to unarchive a
-      // handful would hang the app.
-      for (const uid of uids.filter(u => archivedEmailIds.has(u))) {
-        try { await removeLocalEmail(uid); } catch (e) { console.error(`Failed to unarchive ${uid}:`, e); }
-      }
+      const { removeLocalEmails, archivedEmailIds } = useMailStore.getState();
+      // Only archived messages have anything to remove. One call for the
+      // run: one vault delete and one re-read per (account, mailbox).
+      const targets = uids.filter(u => archivedEmailIds.has(u));
+      try { if (targets.length) await removeLocalEmails(targets); } catch (e) { console.error('Failed to unarchive the selection:', e); }
       useMailStore.getState().updateSortedEmails();
       return;
     }
