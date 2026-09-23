@@ -127,6 +127,30 @@ describe('compose window ownership', () => {
     expect(copied).not.toBeNull();
   });
 
+  // A window is handed main's settings once, at detach. An upgrade made in
+  // main afterwards has to reach it too, or its Premium panels stay locked.
+  it('pushes a settings change made in main to a window, before and after it starts', async () => {
+    const emitTo = vi.fn().mockResolvedValue(undefined);
+    const open = vi.fn().mockResolvedValue('compose-settings');
+    const owner = createComposeWindowOwner({ open, emitTo, update: vi.fn(), close: vi.fn(), queueSend: vi.fn() });
+    const handoff = owner.detach({ id: 12, mode: 'new', snapshot: snapshot(), context: { settings: { billingProfile: null, language: 'de' } } });
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    const token = open.mock.calls[0][0].token;
+
+    owner.pushSettings({ billingProfile: { premiumAccess: true } });
+    ready(owner, 12, token);
+    await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('compose-settings', 'compose-window-message', expect.objectContaining({
+      type: 'initialize', payload: expect.objectContaining({ settings: { billingProfile: { premiumAccess: true }, language: 'de' } }),
+    })));
+    owner.receive({ composeId: '12', token, requestId: 'init', type: 'initialized' });
+    await handoff;
+
+    owner.pushSettings({ billingProfile: null });
+    expect(emitTo).toHaveBeenLastCalledWith('compose-settings', 'compose-window-message', expect.objectContaining({
+      composeId: '12', token, type: 'settings-changed', payload: { billingProfile: null },
+    }));
+  });
+
   it('accepts only messages for the current compose session', () => {
     expect(isComposeMessage({ composeId: 'draft-7', type: 'snapshot' }, 'draft-7')).toBe(true);
     expect(isComposeMessage({ composeId: 'old-draft', type: 'snapshot' }, 'draft-7')).toBe(false);

@@ -120,6 +120,11 @@ export function ComposeWindow() {
           void currentWindow.destroy();
           return;
         }
+        // A settings change made in main since detach (composeWindow.js pushSettings).
+        if (payload.type === 'settings-changed') {
+          applySettings(payload.payload);
+          return;
+        }
         if (payload.type !== 'initialize' || disposed || initializedMessage.current) return;
         initializedMessage.current = true;
 
@@ -185,7 +190,7 @@ export function ComposeWindow() {
       rejectPending(new Error('Compose window closed'));
       if (originalSettingsActions.current) useSettingsStore.setState(originalSettingsActions.current);
     };
-  }, [installSettingRelays, rejectPending, request]);
+  }, [applySettings, installSettingRelays, rejectPending, request]);
 
   const close = useCallback(async (type, explicitSnapshot) => {
     closing.current = true;

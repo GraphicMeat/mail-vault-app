@@ -194,6 +194,18 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
       return true;
     },
 
+    // A window is handed main's settings once, in its context at detach. A
+    // change made in main since (an upgrade above all, or its Premium panels
+    // stay locked) is pushed to every window, and folded into the context
+    // of one still starting up.
+    pushSettings(patch) {
+      for (const session of sessions.values()) {
+        if (session.finished) continue;
+        session.context = { ...session.context, settings: { ...session.context?.settings, ...patch } };
+        if (session.label) void reply(session, null, 'settings-changed', patch).catch(() => {});
+      }
+    },
+
     recover(id) { return recover(sessionFor(id)); },
     recoverLabel(label, token) {
       const session = [...sessions.values()].find(item => item.label === label && (!token || item.token === token));
