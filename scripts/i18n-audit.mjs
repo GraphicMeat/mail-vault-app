@@ -20,7 +20,7 @@
  * Exits 1 if anything is found, so a task can gate its own commit on it.
  */
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { listSourceFiles } from './lib/sourceFiles.mjs';
 
 /**
  * 2026-08-30, second pass: the class was an ALLOW-list of characters, so every
@@ -186,7 +186,7 @@ function hookGaps(src) {
 
 const [mode, ...args] = process.argv.slice(2);
 const files = args.length ? args
-  : execSync("find src -name '*.jsx' -not -path '*__tests__*'", { encoding: 'utf8' }).trim().split('\n');
+  : listSourceFiles(['src'], ['.jsx'], { exclude: ['__tests__'] });
 
 let bad = 0;
 for (const f of files) {

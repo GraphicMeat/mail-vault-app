@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { listSourceFiles } from '../../../scripts/lib/sourceFiles.mjs';
 
-const FILES = execSync("find src -name '*.jsx' -not -path '*__tests__*'", { encoding: 'utf8' })
-  .trim().split('\n');
+const FILES = listSourceFiles(['src'], ['.jsx'], { exclude: ['__tests__'] });
 
 // `x === 1 ? A : B` where A or B is a bare English plural fragment.
 const TERNARY = /\{\s*[\w.[\]]+(?:\.length)?\s*[!=]==?\s*1\s*\?[^}]{0,80}\}/g;

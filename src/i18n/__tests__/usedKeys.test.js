@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { listSourceFiles } from '../../../scripts/lib/sourceFiles.mjs';
 import en from '../locales/en.json';
 
 /**
@@ -9,10 +9,7 @@ import en from '../locales/en.json';
  * missing one renders "settings.cleanup.px" on screen (or, in that case, as an
  * iframe's CSS height) with every test green.
  */
-const FILES = execSync(
-  "find src -name '*.js' -o -name '*.jsx' | grep -v __tests__ | grep -v '\\.test\\.'",
-  { encoding: 'utf8' },
-).trim().split('\n');
+const FILES = listSourceFiles(['src'], ['.js', '.jsx'], { exclude: ['__tests__', '.test.'] });
 
 const KEY = String.raw`([a-zA-Z][\w-]*(?:\.[\w-]+)+)`;
 // t('a.b'), tr('a.b'), tErr('a.b'), translated('a.b', ...), labelKey: 'a.b', ...

@@ -33,11 +33,10 @@ describe('compareNames', () => {
  */
 describe('no bare localeCompare survives in src', () => {
   it('routes every name comparison through compareNames', async () => {
-    const { execSync } = await import('node:child_process');
-    const out = execSync(
-      "grep -rn 'localeCompare(' src --include='*.js' --include='*.jsx' | grep -v __tests__ | grep -v getLocale || true",
-      { encoding: 'utf8' }
-    ).trim();
-    expect(out).toBe('');
+    const { grepSource } = await import('../../../scripts/lib/sourceFiles.mjs');
+    const out = grepSource(['src'], ['.js', '.jsx'], /localeCompare\(/, {
+      exclude: ['__tests__', 'getLocale'],
+    });
+    expect(out).toEqual([]);
   });
 });

@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { listSourceFiles } from '../../../scripts/lib/sourceFiles.mjs';
 import en from '../locales/en.json';
 
-const FILES = execSync(
-  "find src/services src/stores src/hooks src/utils -name '*.js' -not -path '*__tests__*'",
-  { encoding: 'utf8' }
-).trim().split('\n');
+const FILES = listSourceFiles(
+  ['src/services', 'src/stores', 'src/hooks', 'src/utils'],
+  ['.js'],
+  { exclude: ['__tests__'] },
+);
 
 const LITERAL = /(?:throw new Error\(|setError\(|showToast\()['"`]([A-Z][^'"`]{8,})['"`]/g;
 
@@ -42,10 +43,7 @@ describe('service-layer messages', () => {
  * chat view threw `t is not defined` the first time it formatted a name. The
  * hooks audit cannot see this: it only reads .jsx.
  */
-const ALL = execSync(
-  "find src -name '*.js' -o -name '*.jsx' | grep -v __tests__",
-  { encoding: 'utf8' }
-).trim().split('\n');
+const ALL = listSourceFiles(['src'], ['.js', '.jsx'], { exclude: ['__tests__'] });
 
 describe('every t() call has something to call', () => {
   it('never calls t(...) or tr(...) without binding it', () => {

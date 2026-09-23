@@ -109,19 +109,19 @@ describe('spansMailboxes', () => {
 // left the checkbox writing a key nothing else could read, and no test saw it.
 describe('nothing builds a selection key by hand', () => {
   it('leaves no inline `accountId:uid` template outside the helper', async () => {
-    const { execSync } = await import('node:child_process');
+    const { grepSource } = await import('../../../../scripts/lib/sourceFiles.mjs');
     // Only keys that END in a uid — `${accountId}:${mailbox}` is a cache key
     // for a whole folder and is a different thing entirely.
-    const out = execSync(
-      "grep -rnE '[$][{][A-Za-z_.]*[Aa]ccountId[}]:[$][{][A-Za-z_.]*[Uu]id[}]' "
-      + "src --include='*.js' --include='*.jsx' "
-      + "| grep -v __tests__ | grep -v unifiedHelpers.js | grep -v loadUnifiedInbox.js || true",
-      { encoding: 'utf8' }
-    ).trim();
     // One exclusion: loadUnifiedInbox's is a different key with a different
     // job — it dedupes rows within one folder per account, and says so where it
     // is defined. `selectedEmailId` used to be excluded too; it goes through
     // rowKey now.
-    expect(out).toBe('');
+    const out = grepSource(
+      ['src'],
+      ['.js', '.jsx'],
+      /[$][{][A-Za-z_.]*[Aa]ccountId[}]:[$][{][A-Za-z_.]*[Uu]id[}]/,
+      { exclude: ['__tests__', 'unifiedHelpers.js', 'loadUnifiedInbox.js'] },
+    );
+    expect(out).toEqual([]);
   });
 });
