@@ -50,7 +50,7 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 
     let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
         .map_err(|e| format!("failed to create keyring entry: {}", e))?;
-    let json = read_entry(&entry)
+    let json = read_entry(&entry, CREDENTIALS_KEY)
         .map_err(|e| format!("failed to read keychain: {}", e))?
         .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))?;
     serde_json::from_str(&json).map_err(|e| format!("failed to parse credentials: {}", e))
@@ -59,13 +59,16 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 /// Resolve one account's `ImapConfig` (password / oauth2AccessToken included)
 /// from the shared keychain entry, or the `MAILVAULT_TEST_CREDENTIALS` file
 /// bypass in debug builds.
-/// Private on purpose: the blocking body of
-/// `resolve_account_credentials_guarded`. Every caller outside this file is
-/// async, and calling this one inline would park a runtime worker on a
-/// keychain that is locked or prompting — the exact hang the guard exists to
-/// prevent. A guard a caller can walk around is a convention, not a guard.
+/// Test-only: every real caller is async and goes through
+/// `resolve_account_credentials_guarded`, because calling this inline would
+/// park a runtime worker on a keychain that is locked or prompting — the exact
+/// hang the guard exists to prevent.
+#[cfg(test)]
 fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
-    let credentials = load_credentials_blob()?;
+    account_from_blob(&load_credentials_blob()?, account_id)
+}
+
+fn account_from_blob(credentials: &HashMap<String, String>, account_id: &str) -> Result<ImapConfig, String> {
     let raw = credentials
         .get(account_id)
         .ok_or_else(|| format!("no credentials found for account {account_id}"))?;
@@ -83,26 +86,97 @@ fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
 /// blocks until somebody answers the dialog; with the daemon started at login
 /// nobody is there to, and the wait has no end. A timeout turns that into an
 /// error the caller can report instead of a daemon that stopped answering.
+///
+/// The blob is one keychain item, read by at most one thread at a time (see
+/// `SingleFlight`): every account's caller shares that read.
 pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<ImapConfig, String> {
-    let account_id = account_id.to_string();
-    let read = tokio::task::spawn_blocking(move || resolve_account_credentials(&account_id));
-    match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(format!("the credential read panicked: {e}")),
-        Err(_) => {
-            GATE.block("timeout");
-            Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
-        }
+    let blob = guarded(CREDENTIALS_KEY, blob_read(), AI_KEY_TIMEOUT).await?;
+    account_from_blob(&blob, account_id)
+}
+
+/// A shared item read under `limit`. Giving up blocks that item as "timeout";
+/// the read itself keeps going and settles the item when it returns.
+async fn guarded<T: Clone>(key: &'static str, read: SharedRead<T>, limit: Duration) -> Result<T, String> {
+    tokio::time::timeout(limit, read).await.unwrap_or_else(|_| {
+        GATE.block(key, "timeout");
+        Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
+    })
+}
+
+fn blob_read() -> SharedRead<HashMap<String, String>> {
+    // The debug file bypass cannot hang on a prompt, and tests point it at
+    // different files: its read is never shared with anyone else's.
+    if test_credentials_path().is_some() {
+        return unshared(load_credentials_blob);
     }
+    BLOB_READ.run(load_credentials_blob)
+}
+
+fn ai_key_read() -> SharedRead<Option<String>> {
+    if test_ai_key_path().is_some() {
+        return unshared(resolve_ai_endpoint_key);
+    }
+    AI_KEY_READ.run(resolve_ai_endpoint_key)
+}
+
+// ── Single-flight item reads ────────────────────────────────────────────────
+
+type SharedRead<T> = futures::future::Shared<futures::future::BoxFuture<'static, Result<T, String>>>;
+
+static BLOB_READ: SingleFlight<HashMap<String, String>> = SingleFlight::new();
+static AI_KEY_READ: SingleFlight<Option<String>> = SingleFlight::new();
+
+/// At most one blocking read per keychain item. A read parked on a prompt
+/// nobody answers does not come back, and a caller's timeout cannot cancel a
+/// blocking thread; with a new thread per attempt the scheduled worker's
+/// five-minute retries would drain tokio's blocking pool over a weekend. A
+/// caller that finds a read already out waits on that one, so concurrent
+/// callers (`sync.watch` for every account on reconnect) share one read, and
+/// `keychain.retry` joins a read still waiting on the prompt the user can see.
+pub(crate) struct SingleFlight<T> {
+    out: std::sync::Mutex<Option<SharedRead<T>>>,
+}
+
+impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
+    pub(crate) const fn new() -> Self {
+        Self { out: std::sync::Mutex::new(None) }
+    }
+
+    pub(crate) fn run(&'static self, read: impl FnOnce() -> Result<T, String> + Send + 'static) -> SharedRead<T> {
+        let mut out = self.out.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(read) = &*out {
+            return read.clone();
+        }
+        let shared = unshared(move || {
+            let result = read();
+            // Released when the read really returns, never when a caller gives
+            // up on it. Waits for `run` to finish storing it below.
+            *self.out.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            result
+        });
+        *out = Some(shared.clone());
+        shared
+    }
+}
+
+fn unshared<T: Clone + Send + Sync + 'static>(read: impl FnOnce() -> Result<T, String> + Send + 'static) -> SharedRead<T> {
+    use futures::FutureExt;
+    tokio::task::spawn_blocking(read)
+        .map(|joined| joined.unwrap_or_else(|e| Err(format!("the keychain read panicked: {e}"))))
+        .boxed()
+        .shared()
 }
 
 // ── Keychain gate ───────────────────────────────────────────────────────────
 //
-// A read the user can fix by unlocking the keychain (locked, a refused or
-// unanswered prompt) blocks the gate; the next read that answers clears it.
-// Each transition is one `keychain-status` event, which the app turns into its
-// unlock dialog. With no app listening, the daemon posts a banner itself so
-// somebody learns sync and scheduled sends are paused.
+// Per item: a read the user can fix by unlocking the keychain (locked, a
+// refused or unanswered prompt) blocks that item; the next read of the same
+// item that answers clears it. The gate is blocked while any item is, because
+// a refusal is per item (the app's blob can prompt while the daemon's own AI
+// key reads fine). Only blocked/clear flips are events, one `keychain-status`
+// each, which the app turns into its unlock dialog. With no app listening,
+// the daemon posts a banner itself so somebody learns sync and scheduled
+// sends are paused.
 
 /// How long a keychain read gets when the user asked for it (`keychain.retry`)
 /// and may be typing a password into a macOS prompt.
@@ -111,12 +185,14 @@ const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 const BANNER_EVERY: Duration = Duration::from_secs(30 * 60);
 
 struct Blocked {
+    item: &'static str,
     reason: &'static str,
     since_ms: i64,
 }
 
 pub(crate) struct KeychainGate {
-    blocked: std::sync::Mutex<Option<Blocked>>,
+    /// Blocked items, earliest first.
+    blocked: std::sync::Mutex<Vec<Blocked>>,
     events: std::sync::OnceLock<EventBus>,
     last_banner: std::sync::Mutex<Option<std::time::Instant>>,
 }
@@ -131,34 +207,43 @@ pub fn install_events(bus: EventBus) {
 impl KeychainGate {
     const fn new() -> Self {
         Self {
-            blocked: std::sync::Mutex::new(None),
+            blocked: std::sync::Mutex::new(Vec::new()),
             events: std::sync::OnceLock::new(),
             last_banner: std::sync::Mutex::new(None),
         }
     }
 
-    pub(crate) fn block(&self, reason: &'static str) {
+    /// The first reason an item blocked with sticks until that item clears.
+    pub(crate) fn block(&self, item: &'static str, reason: &'static str) {
         {
             let mut blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
-            if blocked.is_some() {
+            if blocked.iter().any(|b| b.item == item) {
                 return;
             }
             let since_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(0);
-            *blocked = Some(Blocked { reason, since_ms });
+            blocked.push(Blocked { item, reason, since_ms });
+            if blocked.len() > 1 {
+                return;
+            }
         }
-        warn!("[keychain] blocked ({reason}); sync and scheduled sends wait for an unlock");
+        warn!("[keychain] blocked ({item}: {reason}); sync and scheduled sends wait for an unlock");
         let Some(bus) = self.events.get() else { return };
         if !bus.emit("keychain-status", json!({"blocked": true, "reason": reason})) {
             self.banner();
         }
     }
 
-    pub(crate) fn clear(&self) {
-        if self.blocked.lock().unwrap_or_else(|e| e.into_inner()).take().is_none() {
-            return;
+    pub(crate) fn clear(&self, item: &'static str) {
+        {
+            let mut blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
+            let before = blocked.len();
+            blocked.retain(|b| b.item != item);
+            if before == 0 || !blocked.is_empty() {
+                return;
+            }
         }
         info!("[keychain] readable again");
         if let Some(bus) = self.events.get() {
@@ -167,11 +252,11 @@ impl KeychainGate {
     }
 
     pub(crate) fn is_blocked(&self) -> bool {
-        self.blocked.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+        !self.blocked.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
     }
 
     pub(crate) fn status(&self) -> Value {
-        match &*self.blocked.lock().unwrap_or_else(|e| e.into_inner()) {
+        match self.blocked.lock().unwrap_or_else(|e| e.into_inner()).first() {
             Some(b) => json!({"blocked": true, "reason": b.reason, "since": b.since_ms}),
             None => json!({"blocked": false}),
         }
@@ -191,22 +276,22 @@ impl KeychainGate {
     }
 }
 
-/// `get_password` with the gate kept in step: a read that answers, even with
-/// "nothing stored", clears it; one unlocking would fix blocks it. `Ok(None)`
-/// is `NoEntry`.
-fn read_entry(entry: &Entry) -> keyring::Result<Option<String>> {
+/// `get_password` with the gate kept in step for `item`: a read that answers,
+/// even with "nothing stored", clears it; one unlocking would fix blocks it.
+/// `Ok(None)` is `NoEntry`.
+fn read_entry(entry: &Entry, item: &'static str) -> keyring::Result<Option<String>> {
     match entry.get_password() {
         Ok(pw) => {
-            GATE.clear();
+            GATE.clear(item);
             Ok(Some(pw))
         }
         Err(keyring::Error::NoEntry) => {
-            GATE.clear();
+            GATE.clear(item);
             Ok(None)
         }
         Err(e) => {
             if let Some(reason) = mailvault_core::keychain::keychain_block_reason(os_status(&e), false) {
-                GATE.block(reason);
+                GATE.block(item, reason);
             }
             Err(e)
         }
@@ -230,31 +315,20 @@ fn os_status(_: &keyring::Error) -> Option<i32> {
 }
 
 /// `keychain.retry`: both items the daemon reads, under a clock long enough
-/// for the user to answer macOS's prompt. `ok` only when both answered,
-/// because a refusal is per item: clearing the gate on the account blob alone
-/// would reopen the dialog at the AI key's next read.
+/// for the user to answer macOS's prompt. A read of an item still out (parked
+/// on the prompt the user is looking at) is joined, not started again. `ok`
+/// once no item is blocked: each read settles its own item, and a failure
+/// unlocking cannot fix (a corrupt blob, nothing stored) is not the gate's.
 pub(crate) async fn retry() -> Value {
-    let read = tokio::task::spawn_blocking(|| -> Result<(), keyring::Error> {
-        if test_credentials_path().is_some() {
-            GATE.clear();
-            return Ok(());
-        }
-        for key in [CREDENTIALS_KEY, AI_ENDPOINT_KEY_ENTRY] {
-            read_entry(&Entry::new(KEYRING_SERVICE, key)?)?;
-        }
-        Ok(())
-    });
-    match tokio::time::timeout(RETRY_TIMEOUT, read).await {
-        Ok(Ok(Ok(()))) => json!({"ok": true}),
-        Ok(Ok(Err(e))) => {
-            let reason = mailvault_core::keychain::keychain_block_reason(os_status(&e), false);
-            json!({"ok": false, "reason": reason.unwrap_or("error")})
-        }
-        Ok(Err(_)) => json!({"ok": false, "reason": "error"}),
-        Err(_) => {
-            GATE.block("timeout");
-            json!({"ok": false, "reason": "timeout"})
-        }
+    let _ = tokio::join!(
+        guarded(CREDENTIALS_KEY, blob_read(), RETRY_TIMEOUT),
+        guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(), RETRY_TIMEOUT),
+    );
+    let status = GATE.status();
+    if status["blocked"] == true {
+        json!({"ok": false, "reason": status["reason"]})
+    } else {
+        json!({"ok": true})
     }
 }
 
@@ -372,7 +446,7 @@ fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
         };
     }
     let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-    read_entry(&entry).map_err(|e| format!("failed to read keychain: {e}"))
+    read_entry(&entry, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to read keychain: {e}"))
 }
 
 /// A keychain ACL can prompt the user and then block the reader until
@@ -382,15 +456,7 @@ fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
 /// wrappers instead, which mirror `scheduled_send_worker::resolve_credentials`'s
 /// spawn_blocking + timeout shape.
 pub async fn resolve_ai_endpoint_key_guarded() -> Result<Option<String>, String> {
-    let read = tokio::task::spawn_blocking(resolve_ai_endpoint_key);
-    match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(format!("the keychain read panicked: {e}")),
-        Err(_) => {
-            GATE.block("timeout");
-            Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
-        }
-    }
+    guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(), AI_KEY_TIMEOUT).await
 }
 
 pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
@@ -459,27 +525,93 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
 
-    /// One event per transition, so the app raises its dialog once, not on
-    /// every failed read; the first reason sticks until the gate clears.
-    #[test]
-    fn the_gate_emits_on_transitions_only() {
+    fn gate_with_events() -> (KeychainGate, tokio::sync::broadcast::Receiver<std::sync::Arc<str>>) {
         let gate = KeychainGate::new();
         let bus = EventBus::new(crate::events::CAPACITY);
         let _ = gate.events.set(bus.clone());
-        let mut rx = bus.subscribe();
+        let rx = bus.subscribe();
+        (gate, rx)
+    }
 
-        gate.block("locked");
-        gate.block("timeout");
+    fn payloads(rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<str>>) -> Vec<Value> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|line| mailvault_core::daemon_ipc::parse_event(&line).expect("an event line").1)
+            .collect()
+    }
+
+    /// One event per transition, so the app raises its dialog once, not on
+    /// every failed read; the first reason sticks until the item clears.
+    #[test]
+    fn the_gate_emits_on_transitions_only() {
+        let (gate, mut rx) = gate_with_events();
+
+        gate.block(CREDENTIALS_KEY, "locked");
+        gate.block(CREDENTIALS_KEY, "timeout");
         assert!(gate.is_blocked());
         assert_eq!(gate.status()["reason"], json!("locked"));
-        gate.clear();
-        gate.clear();
+        gate.clear(CREDENTIALS_KEY);
+        gate.clear(CREDENTIALS_KEY);
 
-        let payloads: Vec<Value> = std::iter::from_fn(|| rx.try_recv().ok())
-            .map(|line| mailvault_core::daemon_ipc::parse_event(&line).expect("an event line").1)
-            .collect();
-        assert_eq!(payloads, vec![json!({"blocked": true, "reason": "locked"}), json!({"blocked": false})]);
+        assert_eq!(payloads(&mut rx), vec![json!({"blocked": true, "reason": "locked"}), json!({"blocked": false})]);
         assert_eq!(gate.status(), json!({"blocked": false}));
+    }
+
+    /// The app's blob can prompt while the daemon's own AI key reads fine. A
+    /// gate any successful read cleared would flap on every AI read, and each
+    /// re-block would bring the dialog back after "Later".
+    #[test]
+    fn another_item_reading_fine_does_not_clear_a_blocked_one() {
+        let (gate, mut rx) = gate_with_events();
+
+        gate.block(CREDENTIALS_KEY, "denied");
+        gate.clear(AI_ENDPOINT_KEY_ENTRY);
+        assert!(gate.is_blocked(), "the blob is still refused");
+        assert_eq!(payloads(&mut rx), vec![json!({"blocked": true, "reason": "denied"})]);
+
+        gate.block(AI_ENDPOINT_KEY_ENTRY, "timeout");
+        assert_eq!(gate.status()["reason"], json!("denied"), "the earliest item's reason");
+        gate.clear(CREDENTIALS_KEY);
+        assert!(gate.is_blocked());
+        assert_eq!(gate.status()["reason"], json!("timeout"));
+        assert!(payloads(&mut rx).is_empty(), "no flip while any item stays blocked");
+
+        gate.clear(AI_ENDPOINT_KEY_ENTRY);
+        assert!(!gate.is_blocked());
+        assert_eq!(payloads(&mut rx), vec![json!({"blocked": false})]);
+    }
+
+    /// A read parked on a prompt must not be joined by a second thread: the
+    /// next caller waits on the same read and gets its result, and a fresh
+    /// read starts only once that one has returned.
+    #[tokio::test]
+    async fn a_read_already_out_is_joined_not_started_again() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let flight: &'static SingleFlight<u32> = Box::leak(Box::new(SingleFlight::new()));
+        let started = std::sync::Arc::new(AtomicUsize::new(0));
+        let (release, parked) = std::sync::mpsc::channel::<()>();
+
+        let s = started.clone();
+        let first = flight.run(move || {
+            s.fetch_add(1, Ordering::SeqCst);
+            let _ = parked.recv();
+            Ok(7)
+        });
+        let s = started.clone();
+        let second = flight.run(move || {
+            s.fetch_add(1, Ordering::SeqCst);
+            Ok(8)
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), second.clone()).await.is_err(),
+            "the second caller waits on the parked read"
+        );
+
+        release.send(()).unwrap();
+        assert_eq!(first.await, Ok(7));
+        assert_eq!(second.await, Ok(7), "the second caller shares the first read's result");
+        assert_eq!(started.load(Ordering::SeqCst), 1, "one blocking thread, not two");
+
+        assert_eq!(flight.run(|| Ok(9)).await, Ok(9), "once it returned, the next read is a fresh one");
     }
 
     #[tokio::test]

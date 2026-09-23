@@ -546,12 +546,12 @@ mod tests {
         // A read that fails without answering, while the gate says the
         // keychain is waiting on the user.
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", s.app_dir.join("missing-credentials.json"));
-        crate::credentials::GATE.block("locked");
+        crate::credentials::GATE.block("scheduled-test-item", "locked");
         let _ = route(&s, "scheduled.send_now", &json!({"id": id}), json!(1)).await;
         // Cleared before any assert: a panic with the process-global gate
         // still blocked would turn other tests' credential failures into
         // Offline too.
-        crate::credentials::GATE.clear();
+        crate::credentials::GATE.clear("scheduled-test-item");
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         let after = mailvault_core::app_db::with(&s.app_dir, |c| scheduled::get(c, &id)).unwrap().unwrap();
