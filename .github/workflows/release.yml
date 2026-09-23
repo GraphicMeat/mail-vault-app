@@ -413,43 +413,7 @@ jobs:
 
       - name: Prepare Artifact Signing
         shell: pwsh
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'artifact-signing'
-          New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          Invoke-WebRequest -Uri 'https://www.nuget.org/api/v2/package/Microsoft.ArtifactSigning.Client/1.0.128' -OutFile "$dir\client.zip"
-          Expand-Archive -Path "$dir\client.zip" -DestinationPath "$dir\client" -Force
-          $dlib = "$dir\client\bin\x64\Azure.CodeSigning.Dlib.dll"
-          if (-not (Test-Path $dlib)) { throw "dlib not found at $dlib" }
-
-          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
-            Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
-          if (-not $signtool) { throw 'signtool.exe not found' }
-          Write-Host "signtool: $($signtool.FullName)"
-
-          # Only AzureCliCredential (from azure/login) may answer; the rest
-          # would be probed first and managed identity can hang on a runner.
-          $metadata = @{
-            Endpoint = 'https://neu.codesigning.azure.net/'
-            CodeSigningAccountName = 'MailVault'
-            CertificateProfileName = 'MailVaultApp2'
-            ExcludeCredentials = @(
-              'ManagedIdentityCredential', 'EnvironmentCredential', 'WorkloadIdentityCredential',
-              'SharedTokenCacheCredential', 'VisualStudioCredential', 'VisualStudioCodeCredential',
-              'AzurePowerShellCredential', 'AzureDeveloperCliCredential', 'InteractiveBrowserCredential'
-            )
-          }
-          $metadata | ConvertTo-Json | Set-Content -Encoding utf8 "$dir\metadata.json"
-
-          # Signing lives in this overlay only, so a local Windows build stays unsigned.
-          $overlay = @{ bundle = @{ windows = @{ signCommand = @{
-            cmd  = $signtool.FullName
-            args = @('sign', '/v', '/fd', 'SHA256', '/tr', 'http://timestamp.acs.microsoft.com', '/td', 'SHA256',
-                     '/dlib', $dlib, '/dmdf', "$dir\metadata.json", '/d', 'MailVault', '%1')
-          } } } }
-          $overlay | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 "$dir\sign.conf.json"
-          Get-Content "$dir\sign.conf.json"
-          "SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
-          "SIGN_CONFIG=$dir\sign.conf.json" >> $env:GITHUB_ENV
+        run: ./scripts/windows-sign-setup.ps1
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -459,19 +423,11 @@ jobs:
           # The signer role sits on the signing account, not the subscription.
           allow-no-subscriptions: true
 
-      # Tauri swallows signtool's output on failure, so sign one throwaway copy
-      # here first: a broken login, role or dlib fails fast and legibly.
       - name: Check signing works
         shell: pwsh
         run: |
-          $probe = Join-Path $env:RUNNER_TEMP 'sign-probe.exe'
-          Copy-Item 'src-tauri\binaries\mailvault-daemon-x86_64-pc-windows-msvc.exe' $probe
-          $cfg = Get-Content $env:SIGN_CONFIG | ConvertFrom-Json
-          $cmd = $cfg.bundle.windows.signCommand
-          # /debug must precede the file, which is the last argument.
-          $signArgs = @($cmd.args | ForEach-Object { if ($_ -eq '%1') { '/debug'; $probe } else { $_ } })
-          & $cmd.cmd @signArgs
-          if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+          Copy-Item 'src-tauri\binaries\mailvault-daemon-x86_64-pc-windows-msvc.exe' "$env:RUNNER_TEMP\sign-probe.exe"
+          ./scripts/windows-sign-probe.ps1 -File "$env:RUNNER_TEMP\sign-probe.exe"
 
       - name: Bundle and sign NSIS installer
         env:

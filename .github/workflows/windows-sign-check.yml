@@ -1,0 +1,39 @@
+name: Windows Sign Check
+
+# Two-minute proof that Azure Artifact Signing works from CI: OIDC login, role,
+# certificate profile, dlib. Run it after changing anything on the Azure side
+# instead of waiting on a full release build.
+on:
+  workflow_dispatch:
+
+jobs:
+  sign-check:
+    # Same environment as build-windows: the federated credential trusts it.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Prepare Artifact Signing
+        shell: pwsh
+        run: ./scripts/windows-sign-setup.ps1
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Sign and verify a throwaway script
+        shell: pwsh
+        run: |
+          $probe = "$env:RUNNER_TEMP\sign-probe.ps1"
+          Set-Content -Path $probe -Value "Write-Output 'MailVault signing probe'"
+          ./scripts/windows-sign-probe.ps1 -File $probe
