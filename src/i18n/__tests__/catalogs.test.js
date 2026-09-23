@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import en from '../locales/en.json';
 import identicalOk from '../locales/IDENTICAL_OK.json';
 import es from '../locales/es.json';
@@ -57,6 +59,30 @@ describe('daemon search copy and Premium catalog', () => {
       blurbKey: 'premium.fastMultiFolderSearch.blurb',
       tab: 'storage',
     });
+  });
+});
+
+// Every other check here compares a locale against English, so a key deleted
+// from all nine catalogs at once passed them all while the app still used it,
+// and t() rendered the raw key: `views.edit` in Settings > Views did. Literal
+// keys only; a built key (`menu.${id}`) cannot be read off the source.
+describe('keys the app uses', () => {
+  const SRC = resolve(process.cwd(), 'src');
+  const sources = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === '__tests__' ? [] : sources(path);
+    return /\.jsx?$/.test(entry.name) && !/\.test\.jsx?$/.test(entry.name) ? [path] : [];
+  });
+
+  it('are all in the English catalog', () => {
+    const missing = [];
+    for (const file of sources(SRC)) {
+      for (const [, , key] of readFileSync(file, 'utf8').matchAll(/\bt(?:r)?\(\s*(['"])([\w.-]+)\1/g)) {
+        // A count picks the plural form, `key_one`/`key_other` (i18n/index.js).
+        if (!(key in en) && !(`${key}_other` in en)) missing.push(`${file.slice(SRC.length + 1)}: ${key}`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });
 

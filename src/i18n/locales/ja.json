@@ -2596,6 +2596,7 @@
   "views.deleteConfirm": "このビューを削除",
   "views.direction.asc": "昇順",
   "views.direction.desc": "降順",
+  "views.edit": "ビューを編集",
   "views.explainer": "ビューは、メールに対するフィルターを保存したものです。メールは動きません。1 通のメッセージはいくつでもビューに現れますが、置き場所は 1 つのフォルダーのままです。",
   "views.filter.accounts": "アカウント",
   "views.filter.allAccounts": "すべてのアカウント",

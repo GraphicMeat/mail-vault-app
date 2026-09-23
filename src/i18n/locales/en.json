@@ -2596,6 +2596,7 @@
   "views.deleteConfirm": "Delete this view",
   "views.direction.asc": "Ascending",
   "views.direction.desc": "Descending",
+  "views.edit": "Edit view",
   "views.explainer": "A view is a saved set of filters over your mail. It moves nothing: a message can appear in any number of views and still live in one folder.",
   "views.filter.accounts": "Accounts",
   "views.filter.allAccounts": "Every account",
