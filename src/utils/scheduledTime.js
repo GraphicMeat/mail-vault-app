@@ -123,12 +123,14 @@ export function zoneCity(tz) {
 
 /**
  * The timezone picker's options for `zones` as they stand at instant `ms`:
- * label "(UTC-04:00) America/New York", value the IANA id untouched, sorted
- * by offset then id. Keywords let a search for "+2", "utc+2", "gmt+5:30" or
- * "EDT" find a zone whose label spells none of those.
+ * label "(UTC-04:00) New York" (the city is what people read, and the whole
+ * id does not fit the field), detail "America/New York" for the open list,
+ * value the IANA id untouched, sorted by offset then id. Keywords let a search
+ * for "+2", "utc+2", "gmt+5:30" or "EDT" find a zone whose label spells none
+ * of those.
  */
 export function zoneOptions(zones, ms) {
-  return zones.map(tz => {
+  const options = zones.map(tz => {
     const { minutes, text } = utcOffsetAt(tz, ms);
     const sign = minutes < 0 ? '-' : '+';
     const h = Math.floor(Math.abs(minutes) / 60);
@@ -138,8 +140,17 @@ export function zoneOptions(zones, ms) {
     if (!min) keywords.push(`${sign}${pad(h)}`);
     const abbr = formatter(tz, 'short').formatToParts(ms).find(p => p.type === 'timeZoneName')?.value;
     if (abbr && /^[A-Za-z]+$/.test(abbr)) keywords.push(abbr);
-    return { value: tz, label: `(UTC${text}) ${tz.replace(/_/g, ' ')}`, keywords, minutes };
-  }).sort((a, b) => a.minutes - b.minutes || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
+    const detail = tz.replace(/_/g, ' ');
+    return { value: tz, label: `(UTC${text}) ${zoneCity(tz)}`, detail, keywords, minutes, offset: text };
+  });
+  // Two zones can share a city at one offset (a runtime's list may carry an
+  // alias beside its canonical id); those keep the whole id, or the closed
+  // field could not tell them apart.
+  const seen = new Map();
+  for (const o of options) seen.set(o.label, (seen.get(o.label) || 0) + 1);
+  return options
+    .map(({ offset, ...o }) => (seen.get(o.label) > 1 ? { ...o, label: `(UTC${offset}) ${o.detail}` } : o))
+    .sort((a, b) => a.minutes - b.minutes || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 }
 
 // Every IANA zone `Intl` ships with the runtime: no date-picker dependency,

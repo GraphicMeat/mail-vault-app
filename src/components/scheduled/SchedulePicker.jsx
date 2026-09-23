@@ -15,10 +15,11 @@ const CLOCK = { hour: 'numeric', minute: '2-digit' };
 const WHEN = { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' };
 
 /**
- * One date-time field and one searchable timezone list, same height, in a
- * row. Shared by ComposeModal's "Schedule send" picker and the Scheduled
- * folder's Reschedule action, so past-time refusal and preset math live in
- * exactly one place.
+ * One date-time field over one searchable timezone list, each the full width:
+ * side by side in Compose's 26rem panel, "(UTC-03:00) Buenos Aires" or a
+ * long date got cut off however the row was split. Shared by ComposeModal's
+ * "Schedule send" picker and the Scheduled folder's Reschedule action, so
+ * past-time refusal and preset math live in exactly one place.
  *
  * Refuses a past time HERE ONLY — this component never gates sending itself,
  * only the caller's submit button; catch-up (a row already due when the app
@@ -62,26 +63,22 @@ export function SchedulePicker({ localTime, tz, onChange, presets = true, testId
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <DateTimePicker
-          value={localTime}
-          tz={tz}
-          onChange={setTime}
-          ariaLabel={t('scheduled.picker.time')}
-          placeholder={t('scheduled.picker.pickTime')}
-          testId={`${testIdPrefix}-time`}
-          className="flex-1"
-        />
-        <Combobox
-          value={tz}
-          options={zones}
-          onChange={(next) => onChange({ localTime, tz: next })}
-          ariaLabel={t('scheduled.picker.timezone')}
-          placeholder={t('scheduled.picker.searchTimezone')}
-          testId={`${testIdPrefix}-tz`}
-          className="flex-1 min-w-0"
-        />
-      </div>
+      <DateTimePicker
+        value={localTime}
+        tz={tz}
+        onChange={setTime}
+        ariaLabel={t('scheduled.picker.time')}
+        placeholder={t('scheduled.picker.pickTime')}
+        testId={`${testIdPrefix}-time`}
+      />
+      <Combobox
+        value={tz}
+        options={zones}
+        onChange={(next) => onChange({ localTime, tz: next })}
+        ariaLabel={t('scheduled.picker.timezone')}
+        placeholder={t('scheduled.picker.searchTimezone')}
+        testId={`${testIdPrefix}-tz`}
+      />
       {tzNote && (
         <p data-testid={`${testIdPrefix}-tz-note`} className="text-xs text-mail-text-muted">{tzNote}</p>
       )}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   zonedTimeToEpoch, isPastLocalTime, formatWallClock, wallClockAt, addDays,
-  presetTomorrow8am, presetNextMonday8am, utcOffsetAt, zoneCity, zoneOptions, resolveSuggestedTz,
+  presetTomorrow8am, presetNextMonday8am, utcOffsetAt, zoneCity, zoneOptions, resolveSuggestedTz, ALL_TIMEZONES,
 } from '../scheduledTime';
 
 // US DST rule (2026): America/New_York springs forward on 2026-03-08 at
@@ -169,16 +169,37 @@ describe('zoneOptions', () => {
   const JAN = Date.UTC(2026, 0, 15, 12);
   const zones = ['Europe/Vilnius', 'Asia/Kolkata', NY, 'Europe/Paris', 'Europe/Berlin'];
 
-  it('labels each zone with its offset, spaces for underscores, value untouched', () => {
+  it('labels each zone with its offset and city, the whole id as detail, value untouched', () => {
     const ny = zoneOptions([NY], JAN)[0];
     expect(ny.value).toBe(NY);
-    expect(ny.label).toBe('(UTC-05:00) America/New York');
-    expect(zoneOptions(['Europe/Vilnius'], JAN)[0].label).toBe('(UTC+02:00) Europe/Vilnius');
+    expect(ny.label).toBe('(UTC-05:00) New York');
+    expect(ny.detail).toBe('America/New York');
+    const [ba] = zoneOptions(['America/Argentina/Buenos_Aires'], JAN);
+    expect(ba.label).toBe('(UTC-03:00) Buenos Aires');
+    expect(ba.detail).toBe('America/Argentina/Buenos Aires');
   });
 
   it('labels at the instant given, so a send after the clocks change shows its own offset', () => {
-    expect(zoneOptions([NY], Date.UTC(2026, 8, 15, 12))[0].label).toBe('(UTC-04:00) America/New York');
-    expect(zoneOptions([NY], Date.UTC(2026, 10, 15, 12))[0].label).toBe('(UTC-05:00) America/New York');
+    expect(zoneOptions([NY], Date.UTC(2026, 8, 15, 12))[0].label).toBe('(UTC-04:00) New York');
+    expect(zoneOptions([NY], Date.UTC(2026, 10, 15, 12))[0].label).toBe('(UTC-05:00) New York');
+  });
+
+  it('keeps the whole id for zones that would share a label, and only for those', () => {
+    const opts = zoneOptions(['America/Indiana/Indianapolis', 'America/Indianapolis', 'UTC', 'Etc/UTC', NY], JAN);
+    expect(Object.fromEntries(opts.map(o => [o.value, o.label]))).toEqual({
+      'America/Indiana/Indianapolis': '(UTC-05:00) America/Indiana/Indianapolis',
+      'America/Indianapolis': '(UTC-05:00) America/Indianapolis',
+      UTC: '(UTC+00:00) UTC',
+      'Etc/UTC': '(UTC+00:00) Etc/UTC',
+      [NY]: '(UTC-05:00) New York',
+    });
+  });
+
+  it('gives every zone this runtime knows its own label', () => {
+    for (const at of [JAN, Date.UTC(2026, 6, 15, 12)]) {
+      const labels = zoneOptions(ALL_TIMEZONES, at).map(o => o.label);
+      expect(new Set(labels).size).toBe(labels.length);
+    }
   });
 
   it('sorts by offset, then by id', () => {

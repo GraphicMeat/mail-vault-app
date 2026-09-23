@@ -16,7 +16,11 @@ import { FIELD_TRIGGER, anchorTo } from './field';
  * ponytail: every match is rendered (the ~420 timezones are fine); add
  * windowing if a list ever reaches thousands.
  *
- * @param {Array<{value: string, label: string, keywords?: string[]}>} options
+ * An option's `detail` is a muted second line in the open list only (the
+ * timezone list's full IANA id under "(UTC-04:00) New York"): the closed
+ * field stays one short line, and the hover title carries the detail.
+ *
+ * @param {Array<{value: string, label: string, detail?: string, keywords?: string[]}>} options
  */
 export function Combobox({ value, options, onChange, ariaLabel, testId, placeholder = '', className = '' }) {
   const t = useT();
@@ -30,7 +34,7 @@ export function Combobox({ value, options, onChange, ariaLabel, testId, placehol
   const listId = useId();
 
   const haystacks = useMemo(
-    () => options.map(o => [o.label, ...(o.keywords || [])].join(' ').toLowerCase()),
+    () => options.map(o => [o.label, o.detail, ...(o.keywords || [])].join(' ').toLowerCase()),
     [options],
   );
   const q = query.trim().toLowerCase();
@@ -112,7 +116,7 @@ export function Combobox({ value, options, onChange, ariaLabel, testId, placehol
         aria-controls={open ? listId : undefined}
         data-testid={testId}
         data-value={value}
-        title={selected?.label || value}
+        title={selected?.detail || selected?.label || value}
         onClick={() => openWith('')}
         onKeyDown={onTriggerKeyDown}
         className={`${FIELD_TRIGGER} ${className}`}
@@ -165,7 +169,8 @@ export function Combobox({ value, options, onChange, ariaLabel, testId, placehol
                 ${i === active ? 'bg-mail-surface-hover' : ''}
                 ${o.value === value ? 'text-mail-accent-text font-medium' : 'text-mail-text'}`}
             >
-              {o.label}
+              <div className="truncate">{o.label}</div>
+              {o.detail && <div className="truncate text-xs font-normal text-mail-text-muted">{o.detail}</div>}
             </li>
           ))}
           {shown.length === 0 && (

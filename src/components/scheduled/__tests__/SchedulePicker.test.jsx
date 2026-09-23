@@ -96,13 +96,14 @@ describe('SchedulePicker', () => {
     expect(screen.queryByTestId('t-preset-tomorrow')).toBeNull();
   });
 
-  it('shows the zone with its offset at the SEND instant, the IANA id on data-value', () => {
+  it('shows the zone as offset at the SEND instant and city, the IANA id on data-value and hover', () => {
     render(<Harness initialLocalTime="2026-12-01T09:00" tz="America/New_York" />);
     expect(zone().dataset.value).toBe('America/New_York');
-    expect(zone().textContent).toBe('(UTC-05:00) America/New York');
+    expect(zone().textContent).toBe('(UTC-05:00) New York');
+    expect(zone().title).toBe('America/New York');
     cleanup();
     render(<Harness initialLocalTime="2026-09-30T09:00" tz="America/New_York" />);
-    expect(zone().textContent).toBe('(UTC-04:00) America/New York');
+    expect(zone().textContent).toBe('(UTC-04:00) New York');
   });
 
   it('picking a zone from the search keeps the wall clock', () => {

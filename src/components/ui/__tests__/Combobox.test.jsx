@@ -35,8 +35,17 @@ describe('Combobox', () => {
   it('shows the picked option\'s label while closed, with the value on data-value', () => {
     render(<Harness />);
     const trigger = screen.getByTestId('tz');
-    expect(trigger.textContent).toBe('(UTC+03:00) Europe/Vilnius');
+    expect(trigger.textContent).toBe('(UTC+03:00) Vilnius');
     expect(trigger.dataset.value).toBe('Europe/Vilnius');
+  });
+
+  it('shows an option\'s detail under it in the list only, and on the closed field\'s hover', () => {
+    render(<Harness />);
+    const trigger = screen.getByTestId('tz');
+    expect(trigger.title).toBe('Europe/Vilnius');
+    fireEvent.click(trigger);
+    expect(screen.getByTestId('tz-option-America/New_York').textContent).toBe('(UTC-04:00) New YorkAmerica/New York');
+    expect(trigger.textContent).toBe('(UTC+03:00) Vilnius');
   });
 
   it('still shows a value that is not among the options', () => {
