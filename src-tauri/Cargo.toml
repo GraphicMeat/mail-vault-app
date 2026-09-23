@@ -84,6 +84,9 @@ signal-hook = "0.3"
 # Windows build does not even resolve.
 keyring = { version = "3", features = ["windows-native"] }
 tauri-plugin-updater = "2"
+# Lists MailVault under Settings > Default apps (mailto.rs). Already in the
+# lock through tauri, so no new crate is downloaded.
+windows-registry = "0.6"
 
 [dev-dependencies]
 tempfile = "3"

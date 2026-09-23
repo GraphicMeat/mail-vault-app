@@ -1,3 +1,8 @@
+// No console window on Windows: a console-subsystem exe gets one, which
+// makes the background daemon show up as an app in the taskbar and Task
+// Manager. Piped stdio (the `--extract-pdf` child) still works without it.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;

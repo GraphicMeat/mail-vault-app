@@ -284,31 +284,53 @@ mod platform {
 #[cfg(target_os = "windows")]
 mod platform {
     use super::*;
+    use mailvault_core::windows_mailto as win;
+    use windows_registry::CURRENT_USER;
 
-    /// Dormant. There is no Windows build yet — no job in `release.yml` and no
-    /// signing — so this compiles and ships nothing, and nobody has run it.
-    ///
-    /// Windows has never allowed an app to claim a default: `UserChoice` is
-    /// hash-protected, so the only honest move is to send the user to Settings.
-    // Reading `HKCU\...\mailto\UserChoice\ProgId` to report the current
-    // default needs a registry crate: windows-sys/windows-registry are only
-    // transitive here (via tauri/keyring), not usable without adding one as a
-    // direct dependency. Shelling out to `reg query` instead (no new crate,
-    // and `make_default` below already shells out for `ms-settings:`) was
-    // considered and rejected — parsing `reg query`'s console-formatted
-    // output for one string is not worth owning, and it is the same class of
-    // fragile text-scrape a registry crate exists to avoid. Deliberately not
-    // added for this task.
+    /// Windows never lets an app claim a default (`UserChoice` is
+    /// hash-protected). What it does allow is being *listed*: without the
+    /// registration `register()` writes, Settings has no MailVault entry to
+    /// pick at all. So the row opens Settings on our page and believes only
+    /// the `UserChoice` read-back.
+    fn is_default() -> bool {
+        CURRENT_USER
+            .open(win::USER_CHOICE_KEY)
+            .and_then(|k| k.get_string("ProgId"))
+            .is_ok_and(|p| win::is_ours(&p))
+    }
+
     pub fn status() -> MailtoStatus {
-        MailtoStatus { is_default: false, can_set: false, hint: "windows_settings" }
+        let is_default = is_default();
+        MailtoStatus { is_default, can_set: true, hint: if is_default { "" } else { "windows_settings" } }
     }
 
     pub fn make_default() -> MailtoStatus {
+        register();
+        // `start` is a cmd builtin; the empty title keeps the URI from being
+        // read as one. No console flash from a GUI app.
+        use std::os::windows::process::CommandExt;
         let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", "ms-settings:defaultapps"])
+            .args(["/C", "start", "", win::SETTINGS_URI])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .spawn();
         status()
     }
+
+    /// Lists MailVault as a mail handler for the current user. Runs at every
+    /// launch so a moved install repoints its command line.
+    pub fn register() {
+        let Some(exe) = std::env::current_exe().ok().and_then(|p| p.to_str().map(str::to_owned)) else {
+            return;
+        };
+        for (key, name, data) in win::registration(&exe) {
+            if let Err(e) = CURRENT_USER.create(key).and_then(|k| k.set_string(name, &data)) {
+                tracing::warn!("mailto registration: {key}\\{name}: {e}");
+            }
+        }
+    }
 }
+
+#[cfg(target_os = "windows")]
+pub use platform::register;
 
 pub use platform::{make_default, status};

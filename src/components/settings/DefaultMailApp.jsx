@@ -19,7 +19,8 @@ const UNKNOWN = { isDefault: false, canSet: false, hint: '' };
  *
  * The row reports only what the backend observed. "Make default" is always an
  * *attempt* — on macOS it launches an unsandboxed helper and waits for
- * LaunchServices, on Windows nothing can be done at all — and the backend
+ * LaunchServices, on Windows it opens Settings on MailVault's default-apps
+ * page, since only the user can make the choice there — and the backend
  * re-queries afterwards. This re-renders from that answer; nothing here flips
  * optimistically on the click.
  */

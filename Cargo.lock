@@ -3836,6 +3836,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "webkit2gtk",
+ "windows-registry 0.6.1",
  "zip 2.4.2",
 ]
 

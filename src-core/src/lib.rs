@@ -8,6 +8,7 @@ pub mod ai;
 pub mod app_db;
 pub mod archive;
 pub mod autostart;
+pub mod windows_mailto;
 pub mod backup;
 pub mod fsx;
 pub mod header_cache;

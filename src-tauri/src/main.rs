@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{Emitter, Manager};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+#[cfg(not(windows))]
+use tauri::menu::Submenu;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 // The `vault_eml` / `vault_files` / `header_cache` re-exports
@@ -1550,7 +1552,24 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     // Check for updates via latest.json
     // Note: Auto-update only works for AppImage installs. For .deb installs,
     // we can detect new versions but users must download manually.
-    let updater = match handle.updater() {
+    // On Windows the updater launches the NSIS installer and exits through
+    // `process::exit`, skipping RunEvent::Exit. A daemon still running then
+    // holds mailvault-daemon.exe open and the installer cannot replace it, so
+    // stop it here, always-on or not (the NSIS pre-install hook force-kills
+    // whatever this misses). `cleanup_before_exit` is the plugin's own default
+    // hook, which setting ours replaces.
+    let exit_handle = handle.clone();
+    let updater = match handle
+        .updater_builder()
+        .on_before_exit(move || {
+            APP_EXITING.store(true, Ordering::SeqCst);
+            daemon_channel::stop();
+            stop_daemon();
+            shutdown_daemon_child();
+            exit_handle.cleanup_before_exit();
+        })
+        .build()
+    {
         Ok(u) => u,
         Err(e) => {
             error!("Failed to create updater: {}", e);
@@ -3167,6 +3186,10 @@ fn main() {
                 // `CFBundleURLTypes` in the bundle.
                 #[cfg(any(target_os = "linux", target_os = "windows"))]
                 let _ = app.deep_link().register_all();
+                // The scheme alone does not put MailVault in Windows' Default
+                // apps list; the registered-application entry does.
+                #[cfg(target_os = "windows")]
+                mailto::register();
             }
 
             // WebKitGTK's checker is off until it is switched on, and it needs a
@@ -3247,13 +3270,19 @@ fn main() {
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("ctrl+,"))?;
+            #[cfg(not(windows))]
             let report_bug = MenuItem::with_id(app, "report_bug", "Report Bug...", true, None::<&str>)?;
+            #[cfg(not(windows))]
             let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
+            #[cfg(not(windows))]
             let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
+            #[cfg(not(windows))]
             logs_submenu.append(&export_logs)?;
+            #[cfg(not(windows))]
             let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
+            #[cfg(not(windows))]
             let more_apps_item = MenuItem::with_id(app, "open_more_apps", "More Apps by GraphicMeat", true, None::<&str>)?;
             // PROBE (not for merge): "Probe: Backup Bookmark Scope (automatic)".
             #[cfg(target_os = "macos")]
@@ -3322,7 +3351,10 @@ fn main() {
                 app.set_menu(menu)?;
             }
 
-            #[cfg(not(target_os = "macos"))]
+            // Windows gets no menu bar: a File/Logs strip under the title bar
+            // is not how Windows apps look. Check for Updates moves to the
+            // tray menu below; Settings and bug reports are in the app itself.
+            #[cfg(target_os = "linux")]
             {
                 let sep = PredefinedMenuItem::separator(app)?;
                 let quit_item = MenuItem::with_id(app, "quit_app", "Quit", true, Some("ctrl+q"))?;
@@ -3399,7 +3431,9 @@ fn main() {
                     }
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
-                    std::process::exit(0);
+                    // Not `process::exit`: that skips RunEvent::Exit, so the
+                    // on-demand daemon child outlived every quit.
+                    app_handle_for_menu.exit(0);
                 }
             });
 
@@ -3417,13 +3451,25 @@ fn main() {
                 &sep2 as &dyn tauri::menu::IsMenuItem<_>,
                 &tray_quit as &dyn tauri::menu::IsMenuItem<_>,
             ])?;
+            // No menu bar on Windows, so the tray is where a manual update
+            // check lives. Same id as the menu bar item: the app-wide
+            // `on_menu_event` above already handles it, and
+            // `apply_menu_labels` localizes it.
+            #[cfg(windows)]
+            tray_menu.insert(&check_updates, 2)?;
 
             // TrayIcon exposes no `menu()` accessor, so keep a handle to the tray
             // menu in state — `apply_menu_labels` relabels it alongside the menu bar.
             app.manage(TrayMenu(tray_menu.clone()));
 
+            // The black template glyph suits the macOS menu bar only; on a dark
+            // Windows taskbar it all but disappears. Windows gets the app icon
+            // (the first, 32px entry of icon.ico).
+            #[cfg(not(windows))]
             let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
                 .expect("Failed to load tray icon");
+            #[cfg(windows)]
+            let tray_icon_image = app.default_window_icon().cloned().expect("bundle has an icon");
 
             TrayIconBuilder::new()
                 .icon(tray_icon_image)
@@ -3459,7 +3505,7 @@ fn main() {
                         }
                         "quit" => {
                             info!("Application quitting via tray menu");
-                            std::process::exit(0);
+                            app.exit(0);
                         }
                         _ => {}
                     }

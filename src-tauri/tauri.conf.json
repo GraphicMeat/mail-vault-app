@@ -92,7 +92,8 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": "",
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installerHooks": "windows/hooks.nsh" }
     }
   },
   "plugins": {

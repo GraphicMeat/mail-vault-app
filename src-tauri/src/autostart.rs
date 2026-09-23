@@ -298,13 +298,8 @@ mod imp {
 
 #[cfg(target_os = "windows")]
 mod imp {
-    //! Unreachable today: the daemon speaks over a Unix socket, so no Windows
-    //! build exists to run it. Kept complete so the toggle works the day the
-    //! IPC grows a named-pipe transport.
-    //!
-    //! `reg.exe` rather than a registry crate — this is the only registry the
-    //! app touches, and it is not worth a dependency that nothing here can
-    //! exercise.
+    //! A `Run` value pointing at the app binary with `--daemon-only`. The NSIS
+    //! uninstall hook (`src-tauri/windows/hooks.nsh`) deletes the same value.
     use super::{core, AutostartState};
     use std::os::windows::process::CommandExt;
     use std::process::Command;

@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
+
 ### Fixed
+- **Quit in the tray menu stops the background helper again.** Since 2.10.0, choosing Quit from the tray menu (or File, Quit on Linux) closed MailVault but left its background helper running. It now stops, unless Settings, Background Daemon is set to keep it running after you quit.
 - **A restored backup now brings back each account's server.** Backup ZIPs recorded every account's incoming and outgoing mail server as empty, so an account recreated by Import Backup came back with no server at all. New backups keep both, and restoring one fills them in. Backups made before this fix still import, but they never recorded a server, so their accounts still come back without one.
 
 ## [2.16.0] - 2026-09-23
