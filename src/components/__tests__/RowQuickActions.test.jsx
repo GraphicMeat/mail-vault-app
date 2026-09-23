@@ -41,7 +41,7 @@ vi.mock('../QuickActions', () => ({
 
 vi.mock('../MoveToFolderDropdown', () => ({ MoveToFolderDropdown: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: () => false }));
-vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => key => key }));
+vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => key => key, getLocale: () => 'en' }));
 vi.mock('../../utils/composeOpener', () => ({ openCompose: (...args) => mocks.openCompose(...args) }));
 vi.mock('../../utils/replyTarget', () => ({ replyTarget: (...args) => mocks.replyTarget(...args) }));
 vi.mock('../../stores/exportStore', () => ({ useExportStore: { getState: () => ({ openExport: mocks.openExport }) } }));
