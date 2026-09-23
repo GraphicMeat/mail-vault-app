@@ -459,6 +459,20 @@ jobs:
           # The signer role sits on the signing account, not the subscription.
           allow-no-subscriptions: true
 
+      # Tauri swallows signtool's output on failure, so sign one throwaway copy
+      # here first: a broken login, role or dlib fails fast and legibly.
+      - name: Check signing works
+        shell: pwsh
+        run: |
+          $probe = Join-Path $env:RUNNER_TEMP 'sign-probe.exe'
+          Copy-Item 'src-tauri\binaries\mailvault-daemon-x86_64-pc-windows-msvc.exe' $probe
+          $cfg = Get-Content $env:SIGN_CONFIG | ConvertFrom-Json
+          $cmd = $cfg.bundle.windows.signCommand
+          # /debug must precede the file, which is the last argument.
+          $signArgs = @($cmd.args | ForEach-Object { if ($_ -eq '%1') { '/debug'; $probe } else { $_ } })
+          & $cmd.cmd @signArgs
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+
       - name: Bundle and sign NSIS installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
