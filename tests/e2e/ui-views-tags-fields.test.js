@@ -113,14 +113,32 @@ describe('Saved views, tags and custom fields', function () {
   });
 
   /// A sidebar view row only opens its view: there is no pencil at the end
-  /// of it, and no other edit control anywhere in the Views section.
+  /// of it. The one Edit the section has sits in its heading, beside the +.
   it('offers no edit control on a sidebar view row', async function () {
     // An object, not the bare count: waitUntil would keep waiting on a 0.
     const found = await browser.waitUntil(async () => browser.execute(() => {
       if (!document.querySelector('[data-testid="view-row-builtin-starred"]')) return false;
-      return { editControls: document.querySelectorAll('[data-testid^="view-edit-"], .sidebar-view-edit').length };
+      return {
+        rowEdits: document.querySelectorAll('[data-testid^="view-edit-"]').length,
+        // Every button in the list is a row; anything else is a control on one.
+        listExtras: document.querySelectorAll('.sidebar-view-list button:not([data-testid^="view-row-"])').length,
+        headingEdits: document.querySelectorAll('.sidebar-section-heading [data-testid="view-edit"]').length,
+      };
     }), { timeout: 15000, timeoutMsg: 'the Views section never showed the starred view' });
-    expect(found.editControls).toBe(0);
+    expect(found).toEqual({ rowEdits: 0, listExtras: 0, headingEdits: 1 });
+  });
+
+  /// The heading's Edit is how the sidebar reaches the builder: it opens the
+  /// Views page in Settings, not a new view.
+  it('opens the Views page from the heading Edit', async function () {
+    await browser.execute(() => document.querySelector('.sidebar-section-heading [data-testid="view-edit"]')?.click());
+    await browser.waitUntil(async () => browser.execute(() => {
+      const root = document.querySelector('[data-testid="settings-page"][role="dialog"]');
+      return !!root?.querySelector('[data-testid="views-row-builtin-starred"]');
+    }), { timeout: 15000, timeoutMsg: 'Edit never opened the Views page in Settings' });
+    const builderOpen = await browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]'));
+    expect(builderOpen).toBe(false);
+    await closeSettings();
   });
 
   /// The builder's grouping control is the one new affordance a headless run
