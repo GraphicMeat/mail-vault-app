@@ -118,23 +118,25 @@ export async function nativeDaemonInvoke(method, params) {
 }
 
 /** Fixture preparation uses real IMAP extraction and the existing disk cache.
- * No Insights results, identities, dates or aggregation are injected. */
+ * No Insights results, identities, dates or aggregation are injected.
+ * Task 5.4a: the IMAP read-path moved to the daemon under the same method
+ * names, so these go through `daemon_rpc` too. */
 export async function cacheScenarioHeaders() {
   const stats = [];
   for (const account of browser.mockAccounts) {
-    const response = await nativeInvoke('imap_get_mailboxes', { account });
+    const response = await nativeDaemonInvoke('imap_get_mailboxes', { account });
     const mailboxes = response.mailboxes;
     assert.ok(Array.isArray(mailboxes));
     await nativeDaemonInvoke('save_mailbox_cache', { accountId: account.id, data: JSON.stringify({ mailboxes, fetchedAt: Date.now() }) });
     for (const folder of mailboxes) {
       const mailbox = folder.path || folder.name;
       if ((folder.attributes || folder.attrs || []).includes('\\Noselect')) continue;
-      const status = await nativeInvoke('imap_check_mailbox_status', { account, mailbox });
+      const status = await nativeDaemonInvoke('imap_check_mailbox_status', { account, mailbox });
       assert.equal(status.uidValidity, 101, 'Generation comes from the actual fixture server SELECT');
       let page = 1, hasMore = true, total = 0;
       const allUids = [];
       while (hasMore) {
-        const headers = await nativeInvoke('imap_get_emails', { account, mailbox, page, limit: 200 });
+        const headers = await nativeDaemonInvoke('imap_get_emails', { account, mailbox, page, limit: 200 });
         assert.ok(Array.isArray(headers.emails), `Provider headers for ${mailbox}`);
         assert.ok(headers.emails.length <= 200);
         total = headers.total;

@@ -99,7 +99,13 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./services/EmailPipelineManager').then(({ pipelineManager }) => {
     window.__PIPELINES__ = () => [...pipelineManager.pipelines.entries()].map(([id, p]) => ({
       id, phase: p._phase, queued: p._queue?.length ?? 0, held: p._lastLoadedEmails?.length ?? 0,
+      activeSlots: p._activeSlots ?? 0,
     }));
+    // A spec that asserts "this screen sent no body fetch" watches every native
+    // call, and background body caching sends exactly that call. Pausing it (the
+    // same pauseAll the app runs when it goes offline) is how such a window is
+    // attributed; `activeSlots` above says when the in-flight ones have landed.
+    window.__PIPELINE_CONTROL__ = { pauseAll: () => pipelineManager.pauseAll(), resumeAll: () => pipelineManager.resumeAll() };
   });
   Promise.all([import('./services/transport.js'), import('./services/db')])
     .then(([transport, db]) => {

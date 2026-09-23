@@ -59,6 +59,15 @@ describe('Insights with real native mail data', function () {
   });
 
   it('shows literal totals, real recency geometry, top-thirty search and unchanged read flags', async () => {
+    // The probe sees every native call in the window, and the mail list's
+    // background pipeline body-caches the fixture's uncached INBOX with the
+    // same `imap_get_email_light` Insights must never send (its queue refills
+    // on every header pass, so it cannot simply be waited out). Pause it, as
+    // going offline does, and let the in-flight fetches land, so a body fetch
+    // in the window is Insights' own.
+    await browser.execute(() => window.__PIPELINE_CONTROL__.pauseAll());
+    await browser.waitUntil(() => browser.execute(() => (window.__PIPELINES__?.() || []).every(p => p.activeSlots <= 0)),
+      { timeout: 60000, interval: 250, timeoutMsg: 'Background body fetches were still in flight after pausing the pipelines' });
     await startNativeProbe();
     let calls, scanTiming;
     try {
@@ -66,7 +75,10 @@ describe('Insights with real native mail data', function () {
       await openInsights(); await setInsightsRange();
     } finally {
       try { calls = await stopNativeProbe(); }
-      finally { scanTiming = await stopFrameProbe(); }
+      finally {
+        scanTiming = await stopFrameProbe();
+        await browser.execute(() => window.__PIPELINE_CONTROL__.resumeAll());
+      }
     }
     assert.ok(calls.includes('insights_begin_snapshot'), 'Read-only assertion requires an observed real native scan');
     assert.equal(calls.some(name => /^(imap_get_email|imap_get_email_light|maildir_read|prefetch_attachments|smtp_send_email|archive_emails|imap_delete_email|bulk_delete_emails)$/.test(name)), false, `Entering charts only reads headers: ${calls.join(', ')}`);
@@ -235,7 +247,8 @@ describe('Insights with real native mail data', function () {
         await browser.waitUntil(() => browser.execute(() => document.body.textContent.includes('INSIGHTS BODY insights-boundary.')), { timeout: 30000 });
         const custody = await browser.execute(() => document.querySelector('[data-testid="insights-reader"]')?.textContent || '');
         assert.match(custody, /Saved in your vault(?: and backup drive)?/);
-        assert.match(custody, /Server copy not verified yet\./);
+        // c719364e dropped the unverified-server line from the local band (insightsViewerSource.test.jsx pins it absent).
+        assert.doesNotMatch(custody, /Server copy not verified yet\./);
         assert.doesNotMatch(custody, /Your only copy|Someone else deleted the server copy/);
       } finally { calls = await stopNativeProbe(); }
       assert.ok(calls.some(name => /^maildir_read/.test(name)), 'Observer sees the actual vault reader before asserting absence of provider fetch');
@@ -367,6 +380,13 @@ describe('Insights with real native mail data', function () {
         // vault before moving it back, so recovery never replaces or deletes
         // that recreated directory.
         if (existsSync(disconnected)) await nativeInvoke('vault_adopt', { path: disconnected });
+        // vault_adopt ends by stopping the daemon, and a vault move refuses to
+        // spawn one while it holds the move suspension, so a move sent before
+        // anything has respawned it fails with "daemon suspended during a vault
+        // move". Any daemon call respawns it on the adopted root; wait for one.
+        await browser.waitUntil(() => browser.executeAsync(done => {
+          window.__TAURI__.core.invoke('daemon_rpc', { method: 'classification.status', params: {} }).then(() => done(true), () => done(false));
+        }), { timeout: 30000, interval: 500, timeoutMsg: 'The daemon never came back after vault_adopt' });
         await nativeInvoke('vault_move_to_default', {});
       }
     }
