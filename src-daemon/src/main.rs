@@ -524,6 +524,12 @@ async fn daemon_main() {
     // (the normal case — the daemon dies with the app in on-demand mode),
     // then sleeps until the next fire_at or a wake from handlers::scheduled.
     scheduled_send_worker::start(Arc::clone(&state));
+    // Watches keychain access so a locked keychain is noticed without waiting
+    // for something to ask for credentials; an unlock wakes the queued sends.
+    {
+        let state = Arc::clone(&state);
+        credentials::start_watcher(move || state.scheduled_send.wake());
+    }
 
     // Auto Tags' standing worker: sweeps enabled rules over newly-cached
     // headers on every wake from a sync/IDLE arrival (see `idle`'s

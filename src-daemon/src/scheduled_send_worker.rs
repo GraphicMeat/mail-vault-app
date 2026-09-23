@@ -80,8 +80,9 @@ const MAX_SLEEP: Duration = Duration::from_secs(3600);
 /// loop would spin hot instead of retrying at a sane pace.
 const MIN_RETRY_WAIT: Duration = Duration::from_secs(1);
 /// How often due rows are tried again while the keychain gate is blocked.
-/// `keychain.retry` wakes the loop the moment the user unlocks, so this is
-/// only the fallback for an unlock that happened some other way.
+/// The keychain watcher and `keychain.retry` wake the loop the moment the
+/// gate clears; this only keeps due rows from being retried every second
+/// while it stays blocked.
 const KEYCHAIN_POLL: Duration = Duration::from_secs(5 * 60);
 
 /// Exponential backoff between transient-failure retries: 30s, 60s for

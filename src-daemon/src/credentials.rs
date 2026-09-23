@@ -193,6 +193,10 @@ struct Blocked {
 pub(crate) struct KeychainGate {
     /// Blocked items, earliest first.
     blocked: std::sync::Mutex<Vec<Blocked>>,
+    /// Signalled on every newly blocked item, so the watcher sleeps while the
+    /// gate is clear. `notify_one` keeps a permit, so a block that lands
+    /// before the watcher waits is not missed.
+    newly_blocked: tokio::sync::Notify,
     events: std::sync::OnceLock<EventBus>,
     last_banner: std::sync::Mutex<Option<std::time::Instant>>,
 }
@@ -208,6 +212,7 @@ impl KeychainGate {
     const fn new() -> Self {
         Self {
             blocked: std::sync::Mutex::new(Vec::new()),
+            newly_blocked: tokio::sync::Notify::const_new(),
             events: std::sync::OnceLock::new(),
             last_banner: std::sync::Mutex::new(None),
         }
@@ -225,6 +230,7 @@ impl KeychainGate {
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(0);
             blocked.push(Blocked { item, reason, since_ms });
+            self.newly_blocked.notify_one();
             if blocked.len() > 1 {
                 return;
             }
@@ -249,6 +255,14 @@ impl KeychainGate {
         if let Some(bus) = self.events.get() {
             bus.emit("keychain-status", json!({"blocked": false}));
         }
+    }
+
+    /// Blocked items worth probing on a clock. Not a refused one: reading it
+    /// again asks macOS again, so the user who just chose Deny would get the
+    /// same prompt every few seconds. Unlock (`keychain.retry`) re-reads those.
+    fn items_to_probe(&self) -> Vec<&'static str> {
+        let blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
+        blocked.iter().filter(|b| b.reason != "denied").map(|b| b.item).collect()
     }
 
     pub(crate) fn is_blocked(&self) -> bool {
@@ -312,6 +326,56 @@ fn os_status(e: &keyring::Error) -> Option<i32> {
 #[cfg(not(target_os = "macos"))]
 fn os_status(_: &keyring::Error) -> Option<i32> {
     None
+}
+
+// ── Watcher ─────────────────────────────────────────────────────────────────
+
+/// How often a blocked item is read again while the user may be unlocking the
+/// keychain some other way (Keychain Access, the app's own prompt).
+const PROBE_EVERY: Duration = Duration::from_secs(5);
+
+/// The daemon's own look at keychain access, so the gate does not depend on
+/// something happening to ask for credentials: the blob is read once at
+/// start, and blocked items are read again every `PROBE_EVERY` until they
+/// answer. Every read goes through the single-flight guarded path, so a probe
+/// joins a read still parked on a prompt instead of starting another thread.
+/// `on_clear` runs when the gate empties (the scheduled worker's wake).
+pub(crate) fn start_watcher(on_clear: impl Fn() + Send + 'static) {
+    tokio::spawn(async move {
+        probe(CREDENTIALS_KEY).await;
+        watch(&GATE, probe, PROBE_EVERY, on_clear).await;
+    });
+}
+
+async fn probe(item: &'static str) {
+    // The result does not matter here: the read settles its own item.
+    let _ = match item {
+        CREDENTIALS_KEY => guarded(item, blob_read(), AI_KEY_TIMEOUT).await.map(|_| ()),
+        _ => guarded(item, ai_key_read(), AI_KEY_TIMEOUT).await.map(|_| ()),
+    };
+}
+
+/// Sleeps while the gate is clear (no polling), and while it is blocked reads
+/// every probe-worthy item once per `every`.
+async fn watch<F, Fut>(gate: &KeychainGate, probe: F, every: Duration, on_clear: impl Fn())
+where
+    F: Fn(&'static str) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    loop {
+        let items = gate.items_to_probe();
+        if items.is_empty() {
+            gate.newly_blocked.notified().await;
+            continue;
+        }
+        tokio::time::sleep(every).await;
+        for item in items {
+            probe(item).await;
+        }
+        if !gate.is_blocked() {
+            on_clear();
+        }
+    }
 }
 
 /// `keychain.retry`: both items the daemon reads, under a clock long enough
@@ -578,6 +642,58 @@ mod tests {
         gate.clear(AI_ENDPOINT_KEY_ENTRY);
         assert!(!gate.is_blocked());
         assert_eq!(payloads(&mut rx), vec![json!({"blocked": false})]);
+    }
+
+    /// Blocked: probes on the clock until the reader answers, then clears and
+    /// wakes. Clear: no probe at all until something blocks again.
+    #[tokio::test]
+    async fn the_watcher_probes_only_while_blocked() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let gate: &'static KeychainGate = Box::leak(Box::new(KeychainGate::new()));
+        let probes: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+        let clears: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+        // The keychain answers on the third read.
+        let reader = move |item: &'static str| async move {
+            if probes.fetch_add(1, Ordering::SeqCst) + 1 >= 3 {
+                gate.clear(item);
+            }
+        };
+
+        gate.block("blob", "locked");
+        let watcher = tokio::spawn(watch(gate, reader, Duration::from_millis(10), move || {
+            clears.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while gate.is_blocked() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("the watcher clears the gate once the reader answers");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(probes.load(Ordering::SeqCst), 3);
+        assert_eq!(clears.load(Ordering::SeqCst), 1, "the clear wakes the scheduled worker once");
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(probes.load(Ordering::SeqCst), 3, "no polling while the gate is clear");
+
+        // A refused item is left to Unlock: probing it would re-prompt.
+        gate.block("blob", "denied");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(probes.load(Ordering::SeqCst), 3, "a denied item is not probed on a clock");
+        gate.clear("blob");
+
+        gate.block("blob", "timeout");
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while gate.is_blocked() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("a new block wakes the watcher");
+        assert_eq!(probes.load(Ordering::SeqCst), 4);
+        watcher.abort();
     }
 
     /// A read parked on a prompt must not be joined by a second thread: the
