@@ -56,14 +56,10 @@ use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
-/// Data directory must match Tauri's `app_data_dir()` so the app and daemon
-/// share the same socket / token path.
-/// macOS: ~/Library/Application Support/com.mailvault.app
-/// Linux: ~/.local/share/com.mailvault.app  (XDG_DATA_HOME)
+/// The app data dir, resolved by the same `mailvault_core::paths` the app
+/// uses, so both processes open the same `app.db`, logs and pid file.
 fn get_data_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("com.mailvault.app")
+    mailvault_core::paths::app_data_dir().unwrap_or_else(|_| PathBuf::from(".").join(mailvault_core::paths::APP_IDENTIFIER))
 }
 
 /// Where the mail itself lives. Defaults to the app data dir; follows the
@@ -136,13 +132,11 @@ fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
     (info.dir, info.ok)
 }
 
-/// IPC directory for socket and token.
-/// Uses `dirs::home_dir()` which inside the App Sandbox returns the container
-/// home — both the app and this sidecar daemon see the same path.
-/// Outside the sandbox (dev/testing) it returns the real home.
+/// IPC directory for socket and token: `mailvault_core::paths::ipc_dir`,
+/// shared with the app. Inside the App Sandbox the home is the container
+/// home, which the app and this sidecar both see.
 fn ipc_dir() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let dir = home.join(".mailvault");
+    let dir = mailvault_core::paths::ipc_dir().unwrap_or_else(|_| PathBuf::from(".").join(".mailvault"));
     let _ = std::fs::create_dir_all(&dir);
     dir
 }

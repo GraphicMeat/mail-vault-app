@@ -1,4 +1,3 @@
-use tauri::Manager;
 
 use crate::backup;
 
@@ -143,7 +142,7 @@ pub async fn backup_status(
             // this side's to report — it passes these two straight through
             // onto the reply, exactly as the old app-side wrapper enriched
             // its own otherwise-`None` fields after the fact.
-            let (status, error) = backup::external_status_fields(&app_handle, resolved);
+            let (status, error) = backup::external_status_fields(resolved);
             serde_json::json!({
                 "accountId": account_id,
                 "accountJson": account_json,
@@ -160,7 +159,6 @@ pub async fn backup_status(
 
 #[tauri::command]
 pub async fn backup_save_external_location(
-    app_handle: tauri::AppHandle,
     path: String,
 ) -> Result<crate::external_location::ExternalLocation, String> {
     // MAS builds gate external backups behind a non-consumable IAP. Non-MAS
@@ -168,31 +166,28 @@ pub async fn backup_save_external_location(
     if !crate::iap::is_entitled("com.mailvault.app.backups") {
         return Err("Cloud Backups requires a one-time in-app purchase. Open Settings → Backups to unlock.".to_string());
     }
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     crate::external_location::save_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP, &path)
 }
 
 #[tauri::command]
 pub async fn backup_get_external_location(
-    app_handle: tauri::AppHandle,
 ) -> Result<crate::external_location::ExternalLocation, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     Ok(crate::external_location::get_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP))
 }
 
 #[tauri::command]
 pub async fn backup_validate_external_location(
-    app_handle: tauri::AppHandle,
 ) -> Result<crate::external_location::ExternalLocation, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     crate::external_location::validate_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP)
 }
 
 #[tauri::command]
 pub async fn backup_clear_external_location(
-    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     crate::external_location::clear_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP)
 }
 
@@ -219,10 +214,9 @@ pub async fn iap_restore() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn backup_migrate_legacy_path(
-    app_handle: tauri::AppHandle,
     legacy_path: String,
 ) -> Result<crate::external_location::ExternalLocation, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     crate::external_location::migrate_legacy_path(&data_dir, &legacy_path)
 }
 
@@ -233,12 +227,9 @@ pub async fn backup_migrate_legacy_path(
 /// the result to one account.
 #[tauri::command]
 pub fn get_transfer_stats(
-    app_handle: tauri::AppHandle,
     account_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
+    let app_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("No app data dir: {}", e))?;
 
     let mut accounts = mailvault_core::transfer_stats::read_all(&app_dir);

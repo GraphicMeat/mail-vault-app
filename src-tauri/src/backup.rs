@@ -54,7 +54,7 @@ pub(crate) fn resolve_backup_path(
     caller_path: Option<String>,
 ) -> (Option<String>, bool) {
     // Try bookmark-based resolution first (authoritative source)
-    let data_dir = match app_handle.path().app_data_dir() {
+    let data_dir = match mailvault_core::paths::app_data_dir() {
         Ok(d) => d,
         Err(_) => {
             // Fallback: use caller path on Linux only
@@ -262,7 +262,7 @@ pub async fn backup_purge_uids(
         // itself and must always be told: it is what separates "no backup
         // configured, nothing to queue" from "configured but unreachable,
         // queue it for the next run".
-        let status = external_location_status(&app_handle);
+        let status = external_location_status();
         forward(&app_handle, "backup_purge_uids", None, |_root| {
             json!({"email": email, "mailbox": mailbox, "uids": uids, "externalStatus": status})
         })
@@ -286,7 +286,7 @@ pub async fn backup_scan_uids(
     tokio::task::spawn_blocking(move || {
         // Users with no backup drive pay nothing: bail before resolving a
         // bookmark or waking the daemon. Same `null` the daemon would answer.
-        if external_location_status(&app_handle).as_deref() == Some("not_configured") {
+        if external_location_status().as_deref() == Some("not_configured") {
             return Ok(Value::Null);
         }
         forward(&app_handle, "backup_scan_uids", None, |_root| {
@@ -301,8 +301,8 @@ pub async fn backup_scan_uids(
 /// `"not_configured"`, ...), or `None` when there is no app data dir to read
 /// it from — which the callers below treat as "not configured", the same
 /// fail-closed reading `mailvault_core::backup::purge_uids` applies.
-fn external_location_status(app_handle: &tauri::AppHandle) -> Option<String> {
-    let data_dir = app_handle.path().app_data_dir().ok()?;
+fn external_location_status() -> Option<String> {
+    let data_dir = mailvault_core::paths::app_data_dir().ok()?;
     Some(external_location::get_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP).status)
 }
 
@@ -311,13 +311,12 @@ fn external_location_status(app_handle: &tauri::AppHandle) -> Option<String> {
 /// enrichment block: a configured location that would not resolve renders as
 /// `needs_reauth` plus whatever `validate_external_location` says went wrong.
 pub(crate) fn external_status_fields(
-    app_handle: &tauri::AppHandle,
     resolved: Option<&str>,
 ) -> (String, Option<String>) {
     if resolved.is_some() {
         return ("ready".to_string(), None);
     }
-    let Ok(data_dir) = app_handle.path().app_data_dir() else {
+    let Ok(data_dir) = mailvault_core::paths::app_data_dir() else {
         return ("not_configured".to_string(), None);
     };
     let loc = external_location::get_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP);

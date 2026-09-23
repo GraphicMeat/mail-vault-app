@@ -74,7 +74,7 @@ struct Resolved {
 /// Resolve the configured vault (if any) and start security-scoped access.
 /// Called at startup and after a switch; the result is cached in [`VaultState`].
 pub fn resolve(app_handle: &tauri::AppHandle) -> VaultStatus {
-    let data_dir = match app_handle.path().app_data_dir() {
+    let data_dir = match mailvault_core::paths::app_data_dir() {
         Ok(d) => d,
         Err(e) => {
             return VaultStatus {
@@ -145,7 +145,7 @@ fn set_state(app_handle: &tauri::AppHandle, resolved: Option<Resolved>) {
 // `Resolved` cache below stays — `status()` still reports it to the UI.
 
 pub fn status(app_handle: &tauri::AppHandle) -> VaultStatus {
-    let data_dir = app_handle.path().app_data_dir().ok();
+    let data_dir = mailvault_core::paths::app_data_dir().ok();
     if let Some(state) = app_handle.try_state::<VaultState>() {
         if let Ok(guard) = state.inner.lock() {
             if let Some(ref r) = *guard {
@@ -170,11 +170,9 @@ pub fn status(app_handle: &tauri::AppHandle) -> VaultStatus {
 /// A one-shot pick preview (spec §3.4 case b territory — fd-passing, not
 /// built this phase): the app's own in-process access from the native
 /// picker is what makes this read possible before any bookmark exists.
-pub fn inspect_folder(app_handle: &tauri::AppHandle, path: &str) -> Result<FolderInspection, String> {
+pub fn inspect_folder(path: &str) -> Result<FolderInspection, String> {
     let dir = PathBuf::from(path);
-    let expected_id = app_handle
-        .path()
-        .app_data_dir()
+    let expected_id = mailvault_core::paths::app_data_dir()
         .ok()
         .and_then(|d| read_marker(&d))
         .map(|m| m.vault_id);
@@ -185,7 +183,7 @@ pub fn inspect_folder(app_handle: &tauri::AppHandle, path: &str) -> Result<Folde
 /// to whatever is in the app data dir. The entire operation is a bookmark
 /// clear (app-only, spec §3.4) — there is no file work to move to the daemon.
 pub fn reset(app_handle: &tauri::AppHandle) -> Result<VaultStatus, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
     external_location::clear_external_location(&data_dir, SLOT_VAULT)?;
     Ok(resolve(app_handle))
 }

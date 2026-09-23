@@ -124,11 +124,17 @@ use objc::{class, msg_send, sel, sel_impl};
 // Global log directory
 struct LogDir(PathBuf);
 
+/// macOS: Tauri's `~/Library/Logs/com.mailvault.app`. Elsewhere Tauri's answer
+/// is `<local data>/com.mailvault.app/logs`, i.e. `<app_data_dir>/logs`, which
+/// is spelled out here so Windows follows `paths`' env override with the rest.
 fn get_log_dir(app_handle: &tauri::AppHandle) -> PathBuf {
-    app_handle
-        .path()
-        .app_log_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
+    #[cfg(target_os = "macos")]
+    return app_handle.path().app_log_dir().unwrap_or_else(|_| PathBuf::from("."));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_handle;
+        mailvault_core::paths::app_data_dir().map(|d| d.join("logs")).unwrap_or_else(|_| PathBuf::from("."))
+    }
 }
 
 fn setup_logging(log_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {
@@ -238,10 +244,8 @@ async fn mailto_make_default() -> mailto::MailtoStatus {
 }
 
 #[tauri::command]
-fn get_client_info(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
+fn get_client_info() -> Result<serde_json::Value, String> {
+    let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
 
     // Ensure the data directory exists
@@ -365,20 +369,30 @@ fn get_client_name() -> String {
         .unwrap_or_else(|| "Unknown Device".to_string())
 }
 
+/// The frontend's plugin-fs calls use absolute paths under the app data dir.
+/// The capability's `$APPDATA` is Tauri's own resolver (Roaming on Windows,
+/// blind to the env override in `paths`), so the real dir is allowed here, at
+/// setup and again on every `get_app_data_dir` (which every frontend fs path
+/// awaits first). Idempotent: the scope is a set.
+fn allow_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    use tauri_plugin_fs::FsExt;
+    let dir = mailvault_core::paths::app_data_dir().map_err(|e| format!("Could not get app data directory: {}", e))?;
+    // Before the allow, so the scope stores the canonical form requests are matched in.
+    let _ = fs::create_dir_all(&dir);
+    app_handle.fs_scope().allow_directory(&dir, true).map_err(|e| format!("Could not allow app data directory: {}", e))?;
+    Ok(dir)
+}
+
 #[tauri::command]
 fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     info!("get_app_data_dir called");
-    app_handle
-        .path()
-        .app_data_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .map_err(|e| format!("Could not get app data directory: {}", e))
+    allow_app_data_dir(&app_handle).map(|p| p.to_string_lossy().to_string())
 }
 
 // Read frontend settings from JSON file on disk (replaces localStorage)
 #[tauri::command]
-fn read_settings_json(app_handle: tauri::AppHandle) -> Result<String, String> {
-    let data_dir = app_handle.path().app_data_dir()
+fn read_settings_json() -> Result<String, String> {
+    let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
     let settings_path = data_dir.join("frontend-settings.json");
     if settings_path.exists() {
@@ -391,8 +405,8 @@ fn read_settings_json(app_handle: tauri::AppHandle) -> Result<String, String> {
 
 // Write frontend settings to JSON file on disk (replaces localStorage)
 #[tauri::command]
-fn write_settings_json(app_handle: tauri::AppHandle, data: String) -> Result<(), String> {
-    let data_dir = app_handle.path().app_data_dir()
+fn write_settings_json(data: String) -> Result<(), String> {
+    let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
     if !data_dir.exists() {
         fs::create_dir_all(&data_dir)
@@ -916,16 +930,13 @@ fn save_attachment_to(
 }
 
 #[tauri::command]
-fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
+fn show_in_folder(path: String) -> Result<(), String> {
     info!("show_in_folder called for: {}", path);
 
     #[cfg(target_os = "macos")]
     {
-        return finder_open(&app_handle, &path, true, None);
+        return finder_open(&path, true, None);
     }
-
-    #[cfg(not(target_os = "macos"))]
-    let _ = &app_handle;
 
     #[cfg(target_os = "windows")]
     {
@@ -960,16 +971,14 @@ fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), Stri
 /// bookmark's scope at that moment — and `.spawn()`ing `/usr/bin/open` threw
 /// away the refusal, so the button appeared to do nothing.
 #[cfg(target_os = "macos")]
-fn finder_open(app_handle: &tauri::AppHandle, path: &str, reveal: bool, app: Option<&str>) -> Result<(), String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
+fn finder_open(path: &str, reveal: bool, app: Option<&str>) -> Result<(), String> {
+    let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
     external_location::open_in_finder(&data_dir, path, reveal, app)
 }
 
 #[tauri::command]
-fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
+fn open_file(path: String) -> Result<(), String> {
     info!("open_file called for: {}", path);
 
     #[cfg(target_os = "macos")]
@@ -982,11 +991,8 @@ fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
         // if a data folder ever gets one of those names.
         let p = std::path::Path::new(&path);
         let reveal = p.is_dir() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"));
-        return finder_open(&app_handle, &path, reveal, None);
+        return finder_open(&path, reveal, None);
     }
-
-    #[cfg(not(target_os = "macos"))]
-    let _ = &app_handle;
 
     #[cfg(target_os = "windows")]
     {
@@ -1018,7 +1024,6 @@ fn open_with_dialog(app_handle: tauri::AppHandle, path: String) -> Result<(), St
     #[cfg(target_os = "macos")]
     {
         use tauri_plugin_dialog::DialogExt;
-        let handle = app_handle.clone();
         app_handle
             .dialog()
             .file()
@@ -1026,7 +1031,7 @@ fn open_with_dialog(app_handle: tauri::AppHandle, path: String) -> Result<(), St
             .add_filter("Applications", &["app"])
             .pick_file(move |picked| {
                 let Some(app) = picked.and_then(|p| p.into_path().ok()) else { return };
-                if let Err(e) = finder_open(&handle, &path, false, Some(&app.to_string_lossy())) {
+                if let Err(e) = finder_open(&path, false, Some(&app.to_string_lossy())) {
                     error!("Open With failed: {}", e);
                 }
             });
@@ -1069,7 +1074,7 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
     let label = format!("email-popup-{}", n);
 
     // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView
-    let cache_dir = app.path().app_data_dir()
+    let cache_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| e.to_string())?
         .join("popup_cache");
     fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
@@ -1189,8 +1194,8 @@ async fn vault_get_status(app_handle: tauri::AppHandle) -> Result<vault::VaultSt
 }
 
 #[tauri::command]
-fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<vault::FolderInspection, String> {
-    vault::inspect_folder(&app_handle, &path)
+fn vault_inspect_folder(path: String) -> Result<vault::FolderInspection, String> {
+    vault::inspect_folder(&path)
 }
 
 /// Point the app at a folder that already holds the mail (drive reconnected at
@@ -1207,7 +1212,7 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
         daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(300));
         let result = daemon_call_blocking(&app_handle, "vault_adopt", serde_json::json!({"path": path.clone()}), std::time::Duration::from_secs(600))
             .and_then(|_| {
-                let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+                let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
                 external_location::save_external_location(&data_dir, external_location::SLOT_VAULT, &path)
             })
             .map(|_| vault::resolve(&app_handle));
@@ -1292,7 +1297,7 @@ fn vault_move_finish(
     };
     let move_id = copy_reply.get("moveId").and_then(|v| v.as_str()).unwrap_or_default().to_string();
 
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string());
+    let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string());
     let bookmark_result = data_dir.and_then(|data_dir| match new_path {
         Some(p) => external_location::save_external_location(&data_dir, external_location::SLOT_VAULT, p).map(|_| ()),
         None => external_location::clear_external_location(&data_dir, external_location::SLOT_VAULT),
@@ -1504,18 +1509,16 @@ fn update_feed_override(track: Option<&str>, app_version: &str) -> Option<String
 /// `RunEvent::Exit`, when the webview is already gone. Any problem reads as
 /// "off", so a corrupt settings file costs a background daemon, never a
 /// stray one the user cannot see or stop.
-fn daemon_always_on(handle: &tauri::AppHandle) -> bool {
-    let Ok(dir) = handle.path().app_data_dir() else { return false };
+fn daemon_always_on() -> bool {
+    let Ok(dir) = mailvault_core::paths::app_data_dir() else { return false };
     let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
     mailvault_core::autostart::always_on_from_settings(&raw)
 }
 
 /// The frontend's persisted `updateTrack`, read straight off disk — this runs in
 /// `setup()`, long before a window could be asked. Any problem reads as "unset".
-fn persisted_update_track(handle: &tauri::AppHandle) -> Option<String> {
-    let path = handle
-        .path()
-        .app_data_dir()
+fn persisted_update_track() -> Option<String> {
+    let path = mailvault_core::paths::app_data_dir()
         .ok()?
         .join("frontend-settings.json");
     let raw = fs::read_to_string(path).ok()?;
@@ -1829,25 +1832,21 @@ fn daemon_child_pid() -> Option<DaemonPid> {
     DAEMON_CHILD.lock().ok()?.as_ref().map(|c| c.id() as DaemonPid)
 }
 
-/// `$HOME/.mailvault/{mv.sock, mv.token}`; must match src-daemon's `ipc_dir()`.
-/// Inside the sandbox HOME is the container home, the same for app and daemon.
+/// `<home>/.mailvault/{mv.sock, mv.token}` from `mailvault_core::paths::ipc_dir`,
+/// the same resolver src-daemon's `ipc_dir()` uses. Inside the sandbox the
+/// home is the container home, the same for app and daemon.
 pub(crate) fn daemon_ipc_paths() -> Result<(PathBuf, PathBuf), String> {
-    let dir = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?.join(".mailvault");
+    let dir = mailvault_core::paths::ipc_dir().map_err(|e| e.to_string())?;
     Ok((mailvault_core::transport::endpoint(&dir), dir.join("mv.token")))
 }
 
 /// Path to the daemon's PID file. This is NOT under `daemon_ipc_paths()`'s
-/// `~/.mailvault` — the daemon writes it into its app data dir
-/// (src-daemon/src/main.rs `get_data_dir()` + `write_pid_file`, which join
-/// `dirs::data_local_dir()` with the app identifier and `daemon.pid`).
-/// `dirs::data_local_dir()` resolves to the sandbox container's data dir for
-/// both processes, same as `home_dir()` does for the container home above, so
-/// this needs no `AppHandle` to match Tauri's `app_data_dir()` (same
-/// identifier, `com.mailvault.app`, from tauri.conf.json).
+/// `~/.mailvault`: the daemon writes it into the app data dir
+/// (src-daemon/src/main.rs `get_data_dir()` + `write_pid_file`), which both
+/// processes resolve through `mailvault_core::paths::app_data_dir`.
 fn daemon_pid_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("com.mailvault.app")
+    mailvault_core::paths::app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from(".").join(mailvault_core::paths::APP_IDENTIFIER))
         .join("daemon.pid")
 }
 
@@ -3031,9 +3030,8 @@ fn main() {
         use std::io::{Read as _, Write as _};
         use std::os::unix::io::AsRawFd;
 
-        let lock_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("com.mailvault.app");
+        let lock_dir = mailvault_core::paths::app_data_dir()
+            .unwrap_or_else(|_| PathBuf::from("/tmp").join(mailvault_core::paths::APP_IDENTIFIER));
         let _ = fs::create_dir_all(&lock_dir);
         let lock_path = lock_dir.join("mailvault.lock");
 
@@ -3257,8 +3255,12 @@ fn main() {
             // Clean up old logs
             cleanup_old_logs(&log_dir);
 
+            if let Err(e) = allow_app_data_dir(app.handle()) {
+                warn!("{e}");
+            }
+
             // Clean up stale popup cache files from previous sessions
-            if let Ok(data_dir) = app.path().app_data_dir() {
+            if let Ok(data_dir) = mailvault_core::paths::app_data_dir() {
                 let popup_cache = data_dir.join("popup_cache");
                 if popup_cache.exists() {
                     let _ = fs::remove_dir_all(&popup_cache);
@@ -3270,7 +3272,7 @@ fn main() {
 
             // Per-account transfer counters → `<app_data_dir>/transfer_stats/*.app.json`.
             // The daemon writes its own file; neither process locks the other's.
-            if let Ok(stats_dir) = app.path().app_data_dir() {
+            if let Ok(stats_dir) = mailvault_core::paths::app_data_dir() {
                 tauri::async_runtime::spawn(async move {
                     let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
                     ticker.tick().await;
@@ -3562,7 +3564,7 @@ fn main() {
 
             // Point Sparkle at the right feed before anything can check it —
             // both the delayed check below and Sparkle's own schedule.
-            apply_update_track(&app.handle(), persisted_update_track(&app.handle()).as_deref());
+            apply_update_track(&app.handle(), persisted_update_track().as_deref());
 
             // Check for updates in background
             let update_handle = app.handle().clone();
@@ -3621,7 +3623,7 @@ fn main() {
                     // budget tight: an unreachable server must cost the user a
                     // beachball, not a hang. Worst case here plus
                     // DAEMON_STOP_GRACE below.
-                    if let Ok(dir) = app_handle.path().app_data_dir() {
+                    if let Ok(dir) = mailvault_core::paths::app_data_dir() {
                         mailvault_core::transfer_stats::global().flush(&dir, "app");
                     }
                     // No IMAP sessions to log out of here any more: the app
@@ -3635,7 +3637,7 @@ fn main() {
                     // keeping it alive — only this SIGTERM would end it.
                     // `stop_daemon()` (vault moves, restarts) still stops it;
                     // this is the app-quit path alone.
-                    if daemon_always_on(app_handle) {
+                    if daemon_always_on() {
                         info!("daemon left running in the background at app exit (always-on is on)");
                     } else {
                         shutdown_daemon_child();
@@ -3748,7 +3750,7 @@ fn probe_backup_scope(h: tauri::AppHandle) {
         Ok(())
     }
 
-    let data_dir = match h.path().app_data_dir() {
+    let data_dir = match mailvault_core::paths::app_data_dir() {
         Ok(d) => d,
         Err(e) => {
             h.dialog().message(format!("app_data_dir: {e}")).title("Probe: Backup Scope — FAIL").blocking_show();
@@ -3892,7 +3894,7 @@ mod tests {
     #[test]
     fn daemon_ipc_paths_live_under_home_dot_mailvault() {
         let (endpoint, token) = crate::daemon_ipc_paths().unwrap();
-        let home = dirs::home_dir().unwrap().join(".mailvault");
+        let home = mailvault_core::paths::home_dir().unwrap().join(".mailvault");
         assert_eq!(token, home.join("mv.token"), "the token is a real file on both platforms");
         assert_eq!(endpoint, mailvault_core::transport::endpoint(&home));
         #[cfg(unix)]
@@ -3904,7 +3906,7 @@ mod tests {
         // Must match src-daemon's get_data_dir() + write_pid_file, and must
         // differ from daemon_ipc_paths()'s ~/.mailvault — they are two
         // different directories the daemon writes into.
-        let expected = dirs::data_local_dir().unwrap().join("com.mailvault.app").join("daemon.pid");
+        let expected = mailvault_core::paths::app_data_dir().unwrap().join("daemon.pid");
         assert_eq!(crate::daemon_pid_path(), expected);
         let (sock, _) = crate::daemon_ipc_paths().unwrap();
         assert_ne!(crate::daemon_pid_path().parent(), sock.parent());
