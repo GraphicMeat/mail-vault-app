@@ -148,7 +148,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
 
   return (
     <AnimatePresence>
-      <ToastShell position="bottom-right" className="w-72 cursor-pointer" onClick={onOpenSettings}>
+      <ToastShell position="bottom-right" className="w-72 cursor-pointer" onClick={onOpenSettings} data-testid="migration-toast">
         {status === 'completed' ? (
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="text-mail-success flex-shrink-0" />

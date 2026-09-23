@@ -169,6 +169,7 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
     scheduleNote: vis('[data-testid="compose-schedule-tz-note"]'),
     scheduleSends: vis('[data-testid="compose-schedule-sends"]'),
     scheduleLocked: !!document.querySelector('[data-testid="compose-schedule-locked"]'),
+    migrationToast: vis('[data-testid="migration-toast"]'),
     shortcuts: vis('[data-testid="shortcuts-modal"]'),
     insights: vis('[data-testid="sender-insights-panel"]'),
     // The Insights workspace, not the per-sender panel above it: two different
@@ -289,8 +290,8 @@ async function setSetting(key, value) {
  * Both highlighting shots are about row GROUNDS, so the list must not read as
  * mid-scroll: clicking a row part way down leaves a half-row clipped under the
  * header. (The migration toast in the corner stays: `wdio.screenshots.conf.js`
- * seeds a job "already in flight" on purpose, so every shot in a run carries
- * it.)
+ * seeds a job "already in flight" on purpose, so every shot in a run but
+ * premium-scheduled-send carries it.)
  */
 async function settleListForHighlightShot() {
   await browser.execute(() => {
@@ -621,8 +622,24 @@ describe('MailVault marketing screenshots', function () {
      * why, and "Tomorrow 8am" lands in HER morning with both wall clocks
      * spelled out. Nothing closes it: `selection-dialog` starts with
      * resetToInbox, which discards this compose as it does compose-email's.
+     *
+     * The seeded migration never finishes, so waiting it out is no option:
+     * its "Migrating INBOX 53%" toast would sit over this frame's corner. It
+     * is parked for this shot and put back after it, for premium-migration
+     * and every other shot that carries it.
      */
+    let parkedMigration = null;
     await step('premium-scheduled-send', async () => {
+      // WebDriver hands `undefined` back as null, so "no store" is its own flag.
+      const parked = await browser.execute(() => {
+        const store = window.__SETTINGS_STORE__;
+        if (!store) return { ok: false };
+        const { activeMigration, clearActiveMigration } = store.getState();
+        clearActiveMigration();
+        return { ok: true, activeMigration };
+      });
+      if (!parked.ok) throw new Error('__SETTINGS_STORE__ missing — is this a VITE_E2E build? (activeMigration)');
+      parkedMigration = parked.activeMigration;
       await resetToInbox();
       if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
       await expectState((s) => s.compose, 'compose did not open');
@@ -645,7 +662,9 @@ describe('MailVault marketing screenshots', function () {
       if (!(await clickTestId('compose-schedule-preset-tomorrow'))) throw new Error('tomorrow preset not found');
       await expectState((s) => s.scheduleTime && s.scheduleSends && s.scheduleTz === SCHEDULED_REPLY.tz,
         'picked time or its "sends ... your time" line missing');
+      await expectState((s) => !s.migrationToast, 'the migration toast is still over the schedule panel');
     });
+    if (parkedMigration) await setSetting('activeMigration', parkedMigration);
 
     // ── Bulk operations ───────────────────────────────────────────────────
     await step('selection-dialog', async () => {
