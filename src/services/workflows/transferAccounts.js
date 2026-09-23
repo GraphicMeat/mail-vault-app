@@ -25,7 +25,9 @@ export async function exportTransfer({ accountIds, includeAppSettings, password 
   const accounts = await getAccounts();
   // A denied/locked keychain hands back accounts without secrets; the daemon
   // would name them E_TRANSFER_INCOMPLETE, but the real cause is the keychain.
-  if (keychainSession.getStatus() !== 'granted') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+  // 'empty' (a successful read that found no stored credentials, e.g. every
+  // account was added by hand this session) is not a failure to read.
+  if (!['granted', 'empty'].includes(keychainSession.getStatus())) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
 
   const settings = collectSettings(accountIds);
   const bundle = {

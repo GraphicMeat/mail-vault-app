@@ -149,6 +149,14 @@ describe('exportTransfer', () => {
     expect(mockDaemonCall).not.toHaveBeenCalled();
   });
 
+  it('exports on an "empty" keychain read too (no stored credentials yet is not a failed read)', async () => {
+    h.status = 'empty';
+    h.existing = [acct('a', 'a@x.test')];
+    const data = await exportTransfer({ accountIds: ['a'], includeAppSettings: false, password: 'x'.repeat(12) });
+    expect(data).toBe('QkFTRTY0');
+    expect(mockDaemonCall).toHaveBeenCalled();
+  });
+
   it('sends only the chosen accounts and nulls app settings when excluded', async () => {
     h.status = 'granted';
     h.existing = [acct('a', 'a@x.test'), acct('b', 'b@x.test')];
