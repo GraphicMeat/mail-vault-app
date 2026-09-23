@@ -240,10 +240,12 @@ function seedOnboardingComplete(home) {
       version: 4,
       state: {
         onboardingComplete: true,
-        // New installs default message rows to the radial menu, whose actions
-        // mount in a portal only while open. Specs find unarchived rows by the
+        // New installs default to expandable threads and a radial row menu,
+        // whose actions mount in a portal only while open. The specs were
+        // written against grouped threads and find unarchived rows by the
         // row's inline `[data-quick-action="archive"]` button, which only the
-        // favorite-menu layout renders, so the harness keeps that layout.
+        // favorite-menu layout renders, so the harness keeps both.
+        threadMode: 'grouped',
         quickActions: { defaults: { row: { mode: 'favorite-menu' } } },
       },
     },
