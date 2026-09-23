@@ -43,6 +43,9 @@ zip = "2"
 # export_fetch's SSRF guard inspects url::Host directly (reqwest re-exports
 # only Url, not Host). Pinned to the version reqwest 0.12 already vendors.
 url = "2.5"
+# handlers/transfer.rs holds the transfer password and decrypted plaintext in
+# Zeroizing wrappers so they are wiped on drop. Same pin as src-core/Cargo.toml.
+zeroize = "1"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }

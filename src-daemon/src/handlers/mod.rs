@@ -42,6 +42,7 @@ pub(crate) mod scheduled;
 pub(crate) mod search_index;
 pub(crate) mod smtp;
 pub(crate) mod tags;
+pub(crate) mod transfer;
 pub(crate) mod vault;
 pub(crate) mod views;
 pub(crate) mod vault_files;
