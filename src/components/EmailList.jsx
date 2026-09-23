@@ -481,6 +481,11 @@ function EmailListComponent({ stacked = false }) {
       setShowSkeleton(false);
     }
   }, [showSkeleton, loading]);
+  // The latch alone can stick: a switch whose `loading` goes true -> false ->
+  // false inside one batch never changes `loading` again after the latch is
+  // set, the effect above never re-runs, and the store's rows sit behind
+  // placeholders for good. A skeleton only ever means "still loading".
+  const skeletonOn = showSkeleton && loading;
 
   const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
 
@@ -1152,7 +1157,7 @@ function EmailListComponent({ stacked = false }) {
             // grouped view is open, setting the list mode alone changes nothing.
             onSearchMailbox={() => { if (viewGrouping) closeView(); setEmailListView('list'); setShowSearch(true); }}
             partial={!searchActive && windowIsPartial} hasMore={!searchActive && viewMode !== 'local' && hasMoreEmails}
-            loadingMore={loadingMore} loading={loading || showSkeleton} onLoadMore={loadMoreEmails} searchActive={searchActive}
+            loadingMore={loadingMore} loading={loading} onLoadMore={loadMoreEmails} searchActive={searchActive}
             groupingOverride={viewGrouping} fieldGroup={viewFieldGroup}
             renderEmail={email => {
               const key = selKey(email);
@@ -1166,7 +1171,7 @@ function EmailListComponent({ stacked = false }) {
                 onRequestDelete={requestRowDelete} onActionStart={handleRowActionStart} isSaving={savingRowIds.has(key)} onStartSaving={startSaving} onStopSaving={stopSaving}
                 derivedFrom={searchActive ? searchResults : sortedEmails} />;
             }} />
-        ) : (loading && rowCount === 0) || showSkeleton ? (
+        ) : (loading && rowCount === 0) || skeletonOn ? (
           /* Skeleton rows — lightweight placeholders during transitions */
           <div className="flex flex-col">
             {Array.from({ length: 12 }, (_, i) => (
@@ -1592,7 +1597,7 @@ function EmailListComponent({ stacked = false }) {
           </div>
         )}
       </div>
-      {showScrubber && !showSkeleton && (
+      {showScrubber && !skeletonOn && (
         <DateScrubber scrollRef={scrollContainerRef} virtualizer={virtualizer} buckets={monthList}
           segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} />
       )}
