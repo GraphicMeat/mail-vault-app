@@ -65,7 +65,8 @@
 .hm-table .hm-group th { position:static; width:auto; padding:22px 14px 8px; font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--mv-muted); background:var(--mv-surface); }
 .hm-table .hm-us { background:color-mix(in oklab,var(--mv-accent) 9%,var(--mv-card)); font-weight:600; }
 .hm-table thead .hm-us { color:var(--mv-accent); }
-.hm-table td.y::before,.hm-table td.p::before,.hm-table td.n::before { display:inline-block; width:1.2em; font-weight:800; }
+.hm-table td.y,.hm-table td.p,.hm-table td.n { position:relative; padding-left:34px; }
+.hm-table td.y::before,.hm-table td.p::before,.hm-table td.n::before { position:absolute; left:14px; font-weight:800; }
 .hm-table td.y::before { content:'✓'; color:#16a34a; }
 .hm-table td.p::before { content:'~'; color:#d97706; }
 .hm-table td.n::before { content:'✕'; color:#dc2626; }
@@ -97,3 +98,5 @@
 @media (prefers-reduced-motion:reduce) { .hm-benefits a,.hm-cards a { transition:none; } }
 .hm-table thead small a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
 .hm-table thead small a:hover { color:var(--mv-accent); }
+.hm-app { display:flex; align-items:center; gap:9px; }
+.hm-app img { flex:none; width:24px; height:24px; object-fit:contain; border-radius:6px; }
