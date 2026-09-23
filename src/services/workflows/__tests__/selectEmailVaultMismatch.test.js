@@ -26,10 +26,8 @@ const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getLocalEmails: vi.fn().mockResolvedValue([]),

@@ -18,16 +18,13 @@ const mockFetchEmailLight = vi.fn();
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockDeleteLocalEmail = vi.fn().mockResolvedValue(undefined);
-const mockGetSavedEmailIds = vi.fn().mockResolvedValue(new Set());
 const mockGetVaultUidSets = vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() });
 const mockSend = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
-  getSavedEmailIds: (...a) => mockGetSavedEmailIds(...a),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: (...a) => mockGetVaultUidSets(...a),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getLocalEmails: vi.fn().mockResolvedValue([]),
@@ -166,7 +163,6 @@ describe('selectEmail marks a body the daemon cached as saved, with no vault rea
     await useMailStore.getState().selectEmail(42, 'server');
 
     expect(useMailStore.getState().savedEmailIds.has(42)).toBe(true);
-    expect(mockGetSavedEmailIds).not.toHaveBeenCalled();
     expect(mockGetVaultUidSets).not.toHaveBeenCalled();
     expect(vaultReads()).toEqual([]);
   });
@@ -199,7 +195,6 @@ describe('selectEmail marks a body the daemon cached as saved, with no vault rea
     await useMailStore.getState().selectEmail(42, 'server');
 
     expect(useMailStore.getState().savedEmailIds.has(42)).toBe(false);
-    expect(mockGetSavedEmailIds).not.toHaveBeenCalled();
     expect(vaultReads()).toEqual([]);
   });
 });

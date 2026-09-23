@@ -82,16 +82,18 @@ export async function archiveEmail(accountId, mailbox, uid) {
 // The vault is keyed (accountId, mailbox, uid). A uid only means anything
 // inside one UIDVALIDITY generation, so once a server reissues its UID space —
 // a change-server migration, or a reissue it does on its own — every uid the
-// vault holds names a different message. `getSavedEmailIds` / `getArchivedEmailIds`
-// answer "is uid N archived?" straight off those filenames, so they answer yes
+// vault holds names a different message. A reader keyed by uid then answers
 // about some other message, and every badge, state icon and bulk target reads
 // that as fact.
 //
-// The repair belongs here rather than at the ~15 places that call those getters:
-// a step each caller has to remember is a step each new caller forgets. Rust
-// no-ops when the recorded generation already matches (two small file reads),
-// and no-ops outright for a mailbox that has never synced and for Graph
-// accounts, which have no IMAP UID space to reissue.
+// The registry routes (`vault_uid_sets`, `vault_light_rows`) repair
+// daemon-side before answering. The readers below that go to disk or custody
+// by uid (the custody entries, the no-index search scan) repair here, once per
+// mailbox however many of them are awaited together, rather than at each of
+// their callers: a step each caller has to remember is a step each new caller
+// forgets. Rust no-ops when the recorded generation already matches (two
+// small file reads), and no-ops outright for a mailbox that has never synced
+// and for Graph accounts, which have no IMAP UID space to reissue.
 const _generationRepairs = new Map();
 
 export function ensureVaultGeneration(accountId, mailbox) {
@@ -553,18 +555,6 @@ export async function isEmailSaved(accountId, mailbox, uid) {
   }
 }
 
-export async function getSavedEmailIds(accountId, mailbox) {
-  await initBasic();
-  if (!invoke) return new Set();
-  await ensureVaultGeneration(accountId, mailbox);
-  try {
-    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
-    return new Set(summaries.map(s => s.uid));
-  } catch {
-    return new Set();
-  }
-}
-
 /**
  * What the vault holds for one mailbox: `{ saved, archived }` uid Sets, from
  * one `vault_uid_sets` call the daemon answers off its registry (generation
@@ -572,7 +562,7 @@ export async function getSavedEmailIds(accountId, mailbox) {
  *
  * `null` means unknown — the call failed, the daemon said `null` (vault
  * unreachable, repair failed, folder unlistable) or the reply is malformed.
- * Never an empty Set on failure (I-5 below): every caller keeps what it
+ * Never an empty Set on failure (I-5): every caller keeps what it
  * already knows instead of persisting "the vault has nothing".
  */
 export async function getVaultUidSets(accountId, mailbox) {
@@ -584,28 +574,6 @@ export async function getVaultUidSets(accountId, mailbox) {
     return { saved: new Set(reply.saved), archived: new Set(reply.archived) };
   } catch (e) {
     console.warn('[db] vault_uid_sets failed:', e);
-    return null;
-  }
-}
-
-// Final fix wave I-5: a failed read returns `null`, never an empty Set.
-// `stampVaultEntry` (messageMutations.js) and every other caller that
-// persists this into the store treats "empty" as durable fact — a message
-// really has no archived copy — so a swallowed daemon error (guaranteed on
-// every cold start and every vault move, not just a disk error) used to be
-// indistinguishable from that, and silently dropped the serverDeleted/
-// serverAbsent stamp for good (memory: an unlistable directory is not an
-// empty one). Every caller below is expected to treat `null` as "unknown,
-// keep whatever was already known" rather than adopting it.
-export async function getArchivedEmailIds(accountId, mailbox) {
-  await initBasic();
-  if (!invoke) return new Set();
-  await ensureVaultGeneration(accountId, mailbox);
-  try {
-    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: 'archived' });
-    return new Set(summaries.map(s => s.uid));
-  } catch (e) {
-    console.warn('[db] getArchivedEmailIds failed:', e);
     return null;
   }
 }

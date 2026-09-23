@@ -10,5 +10,3 @@ export function useMessageListStore(selector) {
 
 // Published read contracts for imperative access from workflows
 export const getLocalEmails = () => useMailStore.getState().localEmails;
-export const getSavedEmailIds = () => useMailStore.getState().savedEmailIds;
-export const getArchivedEmailIds = () => useMailStore.getState().archivedEmailIds;

@@ -36,8 +36,6 @@ const mockTauriInvoke = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../db', () => ({
   isEmailSaved: (...a) => mockIsEmailSaved(...a),
   archiveEmail: (...a) => mockArchiveEmail(...a),
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getLocalEmails: vi.fn().mockResolvedValue([]),
   getLocalEmailLight: vi.fn().mockResolvedValue(null),

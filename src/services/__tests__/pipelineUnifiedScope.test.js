@@ -47,7 +47,6 @@ vi.mock('../../stores/settingsStore', () => ({
 }));
 
 vi.mock('../db', () => ({
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),

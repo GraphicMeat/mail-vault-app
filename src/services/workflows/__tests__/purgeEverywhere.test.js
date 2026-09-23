@@ -45,8 +45,6 @@ const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../db', () => ({
   initDB: vi.fn().mockResolvedValue(undefined),
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getLocalEmails: vi.fn().mockResolvedValue([]),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),

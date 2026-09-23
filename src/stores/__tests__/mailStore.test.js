@@ -32,8 +32,6 @@ vi.mock('../../services/db', () => ({
   getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
   getEmailHeadersMeta: (...args) => mockGetEmailHeadersMeta(...args),
   getEmailHeadersPartial: (...args) => mockGetEmailHeadersPartial(...args),
-  getArchivedEmailIds: (...args) => mockGetArchivedEmailIds(...args),
-  getSavedEmailIds: (...args) => mockGetSavedEmailIds(...args),
   // The registry read the callers use now, derived from the two getters
   // above so every test's per-case values still drive it (null archived =
   // the whole read unknown).

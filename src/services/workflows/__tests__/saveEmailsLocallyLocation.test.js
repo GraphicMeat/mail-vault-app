@@ -43,8 +43,6 @@ vi.mock('../../transport.js', async (importOriginal) => {
 vi.mock('../../db', () => ({
   isEmailSaved: vi.fn().mockResolvedValue(false),
   archiveEmail: vi.fn().mockResolvedValue(undefined),
-  getSavedEmailIds: (...a) => mockGetSavedEmailIds(...a),
-  getArchivedEmailIds: (...a) => mockGetArchivedEmailIds(...a),
   // The registry read the callers use now, derived from the two getters
   // above so every test's per-case values still drive it (null archived =
   // the whole read unknown).

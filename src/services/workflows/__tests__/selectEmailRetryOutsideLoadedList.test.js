@@ -30,11 +30,9 @@ const mockSearchLocalEmails = vi.fn();
 vi.mock('../../db', () => ({
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
   searchLocalEmails: (...a) => mockSearchLocalEmails(...a),
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
   getCachedMailboxes: vi.fn().mockResolvedValue([{ path: 'INBOX', name: 'INBOX' }]),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getLocalEmails: vi.fn().mockResolvedValue([]),

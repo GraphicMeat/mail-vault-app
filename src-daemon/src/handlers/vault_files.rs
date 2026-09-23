@@ -911,8 +911,8 @@ mod tests {
     }
 
     /// A folder that cannot be listed is unknown, never absent: the per-uid
-    /// routes error (JS `isEmailSaved` reads an error as not saved, and
-    /// `getArchivedEmailIds` as unknown), and the new routes answer null.
+    /// routes error (JS `isEmailSaved` reads an error as not saved), and the
+    /// registry routes answer null (JS `getVaultUidSets` reads that as unknown).
     #[tokio::test]
     async fn an_unlistable_folder_is_unknown_not_absent() {
         let (t, s) = st(true);

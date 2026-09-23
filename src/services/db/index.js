@@ -37,8 +37,6 @@ export {
   getAllLocalEmails,
   deleteLocalEmail,
   isEmailSaved,
-  getSavedEmailIds,
-  getArchivedEmailIds,
   getVaultUidSets,
   getVerifiedRawSource,
   ensureVaultGeneration,

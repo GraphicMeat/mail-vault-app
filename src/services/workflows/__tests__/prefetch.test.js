@@ -19,8 +19,6 @@ const mockGetArchivedEmails = vi.fn();
 
 vi.mock('../../db', () => ({
   getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
-  getArchivedEmailIds: (...a) => mockGetArchivedEmailIds(...a),
-  getSavedEmailIds: (...a) => mockGetSavedEmailIds(...a),
   // The registry read the callers use now, derived from the two getters
   // above so every test's per-case values still drive it (null archived =
   // the whole read unknown).

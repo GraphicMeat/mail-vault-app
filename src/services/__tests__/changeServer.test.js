@@ -19,8 +19,6 @@ function accountLogicalKey(a) {
 vi.mock('../../services/db', () => ({
   saveAccount: (...args) => mockSaveAccount(...args),
   accountLogicalKey,
-  getSavedEmailIds: () => Promise.resolve(new Set()),
-  getArchivedEmailIds: () => Promise.resolve(new Set()),
   getVaultUidSets: () => Promise.resolve({ saved: new Set(), archived: new Set() }),
 }));
 

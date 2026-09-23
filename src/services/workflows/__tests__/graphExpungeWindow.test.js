@@ -29,8 +29,6 @@ const mockListGraphMessages = vi.fn();
 const mockGraphListFolders = vi.fn().mockResolvedValue([]);
 
 vi.mock('../../db', () => ({
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
