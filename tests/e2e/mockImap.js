@@ -24,7 +24,10 @@ import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node
 import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../..');
-const SERVER_BIN = join(REPO_ROOT, 'target/debug/mock-imap-server');
+const SERVER_BIN = join(
+  REPO_ROOT,
+  process.platform === 'win32' ? 'target/debug/mock-imap-server.exe' : 'target/debug/mock-imap-server'
+);
 
 /** Build the mock server binary once per run. Cargo no-ops when it's current. */
 export function buildMockServer() {
