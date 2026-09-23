@@ -85,6 +85,17 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
     for (const key of GLOBAL_SETTINGS_ALLOWLIST) {
       if (snapshot.appSettings[key] !== undefined) patch[key] = snapshot.appSettings[key];
     }
+    // Mirrors settingsStore's setAiSettings: a different endpoint is never
+    // pre-consented. An import must not grant consent either, even for the
+    // CURRENT endpoint — only the target's own prior consent carries over,
+    // never a `true` read from the file.
+    if (patch.aiSettings) {
+      const current = s.aiSettings || {};
+      patch.aiSettings = {
+        ...patch.aiSettings,
+        endpointConsented: patch.aiSettings.endpointUrl === current.endpointUrl ? current.endpointConsented : false,
+      };
+    }
     const { accounts: _perAccount, ...globals } = snapshot.appSettings.notificationSettings || {};
     notificationSettings = { ...notificationSettings, ...globals };
   }

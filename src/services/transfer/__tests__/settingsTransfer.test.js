@@ -112,3 +112,28 @@ describe('applySettings', () => {
     expect(h.settings.accountOrder).toEqual(['A', 'B', 'X2']);
   });
 });
+
+describe('applySettings — imported aiSettings never bypasses the consent reset', () => {
+  beforeEach(() => {
+    h.settings.aiSettings = { enabled: true, provider: 'custom', endpointUrl: 'https://old.example', endpointModel: '', endpointConsented: true };
+  });
+
+  it('resets endpointConsented to false when the imported endpoint URL differs, even if the file says true', async () => {
+    const snap = {
+      appSettings: { aiSettings: { enabled: true, provider: 'custom', endpointUrl: 'https://new.example', endpointModel: '', endpointConsented: true } },
+    };
+    await applySettings(snap, {}, { applyGlobal: true });
+    expect(h.settings.aiSettings.endpointUrl).toBe('https://new.example');
+    expect(h.settings.aiSettings.endpointConsented).toBe(false);
+  });
+
+  it('keeps the target\'s current consent when the imported endpoint URL matches, ignoring the file value', async () => {
+    h.settings.aiSettings.endpointConsented = false;
+    const snap = {
+      appSettings: { aiSettings: { enabled: true, provider: 'custom', endpointUrl: 'https://old.example', endpointModel: '', endpointConsented: true } },
+    };
+    await applySettings(snap, {}, { applyGlobal: true });
+    expect(h.settings.aiSettings.endpointUrl).toBe('https://old.example');
+    expect(h.settings.aiSettings.endpointConsented).toBe(false);
+  });
+});
