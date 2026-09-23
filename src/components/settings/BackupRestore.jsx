@@ -66,8 +66,8 @@ export default function BackupRestore() {
       const accountsList = await db.getAccountsWithoutPasswords();
       const backupAccounts = accountsList.map(a => ({
         email: a.email,
-        imapServer: a.imapServer,
-        smtpServer: a.smtpServer,
+        imapHost: a.imapHost,
+        smtpHost: a.smtpHost,
       }));
 
       const store = useMailStore.getState();

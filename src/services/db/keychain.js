@@ -22,7 +22,7 @@ transportSend('get_app_data_dir', {})
 
 // Keychain cache - stores full account objects (id, email, servers, password)
 // Each value in the HashMap is a JSON-serialized account object.
-// Format: { accountId: JSON.stringify({id, email, imapServer, smtpServer, password, createdAt}) }
+// Format: { accountId: JSON.stringify({id, email, imapHost, smtpHost, password, createdAt}) }
 let keychainCache = null;
 let keychainLoaded = false;
 

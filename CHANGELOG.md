@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A restored backup now brings back each account's server.** Backup ZIPs recorded every account's incoming and outgoing mail server as empty, so an account recreated by Import Backup came back with no server at all. New backups keep both, and restoring one fills them in. Backups made before this fix still import, but they never recorded a server, so their accounts still come back without one.
+
 ## [2.16.0] - 2026-09-23
 
 ### Added

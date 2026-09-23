@@ -5,7 +5,7 @@
  * daemon route never writes `accounts.json` (a cross-process race against
  * `db/accounts.js`'s own writer otherwise). `ImportResult.newAccounts`
  * changes shape from `string[]` (bare emails) to
- * `{id, email, imapServer, smtpServer, createdAt}[]` (`AccountsJsonEntry`,
+ * `{id, email, imapHost, smtpHost, createdAt}[]` (`AccountsJsonEntry`,
  * `src-daemon/src/backup_zip.rs`). `BackupRestore.jsx`'s import handler must
  * merge those descriptors into `accounts.json` itself, before it reloads the
  * app, and its "these accounts still need passwords" message must read the
@@ -41,7 +41,7 @@ vi.mock('../../../services/transport', () => ({ send: (...a) => sendMock(...a) }
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue('/picked/mailvault-backup.zip'),
-  save: vi.fn(),
+  save: vi.fn().mockResolvedValue('/picked/out.zip'),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -52,8 +52,8 @@ const { default: BackupRestore } = await import('../BackupRestore');
 const { useMailStore } = await import('../../../stores/mailStore');
 
 const NEW_ACCOUNTS = [
-  { id: 'new-alice', email: 'alice@test.com', imapServer: 'imap.alice.test', smtpServer: 'smtp.alice.test', createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'new-bob', email: 'bob@test.com', imapServer: 'imap.bob.test', smtpServer: null, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'new-alice', email: 'alice@test.com', imapHost: 'imap.alice.test', smtpHost: 'smtp.alice.test', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'new-bob', email: 'bob@test.com', imapHost: 'imap.bob.test', smtpHost: null, createdAt: '2026-01-01T00:00:00Z' },
 ];
 
 beforeEach(() => {
@@ -88,11 +88,49 @@ it('merges import_backup\'s newAccounts descriptors into accounts.json and lists
 
   const onDisk = JSON.parse(fsFiles['accounts.json']);
   expect(onDisk.find((a) => a.email === 'existing@test.com')).toBeTruthy();
-  expect(onDisk.find((a) => a.email === 'alice@test.com')).toMatchObject({ id: 'new-alice', imapServer: 'imap.alice.test' });
+  expect(onDisk.find((a) => a.email === 'alice@test.com')).toMatchObject({ id: 'new-alice', imapHost: 'imap.alice.test' });
   expect(onDisk.find((a) => a.email === 'bob@test.com')).toMatchObject({ id: 'new-bob' });
 
   const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
   expect(msg).toContain('alice@test.com');
   expect(msg).toContain('bob@test.com');
   expect(msg).not.toContain('[object Object]');
+});
+
+// The account objects the app keeps carry `imapHost`/`smtpHost`; the export
+// once read `a.imapServer`/`a.smtpServer`, so every manifest host was null and
+// a restored account landed in accounts.json with no host at all.
+it('round-trips account hosts: export manifest -> import -> accounts.json', async () => {
+  fsFiles = { 'accounts.json': JSON.stringify([
+    { id: 'acct-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test', imapPort: 993 },
+  ]) };
+  let manifestAccounts = null;
+  sendMock.mockImplementation((cmd, args) => {
+    if (cmd === 'export_backup') {
+      manifestAccounts = JSON.parse(args.accountsJson);
+      return Promise.resolve({ emailCount: 1, accountCount: 1 });
+    }
+    if (cmd === 'import_backup') {
+      // The daemon mints a fresh id per manifest account it does not know.
+      const newAccounts = manifestAccounts.map((a) => ({ ...a, id: 'restored-carol', createdAt: '2026-01-01T00:00:00Z' }));
+      return Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts, settingsJson: null });
+    }
+    return Promise.resolve(null);
+  });
+
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Export Backup/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /Choose a location/i }));
+  await waitFor(() => expect(manifestAccounts).not.toBeNull());
+  expect(manifestAccounts).toEqual([{ email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test' }]);
+
+  // Restore onto a fresh install.
+  fsFiles = { 'accounts.json': '[]' };
+  fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+
+  const onDisk = JSON.parse(fsFiles['accounts.json']);
+  expect(onDisk).toEqual([expect.objectContaining({
+    id: 'restored-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test',
+  })]);
 });

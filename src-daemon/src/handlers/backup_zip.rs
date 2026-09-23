@@ -257,6 +257,59 @@ mod tests {
         assert_ne!(err.code, ipc::METHOD_NOT_FOUND, "import_backup did not reach handlers::backup_zip::route");
     }
 
+    /// The app's account objects carry `imapHost`/`smtpHost`; a backup must
+    /// hand those same hosts back as the restored account descriptors.
+    #[tokio::test]
+    async fn export_then_import_carries_the_account_hosts_through_the_manifest() {
+        let (v, a, s) = st(true);
+        seed_file(v.path(), "acct1", "INBOX", 1, &["A"]);
+        std::fs::write(a.path().join("accounts.json"), json!([{"id": "acct1", "email": "a@test.com"}]).to_string()).unwrap();
+        let dest = v.path().parent().unwrap().join(format!("out-{}.zip", uuid::Uuid::new_v4()));
+        let accounts = json!([{"email": "a@test.com", "imapHost": "imap.a.test", "smtpHost": "smtp.a.test"}]);
+        let resp = call(
+            &s,
+            "export_backup",
+            json!({"destPath": dest.to_string_lossy(), "archivedOnly": false, "settingsJson": "", "accountsJson": accounts.to_string()}),
+        )
+        .await;
+        resp.result.expect("export_backup must succeed");
+
+        // Fresh install: no accounts.json, so the account comes back as new.
+        let (_v2, _a2, s2) = st(true);
+        let resp = call(&s2, "import_backup", json!({"sourcePath": dest.to_string_lossy()})).await;
+        let _ = std::fs::remove_file(&dest);
+        let new_accounts = resp.result.expect("import_backup must succeed")["newAccounts"].clone();
+        assert_eq!(new_accounts[0]["email"], json!("a@test.com"));
+        assert_eq!(new_accounts[0]["imapHost"], json!("imap.a.test"));
+        assert_eq!(new_accounts[0]["smtpHost"], json!("smtp.a.test"));
+    }
+
+    /// Backups written before the host-key fix used `imapServer`/`smtpServer`.
+    #[tokio::test]
+    async fn import_backup_reads_the_legacy_server_keys() {
+        let (_v, _a, s) = st(true);
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = dir.path().join("in.zip");
+        {
+            let file = std::fs::File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default();
+            zip.start_file("mailvault-backup/manifest.json", options).unwrap();
+            zip.write_all(
+                json!({"version": 2, "exportedAt": "2026-01-01T00:00:00Z", "accounts": [{"email": "old@test.com", "imapServer": "imap.old.test", "smtpServer": null}], "settings": null})
+                    .to_string()
+                    .as_bytes(),
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+
+        let resp = call(&s, "import_backup", json!({"sourcePath": zip_path.to_string_lossy()})).await;
+        let new_accounts = resp.result.expect("import_backup must succeed")["newAccounts"].clone();
+        assert_eq!(new_accounts[0]["imapHost"], json!("imap.old.test"));
+        assert_eq!(new_accounts[0]["smtpHost"], Value::Null);
+    }
+
     #[tokio::test]
     async fn export_backup_missing_dest_path_is_invalid_params() {
         let (_v, _a, s) = st(true);

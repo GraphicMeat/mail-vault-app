@@ -1,7 +1,8 @@
 //! Backup ZIP export/import (Task 4.3), ported from `src-tauri/src/main.rs`'s
 //! `export_backup`/`import_backup` (`:1490-1842` before this move). The walk,
 //! the manifest shape and the ZIP entry paths are byte-identical to what
-//! shipped before this move; see `handlers::backup_zip` for the router that
+//! shipped before this move (except the account host keys, since renamed
+//! `imapServer`/`smtpServer` -> `imapHost`/`smtpHost`); see `handlers::backup_zip` for the router that
 //! calls these and the porting notes below for the two places this module's
 //! signature had to diverge from the app version's.
 //!
@@ -60,9 +61,12 @@ pub struct BackupManifest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupAccount {
     pub email: String,
-    #[serde(rename = "imapServer")]
+    // `imapHost`/`smtpHost` match the account objects the app sends. Backups
+    // written before this fix carry `imapServer`/`smtpServer` (always null,
+    // since the app never had those fields), still accepted on import.
+    #[serde(rename = "imapHost", alias = "imapServer")]
     pub imap_server: Option<String>,
-    #[serde(rename = "smtpServer")]
+    #[serde(rename = "smtpHost", alias = "smtpServer")]
     pub smtp_server: Option<String>,
 }
 
@@ -95,9 +99,11 @@ pub struct ImportResult {
 pub struct AccountsJsonEntry {
     pub id: String,
     pub email: Option<String>,
-    #[serde(rename = "imapServer")]
+    // No legacy alias: this is also parsed from the live `accounts.json`,
+    // where an entry holding both spellings would be a duplicate-field error.
+    #[serde(rename = "imapHost")]
     pub imap_server: Option<String>,
-    #[serde(rename = "smtpServer")]
+    #[serde(rename = "smtpHost")]
     pub smtp_server: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: Option<String>,
