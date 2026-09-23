@@ -334,7 +334,27 @@ impl Snapshot {
                     // downloads and unrelated files cannot stale the snapshot.
                     match stamp(&p) {
                         Ok(Some(s)) => {
-                            if !s.directory || self.watch_directory(&p, account) {
+                            // In-progress IMAP downloads live in a Maildir
+                            // `tmp/` directory (already excluded from message
+                            // parsing elsewhere — only "cur"-parented files
+                            // count). Excluded here too, before any watch is
+                            // ever placed on it, not merely from recursion:
+                            // `watch_directory` below is what would record
+                            // its stamp, and a file added or removed inside
+                            // `tmp/` changes that directory's own len/mtime
+                            // on Windows (`Watch::Directory::unchanged` has
+                            // no stable inode identity there, unlike unix,
+                            // so it falls back to comparing the whole
+                            // stamp) — flagging the snapshot stale over
+                            // activity nothing here ever reads.
+                            let is_tmp = s.directory && p.file_name().and_then(|n| n.to_str()) == Some("tmp");
+                            if is_tmp {
+                                // Deliberately not pushed to `paths` and
+                                // `watch_directory` never called: `walk`'s
+                                // caller must never see this path, or it
+                                // would recurse and start watching what is
+                                // inside it instead.
+                            } else if !s.directory || self.watch_directory(&p, account) {
                                 paths.push(p);
                             }
                         }
@@ -354,25 +374,10 @@ impl Snapshot {
         while let Some(dir) = dirs.pop() {
             for p in self.children(&dir, account) {
                 if p.is_dir() {
-                    let name = p.file_name().and_then(|n| n.to_str());
                     // Repair-generation quarantines cannot be opened through
                     // the active-mailbox reader, so disclose them explicitly.
-                    if name == Some("orphaned") {
+                    if p.file_name().and_then(|n| n.to_str()) == Some("orphaned") {
                         self.problem("orphanedGeneration", account, None);
-                    } else if name == Some("tmp") {
-                        // In-progress IMAP downloads live here; per
-                        // `children`'s own comment, temporary files must
-                        // never stale the snapshot. Never calling
-                        // `watch_directory` on `tmp/` itself is what makes
-                        // that true on every platform: relying on a child
-                        // add/remove leaving the directory's own identity
-                        // unchanged is a unix inode accident (`Stamp`'s own
-                        // doc comment), not a guarantee Windows shares —
-                        // there `Watch::Directory::unchanged` falls back to
-                        // comparing the whole stamp (len + mtime), and a
-                        // directory's mtime does change under a child
-                        // add/remove, which flagged the snapshot stale over
-                        // activity nothing here ever reads.
                     } else {
                         dirs.push(p);
                     }
