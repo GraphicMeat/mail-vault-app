@@ -50,7 +50,14 @@ fn idle_reports_new_mail_and_ends_on_done() {
         mb.add(Message::new(uid, "Subject: new\r\n\r\nhi"));
     });
 
-    r.get_ref().set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    // idle_loop polls every 50ms (its own doc comment), so this is normally
+    // near-instant -- widened from 2s after a real Windows run flaked here
+    // running alongside this file's other IDLE tests (three mock servers'
+    // 50ms poll threads contending at once): a plain read timeout, not a
+    // connect timeout, but Windows phrases WSAETIMEDOUT as "a connection
+    // attempt failed" even for an already-established socket's read. Passed
+    // in 0.06s run alone; still 200x the poll interval even at 10s.
+    r.get_ref().set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let mut l = String::new();
     r.read_line(&mut l).unwrap();
     assert_eq!(l.trim_end(), "* 3 EXISTS");
@@ -82,7 +89,7 @@ fn idle_reports_a_flag_change_as_fetch() {
         msg.modseq = modseq;
     });
 
-    r.get_ref().set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    r.get_ref().set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let mut l = String::new();
     r.read_line(&mut l).unwrap();
     assert_eq!(l.trim_end(), "* 1 FETCH (FLAGS (\\Seen))");
