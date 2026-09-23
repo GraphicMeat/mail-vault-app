@@ -33,9 +33,23 @@
 .settings-editor-section .ts-control input { color: var(--mail-text); }
 .settings-editor-section .ts-dropdown .option { color: var(--mail-text); }
 .settings-editor-section .ts-dropdown .active { background: var(--mail-surface-hover); }
+.settings-window .ts-wrapper.single .ts-control,
+.settings-window .ts-wrapper.single.input-active .ts-control,
+.settings-window .ts-dropdown { background: var(--mail-bg); color: var(--mail-text); border-color: var(--mail-border); box-shadow: none; }
+.settings-window .ts-control .item,
+.settings-window .ts-control input,
+.settings-window .ts-dropdown .option,
+.settings-window .ts-dropdown .optgroup-header,
+.settings-window .ts-dropdown .no-results,
+.settings-window .ts-dropdown .create { color: var(--mail-text); }
+.settings-window .ts-control input::placeholder { color: var(--mail-text-muted); opacity: 1; }
+.settings-window .ts-dropdown .optgroup-header { background: var(--mail-bg); }
+.settings-window .ts-dropdown .active,
+.settings-window .ts-dropdown .option:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+.settings-window .ts-dropdown .active.create { color: var(--mail-text); }
 @media (max-width: 680px) { .settings-editor-field { grid-template-columns: 1fr; gap: 6px; } .settings-editor-section { padding: 14px; } .settings-editor-split { grid-template-columns: 1fr; } }
 
-.settings-window .views-settings { padding: 0; gap: 0; }
+.settings-window .views-settings { gap: 0; padding: 28px; }
 .settings-window .views-settings .settings-editor-section { margin-bottom: 20px; }
 .settings-window .views-settings .views-list { margin-top: 16px; gap: 4px; }
 .settings-window .views-settings .views-row-button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; }
@@ -58,6 +72,18 @@
 .settings-window .view-editor .view-preview-rows li { min-height: 34px; padding: 8px 4px; border-bottom: 1px solid var(--mail-border); border-radius: 0; background: transparent; font-size: 12px; }
 .settings-window .view-editor .settings-editor-actions { margin-bottom: 16px; }
 .settings-window .view-editor .settings-editor-actions > button:not(.ui-button) { min-height: 32px; padding: 6px 10px; color: var(--mail-text-muted); }
+.settings-window .view-editor .view-choice-field { display: grid; gap: 8px; margin-bottom: 16px; }
+.settings-window .view-editor .view-choice-field > span { color: var(--mail-text-muted); font-size: 12px; font-weight: 600; }
+.settings-window .view-editor .view-choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-window .view-editor .view-choice-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 76px; padding: 8px 14px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; text-align: center; }
+.settings-window .view-editor .view-choice-button:hover { background: var(--mail-surface-hover); }
+.settings-window .view-editor .view-choice-button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 650; }
+.settings-window .view-editor .view-filter-choices { align-items: start; gap: 18px; }
+.settings-window .view-editor .view-filter-choices > .view-choice-field { margin-bottom: 0; }
+.settings-window .view-editor .view-account-choices .view-choice-button { max-width: 100%; overflow-wrap: anywhere; }
+.settings-window .view-editor .view-emoji-input { width: 72px; min-height: 40px; text-align: center; font-size: 20px; }
+.settings-window .view-editor .view-emoji-input.is-selected { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
+@media (max-width: 680px) { .settings-window .views-settings { padding: 16px; } }
 .mail-list-with-timeline { padding-left: 30px; }
 body[data-auxiliary-window="settings"] .fixed:has(.settings-window) { padding: 0; }
 body[data-auxiliary-window="settings"] .settings-window { max-width: none; width: 100vw; height: 100dvh; border: 0; border-radius: 0; }

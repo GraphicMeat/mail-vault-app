@@ -58,9 +58,9 @@ describe('editing a saved view', () => {
     render(<ViewEditor view={MINE} onClose={() => {}} />);
     expect(screen.getByTestId('view-name').value).toBe('Receipts');
     expect(screen.getByTestId('view-query').value).toBe('invoice');
-    expect(screen.getByTestId('view-attachments').checked).toBe(true);
-    expect(screen.getByTestId('view-tag-t1').checked).toBe(true);
-    expect(screen.getByTestId('view-tag-t2').checked).toBe(false);
+    expect(screen.getByTestId('view-attachments').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('view-tag-t1').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('view-tag-t2').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('saves the name, the text and the filters together', () => {
@@ -68,7 +68,7 @@ describe('editing a saved view', () => {
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'overdue' } });
     fireEvent.click(screen.getByTestId('view-tag-t2'));
-    fireEvent.change(screen.getByTestId('view-starred'), { target: { value: 'yes' } });
+    fireEvent.click(screen.getByTestId('view-starred-yes'));
     fireEvent.submit(screen.getByTestId('view-editor-form'));
 
     const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
@@ -82,8 +82,8 @@ describe('editing a saved view', () => {
 
   it('a tri-state filter can go back to not caring', () => {
     render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, unread: true } }} onClose={() => {}} />);
-    expect(screen.getByTestId('view-unread').value).toBe('yes');
-    fireEvent.change(screen.getByTestId('view-unread'), { target: { value: 'any' } });
+    expect(screen.getByTestId('view-unread-yes').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId('view-unread-any'));
     fireEvent.submit(screen.getByTestId('view-editor-form'));
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.unread).toBe(null);
   });
@@ -94,6 +94,33 @@ describe('editing a saved view', () => {
     fireEvent.submit(screen.getByTestId('view-editor-form'));
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.fields)
       .toEqual([{ fieldId: 'f1', op: 'is', value: 'hi' }]);
+  });
+
+  it('chooses the icon and account filters with buttons', () => {
+    useMailStoreMock.setState({ accounts: [
+      { id: 'acct-1', email: 'one@example.test' },
+      { id: 'acct-2', email: 'two@example.test' },
+    ] });
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.click(screen.getByTestId('view-icon-paperclip'));
+    fireEvent.click(screen.getByTestId('view-account-acct-2'));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
+    expect(saved.icon).toBe('paperclip');
+    expect(saved.def.accounts).toEqual(['acct-2']);
+  });
+
+  it('saves an arbitrary emoji and reopens with it selected', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    expect(screen.getAllByTestId(/^view-icon-(reply|inbox|paperclip|tag|star)$/).slice(0, 3)
+      .map(button => button.dataset.testid)).toEqual(['view-icon-reply', 'view-icon-inbox', 'view-icon-paperclip']);
+    fireEvent.change(screen.getByTestId('view-emoji'), { target: { value: '🧑🏽‍💻' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
+    expect(saved.icon).toBe('emoji:🧑🏽‍💻');
+    cleanup();
+    render(<ViewEditor view={saved} onClose={() => {}} />);
+    expect(screen.getByTestId('view-emoji').value).toBe('🧑🏽‍💻');
   });
 
   /// Read back as a bare value, a saved `isNot` reopened as `is` — the editor

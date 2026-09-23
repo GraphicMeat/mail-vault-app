@@ -807,6 +807,7 @@
   color: inherit;
 }
 
+.sidebar-view-edit,
 .sidebar-view-new,
 .views-new {
   flex: 0 0 auto;
@@ -815,11 +816,14 @@
   color: var(--mail-text-muted);
 }
 
+.sidebar-view-edit:hover,
 .sidebar-view-new:hover,
 .views-new:hover:not(:disabled) {
   color: var(--mail-text);
   background: var(--mail-surface-hover);
 }
+
+.view-emoji-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 1.25em; line-height: 1; }
 
 .views-new:disabled {
   opacity: 0.4;

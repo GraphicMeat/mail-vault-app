@@ -10,7 +10,6 @@ import { suggestSendAsAddresses } from '../../utils/sendAsSuggestions';
 import { isFastmailAccount } from '../AccountModal.jsx';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
-import { ToggleSwitch } from './ToggleSwitch';
 import { SettingsTabs } from './SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
 import '../../styles/account-settings-navigation.css';
@@ -607,20 +606,21 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
               </h4>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="account-settings-choice-row">
                   <div>
                     <div className="font-medium text-mail-text">{t('settings.accounts.enableSignature')}</div>
                     <div className="text-sm text-mail-text-muted">
                       {t('settings.accounts.automaticallyAddOutgoingEmails')}
                     </div>
                   </div>
-                  <ToggleSwitch
-                    label={t('settings.accounts.enableSignature')} active={getSignature(selectedAccountId).enabled}
-                    onClick={() => {
-                      const sig = getSignature(selectedAccountId);
-                      setSignature(selectedAccountId, { ...sig, enabled: !sig.enabled });
-                    }}
-                  />
+                  <div className="account-settings-choice-group" role="group" aria-label={t('settings.accounts.enableSignature')}>
+                    {[[true, 'yes'], [false, 'no']].map(([enabled, label]) => <button key={label} type="button"
+                      aria-pressed={!!getSignature(selectedAccountId).enabled === enabled}
+                      onClick={() => {
+                        const sig = getSignature(selectedAccountId);
+                        setSignature(selectedAccountId, { ...sig, enabled });
+                      }}>{t(`views.tristate.${label}`)}</button>)}
+                  </div>
                 </div>
 
                 <div>
@@ -894,7 +894,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
             </div>
             {/* Hide Account */}
             <div className="settings-section">
-              <div className="flex items-center justify-between">
+              <div className="account-settings-choice-row">
                 <div className="flex items-center gap-3">
                   {isAccountHidden(selectedAccountId) ? (
                     <EyeOff size={18} className="text-mail-text-muted" />
@@ -910,11 +910,13 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
                     </div>
                   </div>
                 </div>
-                <ToggleSwitch
-                  label={t('settings.accounts.accountVisible')} active={!isAccountHidden(selectedAccountId)}
-                  onClick={() => {
+                <div className="account-settings-choice-group" role="group" aria-label={t('settings.accounts.accountVisible')}>
+                  {[false, true].map(hidden => <button key={String(hidden)} type="button"
+                    aria-pressed={isAccountHidden(selectedAccountId) === hidden}
+                    onClick={() => {
                     const currentlyHidden = isAccountHidden(selectedAccountId);
-                    setAccountHidden(selectedAccountId, !currentlyHidden);
+                    if (currentlyHidden === hidden) return;
+                    setAccountHidden(selectedAccountId, hidden);
 
                     if (!currentlyHidden) {
                       // Hiding: destroy pipeline and switch active account if needed
@@ -960,8 +962,10 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
                         pipelineManager.restartBackgroundPipelines();
                       });
                     }
-                  }}
-                />
+                  }}>
+                    {t(hidden ? 'settings.accounts.accountHidden' : 'settings.accounts.accountVisible')}
+                  </button>)}
+                </div>
               </div>
             </div>
 

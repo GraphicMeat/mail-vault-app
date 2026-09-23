@@ -45,6 +45,11 @@
 .account-settings-status > button { margin-left: auto; }
 .account-settings-status-error { color: var(--mail-warning); }
 .account-settings-section-intro { color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px; }
+.account-settings-choice-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.account-settings-choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-settings-choice-group button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-surface); color: var(--mail-text); font-size: 13px; }
+.account-settings-choice-group button:hover { background: var(--mail-surface-hover); }
+.account-settings-choice-group button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 650; }
 
 .account-settings-account { position: relative; display: flex; align-items: center; border-radius: 8px; }
 .account-settings-account:hover { background: var(--mail-surface-hover); }
