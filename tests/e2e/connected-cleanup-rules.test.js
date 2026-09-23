@@ -160,6 +160,17 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     method: 'maildir_read_light', params: { accountId: yodaId, mailbox: 'INBOX', uid },
   });
 
+  /**
+   * The uids yoda's INBOX header cache (`custody.db` `header_cache`) holds, via
+   * the daemon. Throws on a failed read: an empty answer from a store that
+   * never answered would pass the absence wait below on its first tick.
+   */
+  const cachedUids = async () => {
+    const r = await invokeApp('daemon_rpc', { method: 'list_cached_uids', params: { accountId: yodaId, mailbox: 'INBOX' } });
+    if (r?.error || !Array.isArray(r?.value?.uids)) throw new Error(`list_cached_uids: ${r?.error || JSON.stringify(r)}`);
+    return r.value.uids;
+  };
+
   const settingsText = () => browser.execute(() =>
     document.querySelector('[data-testid="settings-page"]')?.innerText || '');
 
@@ -216,6 +227,13 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
       timeout: 120_000,
       interval: 1000,
       timeoutMsg: `yoda's INBOX never listed the two appended messages (uids ${victimUid}, ${orphanUid})`,
+    });
+    // Positive control for the prune the case waits on: the header cache holds
+    // the victim now, so its later absence is the sync's doing.
+    await browser.waitUntil(async () => (await cachedUids()).includes(victimUid), {
+      timeout: 60_000,
+      interval: 1000,
+      timeoutMsg: `yoda's INBOX header cache never held uid ${victimUid}`,
     });
 
     // 3. Put the VICTIM in the vault, and only the VICTIM. This is the exact
@@ -398,25 +416,23 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     // ── The vault again, after the repair has had its turn ───────────────
     // Deleting the server copy is half the promise. The other half is that the
     // vault copy is still there once the sync has noticed the message left
-    // INBOX (its header sidecar is gone) and `repair_generation` has opened
+    // INBOX (its header cache row is gone) and `repair_generation` has opened
     // this never-stamped vault dir - `.uidvalidity` is the repair's own
     // signature, written at the end of a run and by nothing else.
     const data = appDataDir(browser.testDataDir);
     const vaultDir = join(data, 'Maildir', yodaId, 'INBOX');
     const stamp = join(vaultDir, '.uidvalidity');
-    const sidecar = join(
-      data, 'email_cache', `${yodaId.replace(/[^a-zA-Z0-9]/g, '_')}_INBOX`, `${victimUid}.json`);
-    await browser.waitUntil(() => !existsSync(sidecar), {
+    await browser.waitUntil(async () => !(await cachedUids()).includes(victimUid), {
       timeout: 120_000,
       interval: 1000,
-      timeoutMsg: `The sync never pruned uid ${victimUid}'s header sidecar, so the repair below `
+      timeoutMsg: `The sync never pruned uid ${victimUid}'s header cache row, so the repair below `
         + 'would still be able to name the message and would prove nothing',
     });
 
     // The repair writes `.uidvalidity` the first time it runs, so whether it
     // falls before or after that prune is a race the runner wins about as often
     // as it loses - and only the losing side is the bug: an unstamped vault dir
-    // holding a message no sidecar can name. Take the stamp off and ask for the
+    // holding a message no cached header can name. Take the stamp off and ask for the
     // run, rather than waiting to see which way the race went. Removed inside
     // the poll because a folder open can stamp it back between two invokes.
     let repair = null;

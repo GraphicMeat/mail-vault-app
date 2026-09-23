@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
 import { buildInsightsScenario } from './insightsFixture.js';
 import { waitForApp, waitForEmails } from './helpers.js';
-import { MOCK_PASSWORD, appDataDir } from './mockImap.js';
+import { MOCK_PASSWORD } from './mockImap.js';
 import { clickReachable, setControl, openInsights, waitForInsights, setInsightsRange,
   nativeInvoke, nativeDaemonInvoke, cacheScenarioHeaders, readNativeSnapshot, summaryText, captureInsights, startFrameProbe, stopFrameProbe, startNativeProbe, stopNativeProbe, waitForHeldNativeReply, releaseNativeReply, nativeProbeOutcomes } from './insightsHelpers.js';
 
@@ -174,16 +174,22 @@ describe('Insights with real native mail data', function () {
 
   it('shows incomplete coverage for a corrupt real header and recovers after repair', async () => {
     const accountId = browser.mockAccounts[0].id;
-    const path = join(appDataDir(browser.testDataDir), 'email_cache', `${accountId.replace(/[^a-z0-9]/gi, '_')}_INBOX`, '1.json');
-    const original = readFileSync(path);
+    // The header is a `custody.db` `header_cache` row now, not a file, and the
+    // daemon owns that db exclusively: corrupt it through the cache RPC. A
+    // wrong-typed field still stores (header_json is any JSON) but fails
+    // Insights' header decode, the same `invalidMetadata` a garbled file gave.
+    const [original] = await nativeDaemonInvoke('load_email_cache_by_uids', { accountId, mailbox: 'INBOX', uids: [1] });
+    assert.equal(original?.uid, 1, 'The fixture header for INBOX uid 1 is cached before it is corrupted');
     try {
-      writeFileSync(path, '{ invalid fixture cache');
+      await nativeDaemonInvoke('save_email_cache', { accountId, mailbox: 'INBOX', data: JSON.stringify({ emails: [{ uid: 1, subject: 42, from: 'not an address' }] }) });
       await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
       assert.match((await summaryText()).coverage, /Counts may be incomplete/i);
       const snapshot = await readNativeSnapshot();
       assert.equal(snapshot.rows.some(row => row.accountId === accountId && row.mailbox === 'INBOX' && row.uid === 1), false);
       await captureInsights('partial-header');
-    } finally { writeFileSync(path, original); }
+    } finally {
+      await nativeDaemonInvoke('save_email_cache', { accountId, mailbox: 'INBOX', data: JSON.stringify({ emails: [original] }) });
+    }
     await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
     await displayedTotal(expected.received);
   });

@@ -75,7 +75,7 @@
  *     lying to the user.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -83,6 +83,7 @@ import {
   clickSidebarItem, folderHeaderText, switchToFolder, churnAccounts,
 } from './helpers.js';
 import { appDataDir } from './mockImap.js';
+import { DatabaseSync } from 'node:sqlite';
 import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
 
 describe('Storage matrix diagnostics', function () {
@@ -167,39 +168,41 @@ describe('Storage matrix diagnostics', function () {
     return result;
   }
 
-  function cacheBaseName(accountId, mbox) {
-    const safe = (s) => s.replace(/[^A-Za-z0-9]/g, '_');
-    return `${safe(accountId)}_${safe(mbox)}`;
-  }
-
-  function sidecarExists(accountId, mbox, uid) {
-    return existsSync(join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox), `${uid}.json`));
+  /**
+   * Every UID the header cache (`custody.db` `header_cache`) holds for one
+   * mailbox, ascending — through the daemon, which owns that db exclusively.
+   * `{ error }` rather than a throw: the callers are diagnostics and the one
+   * precondition below, and a failed read must never look like "none".
+   */
+  async function cachedUids(accountId, mbox) {
+    const r = await browser.executeAsync((a, m, done) => {
+      window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'list_cached_uids', params: { accountId: a, mailbox: m } })
+        .then((v) => done({ uids: v?.uids }), (e) => done({ error: String((e && e.message) || e) }));
+    }, accountId, mbox);
+    return Array.isArray(r?.uids) ? [...r.uids].sort((a, b) => a - b) : { error: r?.error || 'no uids in the answer' };
   }
 
   /**
-   * The durable journal of confirmed-but-unfinished server ops, or null if
-   * there is nothing owed. Written before the first IMAP round-trip of a delete
-   * and cleared after the last, so its contents at a given moment say exactly
-   * how far a delete got.
+   * The durable journal of confirmed-but-unfinished server ops (`app.db`
+   * `pending_ops`), or null if there is nothing owed. Written before the first
+   * IMAP round-trip of a delete and cleared after the last, so its contents at
+   * a given moment say exactly how far a delete got. app.db is shared (WAL, no
+   * exclusive lock), so reading it from here is safe.
    */
   function pendingOpJournal() {
-    const path = join(appDataDir(HOME()), 'pending_ops.json');
-    if (!existsSync(path)) return null;
+    let db;
     try {
-      return JSON.parse(readFileSync(path, 'utf-8'));
+      db = new DatabaseSync(join(appDataDir(HOME()), 'app.db'));
+      db.exec('PRAGMA busy_timeout=5000');
+      const rows = db.prepare('SELECT op, account_id, mailbox, uids_json, arg_json FROM pending_ops ORDER BY id').all();
+      return rows.length ? rows.map((r) => ({
+        op: r.op, accountId: r.account_id, mailbox: r.mailbox, uids: JSON.parse(r.uids_json), arg: JSON.parse(r.arg_json),
+      })) : null;
     } catch (e) {
-      return { __unparseable: e.message };
+      return { __unreadable: e.message };
+    } finally {
+      db?.close();
     }
-  }
-
-  /** Every UID the sidecar cache holds for one mailbox, ascending. */
-  function sidecarUids(accountId, mbox) {
-    const dir = join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox));
-    if (!existsSync(dir)) return null;
-    return readdirSync(dir)
-      .filter((n) => /^\d+\.json$/.test(n))
-      .map((n) => parseInt(n, 10))
-      .sort((a, b) => a - b);
   }
 
   /**
@@ -207,8 +210,8 @@ describe('Storage matrix diagnostics', function () {
    * from the DOM. Read all of them at once so a failure names the layer instead
    * of the symptom:
    *
-   *   sidecar  — the on-disk header cache. Missing here = something pruned it.
-   *   store    — `emails` in the mail store. Present in sidecar but not here =
+   *   cache    — the header cache (custody.db). Missing here = something pruned it.
+   *   store    — `emails` in the mail store. Present in cache but not here =
    *              the load dropped it.
    *   sorted   — `sortedEmails`, after the tombstone and \Deleted filters.
    *              Present in `emails` but not here = a filter is hiding it.
@@ -234,7 +237,7 @@ describe('Storage matrix diagnostics', function () {
     });
     return {
       uid,
-      sidecar: sidecarUids(accountId, mbox),
+      cache: await cachedUids(accountId, mbox),
       store: store && {
         ...store,
         inEmails: store.emailUids.includes(uid),
@@ -412,13 +415,13 @@ describe('Storage matrix diagnostics', function () {
    * Cheap (two readdirs) and never throws — a broken checkpoint must not mask
    * the assertion that actually failed.
    */
-  afterEach(function () {
+  afterEach(async function () {
     try {
-      console.log('[checkpoint] after "%s" — luke/Archive sidecar uids=%s, vader/Matrix=%s, yoda/INBOX=%s',
+      console.log('[checkpoint] after "%s" — luke/Archive cached uids=%s, vader/Matrix=%s, yoda/INBOX=%s',
         this.currentTest?.title,
-        JSON.stringify(sidecarUids(accountIdOf(LUKE), 'Archive')),
-        JSON.stringify(sidecarUids(accountIdOf(VADER), 'Matrix')),
-        JSON.stringify(sidecarUids(accountIdOf(YODA), 'INBOX')));
+        JSON.stringify(await cachedUids(accountIdOf(LUKE), 'Archive')),
+        JSON.stringify(await cachedUids(accountIdOf(VADER), 'Matrix')),
+        JSON.stringify(await cachedUids(accountIdOf(YODA), 'INBOX')));
       // Where the vault actually put its .eml files. Several matrix rows
       // report "archived badge true, no vault file", and the two candidate
       // explanations — the write never happened, or this spec is reading the
@@ -771,14 +774,24 @@ describe('Storage matrix diagnostics', function () {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('reload root-cause regression (no delay)', function () {
-    it('the deleted uid does not repaint from a stale header sidecar on reload', async function () {
+    it('the deleted uid does not repaint from a stale header cache row on reload', async function () {
       const accountId = accountIdOf(VADER);
       await switchToFolder(VADER, 'Matrix');
       const subject = 'Vader matrix 5';
       const uid = 5;
 
-      const sidecarBefore = sidecarExists(accountId, 'Matrix', uid);
-      console.log(`[reload-root-cause] sidecar for uid ${uid} before delete:`, sidecarBefore);
+      // Positive control: the cache has to hold the row for "does not repaint
+      // from the cache" to mean anything. Without it this case passes against
+      // an empty cache.
+      // The folder's cache write can trail its first paint, so wait for it.
+      let cachedBefore = null;
+      await browser.waitUntil(async () => {
+        cachedBefore = await cachedUids(accountId, 'Matrix');
+        return Array.isArray(cachedBefore) && cachedBefore.includes(uid);
+      }, {
+        timeout: 30_000, interval: 500,
+        timeoutMsg: `vader/Matrix header cache never held uid ${uid}: ${JSON.stringify(cachedBefore)}`,
+      });
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickSelectionAction('deleteEverywhere')).toBe(true);
@@ -791,12 +804,12 @@ describe('Storage matrix diagnostics', function () {
 
       // Give the trailing loadEmails() reconcile inside purgeEverywhere a
       // moment to actually finish its network round-trip and its
-      // save_email_cache write before inspecting the sidecar.
+      // save_email_cache write before inspecting the header cache.
       await browser.pause(2000);
-      const sidecarRightAfterDelete = sidecarExists(accountId, 'Matrix', uid);
-      console.log(`[reload-root-cause] sidecar for uid ${uid} right after Delete Everywhere's own reconcile:`, sidecarRightAfterDelete);
-      if (sidecarRightAfterDelete) {
-        console.warn(`[reload-root-cause] sidecar for uid ${uid} survived the delete's own reconcile — the prune fix did not run/land as expected`);
+      const cachedAfterDelete = await cachedUids(accountId, 'Matrix');
+      console.log(`[reload-root-cause] cached uids right after Delete Everywhere's own reconcile:`, JSON.stringify(cachedAfterDelete));
+      if (Array.isArray(cachedAfterDelete) && cachedAfterDelete.includes(uid)) {
+        console.warn(`[reload-root-cause] header cache row for uid ${uid} survived the delete's own reconcile — the prune fix did not run/land as expected`);
       }
 
       await reloadApp();
@@ -807,8 +820,8 @@ describe('Storage matrix diagnostics', function () {
 
       if (rowImmediatelyAfterReload) {
         throw new Error(
-          `"${subject}" reappeared after reload — the deleted row's header sidecar was not pruned.\n` +
-          `  sidecar before delete: ${sidecarBefore}\n  sidecar right after the delete's own reconcile: ${sidecarRightAfterDelete}\n` +
+          `"${subject}" reappeared after reload — the deleted row's header cache row was not pruned.\n` +
+          `  cached uids before delete: ${JSON.stringify(cachedBefore)}\n  right after the delete's own reconcile: ${JSON.stringify(cachedAfterDelete)}\n` +
           `  row after reload: ${JSON.stringify(rowImmediatelyAfterReload)}`,
         );
       }
