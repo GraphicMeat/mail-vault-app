@@ -1057,12 +1057,20 @@ export async function trackMailbox({ host, port }, mailbox) {
 
 // ── Account seeding ─────────────────────────────────────────────────────────
 
-/** Where the app and daemon put their data under a given HOME. */
+/** Where the app and daemon put their data under a given HOME (on Windows,
+ *  under the USERPROFILE whose LOCALAPPDATA wdio.conf.js points inside it). */
 export function appDataDir(home, platform = process.platform) {
+  if (platform === 'win32') return join(home, 'AppData', 'Local', 'com.mailvault.app');
   return platform === 'darwin'
     ? join(home, 'Library/Application Support/com.mailvault.app')
     : join(home, '.local/share/com.mailvault.app');
 }
+
+/** Maildir's info separator as the app writes it on this OS: `;` on Windows
+ *  (a colon there marks an NTFS stream), `:` elsewhere. Mirrors
+ *  src-core/src/maildir.rs `INFO_SEP`/`INFO_PREFIX`; the app reads both. */
+export const INFO_SEP = process.platform === 'win32' ? ';' : ':';
+export const INFO_PREFIX = `${INFO_SEP}2,`;
 
 /**
  * Account blob in the shape `db.saveAccount` persists — the credentials file and
@@ -1090,7 +1098,7 @@ export function mockAccount({ id, email, port, smtpPort, name }) {
 export const LEGACY_EML_UID = 990001;
 
 /** The name that message carries before the sweep, and after it. */
-export const LEGACY_EML_NAME = `${LEGACY_EML_UID}:2,AS`;
+export const LEGACY_EML_NAME = `${LEGACY_EML_UID}${INFO_PREFIX}AS`;
 
 /**
  * A vault as 2.5.0 through 2.13.1 left it: the version marker already says
@@ -1173,7 +1181,7 @@ export function seedLegacyCustody(home, accountId) {
   const nested = join(data, 'maildir', accountId, 'Projects', '2026');
   mkdirSync(nested, { recursive: true });
   writeFileSync(join(nested, 'local-index.json'), JSON.stringify([LEGACY_NESTED_ENTRY]));
-  writeFileSync(join(cur, `${LEGACY_CUSTODY_UID}:2,A.eml`),
+  writeFileSync(join(cur, `${LEGACY_CUSTODY_UID}${INFO_PREFIX}A.eml`),
     'From: Legacy <legacy@mock.test>\r\nTo: luke@mock.test\r\nSubject: Recorded by the JSON index\r\n'
     + 'Date: Mon, 01 Sep 2026 10:00:00 +0000\r\nMessage-ID: <legacy-custody@mock.test>\r\n\r\n'
     + 'A message the old index vouched for.\r\n');
@@ -1246,7 +1254,7 @@ export function seedAttachmentSearchMessage(home, accountId) {
     `--${boundary}--`,
     '',
   ].join('\r\n');
-  writeFileSync(join(cur, `${ATTACHMENT_SEARCH_UID}:2,S.eml`), raw);
+  writeFileSync(join(cur, `${ATTACHMENT_SEARCH_UID}${INFO_PREFIX}S.eml`), raw);
 }
 
 /** A folder no mock server lists, so no mailbox load, repair or custody pass touches the seeds. */
@@ -1261,7 +1269,7 @@ export function seedIndexBacklog(home, accountId, count) {
   const cur = join(appDataDir(home), 'Maildir', accountId, INDEX_SEED_FOLDER, 'cur');
   mkdirSync(cur, { recursive: true });
   for (let uid = 1; uid <= count; uid++) {
-    writeFileSync(join(cur, `${uid}:2,S.eml`), [
+    writeFileSync(join(cur, `${uid}${INFO_PREFIX}S.eml`), [
       'From: Seed Sender <seed@mock.test>',
       'To: luke@mock.test',
       `Subject: Index seed ${uid}`,
@@ -1288,7 +1296,7 @@ export function seedDamagedSearchIndex(home, accountId) {
   db.close();
   const cur = join(data, 'Maildir', accountId, 'IndexRecovery', 'cur');
   mkdirSync(cur, { recursive: true });
-  writeFileSync(join(cur, '990099:2,S.eml'), [
+  writeFileSync(join(cur, `990099${INFO_PREFIX}S.eml`), [
     'From: Recovery Fixture <recovery@mock.test>',
     'To: luke@mock.test',
     'Subject: Search recovery fixture',

@@ -50,6 +50,43 @@ const TAURI_WD_PORT = Number(process.env.E2E_TAURI_WD_PORT) || 4444;
 // (The old MAILVAULT_DATA_DIR was read by nothing.)
 const testDataDir = process.env.E2E_DATA_DIR || mkdtempSync(join(tmpdir(), 'mailvault-e2e-'));
 
+const IS_WIN = process.platform === 'win32';
+
+// Windows ignores HOME: the app and daemon resolve their dirs from USERPROFILE
+// and LOCALAPPDATA (src-core/src/paths.rs, which also derives the daemon's pipe
+// name from USERPROFILE). WebView2 keeps its profile beside the exe unless
+// told otherwise; it lives outside the data dir resetAppState wipes, as
+// WebKit's does on macOS.
+const isolatedEnv = IS_WIN ? {
+  HOME: testDataDir,
+  USERPROFILE: testDataDir,
+  LOCALAPPDATA: join(testDataDir, 'AppData', 'Local'),
+  APPDATA: join(testDataDir, 'AppData', 'Roaming'),
+  WEBVIEW2_USER_DATA_FOLDER: join(testDataDir, 'AppData', 'Local', 'EBWebView'),
+} : { HOME: testDataDir };
+
+/**
+ * Windows pids of `mailvault.exe` at this run's binary, or (with `underRepo`)
+ * of any process whose executable sits under this checkout's `target/`, plus
+ * `tauri-wd.exe` (no product shares that name). Never `mailvault.exe` by
+ * image name: an installed MailVault is `mailvault.exe` too.
+ */
+function winPids({ underRepo = false } = {}) {
+  const filter = underRepo
+    ? `$_.Name -eq 'tauri-wd.exe' -or $_.ExecutablePath -like '${join(import.meta.dirname, 'target')}\\*'`
+    : `$_.ExecutablePath -eq '${appBinaryExe()}'`;
+  const out = execFileSync('powershell', ['-NoProfile', '-Command',
+    `Get-CimInstance Win32_Process | Where-Object { ${filter} } | ForEach-Object { $_.ProcessId }`],
+  { encoding: 'utf8', windowsHide: true });
+  return out.split(/\s+/).filter(Boolean);
+}
+
+const appBinaryExe = () => resolve(appBinary.endsWith('.exe') ? appBinary : `${appBinary}.exe`);
+
+function winKillTree(pid) {
+  try { execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true }); } catch { /* already gone */ }
+}
+
 // Two mock IMAP accounts: connected-* specs cover account switching and the
 // unified inbox, which need more than one, and separate servers keep their
 // mailboxes distinguishable.
@@ -267,6 +304,20 @@ function seedOnboardingComplete(home) {
  */
 async function waitForStrayAppToDie(timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
+  if (IS_WIN) {
+    // tauri-wd ends a session with TerminateProcess, so there is no graceful
+    // exit to wait for: anything still here is stuck.
+    for (;;) {
+      const pids = winPids();
+      if (!pids.length) return;
+      if (Date.now() > deadline) {
+        console.warn(`[wdio] mailvault.exe ${pids.join(', ')} survived taskkill for 5s`);
+        return;
+      }
+      pids.forEach(winKillTree);
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
   for (;;) {
     try {
       execFileSync('pgrep', ['-x', 'mailvault'], { stdio: 'ignore' });
@@ -376,8 +427,12 @@ export const config = {
     // owns the port / the daemon socket, and every session then fails with
     // "App did not report plugin port in time". Mock servers from an aborted
     // run just squat on memory. All three names are ours alone.
-    for (const name of ['tauri-wd', 'mailvault', 'mock-imap-server']) {
-      try { execFileSync('pkill', ['-x', name]); } catch { /* none running */ }
+    if (IS_WIN) {
+      winPids({ underRepo: true }).forEach(winKillTree);
+    } else {
+      for (const name of ['tauri-wd', 'mailvault', 'mock-imap-server']) {
+        try { execFileSync('pkill', ['-x', name]); } catch { /* none running */ }
+      }
     }
 
     buildMockServer();
@@ -437,11 +492,15 @@ export const config = {
       tauriWd = spawn('tauri-wd', ['--port', String(TAURI_WD_PORT), ...(process.env.CI ? ['--log-level', 'trace'] : [])], {
         stdio: ['ignore', 'pipe', 'pipe'],
         // Own process group: killing it takes the app (and its daemon) with it.
-        detached: true,
+        // Windows has no groups (and detached would open a console window);
+        // onComplete kills the process tree there instead.
+        detached: !IS_WIN,
+        windowsHide: true,
         env: {
           ...process.env,
-          // Isolated app data + daemon socket (both derive from HOME)
-          HOME: testDataDir,
+          // Isolated app data + daemon socket (both derive from HOME; on
+          // Windows from the variables in isolatedEnv)
+          ...isolatedEnv,
           // Credentials come from a file, so the run never touches the real keychain
           MAILVAULT_TEST_CREDENTIALS: credentialsPath,
           // Mock IMAP is plaintext; the app honors this for loopback only
@@ -482,7 +541,9 @@ export const config = {
     mockServers.forEach((s) => s?.stop());
     mockGraph?.stop();
 
-    if (tauriWd) {
+    if (tauriWd && IS_WIN) {
+      winKillTree(tauriWd.pid);
+    } else if (tauriWd) {
       // Negative pid = whole group: tauri-wd plus the app it launched. Killing
       // only tauri-wd leaves the app (and the daemon it spawned) running, which
       // then blocks the next run's session.

@@ -30,7 +30,8 @@
     "test:integration": "vitest run --config vitest.integration.config.js",
     "test:dmg": "vitest run --config vitest.dmg.config.js",
     "test:imap": "cargo test -p mailvault-core -p mailvault-daemon",
-    "test:e2e": "VITE_E2E=1 npm run build && DAEMON_PROFILE=debug npm run build:daemon && SPARKLE_FRAMEWORK_PATH=$PWD/src-tauri cargo build -p mailvault --features webdriver && wdio run wdio.conf.js",
+    "build:e2e": "node scripts/build-e2e.js",
+    "test:e2e": "npm run build:e2e && wdio run wdio.conf.js",
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui-headless",
     "test:e2e:connected": "wdio run wdio.conf.js --suite connected-ci",
     "test:e2e:local": "wdio run wdio.conf.js --suite local-manual"
