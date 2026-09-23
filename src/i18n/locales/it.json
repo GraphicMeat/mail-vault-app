@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "Il portachiavi è ancora bloccato. Fai clic su «Sblocca» e inserisci la password di login.",
   "keychainGate.error.denied": "L'accesso è stato negato. Fai di nuovo clic su «Sblocca» e scegli «Consenti sempre» quando macOS lo chiede.",
   "keychainGate.error.error": "MailVault non riesce ancora a leggere il portachiavi. Riprova tra poco.",
-  "keychainGate.later": "Più tardi",
   "keychainGate.unlock": "Sblocca",
   "linkSafety.actuallyRedirects": "In realtà reindirizza a:",
   "linkSafety.dangerousLinkDetected": "Rilevato link pericoloso",

@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "Le trousseau est toujours verrouillé. Cliquez sur « Déverrouiller » et saisissez votre mot de passe de session.",
   "keychainGate.error.denied": "L'accès a été refusé. Cliquez de nouveau sur « Déverrouiller » et choisissez « Toujours autoriser » quand macOS le demande.",
   "keychainGate.error.error": "MailVault ne parvient toujours pas à lire le trousseau. Réessayez dans un instant.",
-  "keychainGate.later": "Plus tard",
   "keychainGate.unlock": "Déverrouiller",
   "linkSafety.actuallyRedirects": "Redirige en réalité vers :",
   "linkSafety.dangerousLinkDetected": "Lien dangereux détecté",

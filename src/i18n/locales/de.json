@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "Der Schlüsselbund ist noch gesperrt. Klicke auf „Entsperren“ und gib dein Anmeldepasswort ein.",
   "keychainGate.error.denied": "Der Zugriff wurde verweigert. Klicke erneut auf „Entsperren“ und wähle „Immer erlauben“, wenn macOS fragt.",
   "keychainGate.error.error": "MailVault kann den Schlüsselbund immer noch nicht lesen. Versuche es gleich noch einmal.",
-  "keychainGate.later": "Später",
   "keychainGate.unlock": "Entsperren",
   "linkSafety.actuallyRedirects": "Leitet tatsächlich weiter zu:",
   "linkSafety.dangerousLinkDetected": "Gefährlicher Link erkannt",

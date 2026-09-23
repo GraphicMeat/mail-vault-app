@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "The keychain is still locked. Click Unlock and enter your login password.",
   "keychainGate.error.denied": "Access was refused. Click Unlock again and choose “Always Allow” when macOS asks.",
   "keychainGate.error.error": "MailVault still can't read the keychain. Try again in a moment.",
-  "keychainGate.later": "Later",
   "keychainGate.unlock": "Unlock",
   "linkSafety.actuallyRedirects": "Actually redirects to:",
   "linkSafety.dangerousLinkDetected": "Dangerous Link Detected",

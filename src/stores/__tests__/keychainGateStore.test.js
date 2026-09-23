@@ -31,6 +31,7 @@ beforeEach(() => {
   for (const m of [mockDaemonCall, mockGetAccounts, mockClearCache, mockRetry, mockNotify]) m.mockReset();
   for (const k of Object.keys(handlers)) delete handlers[k];
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  mockRetry.mockResolvedValue(true);
   vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Macintosh' });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -87,43 +88,61 @@ describe('keychainGateStore', () => {
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
-  it('reopens a dismissed dialog on the next block', () => {
+  it('recovers the app once on every unblock, whatever caused it', () => {
     gate().apply({ blocked: true, reason: 'locked' });
-    gate().dismiss();
-    expect(gate().dismissed).toBe(true);
-    gate().apply({ blocked: true, reason: 'locked' });
-    expect(gate().dismissed).toBe(true);
+    expect(mockRetry).not.toHaveBeenCalled();
+    // The daemon's watcher saw an unlock done elsewhere.
     gate().apply({ blocked: false });
-    gate().apply({ blocked: true, reason: 'denied' });
-    expect(gate().dismissed).toBe(false);
+    expect(mockRetry).toHaveBeenCalledTimes(1);
+    // A repeat of the same state is no transition.
+    gate().apply({ blocked: false });
+    expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('unlocks with the app\'s own read first, then the daemon\'s, then re-activates', async () => {
-    gate().apply({ blocked: true, reason: 'locked' });
-    mockGetAccounts.mockResolvedValue([]);
+  it('unlocks with the daemon\'s own read alone when that answers', async () => {
+    gate().apply({ blocked: true, reason: 'timeout' });
     mockDaemonCall.mockResolvedValue({ ok: true });
     await gate().unlock();
 
-    expect(mockClearCache).toHaveBeenCalled();
+    expect(mockDaemonCall).toHaveBeenCalledTimes(1);
     expect(mockDaemonCall).toHaveBeenCalledWith('keychain.retry');
-    expect(mockGetAccounts.mock.invocationCallOrder[0]).toBeLessThan(mockDaemonCall.mock.invocationCallOrder[0]);
-    expect(mockRetry).toHaveBeenCalledTimes(1);
+    expect(mockGetAccounts).not.toHaveBeenCalled();
     expect(gate()).toMatchObject({ blocked: false, unlocking: false, error: null });
+    expect(mockRetry).toHaveBeenCalledTimes(1);
+
+    // The daemon's own clear event lands after: no second recovery.
+    gate().apply({ blocked: false });
+    expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the dialog up with the reason when the daemon still cannot read', async () => {
+  it('asks the foreground app to prompt only when the keychain is locked, then retries once', async () => {
     gate().apply({ blocked: true, reason: 'locked' });
     mockGetAccounts.mockResolvedValue([]);
+    mockDaemonCall.mockResolvedValueOnce({ ok: false, reason: 'locked' }).mockResolvedValueOnce({ ok: true });
+    await gate().unlock();
+
+    expect(mockClearCache).toHaveBeenCalledTimes(1);
+    expect(mockDaemonCall).toHaveBeenCalledTimes(2);
+    const [first, second] = mockDaemonCall.mock.invocationCallOrder;
+    const foreground = mockGetAccounts.mock.invocationCallOrder[0];
+    expect(first).toBeLessThan(foreground);
+    expect(foreground).toBeLessThan(second);
+    expect(gate()).toMatchObject({ blocked: false, unlocking: false, error: null });
+    expect(mockRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the card up with the reason when the daemon still cannot read', async () => {
+    gate().apply({ blocked: true, reason: 'denied' });
     mockDaemonCall.mockResolvedValue({ ok: false, reason: 'denied' });
     await gate().unlock();
 
+    expect(mockGetAccounts).not.toHaveBeenCalled();
     expect(gate()).toMatchObject({ blocked: true, unlocking: false, error: 'denied' });
     expect(mockRetry).not.toHaveBeenCalled();
   });
 
   it('reads a thrown call as a generic failure', async () => {
     gate().apply({ blocked: true, reason: 'locked' });
-    mockGetAccounts.mockResolvedValue([]);
     mockDaemonCall.mockRejectedValue(new Error('daemon gone'));
     await gate().unlock();
     expect(gate()).toMatchObject({ blocked: true, unlocking: false, error: 'error' });

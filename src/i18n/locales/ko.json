@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "키체인이 아직 잠겨 있습니다. ‘잠금 해제’를 클릭하고 로그인 암호를 입력하세요.",
   "keychainGate.error.denied": "접근이 거부되었습니다. ‘잠금 해제’를 다시 클릭하고 macOS가 물으면 ‘항상 허용’을 선택하세요.",
   "keychainGate.error.error": "MailVault가 아직 키체인을 읽을 수 없습니다. 잠시 후 다시 시도하세요.",
-  "keychainGate.later": "나중에",
   "keychainGate.unlock": "잠금 해제",
   "linkSafety.actuallyRedirects": "실제 리디렉션 주소:",
   "linkSafety.dangerousLinkDetected": "위험한 링크가 감지됨",

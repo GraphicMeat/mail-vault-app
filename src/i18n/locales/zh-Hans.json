@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "钥匙串仍处于锁定状态。请点按“解锁”并输入登录密码。",
   "keychainGate.error.denied": "访问被拒绝。请再次点按“解锁”，并在 macOS 询问时选择“始终允许”。",
   "keychainGate.error.error": "MailVault 仍无法读取钥匙串。请稍后再试。",
-  "keychainGate.later": "稍后",
   "keychainGate.unlock": "解锁",
   "linkSafety.actuallyRedirects": "实际重定向到：",
   "linkSafety.dangerousLinkDetected": "检测到危险链接",

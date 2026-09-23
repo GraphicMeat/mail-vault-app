@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "El llavero sigue bloqueado. Haz clic en «Desbloquear» e introduce tu contraseña de inicio de sesión.",
   "keychainGate.error.denied": "Se denegó el acceso. Vuelve a hacer clic en «Desbloquear» y elige «Permitir siempre» cuando macOS lo pregunte.",
   "keychainGate.error.error": "MailVault todavía no puede leer el llavero. Vuelve a intentarlo en un momento.",
-  "keychainGate.later": "Más tarde",
   "keychainGate.unlock": "Desbloquear",
   "linkSafety.actuallyRedirects": "En realidad redirige a:",
   "linkSafety.dangerousLinkDetected": "Enlace peligroso detectado",

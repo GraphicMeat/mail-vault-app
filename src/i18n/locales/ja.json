@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "キーチェーンはまだロックされています。「ロック解除」をクリックしてログインパスワードを入力してください。",
   "keychainGate.error.denied": "アクセスが拒否されました。もう一度「ロック解除」をクリックし、macOS に聞かれたら「常に許可」を選んでください。",
   "keychainGate.error.error": "MailVault はまだキーチェーンを読み取れません。少し待ってからもう一度お試しください。",
-  "keychainGate.later": "後で",
   "keychainGate.unlock": "ロック解除",
   "linkSafety.actuallyRedirects": "実際のリダイレクト先:",
   "linkSafety.dangerousLinkDetected": "危険なリンクを検出",

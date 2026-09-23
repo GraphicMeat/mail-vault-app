@@ -6,13 +6,12 @@ import { notify } from './focusStore';
 import { t } from '../i18n/index.js';
 
 // The daemon's keychain gate (src-daemon/src/credentials.rs): blocked while a
-// keychain read the user can fix by unlocking keeps failing, cleared by the
-// next read that answers. The daemon owns that state; this store mirrors it
-// for KeychainUnlockDialog and runs the unlock.
+// keychain item the daemon needs cannot be read for a reason unlocking would
+// fix. The daemon watches that itself and owns the state; this store mirrors
+// it for KeychainUnlockCard and runs the unlock.
 export const useKeychainGateStore = create((set, get) => ({
   blocked: false,
   reason: null,
-  dismissed: false,
   unlocking: false,
   // After a failed Unlock: 'timeout' | 'locked' | 'denied' | 'error'.
   error: null,
@@ -23,39 +22,47 @@ export const useKeychainGateStore = create((set, get) => ({
   apply: (status, { announce = false } = {}) => {
     const blocked = !!status?.blocked;
     if (blocked && !get().blocked) {
-      // A new block reopens a dialog the user put off during the last one.
-      set({ blocked: true, reason: status.reason || null, dismissed: false, error: null });
+      set({ blocked: true, reason: status.reason || null, error: null });
       if (announce && windowInBackground()) {
         // Not a mail banner, so notify() applies no mail policy to it; a
-        // Focus session still holds it, and the dialog is waiting either way.
+        // Focus session still holds it, and the card is waiting either way.
         notify(t('keychainGate.notifyTitle'), t('keychainGate.notifyBody'));
       }
     } else if (!blocked && get().blocked) {
       set({ blocked: false, reason: null, error: null });
+      // However it was unlocked (here, in Keychain Access, by the daemon's
+      // watcher noticing), the app's own "Password missing" state recovers
+      // and `sync.watch` registers again. Once per unblock: this branch only
+      // runs on the transition.
+      retryKeychainAccess().catch(() => {});
     }
   },
-
-  dismiss: () => set({ dismissed: true }),
 
   unlock: async () => {
     if (get().unlocking) return;
     set({ unlocking: true, error: null });
     try {
-      // The app's own read first: a foreground app is what macOS shows the
-      // unlock or "allow" prompt to. The cache and a past refusal would both
-      // skip the read, so both are cleared.
-      db.clearCredentialsCache();
-      await db.getAccounts();
-      // No client-side budget on a dotted daemon method (reply_timeout in
-      // src-tauri/src/main.rs), so the daemon's own 120s clock is the limit.
-      const result = await daemonCall('keychain.retry');
+      // The daemon's own read first: the user is here to answer its prompt,
+      // and that is the only prompt in the common case. No client-side budget
+      // on a dotted daemon method (reply_timeout in src-tauri/src/main.rs), so
+      // the daemon's own 120s clock is the limit.
+      let result = await daemonCall('keychain.retry');
+      if (!result?.ok && result?.reason === 'locked') {
+        // A locked keychain will not prompt for a background process. A read
+        // by the foreground app makes macOS ask for the password; the cache
+        // and a past refusal would both skip that read, so both are cleared.
+        db.clearCredentialsCache();
+        await db.getAccounts();
+        result = await daemonCall('keychain.retry');
+      }
       if (!result?.ok) {
         set({ unlocking: false, error: result?.reason || 'error' });
         return;
       }
-      set({ blocked: false, reason: null, unlocking: false });
-      // Re-activate, so `sync.watch` registers again now the daemon can read.
-      await retryKeychainAccess();
+      set({ unlocking: false });
+      // The daemon's clear event may still be on its way; `apply` runs the
+      // recovery once, whichever of the two lands first.
+      get().apply({ blocked: false });
     } catch (err) {
       console.warn('[keychainGate] unlock failed:', err);
       set({ unlocking: false, error: 'error' });
@@ -69,12 +76,12 @@ function windowInBackground() {
 
 let _initialized = false;
 
-/// Once, from KeychainUnlockDialog. The daemon drops an event nobody is
+/// Once, from KeychainUnlockCard. The daemon drops an event nobody is
 /// subscribed to, so the state is asked for at start and again on every
 /// `daemon-reconnected`, after the listeners are attached (VaultAlertBanner's
 /// pattern).
 ///
-/// macOS only: the dialog explains the macOS Keychain and its prompts. Elsewhere
+/// macOS only: the card explains the macOS Keychain and its prompts. Elsewhere
 /// the gate only closes on a read timing out, and the existing keychain toast
 /// already covers the app's own reads.
 export function initKeychainGate() {
@@ -95,5 +102,5 @@ export function initKeychainGate() {
 
 export function __resetKeychainGateForTests() {
   _initialized = false;
-  useKeychainGateStore.setState({ blocked: false, reason: null, dismissed: false, unlocking: false, error: null });
+  useKeychainGateStore.setState({ blocked: false, reason: null, unlocking: false, error: null });
 }

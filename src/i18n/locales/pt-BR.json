@@ -841,7 +841,6 @@
   "keychainGate.error.locked": "As chaves ainda estão bloqueadas. Clique em “Desbloquear” e digite sua senha de início de sessão.",
   "keychainGate.error.denied": "O acesso foi recusado. Clique em “Desbloquear” de novo e escolha “Sempre permitir” quando o macOS perguntar.",
   "keychainGate.error.error": "O MailVault ainda não consegue ler as chaves. Tente de novo daqui a pouco.",
-  "keychainGate.later": "Depois",
   "keychainGate.unlock": "Desbloquear",
   "linkSafety.actuallyRedirects": "Na verdade redireciona para:",
   "linkSafety.dangerousLinkDetected": "Link perigoso detectado",
