@@ -395,6 +395,18 @@ pub fn meta_clear(conn: &Connection, key: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// `HANDLE` is one process-wide slot (by design — see its own doc
+    /// comment), and `cargo test` runs a binary's tests on many threads at
+    /// once. A test that asserts on the slot's exact identity/eviction
+    /// behavior (which of two connections is "the cached one" right now)
+    /// races every other such test unless they take turns; every plain
+    /// `open()` call elsewhere in this module bypasses the slot entirely and
+    /// needs no lock. Real threads are not needed to exercise the race
+    /// itself (see `the_loser_of_a_race_hands_back_the_winners_connection`'s
+    /// own doc comment) — only to keep two *different* tests from
+    /// interleaving their `handle()`/`install()` calls.
+    static HANDLE_SLOT_TESTS: Mutex<()> = Mutex::new(());
+
     fn scratch(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("mv-appdb-{name}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&p).unwrap();
@@ -536,6 +548,7 @@ mod tests {
 
     #[test]
     fn a_second_directory_replaces_the_first_rather_than_holding_both_open() {
+        let _guard = HANDLE_SLOT_TESTS.lock().unwrap_or_else(|p| p.into_inner());
         // A process has one app data dir; a test binary has hundreds, and
         // keeping a connection per directory exhausts its file descriptors.
         let a = scratch("slot-a");
@@ -551,6 +564,7 @@ mod tests {
 
     #[test]
     fn two_opens_of_one_dir_share_one_handle() {
+        let _guard = HANDLE_SLOT_TESTS.lock().unwrap_or_else(|p| p.into_inner());
         let dir = scratch("handle");
         let a = handle(&dir).unwrap();
         let b = handle(&dir).unwrap();
@@ -565,6 +579,7 @@ mod tests {
     /// mid-race and the assertion would be about the scheduler, not the code.
     #[test]
     fn the_loser_of_a_race_hands_back_the_winners_connection() {
+        let _guard = HANDLE_SLOT_TESTS.lock().unwrap_or_else(|p| p.into_inner());
         let dir = scratch("handle-race");
         let winner = Arc::new(Mutex::new(open(&dir).unwrap()));
         let loser = Arc::new(Mutex::new(open(&dir).unwrap()));

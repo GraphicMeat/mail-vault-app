@@ -318,6 +318,16 @@ mod tests {
         let move_resp = route(&state, "vault_move_to", &json!({"path": dst.to_string_lossy()}), json!(1)).await.unwrap();
         let move_id = move_resp.result.unwrap()["moveId"].as_str().unwrap().to_string();
 
+        // The real caller always closes custody before a commit finalize —
+        // `vault_close` runs before `vault_move_to` even starts (architecture.md's
+        // "app owns the vault_close/vault_reopen/stop_daemon restart choreography
+        // around each call") — this route never manages that state itself.
+        // Skipping it here left `DaemonState::for_test`'s custody connection open
+        // through the delete below, which unix's unlink-while-open semantics
+        // hid: `remove_dir_all` on the custody dir failed only on Windows,
+        // which refuses to delete a file another handle still has open.
+        crate::custody::close(&state);
+
         let fin = route(&state, "vault_move_finalize", &json!({"moveId": move_id, "commit": true}), json!(2)).await.unwrap();
         let r = fin.result.expect("finalize must succeed");
         assert_eq!(r["sourceRemoved"], json!(true));

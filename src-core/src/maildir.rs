@@ -827,7 +827,15 @@ mod tests {
 
     #[test]
     fn find_by_uid_matches_either_separator_and_rejects_prefixes_and_legacy_names() {
-        for sep in [':', ';'] {
+        // ':' can never exist as a real file on Windows — NTFS reads it as
+        // an alternate-data-stream separator, not a filename character, so
+        // `fs::write` below would silently write to a hidden stream instead
+        // of creating the file this test means to look for. The parsing
+        // claim this loop proves for ':' on unix is already covered
+        // platform-independently by `both_info_separators_parse_on_every_platform`
+        // above, which asserts on string literals and never touches disk.
+        let seps: &[char] = if cfg!(windows) { &[';'] } else { &[':', ';'] };
+        for &sep in seps {
             let tmp = tempfile::tempdir().unwrap();
             let cur = tmp.path();
             // A longer uid that has `101` as a textual prefix must not match.
@@ -855,7 +863,15 @@ mod tests {
         fs::create_dir_all(&cur).unwrap();
         // Pre-migration files (no `.eml`) in both filename formats we ship.
         fs::write(cur.join(format!("101{INFO_PREFIX}S")), b"A").unwrap();
-        fs::write(cur.join("102:seen:1700000000"), b"B").unwrap();
+        // An arbitrary, non-`2,FLAGS`-shaped legacy suffix — `rename_dir_add_eml`
+        // only requires an info separator before an all-digit prefix
+        // (`is_info_sep`, either spelling), it never re-parses what follows.
+        // Spelled with `;` and `_` rather than raw `:` twice so the fixture
+        // itself is a real file on every platform (Windows rejects a second
+        // literal `:` in a filename outright, ERROR_INVALID_NAME, rather
+        // than silently misplacing it the way one `:` becomes an
+        // alternate-data-stream name).
+        fs::write(cur.join("102;seen_1700000000"), b"B").unwrap();
         // Already-migrated sibling — must be left alone.
         fs::write(cur.join(format!("103{INFO_PREFIX}S.eml")), b"C").unwrap();
         // Non-message file — must be left alone.
@@ -867,7 +883,7 @@ mod tests {
         assert_eq!(s1.skipped_non_message, 1);
         assert_eq!(s1.errors, 0);
         assert!(cur.join(format!("101{INFO_PREFIX}S.eml")).exists());
-        assert!(cur.join("102:seen:1700000000.eml").exists());
+        assert!(cur.join("102;seen_1700000000.eml").exists());
         assert!(cur.join(format!("103{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("local-index.json").exists());
 
@@ -968,7 +984,12 @@ mod tests {
         // uid 1 and uid 5 both need to move, and 1's new uid is 5 — the
         // collision the two-phase rename exists for.
         fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), eml("moved@host.test", "one")).unwrap();
-        fs::write(cur.join("5:seen:1700000000.eml"), eml("stays@host.test", "five")).unwrap();
+        // An arbitrary, non-`2,FLAGS`-shaped suffix (proves the rebind
+        // preserves whatever follows the uid+separator verbatim, not just
+        // the standard flags shape) — spelled with `;` and `_` rather than
+        // raw `:` twice so the fixture is a real file on every platform
+        // (Windows rejects a second literal `:` in a filename outright).
+        fs::write(cur.join("5;seen_1700000000.eml"), eml("stays@host.test", "five")).unwrap();
         fs::write(cur.join(format!("9{INFO_PREFIX}.eml")), eml("gone@host.test", "nine")).unwrap();
         fs::write(cur.join(format!("12{INFO_PREFIX}.eml")), b"Subject: no id\r\n\r\nbody".to_vec()).unwrap();
         // Not a message — must be left exactly where it is.
@@ -997,7 +1018,7 @@ mod tests {
 
         // Flags and timestamp survive the re-key; only the uid changes.
         assert!(cur.join(format!("5{INFO_PREFIX}S.eml")).exists());
-        assert!(cur.join("7:seen:1700000000.eml").exists());
+        assert!(cur.join("7;seen_1700000000.eml").exists());
         assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join("notes.txt").exists());
         // No half-renamed leftovers.

@@ -1237,7 +1237,17 @@ mod tests {
 
         let err = run(state2, &served.path).await.expect_err("binding a live socket must fail");
 
-        assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
+        // Windows has no AddrInUse-shaped error for this collision: a named
+        // pipe's `FILE_FLAG_FIRST_PIPE_INSTANCE` (this crate's `run` always
+        // sets it — see its own doc comment) makes `CreateNamedPipe` fail
+        // with ERROR_ACCESS_DENIED when an instance under that name already
+        // exists, which std maps to `PermissionDenied`, not `AddrInUse`.
+        // Nothing downstream branches on the specific kind (grepped: no
+        // caller of `run()` checks for `AddrInUse`), so this is a real OS
+        // difference in wording, not a behavior gap — the second daemon is
+        // refused either way.
+        let expected = if cfg!(windows) { std::io::ErrorKind::PermissionDenied } else { std::io::ErrorKind::AddrInUse };
+        assert_eq!(err.kind(), expected);
         let _ = std::fs::remove_dir_all(&other);
         served.stop();
     }
