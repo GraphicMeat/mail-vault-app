@@ -23,7 +23,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp } from './helpers.js';
-import { appDataDir, LEGACY_EML_UID, LEGACY_EML_NAME } from './mockImap.js';
+import { appDataDir, LEGACY_EML_UID, LEGACY_EML_NAME, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -66,7 +66,7 @@ describe('Vault — the .eml sweep', function () {
     // The extension-less original is gone, not duplicated: a copy would give
     // the uid two files and the next reader would resolve whichever it saw first.
     expect(names()).not.toContain(LEGACY_EML_NAME);
-    expect(names().filter((n) => n.startsWith(`${LEGACY_EML_UID}:`)).length).toBe(1);
+    expect(names().filter((n) => n.startsWith(`${LEGACY_EML_UID}${INFO_SEP}`)).length).toBe(1);
   });
 
   it('keeps the message readable, so the rename moved the bytes and not just the name', async function () {

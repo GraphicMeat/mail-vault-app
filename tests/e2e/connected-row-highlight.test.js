@@ -125,7 +125,10 @@ describe('Email row highlighting', function () {
       const rows = await threadRows();
       const open = rows.filter(r => r.bg === colours['bg-mail-accent-tint']);
       expect(open.length).toBe(1);
-      expect(open[0].border).toBe('2px');
+      // A border snaps to whole device pixels: 2px draws as 1.6px at 125%
+      // display scaling (a common Windows default), and as 2px at 1x or 2x.
+      const dpr = await browser.execute(() => window.devicePixelRatio);
+      expect(parseFloat(open[0].border)).toBeCloseTo(Math.floor(2 * dpr) / dpr, 2);
     });
 
     it('leaves every other row reacting to the pointer', async function () {

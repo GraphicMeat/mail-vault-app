@@ -24,7 +24,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir, HTML_QUOTED_SUBJECT } from './mockImap.js';
+import { appDataDir, HTML_QUOTED_SUBJECT, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -86,12 +86,12 @@ describe('Email Viewer — vault copy under a reissued UID', function () {
     const cur = join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'INBOX', 'cur');
     mkdirSync(cur, { recursive: true });
     // `find_by_uid` (src-core/src/maildir.rs) matches on the `<uid>:` prefix.
-    writeFileSync(join(cur, `${target.uid}:seen:0.eml`), staleEml);
+    writeFileSync(join(cur, `${target.uid}${INFO_SEP}seen${INFO_SEP}0.eml`), staleEml);
   });
 
   it('seeded a vault file under the row own uid', async function () {
     const accountId = browser.mockAccounts.find((a) => a.email === LUKE).id;
-    const path = join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'INBOX', 'cur', `${target.uid}:seen:0.eml`);
+    const path = join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'INBOX', 'cur', `${target.uid}${INFO_SEP}seen${INFO_SEP}0.eml`);
     // Positive control: without this, the assertions below pass on an empty
     // vault — an absence assertion proves nothing until the container is
     // proven populated.

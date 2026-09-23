@@ -25,7 +25,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir } from './mockImap.js';
+import { appDataDir, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const DRAFT_UID = 900001; // Drafts starts empty in the fixture; far outside any synced uid range.
@@ -112,7 +112,7 @@ describe('Vault move — the daemon keeps custody, caches and the search index c
     if (!target) throw new Error('no unarchived Luke INBOX row to seed the vault with');
     ({ uid: seededUid, subject: seededSubject } = target);
     expect(await clickRowArchive(seededSubject)).toBe(true);
-    await browser.waitUntil(() => existsSync(cur) && readdirSync(cur).some((n) => n.startsWith(`${seededUid}:`)),
+    await browser.waitUntil(() => existsSync(cur) && readdirSync(cur).some((n) => n.startsWith(`${seededUid}${INFO_SEP}`)),
       { timeout: 30_000, interval: 300, timeoutMsg: `"${seededSubject}" (uid ${seededUid}) never reached the vault` });
 
     // Seed a local draft directly through the daemon (Task 2.8's `maildir_store`
