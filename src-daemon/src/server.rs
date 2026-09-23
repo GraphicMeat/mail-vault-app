@@ -741,7 +741,21 @@ impl DaemonState {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+
+    /// The two halves of a client connection to the real socket server,
+    /// scripted against the endpoint `mailvault_core::transport` also gives
+    /// production: a unix socket on unix, a named pipe on Windows. Both
+    /// underlying stream types implement `AsyncRead`/`AsyncWrite`, so
+    /// `tokio::io::split` (the same call production's `rpc_attempt_inner`
+    /// and `daemon_channel::connect` use) produces the same shape either way.
+    #[cfg(unix)]
+    type ConnRead = tokio::io::ReadHalf<tokio::net::UnixStream>;
+    #[cfg(unix)]
+    type ConnWrite = tokio::io::WriteHalf<tokio::net::UnixStream>;
+    #[cfg(windows)]
+    type ConnRead = tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>;
+    #[cfg(windows)]
+    type ConnWrite = tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>;
 
     fn scratch(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("mv-server-{name}-{}", uuid::Uuid::new_v4()));
@@ -1037,11 +1051,27 @@ mod tests {
     // ── The socket: handshake and framing ──────────────────────────────
 
     /// A short private dir: `run` chmods the socket's parent to 0700, and the
-    /// whole socket path must stay under SUN_LEN (104 bytes).
+    /// whole socket path must stay under SUN_LEN (104 bytes) on unix. Also
+    /// used on Windows as the state's `mail_dir`/`app_dir` — the pipe name
+    /// itself (`sock_path` below) lives outside the filesystem, so it does
+    /// not need this dir.
     fn sock_dir() -> PathBuf {
         let p = std::env::temp_dir().join(format!("mv-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]));
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    /// The endpoint `run` binds: a socket file under `dir` on unix, a
+    /// uniquely-named pipe on Windows (never the fixed per-user name
+    /// `transport::endpoint` derives — many `Served` instances run
+    /// concurrently across the test binary and must not collide on one).
+    #[cfg(unix)]
+    fn sock_path(dir: &Path) -> PathBuf {
+        dir.join("s.sock")
+    }
+    #[cfg(windows)]
+    fn sock_path(_dir: &Path) -> PathBuf {
+        PathBuf::from(format!(r"\\.\pipe\mailvault-test-{}", uuid::Uuid::new_v4()))
     }
 
     struct Served {
@@ -1054,24 +1084,32 @@ mod tests {
     impl Served {
         async fn start() -> Served {
             let dir = sock_dir();
-            let path = dir.join("s.sock");
+            let path = sock_path(&dir);
             let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
             let (s, p) = (Arc::clone(&state), path.clone());
             let task = tokio::spawn(async move {
                 let _ = run(s, &p).await;
             });
+            // `path.exists()` only works on unix (a Windows pipe name is not
+            // a filesystem entry — see `transport::is_listening`'s own doc
+            // comment); `is_listening` is the one check that is right on
+            // both.
             for _ in 0..200 {
-                if path.exists() {
+                if mailvault_core::transport::is_listening(&path) {
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
-            assert!(path.exists(), "server never bound {path:?}");
+            assert!(mailvault_core::transport::is_listening(&path), "server never bound {path:?}");
             Served { dir, path, state, task }
         }
 
-        async fn connect(&self) -> (tokio::io::Lines<BufReader<OwnedReadHalf>>, OwnedWriteHalf) {
-            let (r, w) = tokio::net::UnixStream::connect(&self.path).await.unwrap().into_split();
+        async fn connect(&self) -> (tokio::io::Lines<BufReader<ConnRead>>, ConnWrite) {
+            #[cfg(unix)]
+            let stream = tokio::net::UnixStream::connect(&self.path).await.unwrap();
+            #[cfg(windows)]
+            let stream = tokio::net::windows::named_pipe::ClientOptions::new().open(&self.path).unwrap();
+            let (r, w) = tokio::io::split(stream);
             (BufReader::new(r).lines(), w)
         }
 
@@ -1081,12 +1119,12 @@ mod tests {
         }
     }
 
-    async fn send(w: &mut OwnedWriteHalf, line: &str) {
+    async fn send(w: &mut ConnWrite, line: &str) {
         w.write_all(line.as_bytes()).await.unwrap();
         w.write_all(b"\n").await.unwrap();
     }
 
-    async fn recv(lines: &mut tokio::io::Lines<BufReader<OwnedReadHalf>>) -> Value {
+    async fn recv(lines: &mut tokio::io::Lines<BufReader<ConnRead>>) -> Value {
         let line = lines.next_line().await.unwrap().expect("server closed the connection");
         serde_json::from_str(&line).unwrap()
     }
@@ -1125,29 +1163,31 @@ mod tests {
     /// The socket is on its own thread and its own runtime: a ping is answered
     /// even when the runtime that started the server cannot run a single task.
     /// `#[tokio::test]` is `current_thread`, so a plain `std::thread::sleep`
-    /// in the test body parks it completely; the client is a blocking
-    /// `std::os::unix::net::UnixStream` on a plain thread, touching no runtime
-    /// at all. Before `spawn_on_own_thread` this could only hang.
+    /// in the test body parks it completely; the client is
+    /// `mailvault_core::transport::connect_sync` on a plain thread — a
+    /// blocking unix-socket or named-pipe handle, touching no runtime at all
+    /// either way. Before `spawn_on_own_thread` this could only hang.
     #[tokio::test]
     async fn the_server_answers_while_the_runtime_that_started_it_is_parked() {
         use std::io::{BufRead, Write};
 
         let dir = sock_dir();
-        let path = dir.join("s.sock");
+        let path = sock_path(&dir);
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
         let token = state.token.clone();
         super::spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| panic!("server died: {why}")).unwrap();
         for _ in 0..200 {
-            if path.exists() { break }
+            if mailvault_core::transport::is_listening(&path) { break }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-        assert!(path.exists(), "server never bound {path:?}");
+        assert!(mailvault_core::transport::is_listening(&path), "server never bound {path:?}");
 
         let (tx, rx) = std::sync::mpsc::channel();
         let socket = path.clone();
         let client = std::thread::spawn(move || {
-            let mut write = std::os::unix::net::UnixStream::connect(&socket).unwrap();
-            let mut read = std::io::BufReader::new(write.try_clone().unwrap());
+            let (read, mut write) =
+                mailvault_core::transport::connect_sync(&socket, std::time::Duration::from_secs(5)).unwrap();
+            let mut read = std::io::BufReader::new(read);
             writeln!(write, "{{\"token\":\"{token}\"}}").unwrap();
             let mut auth = String::new();
             read.read_line(&mut auth).unwrap();
@@ -1204,7 +1244,7 @@ mod tests {
 
     // ── channel.open ─────────────────────────────────────────────────
 
-    async fn open_channel(served: &Served) -> (tokio::io::Lines<BufReader<OwnedReadHalf>>, OwnedWriteHalf) {
+    async fn open_channel(served: &Served) -> (tokio::io::Lines<BufReader<ConnRead>>, ConnWrite) {
         let (mut lines, mut w) = served.connect().await;
         send(&mut w, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
         recv(&mut lines).await;

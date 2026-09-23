@@ -4325,14 +4325,57 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Task 1.6b fix round 1 (I2, M3): rpc_attempt's retryable classification
-    // and the whole-call timeout, against a scripted UnixListener. No
+    // and the whole-call timeout, against a scripted mock daemon. No
     // AppHandle needed — rpc_attempt takes only a socket path and a token.
+    // The mock listens over the same endpoint `mailvault_core::transport`
+    // gives the real daemon: a unix socket file on unix, a named pipe on
+    // Windows.
     // -----------------------------------------------------------------------
 
     fn tmp_socket_path() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
         let path = dir.path().join("mv.sock");
+        #[cfg(windows)]
+        let path = std::path::PathBuf::from(format!(r"\\.\pipe\mailvault-test-{}", uuid::Uuid::new_v4()));
         (dir, path)
+    }
+
+    /// The one-shot mock listener a test scripts a fake daemon reply on.
+    /// Created synchronously, before the client ever gets to dial: on unix
+    /// `bind` alone starts listening (the client can connect before
+    /// `accept()` runs), and a Windows named pipe *instance* is the listener
+    /// — `create()` is what makes the name dialable at all, `connect()`
+    /// below is only the handshake. Doing this before `tokio::spawn` is load
+    /// bearing: a mock built inside the spawned task races the client, and
+    /// on Windows a lost race reads as "no daemon" instead of exercising
+    /// whatever the mock was scripted to say.
+    #[cfg(unix)]
+    fn mock_listen(path: &std::path::Path) -> tokio::net::UnixListener {
+        tokio::net::UnixListener::bind(path).unwrap()
+    }
+    #[cfg(windows)]
+    fn mock_listen(path: &std::path::Path) -> tokio::net::windows::named_pipe::NamedPipeServer {
+        tokio::net::windows::named_pipe::ServerOptions::new()
+            .first_pipe_instance(true)
+            .create(path.to_string_lossy().as_ref())
+            .unwrap()
+    }
+
+    /// Accept the mock's one connection and split it for line-based IO, the
+    /// same `tokio::io::split` production's `rpc_attempt_inner` and
+    /// `daemon_channel::connect` use for their own client halves.
+    #[cfg(unix)]
+    async fn mock_accept(listener: tokio::net::UnixListener) -> (impl tokio::io::AsyncRead + Unpin, impl tokio::io::AsyncWrite + Unpin) {
+        let (stream, _) = listener.accept().await.unwrap();
+        tokio::io::split(stream)
+    }
+    #[cfg(windows)]
+    async fn mock_accept(
+        listener: tokio::net::windows::named_pipe::NamedPipeServer,
+    ) -> (impl tokio::io::AsyncRead + Unpin, impl tokio::io::AsyncWrite + Unpin) {
+        listener.connect().await.unwrap();
+        tokio::io::split(listener)
     }
 
     #[tokio::test]
@@ -4347,18 +4390,23 @@ mod tests {
     #[tokio::test]
     async fn rpc_attempt_is_retryable_when_auth_is_rejected() {
         let (_dir, path) = tmp_socket_path();
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = mock_listen(&path);
         tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-            let (stream, _) = listener.accept().await.unwrap();
-            let (r, mut w) = stream.into_split();
+            let (r, mut w) = mock_accept(listener).await;
             let mut lines = BufReader::new(r).lines();
             let _auth_line = lines.next_line().await.unwrap();
             w.write_all(b"{\"error\":\"bad token\"}\n").await.unwrap();
         });
 
+        // Assert the specific message, not just retryable: true — a failed
+        // *connect* (no mock reached at all, e.g. a lost create/dial race on
+        // a Windows named pipe) also comes back retryable: true, which would
+        // let this test pass without ever exercising the auth-rejected path.
         match rpc_attempt(&path, "tok", "sync.now", &serde_json::json!({}), None).await {
-            RpcOutcome::Unavailable { retryable: true, .. } => {}
+            RpcOutcome::Unavailable { retryable: true, message } => {
+                assert_eq!(message, "daemon authentication failed");
+            }
             other => panic!("expected a retryable Unavailable, got {other:?}"),
         }
     }
@@ -4372,11 +4420,10 @@ mod tests {
     #[tokio::test]
     async fn rpc_attempt_is_not_retryable_once_the_request_was_sent_and_the_server_drops() {
         let (_dir, path) = tmp_socket_path();
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = mock_listen(&path);
         tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-            let (stream, _) = listener.accept().await.unwrap();
-            let (r, mut w) = stream.into_split();
+            let (r, mut w) = mock_accept(listener).await;
             let mut lines = BufReader::new(r).lines();
             let _auth_line = lines.next_line().await.unwrap();
             w.write_all(b"{}\n").await.unwrap();
@@ -4393,11 +4440,10 @@ mod tests {
     #[tokio::test]
     async fn rpc_attempt_maps_method_not_found_to_the_outdated_key() {
         let (_dir, path) = tmp_socket_path();
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = mock_listen(&path);
         tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-            let (stream, _) = listener.accept().await.unwrap();
-            let (r, mut w) = stream.into_split();
+            let (r, mut w) = mock_accept(listener).await;
             let mut lines = BufReader::new(r).lines();
             let _auth_line = lines.next_line().await.unwrap();
             w.write_all(b"{}\n").await.unwrap();
@@ -4421,11 +4467,10 @@ mod tests {
             (&b"{}\n"[..], serde_json::Value::Null),
         ] {
             let (_dir, path) = tmp_socket_path();
-            let listener = tokio::net::UnixListener::bind(&path).unwrap();
+            let listener = mock_listen(&path);
             tokio::spawn(async move {
                 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-                let (stream, _) = listener.accept().await.unwrap();
-                let (r, mut w) = stream.into_split();
+                let (r, mut w) = mock_accept(listener).await;
                 let mut lines = BufReader::new(r).lines();
                 let _auth_line = lines.next_line().await.unwrap();
                 w.write_all(b"{}\n").await.unwrap();
@@ -4446,11 +4491,10 @@ mod tests {
     #[tokio::test]
     async fn rpc_attempt_response_timeout_is_bounded_and_not_retryable() {
         let (_dir, path) = tmp_socket_path();
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = mock_listen(&path);
         tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-            let (stream, _) = listener.accept().await.unwrap();
-            let (r, mut w) = stream.into_split();
+            let (r, mut w) = mock_accept(listener).await;
             let mut lines = BufReader::new(r).lines();
             let _auth_line = lines.next_line().await.unwrap();
             w.write_all(b"{}\n").await.unwrap();
@@ -4475,9 +4519,9 @@ mod tests {
     #[tokio::test]
     async fn rpc_attempt_auth_timeout_is_bounded_and_not_retryable() {
         let (_dir, path) = tmp_socket_path();
-        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let listener = mock_listen(&path);
         tokio::spawn(async move {
-            let (_stream, _) = listener.accept().await.unwrap(); // accepted, never read, never replied
+            let (_r, _w) = mock_accept(listener).await; // accepted, never read, never replied
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         });
 

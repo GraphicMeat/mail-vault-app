@@ -526,18 +526,20 @@ mod tests {
     /// A save that fails must not eat the messages it was carrying. The worker
     /// used to drop the item it had just classified and move on, so a transient
     /// bad path lost every message for the life of the process.
+    ///
+    /// The failure is injected with a directory sitting where `app.db` needs
+    /// to be, not a permission bit: `Connection::open` cannot create a file
+    /// there on either platform, where a read-only mode bit is a unix
+    /// concept Windows ACLs do not map onto the same way.
     #[tokio::test]
     async fn a_failed_flush_keeps_its_messages_until_a_later_one_succeeds() {
         let mail_dir = scratch("flush-fail-mail");
         let app_dir = scratch("flush-fail-app");
-        // A read-only app dir: `app.db` cannot be created, so every save fails.
-        // Set before the state is built, or the store would already be open.
-        let mut perms = std::fs::metadata(&app_dir).unwrap().permissions();
-        {
-            use std::os::unix::fs::PermissionsExt;
-            perms.set_mode(0o500);
-            std::fs::set_permissions(&app_dir, perms.clone()).unwrap();
-        }
+        // Set before the state is built, or the store would already be open
+        // (`ClassificationState::new` loads the persisted queue on
+        // construction; a failed open there is tolerated as "no queue").
+        let db_path = app_dir.join("app.db");
+        std::fs::create_dir_all(&db_path).unwrap();
 
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
         let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), no_rules()));
@@ -559,12 +561,8 @@ mod tests {
             progress.status
         );
 
-        // Give the directory back and hand the worker one more message.
-        {
-            use std::os::unix::fs::PermissionsExt;
-            perms.set_mode(0o700);
-            std::fs::set_permissions(&app_dir, perms).unwrap();
-        }
+        // Give the path back and hand the worker one more message.
+        std::fs::remove_dir(&db_path).unwrap();
         state
             .classification
             .enqueue("acc1", vec![header(3)], classification::QueueTier::New)
