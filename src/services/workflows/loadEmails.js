@@ -167,17 +167,17 @@ export async function loadEmails() {
       archivedEmailIds = get().archivedEmailIds;
       cachedHeaders = await db.getEmailHeadersMeta(activeAccountId, activeMailbox);
     } else {
-      let rawArchivedEmailIds;
-      [savedEmailIds, rawArchivedEmailIds, cachedHeaders] = await Promise.all([
-        db.getSavedEmailIds(activeAccountId, activeMailbox),
-        db.getArchivedEmailIds(activeAccountId, activeMailbox),
+      let vault;
+      [vault, cachedHeaders] = await Promise.all([
+        db.getVaultUidSets(activeAccountId, activeMailbox),
         db.getEmailHeadersMeta(activeAccountId, activeMailbox),
       ]);
-      // I-5: `null` means "could not read" — keep the store's current value
+      // I-5: `null` means "could not read" — keep the store's current values
       // rather than adopting "nothing is archived" (this disarms the
       // empty-server guard and re-downloads the whole mailbox further down).
-      archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
-      setArchivedGroup(activeAccountId, activeMailbox, rawArchivedEmailIds);
+      savedEmailIds = vault?.saved ?? get().savedEmailIds;
+      archivedEmailIds = vault?.archived ?? get().archivedEmailIds;
+      setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
     }
     if (isStale()) return;
     loadTrace.mark('cache-meta-ready', {
@@ -808,15 +808,13 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   await _restoreGraphIdMap(activeAccountId, activeMailbox);
   if (isStale()) return;
 
-  const [savedEmailIds, rawArchivedEmailIds] = await Promise.all([
-    db.getSavedEmailIds(activeAccountId, activeMailbox),
-    db.getArchivedEmailIds(activeAccountId, activeMailbox),
-  ]);
+  const vault = await db.getVaultUidSets(activeAccountId, activeMailbox);
   if (isStale()) return;
-  // I-5: keep the store's current value on a failed read instead of
-  // adopting "nothing is archived".
-  const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
-  setArchivedGroup(activeAccountId, activeMailbox, rawArchivedEmailIds);
+  // I-5: keep the store's current values on a failed read instead of
+  // adopting "nothing is in the vault".
+  const savedEmailIds = vault?.saved ?? get().savedEmailIds;
+  const archivedEmailIds = vault?.archived ?? get().archivedEmailIds;
+  setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
   useMailStore.setState({ savedEmailIds, archivedEmailIds });
 
   if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {

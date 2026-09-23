@@ -188,14 +188,22 @@ export async function saveEmailLocally(uid) {
     }
 
     if (!isUnified) {
-      const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
-      const rawArchivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
+      const [vault, localEmails] = await Promise.all([
+        db.getVaultUidSets(accountId, mailbox),
+        db.getLocalEmails(accountId, mailbox),
+      ]);
       // I-5: `null` means "could not read" — keep whatever the store already
-      // had rather than adopting "nothing is archived".
-      const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
-      const localEmails = await db.getLocalEmails(accountId, mailbox);
-      setArchivedGroup(accountId, mailbox, rawArchivedEmailIds);
-      useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
+      // had rather than adopting "the vault holds nothing".
+      setArchivedGroup(accountId, mailbox, vault?.archived ?? null);
+      // The reads yielded: publish only onto the folder they describe.
+      const live = get();
+      if (live.activeAccountId === accountId && live.activeMailbox === mailbox) {
+        useMailStore.setState({
+          savedEmailIds: vault?.saved ?? live.savedEmailIds,
+          archivedEmailIds: vault?.archived ?? live.archivedEmailIds,
+          localEmails: localEmails ?? live.localEmails,
+        });
+      }
     }
     get().updateSortedEmails();
   } catch (error) {
@@ -383,36 +391,38 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   const spans = spansMailboxes(state);
   if (!spans && (accountId !== state.activeAccountId || mailbox !== state.activeMailbox)) return;
 
-  const [saved, archived] = await Promise.all([
-    db.getSavedEmailIds(accountId, mailbox),
-    db.getArchivedEmailIds(accountId, mailbox),
-  ]);
+  const vault = await db.getVaultUidSets(accountId, mailbox);
   let locals = await db.readLocalEmailIndex(accountId, mailbox);
   if (!locals) locals = await db.getLocalEmails(accountId, mailbox);
 
-  // I-5: `archived === null` means "could not read", so keep this group's
-  // own last-known ids (setArchivedGroup skips a null write) rather than
-  // adopting "nothing is archived".
-  setArchivedGroup(accountId, mailbox, archived);
+  // I-5: an unknown read (`null`) keeps this group's own last-known ids
+  // (setArchivedGroup skips a null write) rather than adopting "nothing is
+  // archived"; unknown saved ids and rows keep the store's, below.
+  setArchivedGroup(accountId, mailbox, vault?.archived ?? null);
 
+  // The reads yielded: the view may have moved since `state` was taken.
+  const s = get();
+  if (spansMailboxes(s) !== spans) return;
   if (!spans) {
-    const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, [[accountId, mailbox]]);
-    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds, localEmails: locals });
+    if (accountId !== s.activeAccountId || mailbox !== s.activeMailbox) return;
+    const archivedEmailIds = deriveArchivedUnion(s.archivedEmailIds, [[accountId, mailbox]]);
+    useMailStore.setState({ savedEmailIds: vault?.saved ?? s.savedEmailIds, archivedEmailIds, localEmails: locals ?? s.localEmails });
     get().updateSortedEmails();
     return;
   }
 
-  const s = get();
   const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
   useMailStore.setState({
-    savedEmailIds: new Set([...s.savedEmailIds, ...saved]),
+    savedEmailIds: new Set([...s.savedEmailIds, ...(vault?.saved || [])]),
     // A spanning view only grows as groups come into it, so merge this
     // group's cached ids (never the whole map) into the existing union.
     archivedEmailIds: mergeArchivedGroup(s.archivedEmailIds, accountId, mailbox),
-    localEmails: [
-      ...(s.localEmails || []).filter(e => !own(e)),
-      ...locals.map(e => ({ ...e, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
-    ],
+    ...(locals ? {
+      localEmails: [
+        ...(s.localEmails || []).filter(e => !own(e)),
+        ...locals.map(e => ({ ...e, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
+      ],
+    } : {}),
   });
   get().updateSortedEmails();
 }
@@ -516,11 +526,15 @@ export async function removeLocalEmail(uidOrKey, location = null) {
     console.warn('[mailStore] Failed to remove the custody entry:', e);
   }
 
-  const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
-  const rawArchivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
-  const storedLocalEmails = await db.getLocalEmails(accountId, mailbox);
+  const [vault, storedLocalEmails] = await Promise.all([
+    db.getVaultUidSets(accountId, mailbox),
+    db.getLocalEmails(accountId, mailbox),
+  ]);
+  // Unknown (`null`) falls through to the `??` fallbacks below, which keep
+  // the store's own rows and ids minus the removed uid.
+  const savedEmailIds = vault?.saved ?? null;
   const targetLocalEmails = storedLocalEmails?.filter(email => String(email.uid) !== String(uid));
-  setArchivedGroup(accountId, mailbox, rawArchivedEmailIds);
+  setArchivedGroup(accountId, mailbox, vault?.archived ?? null);
 
   const live = get();
   const liveSpans = spansMailboxes(live);
@@ -542,7 +556,9 @@ export async function removeLocalEmail(uidOrKey, location = null) {
   const readerStillNames = selectionStillNames(get, { uid, accountId, mailbox });
 
   if (activeFolder || targetInView) {
-    let nextSavedEmailIds = savedEmailIds ?? live.savedEmailIds;
+    // Unknown keeps the store's ids minus the one just removed, the same
+    // fallback the rows take on the next line.
+    let nextSavedEmailIds = savedEmailIds ?? new Set([...(live.savedEmailIds || [])].filter(id => String(id) !== String(uid)));
     let nextLocalEmails = targetLocalEmails ?? (live.localEmails || []).filter(email => !isTargetRow(email) || String(email.uid) !== String(uid));
     let viewPairs = [[accountId, mailbox]];
 
@@ -1130,7 +1146,7 @@ export async function applyServerRemoval(uid, {
   let archivedLocally = false;
   if (deletedByUs) {
     try {
-      const archivedIds = await db.getArchivedEmailIds(accountId, mailbox);
+      const archivedIds = (await db.getVaultUidSets(accountId, mailbox))?.archived;
       // I-5: `null` means "could not read" — the exact case this fail-closed
       // guard exists for. Route it through the same catch as a thrown error
       // instead of letting `.has` on `null` throw by accident.
@@ -2299,15 +2315,22 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const activeMailboxKey = state.activeMailbox === 'UNIFIED' ? 'INBOX' : state.activeMailbox;
   const activeGroup = groups.get(`${state.activeAccountId}|${activeMailboxKey}`);
   if (activeGroup) {
-    const [savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
-      db.getSavedEmailIds(activeGroup.accountId, activeGroup.mailbox),
-      db.getArchivedEmailIds(activeGroup.accountId, activeGroup.mailbox),
+    const [vault, localEmails] = await Promise.all([
+      db.getVaultUidSets(activeGroup.accountId, activeGroup.mailbox),
       db.getLocalEmails(activeGroup.accountId, activeGroup.mailbox),
     ]);
     // I-5: keep the store's current value on a failed read instead of
-    // adopting "nothing is archived".
-    setArchivedGroup(activeGroup.accountId, activeGroup.mailbox, archivedEmailIds);
-    useMailStore.setState({ savedEmailIds, archivedEmailIds: archivedEmailIds ?? get().archivedEmailIds, localEmails });
+    // adopting "nothing is in the vault".
+    setArchivedGroup(activeGroup.accountId, activeGroup.mailbox, vault?.archived ?? null);
+    // The purge and these reads yielded: publish only onto the view it began in.
+    const live = get();
+    if (live.activeAccountId === state.activeAccountId && live.activeMailbox === state.activeMailbox) {
+      useMailStore.setState({
+        savedEmailIds: vault?.saved ?? live.savedEmailIds,
+        archivedEmailIds: vault?.archived ?? live.archivedEmailIds,
+        localEmails: localEmails ?? live.localEmails,
+      });
+    }
   }
   get().updateSortedEmails();
 

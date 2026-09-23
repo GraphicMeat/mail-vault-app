@@ -226,8 +226,12 @@ class EmailPipelineManager {
       // Use in-memory headers from header loading phase (avoids re-reading from disk)
       const emails = pipeline._lastLoadedEmails;
       if (emails && emails.length > 0) {
-        const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
-        const uids = this._getUncachedUids(emails, savedIds, localCacheDurationMonths);
+        const vault = await db.getVaultUidSets(account.id, 'INBOX');
+        // Unknown is not "nothing saved": treating it so re-fetched every
+        // cached body. Skip this account unmarked; the next cascade retries.
+        // `continue`, never `return`: _backgroundContentRunning must reset.
+        if (!vault) continue;
+        const uids = this._getUncachedUids(emails, vault.saved, localCacheDurationMonths);
         // Start caching first, THEN await completion — avoids race where
         // synchronous onComplete fires before waitForComplete sets up its promise.
         // Empty list: nothing to fetch, but the attachment prefetch still runs.
@@ -394,8 +398,10 @@ class EmailPipelineManager {
       (pipeline._phase === 'idle' || pipeline._phase === 'done')
     ) {
       const { localCacheDurationMonths } = useSettingsStore.getState();
-      const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
-      const uids = this._getUncachedUids(emails, savedIds, localCacheDurationMonths);
+      const vault = await db.getVaultUidSets(account.id, 'INBOX');
+      // Unknown: fetch nothing rather than re-fetch every cached body.
+      if (!vault || pipeline._destroyed || this._destroyed) return;
+      const uids = this._getUncachedUids(emails, vault.saved, localCacheDurationMonths);
       if (uids.length > 0) pipeline.startContentCaching(uids, 'INBOX');
     }
   }

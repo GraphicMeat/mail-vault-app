@@ -19,6 +19,7 @@ vi.mock('../../stores/settingsStore', () => ({
 vi.mock('../db', () => ({
   getSavedEmailIds: () => Promise.resolve(new Set()),
   getArchivedEmailIds: () => Promise.resolve(new Set()),
+  getVaultUidSets: () => Promise.resolve({ saved: new Set(), archived: new Set() }),
   getEmailHeadersMeta: vi.fn(),
   getEmailHeadersPartial: vi.fn(),
   saveEmailHeaders: vi.fn().mockResolvedValue(undefined),

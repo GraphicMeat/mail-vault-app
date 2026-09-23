@@ -21,6 +21,7 @@ vi.mock('../../services/db', () => ({
   accountLogicalKey,
   getSavedEmailIds: () => Promise.resolve(new Set()),
   getArchivedEmailIds: () => Promise.resolve(new Set()),
+  getVaultUidSets: () => Promise.resolve({ saved: new Set(), archived: new Set() }),
 }));
 
 const mockTestConnection = vi.fn().mockResolvedValue({ success: true });

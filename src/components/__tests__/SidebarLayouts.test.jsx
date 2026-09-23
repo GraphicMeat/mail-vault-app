@@ -13,6 +13,7 @@ vi.mock('../../services/workflows/loadSubtree', () => ({ openFolder: vi.fn() }))
 vi.mock('../../services/db', async importOriginal => ({
   ...await importOriginal(), getSavedEmailIds: async () => new Set(),
   getArchivedEmailIds: async () => new Set(), readLocalEmailIndex: async () => [],
+  getVaultUidSets: async () => ({ saved: new Set(), archived: new Set() }),
 }));
 const accounts = [
   { id: 'studio', name: 'Studio', email: 'studio@example.com', authType: 'password' },

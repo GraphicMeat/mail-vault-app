@@ -625,11 +625,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // check, so a hit costs nothing extra and a miss costs nothing either.
       // Before the meta read: rows read after it are at least this fresh.
       const readAt = Date.now();
-      const [memoMeta, rawArchivedEmailIds, savedEmailIds] = await Promise.all([
+      const [memoMeta, vault] = await Promise.all([
         db.getEmailHeadersMeta(accountId, effectiveMailbox),
-        db.getArchivedEmailIds(accountId, effectiveMailbox),
-        db.getSavedEmailIds(accountId, effectiveMailbox),
+        db.getVaultUidSets(accountId, effectiveMailbox),
       ]);
+      const rawArchivedEmailIds = vault?.archived ?? null;
       if (signal.aborted) return;
       // I-5: `null` means "could not read" — fall back to the store's current
       // archivedEmailIds rather than adopting "nothing is archived". By the
@@ -640,6 +640,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // builders emit `firstWindowArchivedUids`, capped at ~50 uids), so that
       // fallback silently collapsed to `new Set()` on every failed read.
       const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds ?? new Set();
+      // Same rule for the saved ids: unknown keeps THIS account's store value.
+      const savedEmailIds = vault?.saved ?? get().savedEmailIds ?? new Set();
 
       // On a stamp mismatch this re-reads only the sidecars that moved (readdir
       // + mtime, then one read per changed UID) instead of discarding the set —

@@ -428,33 +428,34 @@ export class AccountPipeline {
     const { activeAccountId, activeMailbox } = useMailStore.getState();
     if (this.accountId === activeAccountId && mailbox === activeMailbox) {
       try {
-        const [newSavedIds, rawArchivedIds] = await Promise.all([
-          db.getSavedEmailIds(activeAccountId, activeMailbox),
-          db.getArchivedEmailIds(activeAccountId, activeMailbox),
-        ]);
-        // I-5: keep the store's current value on a failed read instead of
-        // adopting "nothing is archived".
-        const newArchivedIds = rawArchivedIds ?? useMailStore.getState().archivedEmailIds;
-        setArchivedGroup(activeAccountId, activeMailbox, rawArchivedIds);
-        useMailStore.setState({
-          savedEmailIds: newSavedIds,
-          archivedEmailIds: newArchivedIds,
-        });
-        // Refresh archived emails from disk (async Rust, won't freeze UI)
-        if (newArchivedIds.size > 0) {
-          db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds, (batchEmails) => {
-            const current = useMailStore.getState();
-            if (current.activeAccountId !== activeAccountId) return;
-            useMailStore.setState({ localEmails: batchEmails });
-            useMailStore.getState().updateSortedEmails();
-          }).catch(() => {});
-        }
-        useMailStore.getState().updateSortedEmails();
+        const vault = await db.getVaultUidSets(activeAccountId, activeMailbox);
+        // The read yielded: a view switched to since owns the store now.
+        const live = useMailStore.getState();
+        if (live.activeAccountId === activeAccountId && live.activeMailbox === activeMailbox) {
+          // I-5: an unknown read (`null`) keeps the store's current saved and
+          // archived values instead of adopting "nothing is in the vault".
+          const newArchivedIds = vault?.archived ?? live.archivedEmailIds;
+          setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
+          useMailStore.setState({
+            savedEmailIds: vault?.saved ?? live.savedEmailIds,
+            archivedEmailIds: newArchivedIds,
+          });
+          // Refresh archived emails from disk (async Rust, won't freeze UI)
+          if (newArchivedIds.size > 0) {
+            db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds, (batchEmails) => {
+              const current = useMailStore.getState();
+              if (current.activeAccountId !== activeAccountId) return;
+              useMailStore.setState({ localEmails: batchEmails });
+              useMailStore.getState().updateSortedEmails();
+            }).catch(() => {});
+          }
+          useMailStore.getState().updateSortedEmails();
 
-        // Persist updated hasAttachments values to headers cache
-        const { emails, totalEmails } = useMailStore.getState();
-        db.saveEmailHeaders(activeAccountId, activeMailbox, emails, totalEmails)
-          .catch(e => console.warn(`[Pipeline:${this.account.email}] Failed to save updated headers:`, e));
+          // Persist updated hasAttachments values to headers cache
+          const { emails, totalEmails } = useMailStore.getState();
+          db.saveEmailHeaders(activeAccountId, activeMailbox, emails, totalEmails)
+            .catch(e => console.warn(`[Pipeline:${this.account.email}] Failed to save updated headers:`, e));
+        }
       } catch (e) {
         console.warn(`[Pipeline:${this.account.email}] Failed to refresh saved IDs:`, e);
       }

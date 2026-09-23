@@ -48,6 +48,7 @@ vi.mock('../../stores/settingsStore', () => ({
 
 vi.mock('../db', () => ({
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
+  getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
 }));
@@ -60,6 +61,7 @@ vi.mock('../graphConfig', () => ({
 vi.mock('../../utils/sentFolder', () => ({ waitForSentMailboxPath: vi.fn().mockResolvedValue('Sent') }));
 
 const { pipelineManager } = await import('../EmailPipelineManager');
+const db = await import('../db');
 
 const LUKE = { id: 'luke', email: 'luke@x' };
 const YODA = { id: 'yoda', email: 'yoda@x' };
@@ -149,5 +151,44 @@ describe('the active account pipeline in a view that spans mailboxes', () => {
     // `activeMailbox` too.
     expect(resume).toHaveBeenCalledWith('INBOX');
     expect(resume).not.toHaveBeenCalledWith('UNIFIED');
+  });
+});
+
+// Unknown is not "nothing saved". The old getter answered a failed vault read
+// with an empty Set, so every cached INBOX body was queued for a re-fetch.
+describe('the content cascade on an unknown vault read', () => {
+  const idlePipeline = () => ({
+    _destroyed: false, _phase: 'idle', _lastLoadedEmails: [{ uid: 5, date: '2026-09-01T10:00:00Z' }],
+    startContentCaching, waitForComplete: () => Promise.resolve(),
+  });
+
+  it('skips the account, leaves it un-walked for the next cascade, and lets the next cascade run', async () => {
+    store.state = { accounts: [LUKE, YODA], activeMailbox: 'INBOX', emails: [], savedEmailIds: new Set() };
+    pipelineManager._activeAccountId = 'luke';
+    pipelineManager._backgroundContentRunning = false;
+    pipelineManager.pipelines.set('yoda', idlePipeline());
+    db.getVaultUidSets.mockResolvedValueOnce(null);
+
+    await pipelineManager._startBackgroundContentPipelines();
+
+    expect(startContentCaching).not.toHaveBeenCalled();
+    expect(pipelineManager._contentCascadeDone.has('yoda')).toBe(false);
+    expect(pipelineManager._backgroundContentRunning).toBe(false);
+
+    // The next cascade, with a known answer, walks it.
+    await pipelineManager._startBackgroundContentPipelines();
+    expect(startContentCaching).toHaveBeenCalledWith([5], 'INBOX');
+    expect(pipelineManager._contentCascadeDone.has('yoda')).toBe(true);
+  });
+
+  it('fetches nothing for a header refresh when the vault read is unknown', async () => {
+    store.state = { accounts: [LUKE, YODA], activeMailbox: 'INBOX', emails: [], savedEmailIds: new Set(), getSentMailboxPath: () => 'Sent' };
+    pipelineManager._activeAccountId = 'luke';
+    pipelineManager._contentCascadeDone.add('yoda');
+    db.getVaultUidSets.mockResolvedValueOnce(null);
+
+    await pipelineManager._onHeadersRefreshed(YODA, idlePipeline(), 'INBOX', [{ uid: 5, date: '2026-09-01T10:00:00Z' }]);
+
+    expect(startContentCaching).not.toHaveBeenCalled();
   });
 });

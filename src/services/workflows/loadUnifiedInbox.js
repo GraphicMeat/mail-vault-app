@@ -268,6 +268,9 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   const allLocalEmails = [];
   const allSavedIds = new Set();
+  // Accounts whose vault read came back unknown keep what the store holds.
+  let savedUnknown = false;
+  const localsUnknown = [];
   // Every viewed account contributes one pair, resolved the same way
   // resolvedPathsByAccount already was above. A pair with no cached group
   // entry just contributes nothing to the derived union (see
@@ -279,17 +282,17 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     .map(async (account) => {
       try {
         const localFolder = resolvedPathsByAccount.get(account.id) || targetFolder;
-        const [saved, archived] = await Promise.all([
-          db.getSavedEmailIds(account.id, localFolder),
-          db.getArchivedEmailIds(account.id, localFolder),
-        ]);
+        const vault = await db.getVaultUidSets(account.id, localFolder);
         let locals = await db.readLocalEmailIndex(account.id, localFolder);
         if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
-        for (const uid of saved) allSavedIds.add(uid);
-        // I-5: `archived === null` means "could not read", so keep this
-        // group's own last-known ids (setArchivedGroup skips a null write)
-        // instead of the whole unified pass losing this one account.
-        setArchivedGroup(account.id, localFolder, archived);
+        if (vault) for (const uid of vault.saved) allSavedIds.add(uid);
+        else savedUnknown = true;
+        // I-5: a null (unknown) read keeps this group's own last-known ids
+        // (setArchivedGroup skips a null write) instead of the whole unified
+        // pass losing this one account.
+        setArchivedGroup(account.id, localFolder, vault?.archived ?? null);
+        // Unknown rows: skip this account's merge, keep its rows on screen.
+        if (!locals) { localsUnknown.push([account.id, localFolder]); return; }
         for (const e of locals) {
           allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
         }
@@ -298,10 +301,12 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   await Promise.all(localPromises);
 
   if (signal.aborted) return;
-  const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, viewPairs);
+  const live = get();
+  const archivedEmailIds = deriveArchivedUnion(live.archivedEmailIds, viewPairs);
+  const kept = (live.localEmails || []).filter(e => localsUnknown.some(([a, m]) => e._accountId === a && e._mailbox === m));
   useMailStore.setState({
-    localEmails: allLocalEmails,
-    savedEmailIds: allSavedIds,
+    localEmails: [...allLocalEmails, ...kept],
+    savedEmailIds: savedUnknown ? new Set([...(live.savedEmailIds || []), ...allSavedIds]) : allSavedIds,
     archivedEmailIds,
   });
   get().updateSortedEmails();

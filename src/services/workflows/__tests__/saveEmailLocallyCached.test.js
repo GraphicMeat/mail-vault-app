@@ -36,6 +36,14 @@ vi.mock('../../db', () => ({
   archiveEmail: (...a) => mockArchiveEmail(...a),
   getSavedEmailIds: (...a) => mockGetSavedEmailIds(...a),
   getArchivedEmailIds: (...a) => mockGetArchivedEmailIds(...a),
+  // The registry read the callers use now, derived from the two getters
+  // above so every test's per-case values still drive it (null archived =
+  // the whole read unknown).
+  getVaultUidSets: async (...a) => {
+    const archived = await mockGetArchivedEmailIds(...a);
+    if (archived == null) return null;
+    return { saved: (await mockGetSavedEmailIds(...a)) ?? new Set(), archived };
+  },
   getLocalEmails: vi.fn().mockResolvedValue([]),
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),

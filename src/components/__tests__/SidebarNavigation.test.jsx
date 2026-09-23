@@ -13,6 +13,7 @@ vi.mock('../../services/db', async importOriginal => ({
   ...await importOriginal(),
   getSavedEmailIds: async () => new Set(),
   getArchivedEmailIds: async () => new Set(),
+  getVaultUidSets: async () => ({ saved: new Set(), archived: new Set() }),
   readLocalEmailIndex: async () => [],
 }));
 

@@ -34,6 +34,14 @@ vi.mock('../../services/db', () => ({
   getEmailHeadersPartial: (...args) => mockGetEmailHeadersPartial(...args),
   getArchivedEmailIds: (...args) => mockGetArchivedEmailIds(...args),
   getSavedEmailIds: (...args) => mockGetSavedEmailIds(...args),
+  // The registry read the callers use now, derived from the two getters
+  // above so every test's per-case values still drive it (null archived =
+  // the whole read unknown).
+  getVaultUidSets: async (...args) => {
+    const archived = await mockGetArchivedEmailIds(...args);
+    if (archived == null) return null;
+    return { saved: (await mockGetSavedEmailIds(...args)) ?? new Set(), archived };
+  },
   getCachedMailboxEntry: (...args) => mockGetCachedMailboxEntry(...args),
   initDB: (...args) => mockInitDB(...args),
   getAccounts: (...args) => mockGetAccounts(...args),

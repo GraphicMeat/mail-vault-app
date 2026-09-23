@@ -38,6 +38,7 @@ vi.mock('../../db', () => ({
   archiveEmail: (...a) => mockArchiveEmail(...a),
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
+  getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   getLocalEmails: vi.fn().mockResolvedValue([]),
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
