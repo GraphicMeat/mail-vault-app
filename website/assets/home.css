@@ -95,3 +95,5 @@
   .mv-wrap { padding-inline:16px; }
 }
 @media (prefers-reduced-motion:reduce) { .hm-benefits a,.hm-cards a { transition:none; } }
+.hm-table thead small a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
+.hm-table thead small a:hover { color:var(--mv-accent); }
