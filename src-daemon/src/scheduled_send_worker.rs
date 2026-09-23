@@ -218,9 +218,14 @@ pub(crate) async fn attempt_row(state: &Arc<DaemonState>, row: &scheduled::Sched
 
     let (status, error) = match send_one(state, row).await {
         Outcome::Sent => {
-            if let Err(e) = crate::handlers::common::with_mailbox_write(state, &row.account_id, &row.mailbox, |root| {
-                vault_files::delete(&state.vault_registry, root, &row.account_id, &row.mailbox, row.uid)
-            }) {
+            // The delete can list the mailbox under its lock: off the runtime.
+            let (st, account_id, mailbox, uid) = (Arc::clone(state), row.account_id.clone(), row.mailbox.clone(), row.uid);
+            let removed = crate::handlers::common::blocking(move || {
+                crate::handlers::common::with_mailbox_write(&st, &account_id, &mailbox, |root| {
+                    vault_files::delete(&st.vault_registry, root, &account_id, &mailbox, uid)
+                })
+            });
+            if let Err(e) = removed.await.and_then(|r| r) {
                 warn!("[scheduled-send] sent {id} but could not remove the frozen draft: {e}");
             }
             ("sent", String::new())
