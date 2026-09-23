@@ -837,7 +837,6 @@
   "keychainGate.title": "Desbloquea tu llavero",
   "keychainGate.body": "MailVault guarda las contraseñas de tus cuentas en el llavero de macOS. El llavero está bloqueado, o macOS espera tu permiso, así que el asistente en segundo plano de MailVault no puede iniciar sesión en tus servidores de correo. La sincronización y los envíos programados están en pausa hasta que pueda hacerlo.",
   "keychainGate.hint": "Haz clic en «Desbloquear». macOS te pedirá tu contraseña de inicio de sesión. Si pregunta si mailvault-daemon puede usar el elemento, elige «Permitir siempre».",
-  "keychainGate.error.timeout": "macOS no respondió a tiempo. Vuelve a hacer clic en «Desbloquear» y responde a la solicitud cuando aparezca.",
   "keychainGate.error.locked": "El llavero sigue bloqueado. Haz clic en «Desbloquear» e introduce tu contraseña de inicio de sesión.",
   "keychainGate.error.denied": "Se denegó el acceso. Vuelve a hacer clic en «Desbloquear» y elige «Permitir siempre» cuando macOS lo pregunte.",
   "keychainGate.error.error": "MailVault todavía no puede leer el llavero. Vuelve a intentarlo en un momento.",

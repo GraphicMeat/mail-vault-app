@@ -837,7 +837,6 @@
   "keychainGate.title": "Desbloqueie suas chaves",
   "keychainGate.body": "O MailVault guarda as senhas das suas contas nas Chaves do macOS. As chaves estão bloqueadas, ou o macOS está aguardando sua permissão, então o assistente em segundo plano do MailVault não consegue entrar nos seus servidores de e-mail. A sincronização e os envios agendados ficam pausados até que ele consiga.",
   "keychainGate.hint": "Clique em “Desbloquear”. O macOS vai pedir sua senha de início de sessão. Se ele perguntar se o mailvault-daemon pode usar o item, escolha “Sempre permitir”.",
-  "keychainGate.error.timeout": "O macOS não respondeu a tempo. Clique em “Desbloquear” de novo e responda à solicitação quando ela aparecer.",
   "keychainGate.error.locked": "As chaves ainda estão bloqueadas. Clique em “Desbloquear” e digite sua senha de início de sessão.",
   "keychainGate.error.denied": "O acesso foi recusado. Clique em “Desbloquear” de novo e escolha “Sempre permitir” quando o macOS perguntar.",
   "keychainGate.error.error": "O MailVault ainda não consegue ler as chaves. Tente de novo daqui a pouco.",

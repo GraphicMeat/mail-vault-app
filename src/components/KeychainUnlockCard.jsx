@@ -12,6 +12,9 @@ import { useT } from '../i18n/index.js';
  * already in the vault stays usable, and with no way to dismiss it: it leaves
  * when the daemon reports the keychain readable again, however that happened.
  */
+/** Every this many clicks past the card, the unlock starts by itself. */
+const UNLOCK_EVERY = 3;
+
 export function KeychainUnlockCard() {
   const t = useT();
   const titleId = useId();
@@ -25,24 +28,36 @@ export function KeychainUnlockCard() {
   // Any click elsewhere in the window while the keychain is blocked shakes the
   // card, so the user sees why nothing syncs. The click itself still goes
   // through: mail already in the vault stays usable. `nudge` is a counter
-  // used as a key, so a click during a running shake restarts it.
+  // used as a key, so a click during a running shake restarts it. Every third
+  // such click also starts the unlock, which brings macOS's prompt back: the
+  // daemon never raises it again on its own within one blocked episode.
   const cardRef = useRef(null);
   const [nudge, setNudge] = useState(0);
+  const clicksPast = useRef(0);
   useEffect(() => {
+    clicksPast.current = 0;
     if (!blocked) return undefined;
     const onPointerDown = (e) => {
-      if (!cardRef.current?.contains(e.target)) setNudge(n => n + 1);
+      if (cardRef.current?.contains(e.target)) return;
+      setNudge(n => n + 1);
+      clicksPast.current += 1;
+      if (clicksPast.current < UNLOCK_EVERY) return;
+      clicksPast.current = 0;
+      const gate = useKeychainGateStore.getState();
+      if (!gate.unlocking) gate.unlock();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [blocked]);
 
+  // No line for a timeout: the prompt went unanswered, and the card itself
+  // already says what to do.
   const ERRORS = {
-    timeout: t('keychainGate.error.timeout'),
     locked: t('keychainGate.error.locked'),
     denied: t('keychainGate.error.denied'),
     error: t('keychainGate.error.error'),
   };
+  const errorLine = error && error !== 'timeout' ? (ERRORS[error] || ERRORS.error) : null;
 
   return (
     <AnimatePresence>
@@ -67,9 +82,9 @@ export function KeychainUnlockCard() {
                 <div id={titleId} className="text-sm font-medium text-mail-text">{t('keychainGate.title')}</div>
                 <p className="text-xs text-mail-text-muted">{t('keychainGate.body')}</p>
                 <p className="text-xs text-mail-text-muted">{t('keychainGate.hint')}</p>
-                {error && (
+                {errorLine && (
                   <p className="text-xs text-mail-danger" data-testid="keychain-unlock-error">
-                    {ERRORS[error] || ERRORS.error}
+                    {errorLine}
                   </p>
                 )}
                 <div className="pt-1">

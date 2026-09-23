@@ -837,7 +837,6 @@
   "keychainGate.title": "解锁你的钥匙串",
   "keychainGate.body": "MailVault 将你的账户密码保存在 macOS 钥匙串中。钥匙串已锁定，或 macOS 正在等待你的许可，因此 MailVault 的后台助手无法登录你的邮件服务器。在它能登录之前，同步和定时发送都会暂停。",
   "keychainGate.hint": "点按“解锁”。macOS 会要求你输入登录密码。如果它询问是否允许 mailvault-daemon 使用该项目，请选择“始终允许”。",
-  "keychainGate.error.timeout": "macOS 未能及时响应。请再次点按“解锁”，并在提示出现时进行回应。",
   "keychainGate.error.locked": "钥匙串仍处于锁定状态。请点按“解锁”并输入登录密码。",
   "keychainGate.error.denied": "访问被拒绝。请再次点按“解锁”，并在 macOS 询问时选择“始终允许”。",
   "keychainGate.error.error": "MailVault 仍无法读取钥匙串。请稍后再试。",

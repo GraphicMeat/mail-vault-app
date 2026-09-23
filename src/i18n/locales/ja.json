@@ -837,7 +837,6 @@
   "keychainGate.title": "キーチェーンのロックを解除",
   "keychainGate.body": "MailVault はアカウントのパスワードを macOS のキーチェーンに保存しています。キーチェーンがロックされているか、macOS があなたの許可を待っているため、MailVault のバックグラウンドヘルパーがメールサーバにサインインできません。サインインできるまで、同期と予約送信は一時停止しています。",
   "keychainGate.hint": "「ロック解除」をクリックしてください。macOS からログインパスワードを求められます。mailvault-daemon による項目の使用を許可するか聞かれたら、「常に許可」を選んでください。",
-  "keychainGate.error.timeout": "macOS が時間内に応答しませんでした。もう一度「ロック解除」をクリックし、表示された確認に答えてください。",
   "keychainGate.error.locked": "キーチェーンはまだロックされています。「ロック解除」をクリックしてログインパスワードを入力してください。",
   "keychainGate.error.denied": "アクセスが拒否されました。もう一度「ロック解除」をクリックし、macOS に聞かれたら「常に許可」を選んでください。",
   "keychainGate.error.error": "MailVault はまだキーチェーンを読み取れません。少し待ってからもう一度お試しください。",

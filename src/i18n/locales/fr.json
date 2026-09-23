@@ -837,7 +837,6 @@
   "keychainGate.title": "Déverrouillez votre trousseau",
   "keychainGate.body": "MailVault conserve les mots de passe de vos comptes dans le trousseau macOS. Le trousseau est verrouillé, ou macOS attend votre autorisation, si bien que l'assistant d'arrière-plan de MailVault ne peut pas se connecter à vos serveurs de messagerie. La synchronisation et les envois programmés sont en pause en attendant.",
   "keychainGate.hint": "Cliquez sur « Déverrouiller ». macOS vous demandera votre mot de passe de session. S'il demande si mailvault-daemon peut utiliser l'élément, choisissez « Toujours autoriser ».",
-  "keychainGate.error.timeout": "macOS n'a pas répondu à temps. Cliquez de nouveau sur « Déverrouiller » et répondez à la demande quand elle apparaît.",
   "keychainGate.error.locked": "Le trousseau est toujours verrouillé. Cliquez sur « Déverrouiller » et saisissez votre mot de passe de session.",
   "keychainGate.error.denied": "L'accès a été refusé. Cliquez de nouveau sur « Déverrouiller » et choisissez « Toujours autoriser » quand macOS le demande.",
   "keychainGate.error.error": "MailVault ne parvient toujours pas à lire le trousseau. Réessayez dans un instant.",

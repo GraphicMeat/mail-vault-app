@@ -837,7 +837,6 @@
   "keychainGate.title": "Schlüsselbund entsperren",
   "keychainGate.body": "MailVault bewahrt die Passwörter deiner Konten im macOS-Schlüsselbund auf. Der Schlüsselbund ist gesperrt oder macOS wartet auf deine Erlaubnis, daher kann sich der Hintergrunddienst von MailVault nicht bei deinen Mailservern anmelden. Synchronisierung und geplante Sendungen pausieren, bis das wieder geht.",
   "keychainGate.hint": "Klicke auf „Entsperren“. macOS fragt nach deinem Anmeldepasswort. Fragt macOS, ob mailvault-daemon das Objekt verwenden darf, wähle „Immer erlauben“.",
-  "keychainGate.error.timeout": "macOS hat nicht rechtzeitig geantwortet. Klicke erneut auf „Entsperren“ und beantworte die Abfrage, sobald sie erscheint.",
   "keychainGate.error.locked": "Der Schlüsselbund ist noch gesperrt. Klicke auf „Entsperren“ und gib dein Anmeldepasswort ein.",
   "keychainGate.error.denied": "Der Zugriff wurde verweigert. Klicke erneut auf „Entsperren“ und wähle „Immer erlauben“, wenn macOS fragt.",
   "keychainGate.error.error": "MailVault kann den Schlüsselbund immer noch nicht lesen. Versuche es gleich noch einmal.",

@@ -837,7 +837,6 @@
   "keychainGate.title": "Unlock your keychain",
   "keychainGate.body": "MailVault keeps your account passwords in the macOS Keychain. The keychain is locked, or macOS is waiting for your permission, so MailVault's background helper can't sign in to your mail servers. Syncing and scheduled sends are paused until it can.",
   "keychainGate.hint": "Click Unlock. macOS will ask for your login password. If it asks whether mailvault-daemon may use the item, choose “Always Allow”.",
-  "keychainGate.error.timeout": "macOS didn't answer in time. Click Unlock again and answer the prompt when it appears.",
   "keychainGate.error.locked": "The keychain is still locked. Click Unlock and enter your login password.",
   "keychainGate.error.denied": "Access was refused. Click Unlock again and choose “Always Allow” when macOS asks.",
   "keychainGate.error.error": "MailVault still can't read the keychain. Try again in a moment.",

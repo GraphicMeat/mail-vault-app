@@ -837,7 +837,6 @@
   "keychainGate.title": "키체인 잠금 해제",
   "keychainGate.body": "MailVault는 계정 비밀번호를 macOS 키체인에 보관합니다. 키체인이 잠겨 있거나 macOS가 사용자의 허락을 기다리고 있어서, MailVault의 백그라운드 도우미가 메일 서버에 로그인할 수 없습니다. 로그인할 수 있을 때까지 동기화와 예약 발송이 일시 중지됩니다.",
   "keychainGate.hint": "‘잠금 해제’를 클릭하세요. macOS가 로그인 암호를 묻습니다. mailvault-daemon이 항목을 사용해도 되는지 물으면 ‘항상 허용’을 선택하세요.",
-  "keychainGate.error.timeout": "macOS가 제때 응답하지 않았습니다. ‘잠금 해제’를 다시 클릭하고 요청이 나타나면 응답하세요.",
   "keychainGate.error.locked": "키체인이 아직 잠겨 있습니다. ‘잠금 해제’를 클릭하고 로그인 암호를 입력하세요.",
   "keychainGate.error.denied": "접근이 거부되었습니다. ‘잠금 해제’를 다시 클릭하고 macOS가 물으면 ‘항상 허용’을 선택하세요.",
   "keychainGate.error.error": "MailVault가 아직 키체인을 읽을 수 없습니다. 잠시 후 다시 시도하세요.",

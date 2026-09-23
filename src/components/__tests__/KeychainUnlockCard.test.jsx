@@ -76,6 +76,56 @@ describe('KeychainUnlockCard', () => {
     expect(screen.queryByTestId(CARD)).toBeNull();
   });
 
+  it('starts the unlock on every third click past it, never while one runs', () => {
+    const unlock = vi.fn();
+    render(<div><button data-testid="elsewhere">x</button><KeychainUnlockCard /></div>);
+    act(() => useKeychainGateStore.setState({ blocked: true, unlock }));
+    const clickPast = (n) => { for (let i = 0; i < n; i++) fireEvent.pointerDown(screen.getByTestId('elsewhere')); };
+
+    clickPast(2);
+    expect(unlock).not.toHaveBeenCalled();
+    // Clicks on the card itself do not count toward the third.
+    fireEvent.pointerDown(screen.getByTestId(CARD).querySelector('[data-nudge]'));
+    expect(unlock).not.toHaveBeenCalled();
+    clickPast(1);
+    expect(unlock).toHaveBeenCalledTimes(1);
+    clickPast(3);
+    expect(unlock).toHaveBeenCalledTimes(2);
+
+    // An unlock already running is not started again; the count still resets.
+    act(() => useKeychainGateStore.setState({ unlocking: true }));
+    clickPast(3);
+    expect(unlock).toHaveBeenCalledTimes(2);
+    act(() => useKeychainGateStore.setState({ unlocking: false }));
+    clickPast(2);
+    expect(unlock).toHaveBeenCalledTimes(2);
+    clickPast(1);
+    expect(unlock).toHaveBeenCalledTimes(3);
+  });
+
+  it('forgets a partial count when the gate clears, and counts nothing after', () => {
+    const unlock = vi.fn();
+    render(<div><button data-testid="elsewhere">x</button><KeychainUnlockCard /></div>);
+    act(() => useKeychainGateStore.setState({ blocked: true, unlock }));
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+
+    act(() => useKeychainGateStore.setState({ blocked: false }));
+    for (let i = 0; i < 6; i++) fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    expect(unlock).not.toHaveBeenCalled();
+
+    act(() => useKeychainGateStore.setState({ blocked: true }));
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    expect(unlock).not.toHaveBeenCalled();
+  });
+
+  it('shows no error line for an unanswered prompt: the card is the message', () => {
+    render(<KeychainUnlockCard />);
+    act(() => useKeychainGateStore.setState({ blocked: true, error: 'timeout' }));
+    expect(screen.getByTestId(CARD)).toBeTruthy();
+    expect(screen.queryByTestId('keychain-unlock-error')).toBeNull();
+  });
+
   it('offers no way to dismiss it', () => {
     render(<KeychainUnlockCard />);
     act(() => useKeychainGateStore.getState().apply({ blocked: true, reason: 'locked' }));

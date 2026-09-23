@@ -837,7 +837,6 @@
   "keychainGate.title": "Sblocca il portachiavi",
   "keychainGate.body": "MailVault conserva le password dei tuoi account nel portachiavi di macOS. Il portachiavi è bloccato, oppure macOS attende il tuo permesso, quindi l'assistente in background di MailVault non riesce ad accedere ai tuoi server di posta. La sincronizzazione e gli invii programmati sono in pausa finché non ci riesce.",
   "keychainGate.hint": "Fai clic su «Sblocca». macOS ti chiederà la password di login. Se chiede se mailvault-daemon può usare l'elemento, scegli «Consenti sempre».",
-  "keychainGate.error.timeout": "macOS non ha risposto in tempo. Fai di nuovo clic su «Sblocca» e rispondi alla richiesta quando compare.",
   "keychainGate.error.locked": "Il portachiavi è ancora bloccato. Fai clic su «Sblocca» e inserisci la password di login.",
   "keychainGate.error.denied": "L'accesso è stato negato. Fai di nuovo clic su «Sblocca» e scegli «Consenti sempre» quando macOS lo chiede.",
   "keychainGate.error.error": "MailVault non riesce ancora a leggere il portachiavi. Riprova tra poco.",

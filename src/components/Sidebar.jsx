@@ -29,6 +29,7 @@ import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
 import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
+import { useKeychainGateStore } from '../stores/keychainGateStore';
 import { mailboxLabel } from '../utils/imapUtf7';
 import {
   Inbox,
@@ -682,7 +683,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       return () => clearTimeout(timer);
     }
   }, [connectionStatus, activeAccountId]);
-  const showError = errorReadyFor !== null && errorReadyFor === activeAccountId;
+  // While the daemon cannot read the keychain, its unlock card is the one
+  // place that says so: the account's "Password missing" or timeout notice
+  // would be the same problem told twice, in worse words.
+  const keychainBlocked = useKeychainGateStore(s => s.blocked);
+  const showError = !keychainBlocked && errorReadyFor !== null && errorReadyFor === activeAccountId;
 
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
