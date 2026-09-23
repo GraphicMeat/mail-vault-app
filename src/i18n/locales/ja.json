@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "サーバーを確認",
   "viewer.checkingEveryFolder": "すべてのフォルダを確認中…",
   "viewer.copy": "コピー",
+  "viewer.copyLink": "リンクをコピー",
   "viewer.couldnTLoadMessage": "このメッセージを読み込めませんでした",
   "viewer.couldnTOpenFolderS": "{{probeResult}} 個のフォルダを開けませんでした — 判定できません。",
   "viewer.couldnTReachServer": "サーバーに接続できませんでした。",

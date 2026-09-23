@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "检查服务器",
   "viewer.checkingEveryFolder": "正在检查每个文件夹…",
   "viewer.copy": "复制",
+  "viewer.copyLink": "复制链接",
   "viewer.couldnTLoadMessage": "无法加载这封邮件",
   "viewer.couldnTOpenFolderS": "无法打开 {{probeResult}} 个文件夹——无法判定。",
   "viewer.couldnTReachServer": "无法连接到服务器。",

@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "Check the server",
   "viewer.checkingEveryFolder": "Checking every folder…",
   "viewer.copy": "Copy",
+  "viewer.copyLink": "Copy Link",
   "viewer.couldnTLoadMessage": "Couldn’t load this message",
   "viewer.couldnTOpenFolderS": "Couldn't open {{probeResult}} folder(s) — no verdict.",
   "viewer.couldnTReachServer": "Couldn't reach the server.",

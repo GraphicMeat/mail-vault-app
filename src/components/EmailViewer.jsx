@@ -482,8 +482,14 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       menu.style.cssText = `position:fixed;z-index:99999;background:${menuBg};border:1px solid ${menuBorder};border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:${menuShadow};`;
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
+      const link = e.target.closest?.('a[href]');
       const items = [
         { label: t('viewer.copy'), action: () => doc.execCommand('copy') },
+        ...(link ? [{
+          label: t('viewer.copyLink'),
+          action: () => navigator.clipboard.writeText(link.href)
+            .catch(err => console.error('Failed to copy link:', err)),
+        }] : []),
         { label: t('settings.migration.selectAll'), action: () => doc.execCommand('selectAll') },
       ];
       items.forEach(({ label, action }) => {

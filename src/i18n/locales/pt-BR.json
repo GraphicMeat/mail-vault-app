@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "Verificar o servidor",
   "viewer.checkingEveryFolder": "Verificando todas as pastas…",
   "viewer.copy": "Copiar",
+  "viewer.copyLink": "Copiar link",
   "viewer.couldnTLoadMessage": "Não foi possível carregar esta mensagem",
   "viewer.couldnTOpenFolderS": "Não foi possível abrir {{probeResult}} pasta(s) — sem veredito.",
   "viewer.couldnTReachServer": "Não foi possível acessar o servidor.",

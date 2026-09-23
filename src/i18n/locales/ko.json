@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "서버 확인",
   "viewer.checkingEveryFolder": "모든 폴더 확인 중…",
   "viewer.copy": "복사",
+  "viewer.copyLink": "링크 복사",
   "viewer.couldnTLoadMessage": "이 메시지를 불러오지 못했습니다",
   "viewer.couldnTOpenFolderS": "폴더 {{probeResult}}개를 열 수 없었습니다 — 판정할 수 없습니다.",
   "viewer.couldnTReachServer": "서버에 접속할 수 없습니다.",

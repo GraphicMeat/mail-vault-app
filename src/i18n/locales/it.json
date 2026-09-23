@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "Controlla il server",
   "viewer.checkingEveryFolder": "Controllo di tutte le cartelle…",
   "viewer.copy": "Copia",
+  "viewer.copyLink": "Copia link",
   "viewer.couldnTLoadMessage": "Impossibile caricare questo messaggio",
   "viewer.couldnTOpenFolderS": "Impossibile aprire {{probeResult}} cartelle: nessun verdetto.",
   "viewer.couldnTReachServer": "Impossibile raggiungere il server.",

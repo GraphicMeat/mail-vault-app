@@ -2571,6 +2571,7 @@
   "viewer.checkServer": "Server prüfen",
   "viewer.checkingEveryFolder": "Alle Ordner werden geprüft …",
   "viewer.copy": "Kopieren",
+  "viewer.copyLink": "Link kopieren",
   "viewer.couldnTLoadMessage": "Diese Nachricht ließ sich nicht laden",
   "viewer.couldnTOpenFolderS": "{{probeResult}} Ordner ließen sich nicht öffnen — kein Ergebnis.",
   "viewer.couldnTReachServer": "Der Server war nicht erreichbar.",
