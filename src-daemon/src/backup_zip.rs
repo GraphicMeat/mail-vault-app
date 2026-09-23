@@ -422,7 +422,14 @@ pub fn import(
         // the same way rather than trusting the accounts-map value verbatim.
         let safe_account_id = common::sanitize_mailbox_name(&account_id);
         let safe_mailbox = common::sanitize_mailbox_name(mailbox);
-        let filename_owned = filename.to_string();
+        // The zip entry's info separator is whatever platform wrote the
+        // backup, which is routinely not this one (a mac/Linux export
+        // imported on Windows, or vice versa). Written verbatim, `:2,` on
+        // Windows is not an error — NTFS reads the `:` as an
+        // alternate-data-stream separator and silently creates a hidden
+        // stream under the bare uid instead of a real file. Respell it to
+        // this platform's own `INFO_PREFIX` before it ever touches disk.
+        let filename_owned = mailvault_core::maildir::respell_for_platform(filename);
 
         // Decision 10: the gate is re-acquired here, inside the loop, once
         // per file, never once around the whole extraction. A refusal
@@ -657,6 +664,44 @@ mod tests {
         let cur = mailvault_core::vault_files::cur_path(v.path(), &new_account.id, "INBOX");
         let written: Vec<_> = std::fs::read_dir(&cur).unwrap().collect();
         assert_eq!(written.len(), 1);
+    }
+
+    /// A zip entry's info separator is whatever platform wrote the backup —
+    /// a mac/Linux export commonly lands on a Windows machine. Written
+    /// verbatim, `:2,` on Windows is not an error: NTFS reads the `:` as an
+    /// alternate-data-stream separator and silently creates a hidden stream
+    /// under the bare uid instead of a real file, so the import reports
+    /// success while the message is not really on disk under any name a
+    /// listing will find. Hardcode `:2,` regardless of which platform this
+    /// test itself runs on (unlike the sibling test above, which hardcodes
+    /// `;2,`) so both directions are proven everywhere the suite runs; on a
+    /// unix/mac runner this is already the platform's own spelling, so the
+    /// respell is a no-op rename and the test still passes.
+    #[test]
+    fn import_respells_a_colon_spelled_entry_to_this_platforms_own_separator() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[("mailvault-backup/emails/new@test.com/INBOX/1:2,S.eml", b"body bytes")],
+            &manifest_for(vec![BackupAccount { email: "new@test.com".into(), imap_server: Some("imap.test".into()), smtp_server: None }]),
+        );
+
+        let result = import(&s, zip_path, vec![], |_, _| {}).unwrap();
+
+        assert_eq!(result.email_count, 1);
+        let new_account = &result.new_accounts[0];
+        let cur = mailvault_core::vault_files::cur_path(v.path(), &new_account.id, "INBOX");
+        let expected_name = format!("1{}S.eml", mailvault_core::maildir::INFO_PREFIX);
+        let dest = cur.join(&expected_name);
+        assert!(
+            dest.exists(),
+            "the imported file must be named with this platform's INFO_PREFIX ({expected_name}), not the zip entry's original spelling"
+        );
+        assert_eq!(std::fs::read(&dest).unwrap(), b"body bytes", "respelling the name must not touch the message bytes");
+        let written: Vec<_> = std::fs::read_dir(&cur).unwrap().collect();
+        assert_eq!(written.len(), 1, "exactly one file, under the respelled name only");
     }
 
     #[test]

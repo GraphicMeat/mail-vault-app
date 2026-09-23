@@ -61,6 +61,29 @@ pub fn has_info(name: &str) -> bool {
     info_flags(name).is_some()
 }
 
+/// Re-spell an externally supplied vault filename's info separator to this
+/// platform's own (`INFO_PREFIX`), keeping the uid prefix and the flags/
+/// extension untouched. A name with no info part (`has_info`) is returned
+/// unchanged — nothing to respell.
+///
+/// Used wherever a vault filename arrives from outside this process (an
+/// imported backup ZIP, a restore source) instead of being built fresh by
+/// `vault_files::build_maildir_filename`. Written verbatim, a `:2,`-spelled
+/// name landing on Windows does not error — NTFS reads the `:` as an
+/// alternate-data-stream separator and silently creates a hidden stream
+/// under the bare uid instead of a real file, so the message looks imported
+/// (no error) but is not actually on disk under any name a listing will
+/// find. Read side of the same fact: `is_info_sep`/`info_flags` already
+/// accept both spellings, since a vault written on one OS is routinely read
+/// on another; this is the write-side counterpart for a name this process
+/// did not build itself.
+pub fn respell_for_platform(name: &str) -> String {
+    match name.split_once(":2,").or_else(|| name.split_once(";2,")) {
+        Some((prefix, rest)) => format!("{prefix}{INFO_PREFIX}{rest}"),
+        None => name.to_string(),
+    }
+}
+
 /// The uid a vault filename carries, by `find_by_uid`'s exact rule: the name
 /// starts with the canonical decimal uid and an info separator (`:`, or `;`
 /// on Windows — either spelling parses on every platform). `u32::parse` alone
