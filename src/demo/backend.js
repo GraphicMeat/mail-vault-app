@@ -828,6 +828,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           .filter(row => !requireFlag || (row.vaultFlags || []).includes(requireFlag))
           .map(row => ({ uid: row.uid, flags: [...(row.vaultFlags || [])], isArchived: (row.vaultFlags || []).includes('archived') }));
       }
+      // The vault registry's reads (production shape): uid sets ascending,
+      // light rows with `snippet` and no body, flags off the vault name.
+      case 'vault_uid_sets': {
+        const rows = local(accountId, mailbox);
+        const uids = pick => rows.filter(pick).map(row => row.uid).sort((a, b) => a - b);
+        return { saved: uids(() => true), archived: uids(row => (row.vaultFlags || []).includes('archived')) };
+      }
+      case 'vault_light_rows': {
+        const rows = args.uids == null ? local(accountId, mailbox).sort((a, b) => a.uid - b.uid) : args.uids.map(uid => find({ accountId, mailbox, uid })).filter(row => row?.vaultPresent);
+        return rows.map(row => { const { text, html, ...rest } = header(row); return { ...rest, snippet: row.snippet || String(text || '').slice(0, 150), uid: row.uid, flags: [...(row.vaultFlags || [])], isArchived: (row.vaultFlags || []).includes('archived') }; });
+      }
       case 'maildir_read': case 'maildir_read_light': { const row = find({ accountId, mailbox, uid: args.uid }); return row && row.vaultPresent ? clone(row) : null; }
       case 'maildir_read_light_batch': return (args.uids || []).map(uid => { const row = find({ accountId, mailbox, uid }); return row && row.vaultPresent ? header(row) : null; });
       case 'maildir_read_raw_source': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.rawSourceBase64 || null; }

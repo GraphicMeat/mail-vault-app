@@ -197,7 +197,50 @@ export async function getVerifiedRawSource(accountId, mailbox, uid, headerRow) {
   return { b64, error: null };
 }
 
+/**
+ * The vault rows of one mailbox: headers, attachment list and `snippet`, no
+ * body. One `vault_light_rows` call answered from the daemon's registry (the
+ * daemon runs the generation repair first), plus custody off one index read.
+ *
+ * `null` when the answer is unknown (vault unreachable, repair failed, folder
+ * unlistable, or the call itself failed): unknown is not empty, so callers
+ * keep what they already hold rather than adopting "the vault has nothing".
+ */
 export async function getLocalEmails(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return [];
+  let rows;
+  try {
+    rows = await invoke('vault_light_rows', { accountId, mailbox });
+  } catch (e) {
+    console.warn('[db] vault_light_rows failed:', e);
+    return null;
+  }
+  if (!Array.isArray(rows)) return null;
+  // These rows become `localEmails`, so custody belongs on them: unstamped, an
+  // archived message loses `_origin` / `serverDeleted` / `serverAbsent`
+  // whenever this path builds the row instead of getArchivedEmails, and the
+  // gold band goes quiet about a message it should be shouting about.
+  // Covered by __tests__/vaultRowCustody.test.js.
+  const stamp = custodyStamper(await getLocalIndexMeta(accountId, mailbox));
+  return rows.map(row => stamp({
+    ...row,
+    localId: `${accountId}-${mailbox}-${row.uid}`,
+    // Provenance travels with the message. A UID names a message only
+    // inside one (account, mailbox); a row that reaches a view without
+    // these gets its location guessed from the ACTIVE folder, which is
+    // right until the moment it isn't — search results span folders by
+    // design, so every one of them was being fetched from whatever
+    // folder happened to be selected.
+    _accountId: accountId,
+    _mailbox: mailbox,
+    isArchived: !!row.isArchived,
+  }));
+}
+
+// The same rows WITH `text`/`html`: the no-index search scan matches bodies,
+// so it keeps the per-file batch read. The rare fallback, never a list read.
+async function _getLocalEmailsWithBodies(accountId, mailbox) {
   await initBasic();
   if (!invoke) return [];
 
@@ -206,11 +249,8 @@ export async function getLocalEmails(accountId, mailbox) {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
     if (summaries.length === 0) return [];
 
-    // Build archive flag lookup
     const archivedUids = new Set(summaries.filter(s => s.isArchived).map(s => s.uid));
     const uids = summaries.map(s => s.uid);
-
-    // Batch read all emails in a single IPC call
     const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids });
     const emails = [];
     for (let i = 0; i < results.length; i++) {
@@ -218,32 +258,15 @@ export async function getLocalEmails(accountId, mailbox) {
         emails.push({
           ...results[i],
           localId: `${accountId}-${mailbox}-${uids[i]}`,
-          // Provenance travels with the message. A UID names a message only
-          // inside one (account, mailbox); a row that reaches a view without
-          // these gets its location guessed from the ACTIVE folder, which is
-          // right until the moment it isn't — search results span folders by
-          // design, so every one of them was being fetched from whatever
-          // folder happened to be selected.
           _accountId: accountId,
           _mailbox: mailbox,
           isArchived: archivedUids.has(uids[i])
         });
       }
     }
-    // These rows become `localEmails`, so custody belongs on them: unstamped, an
-    // archived message loses `_origin` / `serverDeleted` / `serverAbsent`
-    // whenever this path builds the row instead of getArchivedEmails, and the
-    // gold band goes quiet about a message it should be shouting about.
-    //
-    // A note here used to forbid this read — "it sits on the folder-switch path
-    // activateAccount awaits, and left the list loading forever". Both halves
-    // were wrong. activateAccount never calls this function, and the e2e reds
-    // that seemed to prove it were a neighbouring session on the shared runner
-    // pkilling `mock-imap-server` by name. Measured with the line in:
-    // maildir_repair_generation 0.74ms avg / 30ms max, the other three reads
-    // under 0.3ms avg. Covered by __tests__/vaultRowCustody.test.js.
     return emails.map(custodyStamper(await getLocalIndexMeta(accountId, mailbox)));
   } catch {
+    // A search over what could be read: an unreadable folder adds no hits.
     return [];
   }
 }
@@ -404,7 +427,7 @@ export async function getLocalEmailFull(accountId, mailbox, uid) {
  * 1. header sidecars (`email_cache/<uid>.json`), written by the sync;
  * 2. the rows the search index already parsed (`vault_rows`), with flags read
  *    off the current file name;
- * 3. the `.eml` files themselves, 200 per batch (MIME parsing, the slow one).
+ * 3. the vault registry's light rows (each file MIME-parsed once, then stored).
  *
  * Each tier is asked only for what the ones before it missed, and nothing is
  * cached: the per-folder archived-headers file this function used to write was
@@ -449,18 +472,21 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
       console.warn('[db] getArchivedEmails: index rows failed:', e);
     }
   }
-  // 3. The files, 200 per batch (one directory listing per batch since phase 0).
+  // 3. The registry's light rows (parsed once, then stored), 500 per call.
+  // The reply omits uids the vault does not hold, so each row names its own.
   const rest = missing();
-  const BATCH_SIZE = 200;
+  const BATCH_SIZE = 500;
   for (let i = 0; i < rest.length; i += BATCH_SIZE) {
     const batch = rest.slice(i, i + BATCH_SIZE);
+    let rows;
     try {
-      const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids: batch });
-      take(results.map((r, j) => (r ? { ...r, uid: batch[j] } : null)), 'files');
+      rows = await invoke('vault_light_rows', { accountId, mailbox, uids: batch });
     } catch (e) {
-      console.error('[db] getArchivedEmails: .eml loading FAILED:', e);
+      console.error('[db] getArchivedEmails: vault rows FAILED:', e);
       break;
     }
+    if (!Array.isArray(rows)) break;
+    take(rows, 'files');
   }
   return emails;
 }
@@ -481,10 +507,10 @@ export async function getAllLocalEmails(accountId, mailboxes = []) {
       // The directory name is sanitised and lossy — pass the SERVER path it
       // came from, so `_mailbox` on these rows is something IMAP can SELECT.
       const mailbox = mailboxPathFromVaultDir(mbEntry.name, mailboxes);
-      // One call per vault directory, and `getLocalEmails` reads that mailbox's
-      // index once for the whole batch — so custody costs one file read per
-      // MAILBOX here, never one per message.
-      const emails = await getLocalEmails(accountId, mailbox);
+      // One call per vault directory, and the read stamps custody off that
+      // mailbox's index once for the whole batch — one read per MAILBOX here,
+      // never one per message. Bodies included: this feeds the search scan.
+      const emails = await _getLocalEmailsWithBodies(accountId, mailbox);
       allEmails.push(...emails);
     }
     return allEmails;
@@ -536,6 +562,29 @@ export async function getSavedEmailIds(accountId, mailbox) {
     return new Set(summaries.map(s => s.uid));
   } catch {
     return new Set();
+  }
+}
+
+/**
+ * What the vault holds for one mailbox: `{ saved, archived }` uid Sets, from
+ * one `vault_uid_sets` call the daemon answers off its registry (generation
+ * repair included, daemon-side).
+ *
+ * `null` means unknown — the call failed, the daemon said `null` (vault
+ * unreachable, repair failed, folder unlistable) or the reply is malformed.
+ * Never an empty Set on failure (I-5 below): every caller keeps what it
+ * already knows instead of persisting "the vault has nothing".
+ */
+export async function getVaultUidSets(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return null;
+  try {
+    const reply = await invoke('vault_uid_sets', { accountId, mailbox });
+    if (!Array.isArray(reply?.saved) || !Array.isArray(reply?.archived)) return null;
+    return { saved: new Set(reply.saved), archived: new Set(reply.archived) };
+  } catch (e) {
+    console.warn('[db] vault_uid_sets failed:', e);
+    return null;
   }
 }
 
@@ -699,7 +748,7 @@ async function scanLocalEmails(accountId, query, filters = {}) {
 
   let emails;
   if (filters.mailbox && filters.mailbox !== 'all') {
-    emails = await getLocalEmails(accountId, filters.mailbox);
+    emails = await _getLocalEmailsWithBodies(accountId, filters.mailbox);
   } else {
     emails = await getAllLocalEmails(accountId, filters.mailboxes);
   }

@@ -231,6 +231,9 @@ export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId
     if (accountId) params.accountId = accountId;
     const data = await tauriInvoke('imap_get_email_light', params);
     if (data?.gone) throw new MessageGoneError(data.uid ?? uid, data.mailbox ?? mailbox);
+    // The daemon auto-caches the body it just fetched; `cached` says the vault
+    // holds the file now, so the caller can mark it saved with no vault read.
+    if (data.email && data.cached === true) data.email.vaultCached = true;
     return data.email;
   }
   // Dev mode fallback — fetch full email, strip heavy fields client-side

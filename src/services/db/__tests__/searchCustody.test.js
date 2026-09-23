@@ -45,6 +45,9 @@ vi.mock('../../transport.js', () => ({
     if (cmd === 'maildir_list') {
       return Promise.resolve((ROWS[args.mailbox] || []).map(uid => ({ uid, flags: [], isArchived: true, size: 10 })));
     }
+    if (cmd === 'vault_light_rows') {
+      return Promise.resolve((ROWS[args.mailbox] || []).map(uid => ({ uid, subject: `msg ${uid}`, from: { address: 'a@b.c' }, snippet: '', isArchived: true })));
+    }
     if (cmd === 'maildir_read_light_batch') {
       return Promise.resolve(args.uids.map(uid => ({ uid, subject: `msg ${uid}`, from: { address: 'a@b.c' } })));
     }

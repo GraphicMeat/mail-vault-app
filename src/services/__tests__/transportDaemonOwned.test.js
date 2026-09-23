@@ -82,7 +82,8 @@ describe('daemon-owned commands', () => {
       'search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status',
       'smtp_build_draft_mime', 'smtp_build_mime', 'smtp_send_email', 'smtp_test_connection',
       'start_migration', 'start_restore',
-      'vault_rows', 'vault_search',
+      // The vault registry's reads (2026-09-23).
+      'vault_light_rows', 'vault_rows', 'vault_search', 'vault_uid_sets',
       'verify_archived_emails',
     ]);
   });

@@ -27,11 +27,8 @@ const INDEX = JSON.stringify([
 
 vi.mock('../../transport.js', () => ({
   send: (cmd) => {
-    if (cmd === 'maildir_list') {
-      return Promise.resolve([7, 8, 9, 10].map(uid => ({ uid, flags: [], isArchived: true, size: 10 })));
-    }
-    if (cmd === 'maildir_read_light_batch') {
-      return Promise.resolve([7, 8, 9, 10].map(uid => ({ uid, subject: `s${uid}` })));
+    if (cmd === 'vault_light_rows') {
+      return Promise.resolve([7, 8, 9, 10].map(uid => ({ uid, subject: `s${uid}`, snippet: '', flags: ['archived'], isArchived: true })));
     }
     if (cmd === 'local_index_read') return Promise.resolve(INDEX);
     if (cmd === 'maildir_repair_generation') {

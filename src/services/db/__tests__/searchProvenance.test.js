@@ -21,6 +21,9 @@ vi.mock('../../transport.js', () => ({
       listed.push(args.mailbox);
       return Promise.resolve([{ uid: 34, flags: [], isArchived: true, size: 10 }]);
     }
+    if (cmd === 'vault_light_rows') {
+      return Promise.resolve([{ uid: 34, subject: 'Angebot', from: { address: 'a@b.c' }, snippet: '', isArchived: true }]);
+    }
     if (cmd === 'maildir_read_light_batch') {
       return Promise.resolve([{ uid: 34, subject: 'Angebot', from: { address: 'a@b.c' } }]);
     }

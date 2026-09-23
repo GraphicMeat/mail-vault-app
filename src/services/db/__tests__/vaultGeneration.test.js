@@ -1,12 +1,15 @@
 /**
  * The vault is keyed (accountId, mailbox, uid), and a uid only means anything
- * inside one UIDVALIDITY generation. `getSavedEmailIds` / `getArchivedEmailIds`
- * read that uid set straight off Maildir filenames, so after a reissue they
- * answer "yes, uid N is archived" about a message that is not the one in the
- * row.
+ * inside one UIDVALIDITY generation. After a reissue, a uid set read straight
+ * off Maildir filenames answers "yes, uid N is archived" about a message that
+ * is not the one in the row.
  *
- * These assert the ORDER, not the end state: a repair that runs after the list
- * has been read leaves the same wrong answer on screen as no repair at all.
+ * The uid sets and the light rows now come from the daemon's registry, and the
+ * daemon runs the generation repair itself, under the mailbox lock, before it
+ * answers (`vault_uid_sets` / `vault_light_rows`). So those reads send no JS
+ * repair and never list the folder. The custody readers still repair from JS
+ * first, and those assert the ORDER: a repair that runs after the read leaves
+ * the same wrong answer on screen as no repair at all.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,9 +27,9 @@ vi.mock('../../transport.js', () => ({
         ? repairImpl(args)
         : Promise.resolve({ ran: false, rebound: [], orphaned: [], kept: 0, errors: 0, generation: 1 });
     }
-    if (cmd === 'maildir_list') return Promise.resolve([{ uid: 3, flags: ['archived'], isArchived: true, size: 10 }]);
+    if (cmd === 'vault_uid_sets') return Promise.resolve({ saved: [3, 4], archived: [3] });
+    if (cmd === 'vault_light_rows') return Promise.resolve([{ uid: 3, subject: 's', snippet: '', flags: ['archived'], isArchived: true }]);
     if (cmd === 'local_index_read') return Promise.resolve('[{"uid":3,"source":"local"}]');
-    if (cmd === 'maildir_read_light_batch') return Promise.resolve([{ uid: 3, subject: 's' }]);
     return Promise.resolve(null);
   },
 }));
@@ -54,14 +57,18 @@ afterEach(() => { vi.clearAllMocks(); });
 const ACCOUNT = 'acc-1';
 
 describe('vault generation repair', () => {
-  it('repairs before reading the archived uid set off disk', async () => {
-    await db.getArchivedEmailIds(ACCOUNT, 'INBOX');
-    expect(calls).toEqual(['maildir_repair_generation', 'maildir_list']);
+  it('leaves the uid sets to the daemon: one registry read, no JS repair, no listing', async () => {
+    const sets = await db.getVaultUidSets(ACCOUNT, 'INBOX');
+    expect(calls).toEqual(['vault_uid_sets']);
+    expect([...sets.saved]).toEqual([3, 4]);
+    expect([...sets.archived]).toEqual([3]);
   });
 
-  it('repairs before reading the saved uid set off disk', async () => {
-    await db.getSavedEmailIds(ACCOUNT, 'INBOX');
-    expect(calls).toEqual(['maildir_repair_generation', 'maildir_list']);
+  it('reads the light rows before any JS repair; only the custody stamp repairs, for its own read', async () => {
+    const rows = await db.getLocalEmails(ACCOUNT, 'INBOX');
+    expect(rows.map(r => r.uid)).toEqual([3]);
+    expect(calls).toEqual(['vault_light_rows', 'maildir_repair_generation', 'local_index_read']);
+    expect(calls).not.toContain('maildir_list');
   });
 
   it('repairs before reading the local index the list renders from', async () => {
@@ -81,9 +88,9 @@ describe('vault generation repair', () => {
     expect(calls).toEqual(['maildir_repair_generation', 'local_index_read']);
   });
 
-  it('runs one repair when both getters are awaited together', async () => {
-    // The real load path awaits these in a single Promise.all. Two concurrent
-    // repairs would be two concurrent rename passes over the same directory.
+  it('runs one repair when two custody readers are awaited together', async () => {
+    // Two concurrent repairs would be two concurrent rename passes over the
+    // same directory.
     let release;
     const started = [];
     repairImpl = () => {
@@ -92,38 +99,38 @@ describe('vault generation repair', () => {
     };
 
     const both = Promise.all([
-      db.getSavedEmailIds(ACCOUNT, 'INBOX'),
-      db.getArchivedEmailIds(ACCOUNT, 'INBOX'),
+      db.readLocalEmailIndex(ACCOUNT, 'INBOX'),
+      db.getLocalIndexMeta(ACCOUNT, 'INBOX'),
     ]);
-    // Flush every queued microtask so both getters are past their own awaits.
+    // Flush every queued microtask so both readers are past their own awaits.
     await new Promise((r) => setTimeout(r, 0));
     expect(started.length).toBe(1);
     release();
     await both;
 
     expect(calls.filter(c => c === 'maildir_repair_generation').length).toBe(1);
-    expect(calls.filter(c => c === 'maildir_list').length).toBe(2);
+    expect(calls.filter(c => c === 'local_index_read').length).toBe(2);
   });
 
   it('does not share a repair between two mailboxes', async () => {
     await Promise.all([
-      db.getArchivedEmailIds(ACCOUNT, 'INBOX'),
-      db.getArchivedEmailIds(ACCOUNT, 'Sent'),
+      db.readLocalEmailIndex(ACCOUNT, 'INBOX'),
+      db.readLocalEmailIndex(ACCOUNT, 'Sent'),
     ]);
     expect(calls.filter(c => c === 'maildir_repair_generation').length).toBe(2);
   });
 
-  it('still returns the uid set when the repair fails', async () => {
+  it('still reads the custody entries when the repair fails', async () => {
     // A repair that cannot run is a reason to warn, not a reason to blank the
     // mailbox: the pre-existing behaviour is no worse than it was.
     repairImpl = () => Promise.reject(new Error('vault unreadable'));
-    const ids = await db.getArchivedEmailIds(ACCOUNT, 'INBOX');
-    expect(ids.has(3)).toBe(true);
+    const rows = await db.readLocalEmailIndex(ACCOUNT, 'INBOX');
+    expect(rows.map(r => r.uid)).toEqual([3]);
   });
 
   it('skips the repair when there is no mailbox to repair', async () => {
-    await db.getArchivedEmailIds(ACCOUNT, '');
-    expect(calls).toEqual(['maildir_list']);
+    await db.readLocalEmailIndex(ACCOUNT, '');
+    expect(calls).toEqual(['local_index_read']);
   });
 });
 
