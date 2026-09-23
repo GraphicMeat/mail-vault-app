@@ -2,7 +2,8 @@ import { demoFiles } from './runtime.js';
 
 export const BaseDirectory = Object.freeze({ AppData: 'AppData', AppCache: 'AppCache', Home: 'Home', Download: 'Download' });
 
-const pathOf = (path = '') => String(path).replace(/^\.\//, '').replace(/^Maildir\//, 'Maildir/');
+// db/accounts.js hands absolute paths under get_app_data_dir (backend.js: '/demo/app-data').
+const pathOf = (path = '') => String(path).replace(/^\/demo\/app-data\//, '').replace(/^\.\//, '').replace(/^Maildir\//, 'Maildir/');
 
 export async function readTextFile(path) {
   const value = demoFiles.read(pathOf(path));

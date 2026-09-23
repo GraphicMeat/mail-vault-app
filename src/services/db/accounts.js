@@ -1,6 +1,6 @@
 // ── db/accounts — accounts.json + keychain account CRUD, dedup, bootstrapping ──
 
-import { readTextFile, writeTextFile, exists, mkdir, remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
 import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveKeychain } from './keychain.js';
@@ -17,22 +17,46 @@ let initialized = false;
 const ACCOUNTS_FILE = 'accounts.json';
 const MAILDIR = 'Maildir';
 
-async function ensureDir(path) {
+// The app data dir comes from Rust (`get_app_data_dir`, the same resolver the
+// daemon uses), never from plugin-fs's BaseDirectory.AppData: on Windows that
+// is Roaming and ignores the env, while the app and the daemon live in Local.
+let appDataDir = null;
+
+/** Absolute path of `rel` ('/'-separated) under the app data dir. */
+export async function dataPath(rel) {
+  appDataDir ??= invoke('get_app_data_dir').then((dir) => {
+    if (typeof dir !== 'string' || !dir) throw new Error('No app data directory');
+    return dir;
+  });
+  let dir;
   try {
-    const dirExists = await exists(path, { baseDir: BaseDirectory.AppData });
+    dir = await appDataDir;
+  } catch (error) {
+    appDataDir = null; // one failure must not poison the session
+    throw error;
+  }
+  const sep = dir.includes('\\') ? '\\' : '/';
+  return dir.replace(/[\\/]+$/, '') + sep + rel.split('/').join(sep);
+}
+
+async function ensureDir(rel) {
+  const path = await dataPath(rel);
+  try {
+    const dirExists = await exists(path);
     if (!dirExists) {
-      await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true });
+      await mkdir(path, { recursive: true });
     }
   } catch {
-    await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true });
+    await mkdir(path, { recursive: true });
   }
 }
 
 async function readAccountsFile() {
   try {
-    const fileExists = await exists(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    const file = await dataPath(ACCOUNTS_FILE);
+    const fileExists = await exists(file);
     if (!fileExists) return [];
-    const data = await readTextFile(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    const data = await readTextFile(file);
     return JSON.parse(data);
   } catch (error) {
     console.warn('[db.js] Failed to read accounts.json:', error);
@@ -41,7 +65,7 @@ async function readAccountsFile() {
 }
 
 async function writeAccountsFile(accounts) {
-  await writeTextFile(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), { baseDir: BaseDirectory.AppData });
+  await writeTextFile(await dataPath(ACCOUNTS_FILE), JSON.stringify(accounts, null, 2));
 }
 
 export function accountDir(accountId) {
@@ -62,7 +86,7 @@ export async function initBasic() {
 
   // Ensure accounts.json exists
   try {
-    const fileExists = await exists(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    const fileExists = await exists(await dataPath(ACCOUNTS_FILE));
     if (!fileExists) {
       await writeAccountsFile([]);
     }
@@ -424,10 +448,10 @@ export async function deleteAccount(id) {
 
   // Remove Maildir/{accountId}/ directory
   try {
-    const dirPath = accountDir(id);
-    const dirExists = await exists(dirPath, { baseDir: BaseDirectory.AppData });
+    const dirPath = await dataPath(accountDir(id));
+    const dirExists = await exists(dirPath);
     if (dirExists) {
-      await remove(dirPath, { baseDir: BaseDirectory.AppData, recursive: true });
+      await remove(dirPath, { recursive: true });
     }
   } catch (error) {
     console.warn('[db.js] Failed to remove account Maildir:', error);

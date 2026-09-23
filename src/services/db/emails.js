@@ -1,8 +1,8 @@
 // ── db/emails — Maildir email storage, local/archived reads, search, storage stats ──
 
-import { readDir, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { readDir, exists } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
-import { initDB, initBasic, accountDir } from './accounts.js';
+import { initDB, initBasic, accountDir, dataPath } from './accounts.js';
 import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
 import { custodySource } from '../../stores/slices/custody.js';
@@ -497,12 +497,12 @@ export async function getAllLocalEmails(accountId, mailboxes = []) {
   await initDB();
   if (!invoke) return [];
 
-  const acctDir = accountDir(accountId);
   try {
-    const dirExists = await exists(acctDir, { baseDir: BaseDirectory.AppData });
+    const acctDir = await dataPath(accountDir(accountId));
+    const dirExists = await exists(acctDir);
     if (!dirExists) return [];
 
-    const mailboxDirs = await readDir(acctDir, { baseDir: BaseDirectory.AppData });
+    const mailboxDirs = await readDir(acctDir);
     const allEmails = [];
     for (const mbEntry of mailboxDirs) {
       if (!mbEntry.name || !mbEntry.isDirectory) continue;

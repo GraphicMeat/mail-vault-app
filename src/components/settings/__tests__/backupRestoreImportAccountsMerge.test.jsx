@@ -21,7 +21,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // In-memory accounts.json, exactly the surface `src/services/db/accounts.js`
-// reads/writes through (`@tauri-apps/plugin-fs`, BaseDirectory.AppData).
+// reads/writes through (`@tauri-apps/plugin-fs`, absolute paths under the dir
+// `get_app_data_dir` answers).
+const ACCOUNTS_PATH = '/data/accounts.json';
 let fsFiles = {};
 vi.mock('@tauri-apps/plugin-fs', () => ({
   readTextFile: (path) => (path in fsFiles ? Promise.resolve(fsFiles[path]) : Promise.reject(new Error('ENOENT'))),
@@ -29,14 +31,14 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   exists: (path) => Promise.resolve(path in fsFiles),
   mkdir: () => Promise.resolve(),
   remove: () => Promise.resolve(),
-  BaseDirectory: { AppData: 1 },
 }));
 
 // `db/keychain.js` calls `transportSend('get_app_data_dir', {})` as a
 // top-level module side effect the moment anything pulls the `db` barrel
 // in (mailStore's workflows do, statically), before any test's own
 // beforeEach runs. The default must resolve, not return undefined.
-const sendMock = vi.fn(() => Promise.resolve(null));
+const sendDefault = (cmd) => Promise.resolve(cmd === 'get_app_data_dir' ? '/data' : null);
+const sendMock = vi.fn(sendDefault);
 vi.mock('../../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -57,9 +59,9 @@ const NEW_ACCOUNTS = [
 ];
 
 beforeEach(() => {
-  fsFiles = { 'accounts.json': JSON.stringify([{ id: 'existing-1', email: 'existing@test.com' }]) };
+  fsFiles = { [ACCOUNTS_PATH]: JSON.stringify([{ id: 'existing-1', email: 'existing@test.com' }]) };
   sendMock.mockClear();
-  sendMock.mockImplementation(() => Promise.resolve(null));
+  sendMock.mockImplementation(sendDefault);
   window.__MAILVAULT_DEMO__ = true; // skip window.location.reload(), unrelated to the merge under test
   window.__TAURI__ = { core: { invoke: vi.fn() } };
   vi.stubGlobal('alert', vi.fn());
@@ -78,7 +80,7 @@ it('merges import_backup\'s newAccounts descriptors into accounts.json and lists
     if (cmd === 'import_backup') {
       return Promise.resolve({ emailCount: 5, accountCount: 2, newAccounts: NEW_ACCOUNTS, settingsJson: null });
     }
-    return Promise.resolve(null);
+    return sendDefault(cmd);
   });
 
   render(<BackupRestore />);
@@ -86,7 +88,7 @@ it('merges import_backup\'s newAccounts descriptors into accounts.json and lists
 
   await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
 
-  const onDisk = JSON.parse(fsFiles['accounts.json']);
+  const onDisk = JSON.parse(fsFiles[ACCOUNTS_PATH]);
   expect(onDisk.find((a) => a.email === 'existing@test.com')).toBeTruthy();
   expect(onDisk.find((a) => a.email === 'alice@test.com')).toMatchObject({ id: 'new-alice', imapHost: 'imap.alice.test' });
   expect(onDisk.find((a) => a.email === 'bob@test.com')).toMatchObject({ id: 'new-bob' });
