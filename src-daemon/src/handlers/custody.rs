@@ -191,8 +191,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// remaps custody to match. Runs under the registry's per-mailbox lock (so a
 /// verify never lists the folder mid-repair) and the vault gate. The caller
 /// must not hold either, and must call any verifying registry read after
-/// this returns, never inside it. A repair that moved anything invalidates
-/// the mailbox, so the next read relists it.
+/// this returns, never inside it. A repair that moved anything, or hit any
+/// error (a failed second-phase rename leaves a file under its temp name),
+/// invalidates the mailbox, so the next read relists it.
 pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<maildir::GenerationRepair, String> {
     with_mailbox_write(state, account_id, mailbox, |root| -> Result<maildir::GenerationRepair, String> {
         let (cached_uv, cached_total) =
@@ -227,9 +228,10 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, 
             }
         };
         let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
-        // Files were renamed or set aside wholesale: the next
-        // read relists the folder. The change hook nudges the index.
-        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
+        // Files were renamed or set aside wholesale, or a rename failed
+        // part way: the next read relists the folder. The change hook
+        // nudges the index.
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() || report.errors > 0 {
             state.vault_registry.invalidate(account_id, mailbox);
         }
         if !report.rebound.is_empty() || !report.orphaned.is_empty() {
@@ -367,6 +369,33 @@ mod tests {
 
         assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![5], vec![])));
         assert_eq!(reg.listing_count(), 2, "the repair invalidated, so the folder was listed again");
+    }
+
+    /// A repair that only errored still invalidates: its failures (here the
+    /// generation stamp, a directory where the file should be; in the field a
+    /// failed second-phase rename) can leave the folder unlike its rows.
+    #[tokio::test]
+    async fn a_repair_that_only_errors_still_invalidates_the_vault_registry() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,.eml"), b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+        fs::create_dir_all(cur.parent().unwrap().join(maildir::GENERATION_FILE)).unwrap();
+        let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<other@x.test>"}]});
+        daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![1], vec![])));
+        assert_eq!(reg.listing_count(), 1);
+
+        let r = call(&s, "maildir_repair_generation", json!({"accountId": "acc", "mailbox": "INBOX"})).await.result.unwrap();
+        assert_eq!(r["errors"], 1, "{r}");
+        assert_eq!(r["kept"], 1, "{r}");
+        assert_eq!((&r["rebound"], &r["orphaned"], &r["recovered"]), (&json!([]), &json!([]), &json!([])), "{r}");
+
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![1], vec![])));
+        assert_eq!(reg.listing_count(), 2, "the errored repair invalidated, so the folder was listed again");
     }
 
     /// Task 3.7: the Task 2.9b bridge route is gone with its only caller.
