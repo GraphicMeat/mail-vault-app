@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { ViewPreview } from './ViewPreview';
 import { useTagStore } from '../stores/tagStore';
@@ -8,8 +8,8 @@ import { useMailStore } from '../stores/mailStore';
 import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
+import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
 
-const ICONS = ['tag', 'star', 'paperclip', 'reply', 'inbox'];
 /// Three states, not two: a filter can demand a flag, demand its absence, or
 /// not care — and "not care" is what a checkbox cannot say.
 const TRISTATE = [['any', null], ['yes', true], ['no', false]];
@@ -159,10 +159,16 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     }
   };
 
-  const tri = (key) => <select data-testid={`view-${key}`} value={flags[key]} aria-label={t(`views.filter.${key}`)}
-    onChange={event => setFlags(current => ({ ...current, [key]: event.target.value }))}>
-    {TRISTATE.map(([value]) => <option key={value} value={value}>{t(`views.tristate.${value}`)}</option>)}
-  </select>;
+  const tri = key => <div className="view-choice-field">
+    <span>{t(`views.filter.${key}`)}</span>
+    <div className="view-choice-group" role="group" aria-label={t(`views.filter.${key}`)}>
+      {TRISTATE.map(([value]) => <button key={value} type="button" data-testid={`view-${key}-${value}`}
+        className="view-choice-button" aria-pressed={flags[key] === value}
+        onClick={() => setFlags(current => ({ ...current, [key]: value }))}>
+        {t(`views.tristate.${value}`)}
+      </button>)}
+    </div>
+  </div>;
 
   return <form className="view-editor" data-testid="view-editor-form" onSubmit={submit}>
     <SettingsSection title={view.builtin ? viewLabel(view, t) : t('views.edit')} description={t('views.editorIntro')}>
@@ -170,16 +176,21 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       <input data-testid="view-name" value={name} maxLength={80} aria-label={t('views.name')}
         placeholder={view.builtin ? viewLabel(view, t) : t('views.name')}
         onChange={event => setName(event.target.value)} />
-      <select data-testid="view-icon" value={icon} aria-label={t('views.icon')}
-        onChange={event => setIcon(event.target.value)}>
-        {ICONS.map(option => <option key={option} value={option}>{t(`views.iconName.${option}`)}</option>)}
-      </select>
-      <button type="button" data-testid="view-move-up" aria-label={t('views.moveUp')} disabled={saving} onClick={() => { void move(-1); }}>
-        <ChevronUp size={12} />
-      </button>
-      <button type="button" data-testid="view-move-down" aria-label={t('views.moveDown')} disabled={saving} onClick={() => { void move(1); }}>
-        <ChevronDown size={12} />
-      </button>
+    </div>
+    <div className="view-choice-field">
+      <span>{t('views.icon')}</span>
+      <div className="view-choice-group view-icon-choices" role="group" aria-label={t('views.icon')}>
+        {VIEW_ICON_PRESETS.map(option => {
+          return <button key={option} type="button" data-testid={`view-icon-${option}`}
+            className="view-choice-button" aria-pressed={icon === option} onClick={() => setIcon(option)}>
+            <ViewIcon icon={option} size={16} />{t(`views.iconName.${option}`)}
+          </button>;
+        })}
+        <input type="text" data-testid="view-emoji" className={`view-emoji-input${icon.startsWith('emoji:') ? ' is-selected' : ''}`}
+          aria-label={`${t('views.icon')} (😀)`} placeholder="😀"
+          value={icon.startsWith('emoji:') ? icon.slice(6) : ''}
+          onChange={event => setIcon(event.target.value ? `emoji:${event.target.value}` : 'tag')} />
+      </div>
     </div>
 
     <label className="view-editor-row">
@@ -197,28 +208,18 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     </SettingsSection>
 
     <SettingsSection title={t('views.filter.filters')} description={t('views.filtersHint')}>
-    <div className="view-editor-row">
-      <label>{t('views.filter.unread')}{tri('unread')}</label>
-      <label>{t('views.filter.starred')}{tri('starred')}</label>
-      <label>{t('views.filter.answered')}{tri('answered')}</label>
-      <label>
-        <input type="checkbox" data-testid="view-attachments" checked={attachments}
-          onChange={event => setAttachments(event.target.checked)} />
-        {t('views.filter.attachments')}
-      </label>
+    <div className="view-editor-row view-filter-choices">
+      {tri('unread')}
+      {tri('starred')}
+      {tri('answered')}
     </div>
 
-    <div className="view-editor-row">
-      <label>
-        <input type="checkbox" data-testid="view-to-me" checked={toMe}
-          onChange={event => setToMe(event.target.checked)} />
-        {t('views.filter.toMe')}
-      </label>
-      <label>
-        <input type="checkbox" data-testid="view-not-from-me" checked={notFromMe}
-          onChange={event => setNotFromMe(event.target.checked)} />
-        {t('views.filter.notFromMe')}
-      </label>
+    <div className="view-editor-row view-filter-choices">
+      {[[attachments, setAttachments, 'attachments'], [toMe, setToMe, 'toMe'], [notFromMe, setNotFromMe, 'notFromMe']]
+        .map(([active, setActive, key]) => <button key={key} type="button" data-testid={`view-${key}`}
+          className="view-choice-button" aria-pressed={active} onClick={() => setActive(!active)}>
+          {t(`views.filter.${key}`)}
+        </button>)}
     </div>
 
     {/* A rolling window and a fixed range are two answers to one question, so
@@ -247,18 +248,19 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       </>}
     </div>
 
-    {accounts.length > 1 && <div className="view-editor-row">
+    {accounts.length > 1 && <div className="view-choice-field">
       <span>{t('views.filter.accounts')}</span>
-      {/* No box ticked is every account, not none: a view made before a second
+      {/* No account selected is every account: a view made before a second
           account was added must not empty itself when one arrives. */}
-      {accounts.map(account => <label key={account.id}>
-        <input type="checkbox" data-testid={`view-account-${account.id}`} checked={chosenAccounts.includes(account.id)}
-          onChange={event => setChosenAccounts(current => (event.target.checked
-            ? [...current, account.id]
-            : current.filter(id => id !== account.id)))} />
-        {account.email}
-      </label>)}
-      {chosenAccounts.length === 0 && <span className="view-editor-hint">{t('views.filter.allAccounts')}</span>}
+      <div className="view-choice-group view-account-choices" role="group" aria-label={t('views.filter.accounts')}>
+        <button type="button" className="view-choice-button" aria-pressed={chosenAccounts.length === 0}
+          onClick={() => setChosenAccounts([])}>{t('views.filter.allAccounts')}</button>
+        {accounts.map(account => <button key={account.id} type="button" data-testid={`view-account-${account.id}`}
+          className="view-choice-button" aria-pressed={chosenAccounts.includes(account.id)}
+          onClick={() => setChosenAccounts(current => (current.includes(account.id)
+            ? current.filter(id => id !== account.id)
+            : [...current, account.id]))}>{account.email}</button>)}
+      </div>
     </div>}
 
     </SettingsSection>
@@ -296,15 +298,15 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     </SettingsSection>
 
     {(tags.length > 0 || schema.length > 0) && <SettingsSection title={t('views.filter.more')} description={t('views.moreHint')}>
-    {tags.length > 0 && <div className="view-editor-row">
+    {tags.length > 0 && <div className="view-choice-field">
       <span>{t('views.filter.tags')}</span>
-      {tags.map(tag => <label key={tag.id}>
-        <input type="checkbox" data-testid={`view-tag-${tag.id}`} checked={chosenTags.includes(tag.id)}
-          onChange={event => setChosenTags(current => (event.target.checked
-            ? [...current, tag.id]
-            : current.filter(id => id !== tag.id)))} />
-        {tag.name}
-      </label>)}
+      <div className="view-choice-group" role="group" aria-label={t('views.filter.tags')}>
+        {tags.map(tag => <button key={tag.id} type="button" data-testid={`view-tag-${tag.id}`}
+          className="view-choice-button" aria-pressed={chosenTags.includes(tag.id)}
+          onClick={() => setChosenTags(current => (current.includes(tag.id)
+            ? current.filter(id => id !== tag.id)
+            : [...current, tag.id]))}>{tag.name}</button>)}
+      </div>
     </div>}
 
     {schema.length > 0 && <div className="view-editor-row">
@@ -334,6 +336,8 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     {showPreview && <SettingsSection title={t('views.preview.title')} description={t('views.previewHint')}><ViewPreview def={editedDef()} /></SettingsSection>}
 
     <div className="settings-editor-actions justify-end">
+      <button type="button" data-testid="view-move-up" disabled={saving} onClick={() => { void move(-1); }}>{t('views.moveUp')}</button>
+      <button type="button" data-testid="view-move-down" disabled={saving} onClick={() => { void move(1); }}>{t('views.moveDown')}</button>
       <Button variant="primary" size="sm" type="submit" disabled={saving}>{t('common.save')}</Button>
       <Button variant="ghost" size="sm" type="button" onClick={() => onClose?.()}>{t('common.cancel')}</Button>
       {confirming

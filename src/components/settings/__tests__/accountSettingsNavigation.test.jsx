@@ -37,6 +37,18 @@ it('keeps identity visible while revealing only the chosen category', () => {
   expect(screen.queryByRole('heading', { name: 'Account order' })).toBeNull();
 });
 
+it('uses explicit buttons for signature and account visibility', () => {
+  render(<AccountSettings accounts={accounts} />);
+  const signature = screen.getByRole('group', { name: t('settings.accounts.enableSignature') });
+  fireEvent.click(within(signature).getByRole('button', { name: t('views.tristate.yes') }));
+  expect(useSettingsStore.getState().getSignature('studio').enabled).toBe(true);
+  expect(within(signature).getByRole('button', { name: t('views.tristate.yes') }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(tab('Advanced'));
+  const visibility = screen.getByRole('group', { name: t('settings.accounts.accountVisible') });
+  expect(within(visibility).getByRole('button', { name: t('settings.accounts.accountVisible') }).getAttribute('aria-pressed')).toBe('true');
+  expect(within(visibility).getByRole('button', { name: t('settings.accounts.accountHidden') }).getAttribute('aria-pressed')).toBe('false');
+});
+
 it('opens the requested section and honors a new search destination', () => {
   const { rerender } = render(<AccountSettings accounts={accounts} initialSection="connection" />);
   expect(tab('Connection').getAttribute('aria-selected')).toBe('true');

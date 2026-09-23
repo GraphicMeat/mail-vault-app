@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Bookmark, Star, Paperclip, Reply, Inbox } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } from '../../stores/viewStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { ViewEditor } from '../ViewEditor';
 import { Button } from '../ui/Button';
 import { SettingsSection } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
-
-const ICONS = { star: Star, paperclip: Paperclip, reply: Reply, tag: Bookmark, inbox: Inbox };
+import { ViewIcon } from '../ViewIcon';
 
 /// The views page: one list, one builder, and the builder previews what it
 /// would find while it is being typed.
@@ -92,8 +91,8 @@ export function ViewsSettings({ onUpgrade }) {
 
   const editing = views.find(view => view.id === editingId);
 
-  return <section className="views-settings" aria-label={t('views.section')}>
-    <SettingsSection title={t('views.section')} description={t('views.explainer')}>
+  return <section className="views-settings settings-form" aria-label={t('views.section')}>
+    <SettingsSection>
       <Button variant="secondary" size="sm" type="button" data-testid="views-new" disabled={full}
         aria-label={t('views.new')} onClick={startNew}><Plus size={14} /> {t('views.new')}</Button>
 
@@ -115,13 +114,12 @@ export function ViewsSettings({ onUpgrade }) {
 
     <ul className="views-list" data-testid="views-list">
       {views.map((view) => {
-        const Icon = ICONS[view.icon] || Bookmark;
         return <li key={view.id} className="views-row">
           <button type="button" data-testid={`views-row-${view.id}`}
             className={`views-row-button${editingId === view.id ? ' is-editing' : ''}`}
             aria-expanded={editingId === view.id}
             onClick={() => { void selectView(view.id); }}>
-            <Icon size={14} aria-hidden="true" />
+            <ViewIcon icon={view.icon} size={14} />
             <span className="views-row-name">{viewLabel(view, t)}</span>
           </button>
         </li>;

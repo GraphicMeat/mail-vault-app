@@ -1,10 +1,9 @@
 import React from 'react';
-import { Star, Paperclip, Reply, Bookmark, Inbox, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n/index.js';
-
-const ICONS = { star: Star, paperclip: Paperclip, reply: Reply, tag: Bookmark, inbox: Inbox };
+import { ViewIcon } from './ViewIcon';
 
 /// Saved views, pinned above the accounts: a view carries its account scope as
 /// a property, so it belongs to no one account's folder tree.
@@ -30,7 +29,6 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
   const newView = () => { useViewStore.setState({ pendingNew: true }); openSettingsPage(); };
 
   const row = (view) => {
-    const Icon = ICONS[view.icon] || Bookmark;
     const label = viewLabel(view, t);
     const count = counts?.[view.id];
     const active = activeViewId === view.id;
@@ -39,7 +37,7 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
       aria-current={active ? 'true' : undefined}
       title={label}
       onClick={() => (active ? closeView() : openView(view))}>
-      <Icon size={collapsed ? 18 : 14} aria-hidden="true" />
+      <ViewIcon icon={view.icon} size={collapsed ? 18 : 14} />
       {!collapsed && <>
         <span className="sidebar-view-name">{label}</span>
         {count ? <span className="sidebar-view-count" data-testid={`view-count-${view.id}`}>{count}</span> : null}
@@ -63,6 +61,10 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
         aria-expanded={!folded} onClick={toggleFold}>
         {folded ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
         <h2>{t('views.section')}</h2>
+      </button>
+      <button type="button" className="sidebar-view-edit" data-testid="view-edit"
+        aria-label={t('views.edit')} title={t('views.edit')} onClick={openSettingsPage}>
+        <Pencil size={14} />
       </button>
       <button type="button" className="sidebar-view-new" data-testid="view-new"
         aria-label={t('views.new')} title={t('views.new')} onClick={newView}>

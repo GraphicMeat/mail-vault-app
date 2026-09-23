@@ -58,6 +58,12 @@ describe('the Views section', () => {
     expect(screen.getByText('Receipts')).toBeTruthy();
   });
 
+  it('renders a saved emoji icon in the sidebar', () => {
+    useViewStoreMock.setState({ views: [{ ...MINE, icon: 'emoji:🧑🏽‍💻' }] });
+    render(<SidebarViews />);
+    expect(screen.getByTestId('view-row-v1').textContent).toContain('🧑🏽‍💻');
+  });
+
   it('shows the count the daemon gave, and nothing where there is none', () => {
     render(<SidebarViews />);
     expect(screen.getByTestId('view-count-builtin-starred').textContent).toBe('4');
@@ -97,9 +103,9 @@ describe('the Views section', () => {
   it('gives a row no edit control, wide or collapsed', () => {
     const { unmount } = render(<SidebarViews onOpenSettings={vi.fn()} />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
-    // Rows, the fold heading and the + : nothing else is clickable here.
+    // Rows have no edit action; the shared Edit button sits beside +.
     expect(screen.getAllByRole('button').map(b => b.dataset.testid).sort())
-      .toEqual(['view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
+      .toEqual(['view-edit', 'view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
     unmount();
     render(<SidebarViews collapsed onOpenSettings={vi.fn()} />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
@@ -114,6 +120,16 @@ describe('the Views section', () => {
     fireEvent.click(screen.getByTestId('view-new'));
     expect(useViewStoreMock.getState().pendingNew).toBe(true);
     expect(onOpenSettings).toHaveBeenCalledWith('views');
+  });
+
+  it('opens Views settings from Edit without starting a new view', () => {
+    const onOpenSettings = vi.fn();
+    render(<SidebarViews onOpenSettings={onOpenSettings} />);
+    const controls = screen.getAllByRole('button').map(button => button.dataset.testid);
+    expect(controls.indexOf('view-edit')).toBeLessThan(controls.indexOf('view-new'));
+    fireEvent.click(screen.getByTestId('view-edit'));
+    expect(onOpenSettings).toHaveBeenCalledWith('views');
+    expect(useViewStoreMock.getState().pendingNew).toBe(false);
   });
 
   it('folds the list away and keeps the heading', () => {
