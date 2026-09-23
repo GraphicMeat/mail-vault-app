@@ -358,6 +358,12 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
     });
     mockFetchEmails.mockResolvedValue({ total: 1, emails: [mkHeader(1)] }); // live fetch: 1 == serverTotal
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null });
+    // This case is the EARLY-merge ordering: the disk paint lands before the
+    // server half checks. Hold the server half back so that is what happens,
+    // rather than depending on how many microtasks each mock takes (the late
+    // ordering has its own case below).
+    mockResolveServerAccount.mockImplementation((id, account) =>
+      new Promise((r) => setTimeout(() => r({ ok: true, account }), 10)));
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
