@@ -32,6 +32,7 @@ pub mod dns;
 pub mod smtp;
 pub mod spellcheck;
 pub mod transfer_stats;
+pub mod transfer;
 pub mod net;
 pub mod daemon_ipc;
 pub mod transport;

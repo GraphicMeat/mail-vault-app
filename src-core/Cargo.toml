@@ -32,6 +32,10 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 # Offline search index (src/search_index): FTS5 trigram + contentless_delete need SQLite >= 3.43, so bundle it.
 rusqlite = { version = "0.40", features = ["bundled"] }
 zip = "2"
+# Encrypted account transfer file (src/transfer).
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+zeroize = "1"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
