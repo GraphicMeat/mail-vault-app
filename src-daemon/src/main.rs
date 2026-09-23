@@ -425,6 +425,7 @@ async fn daemon_main() {
     idle.set_auto_tag_notify(Arc::clone(&auto_tag_worker.notify));
 
     let events = events::EventBus::new(events::CAPACITY);
+    credentials::install_events(events.clone());
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
     // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls

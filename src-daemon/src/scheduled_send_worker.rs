@@ -79,6 +79,10 @@ const MAX_SLEEP: Duration = Duration::from_secs(3600);
 /// `due` next tick, `next_wait` would answer `Duration::ZERO` again, and the
 /// loop would spin hot instead of retrying at a sane pace.
 const MIN_RETRY_WAIT: Duration = Duration::from_secs(1);
+/// How often due rows are tried again while the keychain gate is blocked.
+/// `keychain.retry` wakes the loop the moment the user unlocks, so this is
+/// only the fallback for an unlock that happened some other way.
+const KEYCHAIN_POLL: Duration = Duration::from_secs(5 * 60);
 
 /// Exponential backoff between transient-failure retries: 30s, 60s for
 /// `attempt` 1 and 2 (`attempt` 3 goes `failed` instead — see `attempt_row`).
@@ -123,6 +127,7 @@ async fn run(state: Arc<DaemonState>) {
         } else {
             OFFLINE_POLL
         };
+        let wait = if crate::credentials::GATE.is_blocked() { wait.max(KEYCHAIN_POLL) } else { wait };
         tokio::select! {
             _ = state.scheduled_send.notify.notified() => {}
             _ = tokio::time::sleep(wait) => {}
@@ -181,8 +186,9 @@ struct StoredEnvelope {
 
 enum Outcome {
     Sent,
-    /// Genuinely offline per `NetGate` — never counted against the row and
-    /// never terminal, whatever `attempts` already says.
+    /// Genuinely offline per `NetGate`, or the keychain gate is blocked —
+    /// never counted against the row and never terminal, whatever `attempts`
+    /// already says.
     Offline(String),
     /// Worth trying again — the ladder in `attempt_row` below decides whether
     /// `MAX_ATTEMPTS` has run out.
@@ -320,6 +326,11 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
         Ok(a) => a,
         Err(e) => {
             let msg = format!("Could not load this account's credentials: {e}");
+            // Waiting on the user to unlock the keychain is not a failure of
+            // this row: like offline, it stays queued and keeps its tries.
+            if crate::credentials::GATE.is_blocked() {
+                return Outcome::Offline(msg);
+            }
             return if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) };
         }
     };

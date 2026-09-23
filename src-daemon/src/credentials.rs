@@ -12,7 +12,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use keyring::Entry;
+use serde_json::{json, Value};
+use tracing::{info, warn};
 
+use crate::events::EventBus;
 use crate::imap::ImapConfig;
 
 // Same service/key the app writes to (src-tauri/src/main.rs KEYRING_SERVICE /
@@ -47,9 +50,9 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 
     let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
         .map_err(|e| format!("failed to create keyring entry: {}", e))?;
-    let json = entry
-        .get_password()
-        .map_err(|e| format!("failed to read keychain: {}", e))?;
+    let json = read_entry(&entry)
+        .map_err(|e| format!("failed to read keychain: {}", e))?
+        .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))?;
     serde_json::from_str(&json).map_err(|e| format!("failed to parse credentials: {}", e))
 }
 
@@ -86,8 +89,229 @@ pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<Ima
     match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
         Ok(Ok(result)) => result,
         Ok(Err(e)) => Err(format!("the credential read panicked: {e}")),
-        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+        Err(_) => {
+            GATE.block("timeout");
+            Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
+        }
     }
+}
+
+// ── Keychain gate ───────────────────────────────────────────────────────────
+//
+// A read the user can fix by unlocking the keychain (locked, a refused or
+// unanswered prompt) blocks the gate; the next read that answers clears it.
+// Each transition is one `keychain-status` event, which the app turns into its
+// unlock dialog. With no app listening, the daemon posts a banner itself so
+// somebody learns sync and scheduled sends are paused.
+
+/// How long a keychain read gets when the user asked for it (`keychain.retry`)
+/// and may be typing a password into a macOS prompt.
+const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+/// At most one daemon-posted banner per this long, however often the gate flaps.
+const BANNER_EVERY: Duration = Duration::from_secs(30 * 60);
+
+struct Blocked {
+    reason: &'static str,
+    since_ms: i64,
+}
+
+pub(crate) struct KeychainGate {
+    blocked: std::sync::Mutex<Option<Blocked>>,
+    events: std::sync::OnceLock<EventBus>,
+    last_banner: std::sync::Mutex<Option<std::time::Instant>>,
+}
+
+pub(crate) static GATE: KeychainGate = KeychainGate::new();
+
+/// Called once from main, so the four credential callers keep their signatures.
+pub fn install_events(bus: EventBus) {
+    let _ = GATE.events.set(bus);
+}
+
+impl KeychainGate {
+    const fn new() -> Self {
+        Self {
+            blocked: std::sync::Mutex::new(None),
+            events: std::sync::OnceLock::new(),
+            last_banner: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub(crate) fn block(&self, reason: &'static str) {
+        {
+            let mut blocked = self.blocked.lock().unwrap_or_else(|e| e.into_inner());
+            if blocked.is_some() {
+                return;
+            }
+            let since_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            *blocked = Some(Blocked { reason, since_ms });
+        }
+        warn!("[keychain] blocked ({reason}); sync and scheduled sends wait for an unlock");
+        let Some(bus) = self.events.get() else { return };
+        if !bus.emit("keychain-status", json!({"blocked": true, "reason": reason})) {
+            self.banner();
+        }
+    }
+
+    pub(crate) fn clear(&self) {
+        if self.blocked.lock().unwrap_or_else(|e| e.into_inner()).take().is_none() {
+            return;
+        }
+        info!("[keychain] readable again");
+        if let Some(bus) = self.events.get() {
+            bus.emit("keychain-status", json!({"blocked": false}));
+        }
+    }
+
+    pub(crate) fn is_blocked(&self) -> bool {
+        self.blocked.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+    }
+
+    pub(crate) fn status(&self) -> Value {
+        match &*self.blocked.lock().unwrap_or_else(|e| e.into_inner()) {
+            Some(b) => json!({"blocked": true, "reason": b.reason, "since": b.since_ms}),
+            None => json!({"blocked": false}),
+        }
+    }
+
+    fn banner(&self) {
+        {
+            let mut last = self.last_banner.lock().unwrap_or_else(|e| e.into_inner());
+            if last.is_some_and(|t| t.elapsed() < BANNER_EVERY) {
+                return;
+            }
+            *last = Some(std::time::Instant::now());
+        }
+        // Its own thread: an Objective-C call that stalls must not park a
+        // runtime worker or the blocking pool.
+        std::thread::spawn(banner::post);
+    }
+}
+
+/// `get_password` with the gate kept in step: a read that answers, even with
+/// "nothing stored", clears it; one unlocking would fix blocks it. `Ok(None)`
+/// is `NoEntry`.
+fn read_entry(entry: &Entry) -> keyring::Result<Option<String>> {
+    match entry.get_password() {
+        Ok(pw) => {
+            GATE.clear();
+            Ok(Some(pw))
+        }
+        Err(keyring::Error::NoEntry) => {
+            GATE.clear();
+            Ok(None)
+        }
+        Err(e) => {
+            if let Some(reason) = mailvault_core::keychain::keychain_block_reason(os_status(&e), false) {
+                GATE.block(reason);
+            }
+            Err(e)
+        }
+    }
+}
+
+/// The `OSStatus` keyring boxed away, recoverable only before it is stringified.
+#[cfg(target_os = "macos")]
+fn os_status(e: &keyring::Error) -> Option<i32> {
+    match e {
+        keyring::Error::PlatformFailure(b) | keyring::Error::NoStorageAccess(b) => {
+            b.downcast_ref::<security_framework::base::Error>().map(|e| e.code())
+        }
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn os_status(_: &keyring::Error) -> Option<i32> {
+    None
+}
+
+/// `keychain.retry`: both items the daemon reads, under a clock long enough
+/// for the user to answer macOS's prompt. `ok` only when both answered,
+/// because a refusal is per item: clearing the gate on the account blob alone
+/// would reopen the dialog at the AI key's next read.
+pub(crate) async fn retry() -> Value {
+    let read = tokio::task::spawn_blocking(|| -> Result<(), keyring::Error> {
+        if test_credentials_path().is_some() {
+            GATE.clear();
+            return Ok(());
+        }
+        for key in [CREDENTIALS_KEY, AI_ENDPOINT_KEY_ENTRY] {
+            read_entry(&Entry::new(KEYRING_SERVICE, key)?)?;
+        }
+        Ok(())
+    });
+    match tokio::time::timeout(RETRY_TIMEOUT, read).await {
+        Ok(Ok(Ok(()))) => json!({"ok": true}),
+        Ok(Ok(Err(e))) => {
+            let reason = mailvault_core::keychain::keychain_block_reason(os_status(&e), false);
+            json!({"ok": false, "reason": reason.unwrap_or("error")})
+        }
+        Ok(Err(_)) => json!({"ok": false, "reason": "error"}),
+        Err(_) => {
+            GATE.block("timeout");
+            json!({"ok": false, "reason": "timeout"})
+        }
+    }
+}
+
+/// The daemon's own banner, for when the gate closes with no app open.
+///
+/// UNPROVEN: posting through UNUserNotificationCenter from the daemon relies on
+/// `NSBundle.mainBundle` resolving to `MailVault.app` (the binary sits in its
+/// `Contents/MacOS`), so the banner posts as MailVault and a click opens the
+/// app, which asks `keychain.status` on start. Anything else (a bare binary in
+/// dev or tests) only logs: UNUserNotificationCenter throws for a process
+/// without a bundle, and under `panic = "abort"` that cannot be caught.
+#[cfg(target_os = "macos")]
+mod banner {
+    use block2::RcBlock;
+    use objc2::runtime::Bool;
+    use objc2_foundation::{NSBundle, NSError, NSLocale, NSString};
+    use objc2_user_notifications::{
+        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationRequest, UNUserNotificationCenter,
+    };
+    use tracing::warn;
+
+    pub fn post() {
+        objc2::rc::autoreleasepool(|_| {
+            let bundle = NSBundle::mainBundle();
+            if !bundle.bundlePath().to_string().ends_with(".app") || bundle.bundleIdentifier().is_none() {
+                warn!("[keychain] not inside an app bundle; no banner posted");
+                return;
+            }
+            let lang = NSLocale::preferredLanguages().firstObject().map(|l| l.to_string()).unwrap_or_default();
+            let (title, body) = mailvault_core::keychain::keychain_banner_text(&lang);
+            let content = UNMutableNotificationContent::new();
+            content.setTitle(&NSString::from_str(title));
+            content.setBody(&NSString::from_str(body));
+            let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
+                &NSString::from_str("mailvault-keychain-blocked"),
+                &content,
+                None,
+            );
+            let deliver = RcBlock::new(move |granted: Bool, _error: *mut NSError| {
+                if granted.as_bool() {
+                    UNUserNotificationCenter::currentNotificationCenter()
+                        .addNotificationRequest_withCompletionHandler(&request, None);
+                } else {
+                    warn!("[keychain] notifications not authorized; banner dropped");
+                }
+            });
+            UNUserNotificationCenter::currentNotificationCenter().requestAuthorizationWithOptions_completionHandler(
+                UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+                &deliver,
+            );
+        });
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod banner {
+    pub fn post() {}
 }
 
 /// Guards every test (in this module or elsewhere in the crate, e.g.
@@ -148,11 +372,7 @@ fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
         };
     }
     let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-    match entry.get_password() {
-        Ok(pw) => Ok(Some(pw)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("failed to read keychain: {e}")),
-    }
+    read_entry(&entry).map_err(|e| format!("failed to read keychain: {e}"))
 }
 
 /// A keychain ACL can prompt the user and then block the reader until
@@ -166,7 +386,10 @@ pub async fn resolve_ai_endpoint_key_guarded() -> Result<Option<String>, String>
     match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
         Ok(Ok(result)) => result,
         Ok(Err(e)) => Err(format!("the keychain read panicked: {e}")),
-        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+        Err(_) => {
+            GATE.block("timeout");
+            Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
+        }
     }
 }
 
@@ -234,6 +457,29 @@ mod tests {
         assert!(err.contains("acct-does-not-exist"));
 
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+
+    /// One event per transition, so the app raises its dialog once, not on
+    /// every failed read; the first reason sticks until the gate clears.
+    #[test]
+    fn the_gate_emits_on_transitions_only() {
+        let gate = KeychainGate::new();
+        let bus = EventBus::new(crate::events::CAPACITY);
+        let _ = gate.events.set(bus.clone());
+        let mut rx = bus.subscribe();
+
+        gate.block("locked");
+        gate.block("timeout");
+        assert!(gate.is_blocked());
+        assert_eq!(gate.status()["reason"], json!("locked"));
+        gate.clear();
+        gate.clear();
+
+        let payloads: Vec<Value> = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|line| mailvault_core::daemon_ipc::parse_event(&line).expect("an event line").1)
+            .collect();
+        assert_eq!(payloads, vec![json!({"blocked": true, "reason": "locked"}), json!({"blocked": false})]);
+        assert_eq!(gate.status(), json!({"blocked": false}));
     }
 
     #[tokio::test]

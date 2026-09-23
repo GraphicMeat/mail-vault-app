@@ -58,6 +58,11 @@ objc2-vision = "0.3"
 # Task 5.1: resolve_account_credentials reads the same keychain entry the app
 # writes. Mirrors src-tauri/Cargo.toml's keyring entry exactly.
 keyring = { version = "3", features = ["apple-native"] }
+# The keychain gate: keyring boxes the OSStatus as this crate's Error, and the
+# daemon's own "unlock your keychain" banner goes through UNUserNotificationCenter.
+security-framework = "3"
+objc2-user-notifications = "0.3"
+block2 = "0.6"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 pdf-extract = "0.12"

@@ -17,7 +17,9 @@ pub(crate) fn outgoing(msg: Result<Arc<str>, RecvError>) -> Option<String> {
 
 pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Value) {
     match method {
-        "daemon.ping" => state.events.emit("daemon-ping", params),
+        "daemon.ping" => {
+            state.events.emit("daemon-ping", params);
+        }
         // Addendum C1: never send while the mail dir is unreachable, same gate
         // `handle_request` applies to sync./snapshot./contacts_index. requests.
         // C2: only locks `signals` and sends on a non-blocking mpsc — no

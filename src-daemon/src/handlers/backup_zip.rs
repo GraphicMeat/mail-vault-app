@@ -46,7 +46,9 @@ fn read_accounts_entries(app_dir: &Path) -> Result<Vec<AccountsJsonEntry>, Strin
 
 fn bus_emit(state: &Arc<DaemonState>) -> impl Fn(&str, Value) {
     let bus = state.events.clone();
-    move |name: &str, payload: Value| bus.emit(name, payload)
+    move |name: &str, payload: Value| {
+        bus.emit(name, payload);
+    }
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {

@@ -532,6 +532,35 @@ mod tests {
         assert_eq!(server.sent_messages().len(), 1, "commands: {:?}", server.smtp_commands());
     }
 
+    /// A locked keychain is the user's to fix, not the row's failure: the row
+    /// stays queued, keeps its tries and its due time, so `keychain.retry`'s
+    /// wake sends it the moment the user unlocks.
+    #[tokio::test]
+    async fn a_blocked_keychain_leaves_the_row_queued_with_its_tries() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let before = mailvault_core::app_db::with(&s.app_dir, |c| scheduled::get(c, &id)).unwrap().unwrap();
+
+        // A read that fails without answering, while the gate says the
+        // keychain is waiting on the user.
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", s.app_dir.join("missing-credentials.json"));
+        crate::credentials::GATE.block("locked");
+        let _ = route(&s, "scheduled.send_now", &json!({"id": id}), json!(1)).await;
+        // Cleared before any assert: a panic with the process-global gate
+        // still blocked would turn other tests' credential failures into
+        // Offline too.
+        crate::credentials::GATE.clear();
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let after = mailvault_core::app_db::with(&s.app_dir, |c| scheduled::get(c, &id)).unwrap().unwrap();
+        assert_eq!(after.status, "queued", "row: {after:?}");
+        assert_eq!(after.attempts, before.attempts, "a blocked keychain must not burn a try");
+        assert_eq!(after.fire_at, before.fire_at, "left due, so the unlock's wake sends it at once");
+        assert!(after.last_error.contains("credentials"), "row: {after:?}");
+    }
+
     /// A mock server that `acc1` resolves to through the
     /// `MAILVAULT_TEST_CREDENTIALS` file bypass. The caller holds
     /// `test_env_lock` and removes that var when done.

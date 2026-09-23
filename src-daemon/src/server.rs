@@ -578,6 +578,18 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
             RpcResponse::success(id, state.net.status())
         }
 
+        // ── Keychain gate ───────────────────────────────────────────
+        "keychain.status" => RpcResponse::success(id, crate::credentials::GATE.status()),
+        "keychain.retry" => {
+            let result = crate::credentials::retry().await;
+            // Rows the gate held back are still due: send them now rather
+            // than at the worker's next look.
+            if result["ok"] == true {
+                state.scheduled_send.wake();
+            }
+            RpcResponse::success(id, result)
+        }
+
         // ── Sync engine (Phase 3) ───────────────────────────────────
         "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
@@ -829,6 +841,18 @@ mod tests {
     }
 
     // ── Routing ────────────────────────────────────────────────────────
+
+    /// The app asks this on start and on every reconnect; with the vault gone
+    /// it still has to answer, because a locked keychain is not a vault fault.
+    #[tokio::test]
+    async fn keychain_status_is_routed_and_ungated() {
+        let dir = scratch("keychain");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), false);
+        let resp = handle_request(&state, req("keychain.status", json!({}))).await;
+        let status = resp.result.expect("keychain.status answers");
+        assert!(status["blocked"].is_boolean(), "got: {status:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[tokio::test]
     async fn daemon_methods_route_through_the_domain_router_and_ungated() {
