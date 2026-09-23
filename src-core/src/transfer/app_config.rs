@@ -346,4 +346,22 @@ mod tests {
         assert_eq!(report.views_added, 0);
         assert_eq!(views::list(&dst).unwrap().len(), 3);
     }
+
+    /// The daemon seeds starters lazily, on the first `views.list`. A target
+    /// that never listed its views must not take the file's starters under
+    /// fresh ids and then get a second set seeded on top.
+    #[test]
+    fn an_unseeded_target_gets_its_own_starters_not_copies() {
+        let src = conn();
+        views::ensure_starters(&src).unwrap();
+        let dst = conn();
+
+        let report = merge(&dst, &snapshot(&src).unwrap(), &HashMap::new()).unwrap();
+
+        assert_eq!(report.views_added, 0);
+        let all = views::list(&dst).unwrap();
+        assert_eq!(all.len(), 3);
+        assert!(all.iter().all(|v| v.id.starts_with("builtin-")), "{all:?}");
+        assert_eq!(views::ensure_starters(&dst).unwrap(), 0, "a later list seeds nothing more");
+    }
 }
