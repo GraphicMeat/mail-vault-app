@@ -11,14 +11,12 @@ import { formatMonthYear, monthYearFormatter } from '../../utils/dateFormat';
 import { bucketAtIndex, monthBuckets, railSegments, reachedMonth, rowDate } from '../../utils/dateBuckets';
 
 export const MONTH_HEADER_H = 26;
-const RAIL_W = 28;
+const RAIL_W = 44;
 // Only the left gutter arms the rail; row actions stay clear on the right.
-const EDGE_PX = 12;
+const EDGE_PX = RAIL_W;
 const RAIL_IDLE_MS = 1200;
 const PILL_IDLE_MS = 800;
 const PENDING_MS = 1500;
-const MAG_RADIUS = 56;
-const MAG_MAX = 0.9;
 const HEADER_CLASS = 'flex items-end px-4 pb-1 text-xs font-semibold text-mail-text-muted bg-mail-surface';
 
 /** The band drawn above the first row of a month, inside that row's wrapper. */
@@ -231,7 +229,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   const labelRef = useRef(null);
   const hoverLabelRef = useRef(null);
   const hoverY = useRef(0);
-  const moveRaf = useRef(0);
   const dragRef = useRef(null);
   const bucketsRef = useRef(buckets);
   bucketsRef.current = buckets;
@@ -325,7 +322,7 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   const ticks = useMemo(() => {
     const out = [];
     const dotGap = railH ? 5 / railH : 0;
-    const labelGap = railH ? 16 / railH : 0;
+    const labelGap = railH ? 20 / railH : 0;
     let lastDot = -Infinity;
     let lastLabel = -Infinity;
     let prevYear = null;
@@ -358,24 +355,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
     return 0;
   };
 
-  const resetMagnify = () => {
-    railRef.current?.querySelectorAll('[data-tick]').forEach(el => { el.style.transform = 'translateY(-50%)'; });
-  };
-  const magnify = () => {
-    moveRaf.current = 0;
-    const rail = railRef.current;
-    if (!rail) return;
-    const y = hoverY.current;
-    if (hoverLabelRef.current) hoverLabelRef.current.style.transform = `translateY(${y}px) translateY(-50%)`;
-    if (reduced) return;
-    const h = rail.clientHeight;
-    rail.querySelectorAll('[data-tick]').forEach((el) => {
-      const d = Math.abs(Number(el.dataset.pos) * h - y);
-      const s = 1 + MAG_MAX * Math.max(0, 1 - d / MAG_RADIUS);
-      el.style.transform = `translateY(-50%) scale(${s.toFixed(3)})`;
-    });
-  };
-
   const onPointerDown = (e) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -392,7 +371,7 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
       drag.i = i;
       if (segments[i]?.kind === 'loaded') onJump(segments[i]);
     }
-    if (!moveRaf.current) moveRaf.current = requestAnimationFrame(magnify);
+    if (hoverLabelRef.current) hoverLabelRef.current.style.transform = `translateY(${hoverY.current}px) translateY(-50%)`;
   };
   const onPointerUp = () => {
     const drag = dragRef.current;
@@ -404,7 +383,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
   const onPointerLeave = () => {
     if (dragRef.current) return;
     setHover(null);
-    resetMagnify();
   };
   const onKeyDown = (e) => {
     const last = segments.length - 1;
@@ -415,7 +393,6 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
     e.stopPropagation(); // not the global list shortcuts too
     onJump(segments[Math.max(0, Math.min(last, to))]);
   };
-  useEffect(() => () => { if (moveRaf.current) cancelAnimationFrame(moveRaf.current); }, []);
 
   const railVisible = scrolling || near || hover !== null || dragging || !!loading;
   // Scrolling only shows the rail; it takes clicks once the pointer is at the
@@ -456,24 +433,24 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
         className={`absolute touch-none select-none rounded-full bg-transparent outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-mail-accent ${railVisible ? 'opacity-100' : 'opacity-50 focus-visible:opacity-100'} ${railLive
           ? 'pointer-events-auto' : 'pointer-events-none focus-visible:pointer-events-auto'}`}
         style={{ top: MONTH_HEADER_H + 6, bottom: 6, left: 0, width: RAIL_W }}>
-        <div className="absolute inset-y-0 left-[13px] w-px bg-mail-border" />
+        <div className="absolute inset-y-0 left-[35px] w-px bg-mail-border" />
         {tail && (
-          <div className="absolute left-[12px] w-[3px] rounded-full bg-mail-text-muted/25"
+          <div className="absolute left-[34px] w-[3px] rounded-full bg-mail-text-muted/25"
             style={{ top: `${tail.start * 100}%`, height: `${tail.size * 100}%` }} />
         )}
-        {current && (
-          <div className="absolute left-[6px] h-[2px] w-4 -translate-y-1/2 rounded-full bg-mail-accent"
-            style={{ top: `${current.start * 100}%` }} />
-        )}
         {ticks.map(tick => (
-          <div key={`${tick.type}-${tick.i}`} data-tick data-pos={tick.pos}
-            className={`absolute left-[4px] origin-left ${tick.dim ? 'opacity-50' : ''}`}
+          <div key={`${tick.type}-${tick.i}`}
+            className={`absolute ${tick.type === 'year' ? 'left-[2px]' : 'left-[34px]'} ${tick.dim ? 'opacity-50' : ''}`}
             style={{ top: `${tick.pos * 100}%`, transform: 'translateY(-50%)' }}>
             {tick.type === 'year'
-              ? <span className="block text-[11px] font-semibold leading-none text-mail-text-muted">{tick.y}</span>
-              : <span className="ml-[7px] block h-[3px] w-[3px] rounded-full bg-mail-text-muted" />}
+              ? <span className={`block text-[11px] font-semibold leading-none ${current?.y === tick.y ? 'text-mail-accent-text' : 'text-mail-text-muted'}`}>{tick.y}</span>
+              : <span className="block h-[3px] w-[3px] rounded-full bg-mail-text-muted" />}
           </div>
         ))}
+        {current && (
+          <div className="absolute left-[31px] h-[9px] w-[9px] -translate-y-1/2 rounded-full bg-mail-accent"
+            style={{ top: `${current.start * 100}%` }} />
+        )}
         {hover !== null && segments[hover] && (
           <div ref={hoverLabelRef}
             className="absolute left-full top-0 ml-2 whitespace-nowrap rounded-md border border-mail-border bg-mail-surface px-2 py-0.5 text-xs font-medium text-mail-text"

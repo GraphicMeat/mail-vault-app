@@ -84,6 +84,6 @@
 .settings-window .view-editor .view-emoji-input { width: 72px; min-height: 40px; text-align: center; font-size: 20px; }
 .settings-window .view-editor .view-emoji-input.is-selected { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
 @media (max-width: 680px) { .settings-window .views-settings { padding: 16px; } }
-.mail-list-with-timeline { padding-left: 30px; }
+.mail-list-with-timeline { padding-left: 46px; }
 body[data-auxiliary-window="settings"] .fixed:has(.settings-window) { padding: 0; }
 body[data-auxiliary-window="settings"] .settings-window { max-width: none; width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
