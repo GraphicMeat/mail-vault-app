@@ -341,6 +341,16 @@ describe('DownloadAllButton', () => {
     await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
   });
 
+  it('names the folder from a Windows path too', async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === 'export_attachments') return { dir: 'C:\\Users\\test\\Downloads\\Q3 report - Attachments', files: ['invoice.pdf'] };
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
+  });
+
   // The daemon is the only writer here that has never written outside the
   // vault, and the Developer ID sidecar holds no downloads entitlement of its
   // own. If it cannot reach ~/Downloads, the app writes the files itself

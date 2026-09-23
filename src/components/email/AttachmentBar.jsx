@@ -739,10 +739,13 @@ async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, atta
     const leaf = safeLeaf(filename);
     const dest = await uniqueIn(destDir, leaf, join);
     await invoke('save_attachment_to', { filename: leaf, contentBase64: getCleanBase64(b64), destPath: dest });
-    files.push(dest.split('/').pop());
+    files.push(leafOf(dest));
   }
   return { dir: destDir, files };
 }
+
+/** The last component of a native path: `\` separates on Windows, `/` elsewhere. */
+const leafOf = (path) => path.split(/[\\/]/).pop();
 
 /** The first free name for `leaf` inside `dir`, `name (1).ext` style. */
 async function uniqueIn(dir, leaf, join) {
@@ -817,7 +820,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
       // The folder's own name, not "Downloaded": when Finder refuses to open
       // (a sandbox scope it does not hold), this is the only thing that says
       // where the files went.
-      setDone(isTauri && result?.dir ? result.dir.split('/').pop() : t('email.attachments.downloaded'));
+      setDone(isTauri && result?.dir ? leafOf(result.dir) : t('email.attachments.downloaded'));
       setTimeout(() => setDone(null), 6000);
       if (isTauri && result?.dir) {
         await window.__TAURI__.core.invoke('show_in_folder', { path: result.dir }).catch(() => {});
