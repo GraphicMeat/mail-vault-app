@@ -860,6 +860,30 @@ fn set_badge_count(_app_handle: tauri::AppHandle, count: i32) -> Result<(), Stri
     Ok(())
 }
 
+/// Reads the user-chosen account transfer file for the import dialog.
+/// Thin on purpose (app is a shell): the bytes go to the webview, which hands
+/// them to the daemon's `transfer.decrypt`, so the daemon never sees a path.
+/// Any webview script can call this, so it reads only a capped `.mvtransfer`
+/// file, and logs only the byte count, never the path or content.
+#[tauri::command(async)]
+fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::Engine;
+    // ponytail: a transfer file is accounts + settings, a few MB at most.
+    const MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+    let p = std::path::Path::new(&path);
+    if !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("mvtransfer")) {
+        return Err("E_TRANSFER_FORMAT: not a .mvtransfer file".to_string());
+    }
+    let len = fs::metadata(p).map_err(|e| format!("Failed to read file: {e}"))?.len();
+    if len > MAX_BYTES {
+        return Err("E_TRANSFER_FORMAT: file too large".to_string());
+    }
+    let bytes = fs::read(p).map_err(|e| format!("Failed to read file: {e}"))?;
+    info!("read_file_base64: {} bytes", bytes.len());
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 #[tauri::command]
 fn save_attachment_to(
     filename: String,
@@ -3127,6 +3151,7 @@ fn main() {
             set_badge_count,
             check_running_from_dmg,
             save_attachment_to,
+            read_file_base64,
             show_in_folder,
             open_file,
             open_with_dialog,

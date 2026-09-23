@@ -43,18 +43,21 @@ function ensureLoaded() {
 }
 
 // Save all cached data to Tauri filesystem
+// Returns the write's promise so flushSafeStorage() can await it; the
+// debounced path ignores it.
 function saveToDisk() {
-  if (!writesEnabled) return;
-  if (!invoke) return;
+  if (!writesEnabled) return Promise.resolve();
+  if (!invoke) return Promise.resolve();
   try {
     const obj = {};
     for (const [key, value] of cache.entries()) {
       try { obj[key] = JSON.parse(value); } catch { obj[key] = value; }
     }
-    invoke('write_settings_json', { data: JSON.stringify(obj) })
+    return invoke('write_settings_json', { data: JSON.stringify(obj) })
       .catch(e => console.warn('[safeStorage] Failed to write settings:', e));
   } catch (e) {
     console.warn('[safeStorage] Failed to serialize settings:', e);
+    return Promise.resolve();
   }
 }
 
@@ -79,6 +82,17 @@ export function setSafeStorageWriteEnabled(enabled) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+}
+
+// Write now instead of in 500ms, and resolve once the file is written: a
+// caller about to reload the window (account transfer import) would otherwise
+// lose whatever the debounce had not yet saved. One write covers every
+// persisted store (settings and theme share this cache). A no-op in windows
+// whose writes are disabled (detached compose/settings).
+export async function flushSafeStorage() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  await ensureLoaded(); // never write a cache that is missing on-disk keys
+  await saveToDisk();
 }
 
 export const safeStorage = {

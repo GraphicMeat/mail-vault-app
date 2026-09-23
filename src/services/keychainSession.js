@@ -16,6 +16,13 @@
  *   empty        — keychain read succeeded but no credentials exist
  */
 
+/**
+ * Error code for "the keychain read did not succeed, so writing or exporting
+ * secrets now would lose or omit them". A code, not a sentence: the UI maps
+ * it to a catalog key.
+ */
+export const E_KEYCHAIN_UNAVAILABLE = 'E_KEYCHAIN_UNAVAILABLE';
+
 let _status = 'idle';
 let _message = null;
 let _promptShown = false; // whether the OS prompt has appeared this session

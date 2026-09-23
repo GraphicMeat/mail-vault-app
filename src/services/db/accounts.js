@@ -4,6 +4,7 @@ import { readTextFile, writeTextFile, exists, mkdir, remove, BaseDirectory } fro
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
 import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveKeychain } from './keychain.js';
+import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
@@ -161,6 +162,39 @@ export async function saveAccount(account) {
   await writeAccountsFile(accounts);
   console.log('[db.js] Account metadata saved to accounts.json');
   return account;
+}
+
+/**
+ * Batch save for account transfer import: ONE keychain read, ONE keychain
+ * write, ONE accounts.json write, however many accounts arrive.
+ *
+ * Refuses unless the keychain read really succeeded. After a denied/
+ * cancelled/timed-out read loadKeychain() hands back {} and saveKeychain's
+ * merge guard only protects a non-empty cache, so writing then would replace
+ * every other account's secrets with just these. The status is checked after
+ * loadKeychain() resolves, since that read is what sets it.
+ */
+export async function saveAccounts(accounts) {
+  if (!accounts.length) return;
+  await initDB();
+
+  // Mutate the shared cache in place, as saveAccount does: a later queued
+  // keychain write (token refresh) is built from that same cache, so it
+  // keeps these accounts even if the write queue collapses ours into it.
+  const data = await loadKeychain();
+  const status = keychainSession.getStatus();
+  if (status !== 'granted' && status !== 'empty') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+  for (const account of accounts) data[account.id] = JSON.stringify(account);
+  await saveKeychain(data);
+
+  const file = await readAccountsFile();
+  for (const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } of accounts) {
+    const idx = file.findIndex(a => a.id === acctData.id);
+    if (idx >= 0) file[idx] = { ...file[idx], ...acctData };
+    else file.push(acctData);
+  }
+  await writeAccountsFile(file);
+  console.log('[db.js] saveAccounts stored', accounts.length, 'account(s)');
 }
 
 export async function getAccountsWithoutPasswords() {

@@ -15,6 +15,7 @@ export {
   initBasic,
   initDB,
   saveAccount,
+  saveAccounts,
   getAccountsWithoutPasswords,
   accountLogicalKey,
   ensureAccountsInFile,
