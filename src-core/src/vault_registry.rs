@@ -233,13 +233,12 @@ impl VaultRegistry {
     }
 
     /// `(saved, archived)` uids, ascending. `None` when the mailbox cannot be
-    /// verified: unknown, never empty.
+    /// verified: unknown, never empty. Reads names only, never `light_row`:
+    /// on a parsed folder that column is megabytes.
     pub fn uid_sets(&self, root: &Path, account: &str, mailbox: &str) -> Option<(Vec<u32>, Vec<u32>)> {
-        let (account, dir) = key(account, mailbox);
-        self.ensure_verified(root, &account, &dir)?;
-        let rows = self.live_rows(&account, &dir, None)?;
-        let archived = rows.iter().filter(|r| is_archived(&r.1)).map(|r| r.0).collect();
-        Some((rows.into_iter().map(|r| r.0).collect(), archived))
+        let files = self.files(root, account, mailbox)?;
+        let archived = files.iter().filter(|f| is_archived(&f.1)).map(|f| f.0).collect();
+        Some((files.into_iter().map(|f| f.0).collect(), archived))
     }
 
     /// `(uid, filename, size)` of every file the mailbox holds, by uid. `None`
@@ -882,6 +881,24 @@ mod tests {
         assert_eq!(reg.uid_sets(&f.root, ACCT, "Missing"), Some((vec![], vec![])));
         // A missing vault root (an unmounted drive) is not an empty folder.
         assert_eq!(reg.uid_sets(&f.root.join("gone"), ACCT, "Other"), None);
+    }
+
+    /// `uid_sets` answers from names alone: parsing the folder changes
+    /// nothing, and a `light_row` that would not even read (a BLOB, which
+    /// never converts to `String`) is never touched.
+    #[test]
+    fn uid_sets_never_reads_the_light_rows() {
+        let f = fixture();
+        put(&f, MB, "1:2,S.eml");
+        put(&f, MB, "2:2,AS.eml");
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        let want = Some((vec![1, 2], vec![2]));
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB), want);
+        assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap().len(), 2);
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB), want, "same answer once the rows are parsed");
+        guard(&reg.conn).as_ref().unwrap().execute("UPDATE files SET light_row = X'00'", []).unwrap();
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB), want, "light_row was read");
+        assert_eq!(reg.listing_count(), 1);
     }
 
     #[test]
