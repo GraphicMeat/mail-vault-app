@@ -149,6 +149,12 @@ Maildir is the source of truth for locally saved email content. The SQLite store
 
 ### Where state lives
 
+The app and the daemon resolve their directories through one module, `mailvault_core::paths`, never through Tauri's path resolver or plugin-fs `BaseDirectory` (the macOS log dir is the one exception). Tauri's `app_data_dir` and `BaseDirectory.AppData` are Roaming on Windows while the daemon was Local, and every Tauri resolver ignores the env; the Windows v2.16.0 draft split its state across both dirs that way.
+
+- **App data dir** `<local data root>/com.mailvault.app`: macOS `~/Library/Application Support` (the container's under the sandbox), Linux `$XDG_DATA_HOME` or `~/.local/share`, Windows `%LOCALAPPDATA%` (Local, never Roaming). Holds `accounts.json`, `app.db`, settings, logs (outside macOS, which keeps `~/Library/Logs`), `daemon.pid` and the default vault. The frontend's plugin-fs calls take absolute paths under `get_app_data_dir`, and the app allows that dir in the fs scope at runtime.
+- **IPC dir** `<home>/.mailvault`: the token, plus `mv.sock` on unix. On Windows the endpoint is the named pipe `\\.\pipe\mailvault-<fnv1a of the lowercased IPC dir path>`, one per home.
+- On Windows both roots honour `LOCALAPPDATA` / `USERPROFILE` when they hold an absolute path. In a normal session they equal the known folders; the override is the Windows equivalent of `HOME` for isolating a test run, pipe included.
+
 Two SQLite stores hold everything that used to be loose JSON files:
 
 - **`<vault>/custody/custody.db`** — records about the mail: custody entries (`vault_entries`), the header cache (`header_cache`, `header_cache_meta`), the per-account folder list (`mailbox_cache`) and the sender address book (`contacts`). Never derived, never deleted, never rebuilt: a store this build cannot read is reported and left exactly as it is. Opened EXCLUSIVE by the daemon, so nothing else in either process may open it — everything reads it through `custody::with_conn`.
