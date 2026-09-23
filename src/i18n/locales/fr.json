@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Afficher ou masquer la chronologie",
   "compose.focusOriginalWindow": "Afficher la fenêtre du message d’origine",
   "compose.detachOriginal": "Ouvrir le message d’origine dans une autre fenêtre",
+  "compose.splitRatio": "Partager rédaction/original {{ratio}}",
   "settingsPage.detach": "Ouvrir les réglages dans une autre fenêtre",
   "compose.resizeOriginalPanel": "Redimensionner le volet du message d’origine",
   "compose.resizeWindow": "Redimensionner la fenêtre de rédaction. Les flèches changent la largeur ; Maj plus les flèches, la hauteur.",

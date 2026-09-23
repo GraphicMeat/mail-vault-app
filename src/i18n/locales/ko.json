@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "목록 타임라인 표시 또는 숨기기",
   "compose.focusOriginalWindow": "원본 메시지 창 표시",
   "compose.detachOriginal": "원본 메시지를 별도 창에서 열기",
+  "compose.splitRatio": "작성 화면과 원본 메시지를 {{ratio}}로 분할",
   "settingsPage.detach": "설정을 별도 창에서 열기",
   "compose.resizeOriginalPanel": "원본 메시지 패널 크기 조절",
   "compose.resizeWindow": "작성 창 크기를 조절합니다. 화살표 키로 너비를, Shift와 화살표 키로 높이를 바꿉니다.",

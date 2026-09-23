@@ -7,7 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { formatDateTime } from '../utils/dateFormat';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
@@ -188,6 +188,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [contextHtml, setContextHtml] = useState('');
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   const [contextWidth, setContextWidth] = useState(400);
+  const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || null);
   const [originalDetached, setOriginalDetached] = useState(false);
   const originalWindowRef = useRef(null);
   const originalCloseStopRef = useRef(null);
@@ -391,6 +392,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         setQuotedHtml(initialData._quotedHtml || '');
         setContextHtml(initialData._contextHtml || initialData._quotedHtml || '');
         setShowContext(initialData._showContext ?? composeContextVisible);
+        setContextSplit(initialData._contextSplit || null);
       } else {
         initForm({ ...formData, body: signatureHtml });
       }
@@ -765,6 +767,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       _quotedHtml: quotedHtml,
       _contextHtml: contextHtml,
       _showContext: showContext,
+      _contextSplit: contextSplit,
       _replyTo: replyTo || initialData?._replyTo || null,
       _accountId: selectedAccountId,
       _fromAddress: composeFrom,
@@ -784,7 +787,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, composeDelay, composeSize, scheduleDraft]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, composeDelay, composeSize, scheduleDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -804,7 +807,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   );
   const sessionSignature = JSON.stringify([
     formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
-    attachments, quotedHtml, contextHtml, showContext, selectedAccountId, pickedFrom, composeDelay, composeSize, scheduleDraft,
+    attachments, quotedHtml, contextHtml, showContext, contextSplit, selectedAccountId, pickedFrom, composeDelay, composeSize, scheduleDraft,
   ]);
 
   // Keep the UI session current independently of the vault draft write. App
@@ -1033,7 +1036,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
-  const effectiveContextWidth = Math.min(contextWidth, Math.max(240, contentWidth - 290));
+  const layoutWidth = Number.isFinite(contentWidth) ? contentWidth : 896;
+  const maxContextWidth = Math.min(760, Math.max(200, layoutWidth - 290));
+  const effectiveContextWidth = Math.min(maxContextWidth, Math.max(200, contextSplit ? layoutWidth * contextSplit : contextWidth));
   const composeWindowStyle = {
     ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
     ...(detaching ? { pointerEvents: 'none' } : {}),
@@ -1120,10 +1125,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 <Maximize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
-            {contextHtml && <Button variant="ghost" icon size="sm" onClick={openOriginalWindow}
-              title={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
-              aria-label={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
-              data-testid="compose-original-detach"><Maximize2 size={16} className="text-mail-text-muted" /></Button>}
             <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
               onClick={confirmClose}
               title={t('common.close')}
@@ -1596,7 +1597,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           </form>
           </div>
 
-          {contextHtml && !originalDetached && <>
+          {contextHtml && <>
             <button
               type="button"
               data-testid="compose-resize"
@@ -1604,8 +1605,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               tabIndex={0}
               aria-orientation="vertical"
               aria-label={t('compose.resizeOriginalPanel')}
-              aria-valuemin={240}
-              aria-valuemax={Math.max(240, Math.min(760, contentWidth - 290))}
+              aria-valuemin={200}
+              aria-valuemax={maxContextWidth}
               aria-valuenow={Math.round(effectiveContextWidth)}
               onPointerDown={event => {
                 contextDragRef.current = { id: event.pointerId, x: event.clientX, width: effectiveContextWidth };
@@ -1614,14 +1615,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               onPointerMove={event => {
                 const drag = contextDragRef.current;
                 if (!drag || drag.id !== event.pointerId) return;
-                setContextWidth(Math.max(240, Math.min(760, Math.min(contentWidth - 290, drag.width + drag.x - event.clientX))));
+                setContextSplit(null);
+                setContextWidth(Math.max(200, Math.min(maxContextWidth, drag.width + drag.x - event.clientX)));
               }}
               onPointerUp={() => { contextDragRef.current = null; }}
               onPointerCancel={() => { contextDragRef.current = null; }}
               onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
                 event.preventDefault();
-                setContextWidth(width => Math.max(240, Math.min(760, contentWidth - 290, width + (event.key === 'ArrowLeft' ? -20 : 20))));
+                setContextSplit(null);
+                setContextWidth(Math.max(200, Math.min(maxContextWidth, effectiveContextWidth + (event.key === 'ArrowLeft' ? -20 : 20))));
               }}
               className={`w-1.5 shrink-0 cursor-col-resize touch-none bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
             />
@@ -1630,28 +1633,49 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               style={showContext && !contextCollapsed ? { width: effectiveContextWidth } : undefined}
               className={`shrink-0 flex flex-col min-h-0 overflow-hidden ${showContext && !contextCollapsed ? 'border-l border-mail-border compose-context-aside' : 'w-12'}`}
             >
-              <button
-                type="button"
-                data-testid="compose-context-toggle"
-                aria-pressed={showContext}
-                aria-expanded={showContext && !contextCollapsed}
-                aria-label={t('compose.showHideOriginalMessage', { action: showContext && !contextCollapsed ? t('settings.backup.verify.hide') : t('compose.show') })}
-                onClick={async () => {
-                  const next = !showContext;
-                  setShowContext(next);
-                  try {
-                    if (onContextVisibleChange) await onContextVisibleChange(next);
-                    else setComposeContextVisible?.(next);
-                  } catch (err) {
-                    setShowContext(!next);
-                    setError(err?.message || String(err));
-                  }
-                }}
-                className="w-full shrink-0 flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted hover:bg-mail-surface-hover transition-colors"
-              >
-                <ChevronRight size={14} className={`transition-transform ${showContext ? 'rotate-90' : ''}`} />
-                {showContext && !contextCollapsed && <span>{t('compose.showHideOriginalMessage', { action: t('settings.backup.verify.hide') })}</span>}
-              </button>
+              <div className="flex shrink-0 items-center">
+                <button
+                  type="button"
+                  data-testid="compose-context-toggle"
+                  aria-pressed={showContext}
+                  aria-expanded={showContext && !contextCollapsed}
+                  aria-label={t('compose.showHideOriginalMessage', { action: showContext && !contextCollapsed ? t('settings.backup.verify.hide') : t('compose.show') })}
+                  onClick={async () => {
+                    const next = !showContext;
+                    setShowContext(next);
+                    try {
+                      if (onContextVisibleChange) await onContextVisibleChange(next);
+                      else setComposeContextVisible?.(next);
+                    } catch (err) {
+                      setShowContext(!next);
+                      setError(err?.message || String(err));
+                    }
+                  }}
+                  className="min-w-0 flex-1 flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted hover:bg-mail-surface-hover transition-colors"
+                >
+                  <ChevronRight size={14} className={`shrink-0 transition-transform ${showContext ? 'rotate-90' : ''}`} />
+                  {showContext && !contextCollapsed && <span className="truncate">{t('compose.showHideOriginalMessage', { action: t('settings.backup.verify.hide') })}</span>}
+                </button>
+                {showContext && !contextCollapsed && (
+                  <Button variant="ghost" icon size="sm" onClick={openOriginalWindow}
+                    title={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
+                    aria-label={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
+                    data-testid="compose-original-detach"><ExternalLink size={16} className="text-mail-text-muted" /></Button>
+                )}
+              </div>
+              {showContext && !contextCollapsed && (
+                <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
+                  {[{ ratio: 0.5, label: '50/50', testid: 'compose-split-half' }, { ratio: 0.25, label: '75/25', testid: 'compose-split-quarter' }].map(({ ratio, label, testid }) => (
+                    <button key={label} type="button" data-testid={testid}
+                      aria-pressed={contextSplit === ratio}
+                      aria-label={t('compose.splitRatio', { ratio: label })}
+                      title={t('compose.splitRatio', { ratio: label })}
+                      onClick={() => setContextSplit(ratio)}
+                      className={`rounded px-2 py-1 text-xs transition-colors ${contextSplit === ratio ? 'bg-mail-accent/15 text-mail-accent-text' : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
+                    >{label}</button>
+                  ))}
+                </div>
+              )}
               {showContext && !contextCollapsed && (
                 <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
                   <div data-testid="compose-quoted" className="pt-2"><QuotedOriginal html={contextHtml} /></div>

@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Mostra o nascondi la cronologia",
   "compose.focusOriginalWindow": "Mostra finestra del messaggio originale",
   "compose.detachOriginal": "Apri messaggio originale in un’altra finestra",
+  "compose.splitRatio": "Dividi composizione/originale {{ratio}}",
   "settingsPage.detach": "Apri Impostazioni in un’altra finestra",
   "compose.resizeOriginalPanel": "Ridimensiona il riquadro del messaggio originale",
   "compose.resizeWindow": "Ridimensiona la finestra di composizione. I tasti freccia cambiano la larghezza; Maiusc più i tasti freccia l’altezza.",

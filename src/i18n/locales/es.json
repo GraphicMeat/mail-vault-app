@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Mostrar u ocultar la línea de tiempo",
   "compose.focusOriginalWindow": "Mostrar ventana del mensaje original",
   "compose.detachOriginal": "Abrir mensaje original en otra ventana",
+  "compose.splitRatio": "Dividir redacción/original {{ratio}}",
   "settingsPage.detach": "Abrir Ajustes en otra ventana",
   "compose.resizeOriginalPanel": "Ajustar el panel del mensaje original",
   "compose.resizeWindow": "Ajustar la ventana de redacción. Las flechas cambian el ancho; Mayús más las flechas, el alto.",

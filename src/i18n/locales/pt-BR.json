@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Mostrar ou ocultar a linha do tempo",
   "compose.focusOriginalWindow": "Mostrar janela da mensagem original",
   "compose.detachOriginal": "Abrir mensagem original em outra janela",
+  "compose.splitRatio": "Dividir redação/original {{ratio}}",
   "settingsPage.detach": "Abrir Configurações em outra janela",
   "compose.resizeOriginalPanel": "Redimensionar o painel da mensagem original",
   "compose.resizeWindow": "Redimensionar a janela de composição. As setas mudam a largura; Shift mais as setas, a altura.",

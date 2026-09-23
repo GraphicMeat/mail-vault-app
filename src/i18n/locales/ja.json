@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "一覧のタイムラインを表示または非表示",
   "compose.focusOriginalWindow": "元のメールのウィンドウを表示",
   "compose.detachOriginal": "元のメールを別ウィンドウで開く",
+  "compose.splitRatio": "作成画面と元のメールを{{ratio}}で分割",
   "settingsPage.detach": "設定を別ウィンドウで開く",
   "compose.resizeOriginalPanel": "元のメッセージパネルのサイズを変更",
   "compose.resizeWindow": "作成ウィンドウのサイズを変更します。矢印キーで幅、Shift＋矢印キーで高さを変更します。",

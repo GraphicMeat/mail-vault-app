@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Show or hide the list timeline",
   "compose.focusOriginalWindow": "Show original message window",
   "compose.detachOriginal": "Open original message in a separate window",
+  "compose.splitRatio": "Split compose/original {{ratio}}",
   "settingsPage.detach": "Open Settings in a separate window",
   "compose.resizeOriginalPanel": "Resize original message panel",
   "compose.resizeWindow": "Resize compose window. Arrow keys change width; Shift plus Arrow keys change height.",

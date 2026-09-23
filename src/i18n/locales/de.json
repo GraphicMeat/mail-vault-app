@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "Zeitleiste ein- oder ausblenden",
   "compose.focusOriginalWindow": "Fenster der Originalnachricht anzeigen",
   "compose.detachOriginal": "Originalnachricht in eigenem Fenster öffnen",
+  "compose.splitRatio": "Verfassen/Original {{ratio}} aufteilen",
   "settingsPage.detach": "Einstellungen in eigenem Fenster öffnen",
   "compose.resizeOriginalPanel": "Bereich der Originalnachricht anpassen",
   "compose.resizeWindow": "Nachrichtenfenster anpassen. Pfeiltasten ändern die Breite, Umschalt plus Pfeiltasten die Höhe.",

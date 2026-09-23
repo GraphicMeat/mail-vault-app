@@ -2750,6 +2750,7 @@
   "list.timelineToggle": "显示或隐藏列表时间线",
   "compose.focusOriginalWindow": "显示原邮件窗口",
   "compose.detachOriginal": "在单独窗口打开原邮件",
+  "compose.splitRatio": "按 {{ratio}} 分割撰写区和原邮件",
   "settingsPage.detach": "在单独窗口打开设置",
   "compose.resizeOriginalPanel": "调整原始邮件面板大小",
   "compose.resizeWindow": "调整撰写窗口大小。方向键调整宽度；Shift 加方向键调整高度。",

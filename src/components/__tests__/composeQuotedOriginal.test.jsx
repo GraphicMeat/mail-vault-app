@@ -293,6 +293,43 @@ describe('the quoted original in a reply', () => {
     expect(screen.getByTestId('compose-send').closest('[data-testid="compose-main"]')).toBe(composer);
   });
 
+  it('splits the compose surface equally or 75/25 and keeps manual resize available', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function () {
+      return this.dataset.testid === 'compose-content' ? 896 : 0;
+    });
+    try {
+      openReply(original);
+      await screen.findByTestId('compose-context');
+
+      fireEvent.click(screen.getByTestId('compose-split-half'));
+      expect(screen.getByTestId('compose-context').style.width).toBe('448px');
+      expect(screen.getByTestId('compose-split-half').getAttribute('aria-pressed')).toBe('true');
+
+      fireEvent.click(screen.getByTestId('compose-split-quarter'));
+      expect(screen.getByTestId('compose-context').style.width).toBe('224px');
+      expect(screen.getByTestId('compose-split-quarter').getAttribute('aria-pressed')).toBe('true');
+
+      fireEvent.keyDown(screen.getByTestId('compose-resize'), { key: 'ArrowRight' });
+      expect(screen.getByTestId('compose-context').style.width).toBe('244px');
+      expect(screen.getByTestId('compose-split-quarter').getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  it('groups the original window action with the original panel controls', async () => {
+    openReply(original);
+    const popout = await screen.findByTestId('compose-original-detach');
+    expect(popout.closest('[data-testid="compose-context"]')).not.toBeNull();
+    expect(popout.querySelector('[data-icon="ExternalLink"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId('compose-context-toggle'));
+    expect(screen.queryByTestId('compose-original-detach')).toBeNull();
+    expect(screen.queryByTestId('compose-split-half')).toBeNull();
+    expect(screen.queryByTestId('compose-split-quarter')).toBeNull();
+    expect(screen.getByTestId('compose-context-toggle').getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('offers an accessible keyboard resize control for an embedded composer', async () => {
     openReply(original);
     const resize = await screen.findByTestId('compose-resize');
