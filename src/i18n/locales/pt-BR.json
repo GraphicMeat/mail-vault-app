@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "Agendar",
   "scheduled.copy.background": "Enviado em segundo plano, mesmo com o MailVault fechado.",
   "scheduled.copy.nextLaunch": "Será enviado na próxima vez que você abrir o MailVault.",
-  "scheduled.copy.offerAlwaysOn": "Ative \"Manter o MailVault em segundo plano\" nas Configurações para enviar com o app fechado.",
+  "scheduled.copy.offerAlwaysOn": "Ative \"Continuar em execução em segundo plano\" nas Configurações para enviar com o app fechado.",
   "scheduled.errors.accountGone": "Esta conta não está mais conectada.",
   "scheduled.errors.openFailed": "Não foi possível abrir este e-mail agendado.",
   "scheduled.errors.scheduleFailed": "Não foi possível agendar este e-mail.",

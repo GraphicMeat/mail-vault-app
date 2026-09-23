@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "Schedule",
   "scheduled.copy.background": "Sends in the background, even while MailVault is closed.",
   "scheduled.copy.nextLaunch": "Sends the next time you open MailVault.",
-  "scheduled.copy.offerAlwaysOn": "Turn on \"Keep MailVault running\" in Settings to send while the app is closed.",
+  "scheduled.copy.offerAlwaysOn": "Turn on \"Keep running in the background\" in Settings to send while the app is closed.",
   "scheduled.errors.accountGone": "This account is no longer connected.",
   "scheduled.errors.openFailed": "Could not open this scheduled email.",
   "scheduled.errors.scheduleFailed": "Could not schedule this email.",

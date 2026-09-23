@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "Planen",
   "scheduled.copy.background": "Wird im Hintergrund gesendet, auch wenn MailVault geschlossen ist.",
   "scheduled.copy.nextLaunch": "Wird gesendet, sobald du MailVault das nächste Mal öffnest.",
-  "scheduled.copy.offerAlwaysOn": "Aktiviere „MailVault im Hintergrund ausführen“ in den Einstellungen, um bei geschlossener App zu senden.",
+  "scheduled.copy.offerAlwaysOn": "Aktiviere „Im Hintergrund weiterlaufen lassen“ in den Einstellungen, um bei geschlossener App zu senden.",
   "scheduled.errors.accountGone": "Dieses Konto ist nicht mehr verbunden.",
   "scheduled.errors.openFailed": "Diese geplante E-Mail konnte nicht geöffnet werden.",
   "scheduled.errors.scheduleFailed": "Diese E-Mail konnte nicht geplant werden.",

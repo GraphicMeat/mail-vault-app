@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "予約する",
   "scheduled.copy.background": "MailVaultを閉じていてもバックグラウンドで送信されます。",
   "scheduled.copy.nextLaunch": "次回MailVaultを開いたときに送信されます。",
-  "scheduled.copy.offerAlwaysOn": "アプリを閉じていても送信するには、設定で「MailVaultをバックグラウンドで実行」をオンにしてください。",
+  "scheduled.copy.offerAlwaysOn": "アプリを閉じていても送信するには、設定で「バックグラウンドで動作を継続」をオンにしてください。",
   "scheduled.errors.accountGone": "このアカウントは接続されていません。",
   "scheduled.errors.openFailed": "この予約メールを開けませんでした。",
   "scheduled.errors.scheduleFailed": "このメールを予約できませんでした。",

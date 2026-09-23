@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "Programmer",
   "scheduled.copy.background": "Envoyé en arrière-plan, même si MailVault est fermé.",
   "scheduled.copy.nextLaunch": "Sera envoyé la prochaine fois que vous ouvrirez MailVault.",
-  "scheduled.copy.offerAlwaysOn": "Activez « Garder MailVault actif » dans les Réglages pour envoyer même app fermée.",
+  "scheduled.copy.offerAlwaysOn": "Activez « Continuer à fonctionner en arrière-plan » dans les Réglages pour envoyer même app fermée.",
   "scheduled.errors.accountGone": "Ce compte n'est plus connecté.",
   "scheduled.errors.openFailed": "Impossible d'ouvrir cet e-mail programmé.",
   "scheduled.errors.scheduleFailed": "Impossible de programmer cet e-mail.",

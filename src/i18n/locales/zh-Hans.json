@@ -1169,7 +1169,7 @@
   "scheduled.compose.submit": "安排",
   "scheduled.copy.background": "即使关闭 MailVault，也会在后台发送。",
   "scheduled.copy.nextLaunch": "将在你下次打开 MailVault 时发送。",
-  "scheduled.copy.offerAlwaysOn": "在设置中开启“让 MailVault 在后台运行”，即可在应用关闭时发送。",
+  "scheduled.copy.offerAlwaysOn": "在设置中开启“在后台持续运行”，即可在应用关闭时发送。",
   "scheduled.errors.accountGone": "此账户已断开连接。",
   "scheduled.errors.openFailed": "无法打开此定时邮件。",
   "scheduled.errors.scheduleFailed": "无法安排此邮件的发送时间。",
