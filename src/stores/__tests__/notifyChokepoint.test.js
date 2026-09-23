@@ -25,7 +25,9 @@ function walk(dir, out = []) {
 }
 
 const files = walk(SRC).map(f => ({
-  rel: f.slice(resolve(process.cwd()).length + 1),
+  // `join`/`readdirSync` use the OS separator (`\` on Windows) — normalize to
+  // `/` so the ALLOWED_* lists below match on every platform.
+  rel: f.slice(resolve(process.cwd()).length + 1).split('\\').join('/'),
   src: readFileSync(f, 'utf8'),
 }));
 
