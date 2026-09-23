@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Move accounts to another computer.** Export accounts, passwords and settings to an encrypted, password-protected file and import it in MailVault elsewhere (Settings > Accounts). A new install can import straight from the welcome screen. Accounts the other computer already has are left as they are, and a forgotten file password cannot be recovered.
+
 ### Changed
 - **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
 

@@ -91,6 +91,7 @@ const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
 
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
+const AccountImportModal = lazy(() => import('./components/AccountImportModal').then(m => ({ default: m.AccountImportModal })));
 const ComposeModal = lazy(() => import('./components/ComposeModal').then(m => ({ default: m.ComposeModal })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const UpdateModal = lazy(() => import('./components/UpdateModal').then(m => ({ default: m.UpdateModal })));
@@ -206,6 +207,8 @@ function App() {
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
   const language = useSettingsStore(s => s.language);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  // Account transfer import: main window only, even when asked from the detached Settings window.
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -784,6 +787,7 @@ function App() {
       listen('settings-window-action', event => {
         if (event.payload?.token !== settingsAuxRef.current?.token) return;
         if (event.payload.action === 'add-account') setShowAccountModal(true);
+        if (event.payload.action === 'import-accounts') setShowImportModal(true);
         if (event.payload.action === 'report-bug') handleReportBug();
         void WebviewWindow.getByLabel('main').then(window => window?.setFocus());
       }),
@@ -1179,6 +1183,12 @@ function App() {
           >
             {t('app.addFirstAccount')}
           </button>
+          <div className="mt-3">
+            <button onClick={() => setShowImportModal(true)}
+              className="text-sm text-mail-accent-text hover:underline">
+              {t('app.importFromAnotherComputer')}
+            </button>
+          </div>
 
           <ChunkErrorBoundary name="Add account">
           <Suspense fallback={null}>
@@ -1187,6 +1197,7 @@ function App() {
                 <AccountModal onClose={() => setShowAccountModal(false)} />
               )}
             </AnimatePresence>
+            {showImportModal && <AccountImportModal onClose={() => setShowImportModal(false)} />}
           </Suspense>
           </ChunkErrorBoundary>
         </motion.div>
@@ -1284,6 +1295,7 @@ function App() {
             <AccountModal onClose={() => setShowAccountModal(false)} />
           )}
         </AnimatePresence>
+        {showImportModal && <AccountImportModal onClose={() => setShowImportModal(false)} />}
       </Suspense>
       </ChunkErrorBoundary>
 
@@ -1381,6 +1393,7 @@ function App() {
               onDetach={detachSettings}
               onClose={closeSettings}
               onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
+              onImportAccounts={() => { closeSettings(); setShowImportModal(true); }}
               onReportBug={handleReportBug}
               onNavigationLabelChange={setSettingsLocation}
               initialTab={settingsWindowRequest.tab}
@@ -1416,7 +1429,7 @@ function App() {
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
       <KeychainUnlockCard />
-      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal
+      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal && !showImportModal
         && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
         && !pendingOperation && !exportTarget && !showExportSamples} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />

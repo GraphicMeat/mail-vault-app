@@ -12,6 +12,7 @@ import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
 import { SettingsTabs } from './SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
+import { AccountTransfer } from './AccountTransfer';
 import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
 import { Toast } from '../Toast';
@@ -53,7 +54,7 @@ function SavedBadge({ visible }) {
   );
 }
 
-export function AccountSettings({ accounts, onAddAccount, initialAccountId, initialSection = 'profile', onSectionChange }) {
+export function AccountSettings({ accounts, onAddAccount, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
   const { removeAccount, activeAccountId, activeMailbox, connectionStatus, connectionError, connectionErrorType, activateAccount } = useAccountStore();
   const {
@@ -455,6 +456,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
               {t('settings.accounts.addAccount')}
             </button>
           )}
+          <AccountTransfer accounts={accounts} onImportAccounts={onImportAccounts} />
         </div>
       </div>
 

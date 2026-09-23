@@ -190,7 +190,7 @@ const settingSearchGroups = [
 const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;
 const searchText = value => value.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 
-export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId, initialSection,
+export function SettingsPage({ onClose, onAddAccount, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
   minimized = false, onMinimize, onDetach, onNavigationLabelChange }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
@@ -442,7 +442,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             )}
 
             {activeTab === 'accounts' && (
-              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} initialAccountId={initialAccountId}
+              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
                 initialSection={accountSection} onSectionChange={setAccountSection} />
             )}
 
