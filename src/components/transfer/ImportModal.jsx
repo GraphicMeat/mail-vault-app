@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { AlertTriangle, FileKey } from 'lucide-react';
-import { Dialog } from './ui/Dialog';
-import { Button } from './ui/Button';
-import { useT } from '../i18n/index.js';
-import { getAccounts } from '../services/db';
-import { decryptTransfer, planImport, applyImport } from '../services/workflows/transferAccounts';
-import { transferErrorKey } from '../services/transfer/transferErrors';
-import { TRANSFER_INPUT } from './settings/AccountTransfer';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { useT } from '../../i18n/index.js';
+import { getAccounts } from '../../services/db';
+import { decryptTransfer, planImport, applyImport } from '../../services/workflows/transferAccounts';
+import { transferErrorKey } from '../../services/transfer/transferErrors';
+import { TRANSFER_INPUT } from './transferStyles';
 
 const reloadWindow = () => window.location.reload();
 
@@ -20,7 +20,7 @@ const reloadWindow = () => window.location.reload();
  * password and the decrypted bundle live in this component's state and go
  * when it unmounts.
  */
-export function AccountImportModal({ onClose, reload = reloadWindow }) {
+export function ImportModal({ onClose, reload = reloadWindow }) {
   const t = useT();
   const [path, setPath] = useState(null);
   const [password, setPassword] = useState('');
@@ -92,6 +92,9 @@ export function AccountImportModal({ onClose, reload = reloadWindow }) {
   });
 
   const done = warnings || needsRestart;
+  // Once anything may have been written, every way out reloads: without it the
+  // imported accounts stay invisible (and a fresh install keeps its welcome screen).
+  const close = done ? reload : onClose;
   let action;
   if (done) {
     action = <Button variant="primary" size="sm" onClick={reload}>{t('settings.transfer.restartNow')}</Button>;
@@ -105,9 +108,9 @@ export function AccountImportModal({ onClose, reload = reloadWindow }) {
   }
 
   return (
-    <Dialog open onClose={onClose} dismissable={!busy} portal title={t('settings.transfer.importTitle')}
+    <Dialog open onClose={close} dismissable={!busy} portal title={t('settings.transfer.importTitle')}
       footer={<div className="flex justify-end gap-2 w-full">
-        <Button variant="ghost" size="sm" onClick={onClose} disabled={!!busy}>{done ? t('common.close') : t('common.cancel')}</Button>
+        {!done && <Button variant="ghost" size="sm" onClick={onClose} disabled={!!busy}>{t('common.cancel')}</Button>}
         {action}
       </div>}>
       {!bundle && (

@@ -104,7 +104,8 @@ export function SettingsWindow() {
   return <SettingsPage initialTab={initial.tab} initialAccountId={initial.accountId} initialSection={initial.section}
     onClose={close}
     onAddAccount={() => handoff('add-account')}
-    /* Import runs in the main window only (AccountImportModal explains why). */
+    /* Export and import run in the main window only (components/transfer/ explains why). */
+    onExportAccounts={() => handoff('export-accounts')}
     onImportAccounts={() => handoff('import-accounts')}
     onReportBug={() => handoff('report-bug')} />;
 }

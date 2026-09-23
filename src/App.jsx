@@ -91,7 +91,8 @@ const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
 
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
-const AccountImportModal = lazy(() => import('./components/AccountImportModal').then(m => ({ default: m.AccountImportModal })));
+const ExportModal = lazy(() => import('./components/transfer/ExportModal').then(m => ({ default: m.ExportModal })));
+const ImportModal = lazy(() => import('./components/transfer/ImportModal').then(m => ({ default: m.ImportModal })));
 const ComposeModal = lazy(() => import('./components/ComposeModal').then(m => ({ default: m.ComposeModal })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const UpdateModal = lazy(() => import('./components/UpdateModal').then(m => ({ default: m.UpdateModal })));
@@ -207,7 +208,8 @@ function App() {
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
   const language = useSettingsStore(s => s.language);
   const [showAccountModal, setShowAccountModal] = useState(false);
-  // Account transfer import: main window only, even when asked from the detached Settings window.
+  // Account transfer: main window only, even when asked from the detached Settings window.
+  const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
@@ -787,6 +789,7 @@ function App() {
       listen('settings-window-action', event => {
         if (event.payload?.token !== settingsAuxRef.current?.token) return;
         if (event.payload.action === 'add-account') setShowAccountModal(true);
+        if (event.payload.action === 'export-accounts') setShowExportModal(true);
         if (event.payload.action === 'import-accounts') setShowImportModal(true);
         if (event.payload.action === 'report-bug') handleReportBug();
         void WebviewWindow.getByLabel('main').then(window => window?.setFocus());
@@ -1197,7 +1200,7 @@ function App() {
                 <AccountModal onClose={() => setShowAccountModal(false)} />
               )}
             </AnimatePresence>
-            {showImportModal && <AccountImportModal onClose={() => setShowImportModal(false)} />}
+            {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} />}
           </Suspense>
           </ChunkErrorBoundary>
         </motion.div>
@@ -1295,7 +1298,8 @@ function App() {
             <AccountModal onClose={() => setShowAccountModal(false)} />
           )}
         </AnimatePresence>
-        {showImportModal && <AccountImportModal onClose={() => setShowImportModal(false)} />}
+        {showExportModal && <ExportModal accounts={accounts} onClose={() => setShowExportModal(false)} />}
+        {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} />}
       </Suspense>
       </ChunkErrorBoundary>
 
@@ -1393,6 +1397,7 @@ function App() {
               onDetach={detachSettings}
               onClose={closeSettings}
               onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
+              onExportAccounts={() => { closeSettings(); setShowExportModal(true); }}
               onImportAccounts={() => { closeSettings(); setShowImportModal(true); }}
               onReportBug={handleReportBug}
               onNavigationLabelChange={setSettingsLocation}
@@ -1429,7 +1434,7 @@ function App() {
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
       <KeychainUnlockCard />
-      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal && !showImportModal
+      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal && !showExportModal && !showImportModal
         && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
         && !pendingOperation && !exportTarget && !showExportSamples} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />

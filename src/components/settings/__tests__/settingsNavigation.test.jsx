@@ -107,6 +107,16 @@ describe('settings page search', () => {
     expect(screen.getByRole('tab', { name: 'Reading', exact: true }).getAttribute('aria-selected')).toBe('true');
   });
 
+  it.each(['export', 'import', 'transfer', 'move'])('finds the account transfer section by "%s"', term => {
+    useMailStore.setState({ accounts: [{ id: 'studio', name: 'Studio', email: 'studio@example.test', imapHost: 'imap.example.test' }], activeAccountId: 'studio' });
+    render(<SettingsPage initialTab="appearance" onClose={() => {}} onExportAccounts={() => {}} onImportAccounts={() => {}} />);
+    const nav = within(screen.getByRole('navigation', { name: 'Settings' }));
+    fireEvent.change(nav.getByRole('textbox', { name: 'Find a setting' }), { target: { value: term } });
+    fireEvent.click(nav.getByRole('button', { name: /^Move to another computer/ }));
+    expect(screen.getByRole('button', { name: 'Export…' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Import…' })).toBeTruthy();
+  });
+
   it('takes password and signature searches to the correct account sections', () => {
     useMailStore.setState({ accounts: [{ id: 'studio', name: 'Studio', email: 'studio@example.test', password: 'saved', imapHost: 'imap.example.test' }], activeAccountId: 'studio' });
     render(<SettingsPage onClose={() => {}} />);

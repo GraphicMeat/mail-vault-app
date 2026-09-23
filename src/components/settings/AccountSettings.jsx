@@ -54,7 +54,7 @@ function SavedBadge({ visible }) {
   );
 }
 
-export function AccountSettings({ accounts, onAddAccount, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
+export function AccountSettings({ accounts, onAddAccount, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
   const { removeAccount, activeAccountId, activeMailbox, connectionStatus, connectionError, connectionErrorType, activateAccount } = useAccountStore();
   const {
@@ -456,7 +456,7 @@ export function AccountSettings({ accounts, onAddAccount, onImportAccounts, init
               {t('settings.accounts.addAccount')}
             </button>
           )}
-          <AccountTransfer accounts={accounts} onImportAccounts={onImportAccounts} />
+          <AccountTransfer accounts={accounts} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} />
         </div>
       </div>
 

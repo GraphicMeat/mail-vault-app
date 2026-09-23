@@ -172,6 +172,9 @@ const settingSearchGroups = [
     ['settings.accounts.accountVisible', 'account visible visibility hidden hide'],
     ['settings.accounts.removeAccount', 'account remove delete disconnect'],
   ] },
+  { id: 'accounts', settings: [
+    ['settings.transfer.title', 'export import transfer move migrate another computer new mac accounts passwords encrypted file'],
+  ] },
   { id: 'views', settings: [
     ['views.section', 'view views saved filter filters smart folder builder preview'],
   ] },
@@ -190,7 +193,7 @@ const settingSearchGroups = [
 const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;
 const searchText = value => value.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 
-export function SettingsPage({ onClose, onAddAccount, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
+export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
   minimized = false, onMinimize, onDetach, onNavigationLabelChange }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
@@ -442,7 +445,7 @@ export function SettingsPage({ onClose, onAddAccount, onImportAccounts, onReport
             )}
 
             {activeTab === 'accounts' && (
-              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
+              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
                 initialSection={accountSection} onSectionChange={setAccountSection} />
             )}
 
