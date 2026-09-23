@@ -38,6 +38,7 @@ vi.mock('../accounts.js', () => ({
   initDB: () => Promise.resolve(),
   initBasic: () => Promise.resolve(),
   accountDir: () => 'acct',
+  dataPath: (rel) => Promise.resolve(`/data/${rel}`),
 }));
 
 // One vault directory, sanitised the way maildir_cur_path sanitises it.

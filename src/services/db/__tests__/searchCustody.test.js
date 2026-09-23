@@ -65,6 +65,7 @@ vi.mock('../accounts.js', () => ({
   initDB: () => Promise.resolve(),
   initBasic: () => Promise.resolve(),
   accountDir: () => 'acct',
+  dataPath: (rel) => Promise.resolve(`/data/${rel}`),
 }));
 
 vi.mock('@tauri-apps/plugin-fs', () => ({

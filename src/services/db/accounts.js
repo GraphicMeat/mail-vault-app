@@ -25,7 +25,8 @@ let appDataDir = null;
 /** Absolute path of `rel` ('/'-separated) under the app data dir. */
 export async function dataPath(rel) {
   appDataDir ??= invoke('get_app_data_dir').then((dir) => {
-    if (typeof dir !== 'string' || !dir) throw new Error('No app data directory');
+    // Diagnostic, not user copy: the Rust command's own errors are English too.
+    if (typeof dir !== 'string' || !dir) throw new Error(`get_app_data_dir returned ${dir}`);
     return dir;
   });
   let dir;
