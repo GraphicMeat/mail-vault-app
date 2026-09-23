@@ -67,6 +67,7 @@ const SCHEMA_V3: &str = "
 ALTER TABLE messages ADD COLUMN flags TEXT NOT NULL DEFAULT '';
 UPDATE messages SET flags = CASE
   WHEN instr(filename, ':2,') > 0 THEN replace(substr(filename, instr(filename, ':2,') + 3), '.eml', '')
+  WHEN instr(filename, ';2,') > 0 THEN replace(substr(filename, instr(filename, ';2,') + 3), '.eml', '')
   ELSE '' END;
 CREATE INDEX messages_msgid ON messages (account_id, message_id);
 ";
@@ -414,6 +415,32 @@ mod tests {
         };
         assert_eq!(flags(7), "FS");
         assert_eq!(flags(8), "", "a file name with no flag part carries no flags");
+    }
+
+    /// The SCHEMA_V3 backfill above uses `INFO_PREFIX`, which is `:2,` on
+    /// this platform whenever the suite runs on unix/mac — so that test alone
+    /// never exercises the `;2,` (Windows) branch of the migration's `CASE`
+    /// on a non-Windows runner. Hardcode `;2,` here, independent of platform,
+    /// so both branches are proven everywhere the suite runs, not only on a
+    /// real Windows box.
+    #[test]
+    fn a_v2_index_backfills_flags_from_a_windows_spelled_filename_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(DB_DIR)).unwrap();
+        {
+            let conn = Connection::open(tmp.path().join(DB_DIR).join(DB_FILE)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}{SCHEMA_V2}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '2');
+                 INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc)
+                   VALUES ('a', 'INBOX', 9, '9;2,S.eml', 0, 0, 0);"
+            ))
+            .unwrap();
+        }
+        let conn = open(tmp.path()).unwrap();
+        let flags: String = conn.query_row("SELECT flags FROM messages WHERE uid = 9", [], |r| r.get(0)).unwrap();
+        assert_eq!(flags, "S", "the ';2,' (Windows) separator must backfill flags too, not just ':2,'");
     }
 
     #[test]
