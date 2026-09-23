@@ -93,7 +93,11 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "",
       "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "nsis": { "installerHooks": "windows/hooks.nsh" }
+      "nsis": {
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
     }
   },
   "plugins": {
