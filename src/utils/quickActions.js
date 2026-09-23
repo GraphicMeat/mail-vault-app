@@ -12,7 +12,7 @@ const entry = (action, extra = {}) => ({ id: action, action, ...extra });
 export const DEFAULT_QUICK_ACTIONS = {
   defaults: {
     row: {
-      mode: 'favorite-menu',
+      mode: 'radial',
       entries: [
         entry('archive'), entry('unarchive'), entry('toggleRead'), entry('star'), entry('unstar'),
         entry('reply'), entry('replyAll'), entry('forward'), entry('newMessage'), entry('move'),

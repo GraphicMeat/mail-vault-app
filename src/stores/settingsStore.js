@@ -353,7 +353,7 @@ export const useSettingsStore = create(
       dismissedQuickReplyThreads: {},
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
-      threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
+      threadMode: 'expandable', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
       emailRowHighlight: 'hover', // 'hover' (rows light under the pointer) | 'selection' (the open row and its thread stay lit)
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
@@ -1202,7 +1202,7 @@ export const useSettingsStore = create(
       insightsPreferences: normalizeInsightsPreferences(),
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
-          threadMode: 'grouped',
+          threadMode: 'expandable',
           emailRowHighlight: 'hover',
           dateFormat: 'auto',
           customDateFormat: '',

@@ -236,7 +236,17 @@ let seededAccounts = [];
  */
 function seedOnboardingComplete(home) {
   writeFileSync(join(appDataDir(home), 'frontend-settings.json'), JSON.stringify({
-    'mailvault-settings': { version: 4, state: { onboardingComplete: true } },
+    'mailvault-settings': {
+      version: 4,
+      state: {
+        onboardingComplete: true,
+        // New installs default message rows to the radial menu, whose actions
+        // mount in a portal only while open. Specs find unarchived rows by the
+        // row's inline `[data-quick-action="archive"]` button, which only the
+        // favorite-menu layout renders, so the harness keeps that layout.
+        quickActions: { defaults: { row: { mode: 'favorite-menu' } } },
+      },
+    },
   }));
 }
 

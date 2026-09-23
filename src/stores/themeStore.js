@@ -6,7 +6,7 @@ export const useThemeStore = create(
   persist(
     (set, get) => ({
       theme: 'dark', // 'light' | 'dark'
-      palette: 'indigo', // 'indigo' | 'graphite'; independent of light/dark
+      palette: 'graphite', // 'indigo' | 'graphite'; independent of light/dark
       
       toggleTheme: () => {
         const newTheme = get().theme === 'dark' ? 'light' : 'dark';
@@ -29,7 +29,7 @@ export const useThemeStore = create(
       initTheme: () => {
         const theme = get().theme;
         document.documentElement.setAttribute('data-theme', theme);
-        document.documentElement.setAttribute('data-palette', get().palette || 'indigo');
+        document.documentElement.setAttribute('data-palette', get().palette || 'graphite');
       }
     }),
     {

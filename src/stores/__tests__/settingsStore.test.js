@@ -276,20 +276,20 @@ describe('tracker blocking is premium', () => {
 });
 
 describe('threadMode', () => {
-  it('defaults to grouped', () => {
-    expect(useSettingsStore.getState().threadMode).toBe('grouped');
+  it('defaults to expandable', () => {
+    expect(useSettingsStore.getState().threadMode).toBe('expandable');
   });
 
   it('setThreadMode writes the value', () => {
     useSettingsStore.getState().setThreadMode('flat');
     expect(useSettingsStore.getState().threadMode).toBe('flat');
-    useSettingsStore.getState().setThreadMode('grouped');
+    useSettingsStore.getState().setThreadMode('expandable');
   });
 
-  it('resetSettings restores grouped', () => {
-    useSettingsStore.getState().setThreadMode('expandable');
+  it('resetSettings restores expandable', () => {
+    useSettingsStore.getState().setThreadMode('grouped');
     useSettingsStore.getState().resetSettings();
-    expect(useSettingsStore.getState().threadMode).toBe('grouped');
+    expect(useSettingsStore.getState().threadMode).toBe('expandable');
   });
 });
 
