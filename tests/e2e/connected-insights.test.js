@@ -190,6 +190,13 @@ describe('Insights with real native mail data', function () {
     // daemon owns that db exclusively: corrupt it through the cache RPC. A
     // wrong-typed field still stores (header_json is any JSON) but fails
     // Insights' header decode, the same `invalidMetadata` a garbled file gave.
+    // "Counts may be incomplete" also shows for any folder with an unknown
+    // server count, which this fixture always has, so the text alone cannot
+    // tell a corrupt header apart. The coverage error on INBOX can: absent
+    // before, present with the bad row, absent again after the repair.
+    const inboxHeaderErrors = snapshot => (snapshot.coverage?.errors || [])
+      .filter(e => e.code === 'invalidMetadata' && e.accountId === accountId && e.mailbox === 'INBOX');
+    assert.deepEqual(inboxHeaderErrors(await readNativeSnapshot()), [], 'INBOX headers decode cleanly before the corruption');
     const [original] = await nativeDaemonInvoke('load_email_cache_by_uids', { accountId, mailbox: 'INBOX', uids: [1] });
     assert.equal(original?.uid, 1, 'The fixture header for INBOX uid 1 is cached before it is corrupted');
     try {
@@ -197,11 +204,13 @@ describe('Insights with real native mail data', function () {
       await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
       assert.match((await summaryText()).coverage, /Counts may be incomplete/i);
       const snapshot = await readNativeSnapshot();
+      assert.equal(inboxHeaderErrors(snapshot).length, 1, `The corrupt header is reported: ${JSON.stringify(snapshot.coverage?.errors)}`);
       assert.equal(snapshot.rows.some(row => row.accountId === accountId && row.mailbox === 'INBOX' && row.uid === 1), false);
       await captureInsights('partial-header');
     } finally {
       await nativeDaemonInvoke('save_email_cache', { accountId, mailbox: 'INBOX', data: JSON.stringify({ emails: [original] }) });
     }
+    assert.deepEqual(inboxHeaderErrors(await readNativeSnapshot()), [], 'The repaired header decodes again');
     await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
     await displayedTotal(expected.received);
   });
