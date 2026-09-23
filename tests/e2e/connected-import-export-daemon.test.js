@@ -63,7 +63,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { daemonExecutable, hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { openTab } from './mockBilling.js';
-import { appDataDir, INFO_PREFIX } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const NEW_ACCOUNT_EMAIL = 'imported-new-account@mock.test';
@@ -241,11 +241,11 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     expect(newAccount.id.length).toBeGreaterThan(0);
 
     const cur = join(appDataDir(browser.testDataDir), 'Maildir', newAccount.id, 'INBOX', 'cur');
-    await browser.waitUntil(() => existsSync(cur) && readdirSync(cur).some((n) => n.startsWith('1:')), {
+    await browser.waitUntil(() => existsSync(cur) && readdirSync(cur).some((n) => n.startsWith(`1${INFO_SEP}`)), {
       timeout: 15_000, interval: 300, timeoutMsg: `imported file for the new account never reached ${cur}`,
     });
     const names = readdirSync(cur);
-    const written = names.find((n) => n.startsWith('1:'));
+    const written = names.find((n) => n.startsWith(`1${INFO_SEP}`));
     // Round-trip, byte-for-byte: import_backup preserves whatever flags the
     // exported filename already carried (decision 3's note that this path
     // needs no fix, unlike import_mbox).

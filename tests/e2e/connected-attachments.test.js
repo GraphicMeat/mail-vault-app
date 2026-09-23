@@ -25,6 +25,7 @@
  *      the real path (WebDriver cannot perform the OS drag itself)
  */
 
+import { isAbsolute } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { ATTACHMENT_SUBJECT, ATTACHMENT_PNG, ATTACHMENT_PDF } from './mockImap.js';
 
@@ -339,7 +340,7 @@ describe('Connected Attachments', function () {
         timeoutMsg: `the export never reached show_in_folder (saw ${JSON.stringify(await invokedCommands())})`,
       });
       exported = (await invokedWith('show_in_folder'))[0].path;
-      expect(exported).toContain('/Downloads/');
+      expect(exported).toMatch(/[\\/]Downloads[\\/]/);
       expect(exported).toContain(ATTACHMENT_SUBJECT);
       expect(exported).toContain('Attachments');
 
@@ -394,7 +395,7 @@ describe('Connected Attachments', function () {
       });
       const [args] = await invokedWith('plugin:drag|start_drag');
       expect(args.item).toHaveLength(1);
-      expect(args.item[0].startsWith('/')).toBe(true);
+      expect(isAbsolute(args.item[0])).toBe(true);
       expect(args.item[0].endsWith(ATTACHMENT_PDF)).toBe(true);
       expect(args.image.startsWith('data:image/png;base64,')).toBe(true);
     } finally {
