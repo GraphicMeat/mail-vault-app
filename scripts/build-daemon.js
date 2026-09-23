@@ -39,14 +39,6 @@ if (tauriTarget) {
   targetTriple = arch === 'arm64' ? 'aarch64-unknown-linux-gnu' : 'x86_64-unknown-linux-gnu';
 }
 
-// Windows uses TCP for the daemon-frontend IPC (Unix sockets unavailable).
-// The daemon code currently #cfg-gates the Unix socket path; the Windows
-// build is wired but not yet packaged.
-if (platform === 'win32') {
-  console.log('Skipping daemon build on Windows (Unix-socket IPC not packaged yet)');
-  process.exit(0);
-}
-
 console.log('Building mailvault-daemon...');
 const cargoProfile = process.env.DAEMON_PROFILE || 'release';
 const cargoTarget = tauriTarget || '';

@@ -360,11 +360,140 @@ jobs:
           path: "*.snap"
           retention-days: 1
 
+  build-windows:
+    # The `release` environment (main only) is what the Azure federated
+    # credential trusts, so this job can sign and a branch run cannot.
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-x86_64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            windows-x86_64-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build daemon sidecar
+        run: npm run build:daemon
+
+      # Compile first, bundle (and sign) later: the Azure login sits right
+      # before the bundle step so its short-lived OIDC token is still valid
+      # when signtool asks for it, not consumed by a cold compile.
+      - name: Build Windows app
+        run: |
+          rm -rf target/release/bundle
+          npx tauri build --no-bundle
+
+      - name: Prepare Artifact Signing
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'artifact-signing'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest -Uri 'https://www.nuget.org/api/v2/package/Microsoft.ArtifactSigning.Client/1.0.128' -OutFile "$dir\client.zip"
+          Expand-Archive -Path "$dir\client.zip" -DestinationPath "$dir\client" -Force
+          $dlib = "$dir\client\bin\x64\Azure.CodeSigning.Dlib.dll"
+          if (-not (Test-Path $dlib)) { throw "dlib not found at $dlib" }
+
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
+            Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
+          if (-not $signtool) { throw 'signtool.exe not found' }
+          Write-Host "signtool: $($signtool.FullName)"
+
+          # Only AzureCliCredential (from azure/login) may answer; the rest
+          # would be probed first and managed identity can hang on a runner.
+          $metadata = @{
+            Endpoint = 'https://neu.codesigning.azure.net/'
+            CodeSigningAccountName = 'MailVault'
+            CertificateProfileName = 'MailVaultApp2'
+            ExcludeCredentials = @(
+              'ManagedIdentityCredential', 'EnvironmentCredential', 'WorkloadIdentityCredential',
+              'SharedTokenCacheCredential', 'VisualStudioCredential', 'VisualStudioCodeCredential',
+              'AzurePowerShellCredential', 'AzureDeveloperCliCredential', 'InteractiveBrowserCredential'
+            )
+          }
+          $metadata | ConvertTo-Json | Set-Content -Encoding utf8 "$dir\metadata.json"
+
+          # Signing lives in this overlay only, so a local Windows build stays unsigned.
+          $overlay = @{ bundle = @{ windows = @{ signCommand = @{
+            cmd  = $signtool.FullName
+            args = @('sign', '/v', '/fd', 'SHA256', '/tr', 'http://timestamp.acs.microsoft.com', '/td', 'SHA256',
+                     '/dlib', $dlib, '/dmdf', "$dir\metadata.json", '/d', 'MailVault', '%1')
+          } } } }
+          $overlay | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 "$dir\sign.conf.json"
+          Get-Content "$dir\sign.conf.json"
+          "SIGNTOOL=$($signtool.FullName)" >> $env:GITHUB_ENV
+          "SIGN_CONFIG=$dir\sign.conf.json" >> $env:GITHUB_ENV
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          # The signer role sits on the signing account, not the subscription.
+          allow-no-subscriptions: true
+
+      - name: Bundle and sign NSIS installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri bundle --bundles nsis --config "$SIGN_CONFIG"
+
+      # A signCommand that silently did not apply still leaves a green build,
+      # so prove the installer carries our publisher before shipping it.
+      - name: Verify Authenticode signature
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem 'target\release\bundle\nsis\*-setup.exe'
+          if (-not $installers) { throw 'no NSIS installer was built' }
+          foreach ($f in $installers) {
+            $out = & $env:SIGNTOOL verify /pa /v $f.FullName | Out-String
+            Write-Host $out
+            if ($LASTEXITCODE -ne 0 -or $out -notmatch 'MODERNIOS APLIKACIJOS') {
+              throw "$($f.Name) is not signed by MODERNIOS APLIKACIJOS"
+            }
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-x86_64-artifacts
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/*-setup.exe.sig
+          retention-days: 1
+
   # Snap Store publishing happens in promote-snaps.yml, triggered when the
   # GitHub release is published (or manually via workflow_dispatch).
 
   create-release:
-    needs: [build-macos, build-linux-x86_64, build-linux-aarch64, build-snap-x86_64, build-snap-aarch64]
+    needs: [build-macos, build-linux-x86_64, build-linux-aarch64, build-snap-x86_64, build-snap-aarch64, build-windows]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -415,6 +544,12 @@ jobs:
           LARM_DEB_NAME=$(basename "$LARM_DEB")
           LARM_SIG=""; [ -f "${LARM_DEB}.sig" ] && LARM_SIG="${LARM_DEB}.sig"
 
+          # ── Windows x86_64 (NSIS) ──
+          WIN_EXE=$(find artifacts/windows-x86_64-artifacts -name "*_${VERSION_NUM}_*-setup.exe" | head -1)
+          if [ -z "$WIN_EXE" ]; then echo "::error::No Windows installer for ${VERSION_NUM}"; exit 1; fi
+          WIN_EXE_NAME=$(basename "$WIN_EXE")
+          WIN_SIG=""; [ -f "${WIN_EXE}.sig" ] && WIN_SIG="${WIN_EXE}.sig"
+
           # ── Snap artifacts (may not exist if snap builds skipped) ──
           SNAP_X86=$(find artifacts/snap-x86_64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
           SNAP_ARM=$(find artifacts/snap-aarch64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
@@ -445,6 +580,12 @@ jobs:
             LINUX_PLATFORMS="${LINUX_PLATFORMS}\"linux-aarch64\": { \"signature\": \"${LARM_SIG_CONTENT}\", \"url\": \"${BASE_URL}/${LARM_DEB_NAME}\" }"
           fi
 
+          if [ -n "$WIN_SIG" ]; then
+            WIN_SIG_CONTENT=$(cat "$WIN_SIG")
+            if [ -n "$LINUX_PLATFORMS" ]; then LINUX_PLATFORMS="${LINUX_PLATFORMS}, "; fi
+            LINUX_PLATFORMS="${LINUX_PLATFORMS}\"windows-x86_64\": { \"signature\": \"${WIN_SIG_CONTENT}\", \"url\": \"${BASE_URL}/${WIN_EXE_NAME}\" }"
+          fi
+
           cat > latest.json <<EOJSON
           {
             "version": "${VERSION_NUM}",
@@ -454,7 +595,7 @@ jobs:
           }
           EOJSON
 
-          echo "Generated latest.json (Linux):"
+          echo "Generated latest.json (Linux + Windows):"
           cat latest.json
 
           # Collect all upload files
@@ -469,7 +610,7 @@ jobs:
             # Never attach an installer from another version: a cached build dir
             # can leave the previous release's .deb/.dmg/.snap behind.
             case "$BASE" in
-              *.deb|*.deb.sig|*.dmg|*.snap)
+              *.deb|*.deb.sig|*.dmg|*.snap|*.exe|*.exe.sig)
                 if ! echo "$BASE" | grep -q "${VERSION_NUM}"; then
                   echo "Skipping stale artifact: $BASE"
                   continue
