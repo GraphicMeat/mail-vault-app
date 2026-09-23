@@ -8,7 +8,7 @@
 
 use crate::app_db::{auto_tags, db::in_txn, fields, tags, views};
 use rusqlite::Connection;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,8 +19,9 @@ pub struct TagDef {
     pub position: i64,
 }
 
+/// `default` so a bundle missing one of the four lists still reads.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
     pub tags: Vec<TagDef>,
     pub fields: Vec<fields::Field>,
@@ -62,7 +63,7 @@ pub fn merge(conn: &Connection, cfg: &AppConfig, account_map: &HashMap<String, S
 
         // Tags: `ensure` matches case-insensitively and keeps an existing row
         // (and its color) untouched.
-        let mut known: std::collections::HashSet<String> = tags::list(conn)?.into_iter().map(|t| t.id).collect();
+        let mut known: HashSet<String> = tags::list(conn)?.into_iter().map(|t| t.id).collect();
         let mut tag_map = HashMap::new();
         for tag in &cfg.tags {
             let got = tags::ensure(conn, &tag.name, &tag.color)?;
@@ -152,8 +153,9 @@ fn same_name(a: &str, b: &str) -> bool {
     a.trim().eq_ignore_ascii_case(b.trim())
 }
 
-/// The view's definition in the target's ids, or `None` when its account list
-/// would empty out: an empty list means every account, which would widen it.
+/// The view's definition in the target's ids, or `None` when it would match
+/// more on the target than on the source: an account list that empties out
+/// (empty means every account), or a tag or field filter that cannot map.
 fn remap_def(
     def: &views::ViewDef,
     account_map: &HashMap<String, String>,
@@ -171,16 +173,19 @@ fn remap_def(
             None => Some(value.to_string()),
         }
     };
+    // A tag or field filter that cannot map would drop out and let the view
+    // match more than it did on the source, so the whole view is skipped
+    // (`?` on the collected `Option`). Group and columns only change display.
+    let tags = def.tags.iter().map(|t| tag_map.get(t).cloned()).collect::<Option<Vec<_>>>()?;
+    let filters = def
+        .fields
+        .iter()
+        .map(|f| field_map.get(&f.field_id).map(|id| fields::FieldFilter { field_id: id.clone(), ..f.clone() }))
+        .collect::<Option<Vec<_>>>()?;
     Some(views::ViewDef {
         accounts,
-        tags: def.tags.iter().filter_map(|t| tag_map.get(t).cloned()).collect(),
-        fields: def
-            .fields
-            .iter()
-            .filter_map(|f| {
-                field_map.get(&f.field_id).map(|id| fields::FieldFilter { field_id: id.clone(), ..f.clone() })
-            })
-            .collect(),
+        tags,
+        fields: filters,
         group: def.group.as_deref().and_then(field_ref),
         columns: def.columns.iter().filter_map(|c| field_ref(c)).collect(),
         ..def.clone()
@@ -363,5 +368,104 @@ mod tests {
         assert_eq!(all.len(), 3);
         assert!(all.iter().all(|v| v.id.starts_with("builtin-")), "{all:?}");
         assert_eq!(views::ensure_starters(&dst).unwrap(), 0, "a later list seeds nothing more");
+    }
+
+    #[test]
+    fn a_view_whose_tag_or_field_filter_cannot_map_is_skipped_not_widened() {
+        let src = conn();
+        let cfg = AppConfig {
+            views: vec![
+                user_view("Unknown tag", ViewDef { tags: vec!["no-such-tag".into()], ..ViewDef::default() }),
+                user_view(
+                    "Unknown field",
+                    ViewDef {
+                        fields: vec![FieldFilter { field_id: "no-such-field".into(), op: "isSet".into(), value: serde_json::Value::Null }],
+                        ..ViewDef::default()
+                    },
+                ),
+                user_view("Display only", ViewDef { group: Some("field:gone".into()), columns: vec!["field:gone".into(), "date".into()], ..ViewDef::default() }),
+            ],
+            ..snapshot(&src).unwrap()
+        };
+        let dst = conn();
+        let report = merge(&dst, &cfg, &HashMap::new()).unwrap();
+        assert!(view_named(&dst, "Unknown tag").is_none(), "would match every message");
+        assert!(view_named(&dst, "Unknown field").is_none(), "would match every message");
+        let shown = view_named(&dst, "Display only").expect("display-only refs just drop");
+        assert_eq!(shown.def.group, None);
+        assert_eq!(shown.def.columns, vec!["date".to_string()]);
+        assert_eq!(report.views_added, 1);
+    }
+
+    #[test]
+    fn an_existing_target_field_wins_and_the_view_points_at_it() {
+        let dst = conn();
+        let target = fields::save(&dst, &field(GLOBAL, "status")).unwrap();
+
+        let src = conn();
+        let file = fields::save(&src, &field(GLOBAL, "Status")).unwrap();
+        assert_ne!(file.id, target.id);
+        views::save(
+            &src,
+            &user_view(
+                "By status",
+                ViewDef {
+                    fields: vec![FieldFilter { field_id: file.id.clone(), op: "isSet".into(), value: serde_json::Value::Null }],
+                    group: Some(format!("field:{}", file.id)),
+                    columns: vec![format!("field:{}", file.id)],
+                    ..ViewDef::default()
+                },
+            ),
+        )
+        .unwrap();
+
+        let report = merge(&dst, &snapshot(&src).unwrap(), &HashMap::new()).unwrap();
+
+        let v = view_named(&dst, "By status").expect("view merged");
+        assert_eq!(v.def.fields[0].field_id, target.id);
+        assert_eq!(v.def.group, Some(format!("field:{}", target.id)));
+        assert_eq!(v.def.columns, vec![format!("field:{}", target.id)]);
+        assert_eq!(report.fields_added, 0);
+        assert_eq!(fields::list_all(&dst).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn two_file_accounts_collapsing_onto_one_target_account_add_one_field() {
+        let src = conn();
+        fields::save(&src, &field("X", "Priority")).unwrap();
+        fields::save(&src, &field("Z", "Priority")).unwrap();
+        let dst = conn();
+
+        let report = merge(&dst, &snapshot(&src).unwrap(), &map(&[("X", "Y"), ("Z", "Y")])).expect("no clash rollback");
+
+        assert_eq!(report.fields_added, 1);
+        let all = fields::list_all(&dst).unwrap();
+        assert_eq!((all.len(), all[0].scope.as_str()), (1, "Y"));
+    }
+
+    #[test]
+    fn a_rule_already_on_the_target_or_without_its_tag_is_skipped() {
+        let dst = conn();
+        let dst_tag = tags::ensure(&dst, "Mine", "").unwrap();
+        auto_tags::create(&dst, rule("work rule", &dst_tag.id)).unwrap();
+
+        let src = conn();
+        let work = tags::ensure(&src, "Work", "").unwrap();
+        auto_tags::create(&src, rule("Work rule", &work.id)).unwrap();
+        auto_tags::create(&src, rule("Orphan rule", &work.id)).unwrap();
+        let mut cfg = snapshot(&src).unwrap();
+        cfg.auto_tag_rules.iter_mut().find(|r| r.name == "Orphan rule").unwrap().tag_id = "no-such-tag".into();
+
+        let report = merge(&dst, &cfg, &HashMap::new()).unwrap();
+
+        assert_eq!(report.rules_added, 0);
+        let names: Vec<String> = auto_tags::list(&dst).unwrap().into_iter().map(|r| r.name).collect();
+        assert_eq!(names, vec!["work rule".to_string()], "the target's rule stays, nothing added");
+    }
+
+    #[test]
+    fn a_bundle_missing_a_list_still_reads() {
+        let cfg: AppConfig = serde_json::from_str(r#"{"tags":[]}"#).unwrap();
+        assert!(cfg.fields.is_empty() && cfg.views.is_empty() && cfg.auto_tag_rules.is_empty());
     }
 }
