@@ -31,6 +31,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
 
+      # Prints who CI signs as (claims only, never the token) so a 403 can be
+      # matched against the Signer role assignment in the portal.
+      - name: Show signing identity
+        shell: pwsh
+        run: |
+          $jwt = az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv
+          $p = $jwt.Split('.')[1].Replace('-', '+').Replace('_', '/')
+          $p = $p.PadRight($p.Length + (4 - $p.Length % 4) % 4, '=')
+          $c = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p)) | ConvertFrom-Json
+          Write-Host "tenant (tid):            $($c.tid)"
+          Write-Host "app id (appid):          $($c.appid)"
+          Write-Host "principal object (oid):  $($c.oid)"
+          Write-Host "audience (aud):          $($c.aud)"
+          Write-Host "roles in token:          $($c.roles -join ', ')"
+
       - name: Sign and verify a throwaway script
         shell: pwsh
         run: |
