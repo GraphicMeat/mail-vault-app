@@ -41,7 +41,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             if password.chars().count() < 12 {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "E_TRANSFER_PASSWORD".to_string()));
             }
-            let mut bundle_val = params.get("bundle").cloned().unwrap_or_else(|| Value::Object(Default::default()));
+            // A missing or non-object bundle must never reach the `["appConfig"] =`
+            // writes below: `Value::IndexMut` panics on anything but an object,
+            // and a silently-defaulted `{}` would export a file with no accounts.
+            let mut bundle_val = match params.get("bundle") {
+                Some(v) if v.is_object() => v.clone(),
+                _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid bundle".to_string())),
+            };
+            let obj = bundle_val.as_object_mut().expect("validated as an object above");
+            // The daemon owns the file format, not the caller: stamp the real
+            // version in rather than trusting (or requiring) one in `bundle`.
+            obj.insert("formatVersion".to_string(), Value::from(1));
 
             let problems = bundle::completeness_problems(&bundle_val);
             if !problems.is_empty() {
@@ -59,21 +69,28 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     Ok(v) => v,
                     Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.to_string())),
                 };
-                bundle_val["appConfig"] = cfg_json;
+                let obj = bundle_val.as_object_mut().expect("validated as an object above");
+                obj.insert("appConfig".to_string(), cfg_json);
                 // A locked/denied keychain must not fail the export — the app
                 // account data still matters even if the AI key doesn't come
                 // along.
                 let key = credentials::resolve_ai_endpoint_key_guarded().await.ok().flatten();
-                bundle_val["aiEndpointKey"] = key.map(Value::String).unwrap_or(Value::Null);
+                let obj = bundle_val.as_object_mut().expect("validated as an object above");
+                obj.insert("aiEndpointKey".to_string(), key.map(Value::String).unwrap_or(Value::Null));
             } else {
-                bundle_val["appConfig"] = Value::Null;
-                bundle_val["aiEndpointKey"] = Value::Null;
+                let obj = bundle_val.as_object_mut().expect("validated as an object above");
+                obj.insert("appConfig".to_string(), Value::Null);
+                obj.insert("aiEndpointKey".to_string(), Value::Null);
             }
 
-            let plaintext: Zeroizing<Vec<u8>> = match serde_json::to_vec(&bundle_val) {
-                Ok(v) => Zeroizing::new(v),
-                Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.to_string())),
-            };
+            // Serialize straight into the zeroized buffer rather than building
+            // a throwaway `Vec` with `to_vec` and copying it in, so the
+            // plaintext bundle exists in as few places as possible before it
+            // is wiped.
+            let mut plaintext: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(4096));
+            if let Err(e) = serde_json::to_writer(&mut *plaintext, &bundle_val) {
+                return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.to_string()));
+            }
 
             let encrypted = match blocking(move || crypto::encrypt(&password, &plaintext)).await {
                 Ok(Ok(bytes)) => bytes,
@@ -115,12 +132,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     Ok(c) => c,
                     Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("appConfig: {e}"))),
                 };
+            // Required: an empty map is a valid choice (nothing maps), but a
+            // caller that forgot to send one at all must not silently merge
+            // every account-scoped row as "not on this machine".
             let account_map: HashMap<String, String> = match params.get("accountMap") {
-                Some(v) => match serde_json::from_value(v.clone()) {
+                Some(v) if v.is_object() => match serde_json::from_value(v.clone()) {
                     Ok(m) => m,
                     Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("accountMap: {e}"))),
                 },
-                None => HashMap::new(),
+                _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountMap".to_string())),
             };
 
             let app_dir = state.app_dir.clone();
@@ -129,18 +149,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(Err(e)) | Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
 
+            // The app.db merge above already committed. A keychain hiccup on
+            // the AI key must never turn into an RPC error at this point — the
+            // caller would have no way to tell "nothing merged" from "merged,
+            // but the key didn't make it" apart, and would be tempted to retry
+            // the whole import. Report it as a plain (non-secret) flag instead.
             // Never overwrite a key the target already has; an absent key in
             // the bundle (nothing to offer) is the same as "don't store".
-            let ai_key_stored = match params.get("aiEndpointKey").and_then(Value::as_str) {
+            let (ai_key_stored, ai_key_error) = match params.get("aiEndpointKey").and_then(Value::as_str) {
                 Some(key) => match credentials::resolve_ai_endpoint_key_guarded().await {
                     Ok(None) => match credentials::store_ai_endpoint_key_guarded(key.to_string()).await {
-                        Ok(()) => true,
-                        Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                        Ok(()) => (true, false),
+                        Err(_) => (false, true),
                     },
-                    Ok(Some(_)) => false,
-                    Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                    Ok(Some(_)) => (false, false),
+                    Err(_) => (false, true),
                 },
-                None => false,
+                None => (false, false),
             };
 
             let mut body = match serde_json::to_value(&report) {
@@ -148,6 +173,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 _ => serde_json::Map::new(),
             };
             body.insert("aiKeyStored".to_string(), Value::Bool(ai_key_stored));
+            body.insert("aiKeyError".to_string(), Value::Bool(ai_key_error));
             RpcResponse::success(id, Value::Object(body))
         }
 
@@ -319,5 +345,109 @@ mod tests {
         let body = resp.result.expect("apply_config must succeed");
         assert_eq!(body["tagsAdded"], 1);
         assert_eq!(body["aiKeyStored"], false);
+    }
+
+    /// Fix round 1, Important 1: a non-object `bundle` used to reach
+    /// `bundle_val["appConfig"] = ...`, which panics on anything but an
+    /// object. It must be refused before that, not crash the handler.
+    #[tokio::test]
+    async fn export_refuses_a_non_object_bundle_without_panicking() {
+        let s = st();
+        for bad in [json!([]), json!("x"), json!(5), Value::Null] {
+            let resp = call(&s, "transfer.export", json!({ "password": "correct horse battery", "bundle": bad, "includeAppConfig": false })).await;
+            assert_eq!(resp.error.expect("must be refused").code, ipc::INVALID_PARAMS);
+        }
+    }
+
+    #[tokio::test]
+    async fn export_refuses_a_missing_bundle() {
+        let s = st();
+        let resp = call(&s, "transfer.export", json!({ "password": "correct horse battery", "includeAppConfig": false })).await;
+        assert_eq!(resp.error.expect("must be refused").code, ipc::INVALID_PARAMS);
+    }
+
+    /// Fix round 1 ruling: the daemon stamps `formatVersion` itself, so a
+    /// caller need not (and cannot) get it wrong.
+    #[tokio::test]
+    async fn export_stamps_format_version_even_when_the_caller_omits_it() {
+        let s = st();
+        let mut bundle = sample_bundle();
+        bundle.as_object_mut().unwrap().remove("formatVersion");
+        let exported = call(&s, "transfer.export", json!({ "password": "correct horse battery", "bundle": bundle, "includeAppConfig": false })).await;
+        let data = exported.result.expect("export must succeed")["data"].as_str().unwrap().to_string();
+
+        let decrypted = call(&s, "transfer.decrypt", json!({ "password": "correct horse battery", "data": data })).await;
+        assert_eq!(decrypted.result.expect("decrypt must succeed")["formatVersion"], 1);
+    }
+
+    /// A well-formed container whose JSON bundle claims a future format must
+    /// be refused, not partially trusted.
+    #[tokio::test]
+    async fn decrypt_refuses_a_bundle_declaring_a_future_format_version() {
+        let mut bundle = sample_bundle();
+        bundle["formatVersion"] = json!(2);
+        let plaintext = serde_json::to_vec(&bundle).unwrap();
+        let container = crypto::encrypt("correct horse battery", &plaintext).unwrap();
+        let data = base64::engine::general_purpose::STANDARD.encode(&container);
+
+        let s = st();
+        let resp = call(&s, "transfer.decrypt", json!({ "password": "correct horse battery", "data": data })).await;
+        let msg = resp.error.expect("must be refused").message;
+        assert!(msg.starts_with("E_TRANSFER_FORMAT"), "{msg}");
+    }
+
+    /// A keychain that cannot be read (forced here by pointing the test file
+    /// bypass at a directory, so the read fails rather than just missing)
+    /// must not stop the account/app-config export from producing a file.
+    #[tokio::test]
+    async fn export_still_produces_a_file_when_the_ai_key_read_fails() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        // A directory, not a file: `resolve_ai_endpoint_key`'s `read_to_string`
+        // fails with something other than `NotFound`, forcing the `Err` arm
+        // rather than the ordinary "nothing stored yet" `Ok(None)`.
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", dir.path());
+
+        let s = st();
+        let exported = call(
+            &s,
+            "transfer.export",
+            json!({ "password": "correct horse battery", "bundle": sample_bundle(), "includeAppConfig": true }),
+        )
+        .await;
+        let body = exported.result.expect("export must still succeed");
+        assert!(body["data"].as_str().is_some_and(|d| !d.is_empty()));
+
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
+    }
+
+    /// Fix round 1, Important 2: an AI-key failure must never turn into an
+    /// RPC error once `merge` has already committed the app.db change.
+    #[tokio::test]
+    async fn apply_config_reports_an_ai_key_error_instead_of_failing_after_the_merge_committed() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", dir.path());
+
+        let s = st();
+        let cfg = json!({ "tags": [{ "id": "f1", "name": "Work", "color": "#00f", "position": 0 }] });
+        let resp = call(&s, "transfer.apply_config", json!({ "appConfig": cfg, "accountMap": {}, "aiEndpointKey": "sk-x" })).await;
+        let body = resp.result.expect("must succeed despite the keychain failure");
+        assert_eq!(body["aiKeyStored"], false);
+        assert_eq!(body["aiKeyError"], true);
+        // The merge itself must still have landed.
+        assert_eq!(body["tagsAdded"], 1);
+
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
+    }
+
+    #[tokio::test]
+    async fn apply_config_requires_account_map() {
+        let s = st();
+        let resp = call(&s, "transfer.apply_config", json!({ "appConfig": {} })).await;
+        assert_eq!(resp.error.expect("must be refused").code, ipc::INVALID_PARAMS);
+
+        let resp2 = call(&s, "transfer.apply_config", json!({ "appConfig": {}, "accountMap": "not-a-map" })).await;
+        assert_eq!(resp2.error.expect("must be refused").code, ipc::INVALID_PARAMS);
     }
 }
