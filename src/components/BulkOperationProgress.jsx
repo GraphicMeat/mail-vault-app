@@ -5,6 +5,7 @@ import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 
 const PHASE_LABELS = () => ({
   archive: tr('bulk.progress.downloading'),
@@ -69,12 +70,12 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   // makes. Announce phase changes, quarter milestones and the outcome; not
   // every percent, which would talk over the user for the whole run.
   const milestone = Math.floor(percentage / 25) * 25;
-  const of = t('bulk.progress.completedOfTotal', { completed: completed.toLocaleString(), total: total.toLocaleString() });
+  const of = t('bulk.progress.completedOfTotal', { completed: formatCount(completed), total: formatCount(total) });
   const announcement = isComplete
-    ? (errors > 0 ? t('bulk.progress.finishedFailedMessages', { errors: errors.toLocaleString(), of }) : t('bulk.progress.finishedMessages', { of }))
+    ? (errors > 0 ? t('bulk.progress.finishedFailedMessages', { errors: formatCount(errors), of }) : t('bulk.progress.finishedMessages', { of }))
     : isCancelled ? t('bulk.progress.cancelledMessages', { of })
     : isError ? t('bulk.progress.stoppedErrorMessages', { of })
-    : t('bulk.progress.messages', { phaseLabel, milestone, total: total.toLocaleString() });
+    : t('bulk.progress.messages', { phaseLabel, milestone, total: formatCount(total) });
   const liveRegion = <p role="status" aria-live="polite" className="sr-only">{announcement}</p>;
 
   if (!isActive && !isComplete && !isCancelled && !isError) return null;
@@ -200,7 +201,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           <div className="px-4 py-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-mail-text-muted">
-                {t('bulk.progress.completedOfTotalEmails', { completed: completed.toLocaleString(), total: total.toLocaleString() })}
+                {t('bulk.progress.completedOfTotalEmails', { completed: formatCount(completed), total: formatCount(total) })}
               </span>
               <span className="text-sm font-medium text-mail-accent-text">
                 {percentage}%

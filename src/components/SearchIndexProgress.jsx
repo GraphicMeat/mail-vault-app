@@ -7,6 +7,7 @@ import { useT } from '../i18n/index.js';
 import { formatBytes } from '../utils/formatBytes';
 import { status, onProgress, onDaemonReconnected } from '../services/searchIndex';
 import { wantsProgressUi, buildFinished, progressPercent, OPEN_DELAY_MS } from '../utils/searchIndexProgress';
+import { formatCount } from '../utils/formatCount';
 
 // input types that accept typed text (a bare `type` attribute defaults the
 // DOM's `.type` to 'text', so "no type" is covered without a special case).
@@ -96,7 +97,7 @@ export function SearchIndexProgress() {
           <div className="h-2 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
         </div>
         <div className="mt-2 flex justify-between text-xs text-mail-text-muted">
-          <span>{t('searchIndexProgress.count', { indexed: (info.indexed || 0).toLocaleString(), total: (info.total || 0).toLocaleString(), percent })}</span>
+          <span>{t('searchIndexProgress.count', { indexed: formatCount(info.indexed || 0), total: formatCount(info.total || 0), percent })}</span>
           <span>{t('searchIndexProgress.size', { size: formatBytes(info.sizeBytes || 0) })}</span>
         </div>
       </Dialog>

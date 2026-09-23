@@ -7,6 +7,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { status, rebuild, destroy, onProgress, onDaemonReconnected } from '../../services/searchIndex';
 import { formatBytes } from '../../utils/formatBytes';
 import { useT } from '../../i18n/index.js';
+import { formatCount } from '../../utils/formatCount';
 
 const PREMIUM_MARKER = '\uE000premium\uE001';
 
@@ -242,8 +243,8 @@ export function SearchIndexSettings({ onUpgrade }) {
               <>
                 <div className="text-sm text-mail-text" data-testid="search-index-status">
                   {t('settings.searchIndex.status', {
-                    indexed: (info.indexed || 0).toLocaleString(),
-                    total: (info.total || 0).toLocaleString(),
+                    indexed: formatCount(info.indexed || 0),
+                    total: formatCount(info.total || 0),
                     size: formatBytes(info.sizeBytes || 0),
                   })}
                 </div>

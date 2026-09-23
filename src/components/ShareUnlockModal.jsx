@@ -15,6 +15,7 @@ import {
 } from '../config/shareUnlock';
 import { t, useT  } from '../i18n/index.js';
 import { formatDateOnly } from '../utils/dateFormat.js';
+import { formatCount } from '../utils/formatCount.js';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -131,7 +132,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
   if (!shareUnlock) return null;
 
   const milestone = emailsBackedUp > 0
-    ? t('shareUnlock.emailsJustLandedSafelyVault', { emailsBackedUp: emailsBackedUp.toLocaleString() })
+    ? t('shareUnlock.emailsJustLandedSafelyVault', { emailsBackedUp: formatCount(emailsBackedUp) })
     : t('shareUnlock.backupJustFinished');
 
   return (

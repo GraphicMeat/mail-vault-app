@@ -18,6 +18,7 @@ import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { t, useT  } from '../../i18n/index.js';
+import { formatCount } from '../../utils/formatCount';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
@@ -528,7 +529,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.emails')}</span>
                     <span className="text-mail-text">
-                      {isCounting ? t('settings.migration.emailsCounting', { totalEmails: totalEmails.toLocaleString() }) : `~${totalEmails.toLocaleString()} emails`}
+                      {isCounting ? t('settings.migration.emailsCounting', { totalEmails: formatCount(totalEmails) }) : `~${formatCount(totalEmails)} emails`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">

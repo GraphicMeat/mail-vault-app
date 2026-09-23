@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 import { T } from '../i18n/T.jsx';
 
 const ACTION_STYLES = () => ({
@@ -48,13 +49,13 @@ const ACTION_STYLES = () => ({
 const CONFIRM_COPY = () => ({
   delete: {
     title: tr('rowMenu.deleteServer2'),
-    lead: (n) => `Remove ${n.toLocaleString()} emails from the server.`,
+    lead: (n) => `Remove ${formatCount(n)} emails from the server.`,
     detail: (n, inVault) => vaultClause(n, inVault),
     confirmLabel: tr('rowMenu.deleteServer'),
   },
   archive_and_delete: {
     title: tr('bulk.ops.archiveThenDeleteServer'),
-    lead: (n) => `Copy ${n.toLocaleString()} emails into your vault, then remove them from the server.`,
+    lead: (n) => `Copy ${formatCount(n)} emails into your vault, then remove them from the server.`,
     // True of the run, not a reassurance: BulkOperationManager archives,
     // verifies, and deletes only the uids that came back verified.
     detail: () => 'Each email is verified in your vault before it leaves the server. Anything that fails to copy stays on the server.',
@@ -62,7 +63,7 @@ const CONFIRM_COPY = () => ({
   },
   delete_everywhere: {
     title: tr('rowMenu.deleteEverywhere2'),
-    lead: (n) => `Remove ${n.toLocaleString()} emails from the server, your vault, and your backup drive.`,
+    lead: (n) => `Remove ${formatCount(n)} emails from the server, your vault, and your backup drive.`,
     detail: () => 'No copy will be left anywhere. This cannot be undone.',
     confirmLabel: tr('rowMenu.deleteEverywhere'),
   },
@@ -405,7 +406,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             <h2 id={titleId} className="text-lg font-semibold text-mail-text">
               {showDeleteConfirm
                 ? CONFIRM_COPY()[selectedAction].title
-                : step === 1 ? t('bulk.ops.bulkEmailOperations') : t('bulk.ops.chooseActionEmails', { selectedCount: selectedCount.toLocaleString() })}
+                : step === 1 ? t('bulk.ops.bulkEmailOperations') : t('bulk.ops.chooseActionEmails', { selectedCount: formatCount(selectedCount) })}
             </h2>
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('bulk.ops.minimizeSelectionKept')}>
               <X size={18} />
@@ -447,7 +448,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             <div className="p-5">
               {loadingPool && (
                 <div className="flex items-start gap-2 p-3 bg-mail-surface border border-mail-border rounded-lg mb-4">
-                  <p className="text-xs text-mail-text-muted">{t('bulk.ops.readingAllEmails', { count: totalEmails.toLocaleString() })}</p>
+                  <p className="text-xs text-mail-text-muted">{t('bulk.ops.readingAllEmails', { count: formatCount(totalEmails) })}</p>
                 </div>
               )}
 
@@ -455,7 +456,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning/20 rounded-lg mb-4">
                   <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text-muted">
-                    {t('bulk.ops.availableLocallyOnlyThoseSelected', { pool: emailPool.length.toLocaleString(), total: totalEmails.toLocaleString() })}
+                    {t('bulk.ops.availableLocallyOnlyThoseSelected', { pool: formatCount(emailPool.length), total: formatCount(totalEmails) })}
                   </p>
                 </div>
               )}
@@ -478,7 +479,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                               : 'bg-mail-surface border-mail-border text-mail-text hover:bg-mail-surface-hover'
                           }`}
                         >
-                          {year} ({count.toLocaleString()})
+                          {year} ({formatCount(count)})
                         </button>
                       );
                     })}
@@ -555,7 +556,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-mail-border">
                 <span className="text-sm text-mail-text-muted">
-                  {selectedCount > 0 ? t('bulk.ops.emailsSelected', { selectedCount: selectedCount.toLocaleString() }) : t('bulk.ops.selectDateRange')}
+                  {selectedCount > 0 ? t('bulk.ops.emailsSelected', { selectedCount: formatCount(selectedCount) }) : t('bulk.ops.selectDateRange')}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="ghost" className="hover:bg-mail-border"
@@ -583,9 +584,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   walking the mirror on modal open, i.e. spinning up a drive for
                   a number nobody asked for. */}
               <div className="flex items-center gap-2 mb-3 text-xs text-mail-text-muted">
-                <span>{t('bulk.ops.onServerCount', { count: selectedCount.toLocaleString() })}</span>
+                <span>{t('bulk.ops.onServerCount', { count: formatCount(selectedCount) })}</span>
                 <span>·</span>
-                <span>{t('bulk.ops.archivedHereCount', { count: archivedSelectedCount.toLocaleString() })}</span>
+                <span>{t('bulk.ops.archivedHereCount', { count: formatCount(archivedSelectedCount) })}</span>
                 {hasBackupConfigured && (<><span>·</span><span>{t('bulk.ops.backupConfigured')}</span></>)}
               </div>
               {/* Warning for locally-stored emails */}

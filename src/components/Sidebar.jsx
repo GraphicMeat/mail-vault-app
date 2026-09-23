@@ -17,6 +17,7 @@ import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess 
 import { useBackupStore } from '../stores/backupStore';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
+import { formatCount } from '../utils/formatCount';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
@@ -1040,8 +1041,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div
               className="p-2"
               title={cacheFilling
-                ? t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })
-                : t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}
+                ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
+                : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}
             >
               {(loading || cacheFilling) ? (
                 <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
@@ -1275,8 +1276,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             {totalEmails > 0 && <div className="sidebar-mail-count">
               <HardDrive size={12} />
               <span>{cacheFilling
-                ? t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })
-                : t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}</span>
+                ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
+                : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}</span>
               {(loading || cacheFilling) && <RefreshCw size={10} className="animate-spin text-mail-accent-text" />}
             </div>}
             <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>

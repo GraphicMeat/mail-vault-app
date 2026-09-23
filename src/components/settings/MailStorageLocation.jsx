@@ -4,6 +4,7 @@ import { AlertCircle, ExternalLink, FolderOpen, HardDrive, Loader } from 'lucide
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import { t, useT  } from '../../i18n/index.js';
+import { formatCount } from '../../utils/formatCount';
 
 /**
  * Where the working copy of the mail lives. Default is the app's own storage;
@@ -72,8 +73,8 @@ export default function MailStorageLocation({ readOnly = false }) {
       setVaultStatus(await api.vaultGetStatus());
       setNotice(
         result.sourceRemoved
-          ? t('settings.mailLocation.movedFilesOldCopyBeen', { result: result.filesCopied.toLocaleString() })
-          : t('settings.mailLocation.copiedFilesSomeOldFiles', { result: result.filesCopied.toLocaleString() })
+          ? t('settings.mailLocation.movedFilesOldCopyBeen', { result: formatCount(result.filesCopied) })
+          : t('settings.mailLocation.copiedFilesSomeOldFiles', { result: formatCount(result.filesCopied) })
       );
     } catch (e) {
       setError(typeof e === 'string' ? e : e.message || 'Move failed');
@@ -110,8 +111,8 @@ export default function MailStorageLocation({ readOnly = false }) {
         setVaultStatus(await api.vaultGetStatus());
         setNotice(
           result.sourceRemoved
-            ? t('settings.mailLocation.movedFilesBackDefaultLocation', { result: result.filesCopied.toLocaleString() })
-            : t('settings.mailLocation.copiedFilesBackDefaultLocation', { result: result.filesCopied.toLocaleString() })
+            ? t('settings.mailLocation.movedFilesBackDefaultLocation', { result: formatCount(result.filesCopied) })
+            : t('settings.mailLocation.copiedFilesBackDefaultLocation', { result: formatCount(result.filesCopied) })
         );
       } else {
         setVaultStatus(await api.vaultReset());
@@ -162,7 +163,7 @@ export default function MailStorageLocation({ readOnly = false }) {
                 : progress?.phase === 'cleaning' ? t('settings.mailLocation.removingOldCopy')
                 : t('settings.mailLocation.copying', { progress: progress?.currentDir || '' })}
             </span>
-            <span>{progress?.total ? `${progress.copied.toLocaleString()} / ${progress.total.toLocaleString()}` : ''}</span>
+            <span>{progress?.total ? `${formatCount(progress.copied)} / ${formatCount(progress.total)}` : ''}</span>
           </div>
           <div className="h-1.5 bg-mail-bg rounded-full overflow-hidden">
             <div className="h-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />

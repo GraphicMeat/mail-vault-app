@@ -5,6 +5,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Z } from './ui/layers';
 import { useT } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 
 /**
  * Post-backup automation upsell. Shown once, right after a free user's first
@@ -44,7 +45,7 @@ export default function BackupUpsellModal({ onUpgrade }) {
         </h2>
         {count > 0 && (
           <p className="text-sm text-mail-text mb-1">
-            {t('backupUpsell.emailsBackedUp', { count: count.toLocaleString() })}
+            {t('backupUpsell.emailsBackedUp', { count: formatCount(count) })}
           </p>
         )}
         <p className="text-sm text-mail-text-muted mb-5">

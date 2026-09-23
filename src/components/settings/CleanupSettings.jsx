@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { t as tr, t, useT   } from '../../i18n/index.js';
+import { formatCount } from '../../utils/formatCount';
 
 const DEFAULT_CATEGORIES = [
   'newsletter', 'promotional', 'notification', 'transactional',
@@ -672,7 +673,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-mail-surface border border-mail-border text-center">
-            <p className="text-2xl font-bold text-mail-text">{mailboxTotal.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-mail-text">{formatCount(mailboxTotal)}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.classified')}</p>
           </div>
           <button
@@ -682,7 +683,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
             }}
             className="p-4 rounded-xl bg-mail-danger-tint border border-mail-danger/20 text-center hover:bg-mail-danger/20 transition-colors"
           >
-            <p className="text-2xl font-bold text-mail-danger">{deletableCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-mail-danger">{formatCount(deletableCount)}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.canDelete')}</p>
           </button>
           <button
@@ -692,7 +693,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
             }}
             className="p-4 rounded-xl bg-mail-accent-tint border border-mail-accent/20 text-center hover:bg-mail-accent/20 transition-colors"
           >
-            <p className="text-2xl font-bold text-mail-accent-text">{archivableCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-mail-accent-text">{formatCount(archivableCount)}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.canArchive')}</p>
           </button>
         </div>

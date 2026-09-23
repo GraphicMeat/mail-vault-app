@@ -5,6 +5,7 @@ import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 
 /**
  * Minimized bulk-operations session.
@@ -66,7 +67,7 @@ export function BulkSelectionBubble() {
                 <span className="text-mail-text-muted mx-1.5">·</span>
                 <span className="text-mail-text-muted">{decodeImapUtf7(folder)}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
-                <span className="font-medium">{t('common.selectedCount', { count, n: count.toLocaleString() })}</span>
+                <span className="font-medium">{t('common.selectedCount', { count, n: formatCount(count) })}</span>
               </span>
             </button>
             <Button variant="ghost" icon size="sm"

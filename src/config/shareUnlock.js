@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount.js';
 /**
  * Share-to-unlock reward configuration.
  *
@@ -24,7 +25,7 @@ export const REWARD_DAYS = {
 
 /** Build social post copy that brags the actual milestone (proof-of-value). */
 export function buildShareText(emailsBackedUp = 0) {
-  const count = emailsBackedUp > 0 ? `${emailsBackedUp.toLocaleString()} ` : '';
+  const count = emailsBackedUp > 0 ? `${formatCount(emailsBackedUp)} ` : '';
   return t('shareUnlock.justBackedUpEmailsLocally', { count, GITHUB_REPO_URL });
 }
 

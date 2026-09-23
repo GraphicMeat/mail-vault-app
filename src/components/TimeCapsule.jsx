@@ -16,6 +16,7 @@ import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, tErr, useT   } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 
 const ROW_HEIGHT = 56;
 
@@ -192,7 +193,7 @@ export function SnapshotList({ snapshots, loading, creating, error, confirmDelet
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-mail-text truncate">{formatSnapshotDate(snap.timestamp)}</p>
                   <p className="text-xs text-mail-text-muted">
-                    {t('timeCapsule.emailsFoldersSize', { emails: snap.total_emails.toLocaleString(), folders: snap.mailbox_count, size: formatBytes(snap.size_bytes) })}
+                    {t('timeCapsule.emailsFoldersSize', { emails: formatCount(snap.total_emails), folders: snap.mailbox_count, size: formatBytes(snap.size_bytes) })}
                   </p>
                 </div>
               </div>

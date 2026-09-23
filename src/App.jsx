@@ -82,6 +82,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { createComposeWindowOwner } from './services/composeWindow';
 import { createComposeSend, scheduleCompose } from './services/composeSend';
 import { getAccountCacheMailboxes } from './services/cacheManager';
+import { formatCount } from './utils/formatCount';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -1513,7 +1514,7 @@ function App() {
       {pendingOperation && (
         <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-strong rounded-xl p-4 max-w-sm">
           <p className="text-sm text-mail-text mb-3">
-            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString(), mailbox: decodeImapUtf7(pendingOperation.mailbox) })}
+            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: formatCount((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length), mailbox: decodeImapUtf7(pendingOperation.mailbox) })}
           </p>
           <div className="flex gap-2">
             <button

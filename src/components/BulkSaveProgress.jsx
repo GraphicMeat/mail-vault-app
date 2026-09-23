@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload, FolderSymlink } from 'lucide-react';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { formatCount } from '../utils/formatCount';
 
 // Use targeted selectors to avoid re-rendering on every store change
 const selectProgress = (s) => s.bulkSaveProgress;
@@ -93,12 +94,12 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   // Same reasoning as BulkOperationProgress: quarter milestones and the
   // outcome, never every percent.
   const milestone = Math.floor(percentage / 25) * 25;
-  const of = t('bulk.progress.completedOfTotal', { completed: completed.toLocaleString(), total: total.toLocaleString() });
+  const of = t('bulk.progress.completedOfTotal', { completed: formatCount(completed), total: formatCount(total) });
   const announcement = isComplete
     ? (errors > 0 ? t('bulk.save.messages', { config: config.errorLabel(errors), of }) : t('bulk.save.messages', { config: config.successLabel, of }))
     // activeLabel ends in an ellipsis for the eye; a screen reader would
     // read it out as "dot dot dot".
-    : t('bulk.save.messages2', { config: config.activeLabel.replace(/\.\.\.$/, ''), milestone, total: total.toLocaleString() });
+    : t('bulk.save.messages2', { config: config.activeLabel.replace(/\.\.\.$/, ''), milestone, total: formatCount(total) });
 
   useEffect(() => {
     if (isComplete && errors === 0) {

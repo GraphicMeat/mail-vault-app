@@ -1027,7 +1027,7 @@ function EmailListComponent({ stacked = false }) {
   const mailboxSummary = formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
   const mailboxScopeLabel = mailboxScope && t('list.acrossFolders', { count: mailboxScope.paths.length });
   const vaultShareLabel = vaultShare && t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
-    inVault: vaultShare.inVault.toLocaleString(), loaded: vaultShare.loaded.toLocaleString(),
+    inVault: formatCount(vaultShare.inVault), loaded: formatCount(vaultShare.loaded),
   });
 
   return (

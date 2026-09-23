@@ -27,6 +27,7 @@ import { formatDateTime } from '../../utils/dateFormat';
 import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, useT  } from '../../i18n/index.js';
+import { formatCount } from '../../utils/formatCount';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
@@ -220,7 +221,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       : (localStorageUsage.totalMB || 0) >= 1
                       ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
                       : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
-                    {' '}{t('settings.storage.emailsSavedParen', { count: (localStorageUsage.emailCount || 0).toLocaleString() })}
+                    {' '}{t('settings.storage.emailsSavedParen', { count: formatCount(localStorageUsage.emailCount || 0) })}
                   </>
                 ) : (
                   usageError ? t('settings.storage.usageUnavailable') : t('settings.storage.calculating')
@@ -370,8 +371,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
           </div>
           {clearCacheResult && (
             <div className="text-xs text-mail-success px-1">
-              {t('settings.storage.clearedCachedEmails', { count: clearCacheResult.deletedCount.toLocaleString() })}
-              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedPreservedSuffix', { count: clearCacheResult.skippedArchived.toLocaleString() })}
+              {t('settings.storage.clearedCachedEmails', { count: formatCount(clearCacheResult.deletedCount) })}
+              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedPreservedSuffix', { count: formatCount(clearCacheResult.skippedArchived) })}
               {t('settings.storage.resyncStarted')}
             </div>
           )}
