@@ -261,9 +261,11 @@ impl VaultRegistry {
 
     /// The light rows (headers, attachment list, `snippet`, no body) for
     /// `uids` in request order, or the whole mailbox by uid. `uid`, `flags` and
-    /// `isArchived` come from the current file name. Uids not held, and files
-    /// that are not mail, are left out. `None` when the mailbox cannot be
-    /// verified.
+    /// `isArchived` come from the current file name. Uids not held, files
+    /// that are not mail, and files that will not read (EIO, EACCES: logged,
+    /// and retried on the next call) are left out; `uid_sets` still counts
+    /// them as held. `None` when the mailbox cannot be verified. One bad file
+    /// must not turn a whole folder's rows into "unknown" on every read.
     pub fn light_rows(&self, root: &Path, account: &str, mailbox: &str, uids: Option<&[u32]>) -> Option<Vec<Value>> {
         let (account, dir) = key(account, mailbox);
         let mut retried = false;
@@ -288,11 +290,10 @@ impl VaultRegistry {
                             }
                             Err(e) => {
                                 // The message is there but will not read (EIO,
-                                // EACCES). Leaving it out would answer "not
-                                // held"; only non-mail files may be left out.
+                                // EACCES): the file's failure, not the folder's.
+                                // Nothing is stored, so the next call tries again.
                                 warn!("vault_registry: read {account}/{dir}/{filename}: {e}");
-                                self.store_parsed(&account, &dir, &parsed);
-                                return None;
+                                continue;
                             }
                         };
                         self.parses.fetch_add(1, Ordering::SeqCst);
@@ -816,7 +817,7 @@ mod tests {
     /// answer: the whole answer is unknown.
     #[cfg(unix)]
     #[test]
-    fn a_held_file_that_will_not_read_makes_light_rows_unknown() {
+    fn a_held_file_that_will_not_read_is_left_out_and_tried_again() {
         use std::os::unix::fs::PermissionsExt;
         let f = fixture();
         put(&f, MB, "1:2,.eml");
@@ -829,7 +830,10 @@ mod tests {
         if as_root {
             return; // permissions aren't enforced, nothing to prove
         }
-        assert_eq!(rows, None);
+        let rows = rows.expect("one unreadable file does not make the folder unknown");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["uid"], 1);
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap().0, vec![1, 2], "still held");
         assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap().len(), 2, "readable again, answered again");
     }
 

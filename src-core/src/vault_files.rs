@@ -202,6 +202,16 @@ pub fn store(
 /// `Ok(None)`: the verified mailbox does not hold `uid`. `Err`: the mailbox
 /// could not be verified (unknown, never absent), or the file will not read.
 pub fn read_resolved(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, Vec<u8>)>, String> {
+    match read_resolved_file(reg, root, account_id, mailbox, uid)? {
+        Some((name, Ok(raw))) => Ok(Some((name, raw))),
+        Some((_, Err(e))) => Err(format!("Failed to read .eml file: {}", e)),
+        None => Ok(None),
+    }
+}
+
+/// `read_resolved` with the file's own read error kept apart from the
+/// folder's: `Err` only when the mailbox is unknown.
+fn read_resolved_file(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, std::io::Result<Vec<u8>>)>, String> {
     use std::io::ErrorKind;
     // Only NotFound goes back to `with_resolved` (it means "relist and
     // retry"); any other read error is the file's own and stays inside.
@@ -213,8 +223,7 @@ pub fn read_resolved(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox
         }
     });
     match read {
-        Ok((name, Ok(raw))) => Ok(Some((name, raw))),
-        Ok((_, Err(e))) => Err(format!("Failed to read .eml file: {}", e)),
+        Ok(found) => Ok(Some(found)),
         Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
@@ -238,9 +247,9 @@ pub fn read_light(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &
 }
 
 /// One slot per requested uid, in request order: `None` when the vault does
-/// not hold the uid (a verified miss), or its file does not parse as mail.
-/// `Err` when the mailbox cannot be verified or relisted, or a held file will
-/// not read: unknown, never a row of empty slots.
+/// not hold the uid (a verified miss), or its file will not read or parse as
+/// mail (that file's failure, not the folder's). `Err` when the mailbox cannot
+/// be verified or relisted: unknown, never a row of empty slots.
 pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<Option<LightEmail>>, String> {
     let held: HashSet<u32> = reg
         .files(root, account_id, mailbox)
@@ -253,7 +262,8 @@ pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mail
             if !held.contains(&uid) {
                 return Ok(None);
             }
-            let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+            let Some((name, raw)) = read_resolved_file(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+            let Ok(raw) = raw else { return Ok(None) };
             Ok(parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok())
         })
         .collect()
@@ -1362,11 +1372,11 @@ mod tests {
         assert!(out[3].is_none(), "legacy name without colon stays invisible, as before");
     }
 
-    /// A held file that will not read is unknown, not an empty slot: the
-    /// whole batch errors. A verified miss stays an empty slot.
+    /// A held file that will not read is that file's empty slot, not the
+    /// folder's failure; the rest of the batch still answers.
     #[cfg(unix)]
     #[test]
-    fn batch_errors_on_a_held_file_that_will_not_read() {
+    fn a_held_file_that_will_not_read_empties_only_its_own_slot() {
         use std::os::unix::fs::PermissionsExt;
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
@@ -1383,7 +1393,8 @@ mod tests {
         if as_root {
             return; // permissions aren't enforced, nothing to prove
         }
-        assert!(out.is_err(), "an unreadable held file must not read as an empty slot");
+        let out = out.expect("one unreadable file does not fail the batch");
+        assert!(out[0].is_some() && out[1].is_none() && out[2].is_none());
         let out = read_light_batch(&reg, root, "acct", "INBOX", &[5, 7, 9]).unwrap();
         assert!(out[0].is_some() && out[1].is_some());
         assert!(out[2].is_none(), "a verified miss is an empty slot");
