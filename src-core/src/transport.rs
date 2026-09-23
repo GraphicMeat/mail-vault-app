@@ -122,13 +122,27 @@ pub fn connect_sync(endpoint: &Path, timeout: Duration) -> std::io::Result<(Box<
 /// A named-pipe client is an ordinary file handle opened on the pipe name, so
 /// `File` gives both halves with `try_clone`.
 ///
-/// `timeout` is unused here and that is a real difference from unix: a pipe
-/// handle has no per-read deadline without overlapped IO. `daemon_ipc::call`
-/// puts the deadline back at a level above (see its Windows arm), so no caller
-/// loses the timeout — but do not "simplify" that arm away.
+/// A pipe has no listen backlog: between one accept and the daemon's next
+/// instance every instance is taken, and the open fails with `PIPE_BUSY`. That
+/// is "try again in a moment" (a unix connect would simply queue), so it is
+/// retried until `timeout`; reporting it as "no daemon" failed concurrent RPCs
+/// with `errors.daemonUnavailable`.
+///
+/// `timeout` bounds only the connect here: a pipe handle has no per-read
+/// deadline without overlapped IO. `daemon_ipc::call` puts the deadline back at
+/// a level above (see its Windows arm), so no caller loses the timeout — but do
+/// not "simplify" that arm away.
 #[cfg(windows)]
-pub fn connect_sync(endpoint: &Path, _timeout: Duration) -> std::io::Result<(Box<dyn Read + Send>, Box<dyn Write + Send>)> {
-    let file = std::fs::OpenOptions::new().read(true).write(true).open(endpoint)?;
+pub fn connect_sync(endpoint: &Path, timeout: Duration) -> std::io::Result<(Box<dyn Read + Send>, Box<dyn Write + Send>)> {
+    let deadline = std::time::Instant::now() + timeout;
+    let file = loop {
+        match std::fs::OpenOptions::new().read(true).write(true).open(endpoint) {
+            Err(e) if e.raw_os_error() == Some(PIPE_BUSY) && std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            other => break other?,
+        }
+    };
     let writer = file.try_clone()?;
     Ok((Box::new(file), Box::new(writer)))
 }
@@ -150,6 +164,30 @@ mod tests {
         } else {
             assert_eq!(ep, Path::new("/home/u/.mailvault/mv.sock"));
         }
+    }
+
+    /// Every instance taken is the daemon between two accepts, not a dead
+    /// daemon: the client waits for the next instance instead of failing.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_busy_pipe_is_waited_for_not_reported_as_no_daemon() {
+        use tokio::net::windows::named_pipe::ServerOptions;
+        let dir = tempfile::tempdir().unwrap();
+        let ep = endpoint(dir.path());
+        let first = ServerOptions::new().first_pipe_instance(true).create(&ep).unwrap();
+        let _held = std::fs::OpenOptions::new().read(true).write(true).open(&ep).unwrap();
+        first.connect().await.unwrap();
+        let busy = std::fs::OpenOptions::new().read(true).write(true).open(&ep).unwrap_err();
+        assert_eq!(busy.raw_os_error(), Some(PIPE_BUSY));
+
+        let client_ep = ep.clone();
+        let client = std::thread::spawn(move || connect_sync(&client_ep, Duration::from_secs(5)).map(|_| ()));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let second = ServerOptions::new().create(&ep).unwrap();
+        // Bounded: a client that gave up never arrives, and the assert below
+        // must report that rather than the test hanging on the accept.
+        let _ = tokio::time::timeout(Duration::from_secs(5), second.connect()).await;
+        client.join().unwrap().expect("a busy pipe must be retried until an instance frees up");
     }
 
     #[test]
