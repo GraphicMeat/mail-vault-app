@@ -65,6 +65,15 @@ pub fn list(conn: &Connection, account_id: &str) -> Result<Vec<Field>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+/// Every field of every scope, for an account-transfer snapshot.
+pub fn list_all(conn: &Connection) -> Result<Vec<Field>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, scope, name, kind, options_json, position FROM fields ORDER BY scope, position, name COLLATE NOCASE")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], row_to_field).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 pub fn save(conn: &Connection, field: &Field) -> Result<Field, String> {
     let name = field.name.trim();
     if name.is_empty() {
