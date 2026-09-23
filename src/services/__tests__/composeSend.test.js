@@ -278,8 +278,9 @@ describe('scheduleCompose', () => {
   });
 
   /// A row is bound to the account whose vault holds it: an edit moved to
-  /// another From account is a new row, and the old one goes only after.
-  it('schedules an edit moved to another account as a new row, then cancels the old one', async () => {
+  /// another From account is a new row. The old one is cancelled first, and
+  /// that cancel is checked: a row already sending must not also get a copy.
+  it('cancels the old row of an edit moved to another account, then schedules it as a new row', async () => {
     const order = [];
     createSchedule.mockImplementationOnce(async () => { order.push('create'); });
     cancelSchedule.mockImplementationOnce(async () => { order.push('cancel'); });
@@ -289,6 +290,24 @@ describe('scheduleCompose', () => {
     expect(replaceSchedule).not.toHaveBeenCalled();
     expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acct-1' }));
     expect(cancelSchedule).toHaveBeenCalledWith('row-1');
-    expect(order).toEqual(['create', 'cancel']);
+    expect(order).toEqual(['cancel', 'create']);
+  });
+
+  it('schedules nothing when the old row can no longer be cancelled, and keeps the draft', async () => {
+    cancelSchedule.mockRejectedValueOnce(new Error('E_SCHEDULED_NOT_EDITABLE: already being sent'));
+
+    await expect(scheduleCompose({ snapshot: editSnapshot('acct-other'), account })).rejects.toThrow('E_SCHEDULED_NOT_EDITABLE');
+
+    expect(createSchedule).not.toHaveBeenCalled();
+    expect(deleteLocalDraft).not.toHaveBeenCalled();
+  });
+
+  it('keeps the draft when the new row fails after the old one was cancelled', async () => {
+    createSchedule.mockRejectedValueOnce(new Error('daemon unavailable'));
+
+    await expect(scheduleCompose({ snapshot: editSnapshot('acct-other'), account })).rejects.toThrow('daemon unavailable');
+
+    expect(cancelSchedule).toHaveBeenCalledWith('row-1');
+    expect(deleteLocalDraft).not.toHaveBeenCalled();
   });
 });

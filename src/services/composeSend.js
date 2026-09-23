@@ -163,8 +163,13 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
   // both. So such a row goes now, and the pending send holds the message.
   // Undo reopens compose from this same snapshot, so the edit markers go too:
   // it is a new email from here, and a later Schedule creates a row instead
-  // of being refused for replacing a cancelled one. A row due later stays
-  // queued until the send is out (below), where it survives a quit.
+  // of being refused for replacing a cancelled one. So does its baseline:
+  // with the row's copy deleted, the reopened window (Undo, or outbox
+  // Dismiss) is the only one, and must read as unsaved work that asks before
+  // closing and autosaves to Drafts. A row due later stays queued until the
+  // send is out (below), where it survives a quit.
+  // ponytail: a quit inside the undo window loses this send, like any other
+  // queued send; a durable pending-send queue would cover both.
   const edited = snapshot._editScheduledRow;
   if (snapshot._editScheduledId && edited?.localTime && edited?.tz
       && zonedTimeToEpoch(edited.localTime, edited.tz) <= Date.now() + EDITED_ROW_DUE_MARGIN_MS) {
@@ -172,6 +177,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       .catch(err => console.warn('[composeSend] could not cancel the edited scheduled send:', err));
     delete snapshot._editScheduledId;
     delete snapshot._editScheduledRow;
+    snapshot._baseline = null;
   }
 
   return async function sendCompose() {
@@ -335,14 +341,15 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
     // E_ code), which leaves the compose window open with everything in it.
     await store.replace(editId, fields);
   } else {
-    await store.create({ accountId: freshAccount.id, ...fields });
     // A row belongs to the account whose vault holds its .eml, so an edit
-    // moved to another From account is a new row; the old one goes only once
-    // that exists.
-    if (editId) {
-      await store.cancel(editId)
-        .catch(err => console.warn('[composeSend] could not cancel the replaced scheduled send:', err));
-    }
+    // moved to another From account is a new row. The old one is cancelled
+    // first, and that cancel is checked: the daemon refuses a row it is
+    // sending or has sent, and a new row beside it would send the email
+    // twice. A refusal, or a create that fails after the cancel, leaves the
+    // window open with the message (ComposeModal handleSchedule), and a
+    // retry comes back here: cancelling a cancelled row is a no-op.
+    if (editId) await store.cancel(editId);
+    await store.create({ accountId: freshAccount.id, ...fields });
   }
   if (snapshot._draftUid && snapshot._draftMailbox) {
     await deleteLocalDraft({ accountId: snapshot._draftAccountId || snapshot._accountId || freshAccount.id, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid });

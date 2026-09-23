@@ -172,6 +172,49 @@ describe('compose editing a scheduled email', () => {
     expect(error.textContent).toBe('This scheduled email is already being sent or is no longer scheduled');
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  // Moved to another From account, the edit cancels its old row before the
+  // new one is created (composeSend.js). A create that then fails leaves
+  // this window as the only copy, even if nothing in it was typed.
+  it('a failed Schedule of an edit moved to another account leaves unsaved work', async () => {
+    const onClose = vi.fn();
+    const onMinimize = vi.fn();
+    const onSchedule = vi.fn().mockRejectedValue(new Error('daemon unavailable'));
+    const moved = { ...initialData, _editScheduledRow: { ...initialData._editScheduledRow, accountId: 'acct-other' } };
+    render(<ComposeModal initialData={moved} onClose={onClose} onMinimize={onMinimize} onSchedule={onSchedule} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(await screen.findByTestId('compose-schedule-submit'));
+    await screen.findByTestId('compose-error');
+
+    fireEvent.keyDown(document.body, { key: 'Escape' }); // closes the schedule panel
+    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(onMinimize).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // Sent now while its row is due inside the send delay: the row, and its
+  // frozen copy, go at hand-off (composeSend.js). Undo and outbox Dismiss
+  // reopen compose from that same snapshot, which is then the only copy: it
+  // must read as unsaved work, or closing it asks nothing and nothing was
+  // ever autosaved to Drafts.
+  it('a compose reopened after its row was cancelled at hand-off is unsaved work', async () => {
+    const { createComposeSend } = await import('../../services/composeSend');
+    const { saveLocalDraft } = await import('../../services/localDrafts');
+    saveLocalDraft.mockClear();
+    const snapshot = { ...initialData, _editScheduledRow: { accountId: 'acct-1', localTime: '2020-01-01T09:00', tz: 'UTC' } };
+    createComposeSend({ snapshot, mode: 'new', replyTo: null, account });
+    expect(snapshot._editScheduledId).toBeUndefined();
+
+    const onClose = vi.fn();
+    const onMinimize = vi.fn();
+    render(<ComposeModal initialData={snapshot} onClose={onClose} onMinimize={onMinimize} onSaveState={() => {}} />);
+    await screen.findByTestId('compose-send');
+    await waitFor(() => expect(saveLocalDraft).toHaveBeenCalled());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(onMinimize).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
 
 // The picker's zone list and calendar are portaled to body, outside the

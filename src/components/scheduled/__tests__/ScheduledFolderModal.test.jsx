@@ -20,6 +20,7 @@ const { getLocalEmailFull, openCompose, cancel, sendNow, loadRows, state } = vi.
 
 vi.mock('../../../i18n/index.js', () => ({
   useT: () => (key, vars) => (vars ? `${key}:${JSON.stringify(vars)}` : key),
+  tErr: err => `tErr:${err.message}`,
   getLocale: () => 'en',
 }));
 vi.mock('../../ui/Dialog', () => ({ Dialog: ({ children }) => <div>{children}</div> }));
@@ -107,6 +108,18 @@ describe('Scheduled folder rows', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('scheduled.errors.openFailed');
     expect(openCompose).not.toHaveBeenCalled();
     expect(cancel).not.toHaveBeenCalled();
+  });
+
+  // The daemon refuses to cancel a row it is sending: its E_ code is a
+  // catalog key, shown through tErr, never the raw daemon string.
+  it('shows a refused cancel as its catalog message', async () => {
+    state.rows = [row('q1', 'queued')];
+    cancel.mockRejectedValue(new Error('E_SCHEDULED_NOT_EDITABLE: already being sent'));
+    render(<ScheduledFolderModal />);
+
+    fireEvent.click(within(screen.getByTestId('scheduled-row-q1')).getByTitle('common.cancel'));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('tErr:E_SCHEDULED_NOT_EDITABLE: already being sent');
   });
 });
 

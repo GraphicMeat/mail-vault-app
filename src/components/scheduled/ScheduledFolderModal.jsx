@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Clock, X, Send, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { useT, getLocale } from '../../i18n/index.js';
+import { useT, tErr, getLocale } from '../../i18n/index.js';
 import { useScheduledStore } from '../../stores/scheduledStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useAutostartState } from '../../hooks/useAutostartState';
@@ -188,8 +188,9 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
     }
   };
 
+  // The daemon refuses a row it is already sending with an E_ code (tErr).
   const handleCancel = async (row) => {
-    try { await cancel(row.id); } catch (err) { setError(String(err?.message || err)); }
+    try { await cancel(row.id); } catch (err) { setError(tErr(err)); }
   };
 
   const handleSendNow = async (row) => {

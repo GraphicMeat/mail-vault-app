@@ -725,6 +725,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         onClose();
       }
     } catch (err) {
+      // An edit moved to another From account cancels its old row before the
+      // new one is created (composeSend.js). If the create is what failed,
+      // this window is now the only copy: it must ask before closing and be
+      // autosaved, even if nothing in it was typed.
+      if (initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) {
+        initialSnapshot.current = null;
+      }
       // tErr: saving an edit over a row that already fired comes back as the
       // daemon's E_SCHEDULED_NOT_EDITABLE code. The window stays open either
       // way, holding the message.
