@@ -17,6 +17,7 @@ import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMemb
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { formatCount } from '../utils/formatCount';
 import { Button } from './ui/Button';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
@@ -127,12 +128,12 @@ export function formatPurgeEverywhereOutcome(result) {
 export function formatListCount({ shown, loaded, total, unreadOnly }) {
   if (unreadOnly) {
     return loaded < total
-      ? t('list.unreadLoaded', { shown: shown.toLocaleString(), loaded: loaded.toLocaleString() })
-      : t('list.unread', { shown: shown.toLocaleString() });
+      ? t('list.unreadLoaded', { shown: formatCount(shown), loaded: formatCount(loaded) })
+      : t('list.unread', { shown: formatCount(shown) });
   }
   return shown < total
-    ? t('list.emails', { shown: shown.toLocaleString(), total: total.toLocaleString() })
-    : t('list.emails2', { total: total.toLocaleString() });
+    ? t('list.emails', { shown: formatCount(shown), total: formatCount(total) })
+    : t('list.emails2', { total: formatCount(total) });
 }
 
 export function MailboxHeaderSummary({ summary, scope, dateRange, searchActive }) {

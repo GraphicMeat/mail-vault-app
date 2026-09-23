@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { formatCount } from './formatCount.js';
 // The words this product uses for where a message lives, in one place.
 //
 // PRODUCT.md fixes the vocabulary: the place a copy is kept is "your vault",
@@ -30,14 +31,14 @@ export function vaultClause(total, inVault) {
       : t('custody.vaultKeepsCopiesPutThem');
   }
   const exposed = total - inVault;
-  return t('custody.themVaultOtherOnlyServer', { inVault: inVault.toLocaleString(), exposed: exposed.toLocaleString(), exposed2: exposed === 1 ? 'exists' : 'exist' });
+  return t('custody.themVaultOtherOnlyServer', { inVault: formatCount(inVault), exposed: formatCount(exposed), exposed2: exposed === 1 ? 'exists' : 'exist' });
 }
 
 /** Confirmation body for "Delete from server" on a row or a thread. */
 export function describeServerDelete(total, inVault) {
   const lead = total === 1
     ? t('custody.emailLeavesServer')
-    : t('custody.theseEmailsLeaveServer', { total: total.toLocaleString() });
+    : t('custody.theseEmailsLeaveServer', { total: formatCount(total) });
   return `${lead} ${vaultClause(total, inVault)}`;
 }
 
