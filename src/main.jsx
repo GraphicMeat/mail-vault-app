@@ -109,6 +109,13 @@ if (import.meta.env.VITE_E2E === '1') {
         storageUsage: () => db.getStorageUsage(),
       };
     });
+  // The every-folder Message-ID sweep lost its viewer button, and opening a
+  // readable vault copy never reaches the server fetch whose "gone" answer
+  // starts it (selectEmail). The sweep, its durable stamp and the gold row it
+  // paints still exist; this is the only way a spec can ask for one.
+  import('./services/workflows/probeServerCopy').then(({ probeServerCopy }) => {
+    window.__CUSTODY_PROBE__ = probeServerCopy;
+  });
 }
 
 if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac')) {

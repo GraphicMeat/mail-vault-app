@@ -28,7 +28,7 @@
  * (rawImap.js) — the same wire the app uses, with none of the app in the way.
  */
 
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
@@ -52,14 +52,18 @@ function nameOf(dir, uid) {
 }
 
 /**
- * `flags` of the uid's entry in a header sidecar: ONE object, because a sidecar
- * holds a single message.
+ * `flags` of the uid's row in the header cache (`custody.db` `header_cache`),
+ * read through the daemon — the db is opened exclusively, so never from here.
+ * Rejects like `indexFlags` below: `null` means the read worked and the cache
+ * has no row for this uid.
  */
-function jsonFlags(path, uid) {
-  if (!existsSync(path)) return null;
-  const v = JSON.parse(readFileSync(path, 'utf-8'));
-  const entries = Array.isArray(v) ? v : (v.uid != null ? [v] : (v.emails || []));
-  const entry = entries.find((e) => Number(e.uid) === uid);
+async function cacheFlags(accountId, mailbox, uid) {
+  const r = await browser.executeAsync((a, m, u, done) => {
+    window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'load_email_cache_by_uids', params: { accountId: a, mailbox: m, uids: [u] } })
+      .then((rows) => done({ ok: true, rows }), (e) => done({ ok: false, reason: String((e && e.message) || e) }));
+  }, accountId, mailbox, uid);
+  if (!r.ok) throw new Error(`load_email_cache_by_uids failed for ${accountId}/${mailbox}: ${r.reason}`);
+  const entry = (r.rows || []).find((e) => Number(e.uid) === uid);
   return entry ? entry.flags : null;
 }
 
@@ -160,7 +164,6 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
 
   let account = null;
   let cur = null;
-  let sidecarDir = null;
   let mirror = null;
   let backupRoot = null;
 
@@ -177,7 +180,6 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     account = browser.mockAccounts.find((a) => a.email === LUKE);
     const data = appDataDir(browser.testDataDir);
     cur = join(data, 'Maildir', account.id, 'INBOX', 'cur');
-    sidecarDir = join(data, 'email_cache', `${account.id.replace(/[^a-zA-Z0-9]/g, '_')}_INBOX`);
 
     // This spec's own mirror, so the mirror assertions test this spec's subject
     // and not whatever location another spec left stored.
@@ -234,7 +236,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     expect((await rowFor(readSubject)).unread).toBe(false);
   });
 
-  it('marking it read lands on the server, the file, the index, the sidecar and the mirror', async function () {
+  it('marking it read lands on the server, the file, the index, the header cache and the mirror', async function () {
     expect(unreadSubject).not.toBeNull();
     // A mirror copy, as a backup run would have left it — planted rather than
     // backed up, so no server fetch of luke's whole INBOX has to be waited on.
@@ -254,8 +256,8 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
       `mirror copy never renamed to read — mirror holds ${nameOf(mirror, unreadUid)}`);
     await waitFor(async () => ((await indexFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
       'the custody entry never got \\Seen');
-    await waitFor(() => (jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
-      'the header sidecar never got \\Seen — the next repaint from cache would show it unread again');
+    await waitFor(async () => ((await cacheFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
+      'the header cache never got \\Seen — the next repaint from cache would show it unread again');
   });
 
   it('marking it unread takes it back off every copy', async function () {
@@ -271,8 +273,11 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
       `mirror copy kept its S — mirror holds ${nameOf(mirror, unreadUid)}`);
     await waitFor(async () => !((await indexFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
       'the custody entry kept \\Seen');
-    await waitFor(() => !(jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
-      'the header sidecar kept \\Seen');
+    // Non-null first: a missing row must not pass as "not \\Seen".
+    await waitFor(async () => {
+      const flags = await cacheFlags(account.id, 'INBOX', unreadUid);
+      return flags !== null && !flags.includes('\\Seen');
+    }, 'the header cache kept \\Seen, or lost the row');
   });
 
   it('shows the same state from every copy the vault keeps, before and after a switch away', async function () {
@@ -282,8 +287,8 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     expect(await clickSelectionAction('markRead')).toBe(true);
     await waitFor(async () => (await vaultFlags(account.id, 'INBOX', unreadUid) || []).includes('\\Seen'),
       'the vault file never said read');
-    await waitFor(() => (jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
-      'sidecar never updated before the switch');
+    await waitFor(async () => ((await cacheFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
+      'header cache never updated before the switch');
 
     // Leave for another account and come back: the list is repainted from the
     // cache first, and the cache has to agree. (The live fetch that follows

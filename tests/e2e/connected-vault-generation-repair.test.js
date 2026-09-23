@@ -30,6 +30,26 @@ const GONE_UID = 999_001;
 const MISFILED_UID = 999_002;
 const GONE_MESSAGE_ID = 'only-on-the-previous-server@old-host.test';
 
+/**
+ * A daemon cache RPC's answer. Resolves `{ok}` rather than rejecting through
+ * wdio, which reads an object with a truthy `error` key back as a W3C error.
+ */
+async function cacheRpc(method, params) {
+  const r = await browser.executeAsync((m, p, done) => {
+    window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: m, params: p })
+      .then((value) => done({ ok: true, value }), (e) => done({ ok: false, reason: String((e && e.message) || e) }));
+  }, method, params);
+  if (!r.ok) throw new Error(`${method} failed: ${r.reason}`);
+  return r.value;
+}
+
+/** `header_cache_meta` for the mailbox: what the sync engine last recorded. */
+async function cacheMeta(accountId, mailbox) {
+  const raw = await cacheRpc('load_email_cache_meta', { accountId, mailbox });
+  if (!raw) throw new Error(`no header cache meta for ${accountId}/${mailbox}`);
+  return JSON.parse(raw);
+}
+
 const eml = (messageId, subject) => [
   'From: Old Host <team@previous-host.test>',
   'To: luke@mock.test',
@@ -50,7 +70,6 @@ describe('Vault — UID generation repair', function () {
   let mailboxDir = null;
   let cur = null;
   let target = null;      // a real row: (uid, messageId) in the current generation
-  let cacheDir = null;
 
   before(async function () {
     await waitForApp();
@@ -61,7 +80,6 @@ describe('Vault — UID generation repair', function () {
     const data = appDataDir(browser.testDataDir);
     mailboxDir = join(data, 'Maildir', accountId, 'INBOX');
     cur = join(mailboxDir, 'cur');
-    cacheDir = join(data, 'email_cache', `${accountId.replace(/[^a-zA-Z0-9]/g, '_')}_INBOX`);
 
     // A row the server currently serves, and the Message-ID it serves it under.
     // The repair binds by Message-ID, so this is the only thing that can move a
@@ -102,15 +120,17 @@ describe('Vault — UID generation repair', function () {
     expect(existsSync(join(cur, `${GONE_UID}:2,.eml`)) || existsSync(join(mailboxDir, 'orphaned'))).toBe(true);
   });
 
-  it('has a sidecar cache complete enough to prove a message is gone', function () {
+  it('has a header cache complete enough to prove a message is gone', async function () {
     // The repair refuses to move anything aside while the cache is partial —
     // during a cold start it is empty, and every message would read as gone.
     // If this is ever false, the repair legitimately did nothing and the
     // assertions below are testing the wrong thing.
-    const meta = JSON.parse(readFileSync(join(cacheDir, '_meta.json'), 'utf8'));
-    const sidecars = readdirSync(cacheDir).filter((f) => /^\d+\.json$/.test(f)).length;
+    // The same two numbers `repair_generation_for` compares: every cached
+    // header row against the server's message count.
+    const meta = await cacheMeta(accountId, 'INBOX');
+    const cached = (await cacheRpc('list_cached_uids', { accountId, mailbox: 'INBOX' })).uids.length;
     expect(meta.uidValidity).toBeGreaterThan(0);
-    expect(sidecars).toBeGreaterThanOrEqual(meta.totalEmails);
+    expect(cached).toBeGreaterThanOrEqual(meta.totalEmails);
   });
 
   it('re-keys a vault file the server still has onto its current uid', async function () {
@@ -131,8 +151,8 @@ describe('Vault — UID generation repair', function () {
     expect(kept).toContain(GONE_MESSAGE_ID);
   });
 
-  it('records the generation it re-keyed onto, so it does not run again', function () {
-    const meta = JSON.parse(readFileSync(join(cacheDir, '_meta.json'), 'utf8'));
+  it('records the generation it re-keyed onto, so it does not run again', async function () {
+    const meta = await cacheMeta(accountId, 'INBOX');
     expect(readFileSync(join(mailboxDir, '.uidvalidity'), 'utf8').trim()).toBe(String(meta.uidValidity));
   });
 });

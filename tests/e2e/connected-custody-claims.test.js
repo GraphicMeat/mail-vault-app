@@ -76,15 +76,31 @@ describe('Custody claims', function () {
   const totalIconCount = () => browser.execute(() =>
     document.querySelectorAll('[data-testid="msg-state-icon"]').length);
 
-  const clickCheckServer = () => browser.execute(() => {
-    const btn = document.querySelector('[data-testid="custody-check-server"]');
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  });
-
-  const checkResult = () => browser.execute(() =>
-    document.querySelector('[data-testid="custody-check-result"]')?.innerText || null);
+  /**
+   * Ask the server whether ANY folder still holds this vault row's Message-ID —
+   * the every-folder sweep (`probeServerCopy`) the viewer's "Check the server"
+   * button used to run. The button is gone (c719364e), and opening a readable
+   * vault copy never reaches the server fetch whose "gone" answer starts the
+   * sweep on its own, so the spec calls the workflow through its e2e seam and
+   * reads the verdict it returns — a 'present' answer has no UI of its own now.
+   *
+   * The uid comes from `localEmails` by subject AND account: uids collide
+   * across accounts, and the vault row is the one the verdict is stamped on.
+   */
+  async function probeServer(account, subject) {
+    const r = await browser.executeAsync((email, needle, done) => {
+      const s = window.__MAIL_STORE__?.getState?.();
+      const acct = s?.accounts?.find((a) => a.email === email);
+      const row = (s?.localEmails || []).find((e) => e.subject === needle
+        && (e._accountId == null || e._accountId === acct?.id));
+      if (typeof window.__CUSTODY_PROBE__ !== 'function') return done({ ok: false, reason: 'no __CUSTODY_PROBE__ seam in this build' });
+      if (!acct || !row) return done({ ok: false, reason: `no vault row "${needle}" for ${email}` });
+      window.__CUSTODY_PROBE__(row.uid, { accountId: acct.id, mailbox: 'INBOX' })
+        .then((result) => done({ ok: true, result }), (e) => done({ ok: false, reason: String((e && e.message) || e) }));
+    }, account, subject);
+    if (!r.ok) throw new Error(`server sweep for "${subject}" did not run: ${r.reason}`);
+    return r.result;
+  }
 
   /**
    * Delete a message from the mock server with our own IMAP connection —
@@ -372,27 +388,23 @@ describe('Custody claims', function () {
       return row.text.match(subjectRe)[0];
     }
 
-    async function openAndCheck(subject) {
+    /** Open the row, then run the sweep for it and hand back the verdict. */
+    async function openAndCheck(account, subject) {
       expect(await openRow(subject)).toBe(true);
       await browser.waitUntil(async () => !!(await bandText()), {
         timeout: 30_000, interval: 200, timeoutMsg: 'Custody band never rendered',
       });
-      expect(await clickCheckServer()).toBe(true);
-      await browser.waitUntil(async () =>
-        !!(await checkResult()) || !!(await bandText())?.includes('only copy'), {
-        timeout: 60_000, interval: 300, timeoutMsg: 'The server check never came back',
-      });
+      return probeServer(account, subject);
     }
 
     it('finds the copy the mailbox lost, in the folder that has it', async function () {
       const subject = await binnedVaultRow(LUKE, /Luke message \d+/);
-      await openAndCheck(subject);
+      const verdict = await openAndCheck(LUKE, subject);
 
       // The sweep visited the Bin. A probe scoped to the active mailbox — the
       // derivation this whole feature replaces — would have said "absent".
-      const note = await checkResult();
-      expect(`${note}`).toContain('Still on the server');
-      expect(`${note}`).toMatch(/Trash|Bin/i);
+      expect(verdict).toMatchObject({ state: 'present' });
+      expect(`${verdict.locations?.[0]?.mailbox}`).toMatch(/Trash|Bin/i);
       const band = await bandText();
       expect(band).toContain('Saved in your vault');
       expect(band).not.toContain('only copy');
@@ -409,14 +421,16 @@ describe('Custody claims', function () {
       // The Bin is where the first case in this file left the server copy.
       await expungeBehindTheApp(2, YODA, 'Trash', subject);
 
-      await openAndCheck(subject);
+      const verdict = await openAndCheck(YODA, subject);
+      // The probe reports WHY it could not answer (`reason`, `failed`); the
+      // object diff prints it, or a red here says only "not gold" and the next
+      // run is another nine minutes.
+      expect(verdict).toMatchObject({ state: 'absent' });
 
       await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('local-only'), {
         timeout: 60_000, interval: 300,
-        // The probe reports WHY it could not answer; print it, or a red here
-        // says only "not gold" and the next run is another nine minutes.
         timeoutMsg: `"${subject}" never went gold after the sweep — the band said `
-          + `${JSON.stringify(await bandText())}, the check said ${JSON.stringify(await checkResult())}`,
+          + `${JSON.stringify(await bandText())}, the sweep said ${JSON.stringify(verdict)}`,
       });
 
       const band = await bandText();

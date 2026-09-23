@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, closeSettings } from './helpers.js';
 import { appDataDir } from './mockImap.js';
@@ -27,18 +27,30 @@ describe('Email Cleanup account reads', function () {
       const status = await window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'classification.status', params: {} });
       done(status.status !== 'Running');
     }), { timeout: 30_000 });
-    const directory = join(appDataDir(browser.testDataDir), 'classifications');
-    mkdirSync(directory, { recursive: true });
-    const path = join(directory, `${accountId}.json`);
-    let entries = {};
-    try { entries = JSON.parse(readFileSync(path, 'utf8')); } catch {}
-    entries['cleanup-e2e'] = {
+    // Classifications live in app.db now; the old per-account JSON file is
+    // imported once per data dir and never read again. app.db is shared by
+    // two processes (WAL, no exclusive lock), so a third writer just waits.
+    const entry = {
       category: 'newsletter', importance: 'low', action: 'archive', confidence: 0.99,
       classified_at: '2026-01-01T00:00:00Z', model_used: 'test', source: 'UserOverride',
       snapshot: { uid: 39, mailbox: 'INBOX', subject: 'Cleanup E2E result',
         from: 'sender@mock.test', date: '2099-01-01T00:00:00Z' },
     };
-    writeFileSync(path, JSON.stringify(entries));
+    const db = new DatabaseSync(join(appDataDir(browser.testDataDir), 'app.db'));
+    try {
+      db.exec('PRAGMA busy_timeout=5000');
+      db.prepare('INSERT OR REPLACE INTO classifications(account_id, email_key, entry_json) VALUES (?, ?, ?)')
+        .run(accountId, 'cleanup-e2e', JSON.stringify(entry));
+    } finally {
+      db.close();
+    }
+    // The daemon drops a row it cannot decode, silently: prove it reads this one
+    // back, or a shape mismatch surfaces later as a "Missing cleanup control".
+    const seeded = await browser.executeAsync((id, done) => {
+      window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'classification.results', params: { accountId: id } })
+        .then((rows) => done((rows || []).some(r => r.messageId === 'cleanup-e2e')), () => done(false));
+    }, accountId);
+    expect(seeded).toBe(true);
     await browser.execute(id => {
       window.__SETTINGS_STORE__.setState({ threadSortOrder: 'newest-first' });
       window.__MAIL_STORE__.getState().activateAccount(id, 'INBOX');
@@ -49,8 +61,10 @@ describe('Email Cleanup account reads', function () {
         // maildir_read_light moved to the daemon, so the app now calls it as
         // `daemon_rpc` with the method inside `args`, not as a bare command.
         if (command === 'daemon_rpc' && args?.method === 'maildir_read_light' && args?.params?.accountId === id && args?.params?.uid === 39) return null;
-        if (['imap_get_email_light'].includes(command)) {
-          window.__CLEANUP_TEST__.calls.push({ command, args });
+        // Task 5.4a: imap_get_email_light moved to the daemon as well, so it
+        // arrives as `daemon_rpc` too; recorded normalized like archive_emails.
+        if (command === 'daemon_rpc' && args?.method === 'imap_get_email_light') {
+          window.__CLEANUP_TEST__.calls.push({ command: 'imap_get_email_light', args: args.params });
         }
         // Task 3.5: archive_emails moved to the daemon too, so the real
         // native call is `daemon_rpc` with the method inside `args`, same
