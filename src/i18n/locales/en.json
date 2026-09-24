@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "{{count}} Attachments",
   "common.attachmentCount_one": "{{count}} attachment",
   "common.attachmentCount_other": "{{count}} attachments",
+  "celebration.continue": "Continue to MailVault",
+  "celebration.heading": "Your mail has a place to land.",
   "common.back": "Back",
   "common.cancel": "Cancel",
   "common.clear": "Clear",

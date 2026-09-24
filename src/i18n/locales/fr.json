@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "{{count}} pièces jointes",
   "common.attachmentCount_one": "{{count}} pièce jointe",
   "common.attachmentCount_other": "{{count}} pièces jointes",
+  "celebration.continue": "Continuer vers MailVault",
+  "celebration.heading": "Vos e-mails ont trouvé où atterrir.",
   "common.back": "Retour",
   "common.cancel": "Annuler",
   "common.clear": "Effacer",

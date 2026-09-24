@@ -55,6 +55,16 @@ const advance = () => {
 };
 
 describe('onboarding back button', () => {
+  it('announces completion only when the final choice is made', () => {
+    const onComplete = vi.fn();
+    render(<Onboarding onComplete={onComplete} />);
+    for (const _ of STEPS.slice(1)) advance();
+    expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('finish'));
+    expect(setOnboardingComplete).toHaveBeenCalledWith(true);
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
   it('is absent on the first step — there is nothing behind it', () => {
     render(<Onboarding />);
     expect(currentStep()).toBe('splash');

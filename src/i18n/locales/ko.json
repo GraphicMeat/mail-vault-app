@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "첨부파일 {{count}}개",
   "common.attachmentCount_one": "첨부파일 {{count}}개",
   "common.attachmentCount_other": "첨부파일 {{count}}개",
+  "celebration.continue": "MailVault로 계속",
+  "celebration.heading": "메일이 도착할 새로운 공간.",
   "common.back": "뒤로",
   "common.cancel": "취소",
   "common.clear": "지우기",

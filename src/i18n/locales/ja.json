@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "添付ファイル {{count}} 件",
   "common.attachmentCount_one": "添付ファイル {{count}} 件",
   "common.attachmentCount_other": "添付ファイル {{count}} 件",
+  "celebration.continue": "MailVault に進む",
+  "celebration.heading": "メールの新しい居場所。",
   "common.back": "戻る",
   "common.cancel": "キャンセル",
   "common.clear": "クリア",

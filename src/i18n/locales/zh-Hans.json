@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "{{count}} 个附件",
   "common.attachmentCount_one": "{{count}} 个附件",
   "common.attachmentCount_other": "{{count}} 个附件",
+  "celebration.continue": "继续使用 MailVault",
+  "celebration.heading": "你的邮件有了新归处。",
   "common.back": "返回",
   "common.cancel": "取消",
   "common.clear": "清除",

@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "{{count}} allegati",
   "common.attachmentCount_one": "{{count}} allegato",
   "common.attachmentCount_other": "{{count}} allegati",
+  "celebration.continue": "Continua su MailVault",
+  "celebration.heading": "La tua posta ha un posto dove arrivare.",
   "common.back": "Indietro",
   "common.cancel": "Annulla",
   "common.clear": "Cancella",

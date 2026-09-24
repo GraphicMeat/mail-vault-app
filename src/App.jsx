@@ -24,6 +24,7 @@ import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
+import { MailArrivalCelebration } from './components/MailArrivalCelebration';
 import { OnboardingRefreshPrompt } from './components/onboarding/OnboardingRefreshPrompt';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
@@ -209,6 +210,14 @@ function App() {
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
   const language = useSettingsStore(s => s.language);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [mailArrivalKind, setMailArrivalKind] = useState(null);
+  const mailArrival = mailArrivalKind && (
+    <MailArrivalCelebration kind={mailArrivalKind} onClose={() => setMailArrivalKind(null)} />
+  );
+  const accountAdded = () => {
+    setShowAccountModal(false);
+    setMailArrivalKind('account');
+  };
   // Account transfer: main window only, even when asked from the detached Settings window.
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -1140,10 +1149,14 @@ function App() {
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
     return (
-      <Onboarding
-        onOpenBilling={() => openSettings({ tab: 'billing' })}
-        onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
-      />
+      <>
+        <Onboarding
+          onComplete={() => setMailArrivalKind('onboarding')}
+          onOpenBilling={() => openSettings({ tab: 'billing' })}
+          onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
+        />
+        {mailArrival}
+      </>
     );
   }
 
@@ -1153,6 +1166,7 @@ function App() {
     if (!initialized) {
       // Still loading — show branded loading screen while keychain prompt may be active
       return (
+        <>
         <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
           <div className="text-center">
             <h1 className="text-4xl font-display font-bold text-mail-text mb-4">
@@ -1162,9 +1176,12 @@ function App() {
             <RefreshCw size={24} className="animate-spin text-mail-accent-text mx-auto" />
           </div>
         </div>
+        {mailArrival}
+        </>
       );
     }
     return (
+      <>
       <div className="h-screen bg-mail-bg flex items-center justify-center pt-8" data-testid="welcome-screen">
         <motion.div
           initial={{ opacity: 1, y: 0 }}
@@ -1198,7 +1215,7 @@ function App() {
           <Suspense fallback={null}>
             <AnimatePresence>
               {showAccountModal && (
-                <AccountModal onClose={() => setShowAccountModal(false)} />
+                <AccountModal onClose={() => setShowAccountModal(false)} onSuccess={accountAdded} />
               )}
             </AnimatePresence>
             {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} />}
@@ -1206,10 +1223,13 @@ function App() {
           </ChunkErrorBoundary>
         </motion.div>
       </div>
+      {mailArrival}
+      </>
     );
   }
   
   return (
+    <>
     <div className="h-screen bg-mail-bg flex flex-col overflow-clip">
       {/* Storage folder unreachable — blocks sync, so it sits above everything */}
       <VaultAlertBanner />
@@ -1296,7 +1316,7 @@ function App() {
       <Suspense fallback={null}>
         <AnimatePresence>
           {showAccountModal && (
-            <AccountModal onClose={() => setShowAccountModal(false)} />
+            <AccountModal onClose={() => setShowAccountModal(false)} onSuccess={accountAdded} />
           )}
         </AnimatePresence>
         {showExportModal && <ExportModal accounts={accounts} onClose={() => setShowExportModal(false)} />}
@@ -1544,6 +1564,8 @@ function App() {
       )}
       </div>
     </div>
+    {mailArrival}
+    </>
   );
 }
 

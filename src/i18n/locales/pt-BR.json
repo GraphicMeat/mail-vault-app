@@ -322,6 +322,8 @@
   "common.attachmentCountCap_other": "{{count}} anexos",
   "common.attachmentCount_one": "{{count}} anexo",
   "common.attachmentCount_other": "{{count}} anexos",
+  "celebration.continue": "Continuar para o MailVault",
+  "celebration.heading": "Seu e-mail tem onde pousar.",
   "common.back": "Voltar",
   "common.cancel": "Cancelar",
   "common.clear": "Limpar",
