@@ -2708,7 +2708,7 @@
   "views.saveSearch": "Enregistrer cette recherche comme vue",
   "views.section": "Vues",
   "views.showTimeline": "Afficher la chronologie",
-  "views.showTimelineHint": "Ouvre cette vue avec la chronologie mensuelle à côté de la liste. Le bouton Chronologie de la barre d’outils de la liste la modifie aussi.",
+  "views.showTimelineHint": "Ouvre cette vue avec la chronologie mensuelle à côté de la liste.",
   "views.sort.date": "Date d’envoi",
   "views.sort.sender": "Expéditeur",
   "views.sort.subject": "Objet",

@@ -2708,7 +2708,7 @@
   "views.saveSearch": "Save this search as a view",
   "views.section": "Views",
   "views.showTimeline": "Show timeline",
-  "views.showTimelineHint": "Opens this view with the month timeline beside the list. The Timeline button in the list toolbar changes it too.",
+  "views.showTimelineHint": "Opens this view with the month timeline beside the list.",
   "views.sort.date": "Date",
   "views.sort.sender": "Sender",
   "views.sort.subject": "Subject",

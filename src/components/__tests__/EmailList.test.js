@@ -75,6 +75,10 @@ vi.mock('../../utils/linkSafety', () => ({
 vi.mock('../../utils/dateFormat', () => ({
   formatEmailDate: (d) => String(d),
   formatDateOnly: (d) => String(d),
+  formatMonthYear: (y, m) => `${y}-${m}`,
+  // A real Intl formatter, not a stub: DateScrubber also calls
+  // `.formatToParts()`, which a hand-rolled `{ format }` object lacks.
+  monthYearFormatter: () => new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }),
 }));
 
 // Build mock emails
@@ -1555,12 +1559,12 @@ describe('a saved view drives the grouping', () => {
 describe('the timeline toggle is per view', () => {
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
 
-  const mount = async ({ def = null, listTimelineVisible = false } = {}) => {
+  const mount = async ({ def = null, listTimelineVisible = false, emails = makeEmails(2) } = {}) => {
     const { useMailStore } = await import('../../stores/mailStore');
     const { useSettingsStore } = await import('../../stores/settingsStore');
     const { useViewStore } = await import('../../stores/viewStore');
     useMailStore.setState({
-      sortedEmails: makeEmails(2), totalEmails: 2,
+      sortedEmails: emails, totalEmails: emails.length,
       activeMailbox: 'INBOX', activeAccountId: 'acc1',
       unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
     });
@@ -1587,6 +1591,18 @@ describe('the timeline toggle is per view', () => {
   it('opens showing the timeline when the view saved it, even with the global default off', async () => {
     const { container } = await mount({ def: { showTimeline: true }, listTimelineVisible: false });
     expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  // The button reflects `timelineVisible`, but the scrubber itself is gated
+  // on `showScrubber`, which also needs two months of rows. Two emails a
+  // couple of months apart exercise that whole chain, not just the button.
+  it('actually shows the month scrubber when the active view says to, with the global default off', async () => {
+    const twoMonths = [
+      { ...makeEmails(1)[0], uid: 1, subject: 'March', date: new Date(2024, 2, 15).toISOString() },
+      { ...makeEmails(1)[0], uid: 2, subject: 'January', date: new Date(2024, 0, 5).toISOString() },
+    ];
+    const { container } = await mount({ def: { showTimeline: true }, listTimelineVisible: false, emails: twoMonths });
+    expect(container.querySelector('.mail-list-with-timeline')).not.toBeNull();
   });
 
   it('opens with the timeline hidden when the view saved nothing, even with the global default on', async () => {

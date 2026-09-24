@@ -2708,7 +2708,7 @@
   "views.saveSearch": "Salva questa ricerca come vista",
   "views.section": "Viste",
   "views.showTimeline": "Mostra la cronologia",
-  "views.showTimelineHint": "Apre questa vista con la cronologia mensile accanto all'elenco. Anche il pulsante Cronologia nella barra degli strumenti dell'elenco la modifica.",
+  "views.showTimelineHint": "Apre questa vista con la cronologia mensile accanto all'elenco.",
   "views.sort.date": "Data",
   "views.sort.sender": "Mittente",
   "views.sort.subject": "Oggetto",

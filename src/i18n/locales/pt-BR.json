@@ -2708,7 +2708,7 @@
   "views.saveSearch": "Salvar esta busca como visão",
   "views.section": "Visões",
   "views.showTimeline": "Mostrar linha do tempo",
-  "views.showTimelineHint": "Abre esta visualização com a linha do tempo mensal ao lado da lista. O botão Linha do tempo na barra de ferramentas da lista também a altera.",
+  "views.showTimelineHint": "Abre esta visualização com a linha do tempo mensal ao lado da lista.",
   "views.sort.date": "Data",
   "views.sort.sender": "Remetente",
   "views.sort.subject": "Assunto",

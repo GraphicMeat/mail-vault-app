@@ -2708,7 +2708,7 @@
   "views.saveSearch": "Diese Suche als Ansicht speichern",
   "views.section": "Ansichten",
   "views.showTimeline": "Zeitverlauf anzeigen",
-  "views.showTimelineHint": "Öffnet diese Ansicht mit dem monatlichen Zeitverlauf neben der Liste. Die Schaltfläche „Zeitverlauf“ in der Listenleiste ändert dies ebenfalls.",
+  "views.showTimelineHint": "Öffnet diese Ansicht mit dem monatlichen Zeitverlauf neben der Liste.",
   "views.sort.date": "Datum",
   "views.sort.sender": "Absender",
   "views.sort.subject": "Betreff",
