@@ -394,7 +394,11 @@ export const config = {
   // plugin port, but the app (debug build, cold CI runner) can need tens of
   // seconds more before the main window exists. The default 3 retries give up
   // after ~1.5s; 15 retries back off to ~50s total, which covers the boot gap.
-  connectionRetryCount: process.env.CI ? 15 : 3,
+  // A freshly booted Windows box (WebView2 host spin-up, debug build, no prior
+  // warm run) is just as cold as CI even outside CI: the very first worker of
+  // a real (non-CI) Windows run reliably exhausted 3 retries in ~1.5s while
+  // every later worker in the same run recovered after 1-2 (2026-09-24).
+  connectionRetryCount: (process.env.CI || process.platform === 'win32') ? 15 : 3,
   specFileRetries: process.env.CI ? 1 : 0,
   specFileRetriesDelay: 5,
   specFileRetriesDeferred: true,
