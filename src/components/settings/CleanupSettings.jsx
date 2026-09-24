@@ -614,7 +614,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-4">
+        <div data-testid="cleanup-summary" className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-mail-surface border border-mail-border text-center">
             <p className="text-2xl font-bold text-mail-text">{formatCount(mailboxTotal)}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.classified')}</p>

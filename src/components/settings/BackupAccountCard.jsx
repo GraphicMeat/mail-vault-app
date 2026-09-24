@@ -372,7 +372,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       </div>
 
       {/* Back up now button + live progress */}
-      <div className="pt-3 border-t border-mail-border space-y-2">
+      <div data-testid="backup-now-controls" className="pt-3 border-t border-mail-border space-y-2">
         {live && (
           <div className="space-y-2" data-testid="backup-card-progress">
             <div className="flex items-center justify-between text-xs">
@@ -539,7 +539,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             </div>
           </div>
           {verificationSection}
-          <div className="pt-2 border-t border-mail-border space-y-2">
+          <div data-testid="backup-now-controls" className="pt-2 border-t border-mail-border space-y-2">
             {live && (
               <div className="space-y-1" data-testid="backup-card-progress">
                 <div className="flex items-center justify-between text-xs">

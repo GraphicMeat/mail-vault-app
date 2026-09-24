@@ -13,7 +13,8 @@
  * photograph, because `screencapture` will happily write a stale frame.
  */
 
-import { capture } from './capture.js';
+import { join } from 'node:path';
+import { capture, pngSize, detailCropBox, cropDetail, OUT_DIR, THEME_SUFFIX } from './capture.js';
 import { raiseWindow } from './window.js';
 import { appCode } from './locales.js';
 
@@ -24,6 +25,46 @@ const SETTLE = 1200; // the splash logo animates in over 0.7s + 0.5s delay
 
 /** The step names src/components/onboarding/steps.js can return. */
 const STEPS = ['splash', 'account', 'appearance', 'defaultMail', 'free', 'premium', 'cta'];
+
+/**
+ * Close-up crops, same shape and same `detailCropBox`/`cropDetail` math as
+ * shots.js's own DETAILS/captureDetail — ported here because the marketing
+ * run (shots.js) seeds past onboarding entirely and can never see this
+ * screen. `onboarding-keychain-notice` only exists on the account step, where
+ * the app explains it is about to ask the keychain for permission.
+ */
+const DETAILS = {
+  account: { selector: '[data-testid="onboarding-keychain-notice"]', pad: 16 },
+};
+
+/** One close-up crop of `fullPath`, mirroring shots.js's captureDetail — never
+ *  throws, a missing selector is a logged skip, not a failed step. */
+async function captureDetail(name, fullPath, { selector, pad = 0, suffix }) {
+  const label = `${name}${suffix ? `/${suffix}` : ''}`;
+  const found = await browser.execute((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return {
+      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
+  }, selector);
+  if (!found) {
+    console.error(`[detail] SKIPPED ${label}: selector "${selector}" matched nothing on-screen`);
+    return;
+  }
+  const image = pngSize(fullPath);
+  const box = detailCropBox(found.rect, found.viewport, image, pad);
+  if (!box) {
+    console.error(`[detail] SKIPPED ${label}: "${selector}" rect has no overlap with the capture`);
+    return;
+  }
+  const out = join(OUT_DIR, `onboarding-${name}-detail${suffix ? `-${suffix}` : ''}${THEME_SUFFIX}.png`);
+  cropDetail(fullPath, out, box);
+  console.log(`[detail] ${out}`);
+}
 
 /** Which step the tour is showing — the wrapper carries `onboarding-<step>`. */
 const currentStep = () => browser.execute((steps) => {
@@ -63,7 +104,12 @@ async function step(name, advanceTestId) {
     const el = document.activeElement;
     if (el && el !== document.body) el.blur();
   });
-  capture(`onboarding-${name}`);
+  const fullPath = capture(`onboarding-${name}`);
+  const details = DETAILS[name];
+  if (details) {
+    // A failed crop must not read as a failed shot: the full capture above is already on disk.
+    try { await captureDetail(name, fullPath, details); } catch (e) { console.error(`[detail] SKIPPED ${name}: ${e.message}`); }
+  }
   if (advanceTestId && !(await click(advanceTestId))) {
     throw new Error(`${name}: ${advanceTestId} not found`);
   }

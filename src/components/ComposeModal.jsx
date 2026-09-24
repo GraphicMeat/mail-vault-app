@@ -1558,6 +1558,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 </button>
                 {showSchedulePicker && (
                   <div style={{ maxWidth: scheduleMaxWidth }}
+                    data-testid="compose-schedule-panel"
                     className="absolute bottom-full right-0 mb-1 w-[26rem] bg-mail-surface border border-mail-border
                                   rounded-lg z-50 p-3 space-y-2">
                     <div className="text-sm font-medium text-mail-text">{t('scheduled.compose.pickerTitle')}</div>

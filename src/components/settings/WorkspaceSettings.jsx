@@ -26,7 +26,7 @@ export function WorkspaceSettings({ windowIsNarrow }) {
       options: [['compact', 'twoLineRows', 'twoLineRowsHint'], ['default', 'singleLineRows', 'singleLineRowsHint']] },
   ];
   return (
-    <section className="settings-preference-group" aria-labelledby="workspace-settings-title">
+    <section className="settings-preference-group" data-testid="appearance-layout-section" aria-labelledby="workspace-settings-title">
       <h4 id="workspace-settings-title">{t('workspace.title')}</h4>
       {groups.map(({ key, setter, title, options, disabled }) => key === 'sidebarLayout' ? (
         <SettingRow key={key} label={t('workspace.sidebarLayout')} className="sidebar-layout-setting">

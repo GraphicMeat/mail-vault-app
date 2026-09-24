@@ -16,7 +16,7 @@
 
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, pressKey } from '../../tests/e2e/helpers.js';
-import { setField, typeInBody, pressInBody } from '../../tests/e2e/composeHelpers.js';
+import { setField, typeInBody, pressInBody, clickButtonText } from '../../tests/e2e/composeHelpers.js';
 import { capture, pngSize, detailCropBox, cropDetail, OUT_DIR, THEME_SUFFIX } from './capture.js';
 import { raiseWindow } from './window.js';
 import { demoScenarios } from './demoData.js';
@@ -86,17 +86,44 @@ const DETAILS = {
   'safety-sender-impersonation': { selector: '.mail-dialog', pad: 16 },
   // `vault-path` renders inside BackupConfig's <MailStorageLocation>, on the
   // Backup tab — NOT the Storage tab, despite the name (StorageSettings.jsx
-  // holds cleanup rules, not a location display).
+  // holds cleanup rules, not a location display). The `settings-backup` step
+  // now clicks explicitly into that "Backup Settings" sub-tab (see below) —
+  // without that click this selector matched nothing, because the sub-tab
+  // that opens BY DEFAULT is "Backup" (BackupRestore.jsx, export/import ZIP),
+  // which has no vault-path at all.
   'settings-backup': { selector: '[data-testid="vault-path"]', pad: 20 },
+  // Manual backup ("Back up now" + live progress) lives in BackupAccountCard,
+  // rendered from the Backup tab's "Backup Schedule" sub-tab — NOT from
+  // BackupConfig.jsx as an earlier pass of this table assumed. That sub-tab is
+  // what `settings-backup-schedule` already opens.
+  'settings-backup-schedule': { selector: '[data-testid="backup-now-controls"]', pad: 16 },
   'premium-backup-hours': { selector: '[data-testid="backup-hours-picker"]', pad: 16 },
+  // BackupVerificationTree's coverage percentages are computed live against
+  // the mock server + local vault at capture time (see the step's own
+  // comment) — this crops whichever state that happens to be in.
+  'premium-backup-health': { selector: '[data-testid="backup-verification-tree"]', pad: 16 },
   'premium-tracker-blocking': { selector: '[data-testid="settings-tracker-blocking"]', pad: 16 },
   'premium-auto-cleanup': { selector: '[data-testid="settings-auto-cleanup"]', pad: 16 },
+  'premium-cleanup': { selector: '[data-testid="cleanup-summary"]', pad: 16 },
   'chat-view-thread': { selector: '[data-testid="chat-view"]', pad: 16 },
-  'thread-view': { selector: '.thread-reader', pad: 16 },
+  'thread-view': [
+    { selector: '.thread-reader', pad: 16 },
+    // Ana Brandt is a normal contact, the most likely of the demo senders to
+    // show the green "verified" badge rather than a warning/danger one.
+    { selector: '[data-testid="sender-verification"]', pad: 16, suffix: 'sender-verification' },
+  ],
   'explorer-sender': { selector: '[data-testid="explorer-view"]', pad: 16 },
   'shortcuts-modal': { selector: '[data-testid="shortcuts-modal"]', pad: 16 },
   'search-results': { selector: '#mail-search-panel', pad: 16 },
   'insights-map': { selector: '[data-testid="insights-page"]', pad: 16 },
+  'settings-layout': { selector: '[data-testid="appearance-layout-section"]', pad: 16 },
+  'unified-inbox': { selector: '[data-testid="email-list-header"]', pad: 16 },
+  'premium-scheduled-send': { selector: '[data-testid="compose-schedule-panel"]', pad: 16 },
+  'settings-templates': { selector: '[data-testid="settings-templates"]', pad: 16 },
+  'settings-auto-tags': { selector: '[data-testid="settings-auto-tags"]', pad: 16 },
+  'settings-views': { selector: '[data-testid="views-list"]', pad: 16 },
+  'tags': { selector: '.local-mail-labels', pad: 12 },
+  'custom-fields': { selector: '.field-strip', pad: 16 },
 };
 
 // SHOTS_ONLY=email-list-view,thread-view narrows a run while iterating.
@@ -128,6 +155,26 @@ const clickTestId = (id) => browser.execute((t) => {
   el.click();
   return true;
 }, id);
+
+/** Set a visible, React-controlled input/textarea by its aria-label. */
+const setByAriaLabel = (label, value) => browser.execute((l, v) => {
+  const el = [...document.querySelectorAll('input, textarea')]
+    .find((e) => e.getAttribute('aria-label') === l && e.offsetHeight > 0);
+  if (!el) return false;
+  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}, label, value);
+
+/** Click a visible, enabled element by its aria-label (default: any button). */
+const clickByAriaLabel = (label, sel = 'button') => browser.execute((l, s) => {
+  const el = [...document.querySelectorAll(s)]
+    .find((e) => e.getAttribute('aria-label') === l && e.offsetHeight > 0 && !e.disabled);
+  if (!el) return false;
+  el.click();
+  return true;
+}, label, sel);
 
 /**
  * A `<select>` driven the way React can hear it. WebDriver's own select
@@ -201,6 +248,7 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
     scheduleSends: vis('[data-testid="compose-schedule-sends"]'),
     scheduleLocked: !!document.querySelector('[data-testid="compose-schedule-locked"]'),
     migrationToast: vis('[data-testid="migration-toast"]'),
+    undoToast: vis('[data-testid="undo-send-toast"]'),
     shortcuts: vis('[data-testid="shortcuts-modal"]'),
     insights: vis('[data-testid="sender-insights-panel"]'),
     // The Insights workspace, not the per-sender panel above it: two different
@@ -967,6 +1015,14 @@ describe('MailVault marketing screenshots', function () {
 
     await step('settings-backup', async () => {
       if (!(await clickByText(L('settings.tab.backup')))) throw new Error('backup tab not found');
+      // The Backup section opens on its "Backup" sub-tab by default
+      // (BackupRestore.jsx — ZIP/MBOX export-import), which has no vault path
+      // at all. `settings.backup.backupSettings` is that DEFAULT sub-tab's own
+      // label, always present in the tab strip regardless of which sub-tab is
+      // active, so asserting on it alone proved nothing about which one was
+      // open — the DETAILS crop below (vault-path) always SKIPped. Click into
+      // the "Backup Settings" sub-tab explicitly; that's BackupConfig.jsx.
+      if (!(await clickByText(L('settings.backup.backupSettings')))) throw new Error('backup settings sub-tab not found');
       await expectState((s) => s.settings && s.text.includes(L('settings.backup.backupSettings')), 'backup tab not on screen');
       await browser.pause(900);
     });
@@ -1081,6 +1137,22 @@ describe('MailVault marketing screenshots', function () {
       if (await $('[data-testid="backup-schedule-locked"]').isExisting()) {
         throw new Error('backup card is still behind the locked overlay — entitlement not applied');
       }
+      // Best-effort only: appPct is computed live from the mock server vs. the
+      // local vault (BackupVerificationTree.jsx), and this step runs late,
+      // after several list/search/archive steps that keep the sync in flux.
+      // Wait up to 15s for the "app" coverage chip to read 100% so the crop
+      // shows green rather than the mid-sync orange the brief warns about; if
+      // it never gets there, proceed anyway and photograph whatever coverage
+      // is real at that moment — a stale wait here would be worse than an
+      // honest partial number.
+      try {
+        await browser.waitUntil(() => browser.execute(() => {
+          const tree = document.querySelector('[data-testid="backup-verification-tree"]');
+          const chip = tree?.querySelector('span[class*="rounded-full"]');
+          const match = (chip?.textContent || '').match(/(\d+)\s*%/);
+          return !!match && Number(match[1]) >= 100;
+        }), { timeout: 15000, interval: 500 });
+      } catch { /* proceed with whatever coverage is real right now */ }
       await browser.pause(400);
     });
 
@@ -1244,6 +1316,206 @@ describe('MailVault marketing screenshots', function () {
       await pressKey('?');
       await expectState((s) => s.shortcuts, 'shortcuts modal did not open');
     });
+
+    // ── Templates / Auto Tags / Views / Tags / Custom Fields / Undo Send ──
+    //
+    // Added after every other shot: each opens its own surface from scratch
+    // (SHOTS_ONLY=<name> works standalone) and none is a prerequisite for
+    // anything above. Kept right before `final-inbox` so that shot still
+    // closes the run on a plain, undecorated inbox.
+
+    await step('settings-templates', async () => {
+      await pressKey('Escape');
+      await openSettings();
+      await browser.pause(500);
+      if (!(await clickByText(L('settings.tab.templates')))) throw new Error('templates tab not found');
+      await expectState((s) => s.settings && s.settingsPage === 'templates', 'templates tab did not open');
+      const templateName = 'Quick Thanks';
+      // The demo profile seeds no templates, so this panel is always empty the
+      // first time it is opened in a run — create one so the shot shows a real
+      // saved template rather than the empty state.
+      if (!(await clickByText(L('settings.templates.addTemplate')))) throw new Error('add template button not found');
+      await browser.pause(300);
+      if (!(await setByAriaLabel(L('settings.templates.templateName'), templateName))) throw new Error('template name input not found');
+      if (!(await setByAriaLabel(L('settings.templates.templateBody'), 'Thanks so much, appreciate it!'))) throw new Error('template body input not found');
+      if (!(await clickButtonText(L('common.save'), '[data-testid="settings-templates"]'))) throw new Error('save template button not found');
+      await expectState((s) => s.settingsPage === 'templates' && s.text.includes(templateName), 'template was not saved');
+    });
+
+    await step('settings-auto-tags', async () => {
+      await openSettings();
+      await browser.pause(500);
+      if (!(await clickByText(L('autoTag.tabLabel')))) throw new Error('auto-tags tab not found');
+      await expectState((s) => s.settings && s.settingsPage === 'auto-tags', 'auto-tags tab did not open');
+      const ruleName = 'Receipts';
+      // Empty by default (no seed) — add one rule so the crop shows a real,
+      // configured rule instead of "no rules yet". The rule needs a tag; the
+      // editor's own inline "new tag" field creates one without touching the
+      // TomSelect widget next to it (a third-party combobox not worth driving
+      // here when a plain input + button does the same job).
+      if (!(await clickByText(L('autoTag.newRule')))) throw new Error('new rule button not found');
+      await browser.pause(300);
+      if (!(await setByAriaLabel(L('autoTag.name'), ruleName))) throw new Error('rule name input not found');
+      if (!(await setByAriaLabel(L('autoTag.instruction'), 'Tag receipts and invoices'))) throw new Error('rule instruction input not found');
+      if (!(await setByAriaLabel(L('autoTag.newTagPlaceholder'), ruleName))) throw new Error('new tag name input not found');
+      if (!(await clickButtonText(L('autoTag.newTag'), '[data-testid="settings-auto-tags"]'))) throw new Error('new tag button not found');
+      // createTag is a daemon round trip; the Save button stays disabled until
+      // the new tag's id lands in the form.
+      await browser.waitUntil(() => browser.execute((label) => {
+        const btn = [...document.querySelectorAll('[data-testid="settings-auto-tags"] button')]
+          .find((b) => (b.textContent || '').trim() === label);
+        return !!btn && !btn.disabled;
+      }, L('common.save')), { timeout: 8000, interval: 300, timeoutMsg: 'save rule button never enabled (tag not created?)' });
+      if (!(await clickButtonText(L('common.save'), '[data-testid="settings-auto-tags"]'))) throw new Error('save rule button not found');
+      await expectState((s) => s.settingsPage === 'auto-tags' && s.text.includes(ruleName), 'auto-tag rule was not saved');
+    });
+
+    await step('settings-views', async () => {
+      await openSettings();
+      await browser.pause(500);
+      if (!(await clickByText(L('views.section')))) throw new Error('views tab not found');
+      await expectState((s) => s.settings && s.settingsPage === 'views', 'views tab did not open');
+      const viewName = 'Invoices';
+      if (!(await clickTestId('views-new'))) throw new Error('new view button not found');
+      await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
+        { timeout: 8000, interval: 300, timeoutMsg: 'view editor did not open' });
+      await setField('view-name', viewName);
+      await setField('view-query', 'invoice');
+      if (!(await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="view-editor-form"] button[type="submit"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      }))) throw new Error('view save button not found');
+      await expectState((s) => s.settingsPage === 'views' && s.text.includes(viewName), 'view was not saved');
+    });
+
+    /**
+     * Assigning a tag has no standalone "add tag" control — it is a Quick
+     * Action, configured once (Settings > Appearance > Quick Actions) and then
+     * fired from wherever that action was placed. The reader surface (the open
+     * message's own toolbar) avoids the row surface's hover-revealed icons,
+     * which nothing here can simulate (no CSS :hover).
+     *
+     * This mutates the GLOBAL reader quick-action config, so it is restored
+     * right after the shot — the rest of the run, and the seed, assume the
+     * defaults.
+     */
+    let priorReaderQuickActions = null;
+    await step('tags', async () => {
+      priorReaderQuickActions = await browser.execute(() => {
+        const qa = window.__SETTINGS_STORE__?.getState()?.quickActions;
+        return qa ? JSON.parse(JSON.stringify(qa)) : null;
+      });
+      await openSettings();
+      await browser.pause(500);
+      if (!(await clickByText(L('settings.appearance.appearance')))) throw new Error('Appearance tab not found');
+      await browser.pause(500);
+      if (!(await clickByText(L('quickActions.title')))) throw new Error('Quick Actions section not found');
+      await browser.pause(400);
+      if (!(await clickByText(L('quickActions.surface.reader')))) throw new Error('reader surface tab not found');
+      await browser.pause(400);
+      if (!(await browser.execute((label, value) => {
+        const select = [...document.querySelectorAll('select')].find((el) => el.getAttribute('aria-label') === label);
+        if (!select || select.offsetHeight === 0) return false;
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }, L('quickActions.action'), 'tag'))) throw new Error('quick action type select not found');
+      await browser.pause(400);
+      const TAG_NAME = 'VIP';
+      if (!(await browser.execute((name) => {
+        const input = document.querySelector('.quick-actions-parameter label:nth-of-type(2) input');
+        if (!input || input.offsetHeight === 0) return false;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, name);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      }, TAG_NAME))) throw new Error('new label name input not found');
+      if (!(await clickByAriaLabel(L('quickActions.addAction')))) throw new Error('add quick action button not found');
+      await expectState(hasText(TAG_NAME), 'tag quick action not added');
+      await resetToInbox();
+      await openWorkInbox();
+      await clickRow(MARKERS.newsletter);
+      await expectState((s) => !s.viewerEmpty, 'no message open to tag');
+      if (!(await browser.execute(() => {
+        const btn = document.querySelector('[data-quick-action="tag"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      }))) throw new Error('tag quick action button not found in reader');
+      await expectState(hasText(TAG_NAME), 'tag chip did not appear on the row');
+    });
+    if (priorReaderQuickActions) {
+      await browser.execute((qa) => { window.__SETTINGS_STORE__.setState({ quickActions: qa }); }, priorReaderQuickActions);
+    }
+
+    await step('custom-fields', async () => {
+      await openSettings();
+      await browser.pause(500);
+      if (!(await clickByText(L('settings.navigation.mailPreferences')))) throw new Error('Mail preferences tab not found');
+      await browser.pause(500);
+      if (!(await clickByText(L('fields.section')))) throw new Error('Fields sub-tab not found');
+      await browser.pause(400);
+      const FIELD_NAME = 'Priority';
+      if (!(await setField('new-field-name', FIELD_NAME))) throw new Error('new field name input not found');
+      if (!(await setField('new-field-kind', 'text'))) throw new Error('new field kind select not found');
+      if (!(await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="new-field-form"] button[type="submit"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      }))) throw new Error('add field button not found');
+      let fieldId = null;
+      await browser.waitUntil(async () => {
+        fieldId = await browser.execute(() => {
+          const row = document.querySelector('[data-testid^="field-row-"]');
+          return row ? row.getAttribute('data-testid').replace('field-row-', '') : null;
+        });
+        return !!fieldId;
+      }, { timeout: 8000, interval: 300, timeoutMsg: 'new field never appeared in the list' });
+      await closeSettings();
+      await browser.pause(400);
+      await resetToInbox();
+      await openWorkInbox();
+      await clickRow(MARKERS.invoice);
+      await expectState((s) => !s.viewerEmpty, 'no message open to set a field on');
+      await browser.waitUntil(() => browser.execute((id) => {
+        const el = document.querySelector(`[data-testid="field-input-${id}"]`);
+        return !!el && el.offsetHeight > 0;
+      }, fieldId), { timeout: 8000, interval: 300, timeoutMsg: 'field strip did not render for this account' });
+      const FIELD_VALUE = 'Urgent';
+      await browser.execute((id, value) => {
+        const el = document.querySelector(`[data-testid="field-input-${id}"]`);
+        if (!el) return;
+        el.focus();
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(el, value);
+        el.dispatchEvent(new Event('blur', { bubbles: true }));
+      }, fieldId, FIELD_VALUE);
+      await browser.pause(600);
+    });
+
+    /**
+     * The undo window, not the send itself: a real delivery would mutate the
+     * mock server for the rest of the run, so this holds the send at a 15s
+     * delay, photographs the toast, then cancels it in the cleanup line below
+     * — never letting the mail actually go out.
+     */
+    await step('undo-send-toast', async () => {
+      await resetToInbox();
+      if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
+      await expectState((s) => s.compose, 'compose did not open for undo-send-toast');
+      await setField('compose-to', 'ana@sizzlemedia.co');
+      await setField('compose-subject', 'Quick note');
+      await typeInBody('Sending this in a moment.');
+      await setField('compose-delay', 15);
+      if (!(await clickTestId('compose-send'))) throw new Error('send button not found or disabled');
+      await expectState((s) => s.undoToast, 'undo-send toast did not appear');
+    });
+    await browser.execute(() => { document.querySelector('[data-testid="undo-send-btn"]')?.click(); });
+    await browser.pause(400);
 
     await step('final-inbox', async () => {
       await pressKey('Escape');
