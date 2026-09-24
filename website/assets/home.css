@@ -134,7 +134,3 @@
 }
 @media (prefers-reduced-motion:reduce) { .hm-benefits a,.hm-cards a { transition:none; } }
 .hm-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-/* Header seam: the notches hang below the bar, filled with its colour, so the bar ends at the line like the section seams. */
-.mv-site:has(main.hm) .mv-header { padding-bottom:4px; }
-.mv-site:has(main.hm) .mv-header-seam { top:calc(100% - 2px); bottom:auto; transform:scaleY(-1); }
-.mv-site:has(main.hm) .mv-header-seam path { fill:var(--mv-bg); }

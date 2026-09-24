@@ -210,12 +210,14 @@
 }
 
 /* The studio's stepped signature, in MailVault's indigo. */
-.mv-header { border-bottom:0; padding-bottom:20px; }
+.mv-header { border-bottom:0; padding-bottom:4px; }
 .mv-brand-family { display:flex; flex-direction:column; align-items:flex-start; gap:1px; padding-bottom:7px; }
 .mv-maker { margin-left:42px; font-size:.68rem; line-height:1.25; color:var(--mv-muted); }
 .mv-maker:hover { color:var(--mv-accent); text-decoration:underline; }
 .mv-header-seam,.mv-section-seam { position:absolute; left:0; width:100%; height:20px; display:block; pointer-events:none; color:var(--mv-accent); }
-.mv-header-seam { bottom:-1px; height:15px; z-index:0; }
+/* Notches hang below the bar, filled with its colour, so the bar ends at the line. */
+.mv-header-seam { top:calc(100% - 2px); height:15px; z-index:0; transform:scaleY(-1); }
+.mv-header-seam path { fill:var(--mv-bg); }
 .mv-branded-section,.mv-studio { position:relative; }
 .mv-section-seam { top:-19px; }
 .mv-studio { background:#111216; color:#f3f3f8; margin-top:20px; }
@@ -345,7 +347,7 @@
 .mv-currency-control select { min-height:44px; padding:8px 32px 8px 12px; border:1px solid var(--mv-line); border-radius:8px; color:var(--mv-ink); background:var(--mv-card); font:inherit; cursor:pointer; }
 main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline:24px; }
 
-@media(max-width:760px) { .mv-header { padding-bottom:16px; } }
+@media(max-width:760px) { .mv-header { padding-bottom:4px; } }
 .mv-premium-links { padding:0; margin:20px 0; list-style:none; }
 .mv-premium-links a { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--mv-line); color:var(--mv-ink); font-size:.9rem; }
 .mv-premium-links a span { color:var(--mv-accent); }
