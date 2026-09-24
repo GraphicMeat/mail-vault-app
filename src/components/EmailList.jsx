@@ -220,6 +220,19 @@ function EmailListComponent({ stacked = false }) {
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
   const listTimelineVisible = useSettingsStore(s => s.listTimelineVisible);
   const setListTimelineVisible = useSettingsStore(s => s.setListTimelineVisible);
+  // A view's own timeline choice, and the toolbar's session-local override of
+  // it — never written into the global `listTimelineVisible`, so a view
+  // closes leaving the global default exactly as it was. Reset the moment a
+  // different view opens so no view's choice leaks into the next.
+  const [viewTimelineOverride, setViewTimelineOverride] = useState(null); // { viewId, visible } | null
+  useEffect(() => { setViewTimelineOverride(null); }, [activeView?.id]);
+  const timelineVisible = activeView
+    ? (viewTimelineOverride?.viewId === activeView.id ? viewTimelineOverride.visible : !!activeView.def?.showTimeline)
+    : listTimelineVisible;
+  const toggleTimelineVisible = () => {
+    if (activeView) setViewTimelineOverride({ viewId: activeView.id, visible: !timelineVisible });
+    else setListTimelineVisible(!listTimelineVisible);
+  };
   // A saved view that groups is shown grouped, whichever list mode is on: the
   // grouping is what the view says it is, not a setting of this screen.
   const viewGrouping = activeView?.def?.group || null;
@@ -813,7 +826,7 @@ function EmailListComponent({ stacked = false }) {
   // Date scrubber (list mode only): a header band on each month's first row.
   // Heights change, indices do not — rows stay 1:1 with threadedDisplay.
   const monthList = useMonthBuckets(threadedDisplay, !isExplorer && emailListGrouping !== 'sender');
-  const showScrubber = listTimelineVisible && emailListGrouping === 'chronological' && monthList.length >= 2;
+  const showScrubber = timelineVisible && emailListGrouping === 'chronological' && monthList.length >= 2;
   const monthHeaders = useMemo(() => (showScrubber ? firstRowOfMonth(monthList) : EMPTY_SET), [showScrubber, monthList]);
 
   const virtualizer = useVirtualizer({
@@ -1088,9 +1101,9 @@ function EmailListComponent({ stacked = false }) {
           </select>
         )}
         {!isExplorer && emailListGrouping === 'chronological' && <button type="button"
-          data-testid="timeline-toggle" className={`mail-toolbar-button ${listTimelineVisible ? 'is-active' : ''}`}
-          aria-pressed={listTimelineVisible} title={t('list.timelineToggle')}
-          onClick={() => setListTimelineVisible(!listTimelineVisible)}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
+          data-testid="timeline-toggle" className={`mail-toolbar-button ${timelineVisible ? 'is-active' : ''}`}
+          aria-pressed={timelineVisible} title={t('list.timelineToggle')}
+          onClick={toggleTimelineVisible}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
         {/* The switch is pinned to the right edge and always last: the controls
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}

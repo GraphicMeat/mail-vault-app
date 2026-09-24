@@ -195,6 +195,20 @@ describe('editing a saved view', () => {
     expect(screen.getByTestId('view-group').value).toBe('field:f1');
   });
 
+  it('saves whether the view opens with its timeline shown', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    expect(screen.getByTestId('view-show-timeline').getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(screen.getByTestId('view-show-timeline'));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.showTimeline).toBe(true);
+  });
+
+  it('reopens with the timeline choice it was saved with', () => {
+    const view = { ...MINE, def: { ...MINE.def, showTimeline: true } };
+    render(<ViewEditor view={view} onClose={() => {}} />);
+    expect(screen.getByTestId('view-show-timeline').getAttribute('aria-checked')).toBe('true');
+  });
+
   it('a starter keeps its own name when none is typed', () => {
     render(<ViewEditor view={STARRED} onClose={() => {}} />);
     expect(screen.getByTestId('view-name').value).toBe('');

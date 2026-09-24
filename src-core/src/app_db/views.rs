@@ -59,6 +59,11 @@ pub struct ViewDef {
     /// `desc` or `asc`.
     pub direction: Option<String>,
     pub columns: Vec<String>,
+    /// Open this view with the month timeline beside the list. Presentation
+    /// only — the list toolbar's own toggle can still override it for the
+    /// session, and neither reaches `request_for`, so it never narrows what
+    /// the view finds.
+    pub show_timeline: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -234,6 +239,24 @@ mod tests {
         assert_eq!(got.name, "Receipts");
         assert_eq!(got.def.query, "invoice");
         assert!(got.def.has_attachments);
+    }
+
+    #[test]
+    fn show_timeline_round_trips_and_defaults_to_false_on_an_older_row() {
+        let c = conn();
+        save(&c, &View { def: ViewDef { show_timeline: true, ..view("v1", "Receipts").def }, ..view("v1", "Receipts") }).unwrap();
+        let got = get(&c, "v1").unwrap().expect("saved");
+        assert!(got.def.show_timeline);
+
+        // A row saved before the field existed has no `showTimeline` key at
+        // all; `#[serde(default)]` must read that back as false, not fail.
+        let c2 = conn();
+        c2.execute(
+            "INSERT INTO views(id, name, icon, position, builtin, def_json) VALUES ('v2','Old','tag',0,NULL,'{}')",
+            [],
+        ).unwrap();
+        let old = get(&c2, "v2").unwrap().expect("saved");
+        assert!(!old.def.show_timeline);
     }
 
     #[test]

@@ -9,6 +9,7 @@
 - **Skip first-time setup, and pick it up later.** Every step of setup now has Skip tour. After skipping, a card in the corner offers to carry on from the step you left, until you finish it or tick "Don't show this again".
 - **Run writing help without the review step.** Settings > AI can turn off the "Review before sending" dialog for AI actions. A custom endpoint is still reviewed the first time it is used.
 - **Pick an emoji for a view.** Clicking the emoji box in the view editor offers a set of emojis to choose from. Typing any other emoji still works.
+- **A view can open with its timeline shown.** The view editor has a Show timeline toggle, saved with the view. The Timeline button in the list toolbar still overrides it for the session, and closing the view leaves your default timeline setting untouched.
 
 - **Updates on Windows, including nightly builds.** Settings > Mail preferences > Behavior now has a Check for updates button on Windows, which has no app menu to hold one, and the same Stable or Nightly choice as on the Mac. MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.
 

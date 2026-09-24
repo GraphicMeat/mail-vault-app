@@ -183,6 +183,8 @@ vi.mock('../../stores/settingsStore', () => {
     // "blocked" or "tracks you"; without a profile it is simply off.
     trackerBlockingEnabled: true,
     billingProfile: null,
+    listTimelineVisible: false,
+    setListTimelineVisible: vi.fn(value => Object.assign(state, { listTimelineVisible: value })),
   };
   const hook = vi.fn((selector) => selector(state));
   hook.getState = () => state;
@@ -1544,5 +1546,83 @@ describe('a saved view drives the grouping', () => {
     const { container } = await mount();
     expect(container.querySelector('[data-testid="mail-view-list"]').disabled).toBe(false);
     expect(container.querySelector('[data-testid="mail-view-explorer"]').disabled).toBe(false);
+  });
+});
+
+// A view's timeline choice is its own: opening one shows or hides the month
+// scrubber by what the view saved, never by the global default, and the
+// toolbar's Timeline button only overrides that one view for the session.
+describe('the timeline toggle is per view', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  const mount = async ({ def = null, listTimelineVisible = false } = {}) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    useMailStore.setState({
+      sortedEmails: makeEmails(2), totalEmails: 2,
+      activeMailbox: 'INBOX', activeAccountId: 'acc1',
+      unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
+    });
+    useSettingsStore.setState({
+      emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {}, listTimelineVisible,
+    });
+    useViewStore.setState({ views: def ? [{ id: 'v1', name: 'Saved', def }] : [], activeViewId: def ? 'v1' : null });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
+    useSettingsStore.setState({ emailListView: 'list', listTimelineVisible: false });
+    useViewStore.setState({ views: [], activeViewId: null });
+  });
+
+  it('opens showing the timeline when the view saved it, even with the global default off', async () => {
+    const { container } = await mount({ def: { showTimeline: true }, listTimelineVisible: false });
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('opens with the timeline hidden when the view saved nothing, even with the global default on', async () => {
+    const { container } = await mount({ def: {}, listTimelineVisible: true });
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('the toolbar toggle overrides only the open view, and never touches the global default', async () => {
+    const { container } = await mount({ def: {}, listTimelineVisible: false });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('true');
+    expect(useSettingsStore.getState().listTimelineVisible).toBe(false);
+  });
+
+  it('resets the override the moment a different view opens', async () => {
+    const { container } = await mount({ def: {}, listTimelineVisible: false });
+    const { useViewStore } = await import('../../stores/viewStore');
+    fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('true');
+
+    act(() => { useViewStore.setState({
+      views: [{ id: 'v1', name: 'Saved', def: {} }, { id: 'v2', name: 'Other', def: {} }],
+      activeViewId: 'v2',
+    }); });
+    await settle();
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('the toolbar toggle still flips the global default when no view is open', async () => {
+    const { container } = await mount({ def: null, listTimelineVisible: false });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+    await settle();
+    expect(useSettingsStore.getState().listTimelineVisible).toBe(true);
   });
 });

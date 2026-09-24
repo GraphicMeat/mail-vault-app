@@ -9,6 +9,8 @@ import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
+import { SettingRow } from './settings/SettingRow';
+import { ToggleSwitch } from './settings/ToggleSwitch';
 
 // Offered when the emoji field is focused; typing any other emoji still works.
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
@@ -81,6 +83,7 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const [group, setGroup] = useState(def.group || '');
   const [sort, setSort] = useState(def.sort || 'date');
   const [direction, setDirection] = useState(def.direction || 'desc');
+  const [showTimeline, setShowTimeline] = useState(!!def.showTimeline);
   const [confirming, setConfirming] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -125,6 +128,7 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     group: group || null,
     sort,
     direction,
+    showTimeline,
   });
 
   const edited = () => ({ ...view, name: name.trim(), icon, def: editedDef() });
@@ -317,6 +321,11 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
         </select>
       </label>
     </div>
+
+    <SettingRow label={t('views.showTimeline')} description={t('views.showTimelineHint')}>
+      <ToggleSwitch testId="view-show-timeline" active={showTimeline}
+        onClick={() => setShowTimeline(!showTimeline)} label={t('views.showTimeline')} />
+    </SettingRow>
 
     </SettingsSection>
 

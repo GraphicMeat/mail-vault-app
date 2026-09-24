@@ -2707,6 +2707,8 @@
   "views.preview.title": "プレビュー",
   "views.saveSearch": "この検索をビューとして保存",
   "views.section": "ビュー",
+  "views.showTimeline": "タイムラインを表示",
+  "views.showTimelineHint": "このビューを月別タイムラインとともに開きます。リストツールバーのタイムラインボタンでも切り替えられます。",
   "views.sort.date": "日付",
   "views.sort.sender": "送信者",
   "views.sort.subject": "件名",

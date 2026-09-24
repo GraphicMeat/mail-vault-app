@@ -2707,6 +2707,8 @@
   "views.preview.title": "Vista previa",
   "views.saveSearch": "Guardar esta búsqueda como vista",
   "views.section": "Vistas",
+  "views.showTimeline": "Mostrar cronología",
+  "views.showTimelineHint": "Abre esta vista con la cronología mensual junto a la lista. El botón Cronología de la barra de herramientas de la lista también la cambia.",
   "views.sort.date": "Fecha",
   "views.sort.sender": "Remitente",
   "views.sort.subject": "Asunto",

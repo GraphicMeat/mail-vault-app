@@ -2707,6 +2707,8 @@
   "views.preview.title": "预览",
   "views.saveSearch": "将此搜索保存为视图",
   "views.section": "视图",
+  "views.showTimeline": "显示时间线",
+  "views.showTimelineHint": "打开此视图时会在列表旁显示按月时间线。列表工具栏中的时间线按钮也可以切换它。",
   "views.sort.date": "日期",
   "views.sort.sender": "发件人",
   "views.sort.subject": "主题",
