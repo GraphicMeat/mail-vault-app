@@ -149,3 +149,9 @@
 .hm .mv-feedback-quotes figcaption a { font-size:.74rem; }
 .hm .hm-after-list { margin:20px 0 0; }
 .hm-table td a { color:inherit; text-decoration:underline; text-decoration-color:color-mix(in oklab,currentColor 35%,transparent); text-underline-offset:2px; }
+.hm-stats { list-style:none; padding:0; margin:28px auto 0; max-width:900px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.hm-stats a { display:block; height:100%; padding:16px 18px; border-radius:12px; background:color-mix(in oklab,var(--mv-accent) 8%,var(--mv-card)); border:1px solid var(--mv-line); text-decoration:none; text-align:center; }
+.hm-stats a:hover { border-color:var(--mv-accent); }
+.hm-stats strong { display:block; font-size:1.6rem; letter-spacing:-.03em; line-height:1.2; }
+.hm-stats span { display:block; margin-top:4px; font-size:.8rem; color:var(--mv-muted); line-height:1.4; }
+@media (max-width:760px) { .hm-stats { grid-template-columns:1fr; } }
