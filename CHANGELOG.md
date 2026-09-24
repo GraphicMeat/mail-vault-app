@@ -8,6 +8,7 @@
 ### Changed
 - **Right-click a message for its quick actions.** Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.
 - **The List and Explorer switch stays put.** It now sits at the right edge of the message list toolbar in both modes, with the Timeline button moved to its left, so switching to Explorer no longer slides it across the toolbar.
+- **Setup walks you through every look option.** On the "Make it yours" step of first-time setup, Next is now the main button and moves through Colors, Layout, Reading and Quick actions in turn. Continue appears once you reach Quick actions, so no tab is skipped by accident. The tabs can still be clicked directly.
 - **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
 
 ### Fixed

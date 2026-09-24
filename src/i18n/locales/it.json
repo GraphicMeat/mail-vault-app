@@ -952,7 +952,7 @@
   "onboarding.afterDeleteNext": "Email successiva",
   "onboarding.afterDeleteNone": "Nulla",
   "onboarding.allComputerBeforeAddAccount": "Tutto su questo computer, prima di aggiungere un account",
-  "onboarding.appearanceSubtitle": "Scegli l’aspetto che preferisci. Puoi continuare in qualsiasi momento.",
+  "onboarding.appearanceSubtitle": "Scegli l’aspetto che preferisci.",
   "onboarding.appearanceTitle": "Rendila tua",
   "onboarding.chooseAlwaysAllow": "Scegli «Consenti sempre» la prima volta, altrimenti la richiesta torna a ogni sincronizzazione.",
   "onboarding.colorsHint": "Scegli un tema e una palette. L’anteprima si aggiorna a ogni modifica.",

@@ -117,6 +117,14 @@ describe('onboarding', function () {
     expect(stacked.layout).toBe('two-column');
     expect(stacked.below).toBe(true);
 
+    // Next is the default button: it walks Layout -> Reading -> Quick actions,
+    // and only the last tab offers Continue.
+    expect(await $('[data-testid="onboarding-continue"]').isExisting()).toBe(false);
+    await $('[data-testid="appearance-next"]').click();
+    await $('[data-testid="appearance-control-threads"]').waitForExist({ timeout: 5000 });
+    await $('[data-testid="appearance-next"]').click();
+    await $('[data-testid="appearance-control-quick-layout"]').waitForExist({ timeout: 5000 });
+    expect(await $('[data-testid="appearance-next"]').isExisting()).toBe(false);
     await $('[data-testid="onboarding-continue"]').click();
 
     // "Default email app" sits between appearance and the free features. The
@@ -175,6 +183,7 @@ describe('onboarding', function () {
       await $('[data-testid="onboarding-language-de"]').click();
       await $('[data-testid="onboarding-continue"]').click();
       await $('[data-testid="appearance-preview"]').waitForExist({ timeout: 5000 });
+      for (let i = 0; i < 3; i++) await $('[data-testid="appearance-next"]').click();
       await $('[data-testid="onboarding-continue"]').click();
       await $('[data-testid="default-mail-state"]').waitForExist({ timeout: 5000 });
       await $('[data-testid="onboarding-continue"]').click();

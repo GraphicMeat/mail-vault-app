@@ -83,7 +83,13 @@ describe('MailVault onboarding screenshots', function () {
   it('captures the tour', async function () {
     await step('splash', 'onboarding-continue');
     await step('account', 'onboarding-skip-account');
-    await step('appearance', 'onboarding-continue');
+    // Appearance's primary button is Next until the last tab; only Quick
+    // actions offers Continue.
+    await step('appearance', null);
+    for (let i = 0; i < 3; i++) {
+      if (!(await click('appearance-next'))) throw new Error('appearance: appearance-next not found');
+    }
+    if (!(await click('onboarding-continue'))) throw new Error('appearance: onboarding-continue not found');
     // "Open mail links here", added between Appearance and Free. Same Continue
     // control; before it was listed here the tour stalled on an unknown step
     // and every locale reported `showing "null"`.

@@ -952,7 +952,7 @@
   "onboarding.afterDeleteNext": "下一封邮件",
   "onboarding.afterDeleteNone": "不选中",
   "onboarding.allComputerBeforeAddAccount": "一切都在这台电脑上，早在你添加账户之前",
-  "onboarding.appearanceSubtitle": "从喜欢的外观开始。你可以随时继续。",
+  "onboarding.appearanceSubtitle": "从喜欢的外观开始。",
   "onboarding.appearanceTitle": "调成你的样子",
   "onboarding.chooseAlwaysAllow": "第一次请选择“始终允许”，否则每次同步都会再问一遍。",
   "onboarding.colorsHint": "选择主题和配色方案，预览会随之更新。",

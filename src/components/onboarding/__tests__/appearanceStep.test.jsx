@@ -111,11 +111,18 @@ describe('appearance step', () => {
     expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
   });
 
-  it('can continue from any tab without resetting existing preferences', () => {
+  it('makes Next the default and walks every tab before Continue', () => {
     const onContinue = vi.fn();
     useSettingsStore.setState({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
     render(<AppearanceStep onContinue={onContinue} />);
-    fireEvent.click(tab('reading'));
+    for (const name of ['colors', 'layout', 'reading']) {
+      expect(tab(name).getAttribute('aria-selected')).toBe('true');
+      expect(screen.queryByTestId('onboarding-continue')).toBeNull();
+      fireEvent.click(screen.getByTestId('appearance-next'));
+    }
+    expect(screen.getByRole('tab', { name: 'Quick actions' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByTestId('appearance-next')).toBeNull();
+    expect(onContinue).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('onboarding-continue'));
     expect(onContinue).toHaveBeenCalledOnce();
     expect(useSettingsStore.getState()).toMatchObject({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });

@@ -20,8 +20,11 @@ function Choice({ id, active, value, onPick, disabled, children }) {
     disabled={disabled} aria-pressed={active === value}>{children}</button>;
 }
 
+const SECTIONS = ['colors', 'layout', 'reading', 'quick-actions'];
+
 // Tab changes only affect what is shown. Preferences keep using the same
 // setters as Settings, and Continue never resets choices the user already made.
+// The primary button walks the tabs (Next) and only the last one offers Continue.
 export function AppearanceStep({ onContinue }) {
   const t = useT();
   const [section, setSection] = useState('colors');
@@ -30,7 +33,8 @@ export function AppearanceStep({ onContinue }) {
   const tags = useTagStore(state => state.tags) || [];
   const [quickSurface, setQuickSurface] = useState('row');
   const chat = settings.viewStyle === 'chat';
-  const tabs = ['colors', 'layout', 'reading', 'quick-actions'].map(id => ({ id, label: id === 'quick-actions' ? t('quickActions.title') : t(`settings.appearance.section.${id}`) }));
+  const nextSection = SECTIONS[SECTIONS.indexOf(section) + 1];
+  const tabs = SECTIONS.map(id => ({ id, label: id === 'quick-actions' ? t('quickActions.title') : t(`settings.appearance.section.${id}`) }));
   const quickActions = normalizeQuickActions(settings.quickActions);
   const quickConfig = quickActions.defaults[quickSurface];
   const quickStyleLinked = isQuickActionStyleLinked(quickActions);
@@ -190,7 +194,9 @@ export function AppearanceStep({ onContinue }) {
     </SettingsTabs>
     <footer className="onboarding-appearance-footer">
       <Button variant="ghost" size="sm" onClick={applyRecommended} data-testid="appearance-recommended">{t('onboarding.recommended')}</Button>
-      <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">{t('common.continue')}<ArrowRight size={14} /></Button>
+      {nextSection
+        ? <Button variant="primary" size="lg" onClick={() => setSection(nextSection)} data-testid="appearance-next">{t('common.next')}<ArrowRight size={14} /></Button>
+        : <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">{t('common.continue')}<ArrowRight size={14} /></Button>}
     </footer>
     <p className="onboarding-appearance-note">{t('onboarding.moreInAppearance')}</p>
   </div>;
