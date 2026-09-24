@@ -23,7 +23,7 @@
 .hm-hero-shot .mv-demo-caption { display:none; }
 
 /* Benefit pillars */
-.hm-pillar { --tint:9%; padding:112px 0; background:linear-gradient(180deg in oklch,color-mix(in oklab,var(--hue) var(--tint),var(--mv-bg)),color-mix(in oklab,var(--hue2) var(--tint),var(--mv-bg))); }
+.hm-pillar { --tint:9%; padding:112px 0; /* oklab: Chrome draws "in oklch" gradients of color-mix() stops upside down. */ background:linear-gradient(180deg in oklab,color-mix(in oklab,var(--hue) var(--tint),var(--mv-bg)),color-mix(in oklab,var(--hue2) var(--tint),var(--mv-bg))); }
 .dark .hm-pillar { --tint:15%; }
 .hm-pillar-grid { display:grid; grid-template-columns:1fr 1.15fr; gap:64px; align-items:center; }
 .hm-flip .hm-pillar-grid > figure { order:-1; }
@@ -144,3 +144,4 @@
 .hm .mv-feedback-quotes .mv-person-mark { width:28px; height:28px; font-size:.85rem; }
 .hm .mv-feedback-quotes figcaption strong { font-size:.88rem; }
 .hm .mv-feedback-quotes figcaption a { font-size:.74rem; }
+.hm .hm-after-list { margin:20px 0 0; }
