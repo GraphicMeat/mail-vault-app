@@ -1002,7 +1002,7 @@ input[type="range"]::-moz-range-thumb:hover {
   .mail-list-header { padding-inline: 12px; }
   .mail-list-toolbar { gap: 2px; padding-inline: 6px; }
   .mail-toolbar-button { gap: 4px; padding-inline: 6px; }
-  .mail-thread-select { max-width: none; width: 100%; margin: 0 4px; }
+  .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
   .mail-state-legend { column-gap: 12px; padding-inline: 12px; }
 }
 
