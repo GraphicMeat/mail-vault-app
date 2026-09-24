@@ -243,6 +243,12 @@ Two rules the definitions follow, both learned from bugs of the same shape:
   names IMAP attributes (`\Trash`, `\Junk`, `\Archive`) and the app resolves
   them to server paths per account when it runs the view.
 
+`ViewDef.query` is written in one notation both sides read: `a && b || c d` is
+(a AND b) OR the phrase "c d". The editor writes it (`src/utils/queryGroups.js`)
+and `search_index::query::boolean_groups` evaluates it, each `&&` word being a
+required phrase. A query with neither operator keeps the plain `plan_query`
+path, so views saved earlier and the search bar mean what they meant.
+
 The index gained a `flags` column for this (schema v3): the Maildir letters live
 in the file name and `index_doc_from_light` strips them from `row_json`, so
 Starred and unread were not answerable before. The migration reads them back out

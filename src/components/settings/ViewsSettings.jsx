@@ -132,7 +132,7 @@ export function ViewsSettings({ onUpgrade }) {
 
     </SettingsSection>
 
-    {editing && <ViewEditor key={editing.id} view={editing} onClose={async saved => {
+    {editing && <ViewEditor key={editing.id} view={editing} isNew={editing.id === newlyCreatedId} onClose={async saved => {
       if (switching.current) return;
       switching.current = true;
       try {

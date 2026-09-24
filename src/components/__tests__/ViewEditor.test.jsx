@@ -89,7 +89,48 @@ describe('editing a saved view', () => {
     expect(screen.getByRole('button', { name: 'common.remove jasinskio' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'common.remove invoice' }));
     fireEvent.submit(screen.getByTestId('view-editor-form'));
-    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('service jasinskio');
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('service && jasinskio');
+  });
+
+  it('keeps a typed phrase whole and starts an OR group at ||', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: '' } }} onClose={() => {}} />);
+    const input = screen.getByTestId('view-query');
+    fireEvent.change(input, { target: { value: 'jasinskio && 14a-37 || mindaugo 30' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByTestId('view-query-group-0').textContent).toContain('jasinskio');
+    expect(screen.getByTestId('view-query-group-1').textContent).toContain('mindaugo 30');
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query)
+      .toBe('jasinskio && 14a-37 || mindaugo 30');
+  });
+
+  it('the OR button starts a group that the next word goes into', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.click(screen.getByTestId('view-query-or'));
+    expect(screen.getByTestId('view-query-group-1')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'receipt' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('invoice || receipt');
+  });
+
+  it('dragging a word onto the OR button moves it to a group of its own, and does not remove it', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: 'a1 && b2 && c3' } }} onClose={() => {}} />);
+    const chip = () => screen.getByRole('button', { name: 'common.remove b2' });
+    const dragTo = element => {
+      // jsdom has no layout, so the element under the pointer is stubbed.
+      document.elementFromPoint = vi.fn(() => element);
+      fireEvent.pointerDown(chip(), { button: 0, clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(chip(), { clientX: 50, clientY: 40 });
+      fireEvent.pointerUp(chip(), { clientX: 50, clientY: 40 });
+      delete document.elementFromPoint;
+    };
+    // Dropped on nothing: the click that ends the drag must not remove it.
+    dragTo(null);
+    fireEvent.click(chip());
+    expect(chip()).toBeTruthy();
+    dragTo(screen.getByTestId('view-query-or'));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('a1 && c3 || b2');
   });
 
   it('a tri-state filter can go back to not caring', () => {
@@ -214,6 +255,17 @@ describe('editing a saved view', () => {
     expect(screen.getByTestId('view-name').value).toBe('');
     fireEvent.submit(screen.getByTestId('view-editor-form'));
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].name).toBe('');
+  });
+
+  it('a new view opens with an empty name, keeps its stand-in when none is typed', () => {
+    const fresh = { ...MINE, name: 'views.new', def: {} };
+    render(<ViewEditor view={fresh} isNew onClose={() => {}} />);
+    const field = screen.getByTestId('view-name');
+    expect(field.value).toBe('');
+    expect(field.placeholder).toBe('views.new');
+    expect(document.activeElement).toBe(field);
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].name).toBe('views.new');
   });
 
   it('will not leave a view the user made with no name at all', () => {

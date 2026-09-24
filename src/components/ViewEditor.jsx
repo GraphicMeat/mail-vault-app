@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Fragment, useRef, useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { ViewPreview } from './ViewPreview';
@@ -16,6 +16,7 @@ import { ToggleSwitch } from './settings/ToggleSwitch';
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
+import { addTyped, dropItem, parseGroups, removeWord, serializeGroups } from '../utils/queryGroups';
 
 /// Three states, not two: a filter can demand a flag, demand its absence, or
 /// not care — and "not care" is what a checkbox cannot say.
@@ -43,9 +44,17 @@ const DIRECTIONS = ['desc', 'asc'];
 /// A stored unix second as the `YYYY-MM-DD` a date input wants, and back.
 const toDateInput = seconds => (seconds ? new Date(seconds * 1000).toISOString().slice(0, 10) : '');
 const fromDateInput = text => (text ? Math.floor(new Date(`${text}T00:00:00Z`).getTime() / 1000) : null);
-const splitKeys = text => text.split(/\s*(?:&&|,)\s*|\s+/).filter(Boolean);
+/// The drop target under a pointer: a word (`w:g:i`), a group (`g:g`) or the
+/// OR button (`new`).
+const dropTargetAt = event => {
+  const spot = document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-drop]')?.dataset.drop;
+  if (!spot) return null;
+  if (spot === 'new') return { g: 'new' };
+  const [kind, g, i] = spot.split(':');
+  return kind === 'w' ? { g: Number(g), i: Number(i) } : { g: Number(g) };
+};
 
-export function ViewEditor({ view, onClose, showPreview = true }) {
+export function ViewEditor({ view, onClose, showPreview = true, isNew = false }) {
   const t = useT();
   const saveView = useViewStore(state => state.saveView);
   const deleteView = useViewStore(state => state.deleteView);
@@ -55,11 +64,18 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const schema = useFieldStore(state => state.fieldsFor(accountId)) || [];
 
   const def = view.def || {};
-  const [name, setName] = useState(view.name || '');
+  // A new view opens with its stand-in name as the placeholder, not the text:
+  // typing a name should not start with deleting one.
+  const [name, setName] = useState(isNew ? '' : view.name || '');
   const [icon, setIcon] = useState(view.icon || 'tag');
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [queryKeys, setQueryKeys] = useState(() => [...new Set(splitKeys(def.query || ''))]);
+  const [groups, setGroups] = useState(() => parseGroups(def.query));
   const [queryInput, setQueryInput] = useState('');
+  /// Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
+  /// HTML5 drag events on Windows.
+  const drag = useRef(null);
+  const dragged = useRef(false);
+  const [dropOver, setDropOver] = useState(null);
   const [sender, setSender] = useState(def.sender || '');
   const [flags, setFlags] = useState({
     unread: toTri(def.unread), starred: toTri(def.starred), answered: toTri(def.answered),
@@ -92,13 +108,43 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const setFilter = (id, patch) =>
     setFieldFilters(current => ({ ...current, [id]: { ...(current[id] || NO_FILTER), ...patch } }));
 
-  const pendingKeys = splitKeys(queryInput);
-  const allKeys = [...new Set([...queryKeys, ...pendingKeys])];
+  const allGroups = addTyped(groups, queryInput);
   const addKeys = () => {
     if (!queryInput.trim()) return;
-    setQueryKeys(allKeys);
+    setGroups(allGroups);
     setQueryInput('');
   };
+
+  const startDrag = item => event => {
+    if (event.button !== 0) return;
+    dragged.current = false;
+    drag.current = { item, x: event.clientX, y: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const moveDrag = event => {
+    const current = drag.current;
+    if (!current) return;
+    // A few pixels of wobble is still a click.
+    if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return;
+    current.moved = true;
+    const target = dropTargetAt(event);
+    setDropOver(target ? JSON.stringify(target) : null);
+  };
+  const endDrag = event => {
+    const current = drag.current;
+    drag.current = null;
+    setDropOver(null);
+    if (!current?.moved) return;
+    // The click that follows a drag must not remove the word or add a group.
+    dragged.current = true;
+    const target = event.type === 'pointerup' && dropTargetAt(event);
+    if (target) setGroups(dropItem(allGroups, current.item, target));
+  };
+  const unlessDragged = action => () => {
+    if (dragged.current) { dragged.current = false; return; }
+    action();
+  };
+  const isOver = target => dropOver === JSON.stringify(target);
 
   /// What the form currently says, as a definition. Spread over the stored one
   /// so the parts this form does not offer — excluded mailboxes, columns — are
@@ -106,7 +152,7 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const editedDef = () => ({
     ...def,
     accounts: chosenAccounts,
-    query: allKeys.join(' '),
+    query: serializeGroups(allGroups),
     sender: sender.trim() || null,
     unread: fromTri(flags.unread),
     starred: fromTri(flags.starred),
@@ -131,13 +177,13 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     showTimeline,
   });
 
-  const edited = () => ({ ...view, name: name.trim(), icon, def: editedDef() });
+  const edited = () => ({ ...view, name: name.trim() || (isNew ? view.name : ''), icon, def: editedDef() });
 
   const submit = async (event) => {
     event.preventDefault();
     // A starter carries no name of its own — the app translates it — so only a
     // view someone made needs one.
-    if (!name.trim() && !view.builtin) return;
+    if (!name.trim() && !view.builtin && !isNew) return;
     setSaveError('');
     setSaving(true);
     try {
@@ -177,8 +223,8 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   return <form className="view-editor" data-testid="view-editor-form" onSubmit={submit}>
     <SettingsSection title={view.builtin ? viewLabel(view, t) : t('views.edit')} description={t('views.editorIntro')}>
     <div className="view-editor-row">
-      <input data-testid="view-name" value={name} maxLength={80} aria-label={t('views.name')}
-        placeholder={view.builtin ? viewLabel(view, t) : t('views.name')}
+      <input data-testid="view-name" value={name} maxLength={80} aria-label={t('views.name')} autoFocus={isNew}
+        placeholder={view.builtin ? viewLabel(view, t) : isNew ? view.name : t('views.name')}
         onChange={event => setName(event.target.value)} />
     </div>
     <div className="view-choice-field">
@@ -210,20 +256,43 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       </div>
     </div>
 
-    <div className="view-choice-field">
+    <div className="view-choice-field view-query-field">
       <label htmlFor="view-query">{t('views.filter.query')}</label>
-      <div className="view-query-keys" aria-label={t('views.filter.query')}>
-        {queryKeys.map(key => <button key={key} type="button" className="view-query-key"
-          aria-label={`${t('common.remove')} ${key}`}
-          onClick={() => setQueryKeys(current => current.filter(item => item !== key))}>
-          {key}<X size={12} aria-hidden="true" />
-        </button>)}
+      {/* Boxes of AND-words, OR between boxes: the one shape a person can read
+          at a glance, and the one the daemon evaluates. */}
+      <div className="view-query-groups" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+        {groups.map((group, g) => <Fragment key={g}>
+          {g > 0 && <span className="view-query-or" aria-hidden="true">{t('views.query.or')}</span>}
+          <div className={`view-query-group${isOver({ g }) ? ' is-over' : ''}`} data-drop={`g:${g}`}
+            data-testid={`view-query-group-${g}`} role="group" aria-label={t('views.query.group', { n: g + 1 })}>
+            {!group.length && <span className="view-query-empty">{t('views.query.empty')}</span>}
+            {group.map((key, i) => <Fragment key={key}>
+              {i > 0 && <span className="view-query-and" aria-hidden="true">{t('views.query.and')}</span>}
+              <button type="button" className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}`}
+                data-drop={`w:${g}:${i}`} aria-label={`${t('common.remove')} ${key}`}
+                onPointerDown={startDrag({ kind: 'word', g, i })}
+                onClick={unlessDragged(() => setGroups(current => removeWord(current, g, i)))}>
+                {key}<X size={12} aria-hidden="true" />
+              </button>
+            </Fragment>)}
+          </div>
+        </Fragment>)}
+      </div>
+      <div className="view-query-entry" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
         <input id="view-query" data-testid="view-query" value={queryInput} maxLength={200}
-          aria-label={t('views.filter.query')}
+          aria-label={t('views.filter.query')} placeholder={t('views.query.placeholder')}
+          aria-describedby="view-query-hint"
           onChange={event => setQueryInput(event.target.value)}
           onKeyDown={event => { if (event.key === 'Enter' && queryInput.trim()) { event.preventDefault(); addKeys(); } }}
           onBlur={addKeys} />
+        <button type="button" data-testid="view-query-or" data-drop="new"
+          className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
+          title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' })}
+          onClick={unlessDragged(() => { setGroups([...allGroups, []]); setQueryInput(''); })}>
+          || {t('views.query.or')}
+        </button>
       </div>
+      <p id="view-query-hint" className="view-query-hint">{t('views.query.hint')}</p>
     </div>
 
     <label className="view-editor-row">

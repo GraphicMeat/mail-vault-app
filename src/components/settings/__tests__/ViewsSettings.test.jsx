@@ -32,7 +32,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: profile => !!profile?.premium,
 }));
 vi.mock('../../ViewEditor', () => ({
-  ViewEditor: ({ view }) => React.createElement('div', { 'data-testid': `view-editor-${view.id}` }),
+  ViewEditor: ({ view, isNew }) => React.createElement('div', { 'data-testid': `view-editor-${view.id}`, 'data-new': String(!!isNew) }),
 }));
 
 const { ViewsSettings } = await import('../ViewsSettings');
@@ -89,7 +89,7 @@ describe('the Views settings page', () => {
   it('opens the builder for the view that was picked', () => {
     render(<ViewsSettings />);
     fireEvent.click(screen.getByTestId('views-row-v1'));
-    expect(screen.getByTestId('view-editor-v1')).toBeTruthy();
+    expect(screen.getByTestId('view-editor-v1').dataset.new).toBe('false');
   });
 
   it('makes a view and opens its builder', async () => {
@@ -99,7 +99,8 @@ describe('the Views settings page', () => {
     const made = useViewStoreMock.getState().createView.mock.calls[0][0];
     expect(made.builtin).toBeNull();
     expect(made.id).toBeTruthy();
-    expect(await screen.findByTestId(`view-editor-${made.id}`)).toBeTruthy();
+    // A fresh view opens with its name field empty, not "New view" to delete.
+    expect((await screen.findByTestId(`view-editor-${made.id}`)).dataset.new).toBe('true');
   });
 
   /// The starters count. A free account makes room by deleting one it never

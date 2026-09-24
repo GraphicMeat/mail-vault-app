@@ -130,6 +130,49 @@ pub fn plan_query(query: &str) -> MatchPlan {
     plan
 }
 
+/// A query written with `&&` / `||`, as a view's word groups are saved:
+/// `jasinskio && 14a-37 || mindaugo 30`. Words joined by `&&` must all
+/// appear; groups joined by `||` are alternatives. `None` when the query has
+/// neither operator, which keeps the plain query on `plan_query`.
+/// ponytail: one level only, an OR of ANDs; parentheses are decoration, not
+/// nesting. Parse a tree if views ever need `a && (b || c)`.
+pub fn boolean_groups(query: &str) -> Option<Vec<Vec<String>>> {
+    if !query.contains("&&") && !query.contains("||") {
+        return None;
+    }
+    Some(
+        query
+            .split("||")
+            .map(|group| {
+                group
+                    .split("&&")
+                    .map(|word| word.replace(['(', ')', '"'], " ").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
+                    .filter(|word| !word.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|group| !group.is_empty())
+            .collect(),
+    )
+}
+
+/// One `&&` word as a WHERE clause. A word of 3+ characters is a phrase the
+/// trigram index must hold, so `mindaugo 30` needs the `30` too; a shorter one
+/// is matched the way a short plain query is.
+fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
+    if word.chars().count() >= 3 {
+        args.push(Value::Text(fts_string(word)));
+        return "m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)".into();
+    }
+    if word.chars().any(is_cjk) {
+        args.push(Value::Text(fts_string(&cjk_units(word))));
+        return "m.id IN (SELECT rowid FROM msg_cjk WHERE msg_cjk MATCH ?)".into();
+    }
+    for _ in 0..3 {
+        args.push(Value::Text(like_pattern(word)));
+    }
+    "(m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')".into()
+}
+
 fn like_pattern(s: &str) -> String {
     format!("%{}%", s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"))
 }
@@ -141,7 +184,8 @@ fn column_queries(plan: &MatchPlan, column: &str) -> Vec<(&'static str, String)>
     if let Some(whole) = &plan.whole {
         queries.push(("msg_fts", format!("{column} : {whole}")));
     }
-    for needle in plan.needles.iter().skip(1).filter(|needle| needle.chars().count() >= 3) {
+    // A LIKE plan's one needle is the header text, never a body probe.
+    for needle in plan.needles.iter().skip(usize::from(plan.like.is_some())).filter(|needle| needle.chars().count() >= 3) {
         let query = format!("{column} : {}", fts_string(needle));
         if !queries.iter().any(|(table, existing)| *table == "msg_fts" && *existing == query) {
             queries.push(("msg_fts", query));
@@ -167,12 +211,41 @@ fn column_match_sql(queries: &[(&'static str, String)]) -> String {
 }
 
 pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<SearchPage, String> {
-    let plan = plan_query(&req.query);
+    let groups = boolean_groups(&req.query);
+    let plan = match &groups {
+        // Every word is a needle, so a hit's snippet and body/attachment
+        // probes see whichever group matched.
+        Some(groups) => {
+            let words: Vec<String> = groups.iter().flatten().cloned().collect();
+            MatchPlan {
+                cjk: words
+                    .iter()
+                    .filter(|w| w.chars().count() < 3 && w.chars().any(is_cjk))
+                    .map(|w| fts_string(&cjk_units(w)))
+                    .collect(),
+                needles: words,
+                ..MatchPlan::default()
+            }
+        }
+        None => plan_query(&req.query),
+    };
     // `clauses` and `args` grow together: every `?` is pushed with its value.
     let mut clauses: Vec<String> = vec!["m.account_id = ?".into()];
     let mut args: Vec<Value> = vec![Value::Text(req.account_id.clone())];
 
-    if let Some(like) = &plan.like {
+    if let Some(groups) = &groups {
+        // Only operators and no words is no text filter at all.
+        if !groups.is_empty() {
+            let any: Vec<String> = groups
+                .iter()
+                .map(|group| {
+                    let all: Vec<String> = group.iter().map(|word| word_clause(word, &mut args)).collect();
+                    format!("({})", all.join(" AND "))
+                })
+                .collect();
+            clauses.push(format!("({})", any.join(" OR ")));
+        }
+    } else if let Some(like) = &plan.like {
         clauses.push(
             "(m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')"
                 .into(),
@@ -586,6 +659,45 @@ mod tests {
         assert_eq!(body.hits.len(), 1);
         assert!(body.hits[0].body_matched);
         assert!(!body.hits[0].attach_matched, "a body-only term must not claim the attachment");
+    }
+
+    #[test]
+    fn boolean_groups_split_or_then_and() {
+        assert_eq!(boolean_groups("invoice PO"), None, "no operator keeps the plain plan");
+        assert_eq!(
+            boolean_groups("(Jasinskio && 14a-37) || (mindaugo  30) ||"),
+            Some(vec![vec!["jasinskio".to_string(), "14a-37".to_string()], vec!["mindaugo 30".to_string()]])
+        );
+        assert_eq!(boolean_groups("|| &&"), Some(vec![]));
+    }
+
+    #[test]
+    fn or_groups_match_either_and_words_must_all_appear() {
+        let (_t, db) = fixture();
+        // Group 1 needs both words; only message 1 has "luke" and "for".
+        // Group 2 is the invoice. The budget mail matches neither.
+        assert_eq!(
+            uids(&db, req("luke", "(luke && for) || invoice")),
+            vec![("INBOX".into(), 2), ("INBOX".into(), 1)]
+        );
+        assert!(uids(&db, req("luke", "luke && budget")).is_empty(), "AND demands every word");
+        assert_eq!(uids(&db, req("luke", "zzz || 会議")), vec![("Projects_2026".into(), 1)], "short CJK word");
+        assert_eq!(uids(&db, req("luke", "PO && invoice")), vec![("INBOX".into(), 2)], "short latin word");
+    }
+
+    #[test]
+    fn a_word_with_a_short_number_keeps_the_number() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let db = Mutex::new(Some(db::open(&root).unwrap()));
+        let cur = root.join("Maildir").join("a").join("INBOX").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        for (uid, body) in [(1, "Deliver to Mindaugo g. 12"), (2, "Deliver to Mindaugo 30")] {
+            let content = eml("Parcel", "Shop <s@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", body);
+            std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), format!("Message-ID: <{uid}@x.test>\r\n{content}")).unwrap();
+        }
+        reconcile_mailbox(&db, &root.join("Maildir"), "a", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
+        assert_eq!(uids(&db, req("a", "jasinskio || mindaugo 30")), vec![("INBOX".into(), 2)]);
     }
 
     #[test]

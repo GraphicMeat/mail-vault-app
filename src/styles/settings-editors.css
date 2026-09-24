@@ -57,9 +57,17 @@
 .settings-window .views-settings .account-settings-reorder-list { width: 100%; }
 .settings-window .views-settings .account-settings-account { border: 1px solid var(--mail-border); }
 .settings-window .views-settings .views-row-button { border: 0; }
-.settings-window .view-editor .view-query-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; }
-.settings-window .view-editor .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
-.settings-window .view-editor .view-query-keys input { flex: 1 1 140px; min-width: 100px; }
+.settings-window .view-editor .view-query-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.settings-window .view-editor .view-query-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; min-width: 120px; padding: 5px 6px; border: 1px dashed var(--mail-border-strong); border-radius: 10px; }
+.settings-window .view-editor .view-query-group.is-over, .settings-window .view-editor .view-query-or-token.is-over { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
+.settings-window .view-editor .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); cursor: grab; touch-action: none; user-select: none; }
+.settings-window .view-editor .view-query-key.is-over { box-shadow: -3px 0 0 var(--mail-accent); }
+.settings-window .view-editor .view-query-and, .settings-window .view-editor .view-query-empty { color: var(--mail-text-muted); font-size: 11px; }
+.settings-window .view-editor .view-query-or { color: var(--mail-accent-text); font-size: 11px; font-weight: 700; }
+.settings-window .view-editor .view-query-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.settings-window .view-editor .view-query-entry input { flex: 0 1 240px; min-width: 0; }
+.settings-window .view-editor .view-query-or-token { padding: 5px 10px; border: 1px solid var(--mail-border-strong); border-radius: 999px; color: var(--mail-accent-text); font-weight: 700; cursor: grab; touch-action: none; user-select: none; }
+.settings-window .view-editor .view-query-hint { margin: 0; color: var(--mail-text-muted); font-size: 12px; max-width: 60ch; }
 .settings-window .view-editor { display: block; margin: 0; padding: 0; border: 0; background: transparent; font-size: 13px; }
 .settings-window .view-editor .settings-editor-section { margin-bottom: 16px; }
 .settings-window .view-editor .view-editor-row { gap: 10px; margin: 0 0 14px; align-items: center; font-size: 12px; }
