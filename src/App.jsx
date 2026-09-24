@@ -791,7 +791,8 @@ function App() {
         if (event.payload?.token !== settingsAuxRef.current?.token) return;
         settingsAuxRef.current = null;
         closeSettings();
-        void import('./stores/viewStore').then(({ useViewStore }) => useViewStore.getState().loadViews());
+        void import('./stores/viewStore').then(({ useViewStore }) => useViewStore.getState().loadViews())
+          .catch(error => console.warn('[views] could not load the views:', error?.message || error));
         void import('./stores/tagStore').then(({ useTagStore }) => useTagStore.getState().loadTags());
         void import('./stores/autoTagStore').then(({ useAutoTagStore }) => useAutoTagStore.getState().loadRules());
         void import('./stores/fieldStore').then(({ useFieldStore }) => Promise.allSettled(

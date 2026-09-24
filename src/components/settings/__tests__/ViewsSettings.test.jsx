@@ -60,6 +60,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('the Views settings page', () => {
+  /// The page asks for the list without awaiting it, so a daemon that cannot
+  /// answer must not leak an unhandled rejection (vitest fails the run on one).
+  it('keeps the views it has when the list cannot be loaded', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    useViewStoreMock.setState({ loadViews: vi.fn(async () => { throw new Error('Tauri invoke not available'); }) });
+    render(<ViewsSettings />);
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(screen.getByTestId('views-row-v1')).toBeTruthy();
+  });
+
   it('moves views from a drag handle and saves the new order', async () => {
     setViews([STARRED, MINE, THIRD]);
     vi.stubGlobal('PointerEvent', class extends MouseEvent {

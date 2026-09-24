@@ -32,7 +32,11 @@ export function ViewsSettings({ onUpgrade }) {
   const [error, setError] = useState('');
   const switching = useRef(false);
 
-  useEffect(() => { void loadViews(); }, [loadViews]);
+  // Not awaited, so a daemon that cannot answer keeps the list already shown
+  // rather than leaking a rejection.
+  useEffect(() => {
+    loadViews().catch(error => console.warn('[views] could not load the views:', error?.message || error));
+  }, [loadViews]);
 
   const full = viewLimitReached(views, premium);
 
