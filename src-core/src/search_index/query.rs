@@ -156,8 +156,12 @@ pub fn boolean_groups(query: &str) -> Option<Vec<Vec<String>>> {
 }
 
 /// One `&&` word as a WHERE clause. A word of 3+ characters is a phrase the
-/// trigram index must hold, so `mindaugo 30` needs the `30` too; a shorter one
-/// is matched the way a short plain query is.
+/// trigram index must hold, so `mindaugo 30` needs the `30` too. A two-letter
+/// Latin word is too short for a trigram on its own, so it is also looked for
+/// with the space or line break before it (`" 30"`, `"\n30"`), which finds the
+/// house number in "Mindaugo g. 30" but not the tail of "130".
+/// ponytail: left boundary only, so `30` also matches "300"; a whole-word match
+/// needs a unicode61 index over Latin text, which means a reindex.
 fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
     if word.chars().count() >= 3 {
         args.push(Value::Text(fts_string(word)));
@@ -170,7 +174,13 @@ fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
     for _ in 0..3 {
         args.push(Value::Text(like_pattern(word)));
     }
-    "(m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')".into()
+    let headers = "m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\'";
+    // One character plus its boundary is still under a trigram: headers only.
+    if word.chars().count() < 2 {
+        return format!("({headers})");
+    }
+    args.push(Value::Text(format!("{} OR {}", fts_string(&format!(" {word}")), fts_string(&format!("\n{word}")))));
+    format!("({headers} OR m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?))")
 }
 
 fn like_pattern(s: &str) -> String {
@@ -698,6 +708,33 @@ mod tests {
         }
         reconcile_mailbox(&db, &root.join("Maildir"), "a", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
         assert_eq!(uids(&db, req("a", "jasinskio || mindaugo 30")), vec![("INBOX".into(), 2)]);
+    }
+
+    #[test]
+    fn a_short_word_after_and_matches_in_the_body_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let db = Mutex::new(Some(db::open(&root).unwrap()));
+        let cur = root.join("Maildir").join("a").join("INBOX").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let bodies = [
+            (1, "Deliver to Mindaugo g. 30, Vilnius"),
+            (2, "Deliver to Mindaugo g. 12"),
+            (3, "Deliver to Mindaugo g. 130"),
+            (4, "Deliver to Mindaugo g.\r\n30 butas"),
+            (5, "Deliver to Gedimino pr. 30"),
+        ];
+        for (uid, body) in bodies {
+            let content = eml("Parcel", "Shop <s@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", body);
+            std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), format!("Message-ID: <{uid}@x.test>\r\n{content}")).unwrap();
+        }
+        reconcile_mailbox(&db, &root.join("Maildir"), "a", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
+        let mut got = uids(&db, req("a", "mindaugo && 30"));
+        got.sort();
+        // "30" after a space or at a line start; not the tail of "130".
+        assert_eq!(got, vec![("INBOX".into(), 1), ("INBOX".into(), 4)]);
+        // One character is below what the trigram index can hold: headers only.
+        assert!(uids(&db, req("a", "mindaugo && g")).is_empty());
     }
 
     #[test]
