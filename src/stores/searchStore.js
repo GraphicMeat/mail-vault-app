@@ -192,8 +192,13 @@ export const useSearchStore = create((set, get) => ({
   /// through the same snapshot and the same `finalize`: custody glyphs, backup
   /// state and the copy-per-message rules are all in there, and a second
   /// render path would have to re-derive every one of them.
-  showRows: (rows) => {
+  showRows: (allRows) => {
     const mail = useMailStore.getState();
+    // The index reads the vault, and a message deleted this session keeps its
+    // vault copy until a sync prunes it (or for good, when archived). The
+    // tombstones the delete wrote are what the mail list already hides it by.
+    const tombstones = mail.deleteTombstones;
+    const rows = tombstones?.size ? allRows.filter(row => !tombstones.has(emailKey(row))) : allRows;
     const searchSnapshot = {
       backedUpKeys: mail.backedUpKeys,
       backedUpScopes: mail.backedUpScopes,

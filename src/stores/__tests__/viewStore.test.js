@@ -46,6 +46,17 @@ beforeEach(() => {
 });
 
 describe('saved views', () => {
+  // Deleted in the Unified Inbox, then the view opened: the vault still held
+  // the copy the index answers from, so the deleted mail came straight back.
+  // The tombstone is written the way the delete writes it
+  // (messageMutations: `${accountId}|${mailbox}|${realUid}`).
+  it('leaves out a message deleted this session when the view opens', async () => {
+    harness.mailState.deleteTombstones = new Set(['acct-1|INBOX|2']);
+    harness.daemonCall.mockResolvedValueOnce({ available: true, rows: [row(1), row(2)], total: 2 });
+    await useViewStore.getState().openView(STARRED);
+    expect(useSearchStore.getState().searchResults.map(email => email.uid)).toEqual([1]);
+  });
+
   it('loads the views the daemon keeps', async () => {
     harness.daemonCall.mockResolvedValueOnce([STARRED, MINE]);
     await useViewStore.getState().loadViews();
