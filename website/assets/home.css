@@ -148,3 +148,4 @@
 .hm .mv-feedback-quotes figcaption strong { font-size:.88rem; }
 .hm .mv-feedback-quotes figcaption a { font-size:.74rem; }
 .hm .hm-after-list { margin:20px 0 0; }
+.hm-table td a { color:inherit; text-decoration:underline; text-decoration-color:color-mix(in oklab,currentColor 35%,transparent); text-underline-offset:2px; }
