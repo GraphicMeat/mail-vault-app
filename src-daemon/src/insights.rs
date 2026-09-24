@@ -347,7 +347,13 @@ impl Snapshot {
                             // so it falls back to comparing the whole
                             // stamp) — flagging the snapshot stale over
                             // activity nothing here ever reads.
-                            let is_tmp = s.directory && p.file_name().and_then(|n| n.to_str()) == Some("tmp");
+                            // Only a `tmp` inside a mailbox (a dir holding
+                            // `cur/`) is Maildir's temp dir: a mailbox whose
+                            // IMAP name is literally "tmp" sits one level up,
+                            // as `Maildir/<account>/tmp`, and must stay listed.
+                            let is_tmp = s.directory
+                                && p.file_name().and_then(|n| n.to_str()) == Some("tmp")
+                                && path.join("cur").is_dir();
                             if is_tmp {
                                 // Deliberately not pushed to `paths` and
                                 // `watch_directory` never called: `walk`'s

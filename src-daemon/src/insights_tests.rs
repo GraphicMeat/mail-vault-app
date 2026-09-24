@@ -318,7 +318,11 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
 }
 
 fn eml(root: &Path, account: &str, uid: u32) -> PathBuf {
-    let path = root.join(format!("Maildir/{account}/INBOX/cur/{uid}{INFO_PREFIX}S"));
+    eml_in(root, account, "INBOX", uid)
+}
+
+fn eml_in(root: &Path, account: &str, mailbox: &str, uid: u32) -> PathBuf {
+    let path = root.join(format!("Maildir/{account}/{mailbox}/cur/{uid}{INFO_PREFIX}S"));
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(
         &path,
@@ -388,6 +392,34 @@ fn insights_ignored_temporary_files_do_not_invalidate_included_headers() {
     fs::remove_file(vault_temp).unwrap();
     let result = page(&state, &start, 0);
     assert_eq!(result["rows"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn insights_includes_a_mailbox_literally_named_tmp() {
+    // A mailbox whose IMAP name is literally "tmp" lives at
+    // `Maildir/<account>/tmp`, one level above Maildir's own `tmp/` (which
+    // only ever sits *inside* a mailbox, next to that mailbox's `cur/`).
+    // No custody row is seeded for it: the only way this uid's row can
+    // appear is the vault walk actually descending into
+    // `Maildir/account-a/tmp` and finding the .eml under its `cur/`. If the
+    // walk skips the directory (treating it as Maildir's temp dir), there is
+    // no custody-cache fallback to paper over the gap and the row is simply
+    // missing.
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    eml_in(dir.path(), "account-a", "tmp", 1);
+    let state = InsightsSnapshots::default();
+    let selected = vec!["account-a".to_string()];
+    let start = state
+        .begin_at(dir.path(), &rows(&custody), &cached(&custody), &account(), &selected, &|| 0)
+        .unwrap();
+    let p = page(&state, &start, 0);
+    let rows = p["rows"].as_array().unwrap();
+    let row = rows
+        .iter()
+        .find(|r| r["mailbox"] == "tmp" && r["uid"] == 1)
+        .unwrap_or_else(|| panic!("no row for the \"tmp\" mailbox in {rows:?}"));
+    assert_eq!(row["source"], "vault");
 }
 
 #[test]
