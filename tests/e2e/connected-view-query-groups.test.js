@@ -7,7 +7,9 @@
  * `A || B`, and the preview must name both. WebKit resolves the drop target
  * (`elementFromPoint`) and the daemon evaluates the saved notation.
  *
- * Also: a new view opens with an empty, focused name field.
+ * Also: a new view opens with an empty, focused name field, and a two-letter
+ * `&&` word is found in the body. `of` is in every mock body ("Body of luke
+ * message N") and in no subject or sender, so only the body match finds it.
  */
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { clickSelectionAction } from './selectionBar.js';
@@ -156,5 +158,36 @@ describe('View query OR groups', function () {
     }), { timeout: 15_000, timeoutMsg: 'the new view was never stored' });
     expect(saved.def.query).toBe(`${a} || ${b}`);
     expect(saved.name.length).toBeGreaterThan(0);
+  });
+
+  it('finds a two-letter && word in the body, not only the headers', async function () {
+    if (!(await browser.execute(() => !!document.querySelector('[data-testid="views-new"]')))) {
+      await openSettings();
+      await browser.pause(400);
+      await clickSettingsNav('Views');
+    }
+    await browser.waitUntil(async () => browser.execute(() => {
+      const button = document.querySelector('[data-testid="views-new"]');
+      return !!button && !button.disabled;
+    }), { timeout: 15_000, timeoutMsg: 'the + for a new view never became usable' });
+    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
+      { timeout: 10_000, timeoutMsg: 'the view builder never opened' });
+
+    // Control: a two-letter word the body does not hold finds nothing.
+    await query(`${a} && zq`);
+    await browser.waitUntil(async () => {
+      const subjects = await previewSubjects();
+      return subjects !== null && !subjects.includes(a);
+    }, { timeout: 30_000, interval: 500, timeoutMsg: `"${a} && zq" should find nothing` });
+
+    await browser.execute(() => [...document.querySelectorAll('.view-query-key')]
+      .find((n) => n.textContent.trim() === 'zq')?.click());
+    await query('of');
+    const groups = await browser.execute(() => [...document.querySelectorAll('[data-testid^="view-query-group-"]')]
+      .map((g) => [...g.querySelectorAll('.view-query-key')].map((n) => n.textContent.trim())));
+    expect(groups).toEqual([[a, 'of']]);
+    await browser.waitUntil(async () => (await previewSubjects())?.includes(a),
+      { timeout: 30_000, interval: 500, timeoutMsg: `"${a} && of" should find ${a} by its body` });
   });
 });
