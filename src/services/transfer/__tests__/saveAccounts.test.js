@@ -16,7 +16,12 @@ vi.mock('../../db/keychain.js', () => ({
   saveKeychain: (...a) => mockSaveKeychain(...a),
 }));
 vi.mock('../../keychainSession.js', () => ({ getStatus: () => h.status, E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE', E_KEYCHAIN_WRITE: 'E_KEYCHAIN_WRITE' }));
-vi.mock('../../transport.js', () => ({ send: vi.fn(async () => ({})) }));
+// dataPath() (src/services/db/accounts.js) resolves the app data dir via
+// invoke('get_app_data_dir') before any read/write; every other command this
+// test can reach stays a no-op {}.
+vi.mock('../../transport.js', () => ({
+  send: vi.fn(async (cmd) => (cmd === 'get_app_data_dir' ? '/mock/appdata' : {})),
+}));
 vi.mock('../../graphConfig.js', () => ({ isPersonalMicrosoftEmail: () => false }));
 vi.mock('../../../i18n/index.js', () => ({ t: (k) => k }));
 vi.mock('@tauri-apps/plugin-fs', () => ({

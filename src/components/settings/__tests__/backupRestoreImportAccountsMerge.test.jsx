@@ -103,7 +103,7 @@ it('merges import_backup\'s newAccounts descriptors into accounts.json and lists
 // once read `a.imapServer`/`a.smtpServer`, so every manifest host was null and
 // a restored account landed in accounts.json with no host at all.
 it('round-trips account hosts: export manifest -> import -> accounts.json', async () => {
-  fsFiles = { 'accounts.json': JSON.stringify([
+  fsFiles = { [ACCOUNTS_PATH]: JSON.stringify([
     { id: 'acct-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test', imapPort: 993 },
   ]) };
   let manifestAccounts = null;
@@ -127,11 +127,11 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
   expect(manifestAccounts).toEqual([{ email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test' }]);
 
   // Restore onto a fresh install.
-  fsFiles = { 'accounts.json': '[]' };
+  fsFiles = { [ACCOUNTS_PATH]: '[]' };
   fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
   await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
 
-  const onDisk = JSON.parse(fsFiles['accounts.json']);
+  const onDisk = JSON.parse(fsFiles[ACCOUNTS_PATH]);
   expect(onDisk).toEqual([expect.objectContaining({
     id: 'restored-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test',
   })]);
