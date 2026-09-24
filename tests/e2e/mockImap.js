@@ -633,9 +633,19 @@ export const LONG_SUBJECT_COUNT = 2;
  * In-Reply-To — a client that sends only its parent's id. Pass it to model a
  * client that keeps the whole chain, or one that truncates it mid-conversation.
  */
-function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, references, day }) {
+// A message that passed SPF, DKIM and DMARC, as the receiving server recorded
+// it. connected-sender-verification.test.js opens it and expects the green
+// shield; every other mock message carries no Authentication-Results at all,
+// which is the shield's "none" state.
+export const SENDER_AUTH_SUBJECT = 'Sender verification check';
+export const SENDER_AUTH_BODY = 'This one passed SPF and DKIM.';
+export const SENDER_AUTH_RESULTS =
+  'mx.mock.test; spf=pass smtp.mailfrom=verified.mock.test; dkim=pass header.i=@verified.mock.test; dmarc=pass header.from=verified.mock.test';
+
+function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, references, day, authResults }) {
   const { internalDate, header } = stamp(day);
   const lines = [
+    ...(authResults ? [`Authentication-Results: ${authResults}`] : []),
     `From: ${from}`,
     `To: ${owner}`,
     `Subject: ${subject}`,
@@ -780,6 +790,13 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
           // tracker (55) and the attachment fixture (54), so the first
           // single-message row and every top-of-list assertion stay put.
           bigBodyMessage({ uid: 9503, owner, day: 44 }),
+          // The authenticated sender, day 45: still under the attachment (54)
+          // and tracker (55) fixtures, so nothing above it moves.
+          threadMessage({
+            uid: 9504, owner, from: 'Verified Sender <news@verified.mock.test>',
+            subject: SENDER_AUTH_SUBJECT, body: SENDER_AUTH_BODY,
+            messageId: `sender-auth@${owner}`, day: 45, authResults: SENDER_AUTH_RESULTS,
+          }),
         ]);
       }
 

@@ -156,6 +156,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
   return (
     <span className="relative inline-flex items-center flex-shrink-0">
       <button
+        data-testid="sender-verification" data-status={status}
         onClick={(e) => {
           e.stopPropagation();
           setPopoverAnchor(popoverAnchor ? null : e.currentTarget.getBoundingClientRect());
