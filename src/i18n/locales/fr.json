@@ -2676,6 +2676,7 @@
   "views.query.placeholder": "Ajouter un mot ou une expression",
   "views.query.orHint": "Commencer un nouveau groupe, ou glisser sur un mot pour scinder son groupe à cet endroit",
   "views.query.hint": "Tous les mots d’une case doivent apparaître (ET). Les cases reliées par OU sont des alternatives : un e-mail correspond si une case correspond. Entrée pour ajouter, tapez || ou OU pour une nouvelle case, glissez les mots ou OU pour regrouper. Un mot avec des espaces doit correspondre à cette expression exacte ; utilisez && pour exiger les mots séparément.",
+  "views.query.dragHint": "Glissez sur un autre mot ou une autre case pour exiger les deux (ET), ou sur OU pour en faire une alternative",
   "views.filter.sender": "Expéditeur",
   "views.filter.sort": "Trier par",
   "views.filter.starred": "Suivis",

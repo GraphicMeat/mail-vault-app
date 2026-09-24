@@ -2676,6 +2676,7 @@
   "views.query.placeholder": "단어나 구문 추가",
   "views.query.orHint": "새 그룹을 시작하거나 단어 위로 끌어 그 위치에서 그룹을 나눕니다",
   "views.query.hint": "한 상자의 단어는 모두 있어야 합니다(그리고). 또는으로 이어진 상자는 대안이며, 어느 상자든 맞으면 메일이 표시됩니다. Enter로 추가하고, || 입력 또는 또는을 눌러 새 상자를 만들고, 단어나 또는을 끌어 다시 묶으세요. 공백이 있는 단어는 그 구문 그대로 일치해야 합니다. 단어를 따로 요구하려면 &&를 쓰세요.",
+  "views.query.dragHint": "다른 단어나 상자로 끌면 둘 다 필요(그리고), 또는으로 끌면 대안이 됩니다",
   "views.filter.sender": "보낸 사람",
   "views.filter.sort": "정렬 기준",
   "views.filter.starred": "별표",

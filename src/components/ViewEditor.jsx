@@ -1,4 +1,5 @@
 import React, { Fragment, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Trash2, X } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { ViewPreview } from './ViewPreview';
@@ -17,6 +18,8 @@ const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '�
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
 import { addTyped, dropItem, parseGroups, removeWord, serializeGroups } from '../utils/queryGroups';
+// The drag ghost reuses the reorder list's preview style.
+import '../styles/account-settings-navigation.css';
 
 /// Three states, not two: a filter can demand a flag, demand its absence, or
 /// not care — and "not care" is what a checkbox cannot say.
@@ -76,6 +79,8 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const drag = useRef(null);
   const dragged = useRef(false);
   const [dropOver, setDropOver] = useState(null);
+  /// What follows the pointer while a word or the OR is carried.
+  const [ghost, setGhost] = useState(null);
   const [sender, setSender] = useState(def.sender || '');
   const [flags, setFlags] = useState({
     unread: toTri(def.unread), starred: toTri(def.starred), answered: toTri(def.answered),
@@ -115,10 +120,13 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     setQueryInput('');
   };
 
-  const startDrag = item => event => {
-    if (event.button !== 0) return;
+  const startDrag = (item, label) => event => {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    // WebKit otherwise runs the mouse default (selection, a native drag), and a
+    // drag it starts ends ours with pointercancel. The click still follows.
+    event.preventDefault();
     dragged.current = false;
-    drag.current = { item, x: event.clientX, y: event.clientY, moved: false };
+    drag.current = { item, label, x: event.clientX, y: event.clientY, moved: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const moveDrag = event => {
@@ -127,6 +135,7 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     // A few pixels of wobble is still a click.
     if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return;
     current.moved = true;
+    setGhost({ label: current.label, x: event.clientX, y: event.clientY, item: current.item });
     const target = dropTargetAt(event);
     setDropOver(target ? JSON.stringify(target) : null);
   };
@@ -134,8 +143,9 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     const current = drag.current;
     drag.current = null;
     setDropOver(null);
+    setGhost(null);
     if (!current?.moved) return;
-    // The click that follows a drag must not remove the word or add a group.
+    // The click that follows a drag must not add a group.
     dragged.current = true;
     const target = event.type === 'pointerup' && dropTargetAt(event);
     if (target) setGroups(dropItem(allGroups, current.item, target));
@@ -145,6 +155,7 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     action();
   };
   const isOver = target => dropOver === JSON.stringify(target);
+  const isCarried = (g, i) => ghost?.item.kind === 'word' && ghost.item.g === g && ghost.item.i === i;
 
   /// What the form currently says, as a definition. Spread over the stored one
   /// so the parts this form does not offer — excluded mailboxes, columns — are
@@ -268,12 +279,18 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
             {!group.length && <span className="view-query-empty">{t('views.query.empty')}</span>}
             {group.map((key, i) => <Fragment key={key}>
               {i > 0 && <span className="view-query-and" aria-hidden="true">{t('views.query.and')}</span>}
-              <button type="button" className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}`}
-                data-drop={`w:${g}:${i}`} aria-label={`${t('common.remove')} ${key}`}
-                onPointerDown={startDrag({ kind: 'word', g, i })}
-                onClick={unlessDragged(() => setGroups(current => removeWord(current, g, i)))}>
-                {key}<X size={12} aria-hidden="true" />
-              </button>
+              {/* The word is the handle; only the X removes, so a press that
+                  wobbles is never a deletion. */}
+              <span className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}${isCarried(g, i) ? ' is-dragging' : ''}`}
+                data-drop={`w:${g}:${i}`} title={t('views.query.dragHint')}
+                onPointerDown={startDrag({ kind: 'word', g, i }, key)}>
+                {key}
+                <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${key}`}
+                  onPointerDown={event => event.stopPropagation()}
+                  onClick={() => setGroups(current => removeWord(current, g, i))}>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </span>
             </Fragment>)}
           </div>
         </Fragment>)}
@@ -287,12 +304,16 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
           onBlur={addKeys} />
         <button type="button" data-testid="view-query-or" data-drop="new"
           className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
-          title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' })}
+          title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' }, `|| ${t('views.query.or')}`)}
           onClick={unlessDragged(() => { setGroups([...allGroups, []]); setQueryInput(''); })}>
           || {t('views.query.or')}
         </button>
       </div>
       <p id="view-query-hint" className="view-query-hint">{t('views.query.hint')}</p>
+      {ghost && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
+        data-testid="view-query-ghost" style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
+        <span>{ghost.label}</span>
+      </div>, document.body)}
     </div>
 
     <label className="view-editor-row">

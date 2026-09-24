@@ -182,7 +182,7 @@ describe('View query OR groups', function () {
     }, { timeout: 30_000, interval: 500, timeoutMsg: `"${a} && zq" should find nothing` });
 
     await browser.execute(() => [...document.querySelectorAll('.view-query-key')]
-      .find((n) => n.textContent.trim() === 'zq')?.click());
+      .find((n) => n.textContent.trim() === 'zq')?.querySelector('button')?.click());
     await query('of');
     const groups = await browser.execute(() => [...document.querySelectorAll('[data-testid^="view-query-group-"]')]
       .map((g) => [...g.querySelectorAll('.view-query-key')].map((n) => n.textContent.trim())));

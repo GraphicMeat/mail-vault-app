@@ -2676,6 +2676,7 @@
   "views.query.placeholder": "Adicione uma palavra ou frase",
   "views.query.orHint": "Comece um novo grupo ou arraste sobre uma palavra para dividir o grupo ali",
   "views.query.hint": "Todas as palavras de uma caixa precisam aparecer (E). Caixas ligadas por OU são alternativas: o e-mail corresponde se qualquer caixa corresponder. Pressione Enter para adicionar, digite || ou pressione OU para uma nova caixa e arraste palavras ou OU para reagrupar. Uma palavra com espaços precisa corresponder a essa frase exata; use && para exigir as palavras separadamente.",
+  "views.query.dragHint": "Arraste sobre outra palavra ou caixa para exigir ambas (E), ou sobre OU para torná-la uma alternativa",
   "views.filter.sender": "Remetente",
   "views.filter.sort": "Ordenar por",
   "views.filter.starred": "Com estrela",

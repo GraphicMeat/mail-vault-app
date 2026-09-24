@@ -113,24 +113,45 @@ describe('editing a saved view', () => {
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('invoice || receipt');
   });
 
+  /// jsdom has no layout, so the element under the pointer is stubbed.
+  const dragTo = (from, element, { up = true } = {}) => {
+    document.elementFromPoint = vi.fn(() => element);
+    fireEvent.pointerDown(from, { button: 0, isPrimary: true, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(from, { clientX: 50, clientY: 40 });
+    if (up) fireEvent.pointerUp(from, { clientX: 50, clientY: 40 });
+    delete document.elementFromPoint;
+  };
+
   it('dragging a word onto the OR button moves it to a group of its own, and does not remove it', () => {
     render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: 'a1 && b2 && c3' } }} onClose={() => {}} />);
-    const chip = () => screen.getByRole('button', { name: 'common.remove b2' });
-    const dragTo = element => {
-      // jsdom has no layout, so the element under the pointer is stubbed.
-      document.elementFromPoint = vi.fn(() => element);
-      fireEvent.pointerDown(chip(), { button: 0, clientX: 0, clientY: 0 });
-      fireEvent.pointerMove(chip(), { clientX: 50, clientY: 40 });
-      fireEvent.pointerUp(chip(), { clientX: 50, clientY: 40 });
-      delete document.elementFromPoint;
-    };
-    // Dropped on nothing: the click that ends the drag must not remove it.
-    dragTo(null);
-    fireEvent.click(chip());
-    expect(chip()).toBeTruthy();
-    dragTo(screen.getByTestId('view-query-or'));
+    const word = () => screen.getByText('b2');
+    // Dropped on nothing: the drag, and the click that ends it, leave it be.
+    dragTo(word(), null);
+    fireEvent.click(word());
+    expect(word()).toBeTruthy();
+    dragTo(word(), screen.getByTestId('view-query-or'));
     fireEvent.submit(screen.getByTestId('view-editor-form'));
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('a1 && c3 || b2');
+  });
+
+  it('dropping a word on a word in another box ANDs the two', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: 'jasinskio || 14a-37 || mindaugo' } }} onClose={() => {}} />);
+    dragTo(screen.getByText('14a-37'), screen.getByText('jasinskio'));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('14a-37 && jasinskio || mindaugo');
+  });
+
+  it('shows the carried word under the pointer while dragging, and only the X removes it', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: 'a1 && b2' } }} onClose={() => {}} />);
+    dragTo(screen.getByText('b2'), null, { up: false });
+    expect(screen.getByTestId('view-query-ghost').textContent).toBe('b2');
+    fireEvent.pointerUp(document.querySelector('[data-drop="w:0:1"]'), { clientX: 50, clientY: 40 });
+    expect(screen.queryByTestId('view-query-ghost')).toBeNull();
+    // A plain press on the word is not a deletion; its X is.
+    fireEvent.click(screen.getByText('a1'));
+    expect(screen.getByText('a1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'common.remove a1' }));
+    expect(screen.queryByText('a1')).toBeNull();
   });
 
   it('a tri-state filter can go back to not caring', () => {

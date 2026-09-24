@@ -62,6 +62,9 @@
 .settings-window .view-editor .view-query-group.is-over, .settings-window .view-editor .view-query-or-token.is-over { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
 .settings-window .view-editor .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); cursor: grab; touch-action: none; user-select: none; }
 .settings-window .view-editor .view-query-key.is-over { box-shadow: -3px 0 0 var(--mail-accent); }
+.settings-window .view-editor .view-query-key.is-dragging { opacity: .45; }
+.settings-window .view-editor .view-query-key-remove { display: inline-flex; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; opacity: .7; }
+.settings-window .view-editor .view-query-key-remove:hover { opacity: 1; }
 .settings-window .view-editor .view-query-and, .settings-window .view-editor .view-query-empty { color: var(--mail-text-muted); font-size: 11px; }
 .settings-window .view-editor .view-query-or { color: var(--mail-accent-text); font-size: 11px; font-weight: 700; }
 .settings-window .view-editor .view-query-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
