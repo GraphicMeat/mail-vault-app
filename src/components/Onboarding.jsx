@@ -13,7 +13,7 @@ import { UpgradeCta } from './onboarding/UpgradeCta';
 import { Button } from './ui/Button';
 import { useT } from '../i18n/index.js';
 
-export function Onboarding({ onOpenBilling, onOpenFaq }) {
+export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
   const t = useT();
   // Accounts live in useAccountStore, not useSettingsStore — App.jsx:122 reads
   // them the same way. Only `onboardingComplete` is a setting.
@@ -39,7 +39,10 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   const step = steps[index];
   const next = () => setIndex(i => Math.min(i + 1, steps.length - 1));
   const back = () => setIndex(i => Math.max(i - 1, 0));
-  const finish = () => setOnboardingComplete(true);
+  const finish = () => {
+    setOnboardingComplete(true);
+    onComplete?.();
+  };
 
   return (
     <div ref={pageRef} className="onboarding-page" data-testid={`onboarding-${step}`}>

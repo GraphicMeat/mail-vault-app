@@ -324,6 +324,8 @@
   "common.attachmentCountCap_other": "{{count}} Anhänge",
   "common.attachmentCount_one": "{{count}} Anhang",
   "common.attachmentCount_other": "{{count}} Anhänge",
+  "celebration.continue": "Weiter zu MailVault",
+  "celebration.heading": "Deine E-Mails haben einen Platz zum Ankommen.",
   "common.back": "Zurück",
   "common.cancel": "Abbrechen",
   "common.clear": "Leeren",
