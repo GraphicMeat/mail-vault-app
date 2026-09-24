@@ -146,8 +146,11 @@ export async function loadEmails() {
   }, 20000);
 
   // Hoisted out of the try block: the catch below falls back to whatever was
-  // loaded before this attempt, and a try-scoped `const` is invisible there
-  // (ReferenceError) whenever the error fires before line 301 assigns it.
+  // loaded before this attempt, and a try-scoped `const` is invisible in the
+  // paired catch at all - not just before it assigns below (line 306) but for
+  // the rest of the function too, since try/catch are separate block scopes.
+  // Every non-stale failed load threw ReferenceError here instead of setting
+  // connectionStatus/connectionError and scheduling a retry.
   let previousEmails;
 
   try {
