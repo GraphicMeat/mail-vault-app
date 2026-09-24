@@ -512,6 +512,21 @@ describe('compose send later', () => {
     expect((await snapshotRef.current())._sendPlan).toEqual({ kind: 'in', minutes: 45 });
   });
 
+  it('an edit whose plan was cleared stays on Send now when it reopens', async () => {
+    render(<ComposeModal initialData={{ ...initialData, _sendPlan: null }} onClose={() => {}} onSaveState={() => {}} />);
+    expect((await screen.findByTestId('compose-send')).dataset.plan).toBe('');
+  });
+
+  it('Shift+Enter in the panel fields sends nothing', async () => {
+    const onQueueSend = vi.fn();
+    render(<ComposeModal initialData={fresh} onQueueSend={onQueueSend} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    fireEvent.keyDown(screen.getByTestId('compose-later-minutes'), { key: 'Enter', shiftKey: true });
+    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+    expect(onQueueSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId('compose-schedule-submit')).toBeTruthy();
+  });
+
   it('Discard reads as destructive', async () => {
     render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
     expect((await screen.findByTestId('compose-discard')).className).toContain('text-mail-danger');

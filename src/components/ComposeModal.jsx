@@ -210,8 +210,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // delay; the Send later panel arms `{ kind: 'in', minutes }` or
   // `{ kind: 'at' }` (scheduleDraft). An edit of a scheduled email starts
   // armed at its own time, so its Send saves over the row.
-  const [sendPlan, setSendPlan] = useState(() => initialData?._sendPlan
-    ?? (initialData?._editScheduledId ? { kind: 'at' } : null));
+  // A plan cleared back to null (Send now) stays cleared through a minimize,
+  // detach or Undo: only a snapshot without the key gets the edit default.
+  const [sendPlan, setSendPlan] = useState(() => (initialData && '_sendPlan' in initialData
+    ? initialData._sendPlan
+    : initialData?._editScheduledId ? { kind: 'at' } : null));
   const [laterTab, setLaterTab] = useState('in');
   const [delayMinutes, setDelayMinutes] = useState(0);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
@@ -1172,8 +1175,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             // Enter in text inputs must NOT submit the form — autocomplete
             // selection with Enter would otherwise send an empty/incomplete
             // email. Shift+Enter is the explicit send shortcut.
+            // The Send later panel's fields are inputs in this form too:
+            // Shift+Enter there must not send before the plan is armed.
             if (e.key === 'Enter' && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) {
-              if (e.shiftKey) {
+              if (e.shiftKey && !showSchedulePicker) {
                 e.preventDefault();
                 handleSend(e);
               } else {

@@ -6,6 +6,7 @@ import { intlLocale, hour12For } from '../../utils/dateFormat';
 import { formatWallClock, wallClockAt } from '../../utils/scheduledTime';
 import { Popover } from './Popover';
 import { FIELD_TRIGGER, anchorTo } from './field';
+import { Spin } from './SpinField';
 
 const VALUE_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
 const pad = (n) => String(n).padStart(2, '0');
@@ -27,7 +28,7 @@ function weekStart(locale) {
 
 /**
  * Date and time in one field: a month calendar beside a column of 15-minute
- * slots, plus a typed field for an exact minute. The value is a wall clock,
+ * slots, plus hour and minute fields (typed or stepped) for an exact minute. The value is a wall clock,
  * "YYYY-MM-DDTHH:MM", in `tz`, which is also where "today" is: days before it
  * and slots already gone today are disabled. Nothing here refuses a submit;
  * the caller's own past-time check stays the only gate.
@@ -90,7 +91,7 @@ export function DateTimePicker({ value, onChange, tz, ariaLabel, testId, placeho
 function trapTab(e) {
   e.stopPropagation();
   if (e.key !== 'Tab') return;
-  const items = [...e.currentTarget.querySelectorAll('button:not([disabled]), input')];
+  const items = [...e.currentTarget.querySelectorAll('button:not([disabled]):not([tabindex="-1"]), input')];
   const at = items.indexOf(document.activeElement);
   if (e.shiftKey ? at <= 0 : at === items.length - 1) {
     e.preventDefault();
@@ -136,9 +137,15 @@ function Panel({ value, onChange, tz, locale, hour12, testId }) {
   const cell = 'h-8 w-8 rounded-md text-sm transition-colors disabled:opacity-30 disabled:cursor-default';
   const onDay = (d) => onChange(`${d}T${time || DEFAULT_TIME}`);
   const onTime = (hhmm) => onChange(`${day || today}T${hhmm}`);
+  const [h, min] = (time || DEFAULT_TIME).split(':').map(Number);
+  const setExact = (total) => {
+    const mins = Math.min(Math.max(0, total), 24 * 60 - 1);
+    onTime(`${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`);
+  };
 
   return (
-    <div ref={rootRef} className="flex gap-3">
+    <div ref={rootRef} className="flex flex-col gap-2">
+    <div className="flex gap-3">
       <div className="w-[15.5rem]">
         <div className="flex items-center justify-between mb-1">
           <button type="button" aria-label={t('common.previousMonth')} disabled={month <= today.slice(0, 7)}
@@ -188,18 +195,15 @@ function Panel({ value, onChange, tz, locale, hour12, testId }) {
             );
           })}
         </div>
-        <input
-          type="time"
-          aria-label={t('common.exactTime')}
-          data-testid={`${testId}-input`}
-          value={time}
-          onChange={(e) => {
-            const hhmm = e.target.value.slice(0, 5);
-            if (/^\d{2}:\d{2}$/.test(hhmm)) onTime(hhmm);
-          }}
-          className="h-8 w-full px-1 text-sm bg-transparent text-mail-text border border-mail-border rounded-md outline-none"
-        />
       </div>
+    </div>
+    <div role="group" aria-label={t('common.exactTime')} className="flex items-center justify-end gap-1 text-sm text-mail-text-muted">
+      <Spin value={h} label={t('compose.later.hours')} testId={`${testId}-hours`}
+        onType={(n) => setExact(Math.min(n, 23) * 60 + min)} onStep={(d) => setExact(h * 60 + min + d * 60)} />
+      <span aria-hidden="true">:</span>
+      <Spin value={min} label={t('compose.later.minutes')} testId={`${testId}-minutes`}
+        onType={(n) => setExact(h * 60 + Math.min(n, 59))} onStep={(d) => setExact(h * 60 + min + d)} />
+    </div>
     </div>
   );
 }

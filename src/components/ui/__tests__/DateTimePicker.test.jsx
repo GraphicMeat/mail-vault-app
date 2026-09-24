@@ -84,8 +84,22 @@ describe('DateTimePicker', () => {
   it('a typed time sets the exact minute on the picked day', () => {
     render(<Harness initial="2026-09-25T14:30" />);
     open();
-    fireEvent.change(screen.getByTestId('dt-input'), { target: { value: '17:42' } });
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    fireEvent.change(screen.getByTestId('dt-hours'), { target: { value: '17' } });
+    fireEvent.change(screen.getByTestId('dt-minutes'), { target: { value: '42' } });
     expect(value()).toBe('2026-09-25T17:42');
+  });
+
+  it('steps the exact time by the minute across the hour, and clamps typed digits', () => {
+    render(<Harness initial="2026-09-25T14:59" />);
+    open();
+    fireEvent.click(screen.getByTestId('dt-minutes-up'));
+    expect(value()).toBe('2026-09-25T15:00');
+    fireEvent.keyDown(screen.getByTestId('dt-hours'), { key: 'ArrowDown' });
+    expect(value()).toBe('2026-09-25T14:00');
+    fireEvent.change(screen.getByTestId('dt-hours'), { target: { value: '99' } });
+    fireEvent.change(screen.getByTestId('dt-minutes'), { target: { value: '75' } });
+    expect(value()).toBe('2026-09-25T23:59');
   });
 
   it('disables days before today and slots already gone today', () => {
@@ -124,8 +138,8 @@ describe('DateTimePicker', () => {
   it('closes on Escape and hands focus back to the field', () => {
     render(<Harness initial="2026-09-25T14:30" />);
     open();
-    fireEvent.keyDown(screen.getByTestId('dt-input'), { key: 'Escape' });
-    expect(screen.queryByTestId('dt-input')).toBeNull();
+    fireEvent.keyDown(screen.getByTestId('dt-minutes'), { key: 'Escape' });
+    expect(screen.queryByTestId('dt-minutes')).toBeNull();
     expect(document.activeElement).toBe(screen.getByTestId('dt'));
   });
 });

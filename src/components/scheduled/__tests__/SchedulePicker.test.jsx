@@ -64,7 +64,9 @@ describe('SchedulePicker', () => {
     render(<Harness initialLocalTime="2026-09-23T23:45" />);
     expect(screen.queryByTestId('t-past-error')).toBeNull();
     fireEvent.click(screen.getByTestId('t-time'));
-    fireEvent.change(screen.getByTestId('t-time-input'), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByTestId('t-time-hours'), { target: { value: '09' } });
+    expect(time()).toBe('2026-09-23T09:45');
+    fireEvent.change(screen.getByTestId('t-time-minutes'), { target: { value: '00' } });
     expect(time()).toBe('2026-09-23T09:00');
     expect(screen.getByTestId('t-past-error')).toBeTruthy();
   });
