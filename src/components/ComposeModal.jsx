@@ -1500,7 +1500,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 )}
               </div>
             </div>
-            
+
+            <SendPlanNote plan={sendPlan} draft={scheduleDraft} onClear={() => setSendPlan(null)} />
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1649,7 +1650,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               </div>
             </div>
           </div>
-          <SendPlanNote plan={sendPlan} draft={scheduleDraft} onClear={() => setSendPlan(null)} />
           </form>
           </div>
 

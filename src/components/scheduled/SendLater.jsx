@@ -82,19 +82,24 @@ export function DelayPicker({ minutes, onChange, max, testIdPrefix = 'compose-la
   );
 }
 
-/** Under the footer once a plan is armed: when it goes, and the way back to Send now. */
+/**
+ * In Compose's footer row once a plan is armed: when it goes, and the way
+ * back to Send now. One truncated line with a zero flex basis, so it never
+ * grows the footer or wraps the buttons. Not a div: the footer's CSS styles
+ * its div children as the button groups.
+ */
 export function SendPlanNote({ plan, draft, onClear }) {
   const t = useT();
   const text = usePlanText(plan, draft);
   if (!text) return null;
   return (
-    <div className="flex items-center justify-end gap-1 px-5 pb-2 -mt-1 text-xs text-mail-text-muted">
-      <span data-testid="compose-send-plan">{text}</span>
+    <span className="grow basis-0 min-w-0 flex items-center justify-end gap-1 text-xs text-mail-text-muted">
+      <span data-testid="compose-send-plan" title={text} className="truncate">{text}</span>
       <button type="button" data-testid="compose-send-plan-clear" aria-label={t('compose.later.clear')}
         title={t('compose.later.clear')} onClick={onClear}
-        className="p-0.5 rounded hover:text-mail-text hover:bg-mail-surface-hover">
+        className="shrink-0 p-0.5 rounded hover:text-mail-text hover:bg-mail-surface-hover">
         <X size={12} />
       </button>
-    </div>
+    </span>
   );
 }

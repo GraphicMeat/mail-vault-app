@@ -412,6 +412,8 @@ describe('compose send later', () => {
     expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
     expect(screen.getByTestId('compose-send').textContent).toBe('Schedule send');
     expect(screen.getByTestId('compose-send-plan').textContent).toMatch(/^Sends in 1 hr 30 mins?, at /);
+    // In the footer row, not a line of its own that grows the footer.
+    expect(screen.getByTestId('compose-send-plan').closest('.compose-footer')).not.toBeNull();
     expect(onQueueSend).not.toHaveBeenCalled();
   });
 

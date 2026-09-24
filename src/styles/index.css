@@ -1247,8 +1247,7 @@ input[type="range"]::-moz-range-thumb:hover {
 @container compose (max-width: 564px) {
   .compose-context-aside { resize: none; }
   .compose-footer { padding: 10px 12px; gap: 8px; }
-  .compose-footer > div:last-child { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; width: 100%; margin-left: 0; }
-  .compose-footer > div:last-child select { width: 100%; min-width: 0; }
+  .compose-footer > div:last-child { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; margin-left: 0; }
   .compose-footer > div:last-child > button { padding-left: 8px; padding-right: 8px; }
 }
 /* Shared sample content follows the selected Chat topic, which fills one pane. */
