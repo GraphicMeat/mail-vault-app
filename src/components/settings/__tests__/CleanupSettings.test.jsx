@@ -12,7 +12,13 @@ vi.mock('../../../services/BulkOperationManager', () => ({
 }));
 vi.mock('../../../services/authUtils', () => ({ ensureFreshToken: vi.fn() }));
 vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
-vi.mock('../../../services/attachmentUtils', () => ({ getRealAttachments: () => [], replaceCidUrls: html => html }));
+vi.mock('../../../services/attachmentUtils', () => ({ getRealAttachments: () => [], replaceCidUrls: html => html, hydrateInlineImages: email => email }));
+// The preview resolves bodies through the shared resolver (vault, then the
+// account's own transport). api.js fixes IS_TAURI at import, so mock there.
+vi.mock('../../../services/api', async importOriginal => ({
+  ...(await importOriginal()), fetchEmailLight: vi.fn(), graphGetMessage: vi.fn(), graphCacheMime: vi.fn(),
+}));
+vi.mock('../../../services/db', async importOriginal => ({ ...(await importOriginal()), getLocalEmailLight: vi.fn() }));
 vi.mock('../../email/AttachmentBar', () => ({ AttachmentItem: () => null }));
 // db/keychain.js calls transportSend('get_app_data_dir', ..) eagerly at
 // module load, before this file's own top-level statements run (its own
@@ -33,6 +39,8 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import * as classification from '../../../services/classificationService';
 import { bulkOperationManager } from '../../../services/BulkOperationManager';
 import { ensureFreshToken } from '../../../services/authUtils';
+import * as api from '../../../services/api';
+import * as db from '../../../services/db';
 
 const account = { id: 'cleanup-account', email: 'cleanup@example.test' };
 const item = { messageId: 'message-42', uid: 42, mailbox: 'INBOX', subject: 'Cleanup regression message', from: 'sender@example.test', classification: { category: 'newsletter', action: 'archive', confidence: 0.9 } };
@@ -48,7 +56,9 @@ beforeEach(() => {
   classification.getSummary.mockResolvedValue({ total: 1 });
   classification.getResults.mockResolvedValue([item]);
   classification.getStatus.mockResolvedValue({ status: 'Idle' });
-  ensureFreshToken.mockResolvedValue({ ...account, accessToken: 'refreshed-token' });
+  ensureFreshToken.mockImplementation(async a => ({ ...a, accessToken: 'refreshed-token' }));
+  db.getLocalEmailLight.mockResolvedValue(undefined);
+  api.fetchEmailLight.mockResolvedValue({ uid: 42, subject: item.subject, textBody: 'Fetched preview body' });
   bulkOperationManager.start.mockResolvedValue(undefined);
   mockSend.mockImplementation(async command => {
     if (command === 'maildir_read_light') return null;
@@ -74,8 +84,41 @@ describe('Cleanup account reads', () => {
     useMailStore.setState({ accounts: [updatedAccount] });
     fireEvent.click(row);
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
-    expect(mockSend).toHaveBeenCalledWith('maildir_read_light', { accountId: account.id, mailbox: 'INBOX', uid: 42 });
-    expect(mockSend).toHaveBeenCalledWith('imap_get_email_light', { account: updatedAccount, accountId: account.id, mailbox: 'INBOX', uid: 42 });
+    expect(db.getLocalEmailLight).toHaveBeenCalledWith(account.id, 'INBOX', 42);
+    expect(ensureFreshToken).toHaveBeenCalledWith(updatedAccount);
+    expect(api.fetchEmailLight).toHaveBeenCalledWith({ ...updatedAccount, accessToken: 'refreshed-token' }, 42, 'INBOX', account.id);
+  });
+
+  // The reading pane refreshes an OAuth token before it fetches; the preview
+  // sent the store's copy as-is and swallowed the auth failure, so every
+  // uncached message on a Gmail/Outlook OAuth account previewed as a blank body.
+  it('refreshes an OAuth token before fetching an uncached preview', async () => {
+    const oauth = { ...account, authType: 'oauth2', oauth2RefreshToken: 'refresh', oauth2AccessToken: 'stale-token' };
+    useMailStore.setState({ accounts: [oauth] });
+    ensureFreshToken.mockImplementation(async a => ({ ...a, oauth2AccessToken: 'fresh-token' }));
+    const fetchAs = async acct => {
+      if (acct.oauth2AccessToken !== 'fresh-token') throw new Error('AUTHENTICATIONFAILED');
+      return { uid: 42, subject: item.subject, html: '<p>OAuth preview body</p>' };
+    };
+    api.fetchEmailLight.mockImplementation(fetchAs);
+    mockSend.mockImplementation(async (command, args) => {
+      if (command === 'imap_get_email_light') return { email: await fetchAs(args.account) };
+      return null;
+    });
+    const { container } = render(<CleanupView />);
+    fireEvent.click(await screen.findByText(item.subject));
+    await waitFor(() => expect(container.querySelector('iframe')?.srcdoc).toContain('OAuth preview body'));
+  });
+
+  it('says why a preview body could not be loaded instead of rendering nothing', async () => {
+    api.fetchEmailLight.mockRejectedValue(new Error('connection reset'));
+    mockSend.mockImplementation(async command => {
+      if (command === 'imap_get_email_light') throw new Error('connection reset');
+      return null;
+    });
+    render(<CleanupView />);
+    fireEvent.click(await screen.findByText(item.subject));
+    expect(await screen.findByText(/connection reset/)).toBeTruthy();
   });
 
 

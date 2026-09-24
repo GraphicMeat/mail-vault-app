@@ -12,7 +12,6 @@ import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { EmailPreviewFrame } from '../email/EmailPreviewFrame';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
-import { send } from '../../services/transport';
 // Lazy-loaded in openPreview to avoid circular import at startup
 let _getRealAttachments = null;
 let _replaceCidUrls = null;
@@ -229,6 +228,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
   const [previewItem, setPreviewItem] = useState(null);
   const [previewEmail, setPreviewEmail] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
   const [bulkAction, setBulkAction] = useState(null); // 'delete' | 'archive' — confirmation pending
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(null);
@@ -327,36 +327,21 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
     setPreviewItem(item);
     onDetailChange?.(true);
     setPreviewEmail(null);
+    setPreviewError(null);
     if (!item.uid || !activeAccountId) return;
     setPreviewLoading(true);
     await loadAttachmentDeps();
-    try {
-      const invoke = window.__TAURI__?.core?.invoke;
-      if (invoke) {
-        // Try maildir first (archived/local)
-        let email = null;
-        try {
-          email = await send('maildir_read_light', { accountId: activeAccountId, mailbox: item.mailbox || 'INBOX', uid: item.uid });
-        } catch {}
-        // Fall back to IMAP fetch
-        if (!email) {
-          const accounts = getAccounts();
-          const account = accounts.find(a => a.id === activeAccountId);
-          if (account) {
-            try {
-              // Task 5.4a: routed through send()/DAEMON_OWNED (daemon RPC,
-              // Tauri twin deleted), not a raw invoke() — the command no
-              // longer exists on the Tauri side.
-              const data = await send('imap_get_email_light', { account, uid: item.uid, mailbox: item.mailbox || 'INBOX', accountId: activeAccountId });
-              email = data?.email;
-            } catch {}
-          }
-        }
-        if (email) setPreviewEmail(email);
-      }
-    } catch (e) {
-      console.warn('[CleanupPreview] Failed to load email:', e);
-    }
+    // The resolver the chat view and export use: vault first, then the
+    // account's own transport (Graph or IMAP) with a refreshed OAuth token.
+    // The bespoke IMAP-only path here sent a stale token and swallowed the
+    // failure, so the preview rendered an empty body.
+    const header = { uid: item.uid, _accountId: activeAccountId, _mailbox: item.mailbox || 'INBOX' };
+    // Lazy for the same circular-import reason as loadAttachmentDeps.
+    const { resolveMessageBody } = await import('../../services/export/bodyResolver');
+    const res = await resolveMessageBody(header, { accounts: getAccounts() })
+      .catch(e => ({ ok: false, reason: e?.message || String(e) }));
+    if (res.ok) setPreviewEmail(res.email);
+    else setPreviewError(res.reason);
     setPreviewLoading(false);
   };
 
@@ -575,6 +560,8 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
             <EmailPreviewFrame html={htmlContent} title={t('settings.cleanup.emailPreview')} />
           ) : previewEmail?.textBody || previewEmail?.text ? (
             <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{previewEmail.textBody || previewEmail.text}</pre>
+          ) : previewError ? (
+            <p role="alert" className="text-sm text-mail-text-muted px-6 py-4">{previewError}</p>
           ) : null}
         </div>
 
@@ -595,7 +582,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
                     attachmentIndex={att._originalIndex ?? i}
                     emailUid={previewItem.uid}
                     accountId={activeAccountId}
-                    mailbox="INBOX"
+                    mailbox={previewItem.mailbox || 'INBOX'}
                     compact
                   />
                 ) : (
