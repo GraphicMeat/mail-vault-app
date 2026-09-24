@@ -82,7 +82,7 @@ const systemTabs = [
   { id: 'help', labelKey: 'settings.tab.help', icon: Mail },
 ];
 
-const allTabs = [...featureTabs, ...settingsTabs, ...systemTabs];
+export const allTabs = [...featureTabs, ...settingsTabs, ...systemTabs];
 // Tabs that show account pills and config sub-views
 const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 
@@ -95,7 +95,9 @@ const sections = [
 
 // Labels are resolved at render time, so search follows the current language.
 // A result points to the same page and section that contain its real control.
-const settingSearchGroups = [
+// Exported so a guard test can assert every setting label in src/components/settings
+// is indexed here (see settingsSearchCoverage.test.jsx).
+export const settingSearchGroups = [
   { id: 'appearance', section: 'colors', sectionKey: 'settings.appearance.section.colors', settings: [
     ['settings.appearance.theme', 'theme light dark mode'],
     ['settings.colors.palette', 'palette color colour indigo graphite'],
@@ -141,6 +143,17 @@ const settingSearchGroups = [
     ['settings.behavior.searchHistoryLimit', 'search history limit saved searches'],
     ['settings.behavior.popularFiltersPeriod', 'popular filters history period'],
     ['settings.behavior.numberPopularFiltersShow', 'popular filters number limit'],
+    ['settings.behavior.composeOpen.title', 'compose open mode new email window separate popup inline default'],
+    ['settings.behavior.confirmBeforeDelete', 'confirm before delete ask skip warning dialog permanently'],
+    ['settings.behavior.updateTrackTitle', 'update updates software nightly stable beta channel track release check version upgrade auto-update sparkle'],
+    ['settings.behavior.updateTrackLabel', 'update track nightly stable beta channel choose select'],
+    ['settings.behavior.updateTrackCheckNow', 'check for updates now manual update version'],
+  ] },
+  { id: 'mail-preferences', section: 'fields', sectionKey: 'fields.section', settings: [
+    ['fields.section', 'custom fields extra properties per account labels'],
+    ['fields.newName', 'add custom field name new field create'],
+    ['fields.newKind', 'custom field kind type text number date select'],
+    ['fields.copyFrom', 'copy custom fields another account duplicate'],
   ] },
   { id: 'mail-preferences', section: 'notifications', sectionKey: 'settings.notifications.notifications', settings: [
     ['settings.notifications.enableDesktopNotifications', 'notifications alerts desktop'],
@@ -153,14 +166,20 @@ const settingSearchGroups = [
     ['settings.notifications.backupNotifications', 'backup notification success failure'],
     ['settings.notifications.notifyWhenBackupCompletes', 'backup notification success complete'],
     ['settings.notifications.notifyWhenBackupFails', 'backup notification failure error'],
+    ['settings.notifications.previewSound', 'preview sound play test notification chime'],
+    ['notifyPolicy.quietHours.title', 'quiet hours mute silence do not disturb schedule night'],
+    ['notifyPolicy.allowlist.title', 'priority senders allowlist important vip always notify'],
+    ['notifyPolicy.log.title', 'notification log history recent decisions sent activity'],
   ] },
   { id: 'mail-preferences', section: 'shortcuts', settings: [
     ['shortcuts.keyboardShortcuts', 'keyboard shortcuts hotkeys keys'],
+    ['settings.shortcuts.enableKeyboardShortcuts', 'enable disable keyboard shortcuts hotkeys'],
   ] },
   { id: 'accounts', section: 'profile', sectionKey: 'settings.accounts.sectionProfile', settings: [
     ['settings.accounts.displayName', 'name sender from identity'],
     ['settings.accounts.sendMail', 'send as alias address identity'],
     ['settings.accounts.emailSignature', 'signature email sign off footer'],
+    ['settings.accounts.enableSignature', 'signature enable toggle on off'],
   ] },
   { id: 'accounts', section: 'connection', sectionKey: 'settings.accounts.sectionConnection', settings: [
     ['settings.accounts.password', 'password update reset authentication login reconnect oauth'],
@@ -177,9 +196,11 @@ const settingSearchGroups = [
   ] },
   { id: 'views', settings: [
     ['views.section', 'view views saved filter filters smart folder builder preview'],
+    ['views.new', 'create new view saved filter'],
   ] },
   { id: 'daemon', settings: [
     ['settings.pendingActions.title', 'pending queued unfinished actions delete move flag retry stuck offline queue'],
+    ['settings.daemon.alwaysOn.label', 'daemon always on background login item startup launch keep running'],
   ] },
   // Storage has no sections to switch: a result opens the page.
   { id: 'storage', section: 'search-index', sectionKey: 'settings.searchIndex.title', settings: [
@@ -187,6 +208,90 @@ const settingSearchGroups = [
     ['settings.searchIndex.attachments', 'search index attachments pdf word excel powerpoint premium'],
     ['settings.searchIndex.imageText', 'search index image text ocr recognize photos scanned premium macos'],
     ['settings.searchIndex.rebuild', 'search index rebuild reindex attachments pdf ocr'],
+    ['settings.searchIndex.concurrency', 'search index mailboxes searched at once speed performance concurrency'],
+  ] },
+  { id: 'storage', settings: [
+    ['settings.storage.cacheDuration', 'cache duration local email caching how long keep'],
+    ['settings.storage.advancedCustomStorageFolder', 'storage location folder custom move vault where files kept'],
+    ['settings.storage.addCleanupRule', 'cleanup rule automatic delete archive old emails age folder schedule'],
+    ['settings.storage.storageStatus', 'storage usage space used disk size'],
+    ['settings.storage.dangerZone', 'empty vault delete everything reset erase all mail'],
+  ] },
+  { id: 'security', settings: [
+    ['settings.security.linkSafetyScanning', 'security link safety scanning phishing malicious url check'],
+    ['settings.security.clickConfirmation', 'security click confirmation links warn before opening'],
+  ] },
+  { id: 'billing', settings: [
+    ['settings.billing.manageSubscription', 'billing subscription manage cancel plan payment'],
+    ['settings.billing.devices', 'billing devices premium license manage remove'],
+  ] },
+  { id: 'templates', settings: [
+    ['settings.templates.templateName', 'email template name create new'],
+    ['settings.templates.templateBody', 'email template body content text canned response'],
+  ] },
+  { id: 'language', settings: [
+    ['settings.language.report.title', 'translation issue report wrong incorrect language bug'],
+  ] },
+  { id: 'ai-providers', settings: [
+    ['ai.settings.enable', 'ai artificial intelligence enable turn on quick replies compose'],
+    ['ai.settings.provider', 'ai provider local ollama endpoint apple intelligence choose'],
+    ['ai.settings.endpointUrl', 'ai endpoint url server address ollama openai'],
+    ['ai.settings.endpointModel', 'ai model name llama gguf'],
+    ['ai.settings.endpointKey', 'ai api key token credential'],
+    ['ai.settings.skipPreview', 'ai skip review preview before sending compose reply'],
+  ] },
+  { id: 'auto-tags', settings: [
+    ['autoTag.name', 'auto tag rule name'],
+    ['autoTag.instruction', 'auto tag rule instruction plain english ai classify'],
+    ['autoTag.tag', 'auto tag label apply'],
+    ['autoTag.inboxAction', 'auto tag inbox action move archive'],
+    ['autoTag.hasAttachments', 'auto tag condition has attachment'],
+    ['autoTag.listIdPresent', 'auto tag mailing list header condition'],
+    ['autoTag.fromAddress', 'auto tag from address condition sender'],
+    ['autoTag.fromDomain', 'auto tag from domain condition sender'],
+    ['autoTag.minConfidence', 'auto tag minimum confidence ai threshold'],
+    ['autoTag.allowRemote', 'auto tag allow remote ai provider rule'],
+    ['autoTag.enabledLabel', 'auto tag rule enabled disabled toggle'],
+  ] },
+  { id: 'data-usage', settings: [
+    ['settings.dataUsage.showUsageHover', 'data usage show hover bandwidth tooltip'],
+    ['settings.dataUsage.account.dailyDownloadLimitMb', 'data usage daily download limit mb bandwidth cap'],
+    ['settings.dataUsage.account.dailyUploadLimitMb', 'data usage daily upload limit mb bandwidth cap'],
+    ['settings.dataUsage.account.warnWhenNearingDailyLimit', 'data usage warn near limit notification'],
+    ['settings.dataUsage.account.pauseSyncDailyLimit', 'data usage pause sync stop limit reached'],
+  ] },
+  { id: 'logs', settings: [
+    ['settings.logs.clearLog2', 'clear delete diagnostic logs'],
+  ] },
+  // Backup has its own sub-tabs (restore / config / schedule) that this
+  // search can't switch directly — results just open the page.
+  { id: 'backup', settings: [
+    ['settings.mailLocation.whereMailStored', 'storage location where mail stored folder move backup'],
+    ['settings.backup.config.whatBackUp', 'backup scope what back up archived all emails'],
+    ['settings.backup.schedule.automaticBackup', 'automatic backup schedule enable'],
+    ['settings.backup.schedule.backupFrequency', 'backup frequency how often hourly daily weekly'],
+    ['settings.backup.schedule.pickHours', 'backup hours pick specific times set hours schedule'],
+    ['settings.backup.schedule.mailboxConcurrency', 'backup mailboxes processed at once concurrency speed performance'],
+    ['settings.backup.restore.exportBackup', 'export backup zip vault download'],
+    ['settings.backup.restore.importBackup', 'import backup zip vault restore'],
+    ['settings.backup.restore.exportMbox', 'export mbox file standard format'],
+    ['settings.backup.restore.importMbox', 'import mbox file standard format'],
+  ] },
+  // Cleanup and Time Capsule keep their settings behind the page's own
+  // "Settings" sub-view — section: 'config' tells openResult to open it.
+  { id: 'cleanup', section: 'config', settings: [
+    ['settings.ai.customCategories', 'cleanup custom categories ai classify email rules'],
+    ['settings.ai.learnedRules', 'cleanup learned rules ai classify email automatic'],
+  ] },
+  { id: 'time-capsule', section: 'config', settings: [
+    ['settings.timeCapsule.enableAutomaticSnapshots', 'time capsule automatic snapshots enable schedule frequency daily weekly'],
+  ] },
+  { id: 'tracking', settings: [
+    ['settings.tracking.blockTrackingPixels', 'block tracking pixels privacy read receipts spy'],
+  ] },
+  { id: 'migration', settings: [
+    ['settings.migration.selectSourceAccount', 'migrate mailbox move emails between accounts servers'],
+    ['settings.migration.migrationHistory', 'migration history past migrations log'],
   ] },
 ];
 
@@ -245,7 +350,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   const sectionKey = activeTab === 'appearance'
     ? { colors: 'settings.appearance.section.colors', layout: 'settings.appearance.section.layout', reading: 'settings.appearance.section.reading', 'date-time': 'settings.appearance.section.dateTime', 'quick-actions': 'quickActions.title' }[appearanceSection]
     : activeTab === 'mail-preferences'
-      ? { behavior: 'generalSettings.behavior', notifications: 'settings.notifications.notifications', shortcuts: 'shortcuts.keyboardShortcuts' }[generalSubTab]
+      ? { behavior: 'generalSettings.behavior', notifications: 'settings.notifications.notifications', shortcuts: 'shortcuts.keyboardShortcuts', fields: 'fields.section' }[generalSubTab]
       : activeTab === 'accounts'
         ? { profile: 'settings.accounts.sectionProfile', connection: 'settings.accounts.sectionConnection', advanced: 'settings.accounts.sectionAdvanced' }[accountSection]
         : null;
@@ -269,6 +374,9 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     if (page.id === 'mail-preferences' && page.section) setGeneralSubTab(page.section);
     if (page.id === 'accounts' && page.section) setAccountSection(page.section);
     handleTabChange(page.id);
+    // Cleanup and Time Capsule keep their settings behind the page's own
+    // "Settings" sub-view (see subView above) — handleTabChange just reset it.
+    if (page.section === 'config') setSubView('config');
     setQuery('');
     setSearchNavigation(value => value + 1);
   };

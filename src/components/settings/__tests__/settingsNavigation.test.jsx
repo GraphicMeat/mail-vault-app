@@ -148,6 +148,20 @@ describe('settings page search', () => {
     }
   });
 
+  it('finds Software updates by "update" or "nightly" and opens it under Mail preferences > Behavior', () => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh)', configurable: true });
+    render(<SettingsPage onClose={() => {}} />);
+    const nav = within(screen.getByRole('navigation', { name: 'Settings' }));
+    for (const query of ['update', 'nightly']) {
+      fireEvent.change(nav.getByRole('textbox', { name: 'Find a setting' }), { target: { value: query } });
+      fireEvent.click(nav.getByRole('button', { name: /^Software updates/ }));
+      expect(screen.getByRole('tab', { name: 'Behavior' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('heading', { name: 'Mail preferences' })).toBeTruthy();
+      expect(screen.getByTestId('update-track-select')).toBeTruthy();
+    }
+  });
+
   it('changes pages through the narrow-window navigation and searches there too', () => {
     const { container } = render(<SettingsPage onClose={() => {}} />);
     fireEvent.change(screen.getByRole('combobox', { name: 'Settings', exact: true }), { target: { value: 'mail-preferences' } });
