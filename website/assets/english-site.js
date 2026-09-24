@@ -203,4 +203,20 @@
       } finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   });
+  // Feature videos: a section stays hidden until its YouTube id is filled in, and
+  // nothing is requested from YouTube until the visitor presses play.
+  document.querySelectorAll('.fp-video[data-youtube-id]').forEach(box => {
+    const id = box.dataset.youtubeId;
+    const play = box.querySelector('.fp-play');
+    if (!/^[\w-]{11}$/.test(id) || !play) return;
+    box.hidden = false;
+    play.addEventListener('click', () => {
+      const frame = document.createElement('iframe');
+      frame.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0';
+      frame.title = box.getAttribute('aria-label') || 'Video';
+      frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      frame.allowFullscreen = true;
+      play.replaceWith(frame);
+    }, { once: true });
+  });
 })();
