@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
@@ -24,6 +24,13 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   // steps under the user's feet.
   const [steps] = useState(() => onboardingSteps(accounts.length));
   const [index, setIndex] = useState(0);
+  const pageRef = useRef(null);
+
+  // The gallery can leave this scroll container near its bottom. Start the
+  // next step at its top so the thank-you entrance is actually seen.
+  useLayoutEffect(() => {
+    if (pageRef.current) pageRef.current.scrollTop = 0;
+  }, [index]);
 
   const step = steps[index];
   const next = () => setIndex(i => Math.min(i + 1, steps.length - 1));
@@ -31,7 +38,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   const finish = () => setOnboardingComplete(true);
 
   return (
-    <div className="onboarding-page" data-testid={`onboarding-${step}`}>
+    <div ref={pageRef} className="onboarding-page" data-testid={`onboarding-${step}`}>
       <div className="onboarding-content">
       <header className="onboarding-header">
       {/* One back control for the whole flow rather than one per step: the six
