@@ -135,9 +135,12 @@
 .hm-platforms svg { width:22px; height:22px; fill:currentColor; }
 .hm-final .mv-actions { justify-content:center; }
 .mv-feedback-quotes img.mv-person-mark { object-fit:cover; background:none; }
-.hm .mv-feedback-quotes { gap:40px 64px; }
-@media (max-width:760px) { .hm .mv-feedback-quotes figure+figure { border-top:1px solid var(--mv-line); padding-top:28px; } }
-.hm-quotes-small { grid-template-columns:repeat(3,1fr); gap:28px; margin-top:28px; }
-.hm-quotes-small blockquote p { font-size:1.08rem; line-height:1.5; }
-@media (max-width:900px) { .hm-quotes-small { grid-template-columns:1fr 1fr; } }
-@media (max-width:760px) { .hm-quotes-small { grid-template-columns:1fr; } }
+/* Feedback: compact cards in a masonry flow, so short quotes leave no gaps. */
+.hm .mv-feedback-quotes { display:block; columns:4 230px; column-gap:16px; margin-top:32px; }
+.hm .mv-feedback-quotes figure,.hm .mv-feedback-quotes figure+figure { break-inside:avoid; margin:0 0 16px; padding:18px; border:1px solid var(--mv-line); border-radius:12px; }
+.hm .mv-feedback-quotes blockquote { margin:0 0 14px; font-size:.95rem; line-height:1.5; }
+.hm .mv-feedback-quotes blockquote p { margin:0; }
+.hm .mv-feedback-quotes figcaption { grid-template-columns:28px 1fr; gap:0 10px; padding-top:12px; font-size:.74rem; line-height:1.45; }
+.hm .mv-feedback-quotes .mv-person-mark { width:28px; height:28px; font-size:.85rem; }
+.hm .mv-feedback-quotes figcaption strong { font-size:.88rem; }
+.hm .mv-feedback-quotes figcaption a { font-size:.74rem; }
