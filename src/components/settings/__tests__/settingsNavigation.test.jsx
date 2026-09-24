@@ -162,6 +162,14 @@ describe('settings page search', () => {
     }
   });
 
+  it('finds the per-view timeline toggle by "timeline" and opens Views', () => {
+    render(<SettingsPage onClose={() => {}} />);
+    const nav = within(screen.getByRole('navigation', { name: 'Settings' }));
+    fireEvent.change(nav.getByRole('textbox', { name: 'Find a setting' }), { target: { value: 'timeline' } });
+    fireEvent.click(nav.getByRole('button', { name: /^Show timeline/ }));
+    expect(screen.getByRole('heading', { name: 'Views' })).toBeTruthy();
+  });
+
   it('changes pages through the narrow-window navigation and searches there too', () => {
     const { container } = render(<SettingsPage onClose={() => {}} />);
     fireEvent.change(screen.getByRole('combobox', { name: 'Settings', exact: true }), { target: { value: 'mail-preferences' } });

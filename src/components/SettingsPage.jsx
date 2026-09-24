@@ -197,6 +197,7 @@ export const settingSearchGroups = [
   { id: 'views', settings: [
     ['views.section', 'view views saved filter filters smart folder builder preview'],
     ['views.new', 'create new view saved filter'],
+    ['views.showTimeline', 'timeline month scrubber view default show edit'],
   ] },
   { id: 'daemon', settings: [
     ['settings.pendingActions.title', 'pending queued unfinished actions delete move flag retry stuck offline queue'],
