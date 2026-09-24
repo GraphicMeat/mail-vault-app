@@ -13,6 +13,7 @@ import {
 import { formatDateTime, formatDateOnly } from '../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { PremiumFeaturesLink } from './PremiumFeaturesLink';
+import { EmailPreviewFrame } from './email/EmailPreviewFrame';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, tErr, useT   } from '../i18n/index.js';
@@ -380,7 +381,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       {/* Email body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {email.html ? (
-          <EmailHtmlBody html={email.html} />
+          <EmailPreviewFrame html={email.html} title={t('timeCapsule.snapshotEmailBody')} />
         ) : email.text || email.textBody ? (
           <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{email.text || email.textBody}</pre>
         ) : (
@@ -408,51 +409,6 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
         </div>
       )}
     </div>
-  );
-}
-
-/** Sandboxed HTML email body — mirrors the main EmailViewer's iframe approach. */
-function EmailHtmlBody({ html }) {
-  const t = useT();
-  const iframeRef = useRef(null);
-  const [height, setHeight] = useState(400);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-
-    // Extract body content to avoid nesting <html> {t('timeCapsule.in')} <html>
-    let body = html;
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    if (bodyMatch) body = bodyMatch[1];
-
-    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #1a1a1a; background: #fff; margin: 0; padding: 16px 24px; line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word; }
-      img { max-width: 100%; height: auto; }
-      a { color: #6366f1; }
-      pre, code { white-space: pre-wrap; word-wrap: break-word; }
-      table { max-width: 100%; }
-    </style></head><body>${body}</body></html>`;
-
-    iframe.srcdoc = doc;
-
-    const onLoad = () => {
-      try {
-        const h = iframe.contentDocument?.body?.scrollHeight;
-        if (h) setHeight(Math.min(h + 32, 2000));
-      } catch {}
-    };
-    iframe.addEventListener('load', onLoad);
-    return () => iframe.removeEventListener('load', onLoad);
-  }, [html]);
-
-  return (
-    <iframe
-      ref={iframeRef}
-      sandbox="allow-same-origin"
-      style={{ width: '100%', height, border: 'none' }}
-      title={t('timeCapsule.snapshotEmailBody')}
-    />
   );
 }
 

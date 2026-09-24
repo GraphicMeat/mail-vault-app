@@ -27,6 +27,7 @@
 - **Quit in the tray menu stops the background helper again.** Since 2.10.0, choosing Quit from the tray menu (or File, Quit on Linux) closed MailVault but left its background helper running. It now stops, unless Settings, Background Daemon is set to keep it running after you quit.
 - **A restored backup now brings back each account's server.** Backup ZIPs recorded every account's incoming and outgoing mail server as empty, so an account recreated by Import Backup came back with no server at all. New backups keep both, and restoring one fills them in. Backups made before this fix still import, but they never recorded a server, so their accounts still come back without one.
 - **Numbers follow the language you chose for MailVault.** Counts in the message list, the sidebar, progress dialogs and Settings were grouped the way your computer's region writes numbers, so English MailVault on a Lithuanian or German Mac showed "12 345" or "12.345". They now use the app's own language, the same way sorting already did.
+- **Tracker blocking now covers Cleanup and Time Capsule.** Opening a message in the Cleanup preview or in a Time Capsule snapshot loaded its tracking pixels even with tracker blocking on, because those previews skipped the protection the reading pane applies. They now show the same cleaned message as the reading pane.
 
 ## [2.16.0] - 2026-09-23
 

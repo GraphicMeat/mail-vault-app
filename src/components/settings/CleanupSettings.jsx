@@ -10,6 +10,7 @@ import { bulkOperationManager } from '../../services/BulkOperationManager';
 import { ensureFreshToken } from '../../services/authUtils';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { EmailPreviewFrame } from '../email/EmailPreviewFrame';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { send } from '../../services/transport';
 // Lazy-loaded in openPreview to avoid circular import at startup
@@ -153,51 +154,6 @@ function senderName(from) {
   if (match) return match[1].trim();
   // Just email
   return from.split('@')[0];
-}
-
-// ── HTML Body (auto-resizing iframe) ─────────────────────────────────────
-
-function CleanupHtmlBody({ html }) {
-  const t = useT();
-  const ref = useRef(null);
-  const [height, setHeight] = useState(400);
-
-  useEffect(() => {
-    const iframe = ref.current;
-    if (!iframe) return;
-
-    let body = html;
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    if (bodyMatch) body = bodyMatch[1];
-
-    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #1a1a1a; background: #fff; margin: 0; padding: 16px 24px; line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word; }
-      img { max-width: 100%; height: auto; }
-      a { color: #6366f1; }
-      pre, code { white-space: pre-wrap; word-wrap: break-word; }
-      table { max-width: 100%; }
-    </style></head><body>${body}</body></html>`;
-
-    iframe.srcdoc = doc;
-
-    const onLoad = () => {
-      try {
-        const h = iframe.contentDocument?.body?.scrollHeight;
-        if (h) setHeight(Math.min(h + 32, 2000));
-      } catch {}
-    };
-    iframe.addEventListener('load', onLoad);
-    return () => iframe.removeEventListener('load', onLoad);
-  }, [html]);
-
-  return (
-    <iframe
-      ref={ref}
-      sandbox="allow-same-origin"
-      style={{ width: '100%', height, border: 'none' }}
-      title={t('settings.cleanup.emailPreview')}
-    />
-  );
 }
 
 // ── Memoized Row ─────────────────────────────────────────────────────────
@@ -616,7 +572,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
               <Loader className="w-5 h-5 animate-spin text-mail-text-muted" />
             </div>
           ) : htmlContent ? (
-            <CleanupHtmlBody html={htmlContent} />
+            <EmailPreviewFrame html={htmlContent} title={t('settings.cleanup.emailPreview')} />
           ) : previewEmail?.textBody || previewEmail?.text ? (
             <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{previewEmail.textBody || previewEmail.text}</pre>
           ) : null}
