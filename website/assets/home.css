@@ -120,6 +120,9 @@
 /* The studio band below the final call: no gap, its notch filled with its own colour. */
 .hm ~ .mv-studio { margin-top:0; z-index:2; }
 .hm ~ .mv-studio .mv-section-seam path { fill:#111216; }
+/* The fill stops at the baseline; sit it 1px lower so no sliver of the band above shows under it. */
+.hm ~ .mv-studio .mv-section-seam { top:-18px; }
+@media (max-width:760px) { .hm ~ .mv-studio .mv-section-seam { top:-12px; } }
 
 @media (max-width:900px) {
   .hm-pillar { padding:72px 0; }
