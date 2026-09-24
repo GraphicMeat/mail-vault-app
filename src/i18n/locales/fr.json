@@ -2674,6 +2674,8 @@
   "views.limit": "{{used}} vues sur {{max}} dans l’offre gratuite.",
   "views.limitReached": "L’offre gratuite conserve {{max}} vues. Supprimez-en une pour faire de la place, ou passez à Premium.",
   "views.moveDown": "Descendre",
+  "views.reorder": "Réorganiser {{name}}",
+  "views.reorderInstructions": "Faites glisser pour réorganiser. Utilisez les flèches haut et bas pour déplacer cette vue.",
   "views.moveUp": "Monter",
   "views.name": "Nom de la vue",
   "views.new": "Nouvelle vue",

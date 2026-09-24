@@ -2674,6 +2674,8 @@
   "views.limit": "免费版共 {{max}} 个视图，已用 {{used}} 个。",
   "views.limitReached": "免费版最多保留 {{max}} 个视图。删除一个腾出位置，或升级。",
   "views.moveDown": "下移",
+  "views.reorder": "重新排列{{name}}",
+  "views.reorderInstructions": "拖动以重新排序。使用上下方向键移动此视图。",
   "views.moveUp": "上移",
   "views.name": "视图名称",
   "views.new": "新建视图",

@@ -2674,6 +2674,8 @@
   "views.limit": "{{used}} of {{max}} views on the free plan.",
   "views.limitReached": "The free plan keeps {{max}} views. Delete one to make room, or upgrade.",
   "views.moveDown": "Move down",
+  "views.reorder": "Reorder {{name}}",
+  "views.reorderInstructions": "Drag to reorder. Use the Up and Down arrow keys to move this view.",
   "views.moveUp": "Move up",
   "views.name": "View name",
   "views.new": "New view",

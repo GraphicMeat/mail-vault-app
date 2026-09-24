@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -53,12 +53,33 @@ beforeEach(() => {
     createView: vi.fn(async (view, premium) => (!premium && get().views.length >= MAX_FREE_VIEWS
       ? { ok: false, reason: 'limit' }
       : (set({ views: [...get().views, view] }), { ok: true, view }))),
+    reorderViews: vi.fn(async ids => set({ views: ids.map(id => get().views.find(view => view.id === id)) })),
   }));
   useSettingsStoreMock = create(() => ({ billingProfile: { premium: false } }));
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('the Views settings page', () => {
+  it('moves views from a drag handle and saves the new order', async () => {
+    setViews([STARRED, MINE, THIRD]);
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      constructor(type, options = {}) {
+        super(type, options);
+        this.pointerId = options.pointerId ?? 1;
+        this.isPrimary = options.isPrimary ?? true;
+      }
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const index = this.matches('li') ? [...this.parentElement.children].indexOf(this) : 0;
+      return { left: 0, right: 260, top: index * 60, bottom: this.matches('li') ? (index + 1) * 60 : 180, width: 260, height: this.matches('li') ? 60 : 180 };
+    });
+    render(<ViewsSettings />);
+    const handle = screen.getByRole('button', { name: 'views.reorder:{"name":"Receipts"}' });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 20, clientY: 90 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 20, clientY: 170 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 20, clientY: 170 });
+    await waitFor(() => expect(useViewStoreMock.getState().reorderViews).toHaveBeenCalledWith(['builtin-starred', 'v2', 'v1']));
+  });
   it('lists every view, starters by their translated name', () => {
     render(<ViewsSettings />);
     expect(screen.getByText('views.builtin.starred')).toBeTruthy();

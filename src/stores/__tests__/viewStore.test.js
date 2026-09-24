@@ -229,20 +229,13 @@ describe('what a view is called', () => {
     expect(harness.daemonCall.mock.calls.map(([method]) => method)).toContain('views.counts');
   });
 
-  it('moving a view swaps it with its neighbour and saves both', async () => {
+  it('sends the complete view order to the daemon', async () => {
     const first = { ...STARRED, position: 0 };
     const second = { ...MINE, position: 1 };
     useViewStore.setState({ views: [first, second] });
     harness.daemonCall.mockResolvedValue({});
-    await useViewStore.getState().moveView('v1', -1);
-    const saves = harness.daemonCall.mock.calls.filter(([method]) => method === 'views.save');
-    expect(saves.map(([, params]) => [params.view.id, params.view.position])).toEqual([['v1', 0], ['builtin-starred', 1]]);
-  });
-
-  it('a view already at the top does not move', async () => {
-    useViewStore.setState({ views: [{ ...STARRED, position: 0 }, { ...MINE, position: 1 }] });
-    await useViewStore.getState().moveView('builtin-starred', -1);
-    expect(harness.daemonCall).not.toHaveBeenCalled();
+    await useViewStore.getState().reorderViews(['v1', 'builtin-starred']);
+    expect(harness.daemonCall).toHaveBeenCalledWith('views.reorder', { ids: ['v1', 'builtin-starred'] });
   });
 
   it('a view that ran is re-run after it is edited', async () => {

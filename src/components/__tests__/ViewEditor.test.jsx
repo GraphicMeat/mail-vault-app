@@ -41,7 +41,6 @@ beforeEach(() => {
     views: [STARRED, MINE],
     saveView: vi.fn(async view => view),
     deleteView: vi.fn(async () => {}),
-    moveView: vi.fn(async () => true),
     previewDef: vi.fn(async () => ({ available: true, reason: null, rows: [], total: 0 })),
   }));
   useTagStoreMock = create(() => ({ tags: [{ id: 't1', name: 'Receipts' }, { id: 't2', name: 'Clients' }] }));
@@ -57,7 +56,7 @@ describe('editing a saved view', () => {
   it('opens on what the view already says', () => {
     render(<ViewEditor view={MINE} onClose={() => {}} />);
     expect(screen.getByTestId('view-name').value).toBe('Receipts');
-    expect(screen.getByTestId('view-query').value).toBe('invoice');
+    expect(screen.getByText('invoice')).toBeTruthy();
     expect(screen.getByTestId('view-attachments').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('view-tag-t1').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('view-tag-t2').getAttribute('aria-pressed')).toBe('false');
@@ -66,6 +65,7 @@ describe('editing a saved view', () => {
   it('saves the name, the text and the filters together', () => {
     render(<ViewEditor view={MINE} onClose={() => {}} />);
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.remove invoice' }));
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'overdue' } });
     fireEvent.click(screen.getByTestId('view-tag-t2'));
     fireEvent.click(screen.getByTestId('view-starred-yes'));
@@ -78,6 +78,18 @@ describe('editing a saved view', () => {
     expect(saved.def.tags.sort()).toEqual(['t1', 't2']);
     expect(saved.def.starred).toBe(true);
     expect(saved.def.hasAttachments).toBe(true);
+  });
+
+  it('adds separate AND search keys, displays them as removable chips, and saves them', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    const input = screen.getByTestId('view-query');
+    fireEvent.change(input, { target: { value: 'service && jasinskio' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'common.remove service' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'common.remove jasinskio' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'common.remove invoice' }));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.query).toBe('service jasinskio');
   });
 
   it('a tri-state filter can go back to not caring', () => {
@@ -176,29 +188,20 @@ describe('editing a saved view', () => {
     expect(useViewStoreMock.getState().saveView).not.toHaveBeenCalled();
   });
 
-  it('moves the view in the sidebar', async () => {
-    render(<ViewEditor view={MINE} onClose={() => {}} />);
-    fireEvent.click(screen.getByTestId('view-move-up'));
-    await waitFor(() => expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1));
-  });
-
-  it('deletes only after the second press', async () => {
+  it('deletes only after modal confirmation', async () => {
     const onClose = vi.fn();
     render(<ViewEditor view={MINE} onClose={onClose} />);
+    expect(screen.getByTestId('view-delete').className).toContain('text-mail-danger');
     fireEvent.click(screen.getByTestId('view-delete'));
     expect(useViewStoreMock.getState().deleteView).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId('view-delete-confirm'));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'views.deleteConfirm' }).className).toContain('bg-mail-danger-fill');
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.cancel' }).at(-1));
+    expect(useViewStoreMock.getState().deleteView).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('view-delete'));
+    fireEvent.click(screen.getByRole('button', { name: 'views.deleteConfirm' }));
     expect(useViewStoreMock.getState().deleteView).toHaveBeenCalledWith('v1');
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
   });
 
-  /// Moving re-reads the stored view, so an unsaved name would be thrown away
-  /// the moment the list reloads.
-  it('saves what is typed before it moves the view', async () => {
-    render(<ViewEditor view={MINE} onClose={() => {}} />);
-    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
-    fireEvent.click(screen.getByTestId('view-move-up'));
-    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].name).toBe('Unpaid');
-    await waitFor(() => expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1));
-  });
 });

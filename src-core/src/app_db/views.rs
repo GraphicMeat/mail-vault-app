@@ -155,6 +155,20 @@ pub fn delete(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM views WHERE id = ?1", [id]).map(|_| ()).map_err(|e| e.to_string())
 }
 
+pub fn reorder(conn: &Connection, ids: &[String]) -> Result<(), String> {
+    in_txn(conn, || {
+        let current = list(conn)?;
+        if ids.len() != current.len() || current.iter().any(|view| !ids.contains(&view.id)) {
+            return Err("view order must include every view once".into());
+        }
+        for (position, id) in ids.iter().enumerate() {
+            conn.execute("UPDATE views SET position = ?1 WHERE id = ?2", params![position as i64, id])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+}
+
 /// Seed the starters on the first run only. Returns how many were written.
 ///
 /// Guarded by a `meta` key rather than by "is the table empty", so a starter
@@ -249,6 +263,16 @@ mod tests {
         save(&c, &View { name: "One edited".into(), ..view("v1", "unused") }).unwrap();
         let all = list(&c).unwrap();
         assert_eq!(all.iter().map(|v| v.id.as_str()).collect::<Vec<_>>(), vec!["v1", "v2"]);
+    }
+
+    #[test]
+    fn reordering_persists_and_rejects_incomplete_orders() {
+        let c = conn();
+        for id in ["a", "b", "c"] { save(&c, &view(id, id)).unwrap(); }
+        assert!(reorder(&c, &["c".into(), "a".into()]).is_err());
+        assert_eq!(list(&c).unwrap().iter().map(|v| v.id.as_str()).collect::<Vec<_>>(), vec!["a", "b", "c"]);
+        reorder(&c, &["c".into(), "a".into(), "b".into()]).unwrap();
+        assert_eq!(list(&c).unwrap().iter().map(|v| v.id.as_str()).collect::<Vec<_>>(), vec!["c", "a", "b"]);
     }
 
     #[test]

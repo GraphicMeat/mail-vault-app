@@ -160,19 +160,9 @@ export const useViewStore = create((set, get) => ({
     return saved;
   },
 
-  /// Move a view past its neighbour. Positions are what the sidebar orders by,
-  /// so both rows have to be written.
-  moveView: async (id, delta) => {
-    const views = [...get().views].sort((a, b) => a.position - b.position);
-    const index = views.findIndex(view => view.id === id);
-    const target = index + delta;
-    if (index < 0 || target < 0 || target >= views.length) return false;
-    const moving = views[index];
-    const displaced = views[target];
-    await daemonCall('views.save', { view: { ...moving, position: displaced.position } });
-    await daemonCall('views.save', { view: { ...displaced, position: moving.position } });
+  reorderViews: async (ids) => {
+    await daemonCall('views.reorder', { ids });
     await get().loadViews();
-    return true;
   },
 
   deleteView: async (id) => {

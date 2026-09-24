@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { GripVertical } from 'lucide-react';
 import { useT } from '../../i18n';
 
-export function AccountReorderList({ accounts, selectedAccountId, onReorder, children }) {
+export function AccountReorderList({ accounts, selectedAccountId, onReorder, children, labels }) {
   const t = useT();
   const instructionsId = useId();
   const listRef = useRef(null);
@@ -22,7 +22,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
     const pointer = pointerRef.current;
     const list = listRef.current;
     if (!pointer?.active || !list) return;
-    const viewport = list.closest('.account-settings-list').getBoundingClientRect();
+    const viewport = (list.closest('.account-settings-list') || list).getBoundingClientRect();
     pointer.overList = pointer.x >= viewport.left && pointer.x <= viewport.right
       && pointer.y >= viewport.top && pointer.y <= viewport.bottom;
     pointer.beforeId = [...list.children].find(row => {
@@ -50,7 +50,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
 
   useEffect(() => {
     if (!drag) return;
-    const scroller = listRef.current.closest('.account-settings-list');
+    const scroller = listRef.current.closest('.account-settings-list') || listRef.current;
     let frame;
     const scroll = () => {
       const pointer = pointerRef.current;
@@ -131,16 +131,16 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
   };
 
   return <>
-    <p id={instructionsId} className="sr-only">{t('settings.accounts.reorderInstructions')}</p>
-    <ol ref={listRef} aria-label={t('settings.accounts.accounts')}
+    <p id={instructionsId} className="sr-only">{labels?.instructions || t('settings.accounts.reorderInstructions')}</p>
+    <ol ref={listRef} aria-label={labels?.list || t('settings.accounts.accounts')}
       className={`account-settings-reorder-list ${drag ? 'is-reordering' : ''}`}
       data-drop-end={drag?.overList && drag.beforeId === null || undefined}>
       {accounts.map(account => <li key={account.id} data-account-id={account.id}
         data-drop-before={drag?.overList && drag.beforeId === account.id || undefined}
         className={`account-settings-account ${account.id === selectedAccountId ? 'account-settings-account-selected' : ''} ${drag?.id === account.id ? 'is-dragging' : ''}`}>
         {accounts.length > 1 && <button type="button" className="account-settings-drag-handle"
-          aria-label={t('settings.accounts.reorderAccount', { email: account.email })}
-          aria-describedby={instructionsId} title={t('settings.accounts.reorderInstructions')}
+          aria-label={labels?.reorder?.(account.email) || t('settings.accounts.reorderAccount', { email: account.email })}
+          aria-describedby={instructionsId} title={labels?.instructions || t('settings.accounts.reorderInstructions')}
           onPointerDown={event => startDrag(event, account)} onPointerMove={moveDrag}
           onPointerUp={finishDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}
           onKeyDown={event => moveWithKeyboard(event, account.id)}>

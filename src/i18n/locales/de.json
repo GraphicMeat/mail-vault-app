@@ -2674,6 +2674,8 @@
   "views.limit": "{{used}} von {{max}} Ansichten im kostenlosen Plan.",
   "views.limitReached": "Der kostenlose Plan behält {{max}} Ansichten. Löschen Sie eine, um Platz zu schaffen, oder führen Sie ein Upgrade durch.",
   "views.moveDown": "Nach unten",
+  "views.reorder": "{{name}} neu anordnen",
+  "views.reorderInstructions": "Zum Neuordnen ziehen. Mit den Pfeiltasten nach oben und unten diese Ansicht verschieben.",
   "views.moveUp": "Nach oben",
   "views.name": "Name der Ansicht",
   "views.new": "Neue Ansicht",

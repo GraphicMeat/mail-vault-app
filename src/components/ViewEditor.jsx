@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, X } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { ViewPreview } from './ViewPreview';
 import { useTagStore } from '../stores/tagStore';
@@ -9,6 +9,7 @@ import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
+import { ConfirmDialog } from './ConfirmDialog';
 
 /// Three states, not two: a filter can demand a flag, demand its absence, or
 /// not care — and "not care" is what a checkbox cannot say.
@@ -36,12 +37,12 @@ const DIRECTIONS = ['desc', 'asc'];
 /// A stored unix second as the `YYYY-MM-DD` a date input wants, and back.
 const toDateInput = seconds => (seconds ? new Date(seconds * 1000).toISOString().slice(0, 10) : '');
 const fromDateInput = text => (text ? Math.floor(new Date(`${text}T00:00:00Z`).getTime() / 1000) : null);
+const splitKeys = text => text.split(/\s*(?:&&|,)\s*|\s+/).filter(Boolean);
 
 export function ViewEditor({ view, onClose, showPreview = true }) {
   const t = useT();
   const saveView = useViewStore(state => state.saveView);
   const deleteView = useViewStore(state => state.deleteView);
-  const moveView = useViewStore(state => state.moveView);
   const tags = useTagStore(state => state.tags) || [];
   const accounts = useMailStore(state => state.accounts) || [];
   const accountId = useMailStore(state => state.activeAccountId);
@@ -50,7 +51,8 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const def = view.def || {};
   const [name, setName] = useState(view.name || '');
   const [icon, setIcon] = useState(view.icon || 'tag');
-  const [query, setQuery] = useState(def.query || '');
+  const [queryKeys, setQueryKeys] = useState(() => [...new Set(splitKeys(def.query || ''))]);
+  const [queryInput, setQueryInput] = useState('');
   const [sender, setSender] = useState(def.sender || '');
   const [flags, setFlags] = useState({
     unread: toTri(def.unread), starred: toTri(def.starred), answered: toTri(def.answered),
@@ -82,13 +84,21 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const setFilter = (id, patch) =>
     setFieldFilters(current => ({ ...current, [id]: { ...(current[id] || NO_FILTER), ...patch } }));
 
+  const pendingKeys = splitKeys(queryInput);
+  const allKeys = [...new Set([...queryKeys, ...pendingKeys])];
+  const addKeys = () => {
+    if (!queryInput.trim()) return;
+    setQueryKeys(allKeys);
+    setQueryInput('');
+  };
+
   /// What the form currently says, as a definition. Spread over the stored one
   /// so the parts this form does not offer — excluded mailboxes, columns — are
   /// carried through an edit rather than dropped.
   const editedDef = () => ({
     ...def,
     accounts: chosenAccounts,
-    query: query.trim(),
+    query: allKeys.join(' '),
     sender: sender.trim() || null,
     unread: fromTri(flags.unread),
     starred: fromTri(flags.starred),
@@ -124,21 +134,6 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     try {
       await saveView(edited());
       onClose?.(true);
-    } catch (cause) {
-      setSaveError(cause?.message || String(cause));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /// Moving re-reads the stored view, so anything typed and not yet saved
-  /// would be thrown away when the list reloads. Save first.
-  const move = async (delta) => {
-    setSaveError('');
-    setSaving(true);
-    try {
-      if (name.trim() || view.builtin) await saveView(edited());
-      await moveView(view.id, delta);
     } catch (cause) {
       setSaveError(cause?.message || String(cause));
     } finally {
@@ -193,11 +188,21 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
       </div>
     </div>
 
-    <label className="view-editor-row">
-      {t('views.filter.query')}
-      <input data-testid="view-query" value={query} maxLength={200} aria-label={t('views.filter.query')}
-        onChange={event => setQuery(event.target.value)} />
-    </label>
+    <div className="view-choice-field">
+      <label htmlFor="view-query">{t('views.filter.query')}</label>
+      <div className="view-query-keys" aria-label={t('views.filter.query')}>
+        {queryKeys.map(key => <button key={key} type="button" className="view-query-key"
+          aria-label={`${t('common.remove')} ${key}`}
+          onClick={() => setQueryKeys(current => current.filter(item => item !== key))}>
+          {key}<X size={12} aria-hidden="true" />
+        </button>)}
+        <input id="view-query" data-testid="view-query" value={queryInput} maxLength={200}
+          aria-label={t('views.filter.query')}
+          onChange={event => setQueryInput(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && queryInput.trim()) { event.preventDefault(); addKeys(); } }}
+          onBlur={addKeys} />
+      </div>
+    </div>
 
     <label className="view-editor-row">
       {t('views.filter.sender')}
@@ -336,16 +341,17 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
     {showPreview && <SettingsSection title={t('views.preview.title')} description={t('views.previewHint')}><ViewPreview def={editedDef()} /></SettingsSection>}
 
     <div className="settings-editor-actions justify-end">
-      <button type="button" data-testid="view-move-up" disabled={saving} onClick={() => { void move(-1); }}>{t('views.moveUp')}</button>
-      <button type="button" data-testid="view-move-down" disabled={saving} onClick={() => { void move(1); }}>{t('views.moveDown')}</button>
       <Button variant="primary" size="sm" type="submit" disabled={saving}>{t('common.save')}</Button>
       <Button variant="ghost" size="sm" type="button" onClick={() => onClose?.()}>{t('common.cancel')}</Button>
-      {confirming
-        ? <button type="button" data-testid="view-delete-confirm" className="is-danger"
-          disabled={saving} onClick={() => { void remove(); }}>{t('views.deleteConfirm')}</button>
-        : <button type="button" data-testid="view-delete" onClick={() => setConfirming(true)}
-          aria-label={t('common.delete')}><Trash2 size={12} /></button>}
+      <Button variant="dangerTint" size="sm" type="button" data-testid="view-delete"
+        disabled={saving} onClick={() => setConfirming(true)}>
+        <Trash2 size={14} /> {t('common.delete')}
+      </Button>
     </div>
     {saveError && <p role="alert" className="text-sm text-mail-danger">{saveError}</p>}
+    <ConfirmDialog isOpen={confirming} onClose={() => setConfirming(false)}
+      onConfirm={() => { void remove(); }} title={t('views.deleteConfirm')}
+      description={saveError || viewLabel(view, t)} confirmLabel={t('views.deleteConfirm')}
+      cancelLabel={t('common.cancel')} destructive loading={saving} />
   </form>;
 }

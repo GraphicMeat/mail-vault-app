@@ -2674,6 +2674,8 @@
   "views.limit": "無料プランのビュー {{max}} 件中 {{used}} 件を使用中。",
   "views.limitReached": "無料プランで持てるビューは {{max}} 件です。1 つ削除して空けるか、アップグレードしてください。",
   "views.moveDown": "下へ",
+  "views.reorder": "{{name}}を並べ替え",
+  "views.reorderInstructions": "ドラッグして並べ替えます。上下の矢印キーでこのビューを移動します。",
   "views.moveUp": "上へ",
   "views.name": "ビュー名",
   "views.new": "新しいビュー",

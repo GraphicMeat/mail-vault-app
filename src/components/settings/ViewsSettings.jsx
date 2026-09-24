@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import { SettingsSection } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 import { ViewIcon } from '../ViewIcon';
+import { AccountReorderList } from './AccountReorderList';
 
 /// The views page: one list, one builder, and the builder previews what it
 /// would find while it is being typed.
@@ -20,6 +21,7 @@ export function ViewsSettings({ onUpgrade }) {
   const loadViews = useViewStore(state => state.loadViews);
   const createView = useViewStore(state => state.createView);
   const deleteView = useViewStore(state => state.deleteView);
+  const reorderViews = useViewStore(state => state.reorderViews);
   // The sidebar's + cannot reach this page's props, so it leaves its intent in
   // the store and this consumes it once.
   const pendingNew = useViewStore(state => state.pendingNew);
@@ -112,20 +114,21 @@ export function ViewsSettings({ onUpgrade }) {
 
     {error && <p className="text-sm text-mail-danger" role="alert">{error}</p>}
 
-    <ul className="views-list" data-testid="views-list">
-      {views.map((view) => {
-        return <li key={view.id} className="views-row">
-          <button type="button" data-testid={`views-row-${view.id}`}
-            className={`views-row-button${editingId === view.id ? ' is-editing' : ''}`}
+    <div className="views-list" data-testid="views-list">
+      <AccountReorderList accounts={views.map(view => ({ ...view, email: viewLabel(view, t) }))}
+        selectedAccountId={editingId} onReorder={ids => { void reorderViews(ids).catch(cause => setError(cause?.message || String(cause))); }}
+        labels={{ list: t('views.section'), instructions: t('views.reorderInstructions'),
+          reorder: name => t('views.reorder', { name }) }}>
+      {view => <button type="button" data-testid={`views-row-${view.id}`}
+            className={`views-row-button account-settings-account-button${editingId === view.id ? ' is-editing' : ''}`}
             aria-expanded={editingId === view.id}
             onClick={() => { void selectView(view.id); }}>
             <ViewIcon icon={view.icon} size={14} />
             <span className="views-row-name">{viewLabel(view, t)}</span>
-          </button>
-        </li>;
-      })}
-      {views.length === 0 && <li className="views-empty" data-testid="views-empty">{t('views.none')}</li>}
-    </ul>
+          </button>}
+      </AccountReorderList>
+      {views.length === 0 && <p className="views-empty" data-testid="views-empty">{t('views.none')}</p>}
+    </div>
 
     </SettingsSection>
 

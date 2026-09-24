@@ -1241,13 +1241,15 @@ input[type="range"]::-moz-range-thumb:hover {
 .compose-addresses input, .compose-addresses select { min-height: 32px; border-radius: 4px; }
 .compose-addresses > div > div { min-width: 0; }
 .compose-editor { min-height: 200px; background: var(--mail-bg); }
-.compose-footer { flex-wrap: wrap; }
+.compose-footer { flex-wrap: wrap; padding-bottom: 26px; }
 .compose-footer > div { flex-shrink: 0; min-width: 0; }
-.compose-footer > div:last-child { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.compose-footer > div:last-child { margin-left: auto; flex-wrap: nowrap; justify-content: flex-end; }
 @container compose (max-width: 564px) {
   .compose-context-aside { resize: none; }
   .compose-footer { padding: 10px 12px; gap: 8px; }
-  .compose-footer > div:last-child { width: 100%; margin-left: 0; }
+  .compose-footer > div:last-child { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; width: 100%; margin-left: 0; }
+  .compose-footer > div:last-child select { width: 100%; min-width: 0; }
+  .compose-footer > div:last-child > button { padding-left: 8px; padding-right: 8px; }
 }
 /* Shared sample content follows the selected Chat topic, which fills one pane. */
 .sample-chat { min-width: 0; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
@@ -1374,7 +1376,7 @@ input[type="range"]::-moz-range-thumb:hover {
 .onboarding-step { width: 100%; flex: 1; display: flex; justify-content: center; align-items: center; }
 @media (max-width: 600px) {
   .compose-window { min-height: 0; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); }
-  .compose-footer { padding: 12px; }
+  .compose-footer { padding: 12px 12px 26px; }
   .compose-footer > div:last-child { gap: 4px; }
   .compose-footer > div:last-child > button:first-child { padding: 8px; }
   .account-setup-window .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }

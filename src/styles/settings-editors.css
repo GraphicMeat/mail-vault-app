@@ -54,6 +54,12 @@
 .settings-window .views-settings .views-list { margin-top: 16px; gap: 4px; }
 .settings-window .views-settings .views-row-button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; }
 .settings-window .views-settings .views-row-button.is-editing { border-color: var(--mail-accent); }
+.settings-window .views-settings .account-settings-reorder-list { width: 100%; }
+.settings-window .views-settings .account-settings-account { border: 1px solid var(--mail-border); }
+.settings-window .views-settings .views-row-button { border: 0; }
+.settings-window .view-editor .view-query-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; }
+.settings-window .view-editor .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.settings-window .view-editor .view-query-keys input { flex: 1 1 140px; min-width: 100px; }
 .settings-window .view-editor { display: block; margin: 0; padding: 0; border: 0; background: transparent; font-size: 13px; }
 .settings-window .view-editor .settings-editor-section { margin-bottom: 16px; }
 .settings-window .view-editor .view-editor-row { gap: 10px; margin: 0 0 14px; align-items: center; font-size: 12px; }

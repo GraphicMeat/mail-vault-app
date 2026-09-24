@@ -2674,6 +2674,8 @@
   "views.limit": "{{used}} de {{max}} vistas en el plan gratuito.",
   "views.limitReached": "El plan gratuito guarda {{max}} vistas. Elimina una para hacer sitio o mejora el plan.",
   "views.moveDown": "Bajar",
+  "views.reorder": "Reordenar {{name}}",
+  "views.reorderInstructions": "Arrastra para reordenar. Usa las flechas arriba y abajo para mover esta vista.",
   "views.moveUp": "Subir",
   "views.name": "Nombre de la vista",
   "views.new": "Nueva vista",

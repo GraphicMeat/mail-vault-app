@@ -67,6 +67,11 @@ fn run(state: &DaemonState, method: &str, params: &Value) -> Result<Value, Strin
             let id = params.get("id").and_then(Value::as_str).ok_or("Missing id")?.to_string();
             app_db::with(app_dir, |conn| views::delete(conn, &id).map(|_| Value::Null))
         }
+        "views.reorder" => {
+            let ids: Vec<String> = serde_json::from_value(params.get("ids").cloned().unwrap_or(Value::Null))
+                .map_err(|e| format!("ids: {e}"))?;
+            app_db::with(app_dir, |conn| views::reorder(conn, &ids).map(|_| Value::Null))
+        }
         "views.evaluate" => {
             let accounts = accounts_of(params)?;
             let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
@@ -412,6 +417,19 @@ mod tests {
         assert!(call(&s, "views.list", json!({})).await.as_array().unwrap().iter().any(|v| v["id"] == "v1"));
         call(&s, "views.delete", json!({ "id": "v1" })).await;
         assert!(!call(&s, "views.list", json!({})).await.as_array().unwrap().iter().any(|v| v["id"] == "v1"));
+    }
+
+    #[tokio::test]
+    async fn reorder_route_persists_the_sidebar_order() {
+        let s = st();
+        let listed = call(&s, "views.list", json!({})).await;
+        let mut ids: Vec<String> = listed.as_array().unwrap().iter()
+            .map(|view| view["id"].as_str().unwrap().to_string()).collect();
+        ids.reverse();
+        call(&s, "views.reorder", json!({ "ids": ids })).await;
+        let after = call(&s, "views.list", json!({})).await;
+        let order: Vec<&str> = after.as_array().unwrap().iter().map(|view| view["id"].as_str().unwrap()).collect();
+        assert_eq!(order, ids.iter().map(String::as_str).collect::<Vec<_>>());
     }
 
     #[tokio::test]
