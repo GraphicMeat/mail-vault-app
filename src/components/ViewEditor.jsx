@@ -186,13 +186,14 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
             <ViewIcon icon={option} size={16} />{t(`views.iconName.${option}`)}
           </button>;
         })}
-        <span className="view-emoji-field">
+        {/* Blur on the wrapper, so Tab can move from the field into the picker. */}
+        <span className="view-emoji-field"
+          onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setEmojiOpen(false); }}
+          onKeyDown={event => { if (event.key === 'Escape' && emojiOpen) { event.stopPropagation(); setEmojiOpen(false); } }}>
           <input type="text" data-testid="view-emoji" className={`view-emoji-input${icon.startsWith('emoji:') ? ' is-selected' : ''}`}
             aria-label={`${t('views.icon')} (😀)`} placeholder="😀"
             value={icon.startsWith('emoji:') ? icon.slice(6) : ''}
             onFocus={() => setEmojiOpen(true)}
-            onBlur={() => setEmojiOpen(false)}
-            onKeyDown={event => { if (event.key === 'Escape' && emojiOpen) { event.stopPropagation(); setEmojiOpen(false); } }}
             onChange={event => setIcon(event.target.value ? `emoji:${event.target.value}` : 'tag')} />
           {emojiOpen && <span className="view-emoji-picker" role="group" aria-label={t('views.icon')} data-testid="view-emoji-picker">
             {VIEW_EMOJIS.map(emoji => <button key={emoji} type="button" aria-pressed={icon === `emoji:${emoji}`}

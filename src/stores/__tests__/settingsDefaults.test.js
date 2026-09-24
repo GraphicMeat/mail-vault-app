@@ -22,6 +22,16 @@ describe('settings defaults', () => {
     expect((await loadOn('Win32')).DEFAULT_AI_SETTINGS.provider).toBe('localGguf');
   });
 
+  it('moves a Mac that never turned AI on to Apple Intelligence, and nothing else', async () => {
+    const off = { aiSettings: { enabled: false, provider: 'localGguf', endpointUrl: '' } };
+    const on = { aiSettings: { enabled: true, provider: 'localGguf', endpointUrl: '' } };
+    const mac = await loadOn('MacIntel');
+    expect(mac.migrateSettings(off, 7).aiSettings.provider).toBe('appleFm');
+    expect(mac.migrateSettings(on, 7).aiSettings.provider).toBe('localGguf');
+    expect(mac.migrateSettings(off, 8).aiSettings.provider).toBe('localGguf');
+    expect((await loadOn('Win32')).migrateSettings(off, 7).aiSettings.provider).toBe('localGguf');
+  });
+
   it('a fresh install plays Glass; an older blob without a sound stays silent', async () => {
     const { useSettingsStore, _mergePersistedSettings } = await loadOn('MacIntel');
     const current = useSettingsStore.getState();

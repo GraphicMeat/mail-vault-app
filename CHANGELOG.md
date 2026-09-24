@@ -13,15 +13,14 @@
 - **Updates on Windows, including nightly builds.** Settings > Mail preferences > Behavior now has a Check for updates button on Windows, which has no app menu to hold one, and the same Stable or Nightly choice as on the Mac. MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.
 
 ### Changed
-- **New installs play the Glass sound for new mail, and a Mac starts writing help on Apple Intelligence.** Existing settings are kept.
-- **The main window opens 100 pixels shorter on Windows**, so it fits on smaller laptop screens.
+- **Writing help on a Mac starts on Apple Intelligence.** It is the default for new installs, and for Macs where writing help has not been turned on yet. Where you already use it, your choice is kept.
+- **New installs play the Glass sound for new mail.** Existing notification settings are kept.
 - **Right-click a message for its quick actions.** Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.
 - **The List and Explorer switch stays put.** It now sits at the right edge of the message list toolbar in both modes, with the Timeline button moved to its left, so switching to Explorer no longer slides it across the toolbar.
 - **Setup walks you through every look option.** On the "Make it yours" step of first-time setup, Next is now the main button and moves through Colors, Layout, Reading and Quick actions in turn. Continue appears once you reach Quick actions, so no tab is skipped by accident. The tabs can still be clicked directly.
 - **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
 
 ### Fixed
-- **Exported email images are no longer blank on Windows.** Saving a message or thread as an image produced an empty white picture on Windows. The picture now carries the message, as it does on the Mac.
 - **The green SPF/DKIM shield is back on opened messages.** Opening a message showed no sender verification shield, even for mail that passed SPF and DKIM, because the opened copy did not keep the authentication results the message list already had. The shield and its details now show again.
 - **A view's account choice now narrows what it finds.** Choosing accounts for a saved view changed nothing: the view, its count in the sidebar and the preview in Settings all kept reading every account. They now read only the accounts you picked, and picking none still means all of them.
 - **Messages you delete stay gone when you open a view.** Deleting mail in the inbox and then opening a saved view showed the deleted messages again, because the view reads your vault and the copies were still there. A view now leaves out the messages you just deleted, and an archived copy of a message deleted on the server is shown as local only, as it is in search.

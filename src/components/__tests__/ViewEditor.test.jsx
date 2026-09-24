@@ -145,6 +145,17 @@ describe('editing a saved view', () => {
     expect(useViewStoreMock.getState().saveView.mock.calls[0][0].icon).toBe('emoji:📥');
   });
 
+  it('keeps the picker open while focus moves into it, closes when it leaves', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    const input = screen.getByTestId('view-emoji');
+    fireEvent.focus(input);
+    const first = screen.getByTestId('view-emoji-picker').querySelector('button');
+    fireEvent.blur(input, { relatedTarget: first });
+    expect(screen.getByTestId('view-emoji-picker')).toBeTruthy();
+    fireEvent.blur(first, { relatedTarget: screen.getByTestId('view-name') });
+    expect(screen.queryByTestId('view-emoji-picker')).toBeNull();
+  });
+
   /// Read back as a bare value, a saved `isNot` reopened as `is` — the editor
   /// then saved the opposite of what the view said.
   it('reopens a saved condition on the operator it was saved with', () => {

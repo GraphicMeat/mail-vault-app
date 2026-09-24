@@ -56,6 +56,9 @@ export function AiProvidersSettings() {
     }
   };
 
+  // Same rule as AiComposeActions: an endpoint never consented to still asks once.
+  const skipPreview = !!aiSettings.skipPreview && (provider.type !== 'endpoint' || aiSettings.endpointConsented);
+
   const confirmTest = async () => {
     setTestBusy(true);
     try {
@@ -148,7 +151,8 @@ export function AiProvidersSettings() {
             <Button variant="secondary" size="sm" onClick={checkStatus} disabled={checking}>
               {checking ? t('ai.settings.checking') : t('ai.settings.checkStatus')}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setPendingTest(true)}>
+            <Button variant="secondary" size="sm" disabled={testBusy}
+              onClick={() => (skipPreview ? confirmTest() : setPendingTest(true))}>
               {t('ai.settings.sendTest')}
             </Button>
             {status && (

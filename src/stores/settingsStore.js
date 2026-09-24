@@ -201,6 +201,9 @@ function normalizeCleanupRule(rule) {
  * `dismissedQuickReplyThreads`. Backfilled with AI OFF by default — no
  * existing install silently starts sending anything anywhere.
  *
+ * v7 → v8: a Mac with AI still off moves from the backfilled local model to
+ * Apple Intelligence. AI stays off; only the provider it would start on changes.
+ *
  * Exported for tests: the disarm is the safety mechanism of the fix, so it
  * needs a test that can call it directly.
  */
@@ -231,6 +234,11 @@ export function migrateSettings(persisted, version) {
       aiSettings: { ...DEFAULT_AI_SETTINGS, ...next.aiSettings },
       dismissedQuickReplyThreads: next.dismissedQuickReplyThreads || {},
     };
+  }
+  // v7 → v8: a Mac defaults to Apple Intelligence. v7 backfilled the local
+  // model into every install with AI off, so that value was never a choice.
+  if (version < 8 && IS_MAC && next.aiSettings && !next.aiSettings.enabled && next.aiSettings.provider === 'localGguf') {
+    next = { ...next, aiSettings: { ...next.aiSettings, provider: 'appleFm' } };
   }
   return next;
 }
@@ -1284,7 +1292,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

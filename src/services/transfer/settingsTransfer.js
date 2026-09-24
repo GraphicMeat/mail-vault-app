@@ -14,7 +14,7 @@ import { flushSafeStorage } from '../../stores/safeStorage';
 // - daemonMode, daemonAlwaysOn, onboarding flags, localMailLabels*: per install.
 export const GLOBAL_SETTINGS_ALLOWLIST = [
   'aiSettings', 'defaultSignatureEnabled', 'undoSendEnabled', 'undoSendDelay', 'sendDelay',
-  'autoSaveDrafts', 'autoSaveInterval', 'spellcheckEnabled', 'composeContextVisible',
+  'autoSaveDrafts', 'autoSaveInterval', 'spellcheckEnabled', 'composeContextVisible', 'composeOpenMode',
   'refreshInterval', 'refreshOnLaunch', 'badgeEnabled', 'badgeMode', 'markAsReadMode',
   'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'updateTrack',
   'autoDownloadAttachments', 'layoutMode', 'viewStyle', 'emailListStyle', 'emailListGrouping',
