@@ -5,6 +5,8 @@
 ### Added
 - **Move accounts to another computer.** Export accounts, passwords and settings to an encrypted, password-protected file and import it in MailVault elsewhere (Settings > Accounts). A new install can import straight from the welcome screen. Accounts the other computer already has are left as they are, and a forgotten file password cannot be recovered. Any imported tagging rules arrive turned off, so you can review them before they run.
 
+- **Updates on Windows, including nightly builds.** Settings > Mail preferences > Behavior now has a Check for updates button on Windows, which has no app menu to hold one, and the same Stable or Nightly choice as on the Mac. MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.
+
 ### Changed
 - **Right-click a message for its quick actions.** Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.
 - **The List and Explorer switch stays put.** It now sits at the right edge of the message list toolbar in both modes, with the Timeline button moved to its left, so switching to Explorer no longer slides it across the toolbar.

@@ -42,10 +42,13 @@ export function BehaviorSettings() {
     setUpdateTrack,
   } = useSettingsStore();
 
-  // Sparkle is the macOS Developer ID updater: Linux has its own and the App
-  // Store build has none. Read at render, not at import — jsdom has no platform.
-  const showUpdateTrack = !IS_APPSTORE_BUILD
-    && (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac'));
+  // Sparkle on a macOS Developer ID build, tauri-plugin-updater on Windows.
+  // Linux has no nightlies and the App Store build has no updater. Windows has
+  // no app menu, so this row is also its only "Check for updates".
+  // Read at render, not at import — jsdom has no platform.
+  const isWindows = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows');
+  const isMac = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
+  const showUpdateTrack = !IS_APPSTORE_BUILD && (isMac || isWindows);
 
   // Which build this is decides the track when the user has never chosen one.
   const [isNightlyBuild, setIsNightlyBuild] = React.useState(false);
@@ -79,8 +82,13 @@ export function BehaviorSettings() {
 
   const checkForUpdatesNow = async () => {
     try {
-      const { checkForUpdates } = await import('tauri-plugin-sparkle-updater-api');
-      await checkForUpdates();
+      if (isWindows) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('check_for_updates_now');
+      } else {
+        const { checkForUpdates } = await import('tauri-plugin-sparkle-updater-api');
+        await checkForUpdates();
+      }
     } catch (e) {
       console.warn('Update check failed:', e);
     }

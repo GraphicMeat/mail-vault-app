@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Override the app version before building (e.g. 2.11.3-nightly.abc1234). Empty = use the repo version.'
+        description: 'Override the app version before building (e.g. 2.11.3-nightly.202609240647.gabc1234). Empty = use the repo version.'
         required: false
         type: string
         default: ''

@@ -1528,19 +1528,19 @@ async fn install_pending_update(_handle: tauri::AppHandle) -> Result<(), String>
 const NIGHTLY_APPCAST_URL: &str =
     "https://github.com/GraphicMeat/mail-vault-app/releases/download/nightly/appcast.xml";
 
+// tauri-plugin-updater (Windows) reads latest.json: the stable one is the
+// endpoint in tauri.conf.json, the nightly one rides the same prerelease.
+#[cfg(any(target_os = "linux", windows))]
+const NIGHTLY_LATEST_JSON_URL: &str =
+    "https://github.com/GraphicMeat/mail-vault-app/releases/download/nightly/latest.json";
+
 /// Sparkle feed override for the chosen update track. `None` = use the
 /// stable feed from Info.plist. With no saved choice a nightly build follows
 /// the nightly feed and a stable build the stable one.
 #[allow(dead_code)] // Only the macOS + Sparkle build applies it; the tests read it everywhere.
 fn update_feed_override(track: Option<&str>, app_version: &str) -> Option<String> {
-    match track {
-        Some("nightly") => Some(NIGHTLY_APPCAST_URL.to_string()),
-        Some("stable") => None,
-        // Anything else is "no choice made": follow the build.
-        _ => app_version
-            .contains("-nightly")
-            .then(|| NIGHTLY_APPCAST_URL.to_string()),
-    }
+    mailvault_core::update_track::follows_nightly(track, app_version)
+        .then(|| NIGHTLY_APPCAST_URL.to_string())
 }
 
 /// Whether the user asked for the daemon to keep running after the app quits.
@@ -1592,15 +1592,32 @@ fn apply_update_track(handle: &tauri::AppHandle, track: Option<&str>) {
     }
 }
 
-// Linux uses tauri-plugin-updater and MAS builds update through the App Store:
-// neither has a feed to override.
-#[cfg(not(all(target_os = "macos", feature = "sparkle")))]
+// MAS builds update through the App Store: no feed to override.
+#[cfg(all(target_os = "macos", not(feature = "sparkle")))]
 fn apply_update_track(_handle: &tauri::AppHandle, _track: Option<&str>) {}
+
+/// The track tauri-plugin-updater checks against, held in memory so a change
+/// in Settings applies to the very next check without waiting for the
+/// frontend's settings file to be written.
+#[cfg(any(target_os = "linux", windows))]
+static UPDATE_TRACK: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[cfg(any(target_os = "linux", windows))]
+fn apply_update_track(_handle: &tauri::AppHandle, track: Option<&str>) {
+    *UPDATE_TRACK.lock().unwrap_or_else(|e| e.into_inner()) = track.map(String::from);
+}
 
 #[tauri::command]
 fn set_update_track(handle: tauri::AppHandle, track: String) -> Result<(), String> {
     apply_update_track(&handle, Some(&track));
     Ok(())
+}
+
+/// Settings' "Check for updates" on Windows, which has no app menu to hold
+/// one. macOS asks Sparkle from the frontend instead.
+#[tauri::command]
+async fn check_for_updates_now(handle: tauri::AppHandle) {
+    check_for_updates(handle, true).await;
 }
 
 /// Shared update check logic for both manual menu trigger and startup auto-check.
@@ -1649,17 +1666,39 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     // whatever this misses). `cleanup_before_exit` is the plugin's own default
     // hook, which setting ours replaces.
     let exit_handle = handle.clone();
-    let updater = match handle
+    let mut builder = handle
         .updater_builder()
+        // Nightly-aware order, the same one Sparkle applies on macOS.
+        .version_comparator(|installed, release| {
+            mailvault_core::update_track::is_newer(
+                &installed.to_string(),
+                &release.version.to_string(),
+            )
+        })
         .on_before_exit(move || {
             APP_EXITING.store(true, Ordering::SeqCst);
             daemon_channel::stop();
             stop_daemon();
             shutdown_daemon_child();
             exit_handle.cleanup_before_exit();
-        })
-        .build()
+        });
+    // Linux has no nightlies; only Windows switches feeds.
+    if cfg!(windows)
+        && mailvault_core::update_track::follows_nightly(
+            UPDATE_TRACK.lock().unwrap_or_else(|e| e.into_inner()).as_deref(),
+            env!("CARGO_PKG_VERSION"),
+        )
     {
+        info!("Update track: nightly");
+        builder = match builder.endpoints(vec![NIGHTLY_LATEST_JSON_URL.parse().expect("static URL")]) {
+            Ok(b) => b,
+            Err(e) => {
+                error!("Failed to set the nightly update endpoint: {}", e);
+                return;
+            }
+        };
+    }
+    let updater = match builder.build() {
         Ok(u) => u,
         Err(e) => {
             error!("Failed to create updater: {}", e);
@@ -3172,6 +3211,7 @@ fn main() {
             log_from_frontend,
             install_pending_update,
             set_update_track,
+            check_for_updates_now,
             get_client_info,
             get_app_data_dir,
             read_settings_json,
@@ -3611,7 +3651,24 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 // Delay update check to let the app initialize first
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                check_for_updates(update_handle, false).await;
+                check_for_updates(update_handle.clone(), false).await;
+
+                // Sparkle schedules its own checks. tauri-plugin-updater only
+                // checks when asked, and a Windows app can run for weeks, so
+                // check again once a day. Wall clock, polled hourly: a monotonic
+                // 24h sleep would not count the hours the machine slept.
+                #[cfg(any(target_os = "linux", windows))]
+                {
+                    const DAY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+                    let mut last_check = std::time::SystemTime::now();
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+                        if last_check.elapsed().map_or(true, |e| e >= DAY) {
+                            last_check = std::time::SystemTime::now();
+                            check_for_updates(update_handle.clone(), false).await;
+                        }
+                    }
+                }
             });
 
             info!("Application setup complete");

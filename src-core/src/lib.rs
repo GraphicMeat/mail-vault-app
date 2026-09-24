@@ -37,6 +37,7 @@ pub mod net;
 pub mod daemon_ipc;
 pub mod transport;
 pub mod paths;
+pub mod update_track;
 
 pub const BUILD_ID: &str = env!("MAILVAULT_BUILD_ID");
 

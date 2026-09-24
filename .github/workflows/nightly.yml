@@ -48,9 +48,13 @@ jobs:
           # Sparkle drops everything after a "-", so the dash version compares equal
           # to stable. Five numeric components — an extra component reads as newer —
           # beat stable ${BASE}, lose to the next stable, and order among themselves.
-          BUNDLE="${BASE}.$(date -u +%Y%m%d).$(date -u +%H%M)"
+          NOW=$(date -u +%Y%m%d%H%M); DAY=${NOW:0:8}; TIME=${NOW:8:4}
+          BUNDLE="${BASE}.${DAY}.${TIME}"
+          # The Windows updater orders nightlies by this same stamp
+          # (mailvault_core::update_track::is_newer). The "g" keeps an all-digit
+          # hash from reading as a semver number with a leading zero.
           echo "last=${LAST}" >> "$GITHUB_OUTPUT"
-          echo "version=${BASE}-nightly.${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE}-nightly.${DAY}${TIME}.g${SHORT}" >> "$GITHUB_OUTPUT"
           echo "bundle_version=${BUNDLE}" >> "$GITHUB_OUTPUT"
           echo "CFBundleVersion for Sparkle: ${BUNDLE}"
           if [ "$FORCE" = "true" ]; then
@@ -130,9 +134,21 @@ jobs:
           if ! grep -q "<sparkle:version>${BUNDLE_VERSION}</sparkle:version>" "$APPCAST"; then
             echo "::error::appcast sparkle:version is not ${BUNDLE_VERSION}"; cat "$APPCAST"; exit 1
           fi
-          # No latest.json on the nightly tag: Windows nightlies are manual installs.
           WIN_EXE=$(find artifacts-windows -name "*_${VERSION}_*-setup.exe" | head -1)
           if [ -z "$WIN_EXE" ]; then echo "::error::No Windows installer for ${VERSION}"; find artifacts-windows -type f; exit 1; fi
+          WIN_SIG="${WIN_EXE}.sig"
+          if [ ! -s "$WIN_SIG" ]; then echo "::error::No updater signature for $(basename "$WIN_EXE")"; find artifacts-windows -type f; exit 1; fi
+          # The Windows nightly feed: tauri-plugin-updater on the nightly track
+          # reads this file from the rolling tag, as Sparkle reads appcast.xml.
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "Nightly build of ${GITHUB_SHA}." \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sig "$(cat "$WIN_SIG")" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/$(basename "$WIN_EXE")" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' \
+            > latest.json
+          cat latest.json
           SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
           DATE=$(date -u +%Y-%m-%d)
           if [ -n "$LAST" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null; then
@@ -149,5 +165,6 @@ jobs:
             --notes "$NOTES" \
             "$DMG" \
             "$APPCAST" \
-            "$WIN_EXE"
+            "$WIN_EXE" \
+            latest.json
           echo "Published nightly ${VERSION} from ${GITHUB_SHA}"
