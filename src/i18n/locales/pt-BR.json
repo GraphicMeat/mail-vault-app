@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Comece pelos critérios comuns. “Qualquer” inclui os dois tipos.",
   "views.presentation": "Como exibir?",
   "views.presentationHint": "Agrupamento e ordem mudam apenas a apresentação.",
+  "views.resetLayout": "Redefinir visualização",
+  "views.resetLayoutHint": "Voltar ao layout com que esta visualização foi salva",
   "views.filter.more": "Etiquetas e campos personalizados",
   "views.moreHint": "Use apenas se os filtros comuns não bastarem.",
   "views.previewHint": "Amostra ao vivo dos e-mails exibidos. Salvar uma visualização não move nada.",

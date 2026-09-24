@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Start with the common checks. Leave a choice on Any to include both kinds.",
   "views.presentation": "How should they appear?",
   "views.presentationHint": "Grouping and order change the display, never the mail itself.",
+  "views.resetLayout": "Reset view",
+  "views.resetLayoutHint": "Back to the layout this view was saved with",
   "views.filter.more": "Tags and custom fields",
   "views.moreHint": "Use these only when the common filters are not enough.",
   "views.previewHint": "A live sample of messages this view would show. Saving a view moves nothing.",

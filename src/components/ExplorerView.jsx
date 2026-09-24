@@ -27,16 +27,17 @@ export function ExplorerView({
   unreadOnly = false, selectedEmailIds, getSelectionKey, onSetSelection,
   renderEmail, onSelectEmail, onOpenThread, onSearchMailbox, hasOpenThread = false, onThreadsChanged,
   partial = false, hasMore = false, loadingMore = false, loading = false, onLoadMore,
-  rowHeight = 56, searchActive = false, groupingOverride = null, fieldGroup = null,
+  rowHeight = 56, searchActive = false, groupingOverride = null, fieldGroup = null, onGroupingChange = null,
 }) {
   const t = useT();
   const storedGrouping = useSettingsStore(s => s.explorerGrouping);
-  // A saved view brings its own grouping. It is never written to the settings
-  // store: closing the view would strand the reader in a grouping they never
-  // picked.
+  // A saved view brings its own grouping, and a change made inside it goes
+  // back to the view (`onGroupingChange`), never to the settings store:
+  // closing the view would strand the reader in a grouping they never picked.
   const grouping = groupingOverride || storedGrouping;
   const dateDepth = useSettingsStore(s => s.explorerDateDepth);
-  const setGrouping = useSettingsStore(s => s.setExplorerGrouping);
+  const setStoredGrouping = useSettingsStore(s => s.setExplorerGrouping);
+  const setGrouping = onGroupingChange || setStoredGrouping;
   const setDateDepth = useSettingsStore(s => s.setExplorerDateDepth);
   const setPath = useSettingsStore(s => s.setExplorerPath);
   const scope = JSON.stringify([context.activeAccountId, context.activeMailbox, context.viewMode,
@@ -164,11 +165,12 @@ export function ExplorerView({
       }
     }}>
     <div className="explorer-controls">
-      {!groupingOverride && <label>{t('explorer.browseBy')}<select data-testid="explorer-grouping" aria-label={t('explorer.browseBy')}
+      <label>{t('explorer.browseBy')}<select data-testid="explorer-grouping" aria-label={t('explorer.browseBy')}
         value={grouping} onChange={event => setGrouping(event.target.value)}>
         <option value="date">{t('explorer.date')}</option><option value="sender">{t('explorer.sender')}</option>
         <option value="conversation">{t('explorer.conversation')}</option>
-      </select></label>}
+        {fieldGroup?.value && <option value={fieldGroup.value}>{fieldGroup.label}</option>}
+      </select></label>
       <label>{t('explorer.dateDepth')}<select aria-label={t('explorer.dateDepth')} value={dateDepth} onChange={event => setDateDepth(event.target.value)}>
         <option value="month">{t('explorer.month')}</option><option value="day">{t('explorer.day')}</option>
       </select></label>

@@ -112,6 +112,19 @@ const normalizeExplorerPaths = value => Object.fromEntries(
       && path.every(id => typeof id === 'string' && id.length <= 4096))
     .slice(-100).map(([key, path]) => [key, [...path]])
 );
+// A saved view's layout as the person last left it (see effectiveViewConfig
+// in viewStore). Only the keys they changed are kept, and the map is capped
+// like explorerPaths so a deleted view's entry ages out on its own.
+const normalizeViewOverrides = value => Object.fromEntries(
+  Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+    .filter(([id, entry]) => id.length <= 256 && entry && typeof entry === 'object' && typeof entry.stamp === 'string')
+    .slice(-100).map(([id, entry]) => [id, {
+      stamp: entry.stamp,
+      ...(['list', 'explorer'].includes(entry.listView) ? { listView: entry.listView } : {}),
+      ...(typeof entry.grouping === 'string' && entry.grouping.length <= 256 ? { grouping: entry.grouping } : {}),
+      ...(typeof entry.timeline === 'boolean' ? { timeline: entry.timeline } : {}),
+    }])
+);
 
 // AI features are OFF by default (Phase 3c) — nothing about this provider
 // layer runs, downloads a model, or reaches a network until the user turns
@@ -130,6 +143,8 @@ export const DEFAULT_AI_SETTINGS = {
   // still gets the dialog until it has been consented to once.
   skipPreview: false,
 };
+
+export { normalizeViewOverrides as _normalizeViewOverrides };
 
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
@@ -150,6 +165,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerGrouping: normalizeExplorerGrouping(persisted?.explorerGrouping ?? current.explorerGrouping),
   explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
+  viewOverrides: normalizeViewOverrides(persisted?.viewOverrides ?? current.viewOverrides),
   insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
   quickActions: normalizeQuickActions(persisted?.quickActions ?? current.quickActions),
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
@@ -364,6 +380,7 @@ export const useSettingsStore = create(
       explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
       explorerDateDepth: 'month',
       explorerPaths: {},
+      viewOverrides: {},
       insightsPreferences: normalizeInsightsPreferences(),
       // AI provider layer (Phase 3b/3c) — see DEFAULT_AI_SETTINGS above.
       aiSettings: { ...DEFAULT_AI_SETTINGS },
@@ -991,6 +1008,19 @@ export const useSettingsStore = create(
         delete paths[scope];
         return { explorerPaths: normalizeExplorerPaths({ ...paths, [scope]: path }) };
       }),
+      /// `stamp` is the view's saved presentation the change was made against:
+      /// a change against an older one starts over instead of merging into it.
+      setViewOverride: (id, stamp, patch) => set(state => {
+        const overrides = { ...state.viewOverrides };
+        const current = overrides[id]?.stamp === stamp ? overrides[id] : { stamp };
+        delete overrides[id];
+        return { viewOverrides: normalizeViewOverrides({ ...overrides, [id]: { ...current, ...patch } }) };
+      }),
+      clearViewOverride: id => set(state => {
+        const overrides = { ...state.viewOverrides };
+        delete overrides[id];
+        return { viewOverrides: overrides };
+      }),
       setThreadReaderLayout: (layout) => set({ threadReaderLayout: layout }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setThreadMode: (mode) => set({ threadMode: mode }),
@@ -1231,6 +1261,7 @@ export const useSettingsStore = create(
           explorerGrouping: 'date',
           explorerDateDepth: 'month',
           explorerPaths: {},
+          viewOverrides: {},
       insightsPreferences: normalizeInsightsPreferences(),
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',

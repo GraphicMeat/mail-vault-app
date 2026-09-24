@@ -15,7 +15,7 @@ vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: id => harness.cacheMailboxes[id] || [],
 }));
 
-const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } = await import('../viewStore');
+const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp } = await import('../viewStore');
 const { useSearchStore } = await import('../searchStore.js');
 const { useFieldStore } = await import('../fieldStore');
 
@@ -331,5 +331,18 @@ describe('the builder preview', () => {
     await useViewStore.getState().previewDef({ starred: true });
     expect(await opening).toBe(true);
     expect(useViewStore.getState().activeViewId).toBe('v1');
+  });
+});
+
+describe('effectiveViewConfig', () => {
+  it('resolves override, then saved definition, then the global list mode', () => {
+    const view = { id: 'v1', def: { group: 'sender', showTimeline: true } };
+    const stamp = viewPresentationStamp(view.def);
+    expect(effectiveViewConfig(view, { emailListView: 'list', viewOverrides: {} }))
+      .toEqual({ listView: 'explorer', grouping: 'sender', timeline: true, overridden: false });
+    expect(effectiveViewConfig(view, { emailListView: 'list', viewOverrides: { v1: { stamp, listView: 'list', timeline: false } } }))
+      .toEqual({ listView: 'list', grouping: 'sender', timeline: false, overridden: true });
+    expect(effectiveViewConfig(view, { emailListView: 'list', viewOverrides: { v1: { stamp: 'old', listView: 'list' } } }).overridden).toBe(false);
+    expect(effectiveViewConfig({ id: 'v2', def: {} }, { emailListView: 'explorer', viewOverrides: {} }).listView).toBe('explorer');
   });
 });

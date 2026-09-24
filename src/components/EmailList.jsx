@@ -8,7 +8,7 @@ import { useSyncStore } from '../stores/syncStore';
 import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
-import { useViewStore, viewLabel } from '../stores/viewStore';
+import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
@@ -46,6 +46,7 @@ import {
   Mail,
   Network,
   Clock3,
+  RotateCcw,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
@@ -220,33 +221,37 @@ function EmailListComponent({ stacked = false }) {
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
   const listTimelineVisible = useSettingsStore(s => s.listTimelineVisible);
   const setListTimelineVisible = useSettingsStore(s => s.setListTimelineVisible);
-  // A view's own timeline choice, and the toolbar's session-local override of
-  // it — never written into the global `listTimelineVisible`, so a view
-  // closes leaving the global default exactly as it was. Reset the moment a
-  // different view opens so no view's choice leaks into the next.
-  const [viewTimelineOverride, setViewTimelineOverride] = useState(null); // { viewId, visible } | null
-  useEffect(() => { setViewTimelineOverride(null); }, [activeView?.id]);
-  const timelineVisible = activeView
-    ? (viewTimelineOverride?.viewId === activeView.id ? viewTimelineOverride.visible : !!activeView.def?.showTimeline)
-    : listTimelineVisible;
+  // While a view is open, list mode, explorer grouping and timeline belong to
+  // that view: a change is kept for it alone (reopening it, from another view
+  // or mailbox, shows it as it was left) and never written into the global
+  // settings, so closing the view leaves those exactly as they were.
+  const viewOverrides = useSettingsStore(s => s.viewOverrides);
+  const setViewOverride = useSettingsStore(s => s.setViewOverride);
+  const clearViewOverride = useSettingsStore(s => s.clearViewOverride);
+  const viewConfig = activeView ? effectiveViewConfig(activeView, { emailListView, viewOverrides }) : null;
+  const overrideView = patch => setViewOverride(activeView.id, viewPresentationStamp(activeView.def), patch);
+  const timelineVisible = viewConfig ? viewConfig.timeline : listTimelineVisible;
   const toggleTimelineVisible = () => {
-    if (activeView) setViewTimelineOverride({ viewId: activeView.id, visible: !timelineVisible });
+    if (activeView) overrideView({ timeline: !timelineVisible });
     else setListTimelineVisible(!listTimelineVisible);
   };
-  // A saved view that groups is shown grouped, whichever list mode is on: the
-  // grouping is what the view says it is, not a setting of this screen.
-  const viewGrouping = activeView?.def?.group || null;
-  const isExplorer = emailListView === 'explorer' || !!viewGrouping;
+  const setListView = mode => (activeView ? overrideView({ listView: mode }) : setEmailListView(mode));
+  const viewGrouping = viewConfig?.grouping || null;
+  const isExplorer = (viewConfig ? viewConfig.listView : emailListView) === 'explorer';
   const fieldSchemas = useFieldStore(s => s.fields);
   const fieldValues = useFieldStore(s => s.byRow);
   // Grouping by a custom field: the value of a row, as the word to group it
   // under. Subscribed, not read once — the view store fills this cache while
   // the rows are being shown.
+  // From the saved grouping, not the one on screen: the explorer offers it as
+  // a choice even after the reader has browsed by something else.
+  const savedGrouping = activeView?.def?.group || null;
   const viewFieldGroup = useMemo(() => {
-    const fieldId = viewGrouping?.startsWith('field:') ? viewGrouping.slice('field:'.length) : null;
+    const fieldId = savedGrouping?.startsWith('field:') ? savedGrouping.slice('field:'.length) : null;
     if (!fieldId) return null;
     const fieldIn = accountId => (fieldSchemas[accountId] || []).find(field => field.id === fieldId);
     return {
+      value: savedGrouping,
       label: fieldIn(activeAccountId)?.name || '',
       valueOf: (email) => {
         const location = resolveEmailLocation(email, useMailStore.getState());
@@ -260,7 +265,7 @@ function EmailListComponent({ stacked = false }) {
         return labelOf(raw);
       },
     };
-  }, [viewGrouping, fieldSchemas, fieldValues, activeAccountId, t]);
+  }, [savedGrouping, fieldSchemas, fieldValues, activeAccountId, t]);
   const explorerContext = useMemo(() => ({ activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope }),
     [activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope]);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
@@ -914,7 +919,7 @@ function EmailListComponent({ stacked = false }) {
       // which left the list permanently stuck when the chain died silently
       // (offline blip, aborted probe). loadMoreEmails self-guards against
       // double-entry via `loadingMore`.
-      if (useSettingsStore.getState().emailListView !== 'explorer'
+      if (currentListView() !== 'explorer'
         && container.scrollTop + container.clientHeight >= container.scrollHeight - 20 * ROW_HEIGHT_DEFAULT) {
         const { hasMoreEmails, loadingMore, viewMode, loadMoreEmails } = useMailStore.getState();
         if (hasMoreEmails && !loadingMore && viewMode !== 'local' && !useSearchStore.getState().searchActive) {
@@ -1108,16 +1113,15 @@ function EmailListComponent({ stacked = false }) {
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}
         <div className="mail-list-view-switch" role="group" aria-label={t('explorer.view')}>
-          {/* A grouped view owns how its rows are laid out, so neither button can
-              keep its promise while one is open. A control that does nothing is
-              worse than one that says it cannot: disable both until the view is
-              closed. */}
+          {/* Inside a view both buttons switch that view only; Reset takes it
+              back to how it was saved. */}
+          {viewConfig?.overridden && <button type="button" data-testid="view-reset-layout" className="mail-toolbar-button"
+            title={t('views.resetLayoutHint')} onClick={() => clearViewOverride(activeView.id)}>
+            <RotateCcw size={14} /><span>{t('views.resetLayout')}</span></button>}
           <button type="button" data-testid="mail-view-list" className="mail-toolbar-button" aria-pressed={!isExplorer}
-            disabled={!!viewGrouping}
-            onClick={() => setEmailListView('list')}><List size={14} /><span>{t('explorer.list')}</span></button>
+            onClick={() => setListView('list')}><List size={14} /><span>{t('explorer.list')}</span></button>
           <button type="button" data-testid="mail-view-explorer" className="mail-toolbar-button" aria-pressed={isExplorer}
-            disabled={!!viewGrouping}
-            onClick={() => { setEmailListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
+            onClick={() => { setListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
         </div>
       </div>
 
@@ -1171,11 +1175,12 @@ function EmailListComponent({ stacked = false }) {
             hasOpenThread={!!selectedThread} onThreadsChanged={syncSelectedThread}
             onSelectEmail={email => selectEmailRow(selKey(email), email)}
             // Searching a folder is leaving the view, not narrowing it: while a
-            // grouped view is open, setting the list mode alone changes nothing.
-            onSearchMailbox={() => { if (viewGrouping) closeView(); setEmailListView('list'); setShowSearch(true); }}
+            // view is open, setting the global list mode alone changes nothing.
+            onSearchMailbox={() => { if (activeView) closeView(); setEmailListView('list'); setShowSearch(true); }}
             partial={!searchActive && windowIsPartial} hasMore={!searchActive && viewMode !== 'local' && hasMoreEmails}
             loadingMore={loadingMore} loading={loading} onLoadMore={loadMoreEmails} searchActive={searchActive}
             groupingOverride={viewGrouping} fieldGroup={viewFieldGroup}
+            onGroupingChange={activeView ? grouping => overrideView({ grouping }) : undefined}
             renderEmail={email => {
               const key = selKey(email);
               return <RowComponent rowId={key} email={email} style={rowStyle}

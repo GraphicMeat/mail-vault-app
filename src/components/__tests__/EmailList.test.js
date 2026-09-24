@@ -163,7 +163,8 @@ vi.mock('../../stores/searchStore', () => {
   return { useSearchStore: hook };
 });
 
-vi.mock('../../stores/settingsStore', () => {
+vi.mock('../../stores/settingsStore', async () => {
+  const { create } = await import('zustand');
   // Hoisted, not rebuilt per call: a real Zustand store hands out the SAME
   // `accountColors` object until something writes to it. Minting a fresh one on
   // every read made every row's `accountColors` prop a new reference, which
@@ -188,11 +189,24 @@ vi.mock('../../stores/settingsStore', () => {
     trackerBlockingEnabled: true,
     billingProfile: null,
     listTimelineVisible: false,
-    setListTimelineVisible: vi.fn(value => Object.assign(state, { listTimelineVisible: value })),
+    setListTimelineVisible: vi.fn(value => store.setState({ listTimelineVisible: value })),
+    // A real store underneath, so a saved view's layout change re-renders the
+    // list the way the app's store does.
+    viewOverrides: {},
+    setViewOverride: (id, stamp, patch) => store.setState(s => {
+      const current = s.viewOverrides[id]?.stamp === stamp ? s.viewOverrides[id] : { stamp };
+      return { viewOverrides: { ...s.viewOverrides, [id]: { ...current, ...patch } } };
+    }),
+    clearViewOverride: id => store.setState(s => {
+      const { [id]: _dropped, ...rest } = s.viewOverrides;
+      return { viewOverrides: rest };
+    }),
+    setExplorerGrouping: grouping => store.setState({ explorerGrouping: grouping }),
   };
-  const hook = vi.fn((selector) => selector(state));
-  hook.getState = () => state;
-  hook.setState = (update) => Object.assign(state, update);
+  const store = create(() => state);
+  const hook = vi.fn((selector) => store(selector));
+  hook.getState = store.getState;
+  hook.setState = store.setState;
   return {
     useSettingsStore: hook,
     getAccountColor: () => '#888',
@@ -1461,9 +1475,9 @@ describe('select messages while a search is on', () => {
 });
 
 
-// A saved view that groups owns how its rows are laid out: the list renders
-// through Explorer with the view's grouping whatever `emailListView` says, and
-// the two mode buttons stop pretending they can change it.
+// A saved view that groups opens in Explorer with the view's grouping whatever
+// `emailListView` says. The reader can still switch it — for that view only —
+// and Reset takes it back to how it was saved.
 describe('a saved view drives the grouping', () => {
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
 
@@ -1479,7 +1493,7 @@ describe('a saved view drives the grouping', () => {
     });
     // The list mode stays 'list' for every case below: the view, not the
     // setting, is what is under test.
-    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {} });
+    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {}, viewOverrides: {} });
     useViewStore.setState({ views: def ? [{ id: 'v1', name: 'Saved', def }] : [], activeViewId: def ? 'v1' : null });
     // Only ever setState on these two — an action would call the daemon.
     useFieldStore.setState({ fields, byRow });
@@ -1498,7 +1512,7 @@ describe('a saved view drives the grouping', () => {
     const { useViewStore } = await import('../../stores/viewStore');
     const { useFieldStore } = await import('../../stores/fieldStore');
     useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
-    useSettingsStore.setState({ emailListView: 'list' });
+    useSettingsStore.setState({ emailListView: 'list', explorerGrouping: 'date', viewOverrides: {} });
     useViewStore.setState({ views: [], activeViewId: null });
     useFieldStore.setState({ fields: {}, byRow: {} });
   });
@@ -1523,12 +1537,95 @@ describe('a saved view drives the grouping', () => {
     expect(groups[0].dataset.detail).toBe('Priority');
   });
 
-  // Both buttons did nothing at all while a grouped view was open. A control
-  // that cannot keep its promise has to say so.
-  it('disables both list-mode buttons while a grouped view is open', async () => {
+  // Both buttons were disabled while a grouped view was open: a saved view
+  // could never be read as a plain list.
+  it('switches a grouped view to List for that view only', async () => {
     const { container } = await mount({ def: { group: 'sender' } });
-    expect(container.querySelector('[data-testid="mail-view-list"]').disabled).toBe(true);
-    expect(container.querySelector('[data-testid="mail-view-explorer"]').disabled).toBe(true);
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const listButton = container.querySelector('[data-testid="mail-view-list"]');
+    expect(listButton.disabled).toBe(false);
+    fireEvent.click(listButton);
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mail-view-list"]').getAttribute('aria-pressed')).toBe('true');
+    expect(useSettingsStore.getState().viewOverrides.v1.listView).toBe('list');
+  });
+
+  it('switching an ungrouped view to Explorer leaves the global list mode alone', async () => {
+    const { container } = await mount({ def: {} });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(container.querySelector('[data-testid="mail-view-explorer"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]')).not.toBeNull();
+    expect(useSettingsStore.getState().emailListView).toBe('list');
+  });
+
+  // Leaving for another view or a mailbox and coming back reopens the view
+  // the way it was left, not the way it was saved.
+  it('reopens a view with its last layout after visiting another view and a mailbox', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    const { useViewStore } = await import('../../stores/viewStore');
+    fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
+    await settle();
+    act(() => { useViewStore.setState({
+      views: [{ id: 'v1', name: 'Saved', def: { group: 'sender' } }, { id: 'v2', name: 'Other', def: { group: 'date' } }],
+      activeViewId: 'v2',
+    }); });
+    await settle();
+    // The other view is untouched by v1's choice.
+    expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('date');
+    act(() => { useViewStore.setState({ activeViewId: null }); });
+    await settle();
+    act(() => { useViewStore.setState({ activeViewId: 'v1' }); });
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mail-view-list"]').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('Reset takes the view back to how it was saved, and only shows once something changed', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
+    await settle();
+    fireEvent.click(container.querySelector('[data-testid="view-reset-layout"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('sender');
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
+  });
+
+  it('browsing a view by something else is kept for the view, not the global explorer grouping', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.change(container.querySelector('[data-testid="explorer-grouping"]'), { target: { value: 'conversation' } });
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('conversation');
+    expect(useSettingsStore.getState().explorerGrouping).toBe('date');
+    expect(useSettingsStore.getState().viewOverrides.v1.grouping).toBe('conversation');
+  });
+
+  it('offers a field grouping the view was saved with as a browse-by choice', async () => {
+    const { container } = await mount({
+      def: { group: 'field:f1' },
+      fields: { acc1: [{ id: 'f1', name: 'Priority', kind: 'select', options: [] }] },
+    });
+    const options = [...container.querySelectorAll('[data-testid="explorer-grouping"] option')];
+    expect(options.map(o => o.value)).toContain('field:f1');
+    expect(container.querySelector('[data-testid="explorer-grouping"]').value).toBe('field:f1');
+  });
+
+  // An edit in Settings is the new saved layout; an older toolbar click must
+  // not keep hiding it.
+  it('drops a layout change once the view is saved with a different layout', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    const { useViewStore } = await import('../../stores/viewStore');
+    fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
+    await settle();
+    act(() => { useViewStore.setState({ views: [{ id: 'v1', name: 'Saved', def: { group: 'date' } }] }); });
+    await settle();
+    expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('date');
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
   });
 
   // The switch sat mid-toolbar in list mode and jumped to the right edge in
@@ -1569,7 +1666,7 @@ describe('the timeline toggle is per view', () => {
       unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
     });
     useSettingsStore.setState({
-      emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {}, listTimelineVisible,
+      emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {}, listTimelineVisible, viewOverrides: {},
     });
     useViewStore.setState({ views: def ? [{ id: 'v1', name: 'Saved', def }] : [], activeViewId: def ? 'v1' : null });
     const { EmailList } = await import('../EmailList.jsx');
@@ -1584,7 +1681,7 @@ describe('the timeline toggle is per view', () => {
     const { useSettingsStore } = await import('../../stores/settingsStore');
     const { useViewStore } = await import('../../stores/viewStore');
     useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
-    useSettingsStore.setState({ emailListView: 'list', listTimelineVisible: false });
+    useSettingsStore.setState({ emailListView: 'list', listTimelineVisible: false, viewOverrides: {} });
     useViewStore.setState({ views: [], activeViewId: null });
   });
 
@@ -1619,7 +1716,7 @@ describe('the timeline toggle is per view', () => {
     expect(useSettingsStore.getState().listTimelineVisible).toBe(false);
   });
 
-  it('resets the override the moment a different view opens', async () => {
+  it('keeps each view\'s own choice: another view opens as saved, and the first comes back as left', async () => {
     const { container } = await mount({ def: {}, listTimelineVisible: false });
     const { useViewStore } = await import('../../stores/viewStore');
     fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
@@ -1632,6 +1729,10 @@ describe('the timeline toggle is per view', () => {
     }); });
     await settle();
     expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('false');
+
+    act(() => { useViewStore.setState({ activeViewId: 'v1' }); });
+    await settle();
+    expect(container.querySelector('[data-testid="timeline-toggle"]').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('the toolbar toggle still flips the global default when no view is open', async () => {

@@ -2815,6 +2815,8 @@
   "views.filtersHint": "일반적인 조건부터 시작하세요. “모두”는 두 종류를 포함합니다.",
   "views.presentation": "어떻게 표시할까요?",
   "views.presentationHint": "그룹과 정렬은 표시 방식만 바꿉니다.",
+  "views.resetLayout": "보기 재설정",
+  "views.resetLayoutHint": "이 보기를 저장할 때의 레이아웃으로 되돌립니다",
   "views.filter.more": "태그와 사용자 지정 필드",
   "views.moreHint": "일반 필터로 부족할 때 사용하세요.",
   "views.previewHint": "이 보기에 나타날 메일의 실시간 예시입니다. 저장해도 메일은 이동하지 않습니다.",

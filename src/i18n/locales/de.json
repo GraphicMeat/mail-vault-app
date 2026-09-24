@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Beginne mit den üblichen Kriterien. „Alle“ schließt beide Arten ein.",
   "views.presentation": "Wie anzeigen?",
   "views.presentationHint": "Gruppierung und Reihenfolge ändern nur die Darstellung.",
+  "views.resetLayout": "Ansicht zurücksetzen",
+  "views.resetLayoutHint": "Zurück zum Layout, mit dem diese Ansicht gespeichert wurde",
   "views.filter.more": "Tags und eigene Felder",
   "views.moreHint": "Nur verwenden, wenn die üblichen Filter nicht reichen.",
   "views.previewHint": "Live-Beispiel der angezeigten E-Mails. Das Speichern verschiebt nichts.",

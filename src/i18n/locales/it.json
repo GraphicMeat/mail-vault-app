@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Inizia dai criteri comuni. “Qualsiasi” include entrambi i tipi.",
   "views.presentation": "Come visualizzarli?",
   "views.presentationHint": "Raggruppamento e ordine cambiano solo la visualizzazione.",
+  "views.resetLayout": "Ripristina vista",
+  "views.resetLayoutHint": "Torna al layout con cui è stata salvata questa vista",
   "views.filter.more": "Tag e campi personalizzati",
   "views.moreHint": "Usali solo se i filtri comuni non bastano.",
   "views.previewHint": "Esempio in tempo reale dei messaggi mostrati. Salvare una vista non sposta nulla.",

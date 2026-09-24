@@ -3,6 +3,7 @@ import { daemonCall } from '../services/daemonClient';
 import { useMailStore } from './mailStore';
 import { useSearchStore } from './searchStore.js';
 import { useFieldStore } from './fieldStore';
+import { useSettingsStore } from './settingsStore';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
@@ -18,6 +19,35 @@ export function viewLabel(view, translate) {
   // a missing import.
   if (view?.builtin) return translate(`views.builtin.${view.builtin}`);
   return '';
+}
+
+/// The part of a view's saved definition its layout comes from. A layout
+/// change made against a different one is stale: an edit in Settings must not
+/// stay hidden behind an old click in the toolbar.
+export const viewPresentationStamp = def => JSON.stringify([def?.group || null, !!def?.showTimeline]);
+
+/// How a saved view is shown: list or explorer, what the explorer groups by,
+/// and whether the timeline is on. Each is what the person last picked while
+/// the view was open (`viewOverrides`), else what the view was saved with. A
+/// view that saved no grouping follows the app's own list mode.
+export function effectiveViewConfig(view, settings) {
+  const def = view?.def || {};
+  const saved = settings.viewOverrides?.[view?.id];
+  const override = saved?.stamp === viewPresentationStamp(def) ? saved : {};
+  return {
+    listView: override.listView ?? (def.group ? 'explorer' : settings.emailListView),
+    grouping: override.grouping ?? (def.group || null),
+    timeline: override.timeline ?? !!def.showTimeline,
+    overridden: ['listView', 'grouping', 'timeline'].some(key => key in override),
+  };
+}
+
+/// The list mode on screen right now, for code outside the list itself.
+export function currentListView() {
+  const settings = useSettingsStore.getState();
+  const { views, activeViewId } = useViewStore.getState();
+  const view = activeViewId && views.find(saved => saved.id === activeViewId);
+  return view ? effectiveViewConfig(view, settings).listView : settings.emailListView;
 }
 
 /// How many views a free account may keep. The starters count: they are

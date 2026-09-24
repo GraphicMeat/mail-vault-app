@@ -40,3 +40,26 @@ describe('Explorer preferences', () => {
     expect(useSettingsStore.getState()).toMatchObject({ emailListView: 'list', explorerGrouping: 'date', explorerDateDepth: 'month', explorerPaths: {} });
   });
 });
+
+describe('a saved view\'s own layout', () => {
+  it('drops a persisted override it cannot read, keeps the keys it can', () => {
+    const merged = _mergePersistedSettings({ viewOverrides: {
+      bad: 'x', noStamp: { listView: 'list' },
+      v1: { stamp: 's', listView: 'grid', grouping: 'field:f1', timeline: 'yes' },
+    } }, useSettingsStore.getState());
+    expect(merged.viewOverrides).toEqual({ v1: { stamp: 's', grouping: 'field:f1' } });
+    expect(_mergePersistedSettings({ viewOverrides: [1] }, useSettingsStore.getState()).viewOverrides).toEqual({});
+  });
+
+  it('merges changes against the same saved layout and starts over against a new one', () => {
+    const { setViewOverride } = useSettingsStore.getState();
+    setViewOverride('v1', 'a', { listView: 'list' });
+    setViewOverride('v1', 'a', { timeline: true });
+    expect(useSettingsStore.getState().viewOverrides.v1).toEqual({ stamp: 'a', listView: 'list', timeline: true });
+    setViewOverride('v1', 'b', { grouping: 'date' });
+    expect(useSettingsStore.getState().viewOverrides.v1).toEqual({ stamp: 'b', grouping: 'date' });
+    useSettingsStore.getState().clearViewOverride('v1');
+    expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
+  });
+
+});

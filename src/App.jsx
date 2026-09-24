@@ -11,6 +11,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { currentListView } from './stores/viewStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
   clampListPaneHeight, MIN_LIST_HEIGHT, MIN_VIEWER_HEIGHT,
@@ -561,7 +562,7 @@ function App() {
   // Every comparison goes through rowKey. Comparing the open message's id to a
   // bare `e.uid` is what made this do nothing at all in the unified inbox.
   const step = (delta) => {
-    if (useSettingsStore.getState().emailListView === 'explorer' && useSettingsStore.getState().viewStyle !== 'chat') {
+    if (currentListView() === 'explorer' && useSettingsStore.getState().viewStyle !== 'chat') {
       window.dispatchEvent(new CustomEvent('mailvault:explorer-step', { detail: delta }));
       return;
     }

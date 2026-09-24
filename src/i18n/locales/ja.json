@@ -2815,6 +2815,8 @@
   "views.filtersHint": "まず一般的な条件を選びます。「すべて」は両方を含みます。",
   "views.presentation": "表示方法",
   "views.presentationHint": "グループ化と並び順は表示だけを変えます。",
+  "views.resetLayout": "ビューをリセット",
+  "views.resetLayoutHint": "このビューを保存したときのレイアウトに戻します",
   "views.filter.more": "タグとカスタム項目",
   "views.moreHint": "一般的な条件で足りない場合に使用します。",
   "views.previewHint": "このビューに表示されるメールの見本です。保存してもメールは移動しません。",

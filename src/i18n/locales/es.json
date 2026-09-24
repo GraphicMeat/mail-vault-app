@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Empieza por los criterios habituales. «Cualquiera» incluye ambos tipos.",
   "views.presentation": "¿Cómo se mostrarán?",
   "views.presentationHint": "La agrupación y el orden solo cambian la presentación.",
+  "views.resetLayout": "Restablecer vista",
+  "views.resetLayoutHint": "Volver al diseño con el que se guardó esta vista",
   "views.filter.more": "Etiquetas y campos personalizados",
   "views.moreHint": "Úsalos solo si los filtros habituales no bastan.",
   "views.previewHint": "Muestra en vivo de los mensajes que verás. Guardar una vista no mueve nada.",

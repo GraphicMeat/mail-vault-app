@@ -2815,6 +2815,8 @@
   "views.filtersHint": "Commencez par les critères courants. « Tous » inclut les deux types.",
   "views.presentation": "Comment les afficher ?",
   "views.presentationHint": "Le regroupement et l’ordre ne modifient que l’affichage.",
+  "views.resetLayout": "Réinitialiser la vue",
+  "views.resetLayoutHint": "Revenir à la disposition enregistrée avec cette vue",
   "views.filter.more": "Tags et champs personnalisés",
   "views.moreHint": "À utiliser si les filtres courants ne suffisent pas.",
   "views.previewHint": "Échantillon des messages affichés. Enregistrer une vue ne déplace rien.",

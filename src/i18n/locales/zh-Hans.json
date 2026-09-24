@@ -2815,6 +2815,8 @@
   "views.filtersHint": "先使用常见条件。“不限”包含两种情况。",
   "views.presentation": "如何显示？",
   "views.presentationHint": "分组和排序只改变显示方式。",
+  "views.resetLayout": "重置视图",
+  "views.resetLayoutHint": "恢复为保存此视图时的布局",
   "views.filter.more": "标签和自定义字段",
   "views.moreHint": "仅在常见筛选条件不足时使用。",
   "views.previewHint": "此视图将显示的邮件示例。保存视图不会移动邮件。",
