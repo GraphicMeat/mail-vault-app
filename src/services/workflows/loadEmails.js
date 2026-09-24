@@ -145,6 +145,11 @@ export async function loadEmails() {
     }
   }, 20000);
 
+  // Hoisted out of the try block: the catch below falls back to whatever was
+  // loaded before this attempt, and a try-scoped `const` is invisible there
+  // (ReferenceError) whenever the error fires before line 301 assigns it.
+  let previousEmails;
+
   try {
     account = await ensureFreshToken(account);
     if (isStale()) return;
@@ -298,7 +303,7 @@ export async function loadEmails() {
     }
 
     // Keep previous/cached emails for degraded modes
-    const previousEmails = get().emails;
+    previousEmails = get().emails;
 
     // Resolve credentialed account
     const resolved = await resolveServerAccount(activeAccountId, account);
