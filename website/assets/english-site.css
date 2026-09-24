@@ -220,8 +220,10 @@
 .mv-header-seam path { fill:var(--mv-bg); }
 .mv-branded-section,.mv-studio { position:relative; }
 .mv-section-seam { top:-19px; }
-.mv-studio { background:#111216; color:#f3f3f8; margin-top:20px; }
-.mv-studio .mv-section-seam { color:#e9404c; }
+.mv-studio { background:#111216; color:#f3f3f8; z-index:2; }
+.mv-studio .mv-section-seam { color:#e9404c; top:-18px; }
+/* Notches filled with the studio colour; the baseline sits 1px inside the band so nothing above shows under it. */
+.mv-studio .mv-section-seam path { fill:#111216; }
 .mv-studio-inner { display:grid; grid-template-columns:1fr 240px; gap:80px; align-items:center; padding-block:42px; }
 .mv-studio h2 { font-size:clamp(1.6rem,3vw,2.4rem); }
 .mv-studio p { max-width:58ch; color:#b9bdca; font-size:.96rem; }
@@ -235,6 +237,7 @@
  .mv-studio-mark img { width:170px; }
  .mv-studio-mark { justify-self:start; }
  .mv-section-seam { height:14px; top:-13px; }
+ .mv-studio .mv-section-seam { top:-12px; }
 }
 .mv-newsletter > * { min-width:0; }
 @media(max-width:400px) {

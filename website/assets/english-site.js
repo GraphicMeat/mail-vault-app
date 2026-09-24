@@ -80,14 +80,16 @@
   const mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   const linux = /Linux/.test(navigator.userAgent) && !mobile;
   const mac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !mobile;
+  const windows = /Windows NT/.test(navigator.userAgent) && !mobile;
   if (mobile) document.querySelectorAll('.mv-mobile-device').forEach(el => { el.hidden = false; });
   if (linux) {
     const platform = document.querySelector('[data-platform="linux"]');
     if (platform) platform.parentElement.prepend(platform);
   }
-  if (mac || linux) {
+  const heroPlatform = mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
+  if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
     document.querySelectorAll('[data-hero-platform="fallback"]').forEach(el => { el.hidden = true; });
-    document.querySelectorAll('[data-hero-platform="' + (mac ? 'mac' : 'linux') + '"]').forEach(el => { el.hidden = false; });
+    document.querySelectorAll('[data-hero-platform="' + heroPlatform + '"]').forEach(el => { el.hidden = false; });
   }
 
   // Same anonymous aggregate event as the existing site; no app telemetry or IDs.
@@ -125,7 +127,7 @@
   })));
 
   const downloadStatus = document.querySelector('[data-download-status]');
-  const downloadControls = document.querySelectorAll('[data-download="mac"], [data-download="amd64"], [data-download="arm64"]');
+  const downloadControls = document.querySelectorAll('[data-download="mac"], [data-download="windows"], [data-download="amd64"], [data-download="arm64"]');
   if (downloadControls.length) {
     fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest', { signal: AbortSignal.timeout(10000) })
       .then(r => { if (!r.ok) throw new Error('release unavailable'); return r.json(); })
@@ -133,18 +135,21 @@
         if (!Array.isArray(release.assets)) throw new Error('release unavailable');
         const matches = {
           mac: release.assets.find(a => /\.dmg$/.test(a.name)),
+          windows: release.assets.find(a => /-setup\.exe$/.test(a.name)),
           amd64: release.assets.find(a => /amd64.*\.deb$/.test(a.name)),
           arm64: release.assets.find(a => /arm64.*\.deb$/.test(a.name)),
         };
+        // Only the platforms this page offers count towards "all links ready".
+        const wanted = Object.keys(matches).filter(platform => document.querySelector('[data-download="' + platform + '"]'));
         let resolved = 0;
         Object.entries(matches).forEach(([platform, asset]) => {
-          if (!asset) return;
+          if (!asset || !wanted.includes(platform)) return;
           const url = new URL(asset.browser_download_url);
           if (url.origin !== 'https://github.com' || !url.pathname.startsWith('/GraphicMeat/mail-vault-app/releases/download/')) return;
           document.querySelectorAll('[data-download="' + platform + '"]').forEach(link => { link.href = url.href; link.dataset.acquisitionResult = 'file'; });
           resolved++;
         });
-        if (downloadStatus) downloadStatus.textContent = resolved === 3
+        if (downloadStatus) downloadStatus.textContent = resolved === wanted.length
           ? (runtimeCopy.releaseReady || 'Latest release: {release}. Direct download links are ready.').replace('{release}', release.tag_name || 'available')
           : (runtimeCopy.releasePartial || 'Some downloads open the latest release page. Choose the file for your computer there.');
       })

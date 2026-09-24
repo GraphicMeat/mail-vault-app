@@ -117,12 +117,6 @@
 .hm-free::before { top:-19px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 24' preserveAspectRatio='none'%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440V24H0Z' fill='%230b0b16'/%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440' fill='none' stroke='%23b2adff' stroke-width='1.5' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"); }
 .hm-free::after { bottom:-19px; transform:scaleY(-1); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 24' preserveAspectRatio='none'%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440V24H0Z' fill='%2316132e'/%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440' fill='none' stroke='%23b2adff' stroke-width='1.5' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"); }
 .hm-final::before { top:-19px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 24' preserveAspectRatio='none'%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440V24H0Z' fill='%2307070f'/%3E%3Cpath d='M0 22H240L254 8H348L362 22H438L460 0H580L602 22H690L704 8H798L812 22H886L908 0H1028L1050 22H1126L1140 8H1234L1248 22H1440' fill='none' stroke='%23b2adff' stroke-width='1.5' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"); }
-/* The studio band below the final call: no gap, its notch filled with its own colour. */
-.hm ~ .mv-studio { margin-top:0; z-index:2; }
-.hm ~ .mv-studio .mv-section-seam path { fill:#111216; }
-/* The fill stops at the baseline; sit it 1px lower so no sliver of the band above shows under it. */
-.hm ~ .mv-studio .mv-section-seam { top:-18px; }
-@media (max-width:760px) { .hm ~ .mv-studio .mv-section-seam { top:-12px; } }
 
 @media (max-width:900px) {
   .hm-pillar { padding:72px 0; }
@@ -137,3 +131,7 @@
 }
 @media (prefers-reduced-motion:reduce) { .hm-benefits a,.hm-cards a { transition:none; } }
 .hm-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.hm-platforms { display:flex; justify-content:center; gap:20px; margin:0 0 20px; color:var(--mv-muted); }
+.hm-platforms svg { width:22px; height:22px; fill:currentColor; }
+.hm-final .mv-actions { justify-content:center; }
+.mv-feedback-quotes img.mv-person-mark { object-fit:cover; background:none; }
