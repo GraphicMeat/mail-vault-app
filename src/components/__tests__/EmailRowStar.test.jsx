@@ -29,7 +29,8 @@ vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
 // Renders the one hover action the rows own a handler for, so the archive case
 // below can press it.
 vi.mock('../RowQuickActions', () => ({
-  RowQuickActions: ({ onArchive }) => <button data-testid="row-archive" onClick={onArchive} />,
+  RowQuickActions: ({ onArchive, openAt }) => <button data-testid="row-archive" onClick={onArchive}
+    data-open-at={openAt ? `${openAt.x},${openAt.y}` : ''} />,
 }));
 vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
@@ -127,6 +128,20 @@ for (const [name, renderRow] of variants) {
 
       expect(props.actions.saveEmailsLocally).toHaveBeenCalledWith([e]);
       expect(props.onStartSaving).toHaveBeenCalled();
+    });
+  });
+}
+
+// Right-click on a row is the row's quick actions at the pointer, in place of
+// the webview's own Reload menu.
+for (const [name, renderRow] of variants) {
+  describe(`${name} — right-click`, () => {
+    it('opens the row actions at the pointer instead of the native menu', () => {
+      render(renderRow(email()));
+      const notCancelled = fireEvent.contextMenu(screen.getByTestId('email-row'), { clientX: 12, clientY: 34 });
+      expect(notCancelled).toBe(false);
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('12,34');
+      expect(onSelect).not.toHaveBeenCalled();
     });
   });
 }

@@ -61,6 +61,7 @@ function QuickActionsConfigured({
   inlineLimit,
   inlineAvailableWidth,
   preview = false,
+  openAt,
 }) {
   const t = useT();
   const triggerRef = useRef(null);
@@ -69,6 +70,9 @@ function QuickActionsConfigured({
   const [anchor, setAnchor] = useState(null);
   const [radialPage, setRadialPage] = useState(0);
   const [activeRadial, setActiveRadial] = useState(null);
+  // Opened from a right-click rather than the trigger: every action is on
+  // offer, whatever the inline or favorite slots already show.
+  const [atPointer, setAtPointer] = useState(false);
   const [parentAvailableWidth, setParentAvailableWidth] = useState(null);
   const previousPageRef = useRef(0);
   const id = useId();
@@ -105,7 +109,9 @@ function QuickActionsConfigured({
     `${item.entry.id}:${item.descriptor.label}`
   ).join("|");
   const inlineOverflow = mode === "inline" && configured.length > maxInline;
-  const remaining = mode === "favorite-menu"
+  const remaining = atPointer
+    ? configured
+    : mode === "favorite-menu"
     ? configured.filter((item) => item !== favorite)
     : mode === "inline"
     ? configured.slice(maxInline)
@@ -193,10 +199,13 @@ function QuickActionsConfigured({
 
   const close = useCallback((restoreFocus = true) => {
     setAnchor(null);
+    setAtPointer(false);
     setActiveRadial(null);
     onOpenChange?.(false);
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [onOpenChange]);
+    // A menu opened at the pointer has no trigger to go back to: focusing the
+    // row's hidden one would pin the row's hover bar open.
+    if (restoreFocus && !atPointer) requestAnimationFrame(() => triggerRef.current?.focus());
+  }, [onOpenChange, atPointer]);
   useEffect(() => {
     if (opened) {
       panelRef.current?.querySelector("button:not(:disabled)")?.focus();
@@ -212,12 +221,31 @@ function QuickActionsConfigured({
   }, [page, preview]);
   useEffect(() => {
     setAnchor(null);
+    setAtPointer(false);
     setRadialPage(0);
     setActiveRadial(null);
     onOpenChange?.(false);
   }, [identity, onOpenChange]);
+  // A right-click on the row hands in the pointer. Only a new point opens the
+  // menu: a re-render with the same one must not reopen what was just closed.
+  useEffect(() => {
+    if (!openAt) return;
+    onOpenChange?.(true);
+    setRadialPage(0);
+    setAtPointer(true);
+    const size = radial ? 304 : 0;
+    setAnchor({
+      top: radial
+        ? Math.max(8, Math.min(window.innerHeight - size - 8, openAt.y - size / 2))
+        : openAt.y,
+      left: radial
+        ? Math.max(8, Math.min(window.innerWidth - size - 8, openAt.x - size / 2))
+        : Math.max(8, Math.min(window.innerWidth - 232, openAt.x)),
+    });
+  }, [openAt]);
   const open = (event) => {
     event.stopPropagation();
+    setAtPointer(false);
     onOpenChange?.(true);
     const rect = event.currentTarget.getBoundingClientRect();
     const radialSize = radial ? 304 : 0;

@@ -11,6 +11,7 @@ import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { TrackerAlertIcon, getThreadTrackerInfo } from './TrackerAlertIcon';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { RowQuickActions } from './RowQuickActions';
+import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
 import { TagChips } from './TagChips';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
@@ -74,6 +75,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
+  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
 
   // Build participant display: every distinct sender in the thread, the user
   // included — a conversation you replied to shows your name too. In an
@@ -112,6 +114,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
+      onContextMenu={openMenuAtPointer}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
@@ -169,7 +172,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
-          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} />
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} openAt={menuAt} />
       </div>
     </div>
   );
@@ -206,6 +209,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
+  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
 
   const participantNames = useMemo(() => {
     const seen = new Set();
@@ -241,6 +245,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
+      onContextMenu={openMenuAtPointer}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
@@ -289,7 +294,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
-          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} display="icon-only" />
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} />
       </div>
     </div>
   );

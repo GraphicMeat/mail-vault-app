@@ -45,7 +45,7 @@ function sameResolvedAccount(locations) {
 
 function folderPath(folder) { return folder?.path || folder?.name || null; }
 
-export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity }) {
+export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity, openAt }) {
   const t = useT();
   const { config } = useQuickActionConfiguration('row');
   const localLabels = useTagStore(state => state.tags) || EMPTY_ARRAY;
@@ -229,7 +229,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   });
 
   return <>
-    <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} />
+    <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}

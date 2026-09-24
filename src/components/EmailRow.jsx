@@ -13,6 +13,7 @@ import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { RowQuickActions } from './RowQuickActions';
+import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
 import { TagChips } from './TagChips';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
@@ -93,6 +94,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
+  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
   const alerts = getCachedAlerts(scopeKey);
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
@@ -135,6 +137,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
+      onContextMenu={openMenuAtPointer}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input
@@ -201,7 +204,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
-          onArchive={handleSave} disabled={isSaving} identity={scopeKey} />
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} openAt={menuAt} />
       </div>
     </div>
   );
@@ -213,6 +216,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
+  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
   const alerts = getCachedAlerts(scopeKey);
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
@@ -251,6 +255,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
+      onContextMenu={openMenuAtPointer}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input type="checkbox" checked={isChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
@@ -300,7 +305,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
-          onArchive={handleSave} disabled={isSaving} identity={scopeKey} display="icon-only" />
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} />
       </div>
     </div>
   );

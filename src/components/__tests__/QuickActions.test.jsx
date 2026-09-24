@@ -109,6 +109,27 @@ describe("QuickActions", () => {
     );
   });
 
+  // A right-click on a row opens the row's actions at the pointer. Inline
+  // mode draws some of them on the row already; the pointer menu offers all.
+  it("opens every configured action at the pointer, once per right-click", async () => {
+    const at = { x: 40, y: 60 };
+    const { rerender } = render(
+      <QuickActions config={config("inline")} descriptors={descriptors} inlineLimit={1} openAt={at} />,
+    );
+    const menu = screen.getByRole("menu");
+    expect(menu.style.top).toBe("60px");
+    expect(menu.style.left).toBe("40px");
+    expect(screen.getAllByRole("menuitem").map((item) => item.getAttribute("aria-label")))
+      .toEqual(["Archive", "Reply", "Delete"]);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    // The same point again is a re-render, not a second right-click.
+    rerender(<QuickActions config={config("inline")} descriptors={descriptors} inlineLimit={1} openAt={at} />);
+    expect(screen.queryByRole("menu")).toBeNull();
+    rerender(<QuickActions config={config("inline")} descriptors={descriptors} inlineLimit={1} openAt={{ x: 40, y: 60 }} />);
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
   it("uses a safe favorite fallback when the saved favorite is unavailable", () => {
     render(
       <QuickActions
