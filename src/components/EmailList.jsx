@@ -1087,6 +1087,13 @@ function EmailListComponent({ stacked = false }) {
             {Object.entries(THREAD_MODE_LABEL).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
           </select>
         )}
+        {!isExplorer && emailListGrouping === 'chronological' && <button type="button"
+          data-testid="timeline-toggle" className={`mail-toolbar-button ${listTimelineVisible ? 'is-active' : ''}`}
+          aria-pressed={listTimelineVisible} title={t('list.timelineToggle')}
+          onClick={() => setListTimelineVisible(!listTimelineVisible)}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
+        {/* The switch is pinned to the right edge and always last: the controls
+            before it come and go with the mode, and it must not move under the
+            pointer when they do. */}
         <div className="mail-list-view-switch" role="group" aria-label={t('explorer.view')}>
           {/* A grouped view owns how its rows are laid out, so neither button can
               keep its promise while one is open. A control that does nothing is
@@ -1099,10 +1106,6 @@ function EmailListComponent({ stacked = false }) {
             disabled={!!viewGrouping}
             onClick={() => { setEmailListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
         </div>
-        {!isExplorer && emailListGrouping === 'chronological' && <button type="button"
-          data-testid="timeline-toggle" className={`mail-toolbar-button ${listTimelineVisible ? 'is-active' : ''}`}
-          aria-pressed={listTimelineVisible} title={t('list.timelineToggle')}
-          onClick={() => setListTimelineVisible(!listTimelineVisible)}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
       </div>
 
       {/* Search Bar */}

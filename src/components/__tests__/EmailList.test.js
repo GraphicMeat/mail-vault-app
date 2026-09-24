@@ -1525,6 +1525,21 @@ describe('a saved view drives the grouping', () => {
     expect(container.querySelector('[data-testid="mail-view-explorer"]').disabled).toBe(true);
   });
 
+  // The switch sat mid-toolbar in list mode and jumped to the right edge in
+  // explorer, where the controls before it are hidden. It is the last child in
+  // both, so the edge it is pinned to is the same one.
+  it('keeps the list/explorer switch last in the toolbar in both modes', async () => {
+    const last = container => container.querySelector('[role="toolbar"]').lastElementChild;
+    const list = await mount();
+    expect(last(list.container).classList.contains('mail-list-view-switch')).toBe(true);
+    expect(list.container.querySelector('[data-testid="timeline-toggle"]').nextElementSibling)
+      .toBe(last(list.container));
+    cleanup();
+    const explorer = await mount({ def: { group: 'sender' } });
+    expect(explorer.container.querySelector('[data-testid="explorer-view"]')).not.toBeNull();
+    expect(last(explorer.container).classList.contains('mail-list-view-switch')).toBe(true);
+  });
+
   it('leaves both list-mode buttons alone when no view is open', async () => {
     const { container } = await mount();
     expect(container.querySelector('[data-testid="mail-view-list"]').disabled).toBe(false);
