@@ -437,6 +437,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       listId: e.listId ?? row?.listId,
       listUnsubscribe: e.listUnsubscribe ?? row?.listUnsubscribe,
       precedence: e.precedence ?? row?.precedence,
+      // Same gap: the SPF/DKIM shield (SenderVerificationBadge) reads these.
+      authenticationResults: e.authenticationResults ?? row?.authenticationResults,
+      returnPath: e.returnPath ?? row?.returnPath,
     };
   };
 
