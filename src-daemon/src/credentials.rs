@@ -56,6 +56,16 @@ fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, S
     let json = read_entry(&entry, CREDENTIALS_KEY, interactive)
         .map_err(|e| format!("failed to read keychain: {}", e))?
         .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))?;
+    // Parts of a split blob (Windows) are plain reads: only the primary item
+    // feeds the gate.
+    let json = mailvault_core::keychain::join_secret(CREDENTIALS_KEY, &json, &mut |name| {
+        match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .map_err(|e| format!("failed to read keychain: {}", e))?;
     serde_json::from_str(&json).map_err(|e| format!("failed to parse credentials: {}", e))
 }
 

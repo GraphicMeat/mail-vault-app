@@ -455,16 +455,54 @@ async fn store_credentials(credentials: std::collections::HashMap<String, String
         let json = serde_json::to_string(&credentials)
             .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
 
-        let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
-            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
-
-        entry.set_password(&json)
-            .map_err(|e| format!("Failed to store credentials: {}", e))?;
+        write_credentials_blob(&json).map_err(|e| {
+            warn!("store_credentials: {}", e);
+            e
+        })?;
 
         info!("Credentials stored successfully");
         info!("=== STORE CREDENTIALS END ===");
         Ok(())
     }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
+}
+
+fn keyring_entry(name: &str) -> Result<Entry, String> {
+    Entry::new(KEYRING_SERVICE, name).map_err(|e| format!("Failed to create keyring entry: {}", e))
+}
+
+/// The blob, split across entries where the platform caps a secret's size
+/// (Windows). Parts first, then the manifest, then the previous generation's
+/// parts go: a reader always finds a complete set.
+fn write_credentials_blob(json: &str) -> Result<(), String> {
+    use mailvault_core::keychain::{secret_limit, split_secret, stale_parts};
+    let primary = keyring_entry(CREDENTIALS_KEY)?;
+    let old = primary.get_password().ok();
+    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let split = split_secret(CREDENTIALS_KEY, json, secret_limit(), &generation);
+    for (name, value) in &split.parts {
+        keyring_entry(name)?.set_password(value).map_err(|e| format!("Failed to store credentials part: {}", e))?;
+    }
+    primary.set_password(&split.primary).map_err(|e| format!("Failed to store credentials: {}", e))?;
+    if !split.parts.is_empty() {
+        info!("Credentials stored in {} parts", split.parts.len());
+    }
+    for name in stale_parts(CREDENTIALS_KEY, old.as_deref(), &split) {
+        if let Err(e) = keyring_entry(&name).and_then(|e| e.delete_credential().map_err(|e| e.to_string())) {
+            warn!("store_credentials: could not remove stale part {}: {}", name, e);
+        }
+    }
+    Ok(())
+}
+
+/// A stored primary resolved to the blob it stands for (see `join_secret`).
+fn join_credentials_blob(primary: &str) -> Result<String, String> {
+    mailvault_core::keychain::join_secret(CREDENTIALS_KEY, primary, &mut |name| {
+        match keyring_entry(name)?.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    })
 }
 
 /// The app's credential read never raises macOS's keychain prompt: the
@@ -515,6 +553,7 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
 
         match quiet_get_password(&entry) {
             Ok(json) => {
+                let json = join_credentials_blob(&json).map_err(|e| format!("unavailable:{}", e))?;
                 let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
                     .map_err(|e| format!("Failed to parse credentials: {}", e))?;
                 info!("Retrieved credentials for {} account(s)", credentials.len());
@@ -571,6 +610,7 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
                     .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
                 let json = quiet_get_password(&entry)
                     .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
+                let json = join_credentials_blob(&json)?;
                 let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
                     .map_err(|e| format!("Failed to parse credentials: {}", e))?;
                 info!("get_credentials: retry succeeded with {} account(s)", credentials.len());
