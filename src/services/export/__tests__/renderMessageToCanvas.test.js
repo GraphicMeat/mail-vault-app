@@ -22,12 +22,20 @@ const message = {
   messageId: '<abc@sizzlemedia.co>',
 };
 
+// jsdom has no 2d context. The copy only needs drawImage; the spy records
+// whether the export frame was still mounted when it ran.
+const drawImage = vi.fn();
+let getContext;
 beforeEach(() => {
   domToCanvas.mockReset();
   domToCanvas.mockResolvedValue({ width: 1640, height: 2000 });
+  drawImage.mockReset();
+  drawImage.mockImplementation(() => { drawImage.framesMounted = document.querySelectorAll('iframe').length; });
+  getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage });
 });
 
 afterEach(() => {
+  getContext.mockRestore();
   document.querySelectorAll('iframe').forEach(f => f.remove());
 });
 
@@ -87,6 +95,19 @@ describe('renderMessageToCanvas', () => {
   it('gives up after the second failure and reports the error', async () => {
     domToCanvas.mockRejectedValue(new Error('still broken'));
     await expect(renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 })).rejects.toThrow('still broken');
+  });
+
+  // Blink blanks a canvas whose document is removed; modern-screenshot's
+  // canvas belongs to the export frame, which is removed on return.
+  it('hands back a copy in the app document, taken while the frame is mounted', async () => {
+    const source = { width: 1640, height: 2000 };
+    domToCanvas.mockResolvedValue(source);
+    const canvas = await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 });
+    expect(canvas.ownerDocument).toBe(document);
+    expect([canvas.width, canvas.height]).toEqual([1640, 2000]);
+    expect(drawImage).toHaveBeenCalledWith(source, 0, 0);
+    expect(drawImage.framesMounted).toBe(1);
+    expect(document.querySelectorAll('iframe').length).toBe(0);
   });
 
   it('leaves no iframe behind when rasterizing fails', async () => {

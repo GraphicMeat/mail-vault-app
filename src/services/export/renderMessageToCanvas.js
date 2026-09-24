@@ -95,6 +95,19 @@ export async function measureMessageHeight({ message, bodyHtml, loadTimeoutMs })
   return height;
 }
 
+// modern-screenshot creates its canvas in the node's own document: the export
+// frame's. Blink (WebView2, so every Windows export) drops the backing store
+// of a canvas whose frame is removed, and the frame is removed right after
+// this returns, so the PNG came out blank. WebKit keeps it, which is why the
+// Mac never showed it. Copied into the app's document before the frame goes.
+function adopt(canvas) {
+  const copy = document.createElement('canvas');
+  copy.width = canvas.width;
+  copy.height = canvas.height;
+  copy.getContext('2d').drawImage(canvas, 0, 0);
+  return copy;
+}
+
 export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, loadTimeoutMs }) {
   const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats });
   const frame = await mountExportFrame(html, { loadTimeoutMs });
@@ -112,12 +125,12 @@ export async function renderMessageToCanvas({ message, bodyHtml, account, mailbo
     try {
       const canvas = await domToCanvas(frame.doc.body, options);
       trace('canvas', { w: canvas.width, h: canvas.height });
-      return canvas;
+      return adopt(canvas);
     } catch (first) {
       trace('canvas-retry', { error: String(first?.message || first) });
       // Known WebKit flake: the first foreignObject rasterize of a document can
       // come back empty or throw. One retry, then it is a real failure.
-      return await domToCanvas(frame.doc.body, options);
+      return adopt(await domToCanvas(frame.doc.body, options));
     }
   } finally {
     frame.dispose();
