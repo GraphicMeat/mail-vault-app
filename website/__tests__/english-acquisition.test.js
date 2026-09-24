@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve('website');
@@ -189,7 +189,9 @@ describe('English acquisition journey', () => {
     expect(form.querySelector('[role="status"]').textContent).toBe('Die E-Mail-Adresse konnte nicht gespeichert werden.');
   });
   it('keeps every local link, anchor, stylesheet, script, and screenshot resolvable',()=>{
-    for(const file of ['index.html','pricing.html','get-started.html']) {
+    // Subdirectory pages too: a root-relative href like "favicon.ico" only resolves at the root.
+    const sub = ['features','faq','blog','guides','compare'].flatMap(d => readdirSync(resolve(root,d)).filter(f => f.endsWith('.html')).map(f => d+'/'+f));
+    for(const file of ['index.html','pricing.html','get-started.html',...sub]) {
       const {doc}=page(file);
       const ids=Array.from(doc.querySelectorAll('[id]'),e=>e.id);
       expect(new Set(ids).size).toBe(ids.length);
