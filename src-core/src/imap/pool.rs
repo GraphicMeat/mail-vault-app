@@ -58,7 +58,7 @@ fn conn_key(config: &ImapConfig) -> String {
 /// on first use and nothing else, so it is the one failure worth trying again;
 /// a tagged `NO`/`BAD` is the server's answer and repeating it changes nothing.
 pub fn is_connection_lost(err: &str) -> bool {
-    const NEEDLES: [&str; 8] = [
+    const NEEDLES: [&str; 10] = [
         "connection lost", // async_imap::error::Error::ConnectionLost
         "connection reset",
         "connection aborted",
@@ -67,6 +67,14 @@ pub fn is_connection_lost(err: &str) -> bool {
         // unix surfaces as ECONNRESET/"connection reset", but worded with an
         // extra "was" that the needle above does not catch.
         "connection was aborted",
+        // Windows renders io::Error text in the system language, so the
+        // English needles miss on a German or Lithuanian install; the
+        // "(os error N)" suffix is the same everywhere. 10053 is
+        // WSAECONNABORTED, 10054 WSAECONNRESET ("An existing connection was
+        // forcibly closed by the remote host", which no needle above matches
+        // even in English). No unix errno is that large.
+        "os error 10053",
+        "os error 10054",
         "connection closed", // the TLS layer: "closed via error" / "closed gracefully"
         "broken pipe",
         "unexpected end of file",
@@ -558,6 +566,28 @@ mod connect_retry_tests {
         assert!(is_connection_lost("SELECT INBOX failed: io: Broken pipe (os error 32)"));
         assert!(is_connection_lost("SELECT CONDSTORE INBOX failed: io: connection closed gracefully"));
         assert!(is_connection_lost("SELECT INBOX failed: connection lost"));
+    }
+
+    #[test]
+    fn a_windows_localized_connection_error_is_still_a_dead_socket() {
+        // WSAECONNRESET, rendered in German — the English needles above
+        // ("connection reset"/"connection aborted") match nothing here; only
+        // the locale-independent "(os error 10054)" suffix does.
+        assert!(is_connection_lost(
+            "SELECT INBOX failed: io: Eine vorhandene Verbindung wurde vom Remotehost geschlossen. (os error 10054)"
+        ));
+        // WSAECONNRESET in English.
+        assert!(is_connection_lost(
+            "SELECT INBOX failed: io: An existing connection was forcibly closed by the remote host. (os error 10054)"
+        ));
+        // WSAECONNABORTED in English.
+        assert!(is_connection_lost(
+            "SELECT INBOX failed: io: An established connection was aborted by the software in your host machine. (os error 10053)"
+        ));
+        // A tagged server answer is not a dead socket, in any language.
+        assert!(!is_connection_lost(
+            "Login failed for butcher@graphicmeat.com: NO [AUTHENTICATIONFAILED] Invalid credentials"
+        ));
     }
 
     #[test]
