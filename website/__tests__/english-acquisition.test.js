@@ -111,6 +111,36 @@ describe('English acquisition journey', () => {
     localLink.click();
     expect(local.w.gm).toBeUndefined();
   });
+  it('counts every other CTA by target and placement, never by its localized text', () => {
+    const gm = vi.fn();
+    const {doc} = page('index.html', '', undefined, {gm, path:'de/index.html'});
+    const click = el => { el.addEventListener('click', e => e.preventDefault()); el.click(); };
+    click(doc.querySelector('.mv-nav-download[href^="/demo/"]'));
+    click(doc.querySelector('.mv-navlinks a[href="/pricing.html"]'));
+    click(doc.querySelector('#want-this-btn'));
+    click(doc.querySelector('.mv-footer nav a[href^="https://github.com/"]'));
+    expect(gm.mock.calls).toEqual([
+      ['cta_click', {page_version:'homepage-en-20260922', target:'/demo/', placement:'header'}],
+      ['cta_click', {page_version:'homepage-en-20260922', target:'/pricing.html', placement:'header'}],
+      ['cta_click', {page_version:'homepage-en-20260922', target:'#want-this-btn', placement:'feedback'}],
+      ['cta_click', {page_version:'homepage-en-20260922', target:'github.com/GraphicMeat/mail-vault-app', placement:'footer'}],
+    ]);
+  });
+  it('leaves named acquisition CTAs to their own event', () => {
+    const gm = vi.fn();
+    const {doc} = page('index.html', '', undefined, {gm});
+    const link = doc.querySelector('[data-acquisition-destination="demo"]');
+    link.addEventListener('click', e => e.preventDefault());
+    link.click();
+    expect(gm.mock.calls.map(([name]) => name)).toEqual(['home_cta']);
+  });
+  it('tags the tracker on every tracked page', () => {
+    const tagged = (html) => /<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="redesign-2026-09">\s*<\/script>/.test(html);
+    for (const file of ['index.html','pricing.html','get-started.html','changelog.html','features/tags.html','blog.html','faq.html']) {
+      expect(tagged(readFileSync(resolve(root, file), 'utf8')), file).toBe(true);
+    }
+    expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
+  });
   it('resolves desktop assets and counts only actual download actions', async () => {
     const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.11.3/';
     const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.11.3',assets:['MailVault.dmg','MailVault_amd64.deb','MailVault_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});

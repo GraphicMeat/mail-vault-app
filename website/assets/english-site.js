@@ -125,6 +125,19 @@
     platform: link.dataset.acquisitionDownload,
     destination: link.dataset.acquisitionResult || (link.dataset.acquisitionDownload === 'snap' ? 'store' : 'fallback'),
   })));
+  // Every other CTA: named by where it goes, not by its (localized) label.
+  const cta = 'a.mv-button, button.mv-button, .mv-text-link, .mv-navlinks a, .mv-mobile-menu nav a, .mv-footer nav a, .mv-community-actions > *';
+  document.addEventListener('click', e => {
+    const el = e.target.closest?.(cta);
+    if (!el || el.matches('[data-acquisition-event], [data-acquisition-download]')) return;
+    const href = el.getAttribute('href');
+    const url = href && new URL(href, location.href);
+    const target = !url ? '#' + (el.id || 'button')
+      : url.origin === location.origin ? url.pathname.replace(/^\/(de|fr|es|it|ja|ko|zh|pt-br)\//, '/') + url.hash
+      : url.hostname + url.pathname;
+    const placement = el.closest('header') ? 'header' : el.closest('footer') ? 'footer' : el.closest('section[id]')?.id || 'page';
+    acquisitionEvent('cta_click', { target, placement });
+  });
 
   const downloadStatus = document.querySelector('[data-download-status]');
   const downloadControls = document.querySelectorAll('[data-download="mac"], [data-download="windows"], [data-download="amd64"], [data-download="arm64"]');
