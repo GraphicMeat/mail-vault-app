@@ -61,15 +61,33 @@ pub fn probe_register_agent() -> Result<isize, String> {
     imp::register_agent_by_name("com.mailvault.app.probe.plist")
 }
 
+// Async so they leave the main thread, where a sync command runs: on Windows
+// each one waits on a `reg.exe` child, and the Daemon tab froze for it.
 #[tauri::command]
-pub fn autostart_state() -> AutostartState {
-    imp::state()
+pub async fn autostart_state() -> Result<AutostartState, String> {
+    off_main(imp::state).await
 }
 
 #[tauri::command]
-pub fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
-    imp::set(enabled)?;
-    Ok(imp::state())
+pub async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
+    off_main(move || {
+        imp::set(enabled)?;
+        Ok(imp::state())
+    })
+    .await?
+}
+
+async fn off_main<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // A blocking-pool thread has no autorelease pool of its own, and the
+        // SMAppService calls return autoreleased objects.
+        #[cfg(target_os = "macos")]
+        return objc2::rc::autoreleasepool(|_| f());
+        #[cfg(not(target_os = "macos"))]
+        f()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ── macOS ────────────────────────────────────────────────────────────────────

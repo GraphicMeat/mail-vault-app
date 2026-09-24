@@ -31,6 +31,7 @@
 - **A restored backup now brings back each account's server.** Backup ZIPs recorded every account's incoming and outgoing mail server as empty, so an account recreated by Import Backup came back with no server at all. New backups keep both, and restoring one fills them in. Backups made before this fix still import, but they never recorded a server, so their accounts still come back without one.
 - **Numbers follow the language you chose for MailVault.** Counts in the message list, the sidebar, progress dialogs and Settings were grouped the way your computer's region writes numbers, so English MailVault on a Lithuanian or German Mac showed "12 345" or "12.345". They now use the app's own language, the same way sorting already did.
 - **Tracker blocking now covers Cleanup and Time Capsule.** Opening a message in the Cleanup preview or in a Time Capsule snapshot loaded its tracking pixels even with tracker blocking on, because those previews skipped the protection the reading pane applies. They now show the same cleaned message as the reading pane.
+- **Settings tabs no longer freeze the window on Windows.** Opening Logs or Background Daemon paused the whole app while it read the log file or asked Windows about the login item. That work now happens in the background, the Logs tab reads only the end of the log instead of the whole file, and the Windows version lookup behind Billing no longer flashes a console window.
 
 ## [2.16.0] - 2026-09-23
 

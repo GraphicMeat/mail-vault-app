@@ -80,6 +80,46 @@ pub fn retire_stamp() -> u64 {
         .unwrap_or(0)
 }
 
+/// The last `n` lines of a text file, joined with `\n` (no trailing newline,
+/// CRLF stripped, invalid UTF-8 replaced). Reads backwards from the end in
+/// chunks, so a multi-megabyte log costs only the bytes of its tail.
+pub fn tail_lines(path: &Path, n: usize) -> std::io::Result<String> {
+    tail_lines_from(&mut fs::File::open(path)?, n, 64 * 1024)
+}
+
+fn tail_lines_from<R: std::io::Read + std::io::Seek>(r: &mut R, n: usize, chunk: usize) -> std::io::Result<String> {
+    use std::io::SeekFrom;
+    let end = r.seek(SeekFrom::End(0))?;
+    let mut pos = end;
+    // Bytes [pos, end). Split points are only ever just after a `\n` (0x0A),
+    // which never occurs inside a multi-byte UTF-8 sequence, so decoding once
+    // at the end never sees a code point cut in half.
+    let mut buf: Vec<u8> = Vec::new();
+    let mut start = 0;
+    let mut seen = 0;
+    'read: while pos > 0 && n > 0 {
+        let take = chunk.min(pos as usize);
+        pos -= take as u64;
+        r.seek(SeekFrom::Start(pos))?;
+        let mut piece = vec![0; take];
+        r.read_exact(&mut piece)?;
+        piece.extend_from_slice(&buf);
+        buf = piece;
+        for i in (0..take).rev() {
+            // The file's own final newline terminates the last line; it does
+            // not start another one.
+            if buf[i] == b'\n' && pos + i as u64 != end - 1 {
+                seen += 1;
+                if seen == n {
+                    start = i + 1;
+                    break 'read;
+                }
+            }
+        }
+    }
+    Ok(String::from_utf8_lossy(&buf[start..]).lines().collect::<Vec<_>>().join("\n"))
+}
+
 /// `.<name>.tmp-<pid>-<seq>`. The leading dot matters: Maildir readers parse the
 /// uid off the FRONT of a filename (`<uid>:2,S.eml`, `<uid>.eml`), so a temp
 /// named `<uid>:2,S.eml.tmp-…` left by a kill mid-write would read as "uid
@@ -137,6 +177,80 @@ mod tests {
         write_atomic(&path, b"hello").unwrap();
 
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn tail(s: &[u8], n: usize, chunk: usize) -> String {
+        tail_lines_from(&mut std::io::Cursor::new(s), n, chunk).unwrap()
+    }
+
+    #[test]
+    fn tail_returns_every_line_when_the_file_has_fewer() {
+        assert_eq!(tail(b"a\nb\n", 500, 3), "a\nb");
+    }
+
+    #[test]
+    fn tail_returns_exactly_the_limit() {
+        assert_eq!(tail(b"a\nb\nc\n", 3, 2), "a\nb\nc");
+        assert_eq!(tail(b"a\nb\nc\n", 2, 2), "b\nc");
+    }
+
+    #[test]
+    fn tail_keeps_the_last_line_without_a_trailing_newline() {
+        assert_eq!(tail(b"a\nb\nc", 2, 2), "b\nc");
+        assert_eq!(tail(b"only", 5, 2), "only");
+    }
+
+    #[test]
+    fn tail_keeps_empty_lines() {
+        assert_eq!(tail(b"a\n\n", 1, 4), "");
+        assert_eq!(tail(b"a\n\nb\n", 2, 4), "\nb");
+    }
+
+    #[test]
+    fn tail_strips_crlf_even_when_split_across_chunks() {
+        let s = b"one\r\ntwo\r\nthree\r\n";
+        // 17 bytes; a first read of 13 starts at byte 4, so the first line's
+        // `\r` and `\n` land in different chunks.
+        assert_eq!(s[3], b'\r');
+        assert_eq!(s[4], b'\n');
+        assert_eq!(tail(s, 5, 13), "one\ntwo\nthree");
+        assert_eq!(tail(s, 2, 13), "two\nthree");
+    }
+
+    #[test]
+    fn tail_of_an_empty_file_is_empty() {
+        assert_eq!(tail(b"", 500, 4), "");
+        assert_eq!(tail(b"a\nb\n", 0, 4), "");
+    }
+
+    #[test]
+    fn tail_never_splits_a_utf8_character_across_chunks() {
+        let s = "x\n\u{e9}t\u{e9}\nfin\n".as_bytes(); // é = C3 A9
+        // 12 bytes; a first read of 9 starts at byte 3, the A9 of the first é.
+        assert_eq!(s[3] & 0xC0, 0x80, "boundary must fall inside a character");
+        assert_eq!(tail(s, 2, 9), "\u{e9}t\u{e9}\nfin");
+        assert_eq!(tail(s, 5, 9), "x\n\u{e9}t\u{e9}\nfin");
+    }
+
+    #[test]
+    fn tail_decodes_invalid_utf8_lossily() {
+        assert_eq!(tail(b"a\n\xff\n", 1, 4), "\u{fffd}");
+    }
+
+    #[test]
+    fn tail_lines_reads_a_file_larger_than_one_chunk() {
+        let dir = scratch("tail");
+        let path = dir.join("mailvault.log");
+        let body: String = (0..10_000).map(|i| format!("line {i}\r\n")).collect();
+        assert!(body.len() > 64 * 1024);
+        std::fs::write(&path, &body).unwrap();
+
+        let got = tail_lines(&path, 500).unwrap();
+        let want: Vec<String> = (9_500..10_000).map(|i| format!("line {i}")).collect();
+        assert_eq!(got, want.join("\n"));
+        // More lines than one 64 KiB chunk holds forces a second read.
+        assert_eq!(tail_lines(&path, 9_000).unwrap().lines().count(), 9_000);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

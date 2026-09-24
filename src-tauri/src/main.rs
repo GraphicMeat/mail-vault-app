@@ -71,7 +71,6 @@ fn apply_menu_labels(
 }
 
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -243,8 +242,22 @@ async fn mailto_make_default() -> mailto::MailtoStatus {
         .unwrap_or_else(|_| mailto::status())
 }
 
+// Sync commands run on the main thread, and this one shells out (`cmd /C ver`,
+// `sw_vers`, `scutil`): the first Billing visit froze the window for it.
 #[tauri::command]
-fn get_client_info() -> Result<serde_json::Value, String> {
+async fn get_client_info() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        // Off the main thread two first calls can overlap (the JS caches only
+        // the resolved value); unserialized, both would mint a client id.
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        client_info()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn client_info() -> Result<serde_json::Value, String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
 
@@ -317,9 +330,12 @@ fn get_os_version() -> String {
 
 #[cfg(target_os = "windows")]
 fn get_os_version() -> String {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     Command::new("cmd")
         .args(["/C", "ver"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -677,15 +693,22 @@ fn store_password(account_id: String, password: String) -> Result<(), String> {
     result.map_err(|e| format!("Failed to store password: {}", e))
 }
 
+// Off the main thread: a sync command runs there, and the Logs tab stalled the
+// window for as long as the read took.
 #[tauri::command]
-fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result<String, String> {
+async fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result<String, String> {
     let log_dir = get_log_dir(&app_handle);
     let lines_to_read = lines.unwrap_or(500);
+    tauri::async_runtime::spawn_blocking(move || read_latest_log(&log_dir, lines_to_read))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
+fn read_latest_log(log_dir: &Path, lines_to_read: usize) -> Result<String, String> {
     info!("read_logs called, reading last {} lines", lines_to_read);
 
     // Find the most recent log file (files starting with "mailvault")
-    let mut log_files: Vec<_> = fs::read_dir(&log_dir)
+    let mut log_files: Vec<_> = fs::read_dir(log_dir)
         .map_err(|e| format!("Failed to read log directory: {}", e))?
         .filter_map(|e| e.ok())
         .filter(|e| {
@@ -711,27 +734,29 @@ fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result<Strin
     });
 
     if let Some(latest_log) = log_files.first() {
-        let file = fs::File::open(latest_log.path())
-            .map_err(|e| format!("Failed to open log file: {}", e))?;
-        let reader = BufReader::new(file);
-        let all_lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
-        let start = all_lines.len().saturating_sub(lines_to_read);
-        Ok(all_lines[start..].join("\n"))
+        mailvault_core::fsx::tail_lines(&latest_log.path(), lines_to_read)
+            .map_err(|e| format!("Failed to read log file: {}", e))
     } else {
         Ok("No log files found".to_string())
     }
 }
 
 #[tauri::command]
-fn clear_logs(app_handle: tauri::AppHandle) -> Result<String, String> {
+async fn clear_logs(app_handle: tauri::AppHandle) -> Result<String, String> {
     let log_dir = get_log_dir(&app_handle);
+    tauri::async_runtime::spawn_blocking(move || clear_log_files(&log_dir))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn clear_log_files(log_dir: &Path) -> Result<String, String> {
     info!("clear_logs called, clearing logs in: {:?}", log_dir);
 
     let mut cleared = 0;
     let mut truncated = 0;
 
     // Find all log files (files starting with "mailvault")
-    let mut log_files: Vec<_> = match fs::read_dir(&log_dir) {
+    let mut log_files: Vec<_> = match fs::read_dir(log_dir) {
         Ok(entries) => entries
             .flatten()
             .filter(|e| {
@@ -3527,7 +3552,7 @@ fn main() {
                         .save_file(move |file_path| {
                             if let Some(file_path) = file_path {
                                 if let Some(path) = file_path.as_path() {
-                                    if let Ok(logs) = read_logs(app_clone.clone(), None) {
+                                    if let Ok(logs) = read_latest_log(&log_dir, 500) {
                                         let _ = fs::write(path, logs);
                                     }
                                 }
