@@ -113,7 +113,7 @@ const DETAILS = {
     { selector: '.thread-reader', pad: 16 },
     // Ana Brandt is a normal contact, the most likely of the demo senders to
     // show the green "verified" badge rather than a warning/danger one.
-    { selector: '[data-testid="sender-verification"]', pad: 16, suffix: 'sender-verification' },
+    { selector: '*:has(> [data-testid="sender-verification"])', pad: 20, suffix: 'sender-verification' },
   ],
   'explorer-sender': { selector: '[data-testid="explorer-view"]', pad: 16 },
   'shortcuts-modal': { selector: '[data-testid="shortcuts-modal"]', pad: 16 },
@@ -1383,6 +1383,14 @@ describe('MailVault marketing screenshots', function () {
       await pressKey('?');
       await expectState((s) => s.shortcuts && !s.focusDialog, 'shortcuts modal did not open, or the focus dialog is still on screen');
     });
+    // `?` toggles the panel; left open it covered every later shot's crop.
+    if (await browser.execute(() => !!document.querySelector('[data-testid="shortcuts-modal"]'))) {
+      await pressKey('?');
+      try {
+        await browser.waitUntil(() => browser.execute(() => !document.querySelector('[data-testid="shortcuts-modal"]')),
+          { timeout: 4000, interval: 200 });
+      } catch { await closeMailDialog(L('common.close')); }
+    }
 
     // ── Templates / Auto Tags / Views / Tags / Custom Fields / Undo Send ──
     //
