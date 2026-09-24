@@ -103,7 +103,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               </select>
             </div>
             {backupGlobalConfig.interval === 'hours' && (
-              <div>
+              <div data-testid="backup-hours-section">
                 <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.pickHours')}</label>
                 <div className="flex flex-wrap gap-1" data-testid="backup-hours-picker">
                   {Array.from({ length: 24 }, (_, h) => {

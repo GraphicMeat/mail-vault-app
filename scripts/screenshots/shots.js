@@ -97,7 +97,10 @@ const DETAILS = {
   // BackupConfig.jsx as an earlier pass of this table assumed. That sub-tab is
   // what `settings-backup-schedule` already opens.
   'settings-backup-schedule': { selector: '[data-testid="backup-now-controls"]', pad: 16 },
-  'premium-backup-hours': { selector: '[data-testid="backup-hours-picker"]', pad: 16 },
+  // The parent block, not just the button grid: `backup-hours-picker` only
+  // wraps the 24 hour buttons, and the hint text below it is a sibling — a
+  // crop of the picker alone cut that hint off at the bottom.
+  'premium-backup-hours': { selector: '[data-testid="backup-hours-section"]', pad: 16 },
   // BackupVerificationTree's coverage percentages are computed live against
   // the mock server + local vault at capture time (see the step's own
   // comment) — this crops whichever state that happens to be in.
@@ -177,6 +180,38 @@ const clickByAriaLabel = (label, sel = 'button') => browser.execute((l, s) => {
 }, label, sel);
 
 /**
+ * Close whatever `.mail-dialog` is open, by its own X button, and wait for it
+ * to be gone — instead of trusting Escape (unreliable under tauri-wd — see
+ * composeHelpers.js's own note on Escape and the webview) or `resetToInbox`'s
+ * generic sweep (it matches a `title` attribute, which `ui/Dialog.jsx`'s close
+ * button does not carry — only `aria-label`). Left open, one of these dialogs
+ * rides into every later shot until something else happens to clear it.
+ *
+ * `label` is the dialog's own close-button aria-label — `common.close` for
+ * most (`ui/Dialog.jsx`'s default), `common.cancel` for `LinkSafetyModal`
+ * (passes `closeLabel={t('common.cancel')}`).
+ *
+ * Called BETWEEN `step()`s, not inside one — so it must never throw: when
+ * `SHOTS_ONLY` skips the step that would have opened this dialog (or that
+ * step itself failed before opening it), there is nothing here to close, and
+ * an uncaught error at this level would abort the whole run rather than just
+ * this one shot. A no-op when no `.mail-dialog` is on screen; a failed close
+ * is logged like a SKIPPED shot, never rethrown.
+ */
+async function closeMailDialog(label) {
+  try {
+    if (!(await browser.execute(() => !!document.querySelector('.mail-dialog')))) return;
+    if (!(await clickByAriaLabel(label, '.mail-dialog button'))) {
+      throw new Error(`.mail-dialog close button (aria-label "${label}") not found`);
+    }
+    await browser.waitUntil(() => browser.execute(() => !document.querySelector('.mail-dialog')),
+      { timeout: 5000, interval: 200, timeoutMsg: '.mail-dialog did not close' });
+  } catch (e) {
+    console.error(`[cleanup] SKIPPED closing .mail-dialog: ${e.message}`);
+  }
+}
+
+/**
  * A `<select>` driven the way React can hear it. WebDriver's own select
  * interaction sets `value` on the element, which React's onChange never sees —
  * the control shows the new option and the app keeps the old state, which is a
@@ -249,6 +284,8 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
     scheduleLocked: !!document.querySelector('[data-testid="compose-schedule-locked"]'),
     migrationToast: vis('[data-testid="migration-toast"]'),
     undoToast: vis('[data-testid="undo-send-toast"]'),
+    mailDialog: vis('.mail-dialog'),
+    focusDialog: vis('[data-testid="focus-dialog"]'),
     shortcuts: vis('[data-testid="shortcuts-modal"]'),
     insights: vis('[data-testid="sender-insights-panel"]'),
     // The Insights workspace, not the per-sender panel above it: two different
@@ -656,6 +693,10 @@ describe('MailVault marketing screenshots', function () {
       ].some((phrase) => s.text.includes(phrase)),
         'link safety modal did not open');
     });
+    // LinkSafetyModal passes its own `closeLabel` (Dialog's default is
+    // `common.close`) — left open, this rode all the way into
+    // `premium-scheduled-send`'s capture on the 2026-09 mini run.
+    await closeMailDialog(L('common.cancel'));
 
     await step('reply-to-mismatch', async () => {
       await browser.execute((clear) => {
@@ -688,14 +729,14 @@ describe('MailVault marketing screenshots', function () {
                             || s.text.includes(L('alert.replyTo.sentDomain')),
         'reply-to dialog did not open');
     });
+    // ReplyToAlertIcon's Dialog carries no custom closeLabel, so its X is
+    // `common.close` (Dialog's default).
+    await closeMailDialog(L('common.close'));
 
     await step('safety-sender-impersonation', async () => {
-      // Close the reply-to dialog the previous step left open. resetToInbox()
-      // presses Escape too, but its first pass clicks buttons BY TEXT and a
-      // Dialog's close control is an icon with no text, so the explicit press
-      // is what actually shuts it.
-      await pressKey('Escape');
-      await browser.pause(300);
+      // The reply-to dialog is already closed explicitly above now — this is
+      // just the usual reset (clears the sender-insights popover
+      // `reply-to-mismatch` opened, any lingering selection, etc).
       await resetToInbox();
       await clickRow(MARKERS.impersonation);
       await browser.pause(700);
@@ -708,13 +749,21 @@ describe('MailVault marketing screenshots', function () {
                             && s.text.includes(L('alert.sender.senderImpersonationDetected')),
         'sender impersonation dialog did not open');
     });
+    // SenderAlertIcon's Dialog also has no custom closeLabel — same default.
+    // Without this, the impersonation dialog rode into every later shot until
+    // something else happened to clear it (compose-email, premium-scheduled-send).
+    await closeMailDialog(L('common.close'));
 
     // ── Compose ───────────────────────────────────────────────────────────
     await step('compose-email', async () => {
       await resetToInbox();
       // The keyboard shortcut needs focus in the list; the button never misses.
       if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
-      await expectState((s) => s.compose, 'compose did not open');
+      // Belt and suspenders: a stale .mail-dialog (link-safety-modal /
+      // safety-reply-to-modal / safety-sender-impersonation, all above this)
+      // should already be closed by their own steps now — this fails loudly
+      // instead of silently photographing compose with a dialog on top.
+      await expectState((s) => s.compose && !s.mailDialog, 'compose did not open, or a stale .mail-dialog is still on screen');
       await browser.execute(() => {
         const set = (el, value) => {
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -762,7 +811,10 @@ describe('MailVault marketing screenshots', function () {
       parkedMigration = parked.activeMigration;
       await resetToInbox();
       if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
-      await expectState((s) => s.compose, 'compose did not open');
+      // Same defensive check as compose-email: this is the shot the 2026-09
+      // mini run actually caught a stale safety-sender-impersonation dialog
+      // sitting on top of.
+      await expectState((s) => s.compose && !s.mailDialog, 'compose did not open, or a stale .mail-dialog is still on screen');
       await setField('compose-to', SCHEDULED_REPLY.to);
       await setField('compose-subject', SCHEDULED_REPLY.subject);
       // insertText carries no newline; a paragraph is ProseMirror's own Enter.
@@ -1184,7 +1236,15 @@ describe('MailVault marketing screenshots', function () {
       // does not.
       const row = await $('[data-testid="settings-auto-cleanup"] [role="switch"]');
       await row.waitForExist({ timeout: 8000 });
-      await row.scrollIntoView({ block: 'center' });
+      // NOT `row.scrollIntoView()` (the wdio element command): tauri-wd
+      // executes it via a WebDriver element reference that does not resolve
+      // to a real DOM node on this driver ("elem.scrollIntoView is not a
+      // function"), the same class of gap noted at the top of this file for
+      // `waitForDisplayed`. Scroll a real DOM element from inside the page.
+      await browser.execute(() => {
+        document.querySelector('[data-testid="settings-auto-cleanup"] [role="switch"]')
+          ?.scrollIntoView({ behavior: 'instant', block: 'center' });
+      });
     });
 
     await step('premium-time-capsule', async () => {
@@ -1306,15 +1366,22 @@ describe('MailVault marketing screenshots', function () {
       if (!(await clickTestId('focus-preset-45'))) throw new Error('45 preset not found');
       await browser.pause(300);
       // Nothing closes the dialog here: `step` takes the shot AFTER this
-      // returns, so an Escape would photograph the inbox. The next step opens
-      // with closeSettings(), whose first act is an Escape, and that clears it.
+      // returns, so an Escape would photograph the inbox.
     });
+    // The comment this replaced assumed the NEXT step's closeSettings() would
+    // clear this via its own Escape — it does not: closeSettings() checks
+    // `[data-testid="settings-page"]` specifically and returns immediately
+    // when Settings isn't open (it never was here), so it never touches this
+    // dialog at all. Left open, it rode into every shot from `shortcuts-modal`
+    // through `final-inbox` — `tags` and `custom-fields` came out as flat
+    // grey/dark blocks because of it. Close it without starting a session.
+    await closeMailDialog(L('common.close'));
 
     await step('shortcuts-modal', async () => {
       await closeSettings();
       await browser.pause(700);
       await pressKey('?');
-      await expectState((s) => s.shortcuts, 'shortcuts modal did not open');
+      await expectState((s) => s.shortcuts && !s.focusDialog, 'shortcuts modal did not open, or the focus dialog is still on screen');
     });
 
     // ── Templates / Auto Tags / Views / Tags / Custom Fields / Undo Send ──
@@ -1373,7 +1440,15 @@ describe('MailVault marketing screenshots', function () {
     await step('settings-views', async () => {
       await openSettings();
       await browser.pause(500);
-      if (!(await clickByText(L('views.section')))) throw new Error('views tab not found');
+      // Unscoped, this matched the SIDEBAR's own "Views" fold toggle first
+      // (SidebarViews.jsx's `<button data-testid="views-fold"><h2>{t('views.section')}</h2></button>`,
+      // same label, still on screen with a real height behind the modal) —
+      // that button collapses the sidebar's saved-views list, not the
+      // Settings tab, so `settingsPage` stayed on whatever tab was open
+      // before. Scope the click to the settings dialog's own nav.
+      if (!(await clickByText(L('views.section'), '[data-testid="settings-page"] button'))) {
+        throw new Error('views tab not found');
+      }
       await expectState((s) => s.settings && s.settingsPage === 'views', 'views tab did not open');
       const viewName = 'Invoices';
       if (!(await clickTestId('views-new'))) throw new Error('new view button not found');

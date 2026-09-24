@@ -260,6 +260,11 @@ function threadInbox(uidBase) {
       from: CAST.ana, to: OWNER,
       subject: THREAD_SUBJECT,
       messageId: THREAD_ROOT,
+      // SPF+DKIM pass gives `checkSenderVerification` (senderCheck.js) a
+      // 'verified' status — the sender-verification badge (thread-view's
+      // second DETAILS crop) renders nothing at all without it, since no
+      // other fixture message carries an Authentication-Results header.
+      extra: ['Authentication-Results: mx.primecut.studio; spf=pass smtp.mailfrom=ana@sizzlemedia.co; dkim=pass header.d=sizzlemedia.co; dmarc=pass header.from=sizzlemedia.co'],
       body: [
         'Rowan,',
         '',

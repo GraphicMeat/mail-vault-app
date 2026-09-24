@@ -44,10 +44,15 @@ for png in "$DIR"/*.png; do
     rm -f "$tmp"
     produced=1
   done
-  # Every real full-window capture is >=1440px wide, so this only ever fires
-  # for a detail crop narrower than the smallest breakpoint (720) — the one
-  # case with no true-to-width variant otherwise. `<name>-detail.webp`, no
-  # width suffix, is the file such a page should reference directly.
+  # A detail crop between breakpoints (say 1000px) would otherwise top out at
+  # its 720 variant and look soft wherever it is shown larger. Keep one more
+  # variant at the crop's own width, named by that width like the others
+  # (`<name>-1000.webp`), so a srcset can offer the full-resolution pixels.
+  case "$src_width" in 720|1440|2880) ;; *)
+    [ "$src_width" -lt 2880 ] && cwebp -quiet -q 84 -alpha_q 90 "$png" -o "$DIR/${base}-${src_width}.webp"
+  ;; esac
+  # Narrower than 720: the native-width file above is the only variant; keep the
+  # plain `<name>.webp` alias too, which pages written before this referenced.
   if [ "$produced" -eq 0 ]; then
     cwebp -quiet -q 84 -alpha_q 90 "$png" -o "$DIR/${base}.webp"
   fi
