@@ -201,6 +201,8 @@ describe('Scheduled Send', function () {
     const before = new Set((await scheduledRows()).map((r) => r.id));
 
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-toggle"]')?.click());
+    // The Send later panel opens on its Send in tab; the set time is the other.
+    await browser.execute(() => document.querySelector('[data-testid="compose-later-tab-at"]')?.click());
     await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[data-testid="compose-schedule-preset-monday"]')), {
       timeout: 10_000, interval: 200, timeoutMsg: 'The schedule picker never opened from the toggle',
     });
@@ -210,7 +212,12 @@ describe('Scheduled Send', function () {
     const tz = await browser.execute(() => document.querySelector('[data-testid="compose-schedule-tz"]')?.dataset.value);
     expect(localTime).toBeTruthy();
 
+    // Schedule in the panel only arms Send; Send (now "Schedule send") schedules.
     await browser.execute(() => document.querySelector('[data-testid="compose-schedule-submit"]')?.click());
+    await browser.waitUntil(() => browser.execute(() => document.querySelector('[data-testid="compose-send"]')?.dataset.plan === 'at'), {
+      timeout: 5_000, interval: 200, timeoutMsg: 'Schedule in the panel never armed Send',
+    });
+    await browser.execute(() => document.querySelector('[data-testid="compose-send"]')?.click());
     await browser.waitUntil(async () => (await modalCount()) === 0, {
       timeout: 15_000, interval: 200, timeoutMsg: 'Compose stayed open after scheduling — handleSchedule never reached onClose',
     });

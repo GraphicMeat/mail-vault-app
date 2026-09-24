@@ -161,7 +161,7 @@ describe('Connected Compose Round 3', function () {
     // Refused: the staged .eml is only on disk while the send has not succeeded.
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await browser.pause(400);
     const formError = await testidText('compose-error');
@@ -258,7 +258,7 @@ describe('Connected Compose Round 3', function () {
     await openComposeFresh();
     await setField('compose-to', `"Doe, John" <doe@${SMTP_REFUSED_DOMAIN}>, second@${SMTP_REFUSED_DOMAIN}`);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await browser.pause(400);
     const formError = await testidText('compose-error');
@@ -285,7 +285,7 @@ describe('Connected Compose Round 3', function () {
     await openComposeFresh();
     await setField('compose-to', `trail@${SMTP_REFUSED_DOMAIN},`);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await browser.pause(400);
     expect(await testidText('compose-error')).toBeFalsy();
@@ -332,7 +332,7 @@ describe('Connected Compose Round 3', function () {
     await openComposeFresh();
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await waitForOutboxError(subject);
     expect(await lastIdentity()).toBe(null);

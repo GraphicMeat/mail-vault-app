@@ -59,6 +59,7 @@ import {
   readStagedEml,
   flatten,
   waitForOutboxError,
+  settingsCall,
 } from './composeHelpers.js';
 
 const HINT = 'compose-inline-dropzone-hint';
@@ -193,7 +194,7 @@ describe('Connected Compose Drop Zones', function () {
     // send SUCCEED, and the staged copy is only observable while it has not.
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
 
     expect(await clickSend()).toBe(true);
     await browser.pause(400);

@@ -1,7 +1,7 @@
 /**
  * E2E: Connected Compose Lifecycle — how a compose window ends. Close, the
  * discard dialog, backdrop click, Escape, minimize/restore, the draft bubble,
- * the send-delay select, and the outbox round trip after a failed send.
+ * the Send later panel, and the outbox round trip after a failed send.
  *
  * Harness facts this leans on:
  *   - WebDriver's Escape never reaches the webview, so `pressEscape()` from
@@ -271,36 +271,28 @@ describe('Connected Compose Lifecycle', function () {
   // Send delay
   // -------------------------------------------------------------------------
 
-  it('offers seven send-delay options and starts on the global value', async function () {
+  it('Send later arms a delay: Send says Schedule send, the time is written below', async function () {
     await freshCompose();
+    expect(await testidText('compose-send')).toBe('Send');
 
-    const delay = await browser.execute(() => {
-      const el = document.querySelector('[data-testid="compose-delay"]');
-      if (!el) return null;
-      return {
-        value: el.value,
-        values: [...el.options].map((o) => o.value),
-        labels: [...el.options].map((o) => o.text.trim()),
-      };
+    await browser.execute(() => document.querySelector('[data-testid="compose-schedule-toggle"]')?.click());
+    await browser.waitUntil(() => testidPresent('compose-later-chip-5'), {
+      timeout: 10_000, interval: 200, timeoutMsg: 'The Send later panel never opened on its Send in tab',
     });
-    expect(delay).not.toBe(null);
-    expect(delay.values).toEqual(['0', '15', '30', '60', '120', '180', '300']);
-    expect(delay.labels).toEqual([
-      'Send now', '15s delay', '30s delay', '1m delay', '2m delay', '3m delay', '5m delay',
-    ]);
-    // The global delay is 0 here, so a fresh compose sends immediately.
-    expect(delay.value).toBe('0');
+    // 5 minutes is inside the free undo window, so no Premium is needed here.
+    await browser.execute(() => document.querySelector('[data-testid="compose-later-chip-5"]')?.click());
+    await browser.execute(() => document.querySelector('[data-testid="compose-schedule-submit"]')?.click());
 
-    expect(await setField('compose-delay', 15)).toBe(true);
-    expect(await fieldValue('compose-delay')).toBe('15');
-  });
+    await browser.waitUntil(async () => (await testidText('compose-send')) === 'Schedule send', {
+      timeout: 5_000, interval: 200, timeoutMsg: 'Arming a delay never turned Send into Schedule send',
+    });
+    expect(await testidPresent('compose-schedule-submit')).toBe(false);
+    expect(await testidText('compose-send-plan')).toMatch(/^Sends in 5 mins?, at /);
 
-  it('picks up a changed global send delay on the next compose', async function () {
-    await settingsCall('setSendDelay', 30);
-    await freshCompose();
-    // The per-compose override is untouched, so the select falls through to the
-    // global setting. (afterEach puts it back to 0.)
-    expect(await fieldValue('compose-delay')).toBe('30');
+    await browser.execute(() => document.querySelector('[data-testid="compose-send-plan-clear"]')?.click());
+    await browser.waitUntil(async () => (await testidText('compose-send')) === 'Send', {
+      timeout: 5_000, interval: 200, timeoutMsg: 'Clearing the armed delay never put Send back',
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -317,8 +309,9 @@ describe('Connected Compose Lifecycle', function () {
       interval: 300,
       timeoutMsg: 'The attachment never landed before Send',
     });
-    // Delay 0 means the send skips the undo window and goes straight to the outbox.
-    expect(await fieldValue('compose-delay')).toBe('0');
+    // Nothing armed and a global delay of 0: the send skips the undo window
+    // and goes straight to the outbox.
+    expect(await testidText('compose-send')).toBe('Send');
 
     expect(await clickButtonTitle('Send (Shift+Enter)')).toBe(true);
     await waitForClosed('Compose stayed open after Send — handleSend never reached queueSend/onClose');

@@ -412,7 +412,7 @@ describe('Connected Compose Editor', function () {
     // survives on disk while the send has not succeeded.
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await browser.pause(400);
     const formError = await testidText('compose-error');
@@ -455,7 +455,7 @@ describe('Connected Compose Editor', function () {
     // Addressed to refuse: the staged .eml only survives while the send fails.
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     expect(await clickSend()).toBe(true);
     await browser.pause(400);
     const formError = await testidText('compose-error');

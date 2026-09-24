@@ -42,6 +42,7 @@ import {
   localIndex,
   waitForLocalDraft,
   flatten,
+  settingsCall,
 } from './composeHelpers.js';
 
 const DISCARD_DIALOG = '[data-testid="compose-discard-dialog"]';
@@ -328,7 +329,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // for, not an accident of the harness.
     await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', 'Draft outlives a failed send');
-    await setField('compose-delay', 0);
+    await settingsCall('setSendDelay', 0);
     await waitForLocalDraft(account.id, 'Draft outlives a failed send');
 
     expect(await clickSend()).toBe(true);
