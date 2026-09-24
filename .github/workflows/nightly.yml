@@ -75,8 +75,19 @@ jobs:
       bundle_version: ${{ needs.check.outputs.bundle_version }}
       release_tag: nightly
 
+  build-windows:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-windows.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.check.outputs.version }}
+
   publish:
-    needs: [check, build]
+    needs: [check, build, build-windows]
     if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -92,6 +103,12 @@ jobs:
         with:
           name: macos-artifacts
           path: artifacts
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-x86_64-artifacts
+          path: artifacts-windows
 
       - name: Replace the nightly prerelease
         env:
@@ -113,6 +130,9 @@ jobs:
           if ! grep -q "<sparkle:version>${BUNDLE_VERSION}</sparkle:version>" "$APPCAST"; then
             echo "::error::appcast sparkle:version is not ${BUNDLE_VERSION}"; cat "$APPCAST"; exit 1
           fi
+          # No latest.json on the nightly tag: Windows nightlies are manual installs.
+          WIN_EXE=$(find artifacts-windows -name "*_${VERSION}_*-setup.exe" | head -1)
+          if [ -z "$WIN_EXE" ]; then echo "::error::No Windows installer for ${VERSION}"; find artifacts-windows -type f; exit 1; fi
           SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
           DATE=$(date -u +%Y-%m-%d)
           if [ -n "$LAST" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null; then
@@ -128,5 +148,6 @@ jobs:
             --title "Nightly ${DATE} (${SHORT})" \
             --notes "$NOTES" \
             "$DMG" \
-            "$APPCAST"
+            "$APPCAST" \
+            "$WIN_EXE"
           echo "Published nightly ${VERSION} from ${GITHUB_SHA}"

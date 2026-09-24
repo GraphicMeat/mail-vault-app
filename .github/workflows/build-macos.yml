@@ -61,17 +61,7 @@ jobs:
         if: inputs.version != ''
         env:
           VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          sed -i '' -E "s/^(  \"version\": *\")[^\"]+\"/\1${VERSION}\"/" package.json src-tauri/tauri.conf.json
-          # First `version = ` line only (the [package] one).
-          awk -v new="$VERSION" '!done && /^version = "/ { sub(/^version = "[^"]+"/, "version = \"" new "\""); done=1 } 1' src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp && mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
-          echo "package.json:      $(grep -m1 '"version"' package.json)"
-          echo "tauri.conf.json:   $(grep -m1 '"version"' src-tauri/tauri.conf.json)"
-          echo "Cargo.toml:        $(grep -m1 '^version = ' src-tauri/Cargo.toml)"
-          for f in package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml; do
-            grep -q "$VERSION" "$f" || { echo "::error::version stamp missed $f"; exit 1; }
-          done
+        run: bash scripts/stamp-version.sh "$VERSION"
 
       - name: Set up Apple certificate
         env:
