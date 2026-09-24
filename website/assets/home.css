@@ -137,3 +137,7 @@
 .mv-feedback-quotes img.mv-person-mark { object-fit:cover; background:none; }
 .hm .mv-feedback-quotes { gap:40px 64px; }
 @media (max-width:760px) { .hm .mv-feedback-quotes figure+figure { border-top:1px solid var(--mv-line); padding-top:28px; } }
+.hm-quotes-small { grid-template-columns:repeat(3,1fr); gap:28px; margin-top:28px; }
+.hm-quotes-small blockquote p { font-size:1.08rem; line-height:1.5; }
+@media (max-width:900px) { .hm-quotes-small { grid-template-columns:1fr 1fr; } }
+@media (max-width:760px) { .hm-quotes-small { grid-template-columns:1fr; } }
