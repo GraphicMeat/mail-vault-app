@@ -11,6 +11,7 @@
 - **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
 
 ### Fixed
+- **The green SPF/DKIM shield is back on opened messages.** Opening a message showed no sender verification shield, even for mail that passed SPF and DKIM, because the opened copy did not keep the authentication results the message list already had. The shield and its details now show again.
 - **A view's account choice now narrows what it finds.** Choosing accounts for a saved view changed nothing: the view, its count in the sidebar and the preview in Settings all kept reading every account. They now read only the accounts you picked, and picking none still means all of them.
 - **Messages you delete stay gone when you open a view.** Deleting mail in the inbox and then opening a saved view showed the deleted messages again, because the view reads your vault and the copies were still there. A view now leaves out the messages you just deleted, and an archived copy of a message deleted on the server is shown as local only, as it is in search.
 - **Quit in the tray menu stops the background helper again.** Since 2.10.0, choosing Quit from the tray menu (or File, Quit on Linux) closed MailVault but left its background helper running. It now stops, unless Settings, Background Daemon is set to keep it running after you quit.
