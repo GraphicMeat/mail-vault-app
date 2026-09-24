@@ -30,7 +30,7 @@ const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
  * nested path would silently stop being localized and every locale would serve
  * the English light shot.
  */
-const THEME_SUFFIX = process.env.SHOTS_THEME === 'light' ? '-light' : '';
+export const THEME_SUFFIX = process.env.SHOTS_THEME === 'light' ? '-light' : '';
 
 export const OUT_DIR = process.env.SHOTS_OUT
   || resolve(HERE, '../../website/screenshots', LOCALE_DIR === 'en' ? '' : LOCALE_DIR);
@@ -128,4 +128,70 @@ export function capture(name, { appName = 'MailVault' } = {}) {
   previousBytes = bytes;
   console.log(`[shot] ${out}`);
   return out;
+}
+
+/** Pixel dimensions of a PNG on disk, via `sips` — no new dependency. */
+export function pngSize(path) {
+  const out = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', path], { encoding: 'utf-8' });
+  const width = Number(out.match(/pixelWidth:\s*(\d+)/)?.[1]);
+  const height = Number(out.match(/pixelHeight:\s*(\d+)/)?.[1]);
+  if (!width || !height) throw new Error(`sips could not read the size of ${path}`);
+  return { width, height };
+}
+
+/**
+ * Map an element's CSS-pixel rect inside the webview to a pixel crop box in
+ * the window's PNG capture — pure, no I/O, so `detailCrop.check.mjs` can
+ * assert it directly.
+ *
+ * The webview sits bottom-aligned and horizontally centred inside the native
+ * window screenshot: the title bar/frame is the strip above it, and
+ * `screencapture -o` (no drop shadow) leaves no border on the other three
+ * sides. So, in image pixels:
+ *
+ *   offsetX = (imgW - innerWidth  * dpr) / 2   — centred horizontally
+ *   offsetY =  imgH - innerHeight * dpr        — flush with the bottom
+ *
+ * `rect` is CSS px from `getBoundingClientRect()`; `padding` is CSS px added
+ * on every side before scaling to device pixels. The result is clamped to the
+ * image bounds — `sips --cropOffset` does not clamp, it pads whatever is
+ * outside the source with black — and returns null when the padded rect has
+ * no on-screen overlap with the image at all (offscreen element, stale rect,
+ * wrong selector). Callers must treat null as "skip", never as a 0×0 crop.
+ */
+export function detailCropBox(rect, viewport, image, padding = 0) {
+  const { innerWidth, innerHeight, devicePixelRatio: dpr } = viewport;
+  const offsetX = (image.width - innerWidth * dpr) / 2;
+  const offsetY = image.height - innerHeight * dpr;
+
+  const left = offsetX + (rect.x - padding) * dpr;
+  const top = offsetY + (rect.y - padding) * dpr;
+  const width = (rect.width + 2 * padding) * dpr;
+  const height = (rect.height + 2 * padding) * dpr;
+
+  const x0 = Math.max(0, left);
+  const y0 = Math.max(0, top);
+  const x1 = Math.min(image.width, left + width);
+  const y1 = Math.min(image.height, top + height);
+
+  const outW = Math.round(x1 - x0);
+  const outH = Math.round(y1 - y0);
+  if (outW <= 0 || outH <= 0) return null;
+
+  return { x: Math.round(x0), y: Math.round(y0), width: outW, height: outH };
+}
+
+/**
+ * Crop `srcPng` to `box` (from `detailCropBox`) and write `outPng`, via
+ * `sips --cropToHeightWidth H W --cropOffset Y X` — order verified empirically
+ * (macOS ships no man-page example): `--cropOffset` takes an ABSOLUTE
+ * top-left corner as `<fromTop> <fromLeft>`, not an offset from the sips
+ * default centred crop, and `--out` leaves the source file untouched.
+ */
+export function cropDetail(srcPng, outPng, box) {
+  execFileSync('sips', [
+    '--cropToHeightWidth', String(box.height), String(box.width),
+    '--cropOffset', String(box.y), String(box.x),
+    srcPng, '--out', outPng,
+  ], { stdio: 'ignore' });
 }

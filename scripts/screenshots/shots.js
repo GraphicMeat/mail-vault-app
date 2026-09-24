@@ -14,9 +14,10 @@
  *   2. A shot that cannot reach its state is SKIPPED and logged, never faked.
  */
 
+import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, pressKey } from '../../tests/e2e/helpers.js';
 import { setField, typeInBody, pressInBody } from '../../tests/e2e/composeHelpers.js';
-import { capture } from './capture.js';
+import { capture, pngSize, detailCropBox, cropDetail, OUT_DIR, THEME_SUFFIX } from './capture.js';
 import { raiseWindow } from './window.js';
 import { demoScenarios } from './demoData.js';
 import { makeLabels } from './labels.js';
@@ -67,6 +68,36 @@ const IN_FLIGHT = [
 
 
 const SETTLE = 900;
+
+/**
+ * Close-up crops for the marketing feature pages: shot name -> one detail, or
+ * an array of details when a single screen yields two (`suffix` then tells
+ * them apart in the filename). `selector` is read against the live DOM right
+ * after the full-window shot; `pad` is CSS px of context kept on every side.
+ *
+ * These reuse selectors the app already ships (data-testid, or a stable class
+ * like `.mail-dialog` / `.thread-reader`) — nothing here required adding a
+ * hook to src/. A selector that matches nothing, or an element with no
+ * on-screen rect, SKIPS that one crop and logs why; it never fakes one.
+ */
+const DETAILS = {
+  'link-safety-modal': { selector: '.mail-dialog', pad: 16 },
+  'safety-reply-to-modal': { selector: '.mail-dialog', pad: 16 },
+  'safety-sender-impersonation': { selector: '.mail-dialog', pad: 16 },
+  // `vault-path` renders inside BackupConfig's <MailStorageLocation>, on the
+  // Backup tab — NOT the Storage tab, despite the name (StorageSettings.jsx
+  // holds cleanup rules, not a location display).
+  'settings-backup': { selector: '[data-testid="vault-path"]', pad: 20 },
+  'premium-backup-hours': { selector: '[data-testid="backup-hours-picker"]', pad: 16 },
+  'premium-tracker-blocking': { selector: '[data-testid="settings-tracker-blocking"]', pad: 16 },
+  'premium-auto-cleanup': { selector: '[data-testid="settings-auto-cleanup"]', pad: 16 },
+  'chat-view-thread': { selector: '[data-testid="chat-view"]', pad: 16 },
+  'thread-view': { selector: '.thread-reader', pad: 16 },
+  'explorer-sender': { selector: '[data-testid="explorer-view"]', pad: 16 },
+  'shortcuts-modal': { selector: '[data-testid="shortcuts-modal"]', pad: 16 },
+  'search-results': { selector: '#mail-search-panel', pad: 16 },
+  'insights-map': { selector: '[data-testid="insights-page"]', pad: 16 },
+};
 
 // SHOTS_ONLY=email-list-view,thread-view narrows a run while iterating.
 const ONLY = (process.env.SHOTS_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -227,7 +258,48 @@ async function shot(name, settle = SETTLE) {
   // its next frame: a capture taken immediately still shows the ring a dialog's
   // auto-focused close button was wearing.
   await browser.pause(150);
-  capture(name);
+  const fullPath = capture(name);
+  const details = DETAILS[name];
+  if (details) {
+    for (const detail of Array.isArray(details) ? details : [details]) {
+      // A failed crop must not read as a failed shot: the full capture above is already on disk.
+      try { await captureDetail(name, fullPath, detail); } catch (e) { console.error(`[detail] SKIPPED ${name}: ${e.message}`); }
+    }
+  }
+}
+
+/**
+ * One close-up crop of `fullPath`, the full-window capture `shot()` just took.
+ * Reads the element's rect and the live viewport in one round trip — both are
+ * needed by `detailCropBox`, and a rect read a beat after a resize would be
+ * stale. Never throws: a missing selector or an off-screen element is a
+ * logged skip, same policy as `step()` for the shot itself.
+ */
+async function captureDetail(name, fullPath, { selector, pad = 0, suffix }) {
+  const label = `${name}${suffix ? `/${suffix}` : ''}`;
+  const found = await browser.execute((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return {
+      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
+  }, selector);
+  if (!found) {
+    console.error(`[detail] SKIPPED ${label}: selector "${selector}" matched nothing on-screen`);
+    return;
+  }
+  const image = pngSize(fullPath);
+  const box = detailCropBox(found.rect, found.viewport, image, pad);
+  if (!box) {
+    console.error(`[detail] SKIPPED ${label}: "${selector}" rect has no overlap with the capture`);
+    return;
+  }
+  const out = join(OUT_DIR, `${name}-detail${suffix ? `-${suffix}` : ''}${THEME_SUFFIX}.png`);
+  cropDetail(fullPath, out, box);
+  console.log(`[detail] ${out}`);
 }
 
 async function step(name, fn, settle) {
