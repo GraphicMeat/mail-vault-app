@@ -49,13 +49,14 @@ describe('website nav', () => {
     const files = englishPages();
     expect(files.length).toBeGreaterThanOrEqual(47);
     expect(files).toEqual(expect.arrayContaining(['website/index.html', 'website/changelog.html', 'website/privacy.html', 'website/terms.html']));
-    const expected = ['/#how-it-works', '/features.html', '/pricing.html', '/blog.html', '/docs.html', '/demo/?lang=en'];
+    const expected = ['/features.html', '/pricing.html', '/faq.html'];
     for (const file of files) {
       const dom = new JSDOM(readFileSync(file, 'utf8'));
       try {
         const doc = dom.window.document;
         expect([...doc.querySelectorAll('.mv-navlinks a')].map(a => a.getAttribute('href')), file).toEqual(expected);
-        expect([...doc.querySelectorAll('.mv-mobile-menu nav a')].map(a => a.getAttribute('href')), file).toEqual([...expected, '/get-started.html?plan=free']);
+        expect([...doc.querySelectorAll('.mv-mobile-menu nav a')].map(a => a.getAttribute('href')), file).toEqual([...expected, '/demo/?lang=en', '/get-started.html?plan=free']);
+        expect([...doc.querySelectorAll('.mv-navtools > a.mv-button')].map(a => a.getAttribute('href')), file).toEqual(['/demo/?lang=en', '/get-started.html?plan=free']);
         expect(doc.querySelector('.mv-mobile-menu summary'), file).not.toBeNull();
         expect(doc.querySelector('.mv-language a[hreflang="de"]'), file).not.toBeNull();
         expect(doc.querySelector('script[src^="/assets/english-site.js"]'), file).not.toBeNull();

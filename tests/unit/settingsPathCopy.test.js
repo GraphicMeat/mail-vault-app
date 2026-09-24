@@ -53,9 +53,10 @@ const catalog = (code) => JSON.parse(readFileSync(`src/i18n/locales/${code}.json
 function deadPaths(text, cat) {
   const settings = cat['settingsPage.settings'];
   const general = cat['settings.tab.general'];
+  const prefs = cat['settings.navigation.mailPreferences'];
   const hits = [];
-  const count = (needle) => {
-    for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + 1)) hits.push(needle);
+  const count = (needle, hay = text) => {
+    for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) hits.push(needle);
   };
   if (!settings) return hits;
   for (const sep of SEPARATORS) {
@@ -63,7 +64,12 @@ function deadPaths(text, cat) {
       if (general && cat[key]) count(`${settings} ${sep} ${general} ${sep} ${cat[key]}`);
     }
     for (const key of MAIL_PREFS_KEYS) {
-      if (cat[key]) count(`${settings} ${sep} ${cat[key]}`);
+      if (!cat[key]) continue;
+      // Where the Mail preferences label itself ends in the Settings word
+      // (E-Mail-Einstellungen, メールの設定, 邮件偏好设置), the right path contains
+      // the wrong one, so take the right ones out before counting.
+      const rest = prefs ? text.split(`${settings} ${sep} ${prefs} ${sep} ${cat[key]}`).join('') : text;
+      count(`${settings} ${sep} ${cat[key]}`, rest);
     }
   }
   return hits;
@@ -97,6 +103,12 @@ describe('settings paths in user-facing copy', () => {
   it('names a tab that exists in the changelog', () => {
     const hits = deadPaths(readFileSync('CHANGELOG.md', 'utf8'), catalog('en'));
     expect(hits, hits.join(', ')).toEqual([]);
+  });
+
+  it('reads a full path whose Mail preferences label ends in the Settings word', () => {
+    const de = catalog('de');
+    expect(deadPaths('Einstellungen → E-Mail-Einstellungen → Benachrichtigungen', de)).toEqual([]);
+    expect(deadPaths('Einstellungen → Benachrichtigungen', de)).toEqual(['Einstellungen → Benachrichtigungen']);
   });
 
   it('leaves the one path that belongs to Apple Mail alone', () => {
