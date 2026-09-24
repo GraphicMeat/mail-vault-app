@@ -7,7 +7,7 @@ import { useT } from '../../i18n/index.js';
 
 // See aiClient.js's FALLBACK_AI_SETTINGS — some specs mock the whole
 // settingsStore module with an object that predates aiSettings.
-const FALLBACK_AI_SETTINGS = { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false };
+const FALLBACK_AI_SETTINGS = { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false, skipPreview: false };
 
 /** One action table feeding one prompt builder and one preview — not five code paths. */
 const ACTIONS = {
@@ -42,9 +42,10 @@ function buildPrompt(actionId, text, tone) {
  * here reads it until the user clicks); `onResult(actionId, text)` gets the
  * generated text to insert, however the caller's surface wants to use it.
  *
- * Every click always opens `AiContextPreview` first, local providers
- * included ("still show what was used") — see that component for why this
- * is a stricter, single-path version of the spec's "first send" floor.
+ * Every click opens `AiContextPreview` first, local providers included
+ * ("still show what was used") — see that component for why this is a
+ * stricter, single-path version of the spec's "first send" floor — unless
+ * the user turned the preview off (`aiSettings.skipPreview`).
  */
 export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText, getDraftText, onResult }) {
   const t = useT();
@@ -76,6 +77,9 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
     : available !== true
       ? t('ai.actions.disabledUnavailable')
       : null;
+  // An endpoint the user has never confirmed still gets the preview once:
+  // skipping is for text that stays on the device, or already went there.
+  const skipPreview = !!aiSettings.skipPreview && (provider.type !== 'endpoint' || aiSettings.endpointConsented);
 
   const start = (actionId, tone) => {
     const cfg = ACTIONS[actionId];
@@ -83,21 +87,23 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
     if (!text) return;
     setToneOpenFor(false);
     setError(null);
-    setPending({ actionId, tone, text, prompt: buildPrompt(actionId, text, tone) });
+    const job = { actionId, tone, text, prompt: buildPrompt(actionId, text, tone) };
+    if (skipPreview) run(job);
+    else setPending(job);
   };
 
-  const confirm = async () => {
-    if (!pending) return;
+  const run = async (job) => {
+    if (!job || busy) return;
     setBusy(true);
     try {
-      const result = await generate({ prompt: pending.prompt, provider, maxTokens: 600 });
+      const result = await generate({ prompt: job.prompt, provider, maxTokens: 600 });
       // A provider that answers with nothing (or whitespace) must not wipe
       // the draft it was meant to improve — treat it the same as a failure
       // and leave both the draft and the preview alone.
       if (!result?.trim()) { setError(t('ai.actions.generateFailed')); return; }
       if (provider.type === 'endpoint') await setAiSettings({ endpointConsented: true });
       setPending(null);
-      onResult(pending.actionId, result);
+      onResult(job.actionId, result);
     } catch {
       setError(t('ai.actions.generateFailed'));
     } finally {
@@ -117,7 +123,7 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
               <button
                 type="button"
                 title={disabledReason || undefined}
-                disabled={!!disabledReason}
+                disabled={!!disabledReason || busy}
                 onClick={() => setToneOpenFor(v => (v === actionId ? false : actionId))}
                 className="px-2 py-1 text-xs rounded-md border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -145,7 +151,7 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
             key={actionId}
             type="button"
             title={disabledReason || undefined}
-            disabled={!!disabledReason}
+            disabled={!!disabledReason || busy}
             onClick={() => start(actionId)}
             className="px-2 py-1 text-xs rounded-md border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -161,7 +167,7 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
         provider={provider}
         busy={busy}
         onCancel={() => setPending(null)}
-        onConfirm={confirm}
+        onConfirm={() => run(pending)}
       />
     </div>
   );

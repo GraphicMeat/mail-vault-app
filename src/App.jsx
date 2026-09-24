@@ -25,6 +25,7 @@ import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { OnboardingRefreshPrompt } from './components/onboarding/OnboardingRefreshPrompt';
+import { OnboardingResumePrompt } from './components/onboarding/OnboardingResumePrompt';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
 import { UndoToast } from './components/UndoToast';
@@ -1137,6 +1138,11 @@ function App() {
     }
   }, [initialized, quickLoadDone, accounts.length, onboardingComplete]);
 
+  // Nothing else on screen that an onboarding invitation would sit on top of.
+  const onboardingPromptReady = initialized && !settingsMounted && !showAccountModal && !showExportModal && !showImportModal
+    && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
+    && !pendingOperation && !exportTarget && !showExportSamples;
+
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
     return (
@@ -1435,9 +1441,8 @@ function App() {
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
       <KeychainUnlockCard />
-      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal && !showExportModal && !showImportModal
-        && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
-        && !pendingOperation && !exportTarget && !showExportSamples} />
+      <OnboardingRefreshPrompt ready={onboardingPromptReady} />
+      <OnboardingResumePrompt ready={onboardingPromptReady} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <UndoToast />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />

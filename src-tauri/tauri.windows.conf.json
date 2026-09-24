@@ -1,0 +1,22 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "app": {
+    "windows": [
+      {
+        "url": "app.html",
+        "fullscreen": false,
+        "height": 700,
+        "width": 1200,
+        "minHeight": 600,
+        "minWidth": 600,
+        "resizable": true,
+        "title": "MailVault",
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "dragDropEnabled": true
+      }
+    ]
+  }
+}

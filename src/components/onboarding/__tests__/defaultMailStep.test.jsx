@@ -41,4 +41,9 @@ describe('default mail app onboarding step', () => {
     expect(await screen.findByTestId('default-mail-state')).toBeTruthy();
     expect(invoke).toHaveBeenCalledWith('mailto_default_status');
   });
+
+  it('asks where Compose opens, with the same row as Settings', async () => {
+    render(<DefaultMailStep onContinue={() => {}} />);
+    expect(await screen.findByTestId('compose-open-mode')).toBeTruthy();
+  });
 });

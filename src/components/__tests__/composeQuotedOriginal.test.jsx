@@ -155,6 +155,7 @@ beforeEach(() => {
   settings.sendAsAddresses = {};
   settings.lastComposeIdentity = null;
   settings.composeContextVisible = true;
+  settings.composeOpenMode = undefined;
   buildOutgoingMime.mockClear();
   saveLocalDraft.mockReset();
   saveLocalDraft.mockResolvedValue(undefined);
@@ -195,6 +196,26 @@ describe('the quoted original in a reply', () => {
     await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
     expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(false);
     expect(to.value).toBe('before@example.test');
+  });
+
+  it('hands an initialized reply straight to its own window when set to always open one', async () => {
+    settings.composeOpenMode = 'window';
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal mode="reply" replyTo={original} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
+    expect(onDetach.mock.calls[0][0]).toMatchObject({ to: 'them@example.test', subject: 'Re: Quote request' });
+    expect(document.querySelector('[data-auto-detach="true"]').style.visibility).toBe('hidden');
+  });
+
+  it('shows the compose it could not hand to a window, with the error', async () => {
+    settings.composeOpenMode = 'window';
+    const onDetach = vi.fn().mockRejectedValue(new Error('Native window unavailable'));
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
+    expect(document.querySelector('[data-auto-detach]')).toBeNull();
+    expect(onDetach).toHaveBeenCalledTimes(1);
   });
 
   it('allocates an owner draft uid before an empty compose detaches', async () => {

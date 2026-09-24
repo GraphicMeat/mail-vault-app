@@ -99,6 +99,15 @@ export function AiProvidersSettings() {
             </select>
           </SettingRow>
 
+          <SettingRow label={t('ai.settings.skipPreview')} description={t('ai.settings.skipPreviewHint')}>
+            <ToggleSwitch
+              testId="ai-settings-skip-preview"
+              active={!!aiSettings.skipPreview}
+              onClick={() => setAiSettings({ skipPreview: !aiSettings.skipPreview })}
+              label={t('ai.settings.skipPreview')}
+            />
+          </SettingRow>
+
           {aiSettings.provider === 'endpoint' && (
             <>
               <SettingRow label={t('ai.settings.endpointUrl')} description={t('ai.settings.endpointUrlHint')}>

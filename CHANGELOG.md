@@ -5,9 +5,16 @@
 ### Added
 - **Move accounts to another computer.** Export accounts, passwords and settings to an encrypted, password-protected file and import it in MailVault elsewhere (Settings > Accounts). A new install can import straight from the welcome screen. Accounts the other computer already has are left as they are, and a forgotten file password cannot be recovered. Any imported tagging rules arrive turned off, so you can review them before they run.
 
+- **Choose where Compose opens.** Settings > Mail preferences > Behavior, and the mail step of first-time setup, choose between writing over your mail (the default) and always opening Compose in a window of its own.
+- **Skip first-time setup, and pick it up later.** Every step of setup now has Skip tour. After skipping, a card in the corner offers to carry on from the step you left, until you finish it or tick "Don't show this again".
+- **Run writing help without the review step.** Settings > AI can turn off the "Review before sending" dialog for AI actions. A custom endpoint is still reviewed the first time it is used.
+- **Pick an emoji for a view.** Clicking the emoji box in the view editor offers a set of emojis to choose from. Typing any other emoji still works.
+
 - **Updates on Windows, including nightly builds.** Settings > Mail preferences > Behavior now has a Check for updates button on Windows, which has no app menu to hold one, and the same Stable or Nightly choice as on the Mac. MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.
 
 ### Changed
+- **New installs play the Glass sound for new mail, and a Mac starts writing help on Apple Intelligence.** Existing settings are kept.
+- **The main window opens 100 pixels shorter on Windows**, so it fits on smaller laptop screens.
 - **Right-click a message for its quick actions.** Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.
 - **The List and Explorer switch stays put.** It now sits at the right edge of the message list toolbar in both modes, with the Timeline button moved to its left, so switching to Explorer no longer slides it across the toolbar.
 - **Setup walks you through every look option.** On the "Make it yours" step of first-time setup, Next is now the main button and moves through Colors, Layout, Reading and Quick actions in turn. Continue appears once you reach Quick actions, so no tab is skipped by accident. The tabs can still be clicked directly.

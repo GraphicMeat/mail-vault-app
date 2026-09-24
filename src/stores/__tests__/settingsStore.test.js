@@ -21,6 +21,7 @@ const {
   normalizeSearchMailboxConcurrency,
   effectiveBackupMailboxConcurrency,
   normalizeBackupMailboxConcurrency,
+  DEFAULT_AI_SETTINGS,
 } = await import('../settingsStore');
 
 describe('settingsStore defaults', () => {
@@ -167,7 +168,7 @@ describe('persist migration v3 → v4', () => {
     // guards are. linkAlerts itself is still untouched by that step.
     expect(migrate(persisted, 4)).toEqual({
       linkAlerts: { 'acct-1-INBOX-41': 'red' },
-      aiSettings: { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false },
+      aiSettings: DEFAULT_AI_SETTINGS,
       dismissedQuickReplyThreads: {},
     });
   });

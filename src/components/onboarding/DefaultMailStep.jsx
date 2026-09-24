@@ -2,10 +2,11 @@ import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { DefaultMailApp } from '../settings/DefaultMailApp';
+import { ComposeOpenMode } from '../settings/ComposeOpenMode';
 import { useT } from '../../i18n/index.js';
 
 /**
- * "Open mail links here" — offered once, during the tour.
+ * "Open mail links here" and where Compose opens — offered once, during the tour.
  *
  * Deliberately the same row Settings shows rather than a tour-only variant:
  * one place decides what the OS actually allows, so the tour cannot promise
@@ -18,6 +19,7 @@ export function DefaultMailStep({ onContinue }) {
   return (
     <div className="max-w-xl w-full">
       <DefaultMailApp standalone />
+      <ComposeOpenMode standalone />
 
       <div className="flex justify-end mt-3">
         <Button

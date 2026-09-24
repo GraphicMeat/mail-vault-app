@@ -19,11 +19,15 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   // them the same way. Only `onboardingComplete` is a setting.
   const accounts = useAccountStore(s => s.accounts) || [];
   const setOnboardingComplete = useSettingsStore(s => s.setOnboardingComplete);
+  const skipOnboarding = useSettingsStore(s => s.skipOnboarding);
+  const skippedAt = useSettingsStore(s => s.onboardingSkippedAt);
 
   // Frozen at mount: adding the first account mid-flow must not renumber the
   // steps under the user's feet.
   const [steps] = useState(() => onboardingSteps(accounts.length));
-  const [index, setIndex] = useState(0);
+  // A resumed tour carries on at the step it was skipped from. That step can
+  // be gone (an account added since drops 'account'): start over then.
+  const [index, setIndex] = useState(() => Math.max(0, steps.indexOf(skippedAt)));
   const pageRef = useRef(null);
 
   // The gallery can leave this scroll container near its bottom. Start the
@@ -60,6 +64,16 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
       )}
 
       <span className="ml-auto" role="status">{t('onboarding.progress', { current: index + 1, total: steps.length })}</span>
+      {step !== 'cta' && (
+        <button
+          type="button"
+          onClick={() => skipOnboarding(step)}
+          data-testid="onboarding-skip"
+          className="ml-2 px-2 py-1.5 rounded-lg text-xs text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
+        >
+          {t('onboarding.skipTour')}
+        </button>
+      )}
       </header>
       <div className="onboarding-step">
       {step === 'splash'  && <Splash onContinue={next} />}

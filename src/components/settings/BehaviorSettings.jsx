@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
+import { ComposeOpenMode } from './ComposeOpenMode';
 import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
@@ -190,6 +191,8 @@ export function BehaviorSettings() {
           />
         </div>
       </div>
+
+      <ComposeOpenMode />
 
       {/* Sending */}
       <div data-testid="settings-undo-send" className="settings-section">

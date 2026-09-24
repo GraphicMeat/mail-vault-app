@@ -117,12 +117,18 @@ const normalizeExplorerPaths = value => Object.fromEntries(
 // layer runs, downloads a model, or reaches a network until the user turns
 // it on. `endpointConsented` gates automatic (un-previewed) use of a
 // non-local provider, e.g. Quick Replies' Tier 2 — see quickReplies.js.
+// A Mac starts on Apple Intelligence: on-device, nothing to download.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent || '');
+
 export const DEFAULT_AI_SETTINGS = {
   enabled: false,
-  provider: 'localGguf', // 'localGguf' | 'endpoint' | 'appleFm'
+  provider: IS_MAC ? 'appleFm' : 'localGguf', // 'localGguf' | 'endpoint' | 'appleFm'
   endpointUrl: '',
   endpointModel: '',
   endpointConsented: false,
+  // Run AI actions without the "Review before sending" dialog. An endpoint
+  // still gets the dialog until it has been consented to once.
+  skipPreview: false,
 };
 
 export const _mergePersistedSettings = (persisted, current) => ({
@@ -131,7 +137,11 @@ export const _mergePersistedSettings = (persisted, current) => ({
   notificationSettings: {
     ...current.notificationSettings,
     ...persisted?.notificationSettings,
-    sound: normalizeNotificationSound(persisted?.notificationSettings?.sound ?? current.notificationSettings?.sound),
+    // A persisted blob without `sound` predates the setting: it stays silent.
+    // Only a fresh install picks up the default.
+    sound: normalizeNotificationSound(persisted?.notificationSettings
+      ? persisted.notificationSettings.sound
+      : current.notificationSettings?.sound),
   },
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
@@ -284,6 +294,8 @@ export const useSettingsStore = create(
       // Remember whether replies show their reading context. Restored drafts
       // carry their own value so their state is never changed by a later toggle.
       composeContextVisible: true,
+      // Where a new compose opens: 'app' (over the main window) or 'window'.
+      composeOpenMode: 'app',
 
       // Email sync settings
       refreshInterval: 5, // minutes (0 = disabled)
@@ -294,7 +306,7 @@ export const useSettingsStore = create(
       notificationSettings: {
         enabled: true,
         showPreview: true,
-        sound: 'none',
+        sound: 'Glass',
         accounts: {},
         // New accounts get default: { enabled: true, folders: ['INBOX'] }
         // Per-account quiet hours live on that same account entry:
@@ -389,6 +401,10 @@ export const useSettingsStore = create(
       // One invitation for installs that completed onboarding before the
       // appearance update. Completing today's flow opts new users out too.
       appearanceOnboardingPromptSeen: false,
+      // The step "Skip tour" left from, so the resume prompt can offer to
+      // carry on there. Null once the tour is finished.
+      onboardingSkippedAt: null,
+      onboardingResumeDismissed: false,
 
       // Search settings
       searchHistoryLimit: 20, // Max number of searches to keep (20-500)
@@ -783,6 +799,7 @@ export const useSettingsStore = create(
         set({ lastComposeIdentity: { accountId, address: (address || '').trim() } });
       },
       setComposeContextVisible: (visible) => set({ composeContextVisible: Boolean(visible) }),
+      setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 
       // Account color management
       setAccountColor: (accountId, color) => {
@@ -1007,8 +1024,15 @@ export const useSettingsStore = create(
       // Onboarding
       setOnboardingComplete: (complete) => set({
         onboardingComplete: complete,
-        ...(complete ? { appearanceOnboardingPromptSeen: true } : {}),
+        ...(complete ? { appearanceOnboardingPromptSeen: true, onboardingSkippedAt: null } : {}),
       }),
+      skipOnboarding: (step) => set({
+        onboardingComplete: true,
+        appearanceOnboardingPromptSeen: true,
+        onboardingSkippedAt: step || 'splash',
+      }),
+      resumeOnboarding: () => set({ onboardingComplete: false }),
+      dismissOnboardingResume: () => set({ onboardingResumeDismissed: true }),
       markAppearanceOnboardingPromptSeen: () => set({ appearanceOnboardingPromptSeen: true }),
 
       // Search settings
@@ -1177,7 +1201,7 @@ export const useSettingsStore = create(
           notificationSettings: {
             enabled: true,
             showPreview: true,
-            sound: 'none',
+            sound: 'Glass',
             accounts: {},
             mutedViewIds: [],
             importantSenders: [],
@@ -1221,6 +1245,7 @@ export const useSettingsStore = create(
           listPaneHeight: 320,
           viewerPaneSize: 50,
           onboardingComplete: false,
+          onboardingSkippedAt: null,
           searchHistoryLimit: 20,
           searchMailboxConcurrency: 3,
           backupMailboxConcurrency: 3,

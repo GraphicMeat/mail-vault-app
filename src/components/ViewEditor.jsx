@@ -9,6 +9,10 @@ import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
+
+// Offered when the emoji field is focused; typing any other emoji still works.
+const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
+  '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
 
 /// Three states, not two: a filter can demand a flag, demand its absence, or
@@ -51,6 +55,7 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
   const def = view.def || {};
   const [name, setName] = useState(view.name || '');
   const [icon, setIcon] = useState(view.icon || 'tag');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [queryKeys, setQueryKeys] = useState(() => [...new Set(splitKeys(def.query || ''))]);
   const [queryInput, setQueryInput] = useState('');
   const [sender, setSender] = useState(def.sender || '');
@@ -181,10 +186,22 @@ export function ViewEditor({ view, onClose, showPreview = true }) {
             <ViewIcon icon={option} size={16} />{t(`views.iconName.${option}`)}
           </button>;
         })}
-        <input type="text" data-testid="view-emoji" className={`view-emoji-input${icon.startsWith('emoji:') ? ' is-selected' : ''}`}
-          aria-label={`${t('views.icon')} (😀)`} placeholder="😀"
-          value={icon.startsWith('emoji:') ? icon.slice(6) : ''}
-          onChange={event => setIcon(event.target.value ? `emoji:${event.target.value}` : 'tag')} />
+        <span className="view-emoji-field">
+          <input type="text" data-testid="view-emoji" className={`view-emoji-input${icon.startsWith('emoji:') ? ' is-selected' : ''}`}
+            aria-label={`${t('views.icon')} (😀)`} placeholder="😀"
+            value={icon.startsWith('emoji:') ? icon.slice(6) : ''}
+            onFocus={() => setEmojiOpen(true)}
+            onBlur={() => setEmojiOpen(false)}
+            onKeyDown={event => { if (event.key === 'Escape' && emojiOpen) { event.stopPropagation(); setEmojiOpen(false); } }}
+            onChange={event => setIcon(event.target.value ? `emoji:${event.target.value}` : 'tag')} />
+          {emojiOpen && <span className="view-emoji-picker" role="group" aria-label={t('views.icon')} data-testid="view-emoji-picker">
+            {VIEW_EMOJIS.map(emoji => <button key={emoji} type="button" aria-pressed={icon === `emoji:${emoji}`}
+              // mousedown would blur the input first and unmount the picker
+              // before the click lands.
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => { setIcon(`emoji:${emoji}`); setEmojiOpen(false); }}>{emoji}</button>)}
+          </span>}
+        </span>
       </div>
     </div>
 

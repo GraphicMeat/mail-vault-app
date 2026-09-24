@@ -179,6 +179,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
   const [sending, setSending] = useState(false);
   const [detaching, setDetaching] = useState(false);
+  // "Always open in a new window": this modal only builds the draft, hands it
+  // to a native window and never shows. If the handoff fails it shows, with
+  // the error, so the draft is never lost behind an invisible window.
+  const composeOpenMode = useSettingsStore(s => s.composeOpenMode);
+  const [autoDetach, setAutoDetach] = useState(() => composeOpenMode === 'window' && !!onDetach && !detached);
+  const [autoDetachTick, setAutoDetachTick] = useState(0);
   const [error, setError] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -1007,7 +1013,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   };
 
   const handleDetach = async () => {
-    if (!onDetach || sending || detaching) return;
+    if (!onDetach || sending || detaching) return false;
     setDetaching(true);
     setSending(true);
     let transferred = false;
@@ -1033,7 +1039,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         setDetaching(false);
       }
     }
+    return transferred;
   };
+
+  // Tick first: that update renders in the same batch as the init effect's
+  // form state, so the handoff below snapshots the initialized draft.
+  useEffect(() => { if (autoDetach) setAutoDetachTick(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (autoDetachTick !== 1) return;
+    setAutoDetachTick(2);
+    handleDetach().then(ok => { if (!ok && aliveRef.current) setAutoDetach(false); });
+  }, [autoDetachTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
   const layoutWidth = Number.isFinite(contentWidth) ? contentWidth : 896;
@@ -1066,6 +1082,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      style={autoDetach ? { visibility: 'hidden' } : undefined}
+      data-auto-detach={autoDetach ? 'true' : undefined}
       className={detached ? 'h-screen w-screen bg-mail-bg' : 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'}
       onMouseDown={(e) => { if (!detaching) pressedOnBackdrop.current = e.target === e.currentTarget; }}
       onClick={(e) => {

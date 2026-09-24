@@ -72,4 +72,33 @@ describe('AiComposeActions', () => {
     render(<AiComposeActions actions={['shorten']} getDraftText={() => 'draft'} onResult={() => {}} />);
     await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(true));
   });
+
+  it('runs straight away with the preview turned off, on-device', async () => {
+    useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false, skipPreview: true } });
+    daemonCall.mockImplementation((method) => {
+      if (method === 'ai.providers') return Promise.resolve([{ provider: 'localGguf', available: true, reason: '' }]);
+      return Promise.resolve({ text: 'Shortened.' });
+    });
+    const onResult = vi.fn();
+    render(<AiComposeActions actions={['shorten']} getDraftText={() => 'a long draft'} onResult={onResult} />);
+
+    await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Shorten'));
+    expect(screen.queryByTestId('ai-preview-text')).toBeNull();
+    await waitFor(() => expect(onResult).toHaveBeenCalledWith('shorten', 'Shortened.'));
+  });
+
+  it('still previews once for an endpoint never consented to, even with the preview off', async () => {
+    useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'endpoint', endpointUrl: 'http://h/v1', endpointModel: 'm', endpointConsented: false, skipPreview: true } });
+    daemonCall.mockImplementation((method) => {
+      if (method === 'ai.providers') return Promise.resolve([{ provider: 'endpoint', available: true, reason: '' }]);
+      return Promise.resolve({ text: 'Shortened.' });
+    });
+    render(<AiComposeActions actions={['shorten']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Shorten'));
+    expect(screen.getByTestId('ai-preview-text')).toBeTruthy();
+    expect(daemonCall).not.toHaveBeenCalledWith('ai.generate', expect.anything());
+  });
 });
