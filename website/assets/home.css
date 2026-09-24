@@ -135,3 +135,5 @@
 .hm-platforms svg { width:22px; height:22px; fill:currentColor; }
 .hm-final .mv-actions { justify-content:center; }
 .mv-feedback-quotes img.mv-person-mark { object-fit:cover; background:none; }
+.hm .mv-feedback-quotes { gap:40px 64px; }
+@media (max-width:760px) { .hm .mv-feedback-quotes figure+figure { border-top:1px solid var(--mv-line); padding-top:28px; } }
