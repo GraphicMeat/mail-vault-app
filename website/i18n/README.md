@@ -109,11 +109,13 @@ Product, company and platform names, and anything that is a literal identifier:
 > IMAP · SMTP · OAuth2 · MBOX · SPF · DKIM · DMARC · Gmail · Google · Outlook ·
 > Microsoft 365 · iCloud · Yahoo Mail · Thunderbird · Apple Mail · MailStore ·
 > Proton Bridge · macOS · Linux · Windows · Ubuntu · Debian · App Store ·
-> Stripe · Sparkle · Tauri · Rust · Time Capsule · Premium
+> Stripe · Sparkle · Tauri · Rust · Premium
 
-"Time Capsule" and "Premium" are MailVault feature names, not descriptions —
-they stay English so they match the app's own UI. Where the surrounding sentence
-needs a gloss the first time, add one in the target language after the name.
+"Premium" stays English because the app keeps it English. Every other feature or
+control name uses **the app's own word for that locale** (`src/i18n/locales/`),
+so the page names what is on screen: Time Capsule is Zeitkapsel, Capsule
+temporelle, Cápsula del tiempo, Capsula del tempo, タイムカプセル, 타임캡슐,
+时间胶囊, Cápsula do tempo; Insights is translated too, Explorer is not.
 
 ## Hard rules
 
