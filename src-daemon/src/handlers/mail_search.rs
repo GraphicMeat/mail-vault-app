@@ -1123,7 +1123,7 @@ fn list_indexed_dirs(
         .map_err(|error| error.to_string())
 }
 
-fn custody_by_vault_uid(rows: Vec<(String, Value)>) -> HashMap<(String, u32), Value> {
+pub(crate) fn custody_by_vault_uid(rows: Vec<(String, Value)>) -> HashMap<(String, u32), Value> {
     let mut custody = HashMap::new();
     let mut ambiguous = HashSet::new();
     for (mailbox, entry) in rows {

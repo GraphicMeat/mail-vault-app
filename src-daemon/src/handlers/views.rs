@@ -45,19 +45,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     if !method.starts_with("views.") {
         return None;
     }
-    let app_dir = state.app_dir.clone();
-    let index = Arc::clone(&state.search_index);
+    let state = Arc::clone(state);
     let params = params.clone();
     let method = method.to_string();
-    Some(done(id, blocking(move || run(&app_dir, &index, &method, &params)).await.and_then(|r| r)))
+    Some(done(id, blocking(move || run(&state, &method, &params)).await.and_then(|r| r)))
 }
 
-fn run(
-    app_dir: &std::path::Path,
-    index: &Arc<crate::search_index::SearchIndexState>,
-    method: &str,
-    params: &Value,
-) -> Result<Value, String> {
+fn run(state: &DaemonState, method: &str, params: &Value) -> Result<Value, String> {
+    let app_dir = state.app_dir.as_path();
     match method {
         "views.list" => app_db::with(app_dir, |conn| {
             views::ensure_starters(conn)?;
@@ -80,7 +75,7 @@ fn run(
                 let def = definition(conn, params)?;
                 Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
             })?;
-            evaluate(index, &def, &accounts, &keys, limit)
+            evaluate(state, &def, &accounts, &keys, limit)
         }
         "views.counts" => {
             let accounts = accounts_of(params)?;
@@ -97,7 +92,7 @@ fn run(
             for view in &all {
                 let empty = HashMap::new();
                 let per_view = keys.get(&view.id).unwrap_or(&empty);
-                let reply = evaluate(index, &view.def, &accounts, per_view, 0)?;
+                let reply = evaluate(state, &view.def, &accounts, per_view, 0)?;
                 // Zero is a claim about the mail. An index that cannot answer
                 // has not made it, so the whole reply is empty rather than a
                 // column of confident noughts.
@@ -188,7 +183,7 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
 }
 
 fn evaluate(
-    index: &Arc<crate::search_index::SearchIndexState>,
+    state: &DaemonState,
     def: &ViewDef,
     accounts: &[Account],
     keys: &HashMap<String, Vec<String>>,
@@ -200,9 +195,12 @@ fn evaluate(
         .unwrap_or(0);
     let mut rows: Vec<Value> = Vec::new();
     let mut total = 0u64;
-    for account in accounts {
+    // No account named is every account: a view made before a second account
+    // was added must not empty itself when one arrives.
+    let in_scope = accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id));
+    for account in in_scope {
         let request = request_for(def, account, keys, now);
-        match crate::search_index::search_page_reply(index, &request)? {
+        match crate::search_index::search_page_reply(&state.search_index, &request)? {
             // An index that cannot answer says so. An empty list would read as
             // "nothing matches this view", which is a different statement.
             Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason, "rows": [] })),
@@ -215,6 +213,14 @@ fn evaluate(
                     continue;
                 }
                 let mut page = crate::search_index::assemble_rows(&result.page);
+                // The same custody proof search reads: an archived copy the
+                // server no longer holds is "local only" here too, not a row
+                // that still offers to delete itself from the server.
+                let custody = crate::custody::with_conn(state, |conn| {
+                    mailvault_core::custody::entries::entries_for_account(conn, &account.account_id)
+                })
+                .map(crate::handlers::mail_search::custody_by_vault_uid)
+                .unwrap_or_default();
                 for row in &mut page {
                     let vault_dir = row.get("vaultDir").and_then(Value::as_str).unwrap_or("").to_owned();
                     crate::handlers::mail_search::stamp_local_row(
@@ -223,7 +229,7 @@ fn evaluate(
                         &vault_dir,
                         &account.known_mailboxes,
                         false,
-                        &HashMap::new(),
+                        &custody,
                     );
                 }
                 rows.append(&mut page);
@@ -321,6 +327,56 @@ mod tests {
         .await;
         let uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
         assert_eq!(uids, vec![2], "the message in this account's bin is left out");
+    }
+
+    /// The editor's account buttons narrow the view. The app hands over every
+    /// account it has; the definition decides which of them the view reads.
+    #[tokio::test]
+    async fn a_view_reads_only_the_accounts_its_definition_names() {
+        let s = st();
+        index(&s);
+        let both = json!([
+            { "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX"] },
+            { "accountId": "b", "address": "you@x.test", "knownMailboxes": ["INBOX"] }
+        ]);
+        let total = |out: Value| out["total"].as_u64().unwrap();
+        let only_b = call(&s, "views.evaluate", json!({ "def": { "accounts": ["b"] }, "accounts": both })).await;
+        assert_eq!(total(only_b), 0, "account a's mail is outside a view scoped to b");
+        let only_a = call(&s, "views.evaluate", json!({ "def": { "accounts": ["a"] }, "accounts": both })).await;
+        assert_eq!(total(only_a), 3);
+        let every = call(&s, "views.evaluate", json!({ "def": { "accounts": [] }, "accounts": both })).await;
+        assert_eq!(total(every), 3, "no account named is every account");
+    }
+
+    /// A view reads the same custody proof search does. An archived copy the
+    /// server has deleted used to come back as a plain server row, offering to
+    /// delete itself from a server that no longer holds it.
+    #[tokio::test]
+    async fn an_archived_copy_deleted_on_the_server_is_local_only_in_a_view() {
+        let s = st();
+        {
+            let conn = index_db::open(&s.data_dir).unwrap();
+            let p = mailvault_core::maildir::INFO_PREFIX;
+            seed(&conn, 4, &format!("4{p}AS.eml"), "Deleted upstream", false, "<four@x.test>");
+            index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+            *lock(&s.search_index.db) = Some(conn);
+        }
+        crate::custody::open_into(&s).unwrap();
+        crate::custody::with_conn(&s, |conn| {
+            mailvault_core::custody::entries::upsert(
+                conn,
+                "a",
+                "INBOX",
+                &[json!({"uid": 4, "source": "local", "serverDeleted": true})],
+            )
+            .map(|_| ())
+        })
+        .unwrap();
+        let out = evaluate(&s, json!({})).await;
+        let row = &out["rows"][0];
+        assert_eq!(row["uid"], 4);
+        assert_eq!(row["serverDeleted"], true);
+        assert_eq!(row["source"], "local-only");
     }
 
     async fn evaluate(s: &Arc<DaemonState>, def: Value) -> Value {
