@@ -23,6 +23,8 @@ import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
+import { routeSend, MAX_DELAY_MINUTES, FREE_DELAY_MINUTES } from '../utils/sendPlan';
+import { DelayPicker, SendPlanNote } from './scheduled/SendLater';
 import { firstRecipient } from '../utils/mailto';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
@@ -140,7 +142,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // Subscribed (not read through the getter) so the From row re-renders when
   // the override changes while compose is open.
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
-  const globalSendDelay = useSettingsStore(s => s.sendDelay) ?? 0;
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
   const spellcheckEnabled = useSettingsStore(s => s.spellcheckEnabled ?? true);
@@ -205,7 +206,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // `contains(relatedTarget)` check never worked — count enter/leave instead.
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const [composeDelay, setComposeDelay] = useState(() => initialData?._composeDelay ?? null); // null = use global
+  // What Send does (utils/sendPlan.js): null sends now under the global send
+  // delay; the Send later panel arms `{ kind: 'in', minutes }` or
+  // `{ kind: 'at' }` (scheduleDraft). An edit of a scheduled email starts
+  // armed at its own time, so its Send saves over the row.
+  const [sendPlan, setSendPlan] = useState(() => initialData?._sendPlan
+    ?? (initialData?._editScheduledId ? { kind: 'at' } : null));
+  const [laterTab, setLaterTab] = useState('in');
+  const [delayMinutes, setDelayMinutes] = useState(0);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [scheduleMaxWidth, setScheduleMaxWidth] = useState();
   // `tzPicked`: the zone was chosen by hand, so no suggestion replaces it.
@@ -215,10 +223,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
   const [tzSuggestion, setTzSuggestion] = useState(null);
-  // Only the schedule panel is gated: Send and its delay menu stay free.
-  // Subscribed, so a subscription that lapses with the panel open swaps the
-  // picker for the locked panel instead of leaving a Schedule that fails.
-  const schedulePremium = showSchedulePicker && hasPremiumAccess(billingProfile);
+  // Only a set time and a delay past the undo window are gated: Send and a
+  // short delay stay free. Subscribed, so a subscription that lapses with the
+  // panel open swaps the picker for the locked panel instead of leaving a
+  // Schedule that fails.
+  const premium = showSchedulePicker && hasPremiumAccess(billingProfile);
+  const schedulePremium = premium && laterTab === 'at';
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
@@ -684,52 +694,50 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setShowTemplates(false);
   };
 
+  const upgrade = () => {
+    setShowSchedulePicker(false);
+    // A compose window of its own has no Settings: ComposeWindow routes this
+    // to the main window.
+    if (onUpgrade) onUpgrade();
+    else useMailStore.getState().requestSettingsTab('billing');
+  };
+
+  // Send and Shift+Enter both land here; the armed plan picks the path.
   const handleSend = async (event) => {
     event.preventDefault();
     if (detaching) return;
     if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
     if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
+    const { delay, draft } = routeSend(sendPlan, scheduleDraft);
+    // Armed a while ago, a set time can have gone by since.
+    if (draft && (!draft.localTime || isPastLocalTime(draft.localTime, draft.tz))) {
+      setError(t('scheduled.picker.pastTime'));
+      return;
+    }
 
     setSending(true);
     setError(null);
     try {
       await saveChainRef.current.catch(() => {});
-      const snapshot = latestSnapshotRef.current();
-      if (onQueueSend) {
-        await onQueueSend(snapshot, snapshot._composeDelay);
+      // A copy: the route's fields must not stick to this window's snapshot
+      // if the send fails and the window stays open.
+      const snapshot = { ...latestSnapshotRef.current(), _composeDelay: delay, ...(draft && { _scheduleDraft: draft }) };
+      const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
+      if (draft) {
+        if (onSchedule) await onSchedule(snapshot);
+        else {
+          await scheduleCompose({ snapshot, account: selectedAccount, settings });
+          onClose();
+        }
+      } else if (onQueueSend) {
+        await onQueueSend(snapshot, delay);
       } else {
-        const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
         const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
           createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings }),
-          snapshot._composeDelay,
+          delay,
         );
-        onClose();
-      }
-    } catch (err) {
-      setError(err.message || t("scheduled.errors.scheduleFailed"));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleSchedule = async () => {
-    if (detaching) return;
-    if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
-    if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
-    if (!scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz)) return;
-
-    setSending(true);
-    setError(null);
-    try {
-      await saveChainRef.current.catch(() => {});
-      const snapshot = latestSnapshotRef.current();
-      if (onSchedule) {
-        await onSchedule(snapshot);
-      } else {
-        const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
-        await scheduleCompose({ snapshot, account: selectedAccount, settings });
         onClose();
       }
     } catch (err) {
@@ -737,7 +745,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       // new one is created (composeSend.js). If the create is what failed,
       // this window is now the only copy: it must ask before closing and be
       // autosaved, even if nothing in it was typed.
-      if (initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) {
+      if (draft && initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) {
         initialSnapshot.current = null;
       }
       // tErr: saving an edit over a row that already fired comes back as the
@@ -781,7 +789,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       _baseline: initialSnapshot.current,
       _draftUid: draftUidRef.current,
       _draftMailbox: draftMailboxRef.current,
-      _composeDelay: composeDelay,
+      _sendPlan: sendPlan,
       _composeSize: composeSize,
       _scheduleDraft: scheduleDraft,
       // Which scheduled email this window is an edit of (localDrafts.js's
@@ -793,7 +801,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, composeDelay, composeSize, scheduleDraft]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -813,7 +821,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   );
   const sessionSignature = JSON.stringify([
     formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
-    attachments, quotedHtml, contextHtml, showContext, contextSplit, selectedAccountId, pickedFrom, composeDelay, composeSize, scheduleDraft,
+    attachments, quotedHtml, contextHtml, showContext, contextSplit, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft,
   ]);
 
   // Keep the UI session current independently of the vault draft write. App
@@ -1491,32 +1499,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                data-testid="compose-discard"
                 onClick={confirmClose}
-                className="px-4 py-2 text-mail-text-muted hover:text-mail-text
-                          transition-colors text-sm"
+                className="px-4 py-2 text-mail-danger hover:opacity-80
+                          transition-opacity text-sm"
               >
                 {t('common.discard')}
               </button>
-              <select
-                aria-label={t('compose.sendDelay')}
-                data-testid="compose-delay"
-                value={composeDelay ?? globalSendDelay}
-                onChange={(e) => setComposeDelay(Number(e.target.value))}
-                className="px-2 py-2 bg-mail-bg border border-mail-border rounded-lg
-                          text-xs text-mail-text-muted cursor-pointer"
-                title={t('compose.sendDelay')}
-              >
-                <option value={0}>{t('compose.sendNow')}</option>
-                <option value={15}>{t('compose.delay15s')}</option>
-                <option value={30}>{t('compose.delay30s')}</option>
-                <option value={60}>{t('compose.delay1m')}</option>
-                <option value={120}>{t('compose.delay2m')}</option>
-                <option value={180}>{t('compose.delay3m')}</option>
-                <option value={300}>{t('compose.delay5m')}</option>
-              </select>
               <button
                 type="submit"
                 data-testid="compose-send"
+                data-plan={sendPlan?.kind || ''}
                 disabled={sending}
                 title={t('compose.sendShiftEnter')}
                 className="flex items-center gap-2 px-4 py-2 bg-mail-accent-fill
@@ -1527,6 +1520,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   <>
                     <Loader size={16} className="animate-spin" />
                     {t('compose.sending')}
+                  </>
+                ) : sendPlan ? (
+                  <>
+                    <Clock size={16} />
+                    {t('compose.scheduleSend')}
                   </>
                 ) : (
                   <>
@@ -1540,7 +1538,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   type="button"
                   data-testid="compose-schedule-toggle"
                   disabled={sending}
-                  title={t('scheduled.compose.menuLabel')}
+                  title={t('compose.later.title')}
+                  aria-label={t('compose.later.title')}
+                  aria-expanded={showSchedulePicker}
                   onClick={() => {
                     // The panel hangs left from this button inside compose-main,
                     // which clips: with a reply's context pane open that can be
@@ -1548,6 +1548,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     const main = scheduleRef.current?.closest('[data-testid="compose-main"]');
                     const room = main ? scheduleRef.current.getBoundingClientRect().right - main.getBoundingClientRect().left - 8 : 0;
                     setScheduleMaxWidth(room > 0 ? room : undefined);
+                    // Opens on what is armed, so a second look edits it.
+                    if (!showSchedulePicker) {
+                      setLaterTab(sendPlan?.kind || 'in');
+                      setDelayMinutes(sendPlan?.kind === 'in' ? sendPlan.minutes : 0);
+                    }
                     setShowSchedulePicker(v => !v);
                   }}
                   className="flex items-center justify-center px-2 py-2 bg-mail-accent-fill
@@ -1561,8 +1566,32 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     data-testid="compose-schedule-panel"
                     className="absolute bottom-full right-0 mb-1 w-[26rem] bg-mail-surface border border-mail-border
                                   rounded-lg z-50 p-3 space-y-2">
-                    <div className="text-sm font-medium text-mail-text">{t('scheduled.compose.pickerTitle')}</div>
-                    {schedulePremium ? <>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium text-mail-text">{t('compose.later.title')}</div>
+                      <div role="tablist" aria-label={t('compose.later.title')} className="flex gap-0.5 p-0.5 rounded-lg bg-mail-bg border border-mail-border">
+                        {[['in', t('compose.later.tabIn')], ['at', t('compose.later.tabAt')]].map(([key, label]) => (
+                          <button key={key} type="button" role="tab" aria-selected={laterTab === key}
+                            data-testid={`compose-later-tab-${key}`} onClick={() => setLaterTab(key)}
+                            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${laterTab === key
+                              ? 'bg-mail-surface-hover text-mail-text font-medium' : 'text-mail-text-muted hover:text-mail-text'}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {laterTab === 'in' ? <>
+                      <DelayPicker minutes={delayMinutes} onChange={setDelayMinutes}
+                        max={premium ? MAX_DELAY_MINUTES : FREE_DELAY_MINUTES} />
+                      {!premium && (
+                        <p data-testid="compose-later-free" className="text-xs text-mail-text-muted">
+                          {t('scheduled.premium.freeDelay')}{' '}
+                          <button type="button" data-testid="compose-later-upgrade" onClick={upgrade}
+                            className="text-mail-accent-text hover:underline">
+                            {t('common.upgrade')}
+                          </button>
+                        </p>
+                      )}
+                    </> : schedulePremium ? <>
                     <SchedulePicker
                       localTime={scheduleDraft.localTime}
                       tz={scheduleDraft.tz}
@@ -1574,33 +1603,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                         : t('scheduled.picker.suggestedLastUsed', { name: tzSuggestion.name })}
                     />
                     <ScheduledSendNotice />
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button type="button" data-testid="compose-schedule-cancel"
-                        onClick={() => setShowSchedulePicker(false)}
-                        className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text transition-colors">
-                        {t('common.cancel')}
-                      </button>
-                      <button type="button" data-testid="compose-schedule-submit"
-                        disabled={sending || !scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz)}
-                        onClick={handleSchedule}
-                        className="px-3 py-1.5 text-sm bg-mail-accent-fill hover:bg-mail-accent-hover
-                                  disabled:opacity-50 text-white font-medium rounded-lg transition-all">
-                        {t('scheduled.compose.submit')}
-                      </button>
-                    </div>
                     </> : (
                       <div data-testid="compose-schedule-locked" className="space-y-2">
                         <p className="text-xs text-mail-text">{t('scheduled.premium.upsell')}</p>
                         <p className="text-xs text-mail-text-muted">{t('scheduled.premium.freeDelay')}</p>
                         <div className="flex justify-end pt-1">
-                          <button type="button" data-testid="compose-schedule-upgrade"
-                            onClick={() => {
-                              setShowSchedulePicker(false);
-                              // A compose window of its own has no Settings:
-                              // ComposeWindow routes this to the main window.
-                              if (onUpgrade) onUpgrade();
-                              else useMailStore.getState().requestSettingsTab('billing');
-                            }}
+                          <button type="button" data-testid="compose-schedule-upgrade" onClick={upgrade}
                             className="px-3 py-1.5 text-sm bg-mail-accent-fill hover:bg-mail-accent-hover
                                       text-white font-medium rounded-lg transition-all">
                             {t('common.upgrade')}
@@ -1608,11 +1616,35 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                         </div>
                       </div>
                     )}
+                    {(laterTab === 'in' || schedulePremium) && (
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button type="button" data-testid="compose-schedule-cancel"
+                        onClick={() => setShowSchedulePicker(false)}
+                        className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text transition-colors">
+                        {t('common.cancel')}
+                      </button>
+                      <button type="button" data-testid="compose-schedule-submit"
+                        disabled={sending || (laterTab === 'in' ? delayMinutes <= 0
+                          : !scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz))}
+                        onClick={() => {
+                          // Arms Send, sends nothing: the button and the line
+                          // under it now say when it goes.
+                          setSendPlan(laterTab === 'in' ? { kind: 'in', minutes: delayMinutes } : { kind: 'at' });
+                          setShowSchedulePicker(false);
+                          setError(null);
+                        }}
+                        className="px-3 py-1.5 text-sm bg-mail-accent-fill hover:bg-mail-accent-hover
+                                  disabled:opacity-50 text-white font-medium rounded-lg transition-all">
+                        {t('scheduled.compose.submit')}
+                      </button>
+                    </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
+          <SendPlanNote plan={sendPlan} draft={scheduleDraft} onClear={() => setSendPlan(null)} />
           </form>
           </div>
 

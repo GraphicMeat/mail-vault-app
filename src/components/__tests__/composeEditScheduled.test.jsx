@@ -115,6 +115,7 @@ vi.mock('../../stores/settingsStore', () => {
 });
 
 const { ComposeModal } = await import('../ComposeModal');
+const { zonedTimeToEpoch } = await import('../../utils/scheduledTime');
 
 const initialData = {
   to: 'you@example.test', cc: '', bcc: '', subject: 'Later', body: '<p>See you then</p>',
@@ -163,8 +164,9 @@ describe('compose editing a scheduled email', () => {
       new Error('E_SCHEDULED_NOT_EDITABLE: This scheduled email is already being sent or is no longer scheduled'),
     );
     render(<ComposeModal initialData={initialData} onClose={onClose} onSchedule={onSchedule} onSaveState={() => {}} />);
-    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
-    fireEvent.click(await screen.findByTestId('compose-schedule-submit'));
+    // An edit opens armed at its own time: Send saves over the row.
+    expect((await screen.findByTestId('compose-send')).dataset.plan).toBe('at');
+    fireEvent.click(screen.getByTestId('compose-send'));
 
     const error = await screen.findByTestId('compose-error');
     expect(onSchedule).toHaveBeenCalledWith(expect.objectContaining({ _editScheduledId: 'row-1' }));
@@ -182,12 +184,9 @@ describe('compose editing a scheduled email', () => {
     const onSchedule = vi.fn().mockRejectedValue(new Error('daemon unavailable'));
     const moved = { ...initialData, _editScheduledRow: { ...initialData._editScheduledRow, accountId: 'acct-other' } };
     render(<ComposeModal initialData={moved} onClose={onClose} onMinimize={onMinimize} onSchedule={onSchedule} onSaveState={() => {}} />);
-    fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
-    fireEvent.click(await screen.findByTestId('compose-schedule-submit'));
+    fireEvent.click(await screen.findByTestId('compose-send'));
     await screen.findByTestId('compose-error');
 
-    fireEvent.keyDown(document.body, { key: 'Escape' }); // closes the schedule panel
-    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
     fireEvent.keyDown(document.body, { key: 'Escape' });
     await waitFor(() => expect(onMinimize).toHaveBeenCalled());
     expect(onClose).not.toHaveBeenCalled();
@@ -279,6 +278,7 @@ describe('compose timezone suggestion', () => {
   it('preselects the zone of their last email and says so', async () => {
     render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-later-tab-at'));
     await waitFor(() => expect(screen.getByTestId('compose-schedule-tz-note').textContent)
       .toBe("Suggested from Bob Smith's last email (UTC+09:00)"));
     expect(zone()).toBe('Asia/Tokyo');
@@ -290,6 +290,7 @@ describe('compose timezone suggestion', () => {
     answer = Promise.resolve({ headerOffsetMinutes: null, headerDateMs: null, rememberedTz: 'Asia/Tokyo' });
     render(<ComposeModal initialData={{ ...fresh, to: 'bob@example.test' }} onClose={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-later-tab-at'));
     await waitFor(() => expect(screen.getByTestId('compose-schedule-tz-note').textContent)
       .toBe('Last used for bob@example.test'));
     expect(zone()).toBe('Asia/Tokyo');
@@ -300,6 +301,7 @@ describe('compose timezone suggestion', () => {
     answer = new Promise((resolve) => { arrive = resolve; });
     render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-later-tab-at'));
     await waitFor(() => expect(asked()).toHaveLength(1));
 
     fireEvent.click(screen.getByTestId('compose-schedule-tz'));
@@ -331,13 +333,17 @@ describe('compose schedule panel for a free user', () => {
     render(<ComposeModal initialData={{ ...initialData, _editScheduledId: undefined, _editScheduledRow: undefined }}
       onClose={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+    fireEvent.click(screen.getByTestId('compose-later-tab-at'));
 
     const locked = screen.getByTestId('compose-schedule-locked');
     expect(locked.textContent).toContain('Scheduled Send is part of Premium');
     expect(locked.textContent).toContain('delay sending by up to 5 minutes');
     expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
     expect(screen.queryByTestId('compose-schedule-tz')).toBeNull();
-    expect(screen.getByTestId('compose-delay').disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('compose-later-tab-in'));
+    expect(screen.getByTestId('compose-later-minutes')).toBeTruthy();
+    expect(screen.getByTestId('compose-later-free').textContent).toContain('delay sending by up to 5 minutes');
+    fireEvent.click(screen.getByTestId('compose-later-tab-at'));
     // No zone to suggest for a picker that is not there.
     await act(async () => { await new Promise(r => setTimeout(r, 400)); });
     expect(invoke.mock.calls.filter(([, args]) => args?.method === 'scheduled.suggest_tz')).toHaveLength(0);
@@ -374,5 +380,140 @@ describe('compose schedule panel for a free user', () => {
     rerender(ui());
     expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
     expect(screen.getByTestId('compose-schedule-locked')).toBeTruthy();
+  });
+});
+
+// One Send button, one "Send later" panel: "Send in" hours and minutes or a
+// set date and time. Schedule in the panel only arms Send, which then says
+// "Schedule send" with the send time written under it.
+describe('compose send later', () => {
+  const fresh = {
+    to: 'you@example.test', cc: '', bcc: '', subject: 'Later', body: '<p>Hi</p>', attachments: [], _accountId: 'acct-1',
+  };
+  const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const open = async () => fireEvent.click(await screen.findByTestId('compose-schedule-toggle'));
+  const type = (id, value) => fireEvent.change(screen.getByTestId(id), { target: { value } });
+  const arm = (hours, minutes) => {
+    type('compose-later-hours', hours);
+    type('compose-later-minutes', minutes);
+    fireEvent.click(screen.getByTestId('compose-schedule-submit'));
+  };
+
+  it('arms a delay: the panel closes, Send says Schedule send, the time is written below', async () => {
+    const onQueueSend = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal initialData={fresh} onQueueSend={onQueueSend} onClose={() => {}} onSaveState={() => {}} />);
+    expect((await screen.findByTestId('compose-send')).textContent).toBe('Send');
+    await open();
+    expect(screen.getByTestId('compose-later-tab-in').getAttribute('aria-selected')).toBe('true');
+    // Nothing to arm at 0h 0m.
+    expect(screen.getByTestId('compose-schedule-submit').disabled).toBe(true);
+    arm('1', '30');
+
+    expect(screen.queryByTestId('compose-schedule-submit')).toBeNull();
+    expect(screen.getByTestId('compose-send').textContent).toBe('Schedule send');
+    expect(screen.getByTestId('compose-send-plan').textContent).toMatch(/^Sends in 1 hr 30 mins?, at /);
+    expect(onQueueSend).not.toHaveBeenCalled();
+  });
+
+  it('a delay past the undo window is a scheduled send at now + delay', async () => {
+    const onSchedule = vi.fn().mockResolvedValue(undefined);
+    const onQueueSend = vi.fn();
+    render(<ComposeModal initialData={fresh} onSchedule={onSchedule} onQueueSend={onQueueSend} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    arm('2', '0');
+    const before = Date.now();
+    fireEvent.click(screen.getByTestId('compose-send'));
+
+    await waitFor(() => expect(onSchedule).toHaveBeenCalledTimes(1));
+    expect(onQueueSend).not.toHaveBeenCalled();
+    const { _scheduleDraft: draft } = onSchedule.mock.calls[0][0];
+    expect(draft.tz).toBe(HERE);
+    const at = zonedTimeToEpoch(draft.localTime, draft.tz);
+    expect(at).toBeGreaterThanOrEqual(before + 120 * 60_000);
+    expect(at).toBeLessThan(before + 122 * 60_000);
+  });
+
+  it('a delay inside the undo window stays an undoable send, in seconds', async () => {
+    const onQueueSend = vi.fn().mockResolvedValue(undefined);
+    const onSchedule = vi.fn();
+    render(<ComposeModal initialData={fresh} onQueueSend={onQueueSend} onSchedule={onSchedule} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    fireEvent.click(screen.getByTestId('compose-later-chip-5'));
+    fireEvent.click(screen.getByTestId('compose-schedule-submit'));
+    fireEvent.click(screen.getByTestId('compose-send'));
+
+    await waitFor(() => expect(onQueueSend).toHaveBeenCalledTimes(1));
+    expect(onQueueSend.mock.calls[0][1]).toBe(300);
+    expect(onSchedule).not.toHaveBeenCalled();
+  });
+
+  it('never takes more than 24 hours and 0 minutes', async () => {
+    render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    type('compose-later-hours', '30');
+    expect(screen.getByTestId('compose-later-hours').value).toBe('24');
+    type('compose-later-minutes', '15');
+    expect(screen.getByTestId('compose-later-minutes').value).toBe('00');
+    fireEvent.click(screen.getByTestId('compose-later-minutes-up'));
+    expect(screen.getByTestId('compose-later-minutes').value).toBe('00');
+    fireEvent.keyDown(screen.getByTestId('compose-later-minutes'), { key: 'ArrowDown' });
+    expect(screen.getByTestId('compose-later-hours').value).toBe('23');
+    expect(screen.getByTestId('compose-later-minutes').value).toBe('59');
+    type('compose-later-minutes', '75');
+    expect(screen.getByTestId('compose-later-minutes').value).toBe('59');
+  });
+
+  it('holds a free user to 5 minutes', async () => {
+    const PREMIUM = settings.billingProfile;
+    settings.billingProfile = null;
+    try {
+      render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
+      await open();
+      type('compose-later-minutes', '45');
+      expect(screen.getByTestId('compose-later-minutes').value).toBe('05');
+      expect(screen.queryByTestId('compose-later-chip-30')).toBeNull();
+      expect(screen.getByTestId('compose-later-free')).toBeTruthy();
+    } finally {
+      settings.billingProfile = PREMIUM;
+    }
+  });
+
+  it('the clear button goes back to Send now under the global delay', async () => {
+    const onQueueSend = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal initialData={fresh} onQueueSend={onQueueSend} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    arm('3', '0');
+    fireEvent.click(screen.getByTestId('compose-send-plan-clear'));
+
+    expect(screen.queryByTestId('compose-send-plan')).toBeNull();
+    expect(screen.getByTestId('compose-send').textContent).toBe('Send');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(onQueueSend).toHaveBeenCalledTimes(1));
+    expect(onQueueSend.mock.calls[0][1]).toBeNull();
+  });
+
+  it('arms a set time, and refuses it at Send once that time has gone by', async () => {
+    const onSchedule = vi.fn();
+    const past = { ...fresh, _sendPlan: { kind: 'at' }, _scheduleDraft: { localTime: '2020-01-01T09:00', tz: 'UTC' } };
+    render(<ComposeModal initialData={past} onSchedule={onSchedule} onClose={() => {}} onSaveState={() => {}} />);
+    expect((await screen.findByTestId('compose-send')).textContent).toBe('Schedule send');
+    expect(screen.getByTestId('compose-send-plan').textContent).toMatch(/^Sends .*\(UTC\)$/);
+    fireEvent.click(screen.getByTestId('compose-send'));
+
+    expect((await screen.findByTestId('compose-error')).textContent).toBe('Pick a time in the future.');
+    expect(onSchedule).not.toHaveBeenCalled();
+  });
+
+  it('carries the armed plan through every snapshot', async () => {
+    const snapshotRef = { current: null };
+    render(<ComposeModal initialData={fresh} snapshotRef={snapshotRef} onClose={() => {}} onSaveState={() => {}} />);
+    await open();
+    arm('0', '45');
+    expect((await snapshotRef.current())._sendPlan).toEqual({ kind: 'in', minutes: 45 });
+  });
+
+  it('Discard reads as destructive', async () => {
+    render(<ComposeModal initialData={fresh} onClose={() => {}} onSaveState={() => {}} />);
+    expect((await screen.findByTestId('compose-discard')).className).toContain('text-mail-danger');
   });
 });

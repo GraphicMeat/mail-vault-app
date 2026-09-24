@@ -826,6 +826,7 @@ describe('MailVault marketing screenshots', function () {
         await typeInBody(line);
       }
       if (!(await clickTestId('compose-schedule-toggle'))) throw new Error('schedule toggle not found');
+      if (!(await clickTestId('compose-later-tab-at'))) throw new Error('date & time tab not found');
       // The suggestion lands a beat after the panel opens (a daemon lookup of
       // her newest cached message). The zone alone could be a coincidence;
       // the note is what says it was suggested.

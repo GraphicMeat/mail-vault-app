@@ -17,6 +17,7 @@
 - **Updates on Windows, including nightly builds.** Settings > Mail preferences > Behavior now has a Check for updates button on Windows, which has no app menu to hold one, and the same Stable or Nightly choice as on the Mac. MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.
 
 ### Changed
+- **Send later, in one place.** The arrow next to Send opens one panel with two tabs: Send in, where you type or step hours and minutes (up to 24 hours), and Date & time for a set moment. Schedule there sets Send up without sending: the button turns into Schedule send and the line below it says when the email goes, with an x to go back to sending now. Delays of up to 5 minutes stay free and can be undone; longer delays and set times are part of Premium and are kept if MailVault quits. Discard is now red.
 - **Writing help on a Mac starts on Apple Intelligence.** It is the default for new installs, and for Macs where writing help has not been turned on yet. Where you already use it, your choice is kept.
 - **New installs play the Glass sound for new mail.** Existing notification settings are kept.
 - **Right-click a message for its quick actions.** Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.
