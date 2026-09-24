@@ -34,7 +34,8 @@ export function UndoSendToast({ onUndo }) {
   }, [pendingSend]);
 
   const handleUndo = () => {
-    const composeState = cancelPendingSend();
+    // This entry, not whichever is newest by the time the click lands.
+    const composeState = cancelPendingSend(pendingSend?.id);
     if (composeState && onUndo) {
       onUndo(composeState);
     }

@@ -494,7 +494,7 @@ export async function closeComposeHard() {
     for (const b of document.querySelectorAll('[data-testid="compose-bubble"]')) b.querySelector('button')?.click();
     const s = window.__MAIL_STORE__?.getState?.();
     if (!s) return;
-    s.cancelPendingSend?.();
+    for (const p of s.pendingSends || []) s.cancelPendingSend?.(p.id);
     for (const item of s.outboxItems || []) s.dismissOutbox?.(item.id);
   });
   await browser.pause(300);

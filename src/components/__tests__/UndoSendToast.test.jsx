@@ -74,6 +74,13 @@ describe('UndoSendToast', () => {
     expect(screen.queryByText('Sent!')).toBeNull();
   });
 
+  it('Undo cancels the send it shows, by id', () => {
+    useComposeStoreMock.setState({ pendingSend: { ...pending(10), id: 7 } });
+    render(<UndoSendToast />);
+    fireEvent.click(screen.getByTestId('undo-send-btn'));
+    expect(cancelPendingSend).toHaveBeenCalledWith(7);
+  });
+
   it('stays hidden when an in-flight send clears the undo slot', () => {
     const { rerender } = render(<UndoSendToast />);
     act(() => { useComposeStoreMock.setState({ pendingSend: pending(5) }); });

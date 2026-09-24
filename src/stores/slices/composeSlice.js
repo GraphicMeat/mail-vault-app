@@ -1,8 +1,9 @@
 // ── composeSlice — undo-send + outbox (sending/error) tracking ──
 //
 // Two stages:
-//  1. `pendingSend` — single slot while the user can still Undo (delay window).
-//     Consumed by UndoSendToast.
+//  1. `pendingSends` — every send still inside its undo (delay) window, oldest
+//     first, each with its own timer. `pendingSend` is the newest of them:
+//     the one UndoSendToast shows and its Undo cancels.
 //  2. `outboxItems` — list of sends that passed the undo window and are either
 //     in-flight, succeeded (ephemeral), or errored (sticky until retry/dismiss).
 //     Rendered as bubbles so the compose flow reuses the same UI surface the
@@ -15,10 +16,12 @@
 import { useSettingsStore } from '../settingsStore';
 
 let _outboxSeq = 0;
+let _pendingSeq = 0;
 
 export const createComposeSlice = (set, get) => ({
   // ── Undo-send stage ──
-  pendingSend: null,  // { composeState, timeoutId, timestamp, delay, sendFn }
+  pendingSends: [],   // [{ id, composeState, timeoutId, timestamp, delay, sendFn }]
+  pendingSend: null,  // pendingSends.at(-1), or null
 
   // ── Outbox stage ──
   // [{ id, composeState, sendFn, status: 'sending'|'sent'|'error', error, startedAt }]
@@ -31,23 +34,33 @@ export const createComposeSlice = (set, get) => ({
       get()._startOutbox(composeState, sendFn);
       return;
     }
+    // Each timer sends the entry it was made for. A second send queued inside
+    // the first one's window used to replace a single slot, and the first
+    // timer then sent the second email while the first never went.
+    _pendingSeq += 1;
+    const id = _pendingSeq;
     const timeoutId = setTimeout(() => {
-      const pending = get().pendingSend;
-      set({ pendingSend: null });
-      if (pending) get()._startOutbox(pending.composeState, pending.sendFn);
+      if (!get().pendingSends.some(p => p.id === id)) return;
+      get()._dropPending(id);
+      get()._startOutbox(composeState, sendFn);
     }, delay * 1000);
-    set({ pendingSend: { composeState, timeoutId, timestamp: Date.now(), delay, sendFn } });
+    const pendingSend = { id, composeState, timeoutId, timestamp: Date.now(), delay, sendFn };
+    set(s => ({ pendingSends: [...s.pendingSends, pendingSend], pendingSend }));
   },
 
-  cancelPendingSend: () => {
-    const { pendingSend } = get();
-    if (pendingSend) {
-      clearTimeout(pendingSend.timeoutId);
-      const saved = pendingSend.composeState;
-      set({ pendingSend: null });
-      return saved;
-    }
-    return null;
+  _dropPending: (id) => set(s => {
+    const pendingSends = s.pendingSends.filter(p => p.id !== id);
+    return { pendingSends, pendingSend: pendingSends.at(-1) ?? null };
+  }),
+
+  // Cancels one pending send (the newest by default) and returns its compose
+  // state for Undo to reopen; the others keep counting down.
+  cancelPendingSend: (id = get().pendingSend?.id) => {
+    const pending = get().pendingSends.find(p => p.id === id);
+    if (!pending) return null;
+    clearTimeout(pending.timeoutId);
+    get()._dropPending(id);
+    return pending.composeState;
   },
 
   // IDs of outbox items the user has cancelled; used to suppress sendFn resolution
