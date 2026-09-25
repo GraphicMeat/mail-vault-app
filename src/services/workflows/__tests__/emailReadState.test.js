@@ -289,7 +289,10 @@ describe('selectEmail — auto mark as read', () => {
       expect(mockUpdateEmailFlags).toHaveBeenLastCalledWith(accountB, 1, ['\\Seen'], 'add', 'Sent');
     });
 
-    it('ignores a mark-read completion after the reader closes', async () => {
+    // The server holds \Seen once the write answers, so the row has to say so
+    // whatever happened to the reader meanwhile — it used to stay bold. The
+    // reader itself stays closed.
+    it('paints the row read, and does not reopen the reader, when the write lands after a close', async () => {
       markAsReadMode = 'delay';
       let releaseMark;
       mockUpdateEmailFlags.mockImplementationOnce(() => new Promise(resolve => { releaseMark = resolve; }));
@@ -301,11 +304,10 @@ describe('selectEmail — auto mark as read', () => {
 
       useMailStore.getState().closeEmail();
       releaseMark();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(seenOf(1)).toBe(true));
 
       expect(useMailStore.getState().selectedEmail).toBeNull();
       expect(useMailStore.getState().selectedEmailId).toBeNull();
-      expect(seenOf(1)).toBe(false);
     });
 
     it('does not publish or schedule a read after closing during the body fetch', async () => {
