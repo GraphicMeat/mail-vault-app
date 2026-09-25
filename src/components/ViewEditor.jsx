@@ -17,7 +17,8 @@ import { ToggleSwitch } from './settings/ToggleSwitch';
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
-import { addGroup, addTyped, dropItem, parseGroups, removeGroup, removeWord, serializeGroups } from '../utils/queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups } from '../utils/queryGroups';
+import { CALENDAR_RANGES } from '../utils/viewRange';
 // The drag ghost reuses the reorder list's preview style.
 import '../styles/account-settings-navigation.css';
 
@@ -49,13 +50,127 @@ const toDateInput = seconds => (seconds ? new Date(seconds * 1000).toISOString()
 const fromDateInput = text => (text ? Math.floor(new Date(`${text}T00:00:00Z`).getTime() / 1000) : null);
 /// The drop target under a pointer: a word (`w:g:i`), a group (`g:g`) or the
 /// OR button (`new`).
-const dropTargetAt = event => {
-  const spot = document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-drop]')?.dataset.drop;
-  if (!spot) return null;
-  if (spot === 'new') return { g: 'new' };
-  const [kind, g, i] = spot.split(':');
+/// Only inside `root`: the query and the senders are two fields of the same
+/// shape, and a word carried out of one must not land in the other.
+const dropTargetAt = (event, root) => {
+  const spot = document.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-drop]');
+  const drop = spot && root?.contains(spot) ? spot.dataset.drop : null;
+  if (!drop) return null;
+  if (drop === 'new') return { g: 'new' };
+  const [kind, g, i] = drop.split(':');
   return kind === 'w' ? { g: Number(g), i: Number(i) } : { g: Number(g) };
 };
+
+/// Boxes of AND-words, OR between boxes: the one shape a person can read at a
+/// glance, and the one the daemon evaluates. The query words and the senders
+/// both use it.
+function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput }) {
+  const t = useT();
+  const root = useRef(null);
+  /// Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
+  /// HTML5 drag events on Windows.
+  const drag = useRef(null);
+  const dragged = useRef(false);
+  const [dropOver, setDropOver] = useState(null);
+  /// What follows the pointer while a word or the OR is carried.
+  const [ghost, setGhost] = useState(null);
+
+  const allGroups = addTyped(groups, input);
+  const addKeys = () => {
+    if (!input.trim()) return;
+    setGroups(allGroups);
+    setInput('');
+  };
+
+  const startDrag = (item, text) => event => {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    // WebKit otherwise runs the mouse default (selection, a native drag), and a
+    // drag it starts ends ours with pointercancel. The click still follows.
+    event.preventDefault();
+    dragged.current = false;
+    drag.current = { item, label: text, x: event.clientX, y: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const moveDrag = event => {
+    const current = drag.current;
+    if (!current) return;
+    // A few pixels of wobble is still a click.
+    if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return;
+    current.moved = true;
+    setGhost({ label: current.label, x: event.clientX, y: event.clientY, item: current.item });
+    const target = dropTargetAt(event, root.current);
+    setDropOver(target ? JSON.stringify(target) : null);
+  };
+  const endDrag = event => {
+    const current = drag.current;
+    drag.current = null;
+    setDropOver(null);
+    setGhost(null);
+    if (!current?.moved) return;
+    // The click that follows a drag must not add a group.
+    dragged.current = true;
+    const target = event.type === 'pointerup' && dropTargetAt(event, root.current);
+    if (target) setGroups(dropItem(allGroups, current.item, target));
+  };
+  const unlessDragged = action => () => {
+    if (dragged.current) { dragged.current = false; return; }
+    action();
+  };
+  const isOver = target => dropOver === JSON.stringify(target);
+  const isCarried = (g, i) => ghost?.item.kind === 'word' && ghost.item.g === g && ghost.item.i === i;
+
+  return <div ref={root} className="view-choice-field view-query-field">
+    <label htmlFor={prefix}>{label}</label>
+    <div className="view-query-groups" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      {groups.map((group, g) => <Fragment key={g}>
+        {g > 0 && <span className="view-query-or" aria-hidden="true">{t('views.query.or')}</span>}
+        <div className={`view-query-group${isOver({ g }) ? ' is-over' : ''}`} data-drop={`g:${g}`}
+          data-testid={`${prefix}-group-${g}`} role="group" aria-label={t('views.query.group', { n: g + 1 })}>
+          {!group.length && <span className="view-query-empty">{t('views.query.empty')}</span>}
+          {!group.length && groups.length > 1 && <button type="button" className="view-query-key-remove"
+            data-testid={`${prefix}-remove-group-${g}`} aria-label={`${t('common.remove')} ${t('views.query.group', { n: g + 1 })}`}
+            onClick={() => setGroups(current => removeGroup(current, g))}>
+            <X size={12} aria-hidden="true" />
+          </button>}
+          {group.map((key, i) => <Fragment key={key}>
+            {i > 0 && <span className="view-query-and" aria-hidden="true">{t('views.query.and')}</span>}
+            {/* The word is the handle; only the X removes, so a press that
+                wobbles is never a deletion. */}
+            <span className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}${isCarried(g, i) ? ' is-dragging' : ''}`}
+              data-drop={`w:${g}:${i}`} title={t('views.query.dragHint')}
+              onPointerDown={startDrag({ kind: 'word', g, i }, key)}>
+              {key}
+              <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${key}`}
+                onPointerDown={event => event.stopPropagation()}
+                onClick={() => setGroups(current => removeWord(current, g, i))}>
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          </Fragment>)}
+        </div>
+      </Fragment>)}
+    </div>
+    <div className="view-query-entry" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      <input id={prefix} data-testid={prefix} value={input} maxLength={200}
+        aria-label={label} placeholder={placeholder}
+        aria-describedby={`${prefix}-hint`}
+        onChange={event => setInput(event.target.value)}
+        onKeyDown={event => { if (event.key === 'Enter' && input.trim()) { event.preventDefault(); addKeys(); } }}
+        onBlur={addKeys} />
+      <button type="button" data-testid={`${prefix}-or`} data-drop="new"
+        className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
+        title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' }, `|| ${t('views.query.or')}`)}
+        onClick={unlessDragged(() => { setGroups(addGroup(allGroups)); setInput(''); })}>
+        || {t('views.query.or')}
+      </button>
+    </div>
+    <p id={`${prefix}-hint`} className="view-query-hint">{hint}</p>
+    {ghost && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
+      data-testid={`${prefix}-ghost`} style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
+      <span>{ghost.label}</span>
+    </div>, document.body)}
+  </div>;
+}
 
 export function ViewEditor({ view, onClose, showPreview = true, isNew = false }) {
   const t = useT();
@@ -74,14 +189,10 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [groups, setGroups] = useState(() => parseGroups(def.query));
   const [queryInput, setQueryInput] = useState('');
-  /// Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
-  /// HTML5 drag events on Windows.
-  const drag = useRef(null);
-  const dragged = useRef(false);
-  const [dropOver, setDropOver] = useState(null);
-  /// What follows the pointer while a word or the OR is carried.
-  const [ghost, setGhost] = useState(null);
-  const [sender, setSender] = useState(def.sender || '');
+  /// Senders in the query's notation: `acme || billing && stripe`. A sender
+  /// saved before groups existed is one name, spaces and all.
+  const [senderGroups, setSenderGroups] = useState(() => parseSenders(def.sender));
+  const [senderInput, setSenderInput] = useState('');
   const [flags, setFlags] = useState({
     unread: toTri(def.unread), starred: toTri(def.starred), answered: toTri(def.answered),
   });
@@ -89,7 +200,8 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const [toMe, setToMe] = useState(!!def.toMe);
   const [notFromMe, setNotFromMe] = useState(!!def.notFromMe);
   const [chosenAccounts, setChosenAccounts] = useState(def.accounts || []);
-  const [withinDays, setWithinDays] = useState(def.withinDays ? String(def.withinDays) : '');
+  /// One choice: a calendar range name, a number of days, or '' for any time.
+  const [within, setWithin] = useState(def.range || (def.withinDays ? String(def.withinDays) : ''));
   const [dateFrom, setDateFrom] = useState(toDateInput(def.dateFrom));
   const [dateTo, setDateTo] = useState(toDateInput(def.dateTo));
   const [chosenTags, setChosenTags] = useState(def.tags || []);
@@ -113,67 +225,24 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const setFilter = (id, patch) =>
     setFieldFilters(current => ({ ...current, [id]: { ...(current[id] || NO_FILTER), ...patch } }));
 
-  const allGroups = addTyped(groups, queryInput);
-  const addKeys = () => {
-    if (!queryInput.trim()) return;
-    setGroups(allGroups);
-    setQueryInput('');
-  };
-
-  const startDrag = (item, label) => event => {
-    if (event.button !== 0 || event.isPrimary === false) return;
-    // WebKit otherwise runs the mouse default (selection, a native drag), and a
-    // drag it starts ends ours with pointercancel. The click still follows.
-    event.preventDefault();
-    dragged.current = false;
-    drag.current = { item, label, x: event.clientX, y: event.clientY, moved: false };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-  const moveDrag = event => {
-    const current = drag.current;
-    if (!current) return;
-    // A few pixels of wobble is still a click.
-    if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return;
-    current.moved = true;
-    setGhost({ label: current.label, x: event.clientX, y: event.clientY, item: current.item });
-    const target = dropTargetAt(event);
-    setDropOver(target ? JSON.stringify(target) : null);
-  };
-  const endDrag = event => {
-    const current = drag.current;
-    drag.current = null;
-    setDropOver(null);
-    setGhost(null);
-    if (!current?.moved) return;
-    // The click that follows a drag must not add a group.
-    dragged.current = true;
-    const target = event.type === 'pointerup' && dropTargetAt(event);
-    if (target) setGroups(dropItem(allGroups, current.item, target));
-  };
-  const unlessDragged = action => () => {
-    if (dragged.current) { dragged.current = false; return; }
-    action();
-  };
-  const isOver = target => dropOver === JSON.stringify(target);
-  const isCarried = (g, i) => ghost?.item.kind === 'word' && ghost.item.g === g && ghost.item.i === i;
-
   /// What the form currently says, as a definition. Spread over the stored one
   /// so the parts this form does not offer — excluded mailboxes, columns — are
   /// carried through an edit rather than dropped.
   const editedDef = () => ({
     ...def,
     accounts: chosenAccounts,
-    query: serializeGroups(allGroups),
-    sender: sender.trim() || null,
+    query: serializeGroups(addTyped(groups, queryInput)),
+    sender: serializeGroups(addTyped(senderGroups, senderInput)) || null,
     unread: fromTri(flags.unread),
     starred: fromTri(flags.starred),
     answered: fromTri(flags.answered),
     hasAttachments: attachments,
     toMe,
     notFromMe,
-    withinDays: withinDays ? Number(withinDays) : null,
-    dateFrom: withinDays ? null : fromDateInput(dateFrom),
-    dateTo: withinDays ? null : fromDateInput(dateTo),
+    range: CALENDAR_RANGES.includes(within) ? within : null,
+    withinDays: within && !CALENDAR_RANGES.includes(within) ? Number(within) : null,
+    dateFrom: within ? null : fromDateInput(dateFrom),
+    dateTo: within ? null : fromDateInput(dateTo),
     tags: chosenTags,
     // A field nobody touched is not a filter — an empty value still means
     // "any" — but `isSet`/`isEmpty` are filters that carry no value.
@@ -267,65 +336,11 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
       </div>
     </div>
 
-    <div className="view-choice-field view-query-field">
-      <label htmlFor="view-query">{t('views.filter.query')}</label>
-      {/* Boxes of AND-words, OR between boxes: the one shape a person can read
-          at a glance, and the one the daemon evaluates. */}
-      <div className="view-query-groups" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-        {groups.map((group, g) => <Fragment key={g}>
-          {g > 0 && <span className="view-query-or" aria-hidden="true">{t('views.query.or')}</span>}
-          <div className={`view-query-group${isOver({ g }) ? ' is-over' : ''}`} data-drop={`g:${g}`}
-            data-testid={`view-query-group-${g}`} role="group" aria-label={t('views.query.group', { n: g + 1 })}>
-            {!group.length && <span className="view-query-empty">{t('views.query.empty')}</span>}
-            {!group.length && groups.length > 1 && <button type="button" className="view-query-key-remove"
-              data-testid={`view-query-remove-group-${g}`} aria-label={`${t('common.remove')} ${t('views.query.group', { n: g + 1 })}`}
-              onClick={() => setGroups(current => removeGroup(current, g))}>
-              <X size={12} aria-hidden="true" />
-            </button>}
-            {group.map((key, i) => <Fragment key={key}>
-              {i > 0 && <span className="view-query-and" aria-hidden="true">{t('views.query.and')}</span>}
-              {/* The word is the handle; only the X removes, so a press that
-                  wobbles is never a deletion. */}
-              <span className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}${isCarried(g, i) ? ' is-dragging' : ''}`}
-                data-drop={`w:${g}:${i}`} title={t('views.query.dragHint')}
-                onPointerDown={startDrag({ kind: 'word', g, i }, key)}>
-                {key}
-                <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${key}`}
-                  onPointerDown={event => event.stopPropagation()}
-                  onClick={() => setGroups(current => removeWord(current, g, i))}>
-                  <X size={12} aria-hidden="true" />
-                </button>
-              </span>
-            </Fragment>)}
-          </div>
-        </Fragment>)}
-      </div>
-      <div className="view-query-entry" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-        <input id="view-query" data-testid="view-query" value={queryInput} maxLength={200}
-          aria-label={t('views.filter.query')} placeholder={t('views.query.placeholder')}
-          aria-describedby="view-query-hint"
-          onChange={event => setQueryInput(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Enter' && queryInput.trim()) { event.preventDefault(); addKeys(); } }}
-          onBlur={addKeys} />
-        <button type="button" data-testid="view-query-or" data-drop="new"
-          className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
-          title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' }, `|| ${t('views.query.or')}`)}
-          onClick={unlessDragged(() => { setGroups(addGroup(allGroups)); setQueryInput(''); })}>
-          || {t('views.query.or')}
-        </button>
-      </div>
-      <p id="view-query-hint" className="view-query-hint">{t('views.query.hint')}</p>
-      {ghost && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
-        data-testid="view-query-ghost" style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
-        <span>{ghost.label}</span>
-      </div>, document.body)}
-    </div>
+    <QueryGroupsField prefix="view-query" label={t('views.filter.query')} placeholder={t('views.query.placeholder')}
+      hint={t('views.query.hint')} groups={groups} setGroups={setGroups} input={queryInput} setInput={setQueryInput} />
 
-    <label className="view-editor-row">
-      {t('views.filter.sender')}
-      <input data-testid="view-sender" value={sender} maxLength={200} aria-label={t('views.filter.sender')}
-        onChange={event => setSender(event.target.value)} />
-    </label>
+    <QueryGroupsField prefix="view-sender" label={t('views.filter.sender')} placeholder={t('views.sender.placeholder')}
+      hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput} />
 
     </SettingsSection>
 
@@ -350,13 +365,13 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     <div className="view-editor-row">
       <label>
         {t('views.filter.within')}
-        <select data-testid="view-within" value={withinDays} aria-label={t('views.filter.within')}
-          onChange={event => setWithinDays(event.target.value)}>
+        <select data-testid="view-within" value={within} aria-label={t('views.filter.within')}
+          onChange={event => setWithin(event.target.value)}>
           <option value="">{t('views.within.any')}</option>
-          {WINDOWS.map(days => <option key={days} value={days}>{t(`views.within.${days}`)}</option>)}
+          {[...WINDOWS, ...CALENDAR_RANGES].map(key => <option key={key} value={key}>{t(`views.within.${key}`)}</option>)}
         </select>
       </label>
-      {!withinDays && <>
+      {!within && <>
         <label>
           {t('common.from')}
           <input type="date" data-testid="view-date-from" value={dateFrom} aria-label={t('common.from')}

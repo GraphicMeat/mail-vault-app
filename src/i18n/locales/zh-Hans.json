@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "搜索索引未打开，因此暂时无法计算此视图。",
   "views.upgrade": "升级以获得无限视图",
   "views.within.30": "最近 30 天",
-  "views.within.365": "最近一年",
+  "views.within.365": "最近 365 天",
   "views.within.7": "最近 7 天",
   "views.within.90": "最近 90 天",
   "views.within.any": "不限时间",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "所有演示邮件、保险库和图表操作都只在此浏览器标签页中进行。",
   "settings.daemon.demoAboutNoHelper": "不使用助手进程、网络账户或本机存储。",
   "explorer.allMessages": "所有邮件",
-  "errors.searchFailed": "搜索失败。请重试。"
+  "errors.searchFailed": "搜索失败。请重试。",
+  "views.within.thisMonth": "本月",
+  "views.within.lastMonth": "上个月",
+  "views.within.thisYear": "今年",
+  "views.within.lastYear": "去年",
+  "views.sender.placeholder": "添加发件人",
+  "views.sender.hint": "同一框内的名称或地址必须全部与发件人匹配（且）；用“或”连接的框互为备选。按 Enter 添加，输入 || 或按“或”新建一框。",
+  "views.download.title": "下载附件",
+  "views.download.all": "全部",
+  "views.download.done_one": "已下载 {{count}} 个文件",
+  "views.download.done_other": "已下载 {{count}} 个文件",
+  "views.download.none": "未找到附件"
 }

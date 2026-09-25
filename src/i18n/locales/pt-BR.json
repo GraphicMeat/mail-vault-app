@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "O índice de busca não está aberto, então esta visão não pode ser calculada agora.",
   "views.upgrade": "Faça upgrade para visões ilimitadas",
   "views.within.30": "Últimos 30 dias",
-  "views.within.365": "Último ano",
+  "views.within.365": "Últimos 365 dias",
   "views.within.7": "Últimos 7 dias",
   "views.within.90": "Últimos 90 dias",
   "views.within.any": "Qualquer data",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "Todo o e-mail, o cofre e os gráficos da demo ficam nesta aba do navegador.",
   "settings.daemon.demoAboutNoHelper": "Nenhum processo auxiliar, conta de rede ou armazenamento nativo é usado.",
   "explorer.allMessages": "Todas as mensagens",
-  "errors.searchFailed": "A pesquisa falhou. Tente novamente."
+  "errors.searchFailed": "A pesquisa falhou. Tente novamente.",
+  "views.within.thisMonth": "Este mês",
+  "views.within.lastMonth": "Mês passado",
+  "views.within.thisYear": "Este ano",
+  "views.within.lastYear": "Ano passado",
+  "views.sender.placeholder": "Adicione um remetente",
+  "views.sender.hint": "Todos os nomes ou endereços de uma caixa precisam corresponder ao remetente (E); caixas ligadas por OU são alternativas. Pressione Enter para adicionar, digite || ou pressione OU para uma nova caixa.",
+  "views.download.title": "Baixar anexos",
+  "views.download.all": "Tudo",
+  "views.download.done_one": "{{count}} arquivo baixado",
+  "views.download.done_other": "{{count}} arquivos baixados",
+  "views.download.none": "Nenhum anexo encontrado"
 }

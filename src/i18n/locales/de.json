@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "Der Suchindex ist nicht geöffnet, daher lässt sich diese Ansicht gerade nicht ermitteln.",
   "views.upgrade": "Upgrade für unbegrenzte Ansichten",
   "views.within.30": "Letzte 30 Tage",
-  "views.within.365": "Letztes Jahr",
+  "views.within.365": "Letzte 365 Tage",
   "views.within.7": "Letzte 7 Tage",
   "views.within.90": "Letzte 90 Tage",
   "views.within.any": "Beliebig",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "Alle Demo-Mails, der Tresor und die Diagramme bleiben in diesem Browser-Tab.",
   "settings.daemon.demoAboutNoHelper": "Es werden kein Helferprozess, kein Netzwerkkonto und kein nativer Speicher verwendet.",
   "explorer.allMessages": "Alle Nachrichten",
-  "errors.searchFailed": "Suche fehlgeschlagen. Versuchen Sie es erneut."
+  "errors.searchFailed": "Suche fehlgeschlagen. Versuchen Sie es erneut.",
+  "views.within.thisMonth": "Dieser Monat",
+  "views.within.lastMonth": "Letzter Monat",
+  "views.within.thisYear": "Dieses Jahr",
+  "views.within.lastYear": "Letztes Jahr",
+  "views.sender.placeholder": "Absender hinzufügen",
+  "views.sender.hint": "Alle Namen oder Adressen in einem Feld müssen zum Absender passen (UND); mit ODER verbundene Felder sind Alternativen. Mit Enter hinzufügen, || tippen oder ODER drücken für ein neues Feld.",
+  "views.download.title": "Anhänge herunterladen",
+  "views.download.all": "Alles",
+  "views.download.done_one": "{{count}} Datei heruntergeladen",
+  "views.download.done_other": "{{count}} Dateien heruntergeladen",
+  "views.download.none": "Keine Anhänge gefunden"
 }

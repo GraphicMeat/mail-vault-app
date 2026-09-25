@@ -154,6 +154,47 @@ describe('editing a saved view', () => {
     expect(screen.queryByText('a1')).toBeNull();
   });
 
+  it('senders combine with AND and OR like the query words, and save in the same notation', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    const input = screen.getByTestId('view-sender');
+    fireEvent.change(input, { target: { value: 'acme && billing' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('view-sender-or'));
+    fireEvent.change(input, { target: { value: 'Ann Lee' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.sender).toBe('acme && billing || Ann Lee');
+  });
+
+  it('a sender saved before groups reopens as one name, and a word never drops into the other field', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, query: 'invoice || receipt', sender: 'Ann Lee' } }} onClose={() => {}} />);
+    expect(screen.getByTestId('view-sender-group-0').textContent).toContain('Ann Lee');
+    // Carried out of the query's second box and let go over the sender's
+    // first: read as the query's own box 0, it would AND the two words.
+    dragTo(screen.getByText('receipt'), screen.getByTestId('view-sender-group-0'));
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
+    expect(saved.def.sender).toBe('Ann Lee');
+    expect(saved.def.query).toBe('invoice || receipt');
+  });
+
+  it('a calendar range replaces the rolling window and the dates, and reopens on itself', () => {
+    render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, withinDays: 30 } }} onClose={() => {}} />);
+    fireEvent.change(screen.getByTestId('view-within'), { target: { value: 'lastMonth' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
+    expect(saved.def).toMatchObject({ range: 'lastMonth', withinDays: null, dateFrom: null, dateTo: null });
+    cleanup();
+    render(<ViewEditor view={{ ...MINE, def: saved.def }} onClose={() => {}} />);
+    expect(screen.getByTestId('view-within').value).toBe('lastMonth');
+  });
+
+  it('a rolling window still saves as days, with no range', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.change(screen.getByTestId('view-within'), { target: { value: '90' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def).toMatchObject({ range: null, withinDays: 90 });
+  });
+
   it('a tri-state filter can go back to not caring', () => {
     render(<ViewEditor view={{ ...MINE, def: { ...MINE.def, unread: true } }} onClose={() => {}} />);
     expect(screen.getByTestId('view-unread-yes').getAttribute('aria-pressed')).toBe('true');

@@ -215,6 +215,17 @@ export const useViewStore = create((set, get) => ({
     return { ok: true, view: saved };
   },
 
+  /// Every real attachment a definition finds — or, for a search, the rows on
+  /// screen — written flat into `destDir` by the daemon. Replies
+  /// `{ dir, files, skipped }`.
+  exportAttachments: (def, destDir) =>
+    daemonCall('views.export_attachments', { def, accounts: accountsPayload(), destDir }),
+  exportRowAttachments: (rows, destDir) => daemonCall('views.export_attachments', {
+    messages: rows.filter(row => row._accountId && row._mailbox && row.uid != null)
+      .map(row => ({ accountId: row._accountId, mailbox: row._mailbox, uid: row.uid })),
+    destDir,
+  }),
+
   /// What a definition would find, for the editor's preview. Never shows its
   /// rows on the mail screen — that is what `openView` is for — and answers
   /// with the same "could not answer" the sidebar already speaks.

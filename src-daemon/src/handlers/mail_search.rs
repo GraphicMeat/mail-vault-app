@@ -1154,7 +1154,7 @@ fn unique_vault_dirs(mailboxes: &[String]) -> HashSet<String> {
         .collect()
 }
 
-fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String, bool, bool) {
+pub(crate) fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String, bool, bool) {
     let mut matches = known_mailboxes
         .iter()
         .filter(|mailbox| core_search::text::vault_dir_name(mailbox) == vault_dir);

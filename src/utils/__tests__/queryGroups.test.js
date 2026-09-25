@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addGroup, addTyped, dropItem, parseGroups, removeGroup, removeWord, serializeGroups } from '../queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups } from '../queryGroups';
 
 describe('view query groups', () => {
   it('reads the notation back as OR groups of AND words', () => {
@@ -55,5 +55,12 @@ describe('view query groups', () => {
     expect(removeGroup([['a'], []], 1)).toEqual([['a']]);
     expect(removeGroup([[], ['b']], 0)).toEqual([['b']]);
     expect(removeGroup([[]], 0)).toEqual([[]]);
+  });
+
+  it('a sender without an operator is one name, spaces and all', () => {
+    expect(parseSenders('Ann Lee')).toEqual([['Ann Lee']]);
+    expect(parseSenders('')).toEqual([[]]);
+    expect(parseSenders(null)).toEqual([[]]);
+    expect(parseSenders('acme && billing || Ann Lee')).toEqual([['acme', 'billing'], ['Ann Lee']]);
   });
 });

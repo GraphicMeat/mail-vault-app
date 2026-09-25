@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "El índice de búsqueda no está abierto, así que esta vista no se puede calcular ahora.",
   "views.upgrade": "Mejora el plan para tener vistas ilimitadas",
   "views.within.30": "Últimos 30 días",
-  "views.within.365": "Último año",
+  "views.within.365": "Últimos 365 días",
   "views.within.7": "Últimos 7 días",
   "views.within.90": "Últimos 90 días",
   "views.within.any": "Cualquier fecha",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "Todo el correo, la bóveda y los gráficos de la demo se quedan en esta pestaña del navegador.",
   "settings.daemon.demoAboutNoHelper": "No se usa ningún proceso auxiliar, cuenta de red ni almacenamiento nativo.",
   "explorer.allMessages": "Todos los mensajes",
-  "errors.searchFailed": "La búsqueda falló. Inténtalo de nuevo."
+  "errors.searchFailed": "La búsqueda falló. Inténtalo de nuevo.",
+  "views.within.thisMonth": "Este mes",
+  "views.within.lastMonth": "El mes pasado",
+  "views.within.thisYear": "Este año",
+  "views.within.lastYear": "El año pasado",
+  "views.sender.placeholder": "Añade un remitente",
+  "views.sender.hint": "Todos los nombres o direcciones de un recuadro deben coincidir con el remitente (Y); los recuadros unidos por O son alternativas. Pulsa Intro para añadir, escribe || o pulsa O para un recuadro nuevo.",
+  "views.download.title": "Descargar adjuntos",
+  "views.download.all": "Todo",
+  "views.download.done_one": "{{count}} archivo descargado",
+  "views.download.done_other": "{{count}} archivos descargados",
+  "views.download.none": "No se encontraron adjuntos"
 }

@@ -61,6 +61,8 @@ pub struct SearchRequest {
     pub msg_keys: Option<Vec<String>>,
     /// Default 500, max 2000.
     pub limit: Option<usize>,
+    /// Hits to skip, for a caller that walks past the cap one page at a time.
+    pub offset: usize,
 }
 
 /// The `msg_key` of a row, in SQL: the `Message-ID` without its angle
@@ -293,9 +295,23 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         args.extend(req.mailboxes_excluded.iter().map(|b| Value::Text(vault_dir_name(b))));
     }
     if let Some(sender) = req.sender.as_ref().map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
-        clauses.push("(m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')".into());
-        args.push(Value::Text(like_pattern(&sender)));
-        args.push(Value::Text(like_pattern(&sender)));
+        // `a && b || c`, the notation the query words use: every name in a
+        // group must match the sender, any one group is enough. Without an
+        // operator the whole text is one name, spaces and all.
+        let groups = boolean_groups(&sender).unwrap_or_else(|| vec![vec![sender.clone()]]);
+        let mut any = Vec::new();
+        for group in groups {
+            let mut all = Vec::new();
+            for name in group {
+                all.push("(m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')");
+                args.push(Value::Text(like_pattern(&name)));
+                args.push(Value::Text(like_pattern(&name)));
+            }
+            any.push(format!("({})", all.join(" AND ")));
+        }
+        if !any.is_empty() {
+            clauses.push(format!("({})", any.join(" OR ")));
+        }
     }
     if let Some(from) = req.date_from {
         clauses.push("m.date_utc >= ?".into());
@@ -356,6 +372,7 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
 
     // Formatted from the clamped usize only, never from request text.
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let offset = req.offset;
     let body_queries = column_queries(&plan, "body");
     let attach_queries = column_queries(&plan, "attach");
     let body_match_sql = column_match_sql(&body_queries);
@@ -370,7 +387,7 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
@@ -780,12 +797,32 @@ mod tests {
     }
 
     #[test]
+    fn senders_combine_with_and_and_or_like_the_query_words() {
+        let (_t, db) = fixture();
+        let from = |sender: &str| uids(&db, SearchRequest { account_id: "luke".into(), sender: Some(sender.into()), ..Default::default() });
+        assert_eq!(from("acme || ann"), vec![("INBOX".into(), 2), ("INBOX".into(), 1)], "either sender");
+        assert_eq!(from("billing && acme"), vec![("INBOX".into(), 2)], "both parts of one sender");
+        assert!(from("ann && acme").is_empty(), "no single sender is both");
+        assert_eq!(from("ann && x.test || billing"), vec![("INBOX".into(), 2), ("INBOX".into(), 1)]);
+        // No operator: one name, spaces and all, exactly as before.
+        assert!(from("ann ken").is_empty());
+    }
+
+    #[test]
     fn hits_expose_internal_merge_keys_in_existing_order() {
         let (_t, db) = fixture();
         let g = crate::search_index::lock(&db);
         let page = search(g.as_ref().unwrap(), &SearchRequest { account_id: "luke".into(), ..Default::default() }).unwrap();
         assert!(page.hits.windows(2).all(|pair| (pair[0].date_utc, pair[0].row_id) >= (pair[1].date_utc, pair[1].row_id)));
         assert!(page.hits.iter().all(|hit| hit.row_id > 0));
+    }
+
+    #[test]
+    fn offset_walks_past_the_first_page() {
+        let (_t, db) = fixture();
+        let all = uids(&db, SearchRequest { account_id: "luke".into(), ..Default::default() });
+        let second = uids(&db, SearchRequest { account_id: "luke".into(), limit: Some(2), offset: 2, ..Default::default() });
+        assert_eq!(second, all[2..].to_vec());
     }
 
     #[test]

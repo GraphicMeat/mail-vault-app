@@ -33,6 +33,15 @@ struct Account {
     special_use: HashMap<String, String>,
 }
 
+/// One message a search put on screen.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Message {
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+}
+
 fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
@@ -51,7 +60,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     Some(done(id, blocking(move || run(&state, &method, &params)).await.and_then(|r| r)))
 }
 
-fn run(state: &DaemonState, method: &str, params: &Value) -> Result<Value, String> {
+fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, String> {
     let app_dir = state.app_dir.as_path();
     match method {
         "views.list" => app_db::with(app_dir, |conn| {
@@ -81,6 +90,38 @@ fn run(state: &DaemonState, method: &str, params: &Value) -> Result<Value, Strin
                 Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
             })?;
             evaluate(state, &def, &accounts, &keys, limit)
+        }
+        // Every real attachment the view finds, flat in one folder the app
+        // named. The app narrows the definition first when a person picked
+        // one month out of the range; `hasAttachments` is forced here so a
+        // view without it cannot walk every message in the vault. A search
+        // is not a view — its targets span folders and servers a definition
+        // cannot name — so it hands over the rows on screen as `messages`.
+        "views.export_attachments" => {
+            let dest_dir = params.get("destDir").and_then(Value::as_str).filter(|d| !d.is_empty()).ok_or("Missing destDir")?;
+            let messages = match params.get("messages") {
+                Some(list) => serde_json::from_value::<Vec<Message>>(list.clone())
+                    .map_err(|e| format!("messages: {e}"))?
+                    .into_iter()
+                    .map(|m| (m.account_id, m.mailbox, m.uid))
+                    .collect(),
+                None => {
+                    let accounts = accounts_of(params)?;
+                    let (mut def, keys) = app_db::with(app_dir, |conn| {
+                        let def = definition(conn, params)?;
+                        Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
+                    })?;
+                    def.has_attachments = true;
+                    messages_of(state, &def, &accounts, &keys)?
+                }
+            };
+            let root = crate::handlers::common::vault_root(state)?;
+            json_of(mailvault_core::vault_files::export_many_attachments(
+                &state.vault_registry,
+                &root,
+                &messages,
+                std::path::Path::new(dest_dir),
+            )?)
         }
         "views.counts" => {
             let accounts = accounts_of(params)?;
@@ -160,6 +201,7 @@ fn narrows_by_metadata(def: &ViewDef) -> bool {
 
 fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<String>>, now: i64) -> SearchRequest {
     let address = account.address.trim().to_lowercase();
+    let (date_from, date_to) = views::date_window(def, now);
     SearchRequest {
         account_id: account.account_id.clone(),
         query: def.query.clone(),
@@ -171,9 +213,10 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
             .chain(def.exclude_special.iter().filter_map(|use_| account.special_use.get(use_).cloned()))
             .collect(),
         sender: def.sender.clone(),
-        // "The last N days" is resolved now, not when the view was saved.
-        date_from: def.within_days.map(|days| now - days * 86_400).or(def.date_from),
-        date_to: def.date_to,
+        // "The last N days" and "last month" are resolved now, not when the
+        // view was saved.
+        date_from,
+        date_to,
         has_attachments: def.has_attachments,
         unread: def.unread,
         starred: def.starred,
@@ -184,7 +227,45 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         // which is the correct answer for a tag nobody has used.
         msg_keys: narrows_by_metadata(def).then(|| keys.get(&account.account_id).cloned().unwrap_or_default()),
         limit: None,
+        offset: 0,
     }
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// Every message a view finds as `(account, mailbox, uid)`, walked page by
+/// page past the index's per-query cap. The index lock is taken per page and
+/// released before any file is read.
+fn messages_of(
+    state: &DaemonState,
+    def: &ViewDef,
+    accounts: &[Account],
+    keys: &HashMap<String, Vec<String>>,
+) -> Result<Vec<(String, String, u32)>, String> {
+    use mailvault_core::search_index::query::MAX_LIMIT;
+    let now = now_secs();
+    let mut out = Vec::new();
+    for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
+        let mut request = SearchRequest { limit: Some(MAX_LIMIT), ..request_for(def, account, keys, now) };
+        loop {
+            let page = crate::search_index::search_page_reply(&state.search_index, &request)?
+                .map_err(|reason| format!("search index unavailable: {reason}"))?
+                .page;
+            for hit in &page.hits {
+                let (mailbox, local_only, _) =
+                    crate::handlers::mail_search::mailbox_for_vault_dir(&hit.vault_dir, &account.known_mailboxes);
+                let mailbox = if local_only { hit.vault_dir.clone() } else { mailbox };
+                out.push((account.account_id.clone(), mailbox, hit.uid));
+            }
+            if page.hits.len() < MAX_LIMIT {
+                break;
+            }
+            request.offset += page.hits.len();
+        }
+    }
+    Ok(out)
 }
 
 fn evaluate(
@@ -194,10 +275,7 @@ fn evaluate(
     keys: &HashMap<String, Vec<String>>,
     limit: usize,
 ) -> Result<Value, String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let now = now_secs();
     let mut rows: Vec<Value> = Vec::new();
     let mut total = 0u64;
     // No account named is every account: a view made before a second account
@@ -301,6 +379,43 @@ mod tests {
 
     fn accounts() -> Value {
         json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX"] }])
+    }
+
+    /// "Download attachments" on a view: only the messages it finds that carry
+    /// one, even when the view itself does not ask for attachments.
+    #[tokio::test]
+    async fn exporting_a_views_attachments_writes_only_what_it_finds() {
+        let s = st();
+        index(&s);
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        let eml = "From: ann@x.test\r\nSubject: Plain two\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nhi\r\n--B\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\nJVBERi0xLjQK\r\n--B--\r\n";
+        std::fs::write(cur.join(format!("2{p}S.eml")), eml).unwrap();
+        let dest = s.data_dir.join("out").join("View - Attachments");
+        let out = call(&s, "views.export_attachments", json!({
+            "def": {}, "accounts": accounts(), "destDir": dest.to_string_lossy(),
+        })).await;
+        assert_eq!(out["files"], 1, "{out}");
+        assert_eq!(out["skipped"], 0, "{out}");
+        assert!(dest.join("a.pdf").exists());
+    }
+
+    #[tokio::test]
+    async fn exporting_a_searchs_rows_reads_exactly_those_messages() {
+        let s = st();
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        let eml = "From: ann@x.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: application/pdf; name=\"b.pdf\"\r\nContent-Disposition: attachment; filename=\"b.pdf\"\r\n\r\nx\r\n--B--\r\n";
+        std::fs::write(cur.join(format!("5{p}S.eml")), eml).unwrap();
+        let dest = s.data_dir.join("out").join("Search - Attachments");
+        let out = call(&s, "views.export_attachments", json!({
+            "messages": [{ "accountId": "a", "mailbox": "INBOX", "uid": 5 }, { "accountId": "a", "mailbox": "INBOX", "uid": 6 }],
+            "destDir": dest.to_string_lossy(),
+        })).await;
+        assert_eq!((out["files"].as_u64(), out["skipped"].as_u64()), (Some(1), Some(1)), "{out}");
+        assert!(dest.join("b.pdf").exists());
     }
 
     /// The app knows which folder is the bin on this account; the daemon must

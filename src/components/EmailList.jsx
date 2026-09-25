@@ -9,6 +9,7 @@ import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScop
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
+import { ViewAttachmentsDownload } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
@@ -182,6 +183,7 @@ function EmailListComponent({ stacked = false }) {
   const activeView = useViewStore(s => s.views.find(view => view.id === s.activeViewId) || null);
   const closeView = useViewStore(s => s.closeView);
   const searchResults = useSearchStore(s => s.searchResults);
+  const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
   const flagSeq = useUiStore(s => s._flagSeq);
   const archivedSize = useMessageListStore(s => s.archivedEmailIds.size);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
@@ -1058,6 +1060,8 @@ function EmailListComponent({ stacked = false }) {
             </h2>
             <MailboxHeaderSummary summary={mailboxSummary} scope={mailboxScopeLabel} dateRange={dateRange} searchActive={searchActive} />
           </div>
+          {activeView?.def?.hasAttachments ? <ViewAttachmentsDownload view={activeView} />
+            : searchActive && searchHasAttachments && <ViewAttachmentsDownload rows={searchResults} name={t('list.searchResults')} />}
           <button type="button" data-testid="mail-search-toggle" onClick={e => {
             if (isExplorer) {
               e.currentTarget.closest('.mail-list')?.querySelector('[data-testid="explorer-search"]')?.focus();

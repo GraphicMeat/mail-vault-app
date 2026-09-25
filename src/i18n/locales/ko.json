@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "검색 색인이 열려 있지 않아 지금은 이 보기를 계산할 수 없습니다.",
   "views.upgrade": "업그레이드하고 보기를 무제한으로",
   "views.within.30": "최근 30일",
-  "views.within.365": "최근 1년",
+  "views.within.365": "최근 365일",
   "views.within.7": "최근 7일",
   "views.within.90": "최근 90일",
   "views.within.any": "기간 제한 없음",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "데모 메일, 보관함, 차트 작업은 모두 이 브라우저 탭 안에서만 이루어집니다.",
   "settings.daemon.demoAboutNoHelper": "도우미 프로세스, 네트워크 계정, 네이티브 저장소는 사용하지 않습니다.",
   "explorer.allMessages": "모든 메시지",
-  "errors.searchFailed": "검색에 실패했습니다. 다시 시도하세요."
+  "errors.searchFailed": "검색에 실패했습니다. 다시 시도하세요.",
+  "views.within.thisMonth": "이번 달",
+  "views.within.lastMonth": "지난달",
+  "views.within.thisYear": "올해",
+  "views.within.lastYear": "작년",
+  "views.sender.placeholder": "발신자 추가",
+  "views.sender.hint": "한 상자의 이름이나 주소는 모두 발신자와 맞아야 합니다(그리고). 또는으로 이어진 상자는 대안입니다. Enter로 추가하고, || 입력 또는 또는을 눌러 새 상자를 만드세요.",
+  "views.download.title": "첨부 파일 다운로드",
+  "views.download.all": "전체",
+  "views.download.done_one": "파일 {{count}}개 다운로드됨",
+  "views.download.done_other": "파일 {{count}}개 다운로드됨",
+  "views.download.none": "첨부 파일이 없습니다"
 }

@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "L’indice di ricerca non è aperto, quindi questa vista non può essere calcolata ora.",
   "views.upgrade": "Passa a Premium per viste illimitate",
   "views.within.30": "Ultimi 30 giorni",
-  "views.within.365": "Ultimo anno",
+  "views.within.365": "Ultimi 365 giorni",
   "views.within.7": "Ultimi 7 giorni",
   "views.within.90": "Ultimi 90 giorni",
   "views.within.any": "Qualsiasi data",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "Tutte le email, la cassaforte e i grafici della demo restano in questa scheda del browser.",
   "settings.daemon.demoAboutNoHelper": "Non vengono usati processi helper, account di rete né archiviazione nativa.",
   "explorer.allMessages": "Tutti i messaggi",
-  "errors.searchFailed": "Ricerca non riuscita. Riprova."
+  "errors.searchFailed": "Ricerca non riuscita. Riprova.",
+  "views.within.thisMonth": "Questo mese",
+  "views.within.lastMonth": "Il mese scorso",
+  "views.within.thisYear": "Quest’anno",
+  "views.within.lastYear": "L’anno scorso",
+  "views.sender.placeholder": "Aggiungi un mittente",
+  "views.sender.hint": "Tutti i nomi o indirizzi di un riquadro devono corrispondere al mittente (E); i riquadri uniti da O sono alternative. Premi Invio per aggiungere, digita || o premi O per un nuovo riquadro.",
+  "views.download.title": "Scarica allegati",
+  "views.download.all": "Tutto",
+  "views.download.done_one": "{{count}} file scaricato",
+  "views.download.done_other": "{{count}} file scaricati",
+  "views.download.none": "Nessun allegato trovato"
 }

@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "The search index is not open, so this view cannot be worked out right now.",
   "views.upgrade": "Upgrade for unlimited views",
   "views.within.30": "Last 30 days",
-  "views.within.365": "Last year",
+  "views.within.365": "Last 365 days",
   "views.within.7": "Last 7 days",
   "views.within.90": "Last 90 days",
   "views.within.any": "Any time",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "All demo mail, vault and chart work stays in this browser tab.",
   "settings.daemon.demoAboutNoHelper": "No helper process, network account or native storage is used.",
   "explorer.allMessages": "All messages",
-  "errors.searchFailed": "Search failed. Try again."
+  "errors.searchFailed": "Search failed. Try again.",
+  "views.within.thisMonth": "This month",
+  "views.within.lastMonth": "Last month",
+  "views.within.thisYear": "This year",
+  "views.within.lastYear": "Last year",
+  "views.sender.placeholder": "Add a sender",
+  "views.sender.hint": "Every name or address in one box must match the sender (AND); boxes joined by OR are alternatives. Press Enter to add, type || or press OR for a new box.",
+  "views.download.title": "Download attachments",
+  "views.download.all": "Everything",
+  "views.download.done_one": "{{count}} file downloaded",
+  "views.download.done_other": "{{count}} files downloaded",
+  "views.download.none": "No attachments found"
 }

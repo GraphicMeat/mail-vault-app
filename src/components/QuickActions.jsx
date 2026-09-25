@@ -17,7 +17,7 @@ import "../styles/quick-actions.css";
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const UNSAFE_FAVORITE = new Set([...DESTRUCTIVE, "unarchive"]);
 const PAGE_SIZE = 8;
-function wedgeClip(index, count) {
+export function wedgeClip(index, count) {
   const gap = Math.min(1.3, 10 / Math.max(count, 1));
   const start = -90 + index * 360 / count + gap;
   const end = -90 + (index + 1) * 360 / count - gap;
@@ -37,7 +37,7 @@ function wedgeClip(index, count) {
   return `polygon(${[...outer, ...inner].join(", ")})`;
 }
 
-function radialContentPosition(index, count) {
+export function radialContentPosition(index, count) {
   const angle = (-90 + (index + .5) * 360 / count) * Math.PI / 180;
   const radius = 37;
   return {

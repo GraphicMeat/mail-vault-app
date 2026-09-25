@@ -36,6 +36,10 @@ pub struct ViewDef {
     /// "The last N days", resolved when the view runs rather than when it was
     /// saved: a saved absolute range would rot the day after it was made.
     pub within_days: Option<i64>,
+    /// A calendar window — `thisMonth`, `lastMonth`, `thisYear`, `lastYear` —
+    /// resolved in local time when the view runs. Wins over `within_days` and
+    /// the absolute dates: the editor offers them as one choice.
+    pub range: Option<String>,
     pub has_attachments: bool,
     pub unread: Option<bool>,
     pub starred: Option<bool>,
@@ -112,6 +116,44 @@ pub fn starters() -> Vec<View> {
         base("starred", "Starred", "star", 1, ViewDef { starred: Some(true), ..ViewDef::default() }),
         base("attachments", "Attachments", "paperclip", 2, ViewDef { has_attachments: true, ..ViewDef::default() }),
     ]
+}
+
+/// The unix-second bounds `[from, to]` of a calendar `range` around `now`, in
+/// `now`'s time zone. `None` for a name this build does not know.
+pub fn range_bounds<Tz: chrono::TimeZone>(range: &str, now: &chrono::DateTime<Tz>) -> Option<(i64, i64)> {
+    use chrono::Datelike;
+    let tz = now.timezone();
+    // A local midnight can be skipped or doubled by a DST jump: take the
+    // earliest instant that exists, else the hour after.
+    let start = |year: i32, month: u32| {
+        let local = |hour| tz.with_ymd_and_hms(year, month, 1, hour, 0, 0).earliest();
+        local(0).or_else(|| local(1)).map(|t| t.timestamp())
+    };
+    let (y, m) = (now.year(), now.month());
+    let (py, pm) = if m == 1 { (y - 1, 12) } else { (y, m - 1) };
+    let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+    let (from, until) = match range {
+        "thisMonth" => (start(y, m)?, start(ny, nm)?),
+        "lastMonth" => (start(py, pm)?, start(y, m)?),
+        "thisYear" => (start(y, 1)?, start(y + 1, 1)?),
+        "lastYear" => (start(y - 1, 1)?, start(y, 1)?),
+        _ => return None,
+    };
+    Some((from, until - 1))
+}
+
+/// The date bounds a view filters on at `now`: a calendar range, else the
+/// last N days, else the absolute dates it was saved with.
+pub fn date_window(def: &ViewDef, now: i64) -> (Option<i64>, Option<i64>) {
+    use chrono::TimeZone;
+    let local = chrono::Local.timestamp_opt(now, 0).single();
+    if let Some((from, to)) = def.range.as_deref().zip(local).and_then(|(range, now)| range_bounds(range, &now)) {
+        return (Some(from), Some(to));
+    }
+    if let Some(days) = def.within_days {
+        return (Some(now - days * 86_400), None);
+    }
+    (def.date_from, def.date_to)
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<View>, String> {
@@ -214,6 +256,47 @@ fn row_to_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<View> {
 mod tests {
     use super::*;
     use crate::app_db::db;
+
+    fn utc(y: i32, m: u32, d: u32) -> chrono::DateTime<chrono::Utc> {
+        use chrono::TimeZone;
+        chrono::Utc.with_ymd_and_hms(y, m, d, 12, 0, 0).unwrap()
+    }
+
+    fn ts(y: i32, m: u32, d: u32) -> i64 {
+        use chrono::TimeZone;
+        chrono::Utc.with_ymd_and_hms(y, m, d, 0, 0, 0).unwrap().timestamp()
+    }
+
+    #[test]
+    fn a_calendar_range_resolves_to_whole_months_and_years() {
+        let now = utc(2026, 9, 25);
+        assert_eq!(range_bounds("thisMonth", &now), Some((ts(2026, 9, 1), ts(2026, 10, 1) - 1)));
+        assert_eq!(range_bounds("lastMonth", &now), Some((ts(2026, 8, 1), ts(2026, 9, 1) - 1)));
+        assert_eq!(range_bounds("thisYear", &now), Some((ts(2026, 1, 1), ts(2027, 1, 1) - 1)));
+        assert_eq!(range_bounds("lastYear", &now), Some((ts(2025, 1, 1), ts(2026, 1, 1) - 1)));
+        assert_eq!(range_bounds("nextDecade", &now), None);
+    }
+
+    #[test]
+    fn last_month_in_january_is_last_years_december() {
+        let now = utc(2027, 1, 10);
+        assert_eq!(range_bounds("lastMonth", &now), Some((ts(2026, 12, 1), ts(2027, 1, 1) - 1)));
+        assert_eq!(range_bounds("thisMonth", &utc(2026, 12, 3)), Some((ts(2026, 12, 1), ts(2027, 1, 1) - 1)));
+    }
+
+    #[test]
+    fn a_range_wins_over_a_rolling_window_and_absolute_dates() {
+        let now = ts(2026, 9, 25);
+        let rolling = ViewDef { within_days: Some(7), date_from: Some(1), date_to: Some(2), ..ViewDef::default() };
+        assert_eq!(date_window(&rolling, now), (Some(now - 7 * 86_400), None));
+        let absolute = ViewDef { date_from: Some(1), date_to: Some(2), ..ViewDef::default() };
+        assert_eq!(date_window(&absolute, now), (Some(1), Some(2)));
+        let ranged = ViewDef { range: Some("lastYear".into()), within_days: Some(7), ..ViewDef::default() };
+        let (from, to) = date_window(&ranged, now);
+        // Local time: the bounds sit within a day of the UTC year edges.
+        assert!((from.unwrap() - ts(2025, 1, 1)).abs() <= 86_400, "{from:?}");
+        assert!((to.unwrap() - ts(2026, 1, 1)).abs() <= 86_400, "{to:?}");
+    }
 
     fn conn() -> Connection {
         let dir = std::env::temp_dir().join(format!("mv-views-{}", uuid::Uuid::new_v4()));

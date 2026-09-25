@@ -2736,7 +2736,7 @@
   "views.unavailable.unavailable": "L’index de recherche n’est pas ouvert, cette vue ne peut donc pas être calculée pour l’instant.",
   "views.upgrade": "Passer à Premium pour des vues illimitées",
   "views.within.30": "30 derniers jours",
-  "views.within.365": "Dernière année",
+  "views.within.365": "365 derniers jours",
   "views.within.7": "7 derniers jours",
   "views.within.90": "90 derniers jours",
   "views.within.any": "Toutes les dates",
@@ -2841,5 +2841,16 @@
   "settings.daemon.demoAboutTab": "Tous les e-mails, le coffre et les graphiques de la démo restent dans cet onglet du navigateur.",
   "settings.daemon.demoAboutNoHelper": "Aucun processus assistant, compte réseau ni stockage natif n’est utilisé.",
   "explorer.allMessages": "Tous les messages",
-  "errors.searchFailed": "La recherche a échoué. Réessayez."
+  "errors.searchFailed": "La recherche a échoué. Réessayez.",
+  "views.within.thisMonth": "Ce mois-ci",
+  "views.within.lastMonth": "Le mois dernier",
+  "views.within.thisYear": "Cette année",
+  "views.within.lastYear": "L’année dernière",
+  "views.sender.placeholder": "Ajouter un expéditeur",
+  "views.sender.hint": "Tous les noms ou adresses d’une case doivent correspondre à l’expéditeur (ET) ; les cases reliées par OU sont des alternatives. Entrée pour ajouter, tapez || ou OU pour une nouvelle case.",
+  "views.download.title": "Télécharger les pièces jointes",
+  "views.download.all": "Tout",
+  "views.download.done_one": "{{count}} fichier téléchargé",
+  "views.download.done_other": "{{count}} fichiers téléchargés",
+  "views.download.none": "Aucune pièce jointe trouvée"
 }

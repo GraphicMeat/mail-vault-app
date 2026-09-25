@@ -20,6 +20,10 @@ export function parseGroups(query) {
   return tidy(text.split('||').map(words));
 }
 
+/// A sender filter in the same notation. Saved before groups existed it is one
+/// name, spaces and all — "John Smith" never meant John AND Smith.
+export const parseSenders = text => (OPERATOR.test(text || '') ? parseGroups(text) : [words(text || '')]);
+
 export const serializeGroups = groups => groups.filter(group => group.length)
   .map(group => group.join(' && ')).join(' || ');
 

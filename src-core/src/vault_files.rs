@@ -954,6 +954,66 @@ fn export_attachments_in(
     Ok(ExportedAttachments { dir: dir.to_string_lossy().to_string(), files })
 }
 
+/// What a bulk export wrote: the folder, how many files landed in it, and how
+/// many messages could not be read (not in the vault, or unparseable).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkExport {
+    pub dir: String,
+    pub files: usize,
+    pub skipped: usize,
+}
+
+/// Every real attachment of many messages — `(account, mailbox, uid)` — flat
+/// in one new folder. "Real" is the viewer's rule (`is_real_attachment`): the
+/// signature logos and tracking pixels it hides are not downloaded either.
+/// One unreadable message is counted and skipped, never the whole export.
+pub fn export_many_attachments(
+    reg: &VaultRegistry,
+    root: &Path,
+    messages: &[(String, String, u32)],
+    dest_dir: &Path,
+) -> Result<BulkExport, String> {
+    let dir = next_free(dest_dir);
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
+    let (mut files, mut skipped) = (0, 0);
+    for (account_id, mailbox, uid) in messages {
+        match read_eml(reg, root, account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
+            Ok(written) => files += written,
+            Err(e) => {
+                warn!("Bulk export skipped uid {} in {}: {}", uid, mailbox, e);
+                skipped += 1;
+            }
+        }
+    }
+    // An empty folder in Downloads says nothing the reply does not.
+    if files == 0 {
+        let _ = fs::remove_dir(&dir);
+    }
+    info!("Bulk-exported {} attachment(s) from {} message(s) to {}", files, messages.len(), dir.display());
+    Ok(BulkExport { dir: dir.to_string_lossy().to_string(), files, skipped })
+}
+
+fn write_real_attachments(raw: &[u8], dir: &Path) -> Result<usize, String> {
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let (mut text, mut html, mut metas) = (None, None, Vec::new());
+    walk_mime_parts_light(&parsed, &mut text, &mut html, &mut metas);
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    let mut written = 0;
+    for (part, meta) in parts.iter().zip(&metas) {
+        if !is_real_attachment(&meta.content_type, &meta.content_id, &meta.filename, meta.size, html.as_deref()) {
+            continue;
+        }
+        let body = part.get_body_raw().map_err(|e| format!("Failed to read attachment body: {}", e))?;
+        let dest = next_free(&dir.join(safe_leaf(&part_filename(part))));
+        write_atomic(&dest, &body).map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
+        mark_from_internet(&dest);
+        written += 1;
+    }
+    Ok(written)
+}
+
 /// Sweep a mailbox's cached .eml files newest-first (uid order) and write
 /// every real attachment above `above_uid` to the cache. Returns the paths it
 /// wrote, in sweep order, and the highest uid it saw.
@@ -1573,6 +1633,39 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(Path::new(&r.dir), dest);
         assert_eq!(fs::read_dir(&dest).unwrap().count(), 1);
         assert_eq!(fs::read(dest.join("photo.png")).unwrap(), b"\x89PNG\r\n\x1a\n".to_vec());
+    }
+
+    #[test]
+    fn a_bulk_export_writes_only_real_attachments_and_skips_what_it_cannot_read() {
+        let root = tempfile::tempdir().unwrap();
+        let cur = cur_path(root.path(), "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(build_maildir_filename(9, &[])), photo_with_inline_and_pixel()).unwrap();
+        fs::write(cur.join(build_maildir_filename(7, &[])), multipart_with_attachment()).unwrap();
+        let (_app, reg) = registry(root.path());
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Invoices - Attachments");
+        let messages = [9, 7, 8].map(|uid| ("acct".to_string(), "INBOX".to_string(), uid));
+
+        let r = export_many_attachments(&reg, root.path(), &messages, &dest).unwrap();
+
+        // The photo and the PDF; not the inline logo, not the pixel, and uid 8
+        // is not in the vault at all.
+        assert_eq!((r.files, r.skipped), (2, 1));
+        let mut names: Vec<_> = fs::read_dir(&dest).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        names.sort();
+        assert_eq!(names, vec!["photo.png".to_string(), "report.pdf".to_string()]);
+    }
+
+    #[test]
+    fn a_bulk_export_that_found_nothing_leaves_no_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry(root.path());
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Empty");
+        let r = export_many_attachments(&reg, root.path(), &[("acct".into(), "INBOX".into(), 1)], &dest).unwrap();
+        assert_eq!((r.files, r.skipped), (0, 1));
+        assert!(!dest.exists());
     }
 
     #[test]
