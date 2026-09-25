@@ -99,6 +99,87 @@ mod tests {
         assert!(!is_newer("2.15.0", "2.15.0"));
     }
 
+    fn release(tag: &str, draft: bool, prerelease: bool) -> GithubRelease {
+        GithubRelease {
+            tag_name: tag.into(),
+            name: Some(format!("MailVault {tag}")),
+            published_at: Some("2026-09-25T13:45:06Z".into()),
+            body: Some(format!("### Fixed\r\n- **{tag}.** fixed")),
+            draft,
+            prerelease,
+        }
+    }
+
+    fn versions(notes: &[ReleaseNote]) -> Vec<&str> {
+        notes.iter().map(|n| n.version.as_str()).collect()
+    }
+
+    #[test]
+    fn release_notes_cover_after_the_installed_up_to_the_offered_newest_first() {
+        let releases = ["v2.14.0", "v2.16.0", "v2.13.1", "v2.17.0", "v2.15.0"]
+            .into_iter().map(|tag| release(tag, false, false)).collect();
+        let notes = release_notes_between(releases, "2.14.0", "2.16.0", false);
+        assert_eq!(versions(&notes), ["2.16.0", "2.15.0"]);
+    }
+
+    #[test]
+    fn release_notes_skip_drafts() {
+        let releases = vec![release("v2.16.0", true, false), release("v2.15.0", false, false)];
+        assert_eq!(versions(&release_notes_between(releases, "2.14.0", "2.16.0", false)), ["2.15.0"]);
+    }
+
+    #[test]
+    fn release_notes_skip_prereleases_unless_asked() {
+        let releases = || vec![release("v2.16.0", false, false), release("v2.17.0-beta.1", false, true)];
+        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", false)), ["2.16.0"]);
+        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", true)), ["2.17.0-beta.1", "2.16.0"]);
+    }
+
+    #[test]
+    fn release_notes_ignore_tags_that_are_not_versions() {
+        // The rolling nightly release is tagged `nightly`.
+        let releases = ["nightly", "garbage", "v2.16", "v2.16.0"]
+            .into_iter().map(|tag| release(tag, false, false)).collect();
+        assert_eq!(versions(&release_notes_between(releases, "2.15.0", "2.16.0", true)), ["2.16.0"]);
+    }
+
+    #[test]
+    fn release_notes_are_empty_when_either_end_is_unreadable() {
+        // The modal falls back to "unknown" when the feed names no version.
+        let releases = || vec![release("v2.15.0", false, false), release("v2.16.0", false, false)];
+        assert!(release_notes_between(releases(), "2.14.0", "unknown", false).is_empty());
+        assert!(release_notes_between(releases(), "", "2.16.0", false).is_empty());
+    }
+
+    #[test]
+    fn a_release_note_carries_the_bare_version_name_date_and_body() {
+        let mut bare = release("v2.15.0", false, false);
+        bare.name = None;
+        bare.body = None;
+        bare.published_at = None;
+        let notes = release_notes_between(vec![release("v2.16.0", false, false), bare], "2.14.0", "2.16.0", false);
+        assert_eq!(
+            serde_json::to_value(&notes).unwrap(),
+            serde_json::json!([
+                { "version": "2.16.0", "name": "MailVault v2.16.0", "publishedAt": "2026-09-25T13:45:06Z",
+                  "body": "### Fixed\r\n- **v2.16.0.** fixed" },
+                { "version": "2.15.0", "name": "", "publishedAt": "", "body": "" },
+            ])
+        );
+    }
+
+    #[test]
+    fn a_github_release_reads_from_the_api_shape() {
+        let parsed: Vec<GithubRelease> = serde_json::from_value(serde_json::json!([
+            { "tag_name": "v2.16.0", "name": "MailVault v2.16.0", "draft": false, "prerelease": false,
+              "published_at": "2026-09-25T13:45:06Z", "body": "### Added", "assets": [] },
+            { "tag_name": "nightly", "name": null, "draft": false, "prerelease": true, "published_at": null, "body": null },
+        ])).unwrap();
+        assert_eq!(parsed[0].tag_name, "v2.16.0");
+        assert!(parsed[1].prerelease);
+        assert_eq!(parsed[1].body, None);
+    }
+
     #[test]
     fn an_unreadable_version_never_offers_an_update() {
         assert!(!is_newer("2.15.0", "garbage"));
