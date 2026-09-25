@@ -128,7 +128,7 @@
       <article class="mb-16" data-version="2.16.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.16.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">September 23, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 25, 2026</span>
           <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -142,11 +142,15 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault for Windows.</strong> MailVault now runs on 64-bit Windows, from a signed installer on the download page. Passwords are kept in Windows Credential Manager, MailVault sits in the notification area and can be made your default mail app, and a backup made on a Mac can be imported. Settings > Mail preferences > Behavior has a Check for updates button, since Windows has no app menu to hold one, and the same Stable or Nightly choice as on the Mac; MailVault also checks once a day while it stays open. A nightly build follows nightlies unless you pick Stable, and it is only replaced by a stable release newer than itself.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Jump to any month in your mail.</strong> The message list now marks where each month begins, keeps the month you are reading pinned at the top, and shows a large date beside the scroll bar while you scroll. Move the pointer to the list's right edge for a timeline of years and months: click or drag to go straight there, including to months that have not been loaded yet, which MailVault pages in for you. The timeline also works from the keyboard.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Send it later, in the time zone you mean.</strong> Compose can schedule a message for a date and time in a zone you choose, and MailVault keeps the finished message in your vault until then. Date and time are one picker, the time zone list can be searched by city or UTC offset, and MailVault suggests the recipient's zone from their last email or from the zone you last scheduled for them. Scheduled mail has its own place in the sidebar: click a message there to edit it, and it stays scheduled as it was until you save the change. You can also move it to another time, send it now or cancel it. The wall clock you picked is what is stored, not the instant it happens to mean today, so a daylight-saving change between now and then does not move your send. The Scheduled folder explains when mail goes out while MailVault is closed and links to the setting for it; with the background helper off, a scheduled message goes out the next time MailVault runs. Scheduling for a set time, editing and rescheduling are part of Premium. Delaying a send by up to five minutes stays free, and sending now or cancelling what is already scheduled works on any plan.</span>
+              <span><strong>Send it later, in the time zone you mean.</strong> Compose can schedule a message for a date and time in a zone you choose, and MailVault keeps the finished message in your vault until then. Date and time are one picker, the time zone list can be searched by city or UTC offset, and MailVault suggests the recipient's zone from their last email or from the zone you last scheduled for them. Scheduled mail has its own place in the sidebar: click a message there to edit it, and it stays scheduled as it was until you save the change. You can also move it to another time, send it now or cancel it. The wall clock you picked is what is stored, not the instant it happens to mean today, so a daylight-saving change between now and then does not move your send. The Scheduled folder explains when mail goes out while MailVault is closed and links to the setting for it; with the background helper off, a scheduled message goes out the next time MailVault runs. The arrow next to Send opens one panel with two tabs: Send in, where you type or step hours and minutes (up to 24 hours), and Date & time for a set moment. Schedule there sets Send up without sending: the button turns into Schedule send, and next to it the footer says when the email goes, with an x to go back to sending now. Delays longer than five minutes, set times, editing and rescheduling are part of Premium, and are kept if MailVault quits. Delays of up to five minutes stay free and can be undone, and sending now or cancelling what is already scheduled works on any plan.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
@@ -158,7 +162,7 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Writing help that runs on your Mac.</strong> Draft a reply, shorten it, change its tone, pull out the action items, or summarise a thread. MailVault uses Apple's on-device model where the Mac has one, or a model you have downloaded, and shows you the exact text before anything is used. You can point it at a model of your own instead, and until you do, nothing leaves your machine. Everything it produces lands in the editor as a draft you can rewrite or undo, and no action sends mail.</span>
+              <span><strong>Writing help that runs on your Mac.</strong> Draft a reply, shorten it, change its tone, pull out the action items, or summarise a thread. MailVault starts on Apple's on-device model where the Mac has one, or a model you have downloaded, and shows you the exact text before anything is used. You can point it at a model of your own instead, and until you do, nothing leaves your machine. Everything it produces lands in the editor as a draft you can rewrite or undo, and no action sends mail.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
@@ -166,7 +170,11 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Keep MailVault syncing when it is closed.</strong> Settings → Background Daemon has a switch that keeps the background helper running after you quit, and starts it again when you log in, so mail keeps arriving and notifications keep appearing without the window open. On macOS this registers a proper login item, which the first time may wait for your approval in System Settings → General → Login Items. On Linux it adds a startup entry; the Snap build manages startup itself and says so instead of offering the switch.</span>
+              <span><strong>Keep MailVault syncing when it is closed.</strong> Settings → Background Daemon has a switch that keeps the background helper running after you quit, and opens MailVault again when you log in, so mail keeps syncing and scheduled messages go out without the window open. On macOS this registers a proper login item, which the first time may wait for your approval in System Settings → General → Login Items. On Linux it adds a startup entry; the Snap build manages startup itself and says so instead of offering the switch.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault tells you when it needs the keychain unlocked.</strong> If the background helper cannot read your passwords because the keychain is locked or macOS is waiting for your permission, MailVault shows a card in the corner with an Unlock button until the keychain can be read again, and posts a notification when its window is not in front. The helper checks for itself every few seconds, so unlocking the keychain any other way works too. Scheduled mail waits instead of failing, and goes out once the keychain is unlocked.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
@@ -174,7 +182,7 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Saved views: your own inboxes, made of filters.</strong> A view is a name and a set of filters — tags, attachments, starred, unread, sender, dates, folders, free text — evaluated across every account and shown in the message list. Nothing is moved or copied: a message can appear in as many views as you like and still live in exactly one folder. Views sit at the top of the sidebar, above your accounts, and MailVault ships three: Needs reply, Starred and Attachments. A view can also group what it finds — by sender, by date, or by one of your own fields — and a filter on a field can ask for more than a match: is not, has any value, is empty, and before or after a date. Any search you can run can be saved as a view from the search bar. Views are built on their own page in Settings, where a builder shows what a definition would find while you are still typing it, so you can see a filter working before you keep it. The sidebar opens views and nothing else: a filter cannot be rewritten from under the list you are reading. The section folds away when you want the room, a + beside it makes a view the way the + beside your accounts adds an account, and opening a view lets go of the account and folder you were in, because the list shows one or the other. A free MailVault keeps three views, the three it ships with included; a paid one keeps as many as you like.</span>
+              <span><strong>Saved views: your own inboxes, made of filters.</strong> A view is a name and a set of filters — tags, attachments, starred, unread, sender, dates, folders, free text — evaluated across every account, or only the ones you pick, and shown in the message list. Nothing is moved or copied: a message can appear in as many views as you like and still live in exactly one folder. Views sit at the top of the sidebar, above your accounts, and MailVault ships three: Needs reply, Starred and Attachments. A view can also group what it finds — by sender, by date, or by one of your own fields — and a filter on a field can ask for more than a match: is not, has any value, is empty, and before or after a date. Any search you can run can be saved as a view from the search bar. Views are built on their own page in Settings, where a builder shows what a definition would find while you are still typing it, so you can see a filter working before you keep it. The sidebar opens views and nothing else: a filter cannot be rewritten from under the list you are reading. The section folds away when you want the room, a + beside it makes a view the way the + beside your accounts adds an account, and opening a view lets go of the account and folder you were in, because the list shows one or the other. A free MailVault keeps three views, the three it ships with included; a paid one keeps as many as you like.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
@@ -212,6 +220,58 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Drag an attachment out to the Desktop or any app.</strong> Dragging a row hands over the real file, not a web link to it.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Move accounts to another computer.</strong> Export accounts, passwords and settings to an encrypted, password-protected file and import it in MailVault elsewhere (Settings > Accounts). A new install can import straight from the welcome screen. Accounts the other computer already has are left as they are, and a forgotten file password cannot be recovered. Any imported tagging rules arrive turned off, so you can review them before they run.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Choose where Compose opens.</strong> Settings > Mail preferences > Behavior, and the mail step of first-time setup, choose between writing over your mail (the default) and always opening Compose in a window of its own.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Skip first-time setup, and pick it up later.</strong> Every step of setup now has Skip tour. After skipping, a card in the corner offers to carry on from the step you left, until you finish it or tick "Don't show this again".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Run writing help without the review step.</strong> Settings > AI can turn off the "Review before sending" dialog for AI actions. A custom endpoint is still reviewed the first time it is used.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Switch a saved view between List and Explorer.</strong> A view that groups its mail can now be read as a plain list, and any view can change its grouping or timeline. Each view keeps the layout you last left it in when you come back from another view or folder, and Reset view returns it to how it was saved.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pick an emoji for a view.</strong> Clicking the emoji box in the view editor offers a set of emojis to choose from. Typing any other emoji still works.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search a view for one set of words OR another.</strong> The view editor's Contains field now holds boxes of words: every word in a box must appear, and mail matches if any box matches, so <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">(jasinskio && 14a-37) || (mindaugo 30)</code> is two boxes. Type <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">||</code> or press OR to start a new box, and drag words, or the OR button itself, to regroup them. A phrase such as "mindaugo 30" now stays one word and must match whole, and a two-character word joined with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">&&</code>, such as <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">mindaugo && 30</code>, is also found in the message text, so "Mindaugo g. 30" matches.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Download every attachment a view finds.</strong> A view that filters on attachments, and a search with the Has attachments filter on, now has a Download attachments button at the top of the list. It saves the attachments into one folder in Downloads; signature logos and tracking pixels are left out. When the view's time range spans two months, such as the last 30 days, a wheel lets you download all of it, this month, or last month.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Calendar time ranges for views.</strong> Besides the last 7, 30, 90 and 365 days, a view can cover this month, last month, this year or last year. They follow the calendar, so "Last month" in October is September.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Filter a view by several senders.</strong> The Sender field now holds boxes like the Contains field: names in one box must all match the sender, and mail matches if any box matches, so <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">acme || billing@stripe.com</code> shows mail from either.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A new view opens with an empty name.</strong> The name field shows "New view" as a hint and has the cursor, so you can type the name straight away. Leaving it empty keeps "New view".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A view can open with its timeline shown.</strong> The view editor has a Show timeline toggle, saved with the view. The Timeline button in the list toolbar still overrides it for the session, and closing the view leaves your default timeline setting untouched.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Edit, open and remove links while you write.</strong> The link button in Compose now opens a small panel for the link's text and address, and pressing it with the cursor in a link edits that link. Pointing at a link shows Open link, Edit, Remove link and Remove link and text. This works in a Compose window of its own too.</span>
+            </li>
           </ul>
         </div>
 
@@ -239,6 +299,26 @@
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span><strong>Folders open, and messages archive, faster on large vaults.</strong> Which messages your vault holds, and the previews shown for them, now come from a small database the background helper keeps up to date, instead of a fresh listing of the folder and a read of every saved message each time. A message's inline images load in one read, and removing many messages from the vault at once takes one step per folder instead of one per message.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>New installs play the Glass sound for new mail.</strong> Existing notification settings are kept.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Right-click a message for its quick actions.</strong> Right-clicking a row in the message list opens the same quick actions as the row's own menu, at the pointer and in the layout you chose for them, radial menu included. It replaces the browser menu that only offered to reload the window.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The List and Explorer switch stays put.</strong> It now sits at the right edge of the message list toolbar in both modes, with the Timeline button moved to its left, so switching to Explorer no longer slides it across the toolbar.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Setup walks you through every look option.</strong> On the "Make it yours" step of first-time setup, Next is now the main button and moves through Colors, Layout, Reading and Quick actions in turn. Continue appears once you reach Quick actions, so no tab is skipped by accident. The tabs can still be clicked directly.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>First-time setup starts from the recommended look.</strong> A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.</span>
+            </li>
           </ul>
         </div>
 
@@ -250,6 +330,38 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Typing after a link no longer adds to the link.</strong> Text typed right after a pasted or inserted link became part of it, space included. It is now plain text.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A sent email no longer shows up twice.</strong> After a send, the conversation and the Sent folder could show two copies of the same email, one marked "Only copy", when the server was slow to file it in Sent. The email now goes out under the same Message-ID as the copy MailVault keeps, and the extra copy is also cleared when a slow server files the email after MailVault stopped waiting for it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Two delayed sends in a row both go out.</strong> Sending a second email while the first was still in its send delay replaced the first: it never went, and the second could go out early. Each email now keeps its own countdown, and Undo takes back only the one on screen.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The green SPF/DKIM shield is back on opened messages.</strong> Opening a message showed no sender verification shield, even for mail that passed SPF and DKIM, because the opened copy did not keep the authentication results the message list already had. The shield and its details now show again.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quit in the tray menu stops the background helper again.</strong> Since 2.10.0, choosing Quit from the tray menu (or File, Quit on Linux) closed MailVault but left its background helper running. It now stops, unless Settings, Background Daemon is set to keep it running after you quit.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A restored backup now brings back each account's server.</strong> Backup ZIPs recorded every account's incoming and outgoing mail server as empty, so an account recreated by Import Backup came back with no server at all. New backups keep both, and restoring one fills them in. Backups made before this fix still import, but they never recorded a server, so their accounts still come back without one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Numbers follow the language you chose for MailVault.</strong> Counts in the message list, the sidebar, progress dialogs and Settings were grouped the way your computer's region writes numbers, so English MailVault on a Lithuanian or German Mac showed "12 345" or "12.345". They now use the app's own language, the same way sorting already did.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Tracker blocking now covers Cleanup and Time Capsule.</strong> Opening a message in the Cleanup preview or in a Time Capsule snapshot loaded its tracking pixels even with tracker blocking on, because those previews skipped the protection the reading pane applies. They now show the same cleaned message as the reading pane.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>An attachment's name can no longer run commands on your Mac.</strong> Choosing Open With on an attachment whose name was built to break out of the old AppleScript could run a shell command as you. The app is now picked in the standard macOS panel and the file is handed to it directly, so a name is only ever a name, including names with accents or other non-English letters. The sign-in page shown after a failed Microsoft or Google login also stops rendering whatever markup was passed to it. Thanks to Lukas Heichel for the report.</span>
