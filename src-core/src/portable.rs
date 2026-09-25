@@ -390,6 +390,18 @@ mod tests {
     }
 
     #[test]
+    fn the_estimate_counts_what_create_copies_and_nothing_it_leaves() {
+        let h = host();
+        let app_db = std::fs::metadata(h.app_dir.join("app.db")).unwrap().len();
+        let settings = b"{\"theme\":\"dark\"}".len() as u64;
+        let mail = b"From: a@example.com\r\n\r\nhello".len() as u64;
+        let app = b"binary".len() as u64;
+        // pid file and logs stay on the host; app.db counts at its file size.
+        assert_eq!(estimate(&h.payload, &h.app_dir, Some(&h.app_dir)), app + app_db + settings + mail);
+        assert_eq!(estimate(&h.payload, &h.app_dir, None), app + app_db + settings);
+    }
+
+    #[test]
     fn a_finished_portable_copy_is_never_overwritten() {
         let h = host();
         let s = secrets();
