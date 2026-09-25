@@ -12,8 +12,8 @@ export const SWIPE_RELEASE_MS = 150;
 export const SWIPE_QUIET_MS = 250;
 export const SWIPE_THRESHOLD_PX = 120;
 const LOCK_RATIO = 1.5;
-const LOCK_MIN_PX = 4;
-const LOCK_SAMPLES = 3;
+const LOCK_MIN_PX = 8;
+const LOCK_SAMPLES = 5;
 const RUBBER = 0.3;
 
 export const idleSwipe = Object.freeze({

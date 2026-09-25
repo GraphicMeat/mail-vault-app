@@ -72,10 +72,11 @@ async fn run(state: Arc<DaemonState>) {
         // A `Wait` leaves its row due; without a floor the loop would spin on
         // it until the network or the keychain comes back.
         let waited = results.iter().any(|(_, outcome, _)| matches!(outcome, snooze::WakeOutcome::Wait(_)));
-        let mut wait = if !online || waited { OFFLINE_POLL } else { next_wait(&state) };
-        if !results.is_empty() {
-            wait = wait.max(MIN_RETRY_WAIT);
-        }
+        // Floored always, not only after a pass that recorded something: a row
+        // whose outcome could not be written (disk full) stays due, is not in
+        // `results`, and would otherwise be searched for as fast as the loop runs.
+        let wait = if !online || waited { OFFLINE_POLL } else { next_wait(&state) };
+        let mut wait = wait.max(MIN_RETRY_WAIT);
         if credentials::GATE.is_blocked() {
             wait = wait.max(KEYCHAIN_POLL);
         }

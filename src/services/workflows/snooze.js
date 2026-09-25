@@ -58,6 +58,7 @@ export async function snoozeEmails(keys, wakeAt) {
   // failure never stops the rest, and the first error is reported at the end.
   const created = [];
   let failure = null;
+  let movedAny = false;
   try {
     for (const [accountId, groupKeys] of groups) {
       const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
@@ -66,6 +67,7 @@ export async function snoozeEmails(keys, wakeAt) {
         forceMailboxRefetch(accountId);
       }
       const { moved } = await moveEmails(groupKeys, folder);
+      movedAny ||= moved.length > 0;
       for (const r of moved) {
         for (let i = 0; i < r.srcUids.length; i++) {
           try {
@@ -85,6 +87,10 @@ export async function snoozeEmails(keys, wakeAt) {
       useSnoozeStore.getState().upsert(created);
       const ids = created.map(row => row.id);
       get().setUndo({ labelKey: 'undo.snoozed', labelParams: { count: ids.length }, run: () => unsnooze(ids) });
+    } else if (movedAny) {
+      // moveEmails left its own "Moved to Snoozed" undo, over messages that
+      // have all been put back already.
+      get().setUndo(null);
     }
   }
   if (failure) throw failure;

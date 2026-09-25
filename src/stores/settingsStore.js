@@ -150,6 +150,17 @@ export const DEFAULT_AI_SETTINGS = {
 
 export { normalizeViewOverrides as _normalizeViewOverrides };
 
+// A default added after the user saved their map is backfilled, unless one of
+// their own bindings already uses its key: then it starts unbound rather than
+// silently taking the key from the action they put there.
+const mergeShortcuts = (persisted) => {
+  const saved = persisted || {};
+  return Object.fromEntries(Object.entries({ ...DEFAULT_SHORTCUTS, ...saved }).map(([action, key]) => [
+    action,
+    !(action in saved) && key && Object.entries(saved).some(([other, k]) => other !== action && k === key) ? '' : key,
+  ]));
+};
+
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
@@ -174,7 +185,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   quickActions: normalizeQuickActions(persisted?.quickActions ?? current.quickActions),
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
   backupMailboxConcurrency: normalizeBackupMailboxConcurrency(persisted?.backupMailboxConcurrency ?? current.backupMailboxConcurrency),
-  keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
+  keyboardShortcuts: mergeShortcuts(persisted?.keyboardShortcuts),
   swipeLeftAction: normalizeSwipeAction(persisted?.swipeLeftAction, current.swipeLeftAction),
   swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
 });
