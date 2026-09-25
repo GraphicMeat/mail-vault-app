@@ -173,6 +173,105 @@ mod tests {
         }
     }
 
+    /// A host whose mail sits in the app data dir, one account in the (test)
+    /// keychain, and a stub app bundle to copy.
+    struct Host {
+        _tmp: tempfile::TempDir,
+        state: Arc<DaemonState>,
+        creds: std::path::PathBuf,
+        payload: Vec<std::path::PathBuf>,
+        dest: std::path::PathBuf,
+        eml: std::path::PathBuf,
+    }
+
+    fn host() -> Host {
+        let tmp = tempfile::tempdir().unwrap();
+        let app_dir = tmp.path().join("host");
+        let cur = app_dir.join("Maildir/acct/INBOX/cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let eml = cur.join("1.eml:2,S");
+        std::fs::write(&eml, b"From: a@example.com\r\n\r\nhello").unwrap();
+        let creds = tmp.path().join("credentials.json");
+        std::fs::write(&creds, json!({"acct-1": "{\"email\":\"a@example.com\",\"password\":\"hunter2\"}"}).to_string()).unwrap();
+        let app = tmp.path().join("MailVault.app");
+        std::fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        std::fs::write(app.join("Contents/MacOS/MailVault"), b"binary").unwrap();
+        let dest = tmp.path().join("USB");
+        std::fs::create_dir_all(&dest).unwrap();
+        let state = DaemonState::for_test(app_dir.clone(), app_dir, true);
+        Host { state, creds, payload: vec![app], dest, eml, _tmp: tmp }
+    }
+
+    fn request(h: &Host, remove_from_host: bool) -> CreateRequest {
+        CreateRequest {
+            dest: h.dest.clone(),
+            passphrase: Zeroizing::new("drive passphrase".to_string()),
+            copy_mail: true,
+            copy_config: true,
+            remove_from_host,
+            params: mailvault_core::transfer::crypto::Params { m_kib: mailvault_core::transfer::crypto::MIN_M_KIB, t: 1, p: 1 },
+        }
+    }
+
+    #[tokio::test]
+    async fn create_seals_the_keychain_accounts_onto_the_drive_and_keeps_the_host() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let h = host();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
+
+        let reply = run_create(&h.state, request(&h, false), h.payload.clone()).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let reply = reply.expect("created");
+        assert_eq!(reply["removedFromHost"], json!(false));
+        let data = h.dest.join("MailVault Data/data");
+        let sealed = mailvault_core::portable::read_sealed(&data.join("credentials.sealed"), "drive passphrase").unwrap();
+        assert!(sealed.credentials.contains_key("acct-1"));
+        assert!(data.join("Maildir/acct/INBOX/cur/1.eml:2,S").exists());
+        assert!(h.eml.exists() && h.creds.exists(), "nothing removed unless asked");
+        assert!(!h.state.vault_closed.load(std::sync::atomic::Ordering::SeqCst), "the vault is open again");
+    }
+
+    #[tokio::test]
+    async fn removal_from_the_host_happens_only_after_a_verified_copy() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let h = host();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
+
+        // A finished portable copy is already there: create refuses, so
+        // nothing may leave the host.
+        std::fs::create_dir_all(h.dest.join("MailVault Data")).unwrap();
+        std::fs::write(h.dest.join("MailVault Data/portable.json"), br#"{"version":1}"#).unwrap();
+        let refused = run_create(&h.state, request(&h, true), h.payload.clone()).await;
+        assert!(refused.is_err());
+        assert!(h.eml.exists() && h.creds.exists(), "a failed copy removes nothing");
+
+        std::fs::remove_dir_all(h.dest.join("MailVault Data")).unwrap();
+        let reply = run_create(&h.state, request(&h, true), h.payload.clone()).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(reply.expect("created")["removedFromHost"], json!(true));
+        assert!(!h.eml.exists(), "host mail removed after the verified copy");
+        assert!(!h.creds.exists(), "host credentials removed after the verified copy");
+        assert!(h.dest.join("MailVault Data/data/Maildir/acct/INBOX/cur/1.eml:2,S").exists());
+    }
+
+    #[tokio::test]
+    async fn create_refuses_a_short_passphrase_and_removal_without_a_full_copy() {
+        let s = st();
+        let short = route(&s, "portable.create", &json!({"dest": "/tmp", "passphrase": "short"}), json!(1)).await.unwrap();
+        assert!(short.error.unwrap().message.starts_with(E_PASSPHRASE_SHORT));
+        let partial = route(
+            &s,
+            "portable.create",
+            &json!({"dest": "/tmp", "passphrase": "long enough passphrase", "copyMail": false, "copyConfig": true, "removeFromHost": true}),
+            json!(1),
+        )
+        .await
+        .unwrap();
+        assert!(partial.error.is_some(), "removing from the host needs the mail and the accounts on the drive");
+    }
+
     #[tokio::test]
     async fn get_credentials_while_locked_is_unavailable_not_empty() {
         let dir = tempfile::tempdir().unwrap();
