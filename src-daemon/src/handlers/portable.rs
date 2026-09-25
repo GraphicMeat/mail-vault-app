@@ -450,6 +450,27 @@ mod tests {
         assert!(partial.error.is_some(), "removing from the host needs the mail and the accounts on the drive");
     }
 
+    /// Drive pulled while running: writes stop (no second archive on the
+    /// host, no half-written files on a drive that is back later), once.
+    #[tokio::test]
+    async fn a_drive_that_disappears_closes_the_vault_once() {
+        let s = st();
+        let drive = tempfile::tempdir().unwrap();
+        let root = drive.path().join("MailVault Data");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("portable.json"), br#"{"version":1}"#).unwrap();
+        let flag = std::sync::atomic::AtomicBool::new(false);
+        let closed = || s.vault_closed.load(std::sync::atomic::Ordering::SeqCst);
+
+        assert!(!check_drive(&s, &root, &flag).await, "present: nothing happens");
+        assert!(!closed());
+
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(check_drive(&s, &root, &flag).await, "gone: reported");
+        assert!(closed(), "vault writes refused while the drive is away");
+        assert!(!check_drive(&s, &root, &flag).await, "reported once, not every tick");
+    }
+
     #[tokio::test]
     async fn get_credentials_while_locked_is_unavailable_not_empty() {
         let dir = tempfile::tempdir().unwrap();
