@@ -721,7 +721,9 @@ function EmailListComponent({ stacked = false }) {
 
   // Through the helper: a uid is unique only inside one mailbox of one account,
   // and a key built here by hand is a key the store cannot read back.
-  const selKey = (email) => selectionKey(email, useMailStore.getState());
+  // Stable: it reads the store at call time, and the explorer's Unread cut
+  // memoizes on it.
+  const selKey = useCallback((email) => selectionKey(email, useMailStore.getState()), []);
 
   // The rest of the open message's conversation, as selection keys. A merged
   // Sent copy shares its uid with an INBOX message, so the set is keyed the way
@@ -1174,7 +1176,8 @@ function EmailListComponent({ stacked = false }) {
           <ExplorerView emails={searchActive ? searchResults : sortedEmails}
             conversationEmails={mergedEmails || (searchActive ? searchResults : sortedEmails)}
             context={explorerContext} rootLabel={searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox)}
-            unreadOnly={unreadOnly} selectedEmailIds={selectedEmailIds} getSelectionKey={selKey}
+            unreadOnly={unreadOnly} selectedEmailId={selectedEmailId} unreadKeep={unreadKeep}
+            selectedEmailIds={selectedEmailIds} getSelectionKey={selKey}
             onSetSelection={setEmailsSelected} onOpenThread={selectThread} rowHeight={ROW_HEIGHT}
             hasOpenThread={!!selectedThread} onThreadsChanged={syncSelectedThread}
             onSelectEmail={email => selectEmailRow(selKey(email), email)}

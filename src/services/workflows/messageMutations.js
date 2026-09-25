@@ -10,6 +10,7 @@ import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import { retryOnce } from './mailboxTree';
+import { cancelPendingMarkRead } from './selectEmail';
 import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
@@ -1371,6 +1372,23 @@ function _mapLocalFlags(localEmails, matches, map) {
   return localEmails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e);
 }
 
+// The open thread is a snapshot of buildThreads' output, and the list only
+// swaps a fresh one in when its MEMBERS change (refreshSelectedThread) — a
+// flag change moves none, so the thread reader kept the read state it was
+// opened with and its toggle offered the wrong next action.
+function _mapThreadFlags(thread, matches, map) {
+  const emails = _mapLocalFlags(thread?.emails, matches, map);
+  return emails === thread?.emails ? thread : { ...thread, emails };
+}
+
+// Is `e` the row of this message? The account is compared the way
+// resolveEmailLocation derives it, never skipped: a delayed mark lands after
+// the user may have switched accounts, and a bare row of the new view under
+// the same folder name and uid is another message.
+const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
+  && (e._accountId || e._srcAccountId || s.activeAccountId) === accountId
+  && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox;
+
 // The durable half of a flag change.
 //
 // One Rust call lands it on every copy the vault keeps: the Maildir file name
@@ -1396,15 +1414,14 @@ function _mapLocalFlags(localEmails, matches, map) {
 // is a different file — the one restore uploads. So the row read here is the
 // one of THIS folder, and no row at all (a flag list rebuilt from nothing
 // would strip \Flagged and \Answered) is skipped rather than guessed at.
-async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFlags, isUnified = false) {
+async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFlags) {
   try {
     const s = useMailStore.getState();
     const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
     const changes = [];
     for (const uid of uids) {
-      const row = pool.find(e => e && e.uid === uid
-        && (!isUnified || !e._accountId || e._accountId === accountId)
-        && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox);
+      const isRow = _rowOf(s, accountId, mailbox, uid);
+      const row = pool.find(e => e && isRow(e));
       if (!row) {
         console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
         continue;
@@ -1419,8 +1436,8 @@ async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFla
   }
 }
 
-const _persistVaultSeen = (useMailStore, accountId, mailbox, uids, read, isUnified = false) =>
-  _persistVaultFlags(useMailStore, accountId, mailbox, uids, (f) => _withSeen(f, read), isUnified);
+const _persistVaultSeen = (useMailStore, accountId, mailbox, uids, read) =>
+  _persistVaultFlags(useMailStore, accountId, mailbox, uids, (f) => _withSeen(f, read));
 
 // Land one message's \Seen change on every surface that renders read state:
 // the list row, the open viewer copy, the cached body, the derived lists and
@@ -1432,9 +1449,8 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   // own message share a uid, and only one of them changed. A row that names
   // no folder is the view's — which is where `mailbox` came from.
   const s = useMailStore.getState();
-  const matches = (e) => e.uid === uid
-    && (!isUnified || e._accountId === accountId)
-    && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox;
+  const isRow = _rowOf(s, accountId, mailbox, uid);
+  const matches = (e) => isRow(e) && (!isUnified || e._accountId === accountId);
   useMailStore.setState(state => ({
     emails: state.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
     // A vault-only row lives in `localEmails` and never in `emails` — see
@@ -1446,6 +1462,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
     selectedEmail: state.selectedEmail && matches(state.selectedEmail)
       ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
       : state.selectedEmail,
+    selectedThread: _mapThreadFlags(state.selectedThread, matches, (f) => _withSeen(f, read)),
   }));
 
   const entry = useMailStore.getState().emailCache.get(`${accountId}-${mailbox}-${uid}`);
@@ -1471,7 +1488,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   // us: counting its rows against `accountId` would put every account's unread
   // on whichever account owns the row that was clicked.
   if (isUnified) _syncUnifiedUnreadBadges(useMailStore);
-  _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read, isUnified);
+  _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read);
 }
 
 
@@ -1578,6 +1595,9 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   const changed = targets.filter(t =>
     (rowFlags.get(`${t.accountId}-${t.mailbox}-${t.uid}`)?.includes(flag) ?? !on) !== on);
 
+  // A hand-set read state outranks the open message's mark-read countdown.
+  if (flag === '\\Seen') cancelPendingMarkRead(targetKeys);
+
   useMailStore.setState(s => ({
     emails: s.emails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e),
     // Vault-only rows are reached through `localEmails`, not `emails` — and
@@ -1587,6 +1607,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     selectedEmail: s.selectedEmail && matches(s.selectedEmail)
       ? { ...s.selectedEmail, flags: map(s.selectedEmail.flags) }
       : s.selectedEmail,
+    selectedThread: _mapThreadFlags(s.selectedThread, matches, map),
   }));
 
   // The body cache freezes the flags a message had when it was fetched, so a
@@ -1625,7 +1646,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     byFolder.get(k).uids.push(t.uid);
   }
   for (const f of byFolder.values()) {
-    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, map, isUnified);
+    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, map);
   }
 
   const action = on ? 'add' : 'remove';

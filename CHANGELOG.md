@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A message marked read by the reading timer now shows as read in the list.** If you moved to the next message, closed the reader or opened a thread while the timer's change was reaching the server, the message was read on the server but stayed bold in the list, in a search and in a saved view. Every row now follows. A message from another account or folder opened from a saved view is also opened, and marked, in its own account instead of the one you were in.
+- **Setting the read state yourself keeps the message where it is.** Marking the open message unread no longer has the reading timer mark it read again a moment later, the thread reader shows the new state straight away, and with the Unread filter on in the explorer the message you are reading, and the ones you read since turning the filter on, stay on screen.
+
 ## [2.16.0] - 2026-09-25
 
 ### Added

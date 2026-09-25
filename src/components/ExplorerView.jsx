@@ -7,6 +7,7 @@ import { getLocale, useT } from '../i18n';
 import { formatEmailDate } from '../utils/dateFormat';
 import { displayText } from '../utils/bidiText';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
+import { filterUnread } from '../utils/emailParser';
 import '../styles/explorer.css';
 
 const EMPTY_PATH = Object.freeze([]);
@@ -24,7 +25,7 @@ function GroupCheckbox({ emails, selectedEmailIds, getSelectionKey, onSetSelecti
 
 export function ExplorerView({
   emails, conversationEmails = emails, context = EMPTY_CONTEXT, rootLabel,
-  unreadOnly = false, selectedEmailIds, getSelectionKey, onSetSelection,
+  unreadOnly = false, selectedEmailId = null, unreadKeep = null, selectedEmailIds, getSelectionKey, onSetSelection,
   renderEmail, onSelectEmail, onOpenThread, onSearchMailbox, hasOpenThread = false, onThreadsChanged,
   partial = false, hasMore = false, loadingMore = false, loading = false, onLoadMore,
   rowHeight = 56, searchActive = false, groupingOverride = null, fieldGroup = null, onGroupingChange = null,
@@ -52,15 +53,19 @@ export function ExplorerView({
   const [search, setSearch] = useState({ location: '', value: '' });
   const query = search.location === location ? search.value : '';
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleEmails = useMemo(() => node.emails.filter(email => (!unreadOnly || isUnread(email))
-    && (!normalizedQuery || [email.subject, email.from?.name, email.from?.address, email.snippet]
-      .some(text => typeof text === 'string' && text.toLocaleLowerCase().includes(normalizedQuery)))),
-  [node, unreadOnly, normalizedQuery]);
+  // The list's Unread cut, keeps included: the open message and the ones read
+  // this filter session stay on screen, or reading one takes it away.
+  const unreadCut = useCallback(rows => filterUnread(rows, unreadOnly, selectedEmailId, getSelectionKey, unreadKeep),
+    [unreadOnly, selectedEmailId, getSelectionKey, unreadKeep]);
+  const visibleEmails = useMemo(() => unreadCut(node.emails).filter(email => !normalizedQuery
+    || [email.subject, email.from?.name, email.from?.address, email.snippet]
+      .some(text => typeof text === 'string' && text.toLocaleLowerCase().includes(normalizedQuery))),
+  [node, unreadCut, normalizedQuery]);
   const showGroups = !normalizedQuery && node.children.length > 0;
   const entries = useMemo(() => showGroups
-    ? node.children.map(group => ({ group, emails: unreadOnly ? group.emails.filter(isUnread) : group.emails }))
+    ? node.children.map(group => ({ group, emails: unreadCut(group.emails) }))
       .filter(entry => entry.emails.length)
-    : visibleEmails.map(email => ({ email })), [showGroups, node, unreadOnly, visibleEmails]);
+    : visibleEmails.map(email => ({ email })), [showGroups, node, unreadCut, visibleEmails]);
   const scrollRef = useRef(null);
   const rootRef = useRef(null);
   const focusAnchor = useRef(null);
