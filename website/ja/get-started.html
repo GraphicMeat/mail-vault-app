@@ -42,7 +42,7 @@
 
 
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260925-redesign">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
   <!-- i18n:alternates -->
@@ -101,10 +101,10 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 <main id="main">
 <section class="mv-page-hero mv-wrap mv-start-hero">
-<p class="mv-eyebrow">macOS と Linux 向けの無料メールクライアント</p>
+<p class="mv-eyebrow">macOS、Windows、Linux 向けの無料メールクライアント</p>
 <h1>MailVault をダウンロードします。</h1>
 <p class="mv-lead">お使いのコンピューター用のインストーラーを選び、メールを接続して最初のアーカイブを作成します。</p>
-<div class="mv-actions mv-start-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS版をダウンロード</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Snap Store から入手 ↗</a><a class="mv-button" data-hero-platform="fallback" href="#platforms">ダウンロードの選択肢を見る</a></div>
+<div class="mv-actions mv-start-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS版をダウンロード</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-acquisition-download="windows" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Windows版をダウンロード</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Snap Store から入手 ↗</a><a class="mv-button" data-hero-platform="fallback" href="#platforms">ダウンロードの選択肢を見る</a></div>
 <div class="mv-intent" aria-live="polite">
 <p data-plan-copy="free">Free ではサブスクリプションなしで閲覧、返信、アーカイブができます。</p>
 <p class="mv-early-pricing" data-plan-copy="yearly" hidden>Early Bird &amp; Family 料金（現在）</p><p class="mv-early-pricing" data-plan-copy="monthly" hidden>Early Bird &amp; Family 料金（現在）</p><p data-plan-copy="yearly" hidden>Premium の年額プランを選択しました：<span data-mv-price="{yearly}/年">$25/年</span>。初めて年額プランに登録する場合は 14 日間のトライアルがあります。ダウンロード後、アプリで開始してください。</p>
@@ -114,12 +114,17 @@
 <section id="platforms" class="mv-wrap mv-install" aria-labelledby="platform-title">
 <div>
 <h2 id="platform-title">お使いのコンピューター向けにダウンロード</h2>
-<p class="mv-mobile-device" hidden>MailVault はデスクトップアプリです。インストールするには、このページを Mac または Linux コンピューターで開いてください。</p>
+<p class="mv-mobile-device" hidden>MailVault はデスクトップアプリです。インストールするには、このページを Mac、Windows、または Linux コンピューターで開いてください。</p>
 <div class="mv-download-options">
 <article data-platform="mac">
 <h3>macOS</h3>
 <p>Apple Silicon と Intel 用のダウンロードは一つです。macOS 11 以降。</p><a class="mv-button" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">macOS版をダウンロード</a>
 <p class="mv-small">.dmg を開き、MailVault を「アプリケーション」へドラッグします。</p>
+</article>
+<article id="windows" data-platform="windows">
+<h3>Windows</h3>
+<p>64 ビットの Intel または AMD で動作する Windows 10 または 11。</p><a class="mv-button" data-download="windows" data-acquisition-download="windows" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Windows版をダウンロード</a>
+<p class="mv-small">インストーラーを実行し、スタートメニューから MailVault を開きます。</p>
 </article>
 <article data-platform="linux">
 <h3>Linux</h3>
@@ -136,10 +141,6 @@
 <h3>このページを開いたままにする</h3>
 <p>選択したプランを始める方法を含む次の手順は下にあります。ダウンロードだけではトライアルは始まらず、料金も発生しません。</p>
 <p>お困りですか？ <a href="/ja/docs.html">セットアップガイドを読む</a>か、<a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡</a>してください。</p>
-<details id="windows">
-<summary>Windows をお探しですか？</summary>
-<p>Windows 版は計画中ですが、リリース日は未定です。利用可能になった時期を知るには製品アップデートに登録してください。</p><a href="/ja/#newsletter">製品アップデートを受け取る →</a>
-</details>
 </aside>
 </section>
 <section id="already-installed" class="mv-section mv-tinted">
@@ -198,7 +199,7 @@
   "releaseFallback": "直接リンクを読み込めませんでした。代わりにダウンロードボタンから最新リリースのページを開き、そこでお使いのコンピューター用のファイルを選んでください。"
 }
   </script>
-<script defer src="/assets/english-site.js?v=20260922-acquisition">
+<script defer src="/assets/english-site.js?v=20260925-cta">
 </script>
 <script defer src="/pricing-localize.js?v=20260905-savings">
 </script>

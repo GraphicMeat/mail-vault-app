@@ -42,7 +42,7 @@
 
 
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260925-redesign">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
   <!-- i18n:alternates -->
@@ -101,10 +101,10 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 <main id="main">
 <section class="mv-page-hero mv-wrap mv-start-hero">
-<p class="mv-eyebrow">Un client email gratuito per macOS e Linux</p>
+<p class="mv-eyebrow">Un client email gratuito per macOS, Windows e Linux</p>
 <h1>Scarica MailVault.</h1>
 <p class="mv-lead">Scegli il programma di installazione per il tuo computer, poi collega la tua email e crea il tuo primo archivio.</p>
-<div class="mv-actions mv-start-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Scarica per macOS</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Scaricalo dal Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" href="#platforms">Vedi le opzioni di download</a></div>
+<div class="mv-actions mv-start-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Scarica per macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-acquisition-download="windows" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Scarica per Windows</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Scaricalo dal Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" href="#platforms">Vedi le opzioni di download</a></div>
 <div class="mv-intent" aria-live="polite">
 <p data-plan-copy="free">La versione gratuita include lettura, risposte e archiviazione senza abbonamento.</p>
 <p class="mv-early-pricing" data-plan-copy="yearly" hidden>Prezzi Early Bird &amp; Family per ora</p><p class="mv-early-pricing" data-plan-copy="monthly" hidden>Prezzi Early Bird &amp; Family per ora</p><p data-plan-copy="yearly" hidden>Hai scelto Premium annuale: <span data-mv-price="{yearly}/anno">$25/anno</span>, con una prova di 14 giorni per chi sottoscrive annualmente per la prima volta. Avviala nell'app dopo il download.</p>
@@ -114,12 +114,17 @@
 <section id="platforms" class="mv-wrap mv-install" aria-labelledby="platform-title">
 <div>
 <h2 id="platform-title">Scarica per il tuo computer</h2>
-<p class="mv-mobile-device" hidden>MailVault è un'app desktop. Apri questa pagina dal tuo computer Mac o Linux per installarla.</p>
+<p class="mv-mobile-device" hidden>MailVault è un'app desktop. Apri questa pagina dal tuo computer Mac, Windows o Linux per installarla.</p>
 <div class="mv-download-options">
 <article data-platform="mac">
 <h3>macOS</h3>
 <p>Un solo download per Apple Silicon e Intel. macOS 11 o successivo.</p><a class="mv-button" data-download="mac" data-acquisition-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Scarica per macOS</a>
 <p class="mv-small">Apri il .dmg, poi trascina MailVault in Applicazioni.</p>
+</article>
+<article id="windows" data-platform="windows">
+<h3>Windows</h3>
+<p>Windows 10 o 11 su Intel o AMD a 64 bit.</p><a class="mv-button" data-download="windows" data-acquisition-download="windows" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Scarica per Windows</a>
+<p class="mv-small">Avvia il programma di installazione, poi apri MailVault dal menu Start.</p>
 </article>
 <article data-platform="linux">
 <h3>Linux</h3>
@@ -136,10 +141,6 @@
 <h3>Tieni aperta questa pagina</h3>
 <p>I prossimi passaggi sono qui sotto, compreso come avviare il piano scelto. Il solo download non avvia una prova e non comporta addebiti.</p>
 <p>Serve una mano? <a href="/it/docs.html">Leggi la guida alla configurazione</a> oppure <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">contatta il team</a>.</p>
-<details id="windows">
-<summary>Cerchi Windows?</summary>
-<p>Windows è previsto, ma non c'è ancora una data di rilascio. Iscriviti agli aggiornamenti sul prodotto per sapere quando sarà disponibile.</p><a href="/it/#newsletter">Ricevi aggiornamenti sul prodotto →</a>
-</details>
 </aside>
 </section>
 <section id="already-installed" class="mv-section mv-tinted">
@@ -198,7 +199,7 @@
   "releaseFallback": "Non è stato possibile caricare i link diretti. I pulsanti di download aprono invece la pagina dell’ultima versione; scegli lì il file per il tuo computer."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20260922-acquisition">
+<script defer src="/assets/english-site.js?v=20260925-cta">
 </script>
 <script defer src="/pricing-localize.js?v=20260905-savings">
 </script>

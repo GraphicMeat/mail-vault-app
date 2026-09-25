@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MailVault — archivez vos e-mails IMAP en local | libérez le stockage serveur sur Mac &amp; Linux</title>
-  <meta name="description" content="Enregistrez des copies consultables de vos e-mails sur votre ordinateur, puis libérez de l’espace dans votre boîte lorsque vous êtes prêt. Client de messagerie et archivage manuel gratuits pour macOS et Linux.">
+  <title>MailVault : l'app e-mail privée qui garde votre courrier | Mac, Windows &amp; Linux</title>
+  <meta name="description" content="Une app e-mail gratuite et privée pour macOS, Windows et Linux. Votre courrier reste sur votre ordinateur, les traqueurs sont signalés, les sauvegardes sont à vous, et presque tout peut être personnalisé.">
   <meta name="robots" content="index, follow">
   <meta name="keywords" content="email archive mac, email backup locally, free up email storage, IMAP backup, offline email archive, local email retention, archive emails before deleting, mailbox full solution, eml files, Maildir, MailStore alternative mac">
   <link rel="canonical" href="https://mailvaultapp.com/fr/">
@@ -135,9 +135,8 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20260922-acquisition">
-<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
-<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260925-redesign">
+<link rel="stylesheet" href="/assets/home.css?v=15">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Aller au contenu</a>
 <header class="mv-header">
@@ -180,205 +179,257 @@
 </div>
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
-<main id="main">
-<section class="mv-hero mv-wrap" aria-labelledby="hero-title">
-<div class="mv-hero-copy">
-<p class="mv-eyebrow">Un client de messagerie gratuit pour macOS et Linux</p>
-<h1 id="hero-title">Lisez vos e-mails.<br><span>Gardez vos e-mails.</span>
-</h1>
-<p class="mv-lead">Lisez, répondez et recherchez dans vos comptes. Passez des fils de discussion au chat et à Explorer. Archivez sur votre ordinateur les messages que vous souhaitez conserver, même après les avoir supprimés du serveur.</p>
-<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Télécharger pour macOS</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="store" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Obtenir sur le Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/fr/get-started.html?plan=free">Télécharger gratuitement</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Essayer la démo en direct dans une nouvelle fenêtre">Essayer la démo en direct ↗</a>
-</div>
+<main id="main" class="hm">
+<svg hidden aria-hidden="true"><symbol id="os-apple" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></symbol><symbol id="os-windows" viewBox="0 0 24 24"><path d="M0,0H11.377V11.372H0ZM12.623,0H24V11.372H12.623ZM0,12.623H11.377V24H0Zm12.623,0H24V24H12.623"/></symbol><symbol id="os-linux" viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"/></symbol></svg>
+<section class="hm-hero hm-dark" aria-labelledby="hero-title">
+<div class="mv-wrap hm-hero-inner">
+<p class="mv-eyebrow">App e-mail gratuite pour macOS, Windows et Linux</p>
+<h1 id="hero-title">Votre e-mail.<br><span class="hm-grad">À vous de le garder.</span></h1>
+<p class="hm-lead">Une app e-mail privée qui garde votre courrier sur votre propre ordinateur. Pas de pub, pas de compte MailVault, et personne qui lit par-dessus votre épaule.</p>
+<p class="hm-platforms" role="img" aria-label="macOS, Windows et Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
+<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Télécharger pour macOS</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="store" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Obtenir sur le Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/fr/get-started.html?plan=free">Télécharger gratuitement</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Essayer la démo en direct dans une nouvelle fenêtre">Essayer la démo en direct ↗</a></div>
+<p class="mv-small">Gratuit pour toujours : l'app e-mail complète et des sauvegardes manuelles illimitées.</p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/fr/get-started.html?plan=free#platforms">Autres plateformes et formats →</a>
-<p class="mv-small">Client de messagerie complet et archivage manuel illimité. Aucun compte MailVault requis.</p>
 </div>
-<figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Ouvrir la démo dans une nouvelle fenêtre"><span class="mv-demo-badge">Démo interactive</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-fr-dark-compact-3d372a91e768.webp 720w, /demo/assets/demo-preview-fr-dark-wide-76e0956da2a7.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-fr-light-wide-666bf1fb81d8.webp" srcset="/demo/assets/demo-preview-fr-light-compact-1783c3cba60c.webp 720w, /demo/assets/demo-preview-fr-light-wide-666bf1fb81d8.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="Boîte de réception MailVault avec conversations regroupées par fil" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">Ouvrir la démo <span aria-hidden="true">↗</span></span></a>
+<div class="mv-wrap hm-hero-shot"><figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Ouvrir la démo dans une nouvelle fenêtre"><span class="mv-demo-badge">Démo interactive</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-fr-dark-compact-3d372a91e768.webp 720w, /demo/assets/demo-preview-fr-dark-wide-76e0956da2a7.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-fr-light-wide-666bf1fb81d8.webp" srcset="/demo/assets/demo-preview-fr-light-compact-1783c3cba60c.webp 720w, /demo/assets/demo-preview-fr-light-wide-666bf1fb81d8.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="Boîte de réception MailVault avec conversations regroupées par fil" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">Ouvrir la démo <span aria-hidden="true">↗</span></span></a>
 <figcaption class="mv-demo-caption"><div><strong class="mv-demo-title">Une vraie boîte de réception. Prête à être explorée.</strong><span class="mv-demo-meta">Recherchez des e-mails, changez de vue et essayez l’archivage.<br>3 comptes · 300 e-mails d’exemple<br>Sans inscription. Sans installation.</span></div>
 </figcaption>
-</figure>
-</section>
-<section id="features" class="mv-section mv-product-examples-section" aria-labelledby="examples-title">
-<div class="mv-wrap">
-<div class="mv-section-heading"><h2 id="examples-title">Un seul endroit pour travailler.<br>Une copie qui reste à vous.</h2><p>MailVault réunit le travail quotidien dans vos e-mails et l’archivage volontaire dans la même application de bureau.</p></div>
-<div class="mv-product-examples">
-<article class="mv-product-example"><figure><button class="mv-shot" type="button" data-image aria-label="Agrandir : boîte de réception unifiée avec conversations en fil"><picture><img src="/screenshots/fr/unified-inbox-1440.webp" srcset="/screenshots/fr/unified-inbox-720.webp 720w, /screenshots/fr/unified-inbox-1440.webp 1440w" sizes="(max-width: 760px) 92vw, 560px" width="1440" height="932" alt="Boîte de réception unifiée avec conversations en fil" loading="lazy" decoding="async"></picture></button></figure><div><h3>Lisez à votre façon</h3><p>Utilisez une boîte de réception unifiée, les fils, la vue discussion, Explorer et la recherche dans les comptes que vous utilisez déjà.</p><a class="mv-text-link" href="/fr/features.html#explorer">Découvrir les vues →</a></div></article>
-<article class="mv-product-example"><figure><button class="mv-shot" type="button" data-image aria-label="Agrandir : avertissement pour un lien web incohérent"><picture><img src="/screenshots/fr/link-safety-light-1440.webp" srcset="/screenshots/fr/link-safety-light-720.webp 720w, /screenshots/fr/link-safety-light-1440.webp 1440w" sizes="(max-width: 760px) 92vw, 560px" width="1440" height="932" alt="Avertissement pour un lien web incohérent dans un e-mail" loading="lazy" decoding="async"></picture></button></figure><div><h3>Repérez ce qui ne correspond pas</h3><p>Voyez les liens web incohérents et les avertissements sur l’expéditeur avant de donner suite. Vérifiez l’authentification de l’expéditeur d’un coup d’œil.</p><a class="mv-text-link" href="/fr/features.html#security">Voir les contrôles de sécurité →</a></div></article>
-<article class="mv-product-example"><figure><button class="mv-shot" type="button" data-image aria-label="Agrandir : état Enregistré dans votre coffre et icônes d’état par message"><picture><img src="/screenshots/fr/state-icons-1440.webp" srcset="/screenshots/fr/state-icons-720.webp 720w, /screenshots/fr/state-icons-1440.webp 1440w" sizes="(max-width: 760px) 92vw, 560px" width="1440" height="932" alt="État Enregistré dans votre coffre et icônes d’état par message" loading="lazy" decoding="async"></picture></button></figure><div><h3>Gardez votre propre copie</h3><p>Archivez les messages que vous choisissez sous forme de fichiers .eml simples, puis vérifiez l’état sur le serveur et dans votre coffre avant de supprimer quoi que ce soit.</p><a class="mv-text-link" href="#how-it-works">Voir comment fonctionne l’archivage →</a></div></article>
-</div>
-<aside class="mv-premium-summary"><strong>Premium s’occupe de la routine :</strong><span>blocage des traqueurs, sauvegardes planifiées, Capsule temporelle et migration.</span><a class="mv-text-link" href="/fr/pricing.html">Comparer Free et Premium →</a></aside>
-<aside class="mv-story"><p class="mv-eyebrow">Pourquoi nous avons créé MailVault</p><p>Notre ami Tomas travaille dans la logistique. Sa boîte se remplissait de documents d’expédition et de factures dont il avait encore besoin. Nous avons créé MailVault pour qu’il puisse faire de la place sans renoncer à ces documents.</p><a class="mv-text-link" href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Parler aux personnes qui le créent ↗</a></aside>
-</div>
-</section>
-<section id="how-it-works" class="mv-section mv-tinted" aria-labelledby="how-title">
-<div class="mv-wrap">
-<div class="mv-section-heading">
-<div>
-<p class="mv-eyebrow">Commencez avec quelques messages</p>
-<h2 id="how-title">Une copie que vous voyez.<br>Un nettoyage que vous contrôlez.</h2>
-</div>
-<p>Essayez d’abord d’archiver une petite sélection. Votre copie sur le serveur reste en place jusqu’à ce que vous choisissiez de la supprimer.</p>
-</div>
-<div class="mv-walkthrough">
-<ol class="mv-steps">
-<li>
-<h3><span>1</span> Connectez votre e-mail</h3>
-<p>Ajoutez votre compte existant. Connectez-vous chez votre fournisseur ; MailVault stocke les identifiants dans le trousseau de votre système.</p>
-</li>
-<li>
-<h3><span>2</span> Choisissez ce que vous gardez</h3>
-<p>Sélectionnez vos messages et choisissez <strong>Archiver</strong>. Les copies sont enregistrées dans votre coffre et restent aussi sur le serveur.</p>
-</li>
-<li>
-<h3><span>3</span> Vérifiez votre copie locale</h3>
-<p>Cherchez <strong>Enregistré dans votre coffre</strong>, puis ouvrez le message. Quand vous êtes prêt à libérer de l’espace, utilisez archiver-puis-supprimer pour enregistrer et vérifier chaque copie avant sa suppression du serveur.</p>
-</li>
-</ol>
-<figure><button class="mv-shot mv-archive-shot" type="button" data-image aria-label="Agrandir : archiver les messages sélectionnés tout en les gardant sur le serveur"><picture><img src="/screenshots/fr/selection-dialog-archive-light-1440.webp" srcset="/screenshots/fr/selection-dialog-archive-light-720.webp 720w, /screenshots/fr/selection-dialog-archive-light-1440.webp 1440w, /screenshots/fr/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="Archiver les messages sélectionnés tout en les gardant sur le serveur" loading="lazy" decoding="async"></picture></button>
-<figcaption>L’action Archiver vous indique précisément ce qui reste où.</figcaption>
-</figure>
-</div>
-<div class="mv-proof">
-<div><span class="mv-vault-label">✓ Enregistré dans votre coffre</span>
-<p>Chaque message indique où vivent ses copies. Vous pouvez distinguer une copie enregistrée d’un message encore uniquement sur le serveur.</p><a class="mv-text-link" href="/fr/docs.html">Lire le guide d’archivage →</a>
-</div>
-<figure><button class="mv-shot mv-state-shot" type="button" data-image aria-label="Agrandir : état Enregistré dans votre coffre et icônes d’état par message"><picture><img src="/screenshots/fr/state-icons-2880.webp" srcset="/screenshots/fr/state-icons-720.webp 720w, /screenshots/fr/state-icons-1440.webp 1440w, /screenshots/fr/state-icons-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="État Enregistré dans votre coffre et icônes d’état par message" loading="lazy" decoding="async"></picture></button>
-</figure>
-</div>
-</div>
-</section>
-<section id="feedback" class="mv-feedback mv-wrap" aria-labelledby="feedback-title">
-<div class="mv-section-heading"><h2 id="feedback-title">De vraies personnes.<br>De vrais retours.</h2><p>Avec leurs propres mots, issus de conversations par e-mail et de notre discussion publique sur GitHub.</p></div>
-<div class="mv-feedback-quotes"><figure><blockquote><p>« J’aime l’option d’étape &quot;tester/vérifier&quot;. <strong>Elle m’épargne vraiment une étape.</strong> »</p></blockquote><figcaption><span class="mv-person-mark" aria-hidden="true">B</span><strong>Ben</strong><span>À propos de la vérification d’une adresse d’envoi</span><span>Utilisateur Fastmail · Retour par e-mail · août 2026</span></figcaption></figure><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18296186"><p>« merci pour le <strong>service et l’assistance exceptionnellement bons.</strong> »</p></blockquote><figcaption><span class="mv-person-mark" aria-hidden="true">b</span><strong>bson73</strong><span>À propos de l’assistance après un problème de boîte de réception</span><span>Utilisateur MailVault · Discussions GitHub</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18296186" target="_blank" rel="noopener">Lire le commentaire d’origine ↗</a></figcaption></figure></div>
-<p class="mv-feedback-note">Extraits choisis. <a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1" target="_blank" rel="noopener">Lire toute la discussion, y compris les signalements et les réponses ↗</a></p>
-<div class="mv-community-actions" aria-label="Soutenir MailVault">
-<button type="button" id="want-this-btn" aria-pressed="false"><span class="mv-heart" aria-hidden="true">♥</span><span id="vote-label">Je le veux !</span><span id="vote-count" class="mv-community-count" hidden></span></button>
-<a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener"><span class="mv-star" aria-hidden="true">★</span><span>Mettre une étoile sur GitHub</span><span id="github-stars" class="mv-community-count" hidden></span></a>
-</div>
-<p id="vote-status" class="mv-community-status" role="status"></p>
-<div class="mv-feedback-loop" aria-labelledby="feedback-loop-title"><h3 id="feedback-loop-title">Vous le signalez. Nous y travaillons.</h3><p>Deux vraies conversations. Deux améliorations que vous pouvez suivre.</p><div class="mv-feedback-cases">
-<article><h4>Bug corrigé, jusqu’au bout</h4><p class="mv-case-timing"><strong>Le lendemain</strong><span>Signalement → version fonctionnelle · 3–4 sept. 2026</span></p><details class="mv-case-detail"><summary>Que s’est-il passé ?</summary><p>Un utilisateur a signalé des erreurs de déplacement et une boîte de réception affichant trop d’e-mails. Le premier correctif n’a pas tout résolu. Son suivi a identifié le problème de boîte de réception ; v2.11.3 a été annoncée 1 heure et 21 minutes plus tard, environ 22 heures après le signalement initial.</p></details><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18296186"><p>« Merci. Tout semble bon. »</p></blockquote><p class="mv-case-author"><strong>bson73</strong><span>Après la mise à jour · les tests ont continué</span></p><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18271741" target="_blank" rel="noopener">Lire le signalement, les correctifs et le suivi ↗</a><a class="mv-text-link mv-feedback-action" href="https://github.com/GraphicMeat/mail-vault-app/issues/new?title=Bug+report%3A+&amp;body=What+happened%3F%0A%0AWhat+did+you+expect%3F%0A%0ASteps+to+reproduce%3A%0A1.+%0A%0AMailVault+version+and+operating+system%3A%0A%0AEmail+provider+%28no+email+address%29%3A%0A%0APlease+remove+email+addresses%2C+message+content%2C+and+credentials+from+screenshots+or+logs." target="_blank" rel="noopener">Signaler un bug ↗</a></article>
-<article><h4>Fonction demandée. Fonction livrée.</h4><p class="mv-case-timing"><strong>Moins de 2 jours</strong><span>Demande → dossiers imbriqués · 1–3 sept. 2026</span></p><details class="mv-case-detail"><summary>Que s’est-il passé ?</summary><p>Un utilisateur avait besoin de dossiers imbriqués plutôt que d’une liste plate. Environ 45 heures après la demande, v2.11.1 a été annoncée avec une arborescence de dossiers et la recherche dans les sous-dossiers. L’utilisateur l’a essayée et a répondu :</p></details><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18269423"><p>« Merci encore pour cette mise en œuvre très rapide. »</p></blockquote><p class="mv-case-author"><strong>bson73</strong><span>À propos de la version avec dossiers imbriqués</span></p><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18233405" target="_blank" rel="noopener">Lire la demande, les mises à jour et la réponse ↗</a><a class="mv-text-link mv-feedback-action" href="https://github.com/GraphicMeat/mail-vault-app/issues/new?title=Feature+request%3A+&amp;body=What+would+you+like+MailVault+to+do%3F%0A%0AWhat+task+would+this+make+easier%3F%0A%0AHow+do+you+handle+it+today%3F%0A%0APlease+do+not+include+private+email+addresses+or+message+content." target="_blank" rel="noopener">Demander une fonctionnalité ↗</a></article></div>
-<p class="mv-feedback-note">Exemples réels issus de commentaires publics. Le délai varie selon chaque demande.</p><p class="mv-feedback-private">Les signalements GitHub sont publics. N’y indiquez pas d’adresses e-mail ni de messages privés. Vous préférez une conversation privée ? <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacter l’équipe ↗</a></p></div>
+</figure></div>
 </section>
 
-<section id="pricing" class="mv-section mv-tinted mv-branded-section" aria-labelledby="pricing-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
-<div class="mv-wrap">
-<div class="mv-section-heading">
-<h2 id="pricing-title">Commencez gratuitement.<br>Laissez Premium gérer la routine.</h2>
-<p>Les sauvegardes manuelles sont gratuites et le resteront. Choisissez Premium pour les sauvegardes programmées, le nettoyage, la migration et les outils qui vous évitent les tâches répétitives.</p>
-</div>
-<div class="mv-plans" id="plans">
-<article class="mv-plan mv-free-plan">
-<div class="mv-pixel-banner mv-pixel-free"><img src="/assets/pixel-free.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">À vous de garder</span><h3>Free. Pour toujours.</h3></div></div>
-<p class="mv-plan-intro">Votre boîte de réception, votre archive, vos fichiers.</p>
-<p class="mv-price"><span data-mv-price="{zero}">$0</span><span>pour toujours</span>
-</p>
-<ul class="mv-checklist">
-<li>Lire, rédiger, répondre et chercher</li>
-<li>Tous vos comptes dans une seule boîte de réception unifiée</li>
-<li>Les sauvegardes manuelles sont gratuites. Elles le resteront.</li>
-<li>Fichiers EML standard dans des dossiers de type Maildir</li>
-</ul><a class="mv-button mv-secondary" href="/fr/get-started.html?plan=free">Télécharger gratuitement</a>
-<p class="mv-small">Aucun abonnement. Aucun quota de sauvegarde de notre part. Utilisez l’espace disque que vous possédez déjà.</p>
-</article>
-<article class="mv-plan mv-premium" id="premium-plan">
-<div class="mv-plan-heading">
-<h3>Premium</h3><span class="mv-tag">Moins de choses à retenir</span>
-</div>
-<p class="mv-plan-intro">Définissez la routine. Laissez MailVault gérer les tâches répétitives.</p>
-<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Tout juste sorti du four</span><p>Tarifs Early Bird &amp; Family <span>pour le moment</span></p></div></div>
-<fieldset class="mv-billing" hidden>
-<legend class="mv-sr-only">Période de facturation Premium</legend>
-<label><input type="radio" name="billing" value="yearly" checked><span>Annuel</span>
-</label>
-<label><input type="radio" name="billing" value="monthly"><span>Mensuel</span>
-</label>
-</fieldset>
-<div data-billing-panel="yearly">
-<p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ an</span>
-</p>
-<p class="mv-small" data-mv-price="Environ {monthlyEquivalent}/mois, facturé annuellement">Environ $2.08/mois, facturé annuellement</p>
-<div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="Économisez {savingsPercent}% avec l’annuel">Économisez 48 % avec l’annuel</strong><span data-mv-price="Économisez {annualSavings}/an par rapport à {annualMonthly} pour 12 paiements mensuels.">Économisez $23/an par rapport à $48 pour 12 paiements mensuels.</span></div>
-<p class="mv-trial">Essai gratuit de 14 jours avec votre premier abonnement annuel</p>
-</div>
-<div data-billing-panel="monthly" hidden>
-<p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ mois</span>
-</p>
-<p class="mv-small">Facturé chaque mois. Annulez à tout moment.</p>
-<p class="mv-trial">L’essai de 14 jours est disponible avec la facturation annuelle.</p>
-</div>
-<noscript><p class="mv-small">Premium mensuel coûte $4/mois, sans période d’essai. <a href="/fr/get-started.html?plan=monthly">Choisir la facturation mensuelle</a>.</p></noscript>
-<ul class="mv-checklist">
-<li>Tout ce qui est inclus dans Free</li>
-<li>Sauvegardes programmées avec vérification de l’état</li>
-<li>Instantanés Capsule temporelle pour retrouver des sauvegardes antérieures</li>
-<li>Migration de boîte mail et règles de nettoyage automatique</li>
-<li>Export d’image / HTML et blocage des traqueurs d’e-mail</li>
-<li>Des sessions de concentration qui couvrent la fenêtre et retiennent les notifications</li>
-<li>Premium sur jusqu’à 5 appareils</li>
+<div id="how-it-works" class="hm-pillars">
+<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Confidentialité</p>
+<h2 id="privacy-title">Votre boîte de réception ne regarde personne.<br><span class="hm-grad">Pas même nous.</span></h2>
+<p class="hm-body">Votre e-mail va directement de votre fournisseur à votre ordinateur. Il ne passe jamais par les serveurs de MailVault : nous n'avons donc rien à lire, à vendre ni à utiliser pour entraîner une IA.</p>
+<ul class="hm-benefits">
+<li><a href="/fr/features/local-vault.html"><strong>Votre courrier vit sur votre disque</strong><span>Lisez-le et cherchez-y hors ligne, dans un dossier de votre choix.</span></a></li>
+<li><a href="/fr/features/no-account.html"><strong>Pas de compte chez nous</strong><span>Connectez-vous avec votre fournisseur. Les mots de passe restent dans le trousseau de votre système.</span></a></li>
+<li><a href="/fr/features/sender-verification.html"><strong>Sachez qui l'a vraiment envoyé</strong><span>Résultats SPF, DKIM et DMARC affichés directement sur le message.</span></a></li>
 </ul>
-<a class="mv-button" data-premium-cta href="/fr/get-started.html?plan=yearly"><span data-billing-panel="yearly">Commencer avec l’essai annuel</span><span data-billing-panel="monthly" hidden>Commencer avec Premium mensuel</span></a>
-<p class="mv-small">Téléchargez d’abord, puis choisissez votre formule dans Réglages → Facturation. Votre essai commence lorsque vous terminez le paiement dans l’application.</p>
-<p class="mv-reassurance">Annulez à tout moment. Vos e-mails enregistrés restent à vous.</p>
-</article>
 </div>
-<p class="mv-after-plans"><a class="mv-text-link" href="/fr/pricing.html">Comparer les formules et les détails de facturation →</a>
-</p>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="Agrandir : réglages du coffre MailVault montrant où votre courrier est stocké"><picture><img src="/screenshots/fr/local-vault-2880.webp" srcset="/screenshots/fr/local-vault-720.webp 720w, /screenshots/fr/local-vault-1440.webp 1440w, /screenshots/fr/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="Réglages du coffre MailVault montrant où votre courrier est stocké" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
-<section class="mv-section mv-wrap mv-faq-layout" aria-labelledby="faq-title">
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
 <div>
-<h2 id="faq-title">Quelques questions<br>que vous vous posez peut-être.</h2>
-<p>Gérer vos e-mails devrait être simple.</p><a class="mv-text-link" href="/fr/faq.html">Plus de questions, avec réponses →</a>
+<p class="mv-eyebrow">Blocage des traqueurs</p>
+<h2 id="trackers-title">Lisez en privé.<br><span class="hm-grad">Les expéditeurs n'apprennent rien.</span></h2>
+<p class="hm-body">Les e-mails marketing cachent de minuscules images qui signalent quand et où vous les ouvrez. MailVault les repère dans chaque message et vous avertit des liens qui mentent sur leur destination.</p>
+<ul class="hm-benefits">
+<li><a href="/fr/features/email-tracker-blocking.html"><strong>Voyez chaque traqueur</strong><span>Un repère clair sur chaque message qui essaie de vous surveiller.</span></a></li>
+<li><a href="/fr/features/email-tracker-blocking.html"><strong>Retirez-les avant leur chargement <em class="hm-chip">Premium</em></strong><span>Les expéditeurs ne savent jamais que vous l'avez ouvert.</span></a></li>
+<li><a href="/fr/features/link-safety.html"><strong>Repérez les liens trompeurs</strong><span>Une alerte quand le texte d'un lien et sa vraie destination ne correspondent pas.</span></a></li>
+</ul>
 </div>
-<div class="mv-faq">
-<details>
-<summary>La connexion de mon compte supprimera-t-elle des e-mails ?</summary>
-<p>Non. La connexion permet à MailVault de lire et de synchroniser votre boîte mail. Choisissez Archiver pour enregistrer une copie tout en laissant celle du serveur en place. Le nettoyage du serveur est un choix distinct ; Archiver &amp; supprimer enregistre et vérifie chaque copie avant de la retirer du serveur.</p>
-</details>
-<details>
-<summary>Puis-je continuer à utiliser mon application e-mail actuelle ?</summary>
-<p>Oui. Utilisez MailVault avec votre application actuelle pour l’archivage, ou son client de messagerie complet pour lire, rédiger, répondre et chercher au quotidien.</p>
-</details>
-<details>
-<summary>La synchronisation signifie-t-elle que mes e-mails sont sauvegardés ?</summary>
-<p>La synchronisation maintient votre boîte mail à jour. Pour une copie locale durable, archivez les messages que vous souhaitez garder. L’archivage et les sauvegardes manuels sont gratuits ; les sauvegardes automatiques programmées sont une fonctionnalité Premium.</p>
-</details>
-<details>
-<summary>Où mes e-mails sont-ils stockés ?</summary>
-<p>Dans le coffre, un dossier sur votre ordinateur. Chaque message archivé est un fichier .eml standard que vous pouvez ouvrir dans d’autres applications de messagerie. Gardez une sauvegarde de ce dossier sur un autre disque : le stockage local dépend toujours d’un disque fonctionnel et de l’espace disponible.</p>
-</details>
-<details>
-<summary>Quels comptes e-mail puis-je connecter ?</summary>
-<p>Gmail, Microsoft 365, Outlook.com et les comptes IMAP, y compris de nombreux fournisseurs professionnels. <a href="/fr/docs.html">Voir le guide de configuration du compte</a> pour votre fournisseur.</p>
-</details>
-<details>
-<summary>Que se passe-t-il si j’annule Premium ?</summary>
-<p>Vous conservez l’accès à vos e-mails enregistrés et aux fonctionnalités Free. Premium reste actif jusqu’à la fin de votre essai ou période payée, puis l’application revient à Free. Annulez pendant l’essai annuel pour éviter les frais d’abonnement.</p>
-</details>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Agrandir : réglages du blocage des traqueurs, avec un message montré avant et après le retrait de son pixel espion"><picture><img src="/screenshots/fr/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/fr/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/fr/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/fr/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="Réglages du blocage des traqueurs, avec un message montré avant et après le retrait de son pixel espion" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
-<section id="download" class="mv-section mv-final" aria-labelledby="download-title">
+
+<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Sauvegardes</p>
+<h2 id="backups-title">Libérez votre boîte mail.<br><span class="hm-grad">Gardez chaque message.</span></h2>
+<p class="hm-body">Enregistrez le courrier dont vous avez encore besoin, laissez MailVault vérifier chaque copie, puis faites de la place sur le serveur. Votre archive est constituée de simples fichiers .eml qui s'ouvrent dans d'autres apps de messagerie, même si MailVault disparaissait demain.</p>
+<ul class="hm-benefits">
+<li><a href="/fr/features/local-backups.html"><strong>Sauvegardes manuelles illimitées</strong><span>Tous les comptes, tous les dossiers. Aucun quota de notre part.</span></a></li>
+<li><a href="/fr/features/archive-and-delete.html"><strong>Vérifié avant toute suppression</strong><span>Chaque copie est vérifiée sur le disque avant que celle du serveur ne parte.</span></a></li>
+<li><a href="/fr/features/scheduled-backups.html"><strong>Des sauvegardes qui se lancent seules <em class="hm-chip">Premium</em></strong><span>Quotidien, hebdomadaire ou votre propre planning, avec des contrôles de santé.</span></a></li>
+<li><a href="/fr/features/time-capsule.html"><strong>Capsule temporelle <em class="hm-chip">Premium</em></strong><span>Parcourez une boîte mail telle qu'elle était à n'importe quelle date antérieure.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Agrandir : règles de nettoyage automatique qui archivent le vieux courrier dans le coffre, puis le suppriment du serveur"><picture><img src="/screenshots/fr/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/fr/premium-auto-cleanup-detail-720.webp 720w, /screenshots/fr/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/fr/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="Règles de nettoyage automatique qui archivent le vieux courrier dans le coffre, puis le suppriment du serveur" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Personnalisation</p>
+<h2 id="customize-title">Un e-mail qui s'adapte à votre façon de travailler.<br><span class="hm-grad">Changez presque tout.</span></h2>
+<p class="hm-body">Fils de discussion, bulles de chat ou chronologie. Deux colonnes ou trois. Vos raccourcis, votre barre d'outils, votre thème. Réglez tout une fois, puis changez d'avis quand vous voulez.</p>
+<ul class="hm-benefits">
+<li><a href="/fr/features/views.html"><strong>Choisissez comment lire votre courrier</strong><span>Conversations, vue Chat, Explorer ou regroupement par expéditeur.</span></a></li>
+<li><a href="/fr/features/layouts.html"><strong>Organisez votre fenêtre</strong><span>Dispositions à 2 ou 3 colonnes redimensionnables, thèmes clair et sombre.</span></a></li>
+<li><a href="/fr/features/keyboard-shortcuts.html"><strong>Vos touches, vos actions</strong><span>Réassignez les raccourcis et choisissez les actions de la barre d'outils.</span></a></li>
+<li><a href="/fr/features/notifications.html"><strong>Seulement les alertes que vous voulez</strong><span>Règles de notification par compte et par dossier.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Agrandir : réglages de disposition avec les options de vue du courrier, du volet de lecture et de la barre latérale"><picture><img src="/screenshots/fr/settings-layout-detail-light-1664.webp" srcset="/screenshots/fr/settings-layout-detail-light-720.webp 720w, /screenshots/fr/settings-layout-detail-light-1440.webp 1440w, /screenshots/fr/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="Réglages de disposition avec les options de vue du courrier, du volet de lecture et de la barre latérale" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Vous venez de Notion Mail</p>
+<h2 id="notion-mail-title">Notion Mail a disparu.<br><span class="hm-grad">Pas votre façon de travailler.</span></h2>
+<p class="hm-body">Notion Mail a fermé le 22 septembre 2026. MailVault fait revivre ce qui le rendait utile : des boîtes de réception construites à partir de vos propres vues, des champs sur chaque message et des règles qui trient le courrier pour vous. Il fonctionne avec votre compte Gmail, et votre courrier reste sur votre ordinateur.</p>
+<ul class="hm-benefits">
+<li><a href="/fr/features/saved-views.html"><strong>Des vues qui se comportent comme des boîtes de réception</strong><span>Filtrez par tag, expéditeur, date ou dossier, et groupez le résultat. Trois vues gratuites, illimitées avec Premium.</span></a></li>
+<li><a href="/fr/features/custom-fields.html"><strong>Des champs sur n'importe quel message</strong><span>Responsable, priorité, échéance ou case à cocher, conservés sur votre ordinateur.</span></a></li>
+<li><a href="/fr/features/tagging-rules.html"><strong>Des règles écrites en langage courant</strong><span>Décrivez ce qu'il faut repérer et MailVault étiquette le nouveau courrier à son arrivée.</span></a></li>
+<li><a href="/fr/features/ai-writing.html"><strong>Aide à l'écriture par IA, gratuite</strong><span>Rédigez, raccourcissez ou résumez avec un modèle qui tourne sur votre ordinateur.</span></a></li>
+</ul>
+<p class="hm-after-list"><a class="mv-text-link" href="/fr/blog/notion-mail-closing.html">Ce que les utilisateurs de Notion Mail doivent savoir →</a></p>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Agrandir : liste de vues enregistrées avec À répondre, Suivis, Pièces jointes et une vue personnalisée Factures"><picture><img src="/screenshots/fr/settings-views-detail-1708.webp" srcset="/screenshots/fr/settings-views-detail-720.webp 720w, /screenshots/fr/settings-views-detail-1440.webp 1440w, /screenshots/fr/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="Liste de vues enregistrées avec À répondre, Suivis, Pièces jointes et une vue personnalisée Factures" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+</div>
+
+<section id="free" class="hm-free hm-dark" aria-labelledby="free-title">
 <div class="mv-wrap">
-<h2 id="download-title">Gardez les e-mails qui comptent.</h2>
-<p>Commencez avec une petite archive. Voyez comment cela vous convient.</p><a class="mv-button" href="/fr/get-started.html?plan=free">Télécharger MailVault gratuitement</a>
-<p class="mv-small">macOS 11+ · Ubuntu 22.04+ / Debian 12+</p><a class="mv-text-link" href="/fr/get-started.html#platforms">Autres plateformes et formats de téléchargement →</a>
+<div class="hm-center">
+<h2 id="free-title">Gratuit là où ça compte.<br><span class="hm-grad">Toujours.</span></h2>
+<p class="hm-body">L'app e-mail et vos sauvegardes ne seront jamais derrière un mur payant. Premium est là pour celles et ceux qui veulent que la routine soit prise en charge à leur place, et elle finance tout ce qui reste gratuit.</p>
+</div>
+<ul class="hm-free-list">
+<li>Lisez, écrivez et cherchez dans tous vos comptes</li>
+<li>Une boîte de réception unifiée</li>
+<li>Sauvegardes manuelles illimitées</li>
+<li>Vérifications des traqueurs, des liens et des expéditeurs</li>
+<li>Toutes les vues, dispositions et raccourcis</li>
+<li>Votre courrier en fichiers .eml ouverts</li>
+</ul>
+<p class="hm-center mv-small">Pas de pub. Pas de compte MailVault. Pas de compte à rebours sur l'app gratuite. <a class="mv-text-link" href="/fr/pricing.html">Voir ce qu'ajoute Premium →</a></p>
 </div>
 </section>
-<section id="newsletter" class="mv-wrap mv-newsletter" aria-labelledby="newsletter-title">
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">De petites choses.<br><span class="hm-grad">Chaque jour.</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/fr/features/unified-inbox.html"><strong>Tous les comptes, une seule boîte de réception</strong><span>Gmail, Microsoft 365, Outlook.com et IMAP côte à côte.</span></a>
+<a href="/fr/features/search.html"><strong>Retrouvez-le en millisecondes</strong><span>Recherche plein texte hors ligne. 50 000 messages parcourus en moins de 15 ms dans notre test.</span></a>
+<a href="/fr/features/insights.html"><strong>Voyez votre courrier d'un coup d'œil</strong><span>Statistiques dresse la carte de qui vous écrit et quand, à partir de vos propres en-têtes.</span></a>
+<a href="/fr/features/undo-send.html"><strong>Reprenez-le</strong><span>Annulez l'envoi avec le délai de votre choix.</span></a>
+<a href="/fr/features/native-app.html"><strong>Léger sur votre ordinateur</strong><span>Une app de bureau native construite avec Tauri, pas un navigateur déguisé.</span></a>
+<a href="/fr/features/email-cleanup.html"><strong>Une boîte de réception plus rangée <em class="hm-chip">Premium</em></strong><span>Triez newsletters, reçus et promos, et nettoyez par règle.</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/fr/features.html">Toutes les fonctionnalités →</a></p>
+</div>
+</section>
+
+<section id="compare" class="mv-section hm-compare" aria-labelledby="compare-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="compare-title">Comment MailVault se compare.<br><span class="hm-grad">Honnêtement.</span></h2>
+<p class="hm-body">Cinq apps e-mail côte à côte. Sélectionnez une fonctionnalité pour voir comment elle fonctionne dans MailVault.</p>
+</div>
+<div class="hm-table-wrap">
+<table class="hm-table">
+<thead><tr><th scope="col">Fonction</th><th scope="col" class="hm-us"><span class="hm-app"><img src="/icon-128.webp" width="24" height="24" alt="" loading="lazy"><span>MailVault</span></span></th><th scope="col"><span class="hm-app"><img src="/assets/compare/thunderbird.svg" width="24" height="24" alt="" loading="lazy"><span>Thunderbird</span></span></th><th scope="col"><span class="hm-app"><img src="/assets/compare/apple-mail.svg" width="24" height="24" alt="" loading="lazy"><span>Apple Mail</span></span></th><th scope="col"><span class="hm-app"><img src="/assets/compare/outlook.svg" width="24" height="24" alt="" loading="lazy"><span>Outlook<small>nouveau, Windows</small></span></span></th><th scope="col"><span class="hm-app"><img src="/assets/compare/notion.svg" width="24" height="24" alt="" loading="lazy"><span>Notion Mail<small><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" target="_blank" rel="noopener">arrêté le 22 sept. 2026 ↗</a></small></span></span></th></tr></thead>
+<tbody style="--g:#2f8cf0"><tr class="hm-group"><th colspan="6" scope="colgroup">Confidentialité et propriété</th></tr>
+<tr><th scope="row">Gratuit, sans pub</th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Oui</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Publicités sans Microsoft 365</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Arrêté</td></tr>
+<tr><th scope="row"><a href="/fr/features/local-vault.html">Le courrier évite le cloud de l'éditeur</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Oui, sauf iCloud</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>Non, le courrier IMAP se synchronise via le Cloud Microsoft</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+<tr><th scope="row"><a href="/fr/features/local-vault.html">Copie complète sur votre ordinateur</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Oui</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Courrier récent seulement</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+<tr><th scope="row"><a href="/fr/features/archive-and-delete.html">Gardez le courrier après l'avoir supprimé du serveur</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui, chaque copie vérifiée</td><td class="p"><span class="hm-sr" translate="no">Thunderbird : </span>Manuel, dossiers locaux</td><td class="p"><span class="hm-sr" translate="no">Apple Mail : </span>Manuel, Sur mon Mac</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Limité, fichiers PST</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+<tr><th scope="row"><a href="/fr/features/local-vault.html">Format de fichier ouvert</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>.eml, un fichier par e-mail</td><td class="p"><span class="hm-sr" translate="no">Thunderbird : </span>mbox</td><td class="p"><span class="hm-sr" translate="no">Apple Mail : </span>.emlx, propre à Apple</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>PST, propriétaire</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Aucune</td></tr>
+<tr><th scope="row"><a href="/fr/features/local-vault.html">Dossiers Maildir</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui, lisible par d'autres outils Maildir</td><td class="p"><span class="hm-sr" translate="no">Thunderbird : </span>Facultatif, mbox par défaut</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Non</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>Non</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+<tr><th scope="row"><a href="/fr/features/scheduled-backups.html">Sauvegardes locales planifiées</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Premium</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Non</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Non, Time Machine seulement</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>Non</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+</tbody>
+<tbody style="--g:#8b5cf6"><tr class="hm-group"><th colspan="6" scope="colgroup">Sécurité</th></tr>
+<tr><th scope="row"><a href="/fr/features/email-tracker-blocking.html">Pixels espions</a></th><td class="hm-us p"><span class="hm-sr" translate="no">MailVault : </span>Signalé gratuitement, retiré avec Premium</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Contenu distant bloqué</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Protection de la confidentialité du courrier</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Images bloquées</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Images relayées par proxy</td></tr>
+<tr><th scope="row"><a href="/fr/features/sender-verification.html">Vérification de l'expéditeur affichée</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>SPF, DKIM, DMARC</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Non</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Non</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Étiquette « non vérifié »</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non documenté</td></tr>
+<tr><th scope="row"><a href="/fr/features/link-safety.html">Alertes sur les liens suspects</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Bannière d'arnaque</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Filtre indésirables seulement</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Oui</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non documenté</td></tr>
+</tbody>
+<tbody style="--g:#f97316"><tr class="hm-group"><th colspan="6" scope="colgroup">Organiser</th></tr>
+<tr><th scope="row"><a href="/fr/features/saved-views.html">Vues enregistrées personnalisées</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Avec vos propres champs. 3 gratuites, illimitées avec Premium</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Recherches enregistrées</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Boîtes intelligentes</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Dossiers de recherche, critères prédéfinis</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Vues personnalisées</td></tr>
+<tr><th scope="row"><a href="/fr/features/saved-views.html">Filtrer et regrouper la liste</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Par expéditeur, date ou votre propre champ</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Filtre rapide</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Barre de filtre</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Filtres, tri et regroupement</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Filtrer et regrouper</td></tr>
+<tr><th scope="row"><a href="/fr/features/tags.html">Tags sur n'importe quel message</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>N'importe quel fournisseur, conservé sur votre ordinateur</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Tags</td><td class="p"><span class="hm-sr" translate="no">Apple Mail : </span>Indicateurs colorés</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Catégories</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Libellés</td></tr>
+<tr><th scope="row"><a href="/fr/features/tagging-rules.html">Des règles qui trient le nouveau courrier</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Écrites en langage courant, traitées sur votre ordinateur</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Filtres de messages</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Règles</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Règles</td><td class="p"><span class="hm-sr" translate="no">Notion Mail : </span>Libellés IA, payant</td></tr>
+<tr><th scope="row"><a href="/fr/features/search.html">Cherchez dans une boîte de 50 000 messages</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span><a href="/fr/blog/search-50000-emails-in-milliseconds.html">Moins de 15 ms, dans notre test</a></td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=585429" target="_blank" rel="noopener">L'indexation ralentit, bug ouvert depuis 2010 ↗</a></td><td><span class="hm-sr" translate="no">Apple Mail : </span>Non testé</td><td><span class="hm-sr" translate="no">Outlook : </span>Non testé</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Arrêté</td></tr>
+<tr><th scope="row"><a href="/fr/features/unified-inbox.html">Boîte de réception unifiée</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Oui</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>Par compte</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Non</td></tr>
+<tr><th scope="row"><a href="/fr/features/views.html">Façons de personnaliser</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Vues, dispositions, raccourcis, barre d'outils</td><td class="y"><span class="hm-sr" translate="no">Thunderbird : </span>Thèmes et extensions</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Minimal</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Compléments</td><td class="p"><span class="hm-sr" translate="no">Notion Mail : </span>Vues personnalisées</td></tr>
+</tbody>
+<tbody style="--g:#10b981"><tr class="hm-group"><th colspan="6" scope="colgroup">IA et rédaction</th></tr>
+<tr><th scope="row"><a href="/fr/features/ai-writing.html">Aide à l'écriture par IA</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Gratuit</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Extension seulement</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Apple Intelligence, Mac récents</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Copilot, payant</td><td class="p"><span class="hm-sr" translate="no">Notion Mail : </span>Notion AI, payant</td></tr>
+<tr><th scope="row"><a href="/fr/features/ai-writing.html">Résumés de fils par IA</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Gratuit</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Extension seulement</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Apple Intelligence, Mac récents</td><td class="p"><span class="hm-sr" translate="no">Outlook : </span>Copilot, payant</td><td class="p"><span class="hm-sr" translate="no">Notion Mail : </span>Notion AI, payant</td></tr>
+<tr><th scope="row"><a href="/fr/features/ai-writing.html">L'IA tourne sur votre ordinateur</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Oui, sauf si vous ajoutez votre propre modèle</td><td><span class="hm-sr" translate="no">Thunderbird : </span>Pas d'IA intégrée</td><td class="p"><span class="hm-sr" translate="no">Apple Mail : </span>Sur l'appareil, en partie via Private Cloud Compute</td><td class="n"><span class="hm-sr" translate="no">Outlook : </span>Cloud Microsoft</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Cloud Notion</td></tr>
+<tr><th scope="row"><a href="/fr/features/templates.html">Modèles et extraits</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Modèles</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Extension seulement</td><td class="n"><span class="hm-sr" translate="no">Apple Mail : </span>Non</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Mes modèles</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Extraits</td></tr>
+<tr><th scope="row"><a href="/fr/features/scheduled-send.html">Envoi programmé</a></th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span>Premium. Délais jusqu'à 5 minutes gratuits</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Extension seulement</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Oui</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Oui</td></tr>
+<tr><th scope="row">Report et rappels</th><td class="hm-us n"><span class="hm-sr" translate="no">MailVault : </span>Pas encore</td><td class="n"><span class="hm-sr" translate="no">Thunderbird : </span>Extension seulement</td><td class="y"><span class="hm-sr" translate="no">Apple Mail : </span>Me le rappeler</td><td class="y"><span class="hm-sr" translate="no">Outlook : </span>Reporter</td><td class="y"><span class="hm-sr" translate="no">Notion Mail : </span>Rappels</td></tr>
+</tbody>
+<tbody style="--g:#64748b"><tr class="hm-group"><th colspan="6" scope="colgroup">Plateformes et support</th></tr>
+<tr><th scope="row">Signalements de bugs</th><td class="hm-us y"><span class="hm-sr" translate="no">MailVault : </span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1" target="_blank" rel="noopener">Corrigé en quelques heures, en public ↗</a></td><td class="p"><span class="hm-sr" translate="no">Thunderbird : </span><a href="https://bugzilla.mozilla.org/buglist.cgi?product=Thunderbird&amp;product=MailNews%20Core&amp;resolution=---&amp;bug_type=defect&amp;f1=creation_ts&amp;o1=lessthan&amp;v1=2016-09-24" target="_blank" rel="noopener">Environ 4 200 anomalies ouvertes signalées il y a plus de 10 ans ↗</a></td><td><span class="hm-sr" translate="no">Apple Mail : </span>Pas de suivi public</td><td><span class="hm-sr" translate="no">Outlook : </span>Pas de suivi public</td><td class="n"><span class="hm-sr" translate="no">Notion Mail : </span>Arrêté</td></tr>
+<tr><th scope="row">Fonctionne sur</th><td class="hm-us"><span class="hm-sr" translate="no">MailVault : </span>macOS, Windows, Linux</td><td><span class="hm-sr" translate="no">Thunderbird : </span>Windows, macOS, Linux, Android</td><td><span class="hm-sr" translate="no">Apple Mail : </span>Appareils Apple</td><td><span class="hm-sr" translate="no">Outlook : </span>Windows, macOS, web, mobile</td><td><span class="hm-sr" translate="no">Notion Mail : </span>Aucune</td></tr>
+</tbody>
+</table>
+</div>
+<details class="hm-sources"><summary>Vérifié en septembre 2026 par rapport à la documentation de chaque éditeur. Sources</summary>
+<ul>
+<li><a href="https://support.microsoft.com/en-us/office/sync-your-account-in-outlook-to-the-microsoft-cloud-985f9e19-d308-4e85-9d1d-0c6f32f8e981" rel="noopener" target="_blank">Outlook : synchronisation des comptes vers le Cloud Microsoft</a></li>
+<li><a href="https://support.microsoft.com/en-us/outlook/about-ads-in-outlook" rel="noopener" target="_blank">Outlook : publicités dans Outlook</a></li>
+<li><a href="https://bugzilla.mozilla.org/buglist.cgi?product=Thunderbird&amp;product=MailNews%20Core&amp;resolution=---&amp;bug_type=defect&amp;f1=creation_ts&amp;o1=lessthan&amp;v1=2016-09-24" rel="noopener" target="_blank">Thunderbird : rapports d'anomalies ouverts déposés avant le 24 sept. 2016 (Mozilla Bugzilla, comptés le 24 sept. 2026)</a></li>
+<li><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=585429" rel="noopener" target="_blank">Thunderbird : l'indexation globale ralentit sur les grosses boîtes mail (Bugzilla 585429)</a></li>
+<li><a href="/fr/blog/search-50000-emails-in-milliseconds.html">MailVault : recherche de 50 000 e-mails en millisecondes, méthode de test et chiffres</a></li>
+<li><a href="https://support.mozilla.org/en-US/kb/maildir-thunderbird" rel="noopener" target="_blank">Thunderbird : stockage Maildir</a></li>
+<li><a href="https://support.mozilla.org/en-US/kb/remote-content-in-messages" rel="noopener" target="_blank">Thunderbird : contenu distant dans les messages</a></li>
+<li><a href="https://support.mozilla.org/en-US/kb/thunderbirds-scam-detection" rel="noopener" target="_blank">Thunderbird : détection d'arnaques</a></li>
+<li><a href="https://support.apple.com/guide/mail/protect-email-privacy-mlhlp1205/mac" rel="noopener" target="_blank">Apple Mail : protection de la confidentialité du courrier</a></li>
+<li><a href="https://support.apple.com/guide/mail/use-smart-mailboxes-mlhlp1190/mac" rel="noopener" target="_blank">Apple Mail : boîtes intelligentes</a></li>
+<li><a href="https://support.apple.com/guide/mac-help/use-apple-intelligence-in-mail-mchlb2dbea8f/mac" rel="noopener" target="_blank">Apple Mail : Apple Intelligence dans Mail</a></li>
+<li><a href="https://support.microsoft.com/en-us/office/frequently-asked-questions-about-copilot-in-outlook-07420c70-099e-4552-8522-7d426712917b" rel="noopener" target="_blank">Outlook : Copilot dans Outlook</a></li>
+<li><a href="https://support.microsoft.com/en-us/outlook/mail/manage-email-messages-by-using-rules-in-outlook" rel="noopener" target="_blank">Outlook : règles</a></li>
+<li><a href="https://support.mozilla.org/en-US/kb/using-saved-searches" rel="noopener" target="_blank">Thunderbird : recherches enregistrées</a></li>
+<li><a href="https://addons.thunderbird.net/en-US/thunderbird/addon/send-later-3/" rel="noopener" target="_blank">Thunderbird : extension Send Later</a></li>
+<li><a href="https://www.notion.com/en-gb/help/views-groups-filters-and-properties" rel="noopener" target="_blank">Notion Mail : vues, groupes et filtres</a></li>
+<li><a href="https://www.notion.com/help/use-notion-ai-with-notion-mail" rel="noopener" target="_blank">Notion Mail : Notion AI</a></li>
+<li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail : avis de fermeture</a></li>
+</ul>
+</details>
+</div>
+</section>
+
+<section id="feedback" class="mv-section" aria-labelledby="feedback-title">
+<div class="mv-wrap">
+<div class="hm-center"><h2 id="feedback-title">De vraies personnes.<br><span class="hm-grad">De vrais retours.</span></h2></div>
+<ul class="hm-stats"><li><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18388821" target="_blank" rel="noopener"><strong>2 h 45 min</strong><span>entre un rapport de bug public et la version publiée qui l'a corrigé, le 10 sept. 2026</span></a></li><li><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18150645" target="_blank" rel="noopener"><strong>3 h 14 min</strong><span>entre le rapport et la correction publiée d'un bug de recherche, le 25 août 2026</span></a></li><li><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><strong>13 versions</strong><span>en 31 jours, du 21 août au 20 sept. 2026</span></a></li></ul>
+
+<div class="mv-feedback-quotes"><div class="hm-qcol"><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18152998"><p>« Toutes les erreurs ont été vérifiées et corrigées, et <strong>les vérifications de sauvegarde affichent 100 %, avec tous les chiffres qui correspondent.</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/bson73.webp" width="40" height="40" alt="" loading="lazy"><strong>bson73</strong><span>À propos de la vérification d'une sauvegarde complète de boîte mail</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18152998" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/issues/5"><p>« Tout d'abord, <strong>merci infiniment d'avoir écrit MailVault.</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/jaimet.webp" width="40" height="40" alt="" loading="lazy"><strong>jaimet</strong><span>À propos de l'installation de MailVault sur Debian</span><span>Utilisateur Linux · GitHub Issues</span><a href="https://github.com/GraphicMeat/mail-vault-app/issues/5" target="_blank" rel="noopener">Lire le signalement original ↗</a></figcaption></figure></div><div class="hm-qcol"><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-17907445"><p>« [MailVault] <strong>a déplacé tous mes gros dossiers de données comme promis.</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/artiste212.webp" width="40" height="40" alt="" loading="lazy"><strong>artiste212</strong><span>À propos du déplacement d'une archive Gmail de 43 000 messages vers un disque externe</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-17907445" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18271741"><p>« Le programme est en fait bien meilleur que ce à quoi je m'attendais. <strong>Une fenêtre de recherche pour la fonction &quot;Déplacer vers un dossier&quot;, ça fait des années que ça me manque !</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/bson73.webp" width="40" height="40" alt="" loading="lazy"><strong>bson73</strong><span>À propos de la recherche de dossiers lors du déplacement de courrier</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18271741" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure></div><div class="hm-qcol"><figure><blockquote><p>« J’aime l’option d’étape &quot;tester/vérifier&quot;. <strong>Elle m’épargne vraiment une étape.</strong> »</p></blockquote><figcaption><span class="mv-person-mark" aria-hidden="true">B</span><strong>Ben</strong><span>À propos de la vérification d’une adresse d’envoi</span><span>Utilisateur Fastmail · Retour par e-mail · août 2026</span></figcaption></figure><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18233405"><p>« D'entrée de jeu : <strong>je suis vraiment impressionné par la tournure que prend l'app</strong> – vraiment du beau travail ! »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/bson73.webp" width="40" height="40" alt="" loading="lazy"><strong>bson73</strong><span>En demandant des dossiers imbriqués, livrés en moins de deux jours</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18233405" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure></div><div class="hm-qcol"><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18151596"><p>« Merci infiniment pour cette réponse ultra-rapide. <strong>Je suis bluffé !</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/bson73.webp" width="40" height="40" alt="" loading="lazy"><strong>bson73</strong><span>À propos d'une réponse du support le jour même</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18151596" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure><figure><blockquote cite="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18296186"><p>« merci pour le <strong>service et l’assistance exceptionnellement bons.</strong> »</p></blockquote><figcaption><img class="mv-person-mark" src="/assets/feedback/bson73.webp" width="40" height="40" alt="" loading="lazy"><strong>bson73</strong><span>À propos du support après un problème de boîte de réception</span><span>GitHub Discussions</span><a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1#discussioncomment-18296186" target="_blank" rel="noopener">Lire le commentaire original ↗</a></figcaption></figure></div></div>
+<p class="mv-feedback-note">Extraits choisis. <a href="https://github.com/GraphicMeat/mail-vault-app/discussions/1" target="_blank" rel="noopener">Lire toute la discussion, y compris les signalements et les réponses ↗</a></p>
+</div>
+</section>
+
+<section id="newsletter" class="hm-community" aria-labelledby="community-title">
+<div class="mv-wrap hm-community-grid">
 <div>
-<h2 id="newsletter-title">Un mot quand il y a du nouveau.</h2>
+<h2 id="community-title">Aidez MailVault à grandir.<br><span class="hm-grad">Un seul clic suffit.</span></h2>
+<p class="hm-body">Nous sommes une petite équipe indépendante. Une étoile ou un cœur nous dit que nous construisons la bonne chose.</p>
+<div class="mv-community-actions" aria-label="Soutenir MailVault">
+<a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener"><span class="mv-star" aria-hidden="true">★</span><span>Mettre une étoile sur GitHub</span><span id="github-stars" class="mv-community-count" hidden></span></a>
+<button type="button" id="want-this-btn" aria-pressed="false"><span class="mv-heart" aria-hidden="true">♥</span><span id="vote-label">Pas de GitHub ? Envoyez un cœur</span><span id="vote-count" class="mv-community-count" hidden></span></button>
+</div>
+<p id="vote-status" class="mv-community-status" role="status"></p>
+</div>
+<form action="/api/subscribe" method="post" data-subscribe class="hm-newsletter">
+<h3 id="newsletter-title">Un mot quand il y a du nouveau</h3>
 <p>Mises à jour produit et conseils pratiques. Désabonnez-vous à tout moment.</p>
-</div>
-<form action="/api/subscribe" method="post" data-subscribe>
 <label for="newsletter-email">Adresse e-mail</label>
-<div class="mv-form-row"><input id="newsletter-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="vous@exemple.com"><button type="submit" class="mv-button mv-secondary">S'abonner</button>
-</div>
-<p role="status" data-form-status>
-</p>
+<div class="mv-form-row"><input id="newsletter-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="vous@exemple.com"><button type="submit" class="mv-button">S'abonner</button></div>
+<p role="status" data-form-status></p>
 </form>
+</div>
+</section>
+
+<section id="download" class="hm-final hm-dark" aria-labelledby="download-title">
+<div class="mv-wrap hm-center">
+<h2 id="download-title">Reprenez le contrôle de votre e-mail.<br><span class="hm-grad">C'est gratuit.</span></h2>
+<p class="hm-platforms" role="img" aria-label="macOS, Windows et Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
+<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Télécharger pour macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Télécharger pour Windows</a><a class="mv-button" data-hero-platform="linux" data-download="snap" data-acquisition-download="snap" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="store" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" hidden>Obtenir sur le Snap Store ↗</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="setup" href="/fr/get-started.html?plan=free">Télécharger MailVault</a></div>
+<p class="mv-small">macOS 11+ · Windows 10+ · Ubuntu 22.04+ / Debian 12+</p>
+</div>
 </section>
 </main>
+
 <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Une création de Graphic Meat</p><h2 id="studio-title">Découvrez les personnes derrière MailVault.</h2><p>Nous sommes Graphic Meat, un studio de produits indépendant qui crée des logiciels utiles depuis 2013. MailVault est l’un de nos produits. Venez nous rencontrer et découvrir nos autres projets.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Découvrir Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visiter Graphic Meat, le studio derrière MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Plus de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transformez vos photos en livre prêt à imprimer.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espace de travail local pour les notes et le code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Transférez vos e-mails vers un nouveau fournisseur.</span></a></div></div></aside>
 <footer class="mv-footer">
 <div class="mv-wrap">
@@ -415,9 +466,7 @@
   "voteSendError": "Votre vote n’a pas pu être envoyé. Réessayez bientôt."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20260922-acquisition">
-</script>
-<script defer src="/pricing-localize.js?v=20260905-savings">
+<script defer src="/assets/english-site.js?v=20260925-cta">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09">
 </script>

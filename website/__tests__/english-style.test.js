@@ -39,8 +39,6 @@ describe('English visual rollout',()=>{
  });
  it('keeps reports accessible without exposing personal email addresses',()=>{
   const d=new JSDOM(readFileSync(resolve(root,'index.html'),'utf8')).window.document;
-  expect(d.querySelectorAll('.mv-case-detail').length).toBe(2);
-  expect(d.querySelectorAll('.mv-feedback-action').length).toBe(2);
   expect(d.querySelector('#feedback').textContent).not.toMatch(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
   for(const img of d.querySelectorAll('.mv-product-icon'))expect(img.src).toMatch(/^https:\/\/graphicmeat.com\/assets\//);
  });

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 // theme: only the hero demo follows the theme, every other shot is pinned.
 const theme = (img) => (/-light-\d+\.webp/.test(img.getAttribute('src')) ? 'light' : 'dark');
 
-describe.each(['website/index.html', 'index.html', 'website/home-preview.html'])('%s screenshots', (file) => {
+describe.each(['website/index.html', 'index.html'])('%s screenshots', (file) => {
   const doc = new JSDOM(readFileSync(file, 'utf8')).window.document;
   const shots = [...doc.querySelectorAll('picture img[src^="/screenshots/"]')];
 

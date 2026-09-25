@@ -82,11 +82,9 @@
   const mac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !mobile;
   const windows = /Windows NT/.test(navigator.userAgent) && !mobile;
   if (mobile) document.querySelectorAll('.mv-mobile-device').forEach(el => { el.hidden = false; });
-  if (linux) {
-    const platform = document.querySelector('[data-platform="linux"]');
-    if (platform) platform.parentElement.prepend(platform);
-  }
   const heroPlatform = mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
+  const ownPlatform = heroPlatform && document.querySelector('[data-platform="' + heroPlatform + '"]');
+  if (ownPlatform) ownPlatform.parentElement.prepend(ownPlatform);
   if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
     document.querySelectorAll('[data-hero-platform="fallback"]').forEach(el => { el.hidden = true; });
     document.querySelectorAll('[data-hero-platform="' + heroPlatform + '"]').forEach(el => { el.hidden = false; });

@@ -72,13 +72,23 @@ describe('English acquisition journey', () => {
   it.each([
     ['macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'mac'],
     ['Linux', 'Mozilla/5.0 (X11; Linux x86_64)', 'linux'],
-    ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'fallback'],
+    ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'windows'],
     ['unknown desktop', 'Mozilla/5.0 (ExampleOS)', 'fallback'],
     ['mobile', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'fallback'],
   ])('uses %s hero action for %s', (_name, userAgent, visible) => {
     const {doc} = page('index.html', '', undefined, {userAgent});
-    for (const action of ['mac','linux','fallback']) expect(doc.querySelector('[data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
+    for (const action of ['mac','windows','linux','fallback']) expect(doc.querySelector('[data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
     expect(doc.querySelector('a[href="/get-started.html?plan=free#platforms"]')).not.toBeNull();
+  });
+  it('puts the visitor’s own platform first on the download page, Windows included', async () => {
+    const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
+    const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:['MailVault.dmg','MailVault_2.16.0_x64-setup.exe'].map(name=>({name,browser_download_url:base+name}))})});
+    const {doc}=page('get-started.html','',fetch,{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
+    await tick();
+    expect(doc.querySelector('.mv-download-options > article').dataset.platform).toBe('windows');
+    expect(doc.querySelector('[data-hero-platform="windows"]').hidden).toBe(false);
+    for (const link of doc.querySelectorAll('[data-download="windows"]')) expect(link.href).toBe(base+'MailVault_2.16.0_x64-setup.exe');
+    expect(doc.body.textContent).not.toContain('Windows is planned');
   });
   it('resolves the macOS homepage action with the shared release resolver', async () => {
     const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.11.3/';
@@ -122,7 +132,7 @@ describe('English acquisition journey', () => {
     expect(gm.mock.calls).toEqual([
       ['cta_click', {page_version:'homepage-en-20260922', target:'/demo/', placement:'header'}],
       ['cta_click', {page_version:'homepage-en-20260922', target:'/pricing.html', placement:'header'}],
-      ['cta_click', {page_version:'homepage-en-20260922', target:'#want-this-btn', placement:'feedback'}],
+      ['cta_click', {page_version:'homepage-en-20260922', target:'#want-this-btn', placement:'newsletter'}],
       ['cta_click', {page_version:'homepage-en-20260922', target:'github.com/GraphicMeat/mail-vault-app', placement:'footer'}],
     ]);
   });
