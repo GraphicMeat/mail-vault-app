@@ -267,7 +267,8 @@ describe('onboarding', function () {
             const button = document.querySelector('[data-testid="onboarding-continue"]');
             let top = button.getBoundingClientRect().top + window.scrollY;
             for (let el = button.parentElement; el; el = el.parentElement) top += el.scrollTop;
-            return top;
+            // A tenth of a pixel: the scroll offsets add float noise.
+            return Math.round(top * 10) / 10;
           })(),
         }));
         seen.push(frame.feature);
