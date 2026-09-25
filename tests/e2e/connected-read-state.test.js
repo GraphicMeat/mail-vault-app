@@ -22,12 +22,13 @@ describe('Email read state', function () {
   const SUBJECT_RE = String.raw`(?:Luke|Vader|Mock|Archived|Sent) message \d+`;
 
   // Rows are virtualized and recycled — the subject is the only stable handle.
-  // `bg-mail-surface` on the row root is the unread marker.
+  // A bold subject is the unread marker. The row ground (`bg-mail-surface`)
+  // says it too, but not on the open row, which is painted as the selection.
   const rows = () => browser.execute((re) => {
     const pattern = new RegExp(re);
     return [...document.querySelectorAll('[data-testid="email-row"]')].map(row => ({
       subject: ((row.innerText || '').match(pattern) || [null])[0],
-      unread: row.classList.contains('bg-mail-surface'),
+      unread: !!row.querySelector('[data-testid="row-subject"]')?.classList.contains('font-semibold'),
     })).filter(r => r.subject);
   }, SUBJECT_RE);
 
