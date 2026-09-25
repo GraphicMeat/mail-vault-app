@@ -2868,5 +2868,6 @@
   "snooze.offline": "スヌーズにはメールサーバーへの接続が必要です。オンラインになってから再度お試しください。",
   "snooze.until": "{{time}} までスヌーズ中",
   "undo.snoozed_one": "{{count}} 件をスヌーズしました",
-  "undo.snoozed_other": "{{count}} 件をスヌーズしました"
+  "undo.snoozed_other": "{{count}} 件をスヌーズしました",
+  "snooze.unavailable": "これらのメッセージはスヌーズできません。"
 }

@@ -87,10 +87,10 @@ function StarToggle({ email, actions, size }) {
 // when it arrived.
 function RowDate({ email }) {
   const t = useT();
-  const hour12 = hour12For(useSettingsStore(s => s.timeFormat));
+  const timeFormat = useSettingsStore(s => s.timeFormat);
   const wakeAt = useSnoozeStore(s => wakeAtFor(s.rows, email._accountId || useMailStore.getState().activeAccountId, email.messageId));
   if (wakeAt == null) return formatEmailDate(email.date);
-  const when = new Intl.DateTimeFormat(intlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12 }).format(wakeAt);
+  const when = new Intl.DateTimeFormat(intlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12For(timeFormat) }).format(wakeAt);
   return (
     <span data-testid="row-snoozed-until" title={t('snooze.until', { time: when })} className="inline-flex items-center gap-1">
       <AlarmClock size={11} aria-hidden="true" />{when}

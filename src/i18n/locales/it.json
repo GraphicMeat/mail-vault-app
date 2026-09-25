@@ -2868,5 +2868,6 @@
   "snooze.offline": "Per posticipare serve una connessione al server di posta. Riprova quando sei online.",
   "snooze.until": "Posticipato fino a {{time}}",
   "undo.snoozed_one": "{{count}} messaggio posticipato",
-  "undo.snoozed_other": "{{count}} messaggi posticipati"
+  "undo.snoozed_other": "{{count}} messaggi posticipati",
+  "snooze.unavailable": "Questi messaggi non possono essere posticipati."
 }

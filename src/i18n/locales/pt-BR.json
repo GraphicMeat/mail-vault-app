@@ -2868,5 +2868,6 @@
   "snooze.offline": "Adiar precisa de conexão com o servidor de e-mail. Tente de novo quando estiver online.",
   "snooze.until": "Adiado até {{time}}",
   "undo.snoozed_one": "{{count}} mensagem adiada",
-  "undo.snoozed_other": "{{count}} mensagens adiadas"
+  "undo.snoozed_other": "{{count}} mensagens adiadas",
+  "snooze.unavailable": "Estas mensagens não podem ser adiadas."
 }

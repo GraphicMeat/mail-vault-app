@@ -2868,5 +2868,6 @@
   "snooze.offline": "Posponer necesita conexión con el servidor de correo. Inténtalo de nuevo cuando estés en línea.",
   "snooze.until": "Pospuesto hasta {{time}}",
   "undo.snoozed_one": "{{count}} mensaje pospuesto",
-  "undo.snoozed_other": "{{count}} mensajes pospuestos"
+  "undo.snoozed_other": "{{count}} mensajes pospuestos",
+  "snooze.unavailable": "Estos mensajes no se pueden posponer."
 }

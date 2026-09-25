@@ -2868,5 +2868,6 @@
   "snooze.offline": "Le report nécessite une connexion au serveur de messagerie. Réessayez une fois en ligne.",
   "snooze.until": "Reporté jusqu’à {{time}}",
   "undo.snoozed_one": "{{count}} message reporté",
-  "undo.snoozed_other": "{{count}} messages reportés"
+  "undo.snoozed_other": "{{count}} messages reportés",
+  "snooze.unavailable": "Ces messages ne peuvent pas être reportés."
 }

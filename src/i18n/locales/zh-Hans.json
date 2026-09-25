@@ -2868,5 +2868,6 @@
   "snooze.offline": "稍后提醒需要连接邮件服务器。请在联网后重试。",
   "snooze.until": "稍后提醒至 {{time}}",
   "undo.snoozed_one": "已将 {{count}} 封设为稍后提醒",
-  "undo.snoozed_other": "已将 {{count}} 封设为稍后提醒"
+  "undo.snoozed_other": "已将 {{count}} 封设为稍后提醒",
+  "snooze.unavailable": "这些邮件无法设为稍后提醒。"
 }

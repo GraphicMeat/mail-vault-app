@@ -50,39 +50,57 @@ export async function snoozeEmails(keys, wakeAt) {
     if (!groups.has(accountId)) groups.set(accountId, []);
     groups.get(accountId).push(key);
   }
+  // Only the keyboard shortcut gets here with nothing to snooze: the quick
+  // actions are disabled for such a selection.
+  if (!groups.size) throw new Error(tr('snooze.unavailable'));
 
+  // Every moved message gets its row or goes back where it came from; one
+  // failure never stops the rest, and the first error is reported at the end.
   const created = [];
-  for (const [accountId, groupKeys] of groups) {
-    const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
-    const folder = await daemonCall('snooze.ensure_folder', { account });
-    if (!(accountId === state.activeAccountId && (state.mailboxes || []).some(m => m.path === folder))) {
-      forceMailboxRefetch(accountId);
-    }
-    const { moved } = await moveEmails(groupKeys, folder);
-    for (const r of moved) {
-      for (let i = 0; i < r.srcUids.length; i++) {
-        const uid = r.dstUids?.[i] ?? null;
-        try {
-          created.push(await daemonCall('snooze.create', {
-            accountId: r.accountId, mailbox: r.from, snoozedMailbox: r.to, uid, messageId: r.messageIds[i], wakeAt,
-          }));
-        } catch (e) {
-          // No row means nothing would ever wake it: put it back. Without a
-          // COPYUID there is no uid to address it by; the error says so.
-          if (uid != null) await api.moveEmails(r.account, [uid], r.to, r.from).catch(() => {});
-          throw e;
+  let failure = null;
+  try {
+    for (const [accountId, groupKeys] of groups) {
+      const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
+      const folder = await daemonCall('snooze.ensure_folder', { account });
+      if (!(accountId === state.activeAccountId && (state.mailboxes || []).some(m => m.path === folder))) {
+        forceMailboxRefetch(accountId);
+      }
+      const { moved } = await moveEmails(groupKeys, folder);
+      for (const r of moved) {
+        for (let i = 0; i < r.srcUids.length; i++) {
+          try {
+            created.push(await daemonCall('snooze.create', {
+              accountId: r.accountId, mailbox: r.from, snoozedMailbox: r.to,
+              uid: r.dstUids?.[i] ?? null, messageId: r.messageIds[i], wakeAt,
+            }));
+          } catch (e) {
+            failure ||= e;
+            await putBack(r, i).catch(err => console.error('[snooze] could not put back a message with no row:', err));
+          }
         }
       }
     }
+  } finally {
+    if (created.length) {
+      useSnoozeStore.getState().upsert(created);
+      const ids = created.map(row => row.id);
+      get().setUndo({ labelKey: 'undo.snoozed', labelParams: { count: ids.length }, run: () => unsnooze(ids) });
+    }
   }
+  if (failure) throw failure;
+  return { snoozed: created.length, skipped: keys.length - [...groups.values()].reduce((n, g) => n + g.length, 0) };
+}
 
-  if (created.length) {
-    useSnoozeStore.getState().upsert(created);
-    const ids = created.map(row => row.id);
-    get().setUndo({ labelKey: 'undo.snoozed', labelParams: { count: ids.length }, run: () => unsnooze(ids) });
+// A moved message whose row could not be written: nothing would ever wake
+// it, so it goes back. Without a COPYUID it is found by Message-ID in the
+// Snoozed folder, like the move workflow's own undo does.
+async function putBack(r, i) {
+  let uids = r.dstUids?.[i] != null ? [r.dstUids[i]] : [];
+  if (!uids.length && r.messageIds[i]) {
+    const probe = await api.findMessageId(r.account, r.messageIds[i], { stopOnFirst: false });
+    uids = (probe?.found || []).filter(loc => loc.mailbox === r.to).map(loc => loc.uid);
   }
-  const snoozed = created.length;
-  return { snoozed, skipped: keys.length - [...groups.values()].reduce((n, g) => n + g.length, 0) };
+  if (uids.length) await api.moveEmails(r.account, uids, r.to, r.from);
 }
 
 /** Wake these snooze rows now (the daemon moves them back), then repaint. */

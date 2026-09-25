@@ -2868,5 +2868,6 @@
   "snooze.offline": "Zum Zurückstellen ist eine Verbindung zum Mailserver nötig. Versuche es erneut, wenn du online bist.",
   "snooze.until": "Zurückgestellt bis {{time}}",
   "undo.snoozed_one": "{{count}} Nachricht zurückgestellt",
-  "undo.snoozed_other": "{{count}} Nachrichten zurückgestellt"
+  "undo.snoozed_other": "{{count}} Nachrichten zurückgestellt",
+  "snooze.unavailable": "Diese Nachrichten können nicht zurückgestellt werden."
 }

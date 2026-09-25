@@ -2868,5 +2868,6 @@
   "snooze.offline": "Snooze needs a connection to the mail server. Try again when you are online.",
   "snooze.until": "Snoozed until {{time}}",
   "undo.snoozed_one": "Snoozed {{count}} message",
-  "undo.snoozed_other": "Snoozed {{count}} messages"
+  "undo.snoozed_other": "Snoozed {{count}} messages",
+  "snooze.unavailable": "Snooze is not available for these messages."
 }
