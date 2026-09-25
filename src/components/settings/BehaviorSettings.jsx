@@ -1,11 +1,12 @@
 import { Button } from '../ui/Button';
 import React from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, SWIPE_ACTIONS } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
 import { ComposeOpenMode } from './ComposeOpenMode';
-import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download } from 'lucide-react';
+import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download, MoveHorizontal } from 'lucide-react';
+import { SWIPE_ACTION_LABELS } from '../SwipeBackdrop';
 import { t, useT  } from '../../i18n/index.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 
@@ -25,6 +26,11 @@ export function BehaviorSettings() {
     setConfirmBeforeDelete,
     afterDeleteSelect,
     setAfterDeleteSelect,
+    trackpadSwipeEnabled,
+    setTrackpadSwipeEnabled,
+    swipeLeftAction,
+    swipeRightAction,
+    setSwipeAction,
     autoDownloadAttachments,
     setAutoDownloadAttachments,
     searchHistoryLimit,
@@ -299,6 +305,44 @@ export function BehaviorSettings() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Trackpad swipe */}
+      <div className="settings-section">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <MoveHorizontal size={18} className="text-mail-accent-text" />
+          {t('settings.behavior.swipe.title')}
+        </h4>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <div className="font-medium text-mail-text">{t('settings.behavior.swipe.enabled')}</div>
+            <div className="text-sm text-mail-text-muted">{t('settings.behavior.swipe.enabledDesc')}</div>
+          </div>
+          <ToggleSwitch
+            label={t('settings.behavior.swipe.enabled')} active={trackpadSwipeEnabled}
+            onClick={() => setTrackpadSwipeEnabled(!trackpadSwipeEnabled)}
+            testId="toggle-trackpad-swipe"
+          />
+        </div>
+        {trackpadSwipeEnabled && ['left', 'right'].map(side => (
+          <div key={side} className="mt-4">
+            <label className="block text-sm font-medium text-mail-text mb-2">
+              {side === 'left' ? t('settings.behavior.swipe.left') : t('settings.behavior.swipe.right')}
+            </label>
+            <select aria-label={side === 'left' ? t('settings.behavior.swipe.left') : t('settings.behavior.swipe.right')}
+              data-testid={`swipe-${side}-select`}
+              value={side === 'left' ? swipeLeftAction : swipeRightAction}
+              onChange={(e) => setSwipeAction(side, e.target.value)}
+              className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                        text-mail-text focus:border-mail-accent transition-all
+                        cursor-pointer"
+            >
+              {SWIPE_ACTIONS.map(action => (
+                <option key={action} value={action}>{t(SWIPE_ACTION_LABELS[action])}</option>
+              ))}
+            </select>
+          </div>
+        ))}
       </div>
 
       {/* Deleting */}

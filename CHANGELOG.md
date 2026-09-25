@@ -4,6 +4,7 @@
 
 ### Added
 - **Snooze a message until you want it.** Snooze moves a message into a Snoozed folder on your mail server, so it leaves the inbox on every device, and brings it back unread at the time you chose. Pick Later today, Tomorrow, This weekend, Next week or a date and time of your own, from the row menu, the selection bar, the reading pane's actions or the B key. A message in Snoozed shows when it comes back, Undo brings it straight back, and one you move out of Snoozed yourself is simply left alone. The background helper wakes snoozed mail even while MailVault is closed, if it is set to keep running. Not yet available for Outlook accounts connected through Microsoft Graph.
+- **Swipe a message to act on it.** Swipe two fingers left or right across a message row on the trackpad to archive it, delete it, mark it read or unread, star it, snooze it or move it. The row follows your fingers and shows what letting go will do; stop short and nothing happens. Swiping left archives and swiping right marks read or unread until you choose otherwise in Settings > Mail preferences > Behavior, where swipes can also be turned off. Scrolling the list up and down is never mistaken for a swipe.
 
 ## [2.16.0] - 2026-09-25
 

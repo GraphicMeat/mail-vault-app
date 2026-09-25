@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArchiveRestore, Forward, FolderInput, ImageDown, Mail, MailOpen,
   MailPlus, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2, AlarmClock,
@@ -18,6 +18,7 @@ import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SnoozePicker } from './SnoozePicker';
 import { canSnooze } from '../services/workflows/snooze';
+import { registerRowActions } from '../utils/rowActionRegistry';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
@@ -63,6 +64,8 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const state = useMailStore.getState();
   const backupScan = useBackupScan();
   const keys = useMemo(() => emails.map(email => selectionKey(email, useMailStore.getState())), [emails, identity]);
+  const describeRef = useRef(null);
+  const registerMarker = useCallback(node => registerRowActions(node, describeRef), []);
   if (!emails.length) return null;
 
   const newest = emails.reduce((a, b) => new Date(b.date) > new Date(a.date) ? b : a);
@@ -170,7 +173,9 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     if (entry.action === 'snooze') return t('snooze.action');
     return t('quickActions.title');
   };
-  const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(entry => {
+  // One entry's descriptor. Also what a trackpad swipe runs an action through
+  // (utils/rowActionRegistry.js), whether or not the row's menu lists it.
+  const describe = entry => {
     const template = templates.find(item => item.id === entry.params?.templateId);
     const label = localLabels.find(item => item.id === entry.params?.tagId);
     const savedTargetAccount = entry.params?.accountId || (oneAccount ? locs[0].accountId : null);
@@ -233,9 +238,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
         } else if (entry.action === 'newMessage') { onClose?.(); openNewMessage(); }
       },
     };
-  });
+  };
+  const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(describe);
+  describeRef.current = describe;
 
   return <>
+    <span hidden data-row-actions ref={registerMarker} />
     <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}

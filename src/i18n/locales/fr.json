@@ -2869,5 +2869,13 @@
   "snooze.until": "Reporté jusqu’à {{time}}",
   "undo.snoozed_one": "{{count}} message reporté",
   "undo.snoozed_other": "{{count}} messages reportés",
-  "snooze.unavailable": "Ces messages ne peuvent pas être reportés."
+  "snooze.unavailable": "Ces messages ne peuvent pas être reportés.",
+  "settings.behavior.swipe.title": "Gestes de balayage",
+  "settings.behavior.swipe.enabled": "Balayage sur le trackpad",
+  "settings.behavior.swipe.enabledDesc": "Balayez un message à deux doigts vers la gauche ou la droite pour agir dessus.",
+  "settings.behavior.swipe.left": "Balayer vers la gauche",
+  "settings.behavior.swipe.right": "Balayer vers la droite",
+  "settings.behavior.swipe.toggleRead": "Marquer lu ou non lu",
+  "settings.behavior.swipe.star": "Suivre ou ne plus suivre",
+  "settings.behavior.swipe.none": "Rien"
 }

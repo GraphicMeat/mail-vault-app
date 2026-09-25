@@ -2869,5 +2869,13 @@
   "snooze.until": "{{time}}까지 다시 알림 대기 중",
   "undo.snoozed_one": "{{count}}건을 다시 알림으로 설정했습니다",
   "undo.snoozed_other": "{{count}}건을 다시 알림으로 설정했습니다",
-  "snooze.unavailable": "이 메시지는 다시 알림으로 설정할 수 없습니다."
+  "snooze.unavailable": "이 메시지는 다시 알림으로 설정할 수 없습니다.",
+  "settings.behavior.swipe.title": "스와이프 제스처",
+  "settings.behavior.swipe.enabled": "트랙패드 스와이프",
+  "settings.behavior.swipe.enabledDesc": "메시지 위에서 두 손가락을 왼쪽이나 오른쪽으로 밀어 작업합니다.",
+  "settings.behavior.swipe.left": "왼쪽으로 스와이프",
+  "settings.behavior.swipe.right": "오른쪽으로 스와이프",
+  "settings.behavior.swipe.toggleRead": "읽음 또는 읽지 않음으로 표시",
+  "settings.behavior.swipe.star": "별표 표시 또는 해제",
+  "settings.behavior.swipe.none": "없음"
 }

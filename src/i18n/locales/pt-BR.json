@@ -2869,5 +2869,13 @@
   "snooze.until": "Adiado até {{time}}",
   "undo.snoozed_one": "{{count}} mensagem adiada",
   "undo.snoozed_other": "{{count}} mensagens adiadas",
-  "snooze.unavailable": "Estas mensagens não podem ser adiadas."
+  "snooze.unavailable": "Estas mensagens não podem ser adiadas.",
+  "settings.behavior.swipe.title": "Gestos de deslizar",
+  "settings.behavior.swipe.enabled": "Deslizar no trackpad",
+  "settings.behavior.swipe.enabledDesc": "Deslize dois dedos para a esquerda ou a direita sobre uma mensagem para agir nela.",
+  "settings.behavior.swipe.left": "Deslizar para a esquerda",
+  "settings.behavior.swipe.right": "Deslizar para a direita",
+  "settings.behavior.swipe.toggleRead": "Marcar lida ou não lida",
+  "settings.behavior.swipe.star": "Marcar ou remover estrela",
+  "settings.behavior.swipe.none": "Nada"
 }

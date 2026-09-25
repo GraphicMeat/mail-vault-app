@@ -2869,5 +2869,13 @@
   "snooze.until": "Zurückgestellt bis {{time}}",
   "undo.snoozed_one": "{{count}} Nachricht zurückgestellt",
   "undo.snoozed_other": "{{count}} Nachrichten zurückgestellt",
-  "snooze.unavailable": "Diese Nachrichten können nicht zurückgestellt werden."
+  "snooze.unavailable": "Diese Nachrichten können nicht zurückgestellt werden.",
+  "settings.behavior.swipe.title": "Wischgesten",
+  "settings.behavior.swipe.enabled": "Wischen auf dem Trackpad",
+  "settings.behavior.swipe.enabledDesc": "Wische mit zwei Fingern über eine Nachricht nach links oder rechts, um sie zu bearbeiten.",
+  "settings.behavior.swipe.left": "Nach links wischen",
+  "settings.behavior.swipe.right": "Nach rechts wischen",
+  "settings.behavior.swipe.toggleRead": "Gelesen oder ungelesen",
+  "settings.behavior.swipe.star": "Markieren oder entmarkieren",
+  "settings.behavior.swipe.none": "Nichts"
 }

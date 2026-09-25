@@ -99,6 +99,9 @@ const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].inclu
 const normalizeEmailListView = value => value === 'explorer' ? 'explorer' : 'list';
 const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(value) ? value : 'date';
 const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
+// What a two-finger trackpad swipe on a message row does, per side.
+export const SWIPE_ACTIONS = ['archive', 'delete', 'toggleRead', 'star', 'snooze', 'move', 'none'];
+const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) ? value : fallback;
 export const normalizeSearchMailboxConcurrency = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
@@ -172,6 +175,8 @@ export const _mergePersistedSettings = (persisted, current) => ({
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
   backupMailboxConcurrency: normalizeBackupMailboxConcurrency(persisted?.backupMailboxConcurrency ?? current.backupMailboxConcurrency),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
+  swipeLeftAction: normalizeSwipeAction(persisted?.swipeLeftAction, current.swipeLeftAction),
+  swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
 });
 
 /**
@@ -256,6 +261,22 @@ export function migrateSettings(persisted, version) {
   // model into every install with AI off, so that value was never a choice.
   if (version < 8 && IS_MAC && next.aiSettings && !next.aiSettings.enabled && next.aiSettings.provider === 'localGguf') {
     next = { ...next, aiSettings: { ...next.aiSettings, provider: 'appleFm' } };
+  }
+  // v8 → v9: Snooze is a new row and selection quick action. A saved list
+  // predates it, so it is appended once; removing it afterwards sticks.
+  if (version < 9 && next.quickActions?.defaults) {
+    const withSnooze = (surface) => {
+      const saved = next.quickActions.defaults[surface];
+      if (!Array.isArray(saved?.entries) || saved.entries.some(e => e?.action === 'snooze')) return saved;
+      return { ...saved, entries: [...saved.entries, { id: 'snooze', action: 'snooze' }] };
+    };
+    next = {
+      ...next,
+      quickActions: {
+        ...next.quickActions,
+        defaults: { ...next.quickActions.defaults, row: withSnooze('row'), selection: withSnooze('selection') },
+      },
+    };
   }
   return next;
 }
@@ -357,6 +378,11 @@ export const useSettingsStore = create(
       // 'none' closes it — the safe default, because the next message opens
       // itself the moment it is selected and that marks it read.
       afterDeleteSelect: 'none', // 'none' | 'next'
+
+      // Two-finger trackpad swipes on message rows (SWIPE_ACTIONS per side).
+      trackpadSwipeEnabled: true,
+      swipeLeftAction: 'archive',
+      swipeRightAction: 'toggleRead',
 
       // Which Sparkle feed this install follows. Rust reads it out of the
       // persisted file at startup, before any window exists.
@@ -969,6 +995,12 @@ export const useSettingsStore = create(
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
+      setTrackpadSwipeEnabled: (enabled) => set({ trackpadSwipeEnabled: !!enabled }),
+      setSwipeAction: (side, action) => {
+        if (!SWIPE_ACTIONS.includes(action)) return;
+        if (side === 'left') set({ swipeLeftAction: action });
+        else if (side === 'right') set({ swipeRightAction: action });
+      },
       setUpdateTrack: (track) => set({ updateTrack: track }),
 
       setDaemonAlwaysOn: (on) => set({ daemonAlwaysOn: !!on }),
@@ -1251,6 +1283,9 @@ export const useSettingsStore = create(
           markAsReadDelay: 3,
           confirmBeforeDelete: true,
           afterDeleteSelect: 'none',
+          trackpadSwipeEnabled: true,
+          swipeLeftAction: 'archive',
+          swipeRightAction: 'toggleRead',
           updateTrack: null,
           daemonAlwaysOn: false,
           layoutMode: 'three-column',
@@ -1324,7 +1359,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

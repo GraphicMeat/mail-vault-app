@@ -2869,5 +2869,13 @@
   "snooze.until": "{{time}} までスヌーズ中",
   "undo.snoozed_one": "{{count}} 件をスヌーズしました",
   "undo.snoozed_other": "{{count}} 件をスヌーズしました",
-  "snooze.unavailable": "これらのメッセージはスヌーズできません。"
+  "snooze.unavailable": "これらのメッセージはスヌーズできません。",
+  "settings.behavior.swipe.title": "スワイプ操作",
+  "settings.behavior.swipe.enabled": "トラックパッドのスワイプ",
+  "settings.behavior.swipe.enabledDesc": "メッセージの上で2本指を左右にスワイプすると操作できます。",
+  "settings.behavior.swipe.left": "左にスワイプ",
+  "settings.behavior.swipe.right": "右にスワイプ",
+  "settings.behavior.swipe.toggleRead": "既読/未読にする",
+  "settings.behavior.swipe.star": "スターを付ける・外す",
+  "settings.behavior.swipe.none": "なし"
 }

@@ -2869,5 +2869,13 @@
   "snooze.until": "Pospuesto hasta {{time}}",
   "undo.snoozed_one": "{{count}} mensaje pospuesto",
   "undo.snoozed_other": "{{count}} mensajes pospuestos",
-  "snooze.unavailable": "Estos mensajes no se pueden posponer."
+  "snooze.unavailable": "Estos mensajes no se pueden posponer.",
+  "settings.behavior.swipe.title": "Gestos de deslizar",
+  "settings.behavior.swipe.enabled": "Deslizar en el trackpad",
+  "settings.behavior.swipe.enabledDesc": "Desliza dos dedos a la izquierda o a la derecha sobre un mensaje para actuar sobre él.",
+  "settings.behavior.swipe.left": "Deslizar a la izquierda",
+  "settings.behavior.swipe.right": "Deslizar a la derecha",
+  "settings.behavior.swipe.toggleRead": "Marcar leído o no leído",
+  "settings.behavior.swipe.star": "Destacar o quitar destacado",
+  "settings.behavior.swipe.none": "Nada"
 }

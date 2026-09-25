@@ -2869,5 +2869,13 @@
   "snooze.until": "Snoozed until {{time}}",
   "undo.snoozed_one": "Snoozed {{count}} message",
   "undo.snoozed_other": "Snoozed {{count}} messages",
-  "snooze.unavailable": "Snooze is not available for these messages."
+  "snooze.unavailable": "Snooze is not available for these messages.",
+  "settings.behavior.swipe.title": "Swipe gestures",
+  "settings.behavior.swipe.enabled": "Trackpad swipe",
+  "settings.behavior.swipe.enabledDesc": "Swipe two fingers left or right across a message to act on it.",
+  "settings.behavior.swipe.left": "Swipe left",
+  "settings.behavior.swipe.right": "Swipe right",
+  "settings.behavior.swipe.toggleRead": "Mark read or unread",
+  "settings.behavior.swipe.star": "Star or unstar",
+  "settings.behavior.swipe.none": "Nothing"
 }

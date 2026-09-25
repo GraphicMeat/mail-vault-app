@@ -2869,5 +2869,13 @@
   "snooze.until": "稍后提醒至 {{time}}",
   "undo.snoozed_one": "已将 {{count}} 封设为稍后提醒",
   "undo.snoozed_other": "已将 {{count}} 封设为稍后提醒",
-  "snooze.unavailable": "这些邮件无法设为稍后提醒。"
+  "snooze.unavailable": "这些邮件无法设为稍后提醒。",
+  "settings.behavior.swipe.title": "滑动手势",
+  "settings.behavior.swipe.enabled": "触控板滑动",
+  "settings.behavior.swipe.enabledDesc": "在邮件上用两指向左或向右滑动即可操作。",
+  "settings.behavior.swipe.left": "向左滑动",
+  "settings.behavior.swipe.right": "向右滑动",
+  "settings.behavior.swipe.toggleRead": "标为已读或未读",
+  "settings.behavior.swipe.star": "加星标或取消星标",
+  "settings.behavior.swipe.none": "无"
 }
