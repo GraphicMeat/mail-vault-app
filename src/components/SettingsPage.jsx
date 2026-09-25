@@ -364,7 +364,11 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       row.scrollIntoView?.({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
       row.classList.add('settings-search-target');
       setTimeout(() => row.classList.remove('settings-search-target'), 1600);
-      (row.matches(FOCUSABLE) ? row : row.querySelector(FOCUSABLE))?.focus({ preventScroll: true });
+      // Only while focus is still where the search left it: a late landing
+      // must not pull focus back from a minimized Settings or another click.
+      if (root.contains(document.activeElement)) {
+        (row.matches(FOCUSABLE) ? row : row.querySelector(FOCUSABLE))?.focus({ preventScroll: true });
+      }
       return true;
     };
     if (land()) return;
