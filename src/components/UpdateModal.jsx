@@ -4,6 +4,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { daemonCall } from '../services/daemonClient';
 import { version as currentVersion } from '../../package.json';
 import { t as tr, useT  } from '../i18n/index.js';
 
@@ -14,7 +15,8 @@ import { t as tr, useT  } from '../i18n/index.js';
 function renderChangelogMarkdown(text) {
   if (!text) return null;
 
-  const lines = text.split('\n');
+  // GitHub release bodies end their lines with CRLF.
+  const lines = text.split(/\r?\n/);
   const elements = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -72,9 +74,23 @@ export function UpdateModal({ updateInfo, onClose }) {
 
   const setUpdateSnooze = useSettingsStore(s => s.setUpdateSnooze);
   const setSkippedVersion = useSettingsStore(s => s.setSkippedVersion);
+  const updateTrack = useSettingsStore(s => s.updateTrack);
 
   const newVersion = updateInfo?.version || 'unknown';
-  const notes = updateInfo?.notes || '';
+  const [releases, setReleases] = useState([]);
+  // The feed's own notes are often empty (Sparkle's appcast carries none), so
+  // the daemon reads every release since this version from GitHub. Until it
+  // answers, or if it cannot, the feed's notes stay.
+  const notes = releases.map(r => (releases.length > 1 ? `## v${r.version}\n` : '') + r.body).join('\n')
+    || updateInfo?.notes || '';
+  const includePrereleases = (updateTrack ?? (currentVersion.includes('-nightly') ? 'nightly' : 'stable')) === 'nightly';
+  useEffect(() => {
+    let alive = true;
+    daemonCall('app.release_notes', { from: currentVersion, to: newVersion, includePrereleases })
+      .then(list => { if (alive && Array.isArray(list)) setReleases(list); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [newVersion, includePrereleases]);
 
   // ESC to close (only when idle, not during download/install)
   const titleId = useId();
@@ -182,7 +198,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           {state === 'idle' && (
             <>
               {notes && (
-                <div className="px-5 py-4 max-h-80 overflow-y-auto border-b border-mail-border">
+                <div data-testid="update-release-notes" className="px-5 py-4 max-h-80 overflow-y-auto border-b border-mail-border">
                   {renderChangelogMarkdown(notes)}
                 </div>
               )}

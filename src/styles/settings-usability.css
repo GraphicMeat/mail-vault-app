@@ -7,6 +7,15 @@
 .settings-search-result-copy { display: grid; gap: 3px; min-width: 0; }
 .settings-search-result-copy > span { overflow-wrap: anywhere; line-height: 1.4; }
 .settings-search-result-copy > small { color: var(--mail-text-muted); font-size: 12px; line-height: 1.4; }
+/* The setting a search result landed on: a ring that fades out. */
+.settings-search-target { border-radius: 8px; animation: settings-search-target 1.6s ease-out; }
+@keyframes settings-search-target {
+  from { box-shadow: 0 0 0 2px var(--mail-accent), 0 0 0 6px var(--mail-accent-tint); }
+  to { box-shadow: 0 0 0 2px transparent, 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-search-target { animation: none; box-shadow: 0 0 0 2px var(--mail-accent); }
+}
 .settings-page-description { max-width: 65ch; color: var(--mail-text-muted); font-size: 13px; line-height: 1.5; margin-top: 3px; }
 .settings-mobile-search { display: none; }
 

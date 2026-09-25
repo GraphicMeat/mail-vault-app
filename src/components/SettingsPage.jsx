@@ -264,19 +264,22 @@ export const settingSearchGroups = [
   { id: 'logs', settings: [
     ['settings.logs.clearLog2', 'clear delete diagnostic logs'],
   ] },
-  // Backup has its own sub-tabs (restore / config / schedule) that this
-  // search can't switch directly — results just open the page.
-  { id: 'backup', settings: [
-    ['settings.mailLocation.whereMailStored', 'storage location where mail stored folder move backup'],
-    ['settings.backup.config.whatBackUp', 'backup scope what back up archived all emails'],
-    ['settings.backup.schedule.automaticBackup', 'automatic backup schedule enable'],
-    ['settings.backup.schedule.backupFrequency', 'backup frequency how often hourly daily weekly'],
-    ['settings.backup.schedule.pickHours', 'backup hours pick specific times set hours schedule'],
-    ['settings.backup.schedule.mailboxConcurrency', 'backup mailboxes processed at once concurrency speed performance'],
+  // Backup's own sub-tabs: section names the one that holds the setting.
+  { id: 'backup', section: 'restore', settings: [
     ['settings.backup.restore.exportBackup', 'export backup zip vault download'],
     ['settings.backup.restore.importBackup', 'import backup zip vault restore'],
     ['settings.backup.restore.exportMbox', 'export mbox file standard format'],
     ['settings.backup.restore.importMbox', 'import mbox file standard format'],
+  ] },
+  { id: 'backup', section: 'config', sectionKey: 'settings.backup.backupSettings', settings: [
+    ['settings.mailLocation.whereMailStored', 'storage location where mail stored folder move backup'],
+    ['settings.backup.config.whatBackUp', 'backup scope what back up archived all emails'],
+  ] },
+  { id: 'backup', section: 'schedule', sectionKey: 'settings.backup.backupSchedule', settings: [
+    ['settings.backup.schedule.automaticBackup', 'automatic backup schedule enable'],
+    ['settings.backup.schedule.backupFrequency', 'backup frequency how often hourly daily weekly'],
+    ['settings.backup.schedule.pickHours', 'backup hours pick specific times set hours schedule'],
+    ['settings.backup.schedule.mailboxConcurrency', 'backup mailboxes processed at once concurrency speed performance'],
   ] },
   // Cleanup and Time Capsule keep their settings behind the page's own
   // "Settings" sub-view — section: 'config' tells openResult to open it.
@@ -298,6 +301,23 @@ export const settingSearchGroups = [
 
 const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;
 const searchText = value => value.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
+const settingText = value => value.replace(/\s+/g, ' ').trim();
+const CONTROL = 'input, select, textarea, button, [tabindex]';
+const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex="0"]';
+
+// Where a searched setting sits on its page: the leaf-most element that reads
+// exactly as its label, else the control named by it. Tab rows are page
+// navigation, not the setting. Returns the row around it: the nearest
+// ancestor that holds a control, so the highlight frames label and control.
+function findSettingRow(root, label) {
+  const inTabs = el => el.closest('[role="tablist"]');
+  const texts = [...root.querySelectorAll('*')].filter(el => !inTabs(el) && settingText(el.textContent) === label);
+  const hit = texts.find(el => !texts.some(other => other !== el && el.contains(other)))
+    || [...root.querySelectorAll('[aria-label]')].find(el => !inTabs(el) && el.getAttribute('aria-label') === label);
+  let row = hit;
+  while (row && row !== root && !row.matches(CONTROL) && !row.querySelector(CONTROL)) row = row.parentElement;
+  return row === root ? hit : row;
+}
 
 export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
   minimized = false, onMinimize, onDetach, onNavigationLabelChange }) {
@@ -319,15 +339,52 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   const [subView, setSubView] = useState(null); // null = feature view, 'config' = settings sub-view
   const [selectedFeatureAccountId, setSelectedFeatureAccountId] = useState(initialAccountId || activeAccountId || accounts[0]?.id);
   const [featureDetailActive, setFeatureDetailActive] = useState(false);
+  const [backupSubTab, setBackupSubTab] = useState(null);
   const contentRef = useRef(null);
   const [searchNavigation, setSearchNavigation] = useState(0);
+  const searchTargetRef = useRef(null);
 
   // The chosen result disappears. Move keyboard focus into its destination,
-  // rather than leaving the user on a detached search-result button.
+  // rather than leaving the user on a detached search-result button. A
+  // setting result then lands on the setting itself: scrolled to the middle,
+  // briefly highlighted, focus on its control. Its section may render a beat
+  // later, so watch the pane for a moment; not found, the page stays open.
   useEffect(() => {
     if (!searchNavigation) return;
-    const panel = contentRef.current?.querySelector('[role="tabpanel"]') || contentRef.current;
+    const root = contentRef.current;
+    const panel = root?.querySelector('[role="tabpanel"]') || root;
     panel?.focus({ preventScroll: true });
+    const labelKey = searchTargetRef.current;
+    if (!root || !labelKey) return;
+    const label = settingText(t(labelKey));
+    const land = () => {
+      const row = findSettingRow(root, label);
+      if (!row) return false;
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      row.scrollIntoView?.({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+      row.classList.add('settings-search-target');
+      setTimeout(() => row.classList.remove('settings-search-target'), 1600);
+      // Only while focus is still where the search left it: a late landing
+      // must not pull focus back from a minimized Settings or another click.
+      if (root.contains(document.activeElement)) {
+        (row.matches(FOCUSABLE) ? row : row.querySelector(FOCUSABLE))?.focus({ preventScroll: true });
+      }
+      return true;
+    };
+    if (land()) return;
+    // Land once the pane goes quiet, after the sub-page's own effects (a
+    // sub-tab switch scrolls its pane back to the top).
+    let settle;
+    const observer = new MutationObserver(() => {
+      clearTimeout(settle);
+      settle = setTimeout(() => { if (land()) stop(); }, 50);
+    });
+    const timer = setTimeout(() => stop(), 1500);
+    function stop() { observer.disconnect(); clearTimeout(timer); clearTimeout(settle); }
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return stop;
+    // `t` follows the language; a language change is not a new search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchNavigation]);
 
   // Reset subView when switching tabs
@@ -374,10 +431,13 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     if (page.id === 'appearance' && page.section) setAppearanceSection(page.section);
     if (page.id === 'mail-preferences' && page.section) setGeneralSubTab(page.section);
     if (page.id === 'accounts' && page.section) setAccountSection(page.section);
+    if (page.id === 'backup' && page.section) setBackupSubTab(page.section);
     handleTabChange(page.id);
     // Cleanup and Time Capsule keep their settings behind the page's own
     // "Settings" sub-view (see subView above) — handleTabChange just reset it.
-    if (page.section === 'config') setSubView('config');
+    if (accountPillTabIds.has(page.id) && page.section === 'config') setSubView('config');
+    // Page results have no keywords: they open the page, nothing to land on.
+    searchTargetRef.current = page.keywords ? page.labelKey : null;
     setQuery('');
     setSearchNavigation(value => value + 1);
   };
@@ -583,7 +643,8 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
             )}
 
             {activeTab === 'backup' && (
-              <BackupSettings initialAccountId={initialAccountId} onUpgrade={() => handleTabChange('billing')} />
+              <BackupSettings initialAccountId={initialAccountId} initialSubTab={backupSubTab} onSubTabChange={setBackupSubTab}
+                onUpgrade={() => handleTabChange('billing')} />
             )}
 
             {activeTab === 'migration' && (

@@ -28,6 +28,60 @@ pub fn is_newer(installed: &str, offered: &str) -> bool {
     }
 }
 
+/// One entry of GitHub's `GET /repos/{owner}/{repo}/releases`, the fields the
+/// update dialog reads.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubRelease {
+    pub tag_name: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub published_at: Option<String>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub draft: bool,
+    #[serde(default)]
+    pub prerelease: bool,
+}
+
+/// What the update dialog shows for one release.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseNote {
+    pub version: String,
+    pub name: String,
+    pub published_at: String,
+    pub body: String,
+}
+
+/// The published releases an update from `from` to `to` brings in, newest
+/// first: after `from`, up to and including `to`, in the same order
+/// `is_newer` uses. Drafts never; prereleases only when asked. A tag that is
+/// not a version (the rolling `nightly` release) and an unreadable `from` or
+/// `to` give nothing rather than every release.
+pub fn release_notes_between(releases: Vec<GithubRelease>, from: &str, to: &str, include_prereleases: bool) -> Vec<ReleaseNote> {
+    let (Some(from), Some(to)) = (rank(from), rank(to)) else {
+        return Vec::new();
+    };
+    let mut kept: Vec<_> = releases
+        .into_iter()
+        .filter(|r| !r.draft && (include_prereleases || !r.prerelease))
+        .filter_map(|r| {
+            let version = r.tag_name.strip_prefix('v').unwrap_or(&r.tag_name).to_string();
+            let at = rank(&version).filter(|at| *at > from && *at <= to)?;
+            Some((at, ReleaseNote {
+                version,
+                name: r.name.unwrap_or_default(),
+                published_at: r.published_at.unwrap_or_default(),
+                body: r.body.unwrap_or_default(),
+            }))
+        })
+        .collect();
+    kept.sort_by(|a, b| b.0.cmp(&a.0));
+    kept.into_iter().map(|(_, note)| note).collect()
+}
+
 fn rank(version: &str) -> Option<(u64, u64, u64, u64)> {
     let version = version.split('+').next()?;
     let (core, pre) = match version.split_once('-') {
@@ -97,6 +151,87 @@ mod tests {
         assert!(is_newer("2.9.0", "2.10.0"));
         assert!(!is_newer("2.10.0", "2.9.0"));
         assert!(!is_newer("2.15.0", "2.15.0"));
+    }
+
+    fn release(tag: &str, draft: bool, prerelease: bool) -> GithubRelease {
+        GithubRelease {
+            tag_name: tag.into(),
+            name: Some(format!("MailVault {tag}")),
+            published_at: Some("2026-09-25T13:45:06Z".into()),
+            body: Some(format!("### Fixed\r\n- **{tag}.** fixed")),
+            draft,
+            prerelease,
+        }
+    }
+
+    fn versions(notes: &[ReleaseNote]) -> Vec<&str> {
+        notes.iter().map(|n| n.version.as_str()).collect()
+    }
+
+    #[test]
+    fn release_notes_cover_after_the_installed_up_to_the_offered_newest_first() {
+        let releases = ["v2.14.0", "v2.16.0", "v2.13.1", "v2.17.0", "v2.15.0"]
+            .into_iter().map(|tag| release(tag, false, false)).collect();
+        let notes = release_notes_between(releases, "2.14.0", "2.16.0", false);
+        assert_eq!(versions(&notes), ["2.16.0", "2.15.0"]);
+    }
+
+    #[test]
+    fn release_notes_skip_drafts() {
+        let releases = vec![release("v2.16.0", true, false), release("v2.15.0", false, false)];
+        assert_eq!(versions(&release_notes_between(releases, "2.14.0", "2.16.0", false)), ["2.15.0"]);
+    }
+
+    #[test]
+    fn release_notes_skip_prereleases_unless_asked() {
+        let releases = || vec![release("v2.16.0", false, false), release("v2.16.1-beta.1", false, true)];
+        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", false)), ["2.16.0"]);
+        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", true)), ["2.16.1-beta.1", "2.16.0"]);
+    }
+
+    #[test]
+    fn release_notes_ignore_tags_that_are_not_versions() {
+        // The rolling nightly release is tagged `nightly`.
+        let releases = ["nightly", "garbage", "v2.16", "v2.16.0"]
+            .into_iter().map(|tag| release(tag, false, false)).collect();
+        assert_eq!(versions(&release_notes_between(releases, "2.15.0", "2.16.0", true)), ["2.16.0"]);
+    }
+
+    #[test]
+    fn release_notes_are_empty_when_either_end_is_unreadable() {
+        // The modal falls back to "unknown" when the feed names no version.
+        let releases = || vec![release("v2.15.0", false, false), release("v2.16.0", false, false)];
+        assert!(release_notes_between(releases(), "2.14.0", "unknown", false).is_empty());
+        assert!(release_notes_between(releases(), "", "2.16.0", false).is_empty());
+    }
+
+    #[test]
+    fn a_release_note_carries_the_bare_version_name_date_and_body() {
+        let mut bare = release("v2.15.0", false, false);
+        bare.name = None;
+        bare.body = None;
+        bare.published_at = None;
+        let notes = release_notes_between(vec![release("v2.16.0", false, false), bare], "2.14.0", "2.16.0", false);
+        assert_eq!(
+            serde_json::to_value(&notes).unwrap(),
+            serde_json::json!([
+                { "version": "2.16.0", "name": "MailVault v2.16.0", "publishedAt": "2026-09-25T13:45:06Z",
+                  "body": "### Fixed\r\n- **v2.16.0.** fixed" },
+                { "version": "2.15.0", "name": "", "publishedAt": "", "body": "" },
+            ])
+        );
+    }
+
+    #[test]
+    fn a_github_release_reads_from_the_api_shape() {
+        let parsed: Vec<GithubRelease> = serde_json::from_value(serde_json::json!([
+            { "tag_name": "v2.16.0", "name": "MailVault v2.16.0", "draft": false, "prerelease": false,
+              "published_at": "2026-09-25T13:45:06Z", "body": "### Added", "assets": [] },
+            { "tag_name": "nightly", "name": null, "draft": false, "prerelease": true, "published_at": null, "body": null },
+        ])).unwrap();
+        assert_eq!(parsed[0].tag_name, "v2.16.0");
+        assert!(parsed[1].prerelease);
+        assert_eq!(parsed[1].body, None);
     }
 
     #[test]

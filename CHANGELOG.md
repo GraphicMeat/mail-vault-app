@@ -4,6 +4,8 @@
 
 ### Added
 - **Pick senders and tags for a view as you type.** In the view editor, the sender field suggests the people and domains your indexed mail actually comes from, with how many messages each has sent, and the tags field offers your tags by name. Use the arrow keys and Enter, or click, to add one; anything else you type still works as before, and Backspace in an empty field takes off the last one.
+- **Settings search takes you to the setting itself.** Clicking a result opens its page, scrolls the setting into view, briefly outlines it and puts the keyboard on its control. Backup results now open the right tab too, whether that is Backup & Restore, Backup Settings or Backup Schedule.
+- **The update window lists what changed.** When a new version is offered, MailVault shows the release notes of every version between yours and the new one in a scrollable list, read from the project's GitHub releases. If they cannot be fetched, the notes that came with the update are shown as before.
 
 ### Fixed
 - **A message marked read by the reading timer now shows as read in the list.** If you moved to the next message, closed the reader or opened a thread while the timer's change was reaching the server, the message was read on the server but stayed bold in the list, in a search and in a saved view. Every row now follows. A message from another account or folder opened from a saved view is also opened, and marked, in its own account instead of the one you were in.

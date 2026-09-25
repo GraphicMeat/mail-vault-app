@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SettingsTabs } from '../SettingsTabs';
 import { ColorSchemeSettings } from '../ColorSchemeSettings';
 import { useThemeStore } from '../../../stores/themeStore';
@@ -87,14 +87,15 @@ describe('settings page search', () => {
     ['reading pane', 'Reading pane', 'Layout'],
     ['account switcher', 'Sidebar layout', 'Layout'],
     ['backup icon', 'Backup status location', 'Layout'],
-  ])('finds %s and opens its Appearance section', (query, result, section) => {
+  ])('finds %s and opens its Appearance section', async (query, result, section) => {
     render(<SettingsPage onClose={() => {}} />);
     const nav = within(screen.getByRole('navigation', { name: 'Settings' }));
     fireEvent.change(nav.getByRole('textbox', { name: 'Find a setting' }), { target: { value: query } });
     fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${result}`) }));
     expect(screen.getByRole('tab', { name: section, exact: true }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Appearance' })).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole('tabpanel', { name: section, exact: true }));
+    // Focus lands on the found setting's control, inside the opened section.
+    await waitFor(() => expect(screen.getByRole('tabpanel', { name: section, exact: true }).contains(document.activeElement)).toBe(true));
   });
 
   it('retains legacy General entry and remembers the Appearance section when returning from another page', () => {

@@ -11,17 +11,19 @@ const backupSubTabs = () => ([
   { id: 'schedule', label: t('settings.backup.backupSchedule') },
 ]);
 
-export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
+export default function BackupSettings({ initialAccountId = null, initialSubTab = null, onSubTabChange, onUpgrade }) {
   const t = useT();
-  const [activeSubTab, setActiveSubTab] = useState(initialAccountId ? 'schedule' : 'restore');
+  const [activeSubTab, setActiveSubTab] = useState(initialSubTab || (initialAccountId ? 'schedule' : 'restore'));
 
-  // If initialAccountId arrives later, switch to schedule tab
+  // A settings search result names its sub-tab; otherwise an initialAccountId
+  // that arrives later opens that account's schedule.
   useEffect(() => {
-    if (initialAccountId) setActiveSubTab('schedule');
-  }, [initialAccountId]);
+    if (initialSubTab) setActiveSubTab(initialSubTab);
+    else if (initialAccountId) setActiveSubTab('schedule');
+  }, [initialSubTab, initialAccountId]);
 
   return (
-    <SettingsTabs tabs={backupSubTabs()} value={activeSubTab} onChange={setActiveSubTab}
+    <SettingsTabs tabs={backupSubTabs()} value={activeSubTab} onChange={value => { setActiveSubTab(value); onSubTabChange?.(value); }}
       label={t('settings.tab.backup')}>
         {activeSubTab === 'restore' && <BackupRestore />}
         {activeSubTab === 'config' && <BackupConfig />}
