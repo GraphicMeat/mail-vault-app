@@ -201,33 +201,7 @@ describe('Connected Compose Editor', function () {
     });
   }
 
-  // ── links ────────────────────────────────────────────────────────────────
-
-  it('wraps the selection in an anchor when Insert Link is used', async function () {
-    await openComposeFresh();
-    await typeInBody('link this');
-    await selectAllInBody();
-
-    // setLink() reads window.prompt; a null return is the user cancelling, so
-    // the stub has to answer before the button is pressed.
-    await browser.execute(() => {
-      window.__origPrompt = window.prompt;
-      window.prompt = () => 'https://example.com';
-    });
-
-    const hit = await clickToolbar('Insert Link');
-    expect(hit.found).toBe(true);
-
-    const html = await editorHtml();
-    expect(html).toContain('href="https://example.com"');
-    // Mail clients open links in a browser, never inside the message frame.
-    expect(html).toContain('target="_blank"');
-    expect(html).toContain('rel="noopener noreferrer"');
-
-    await browser.execute(() => {
-      if (window.__origPrompt) window.prompt = window.__origPrompt;
-    });
-  });
+  // Links (insert, edit, hover card, typing after one): connected-compose-links.test.js.
 
   it('strips a mark with Clear Formatting', async function () {
     await openComposeFresh();
