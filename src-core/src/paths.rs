@@ -6,6 +6,8 @@
 //!   inside the sandbox), Linux `$XDG_DATA_HOME` or `~/.local/share`, Windows
 //!   `%LOCALAPPDATA%` (Local, not Roaming: a mail archive must not roam).
 //! - `ipc_dir()`: `<home>/.mailvault`, the socket (or the pipe's token) lives here.
+//! - Portable mode (see `portable_root`) replaces both: data on the drive,
+//!   the socket in a per-drive subdirectory of the host's `.mailvault`.
 //!
 //! On Windows the two roots honour `LOCALAPPDATA` and `USERPROFILE` when they
 //! hold an absolute path, and fall back to the known folders otherwise. In
@@ -17,7 +19,7 @@
 
 use std::ffi::OsString;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const APP_IDENTIFIER: &str = "com.mailvault.app";
 
@@ -43,21 +45,91 @@ pub fn data_local_root() -> Option<PathBuf> {
 }
 
 pub fn app_data_dir() -> io::Result<PathBuf> {
+    if let Some(root) = portable_root() {
+        return Ok(portable_data_dir(root));
+    }
     data_local_root()
         .map(|d| d.join(APP_IDENTIFIER))
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not resolve the local data directory"))
 }
 
 pub fn ipc_dir() -> io::Result<PathBuf> {
-    home_dir()
-        .map(|h| h.join(".mailvault"))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not resolve the home directory"))
+    let home = home_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not resolve the home directory"))?;
+    Ok(match portable_root() {
+        Some(root) => portable_ipc_dir(&home, root),
+        None => home.join(".mailvault"),
+    })
+}
+
+// ── Portable mode ──────────────────────────────────────────────────────────
+//
+// MailVault copied to a drive runs from it: a `MailVault Data` folder holding
+// `portable.json` beside the app (beside the `.app` bundle on macOS, the
+// AppImage file on Linux, the `.exe` on Windows) takes the place of the
+// host's app data dir. The socket stays on the host (a drive path can blow
+// the 104-byte socket cap, and FAT/exFAT cannot hold a socket), in a
+// per-root subdirectory so an installed copy never talks to this daemon.
+
+pub const PORTABLE_DIR: &str = "MailVault Data";
+pub const PORTABLE_MARKER: &str = "portable.json";
+/// The app sets it on the daemon it spawns; it wins over the install location.
+pub const PORTABLE_ENV: &str = "MAILVAULT_PORTABLE_ROOT";
+
+/// `dir` holds a marker we wrote: a JSON object with a numeric `version`.
+pub fn is_portable_root(dir: &Path) -> bool {
+    std::fs::read(dir.join(PORTABLE_MARKER))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .is_some_and(|v| v.get("version").is_some_and(|n| n.is_u64()))
+}
+
+/// The folder the running app sits in: the `.app` bundle's parent, else the
+/// AppImage file's folder, else the binary's own folder.
+pub fn install_dir(exe: &Path, appimage: Option<&Path>) -> Option<PathBuf> {
+    if let Some(bundle) = exe.ancestors().find(|a| a.extension().is_some_and(|e| e == "app")) {
+        return bundle.parent().map(Path::to_path_buf);
+    }
+    appimage.unwrap_or(exe).parent().map(Path::to_path_buf)
+}
+
+/// Pure so tests pass everything in. A root must carry the marker whichever
+/// way it was found: a stray env var must not send the data anywhere else.
+pub fn detect_portable_root(env: Option<OsString>, exe: Option<&Path>, appimage: Option<OsString>) -> Option<PathBuf> {
+    let explicit = env.map(PathBuf::from).filter(|p| p.is_absolute() && is_portable_root(p));
+    explicit.or_else(|| {
+        let appimage = appimage.map(PathBuf::from).filter(|p| p.is_absolute());
+        let root = install_dir(exe?, appimage.as_deref())?.join(PORTABLE_DIR);
+        is_portable_root(&root).then_some(root)
+    })
+}
+
+/// Resolved once per process: a drive pulled mid-run must never flip the
+/// data dir back to the host's.
+pub fn portable_root() -> Option<&'static Path> {
+    static ROOT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        let exe = std::env::current_exe().ok();
+        detect_portable_root(std::env::var_os(PORTABLE_ENV), exe.as_deref(), std::env::var_os("APPIMAGE"))
+    })
+    .as_deref()
+}
+
+pub fn portable_data_dir(root: &Path) -> PathBuf {
+    root.join("data")
+}
+
+/// `<home>/.mailvault/p-<8 hex of sha256(root)>`. The path as given, never
+/// canonicalized: the app and the daemon hash the same string.
+pub fn portable_ipc_dir(home: &Path, root: &Path) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(root.to_string_lossy().as_bytes());
+    let tag: String = digest[..4].iter().map(|b| format!("{b:02x}")).collect();
+    home.join(".mailvault").join(format!("p-{tag}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     fn abs() -> &'static str {
         if cfg!(windows) { r"C:\iso\home" } else { "/iso/home" }
