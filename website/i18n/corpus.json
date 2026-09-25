@@ -1216,6 +1216,12 @@
     "ef4fe8b509a4": "Scheduling an email for a set date and time is part of Premium. Delaying a send by up to 5 minutes is free: per email with the menu next to Send, or for every email with Send Delay in Settings. Without Premium, the Schedule send panel says so and offers Upgrade. See what Premium includes."
   },
   "15": {
+    "de1196329dfe": "Page not found | MailVault",
+    "b23b32035610": "This page is not here.",
+    "31f4750cd5e8": "The link may be old, or the address may have a typo. These are good places to start.",
+    "719534623735": "Go to the homepage",
+    "0121b06f5711": "See the features",
+    "a5a7c5660162": "Read the FAQ →",
     "4e8baca8eaca": "A free email client for macOS, Windows and Linux",
     "892a17c5b677": "MailVault is a desktop app. Open this page on your Mac, Windows or Linux computer to install it.",
     "dae6959e08eb": "Windows 10 or 11 on 64-bit Intel or AMD.",
@@ -1446,13 +1452,7 @@
     "4e9d3b0a27c6": "Ways to read in MailVault, close up",
     "6ef5f4503e43": "Video: Ways to read in MailVault",
     "4fa6a1ffc674": "Enlarge: Ways to read in the MailVault window",
-    "d467998bc880": "Ways to read in the MailVault window",
-    "de1196329dfe": "Page not found | MailVault",
-    "b23b32035610": "This page is not here.",
-    "31f4750cd5e8": "The link may be old, or the address may have a typo. These are good places to start.",
-    "719534623735": "Go to the homepage",
-    "0121b06f5711": "See the features",
-    "a5a7c5660162": "Read the FAQ →"
+    "d467998bc880": "Ways to read in the MailVault window"
   },
   "01": {
     "fc338f87a058": "Features",
