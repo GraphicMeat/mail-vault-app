@@ -236,6 +236,22 @@ describe('Caddy 404 patch', () => {
       expect(existsSync(resolve(root, dir, '404.html'))).toBe(true);
     }
   });
+
+  it('restores the Caddyfile from its backup if the patch fails partway through', () => {
+    // Regression: on a first-install reload failure, the old trap deleted the
+    // snippet but left $CF importing it, breaking every site on the box.
+    expect(stepText).toContain('cp "$CF.bak-$STAMP" "$CF"');
+    const trapMatch = stepText.match(/trap '([^']*)' ERR/);
+    expect(trapMatch).toBeTruthy();
+    expect(trapMatch[1].indexOf('cp "$CF.bak-$STAMP" "$CF"')).toBe(0);
+  });
+
+  it('checks a missing page for 404 in the post-deploy Cloudflare verify', () => {
+    const verifyMatch = workflow.match(/- name: Verify via Cloudflare \(public\)[\s\S]*?(?=\n {6}- name:)/);
+    expect(verifyMatch).toBeTruthy();
+    expect(verifyMatch[0]).toContain("= 404");
+    expect(verifyMatch[0]).toMatch(/-w '%\{http_code\}'.*= 404/s);
+  });
 });
 
 it('keeps the homepage demo handoff source strings in the corpus', () => {

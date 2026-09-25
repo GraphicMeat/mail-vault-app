@@ -333,7 +333,7 @@ jobs:
           STAMP=$(date +%Y%m%d-%H%M%S)
           cp "$CF" "$CF.bak-$STAMP"
           if [ -f "$SNIP" ]; then cp "$SNIP" "$SNIP.bak-$STAMP"; fi
-          trap 'if [ -f "$SNIP.bak-$STAMP" ]; then cp "$SNIP.bak-$STAMP" "$SNIP"; else rm -f "$SNIP"; fi; rm -f "$CF.new" "$NEW"' ERR
+          trap 'cp "$CF.bak-$STAMP" "$CF"; if [ -f "$SNIP.bak-$STAMP" ]; then cp "$SNIP.bak-$STAMP" "$SNIP"; else rm -f "$SNIP"; fi; rm -f "$CF.new" "$NEW"' ERR
           install -m 644 "$NEW" "$SNIP"
           if grep -qF "import $SNIP" "$CF"; then
             cp "$CF" "$CF.new"
@@ -369,6 +369,7 @@ jobs:
         run: |
           curl -sS -f --max-time 15 https://mailvaultapp.com/api/health
           curl -sS -f --max-time 15 -o /dev/null -w "homepage: %{http_code}\n" https://mailvaultapp.com/
+          test "$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mailvaultapp.com/no-such-page-deploy-check)" = 404
 
       - name: Verify both subscription prices are sellable
         run: |
