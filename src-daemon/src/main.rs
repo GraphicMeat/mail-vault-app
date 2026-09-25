@@ -524,6 +524,8 @@ async fn daemon_main() {
         let state = Arc::clone(&state);
         credentials::start_watcher(move || state.scheduled_send.wake());
     }
+    // A portable copy watches the drive it runs from.
+    handlers::portable::watch_drive(Arc::clone(&state));
 
     // Auto Tags' standing worker: sweeps enabled rules over newly-cached
     // headers on every wake from a sync/IDLE arrival (see `idle`'s

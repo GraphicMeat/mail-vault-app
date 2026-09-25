@@ -12,6 +12,7 @@ use crate::server::DaemonState;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
@@ -66,7 +67,41 @@ fn status_json(store: Option<&SealedStore>) -> Value {
         "locked": store.is_locked(),
         "hasStore": store.path().exists(),
         "freeBytes": free_bytes(root),
+        "disconnected": DISCONNECTED.load(Ordering::SeqCst),
     })
+}
+
+/// Set once the drive this copy runs from went away; never cleared, since the
+/// open databases on it are gone too: the banner asks for a restart.
+static DISCONNECTED: AtomicBool = AtomicBool::new(false);
+
+/// One look at the drive. On the first miss the vault closes (the same flag
+/// `vault_close` sets, so every mail write is refused rather than landing on
+/// the host or half on a drive that comes back) and the app hears it once.
+pub(crate) async fn check_drive(state: &Arc<DaemonState>, root: &Path, gone: &AtomicBool) -> bool {
+    let root = root.to_path_buf();
+    // A stat on a yanked drive can stall: off the async workers.
+    if blocking(move || mailvault_core::paths::is_portable_root(&root)).await.unwrap_or(false) {
+        return false;
+    }
+    if gone.swap(true, Ordering::SeqCst) {
+        return false;
+    }
+    tracing::warn!("[portable] the drive this copy runs from is gone; mail writes stop until a restart");
+    state.vault_closed.store(true, Ordering::SeqCst);
+    announce(state);
+    true
+}
+
+/// Every few seconds while running from a drive.
+pub(crate) fn watch_drive(state: Arc<DaemonState>) {
+    let Some(root) = mailvault_core::paths::portable_root() else { return };
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            check_drive(&state, root, &DISCONNECTED).await;
+        }
+    });
 }
 
 /// One `portable-status` per change, so the unlock card and the badge follow.

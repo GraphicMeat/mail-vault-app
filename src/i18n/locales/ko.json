@@ -1029,6 +1029,7 @@
   "portable.copyMail": "모든 메일 복사",
   "portable.create": "휴대용 사본 만들기",
   "portable.currentPassword": "현재 비밀번호",
+  "portable.disconnected": "MailVault가 실행 중인 드라이브가 분리되었습니다. 다시 연결하고 MailVault를 재시작할 때까지 아무것도 기록되지 않습니다.",
   "portable.done": "휴대용 사본이 {{path}}에 준비되었습니다. 분리하기 전에 드라이브를 추출하세요.",
   "portable.doneRemoved": "이제 메일과 계정은 드라이브에만 있습니다. MailVault를 종료하고 드라이브에서 여세요.",
   "portable.eject": "안전하게 추출",

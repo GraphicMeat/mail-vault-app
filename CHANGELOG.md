@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Take MailVault with you on a drive** *(Premium)*. Settings > Portable copies MailVault to a USB stick or external drive, with a MailVault Data folder beside it holding your accounts, settings and, if you like, all your mail. Opened from the drive on any computer, MailVault uses that folder for everything and asks for the password you set; passwords and sign-ins are kept encrypted on the drive, never on the computer it runs on, and a forgotten password cannot be recovered. Everything is copied and checked before anything else happens, and only then, if you ask, are your mail and accounts removed from this computer. A copy running from a drive says so in the sidebar, can be locked or ejected from Settings, and stops writing if the drive is pulled out. It does not start at login, become the default mail app or update itself: to update it, replace the app on the drive with a newer one. Windows, Linux (AppImage) and the macOS version from the website; not in the App Store version.
+
 ## [2.16.0] - 2026-09-25
 
 ### Added

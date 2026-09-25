@@ -1029,6 +1029,7 @@
   "portable.copyMail": "Alle meine E-Mails kopieren",
   "portable.create": "Portable Kopie erstellen",
   "portable.currentPassword": "Aktuelles Passwort",
+  "portable.disconnected": "Das Laufwerk, von dem MailVault läuft, wurde getrennt. Es wird nichts mehr geschrieben, bis Sie es wieder anschließen und MailVault neu starten.",
   "portable.done": "Die portable Kopie liegt bereit in {{path}}. Werfen Sie das Laufwerk aus, bevor Sie es abziehen.",
   "portable.doneRemoved": "Ihre E-Mails und Konten sind jetzt nur noch auf dem Laufwerk. Beenden Sie MailVault und öffnen Sie es vom Laufwerk.",
   "portable.eject": "Sicher auswerfen",

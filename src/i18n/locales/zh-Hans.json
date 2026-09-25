@@ -1029,6 +1029,7 @@
   "portable.copyMail": "复制我的全部邮件",
   "portable.create": "创建便携版",
   "portable.currentPassword": "当前密码",
+  "portable.disconnected": "运行 MailVault 的驱动器已断开。在你重新连接并重启 MailVault 之前，不会再写入任何内容。",
   "portable.done": "便携版已在 {{path}} 准备就绪。拔出前请先推出驱动器。",
   "portable.doneRemoved": "你的邮件和账户现在只在驱动器上。请退出 MailVault，然后从驱动器打开。",
   "portable.eject": "安全推出",

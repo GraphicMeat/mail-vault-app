@@ -1029,6 +1029,7 @@
   "portable.copyMail": "Copier tous mes e-mails",
   "portable.create": "Créer la copie portable",
   "portable.currentPassword": "Mot de passe actuel",
+  "portable.disconnected": "Le disque depuis lequel MailVault fonctionne a été débranché. Plus rien n’est écrit tant que vous ne l’avez pas rebranché et redémarré MailVault.",
   "portable.done": "La copie portable est prête dans {{path}}. Éjectez le disque avant de le débrancher.",
   "portable.doneRemoved": "Vos e-mails et vos comptes ne sont plus que sur le disque. Quittez MailVault et ouvrez-le depuis le disque.",
   "portable.eject": "Éjecter en toute sécurité",

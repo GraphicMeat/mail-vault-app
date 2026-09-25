@@ -1029,6 +1029,7 @@
   "portable.copyMail": "Copiar todos os meus e-mails",
   "portable.create": "Criar cópia portátil",
   "portable.currentPassword": "Senha atual",
+  "portable.disconnected": "A unidade de onde o MailVault é executado foi desconectada. Nada mais é gravado até você reconectá-la e reiniciar o MailVault.",
   "portable.done": "A cópia portátil está pronta em {{path}}. Ejete a unidade antes de desconectá-la.",
   "portable.doneRemoved": "Seus e-mails e contas agora estão apenas na unidade. Feche o MailVault e abra-o a partir da unidade.",
   "portable.eject": "Ejetar com segurança",

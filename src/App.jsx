@@ -40,6 +40,7 @@ import { KeychainToast } from './components/KeychainToast';
 import { KeychainUnlockCard } from './components/KeychainUnlockCard';
 import { PortableUnlockCard } from './components/PortableUnlockCard';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
+import { PortableDriveBanner } from './components/PortableIndicators';
 import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
@@ -1244,6 +1245,7 @@ function App() {
     <div className="h-screen bg-mail-bg flex flex-col overflow-clip">
       {/* Storage folder unreachable — blocks sync, so it sits above everything */}
       <VaultAlertBanner />
+      <PortableDriveBanner />
       {/* No internet. Below the vault banner: an unplugged drive is the worse
           problem, and only one of the two is the user's to fix right now. */}
       <OfflineBanner />

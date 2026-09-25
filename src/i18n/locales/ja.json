@@ -1029,6 +1029,7 @@
   "portable.copyMail": "すべてのメールをコピー",
   "portable.create": "ポータブル版を作成",
   "portable.currentPassword": "現在のパスワード",
+  "portable.disconnected": "MailVault を実行しているドライブが取り外されました。再接続して MailVault を再起動するまで、何も書き込まれません。",
   "portable.done": "ポータブル版を {{path}} に作成しました。取り外す前にドライブを取り出してください。",
   "portable.doneRemoved": "メールとアカウントは現在ドライブにのみあります。MailVault を終了し、ドライブから開いてください。",
   "portable.eject": "安全に取り出す",
