@@ -48,6 +48,12 @@ pub struct MailtoStatus {
     pub hint: &'static str,
 }
 
+/// A portable copy never offers the switch: the host would send mail links to
+/// an app on a drive that may not be plugged in.
+pub fn portable_status() -> Option<MailtoStatus> {
+    mailvault_core::paths::portable_root().map(|_| MailtoStatus { is_default: false, can_set: false, hint: "portable" })
+}
+
 /// Desktop-entry names to try on Linux, in order.
 ///
 /// The name is not knowable statically: deb and AppImage derive it from the

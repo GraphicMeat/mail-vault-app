@@ -13,6 +13,7 @@ const REASON_KEYS = {
   'macos-version': 'settings.daemon.alwaysOn.unsupportedMacosVersion',
   'not-bundled': 'settings.daemon.alwaysOn.unsupportedNotBundled',
   platform: 'settings.daemon.alwaysOn.unsupportedPlatform',
+  portable: 'settings.daemon.alwaysOn.unsupportedPortable',
 };
 
 /**
@@ -86,7 +87,7 @@ export function DaemonAlwaysOn() {
       </SettingRow>
 
       {!state.supported && reasonKey && (
-        <p className="mt-2 text-xs text-mail-text-muted">{t(reasonKey)}</p>
+        <p data-testid="daemon-always-on-reason" className="mt-2 text-xs text-mail-text-muted">{t(reasonKey)}</p>
       )}
 
       {state.needsApproval && (

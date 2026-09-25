@@ -65,11 +65,19 @@ pub fn probe_register_agent() -> Result<isize, String> {
 // each one waits on a `reg.exe` child, and the Daemon tab froze for it.
 #[tauri::command]
 pub async fn autostart_state() -> Result<AutostartState, String> {
+    if mailvault_core::paths::portable_root().is_some() {
+        return Ok(AutostartState::unsupported("portable"));
+    }
     off_main(imp::state).await
 }
 
+/// A portable copy never registers a login item: the host would try to start
+/// an app from a drive that is usually not there.
 #[tauri::command]
 pub async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
+    if mailvault_core::paths::portable_root().is_some() {
+        return Ok(AutostartState::unsupported("portable"));
+    }
     off_main(move || {
         imp::set(enabled)?;
         Ok(imp::state())

@@ -10,6 +10,7 @@ const HINT_KEYS = {
   macos_confirm: 'settings.behavior.defaultMail.hintMacosConfirm',
   windows_settings: 'settings.behavior.defaultMail.hintWindowsSettings',
   linux_manual: 'settings.behavior.defaultMail.hintLinuxManual',
+  portable: 'settings.behavior.defaultMail.hintPortable',
 };
 
 const UNKNOWN = { isDefault: false, canSet: false, hint: '' };
