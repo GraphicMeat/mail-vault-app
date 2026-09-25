@@ -959,6 +959,94 @@ mod tests {
         assert_eq!(*started.lock().unwrap(), vec![false, true]);
     }
 
+    // ── Portable: the sealed store on the drive ─────────────────────────
+
+    use mailvault_core::portable::{read_sealed, write_sealed, Secrets};
+    use mailvault_core::transfer::crypto::{Params, MIN_M_KIB};
+
+    const CHEAP: Params = Params { m_kib: MIN_M_KIB, t: 1, p: 1 };
+
+    fn sealed_with_one_account(dir: &std::path::Path) -> SealedStore {
+        let path = dir.join("credentials.sealed");
+        let mut credentials = HashMap::new();
+        credentials.insert("acct-1".to_string(), sample_account_json());
+        write_sealed(&path, "drive passphrase", &Secrets { credentials, ai_endpoint_key: None }, CHEAP).unwrap();
+        SealedStore::new(path, CHEAP)
+    }
+
+    #[test]
+    fn only_a_portable_root_gets_the_sealed_backend() {
+        let root = std::path::Path::new("/Volumes/USB/MailVault Data");
+        assert_eq!(sealed_store_path(Some(root)), Some(root.join("data").join("credentials.sealed")));
+        assert_eq!(sealed_store_path(None), None, "an installed copy keeps the OS keychain");
+    }
+
+    #[test]
+    fn a_locked_store_neither_answers_nor_takes_a_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sealed_with_one_account(dir.path());
+        assert!(store.is_locked());
+        assert!(store.secrets().unwrap_err().starts_with(E_PORTABLE_LOCKED));
+        // A write now would replace every account with whatever the caller
+        // happened to hold: refused, and the file is untouched.
+        let before = std::fs::read(dir.path().join("credentials.sealed")).unwrap();
+        assert!(store.set_credentials(HashMap::new()).unwrap_err().starts_with(E_PORTABLE_LOCKED));
+        assert_eq!(std::fs::read(dir.path().join("credentials.sealed")).unwrap(), before);
+    }
+
+    #[test]
+    fn unlock_takes_the_right_passphrase_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sealed_with_one_account(dir.path());
+        let err = store.unlock("wrong passphrase").unwrap_err();
+        assert!(err.starts_with(mailvault_core::portable::E_PASSPHRASE), "{err}");
+        assert!(store.is_locked());
+
+        store.unlock("drive passphrase").unwrap();
+        assert!(!store.is_locked());
+        let blob = store.secrets().unwrap().credentials;
+        assert_eq!(account_from_blob(&blob, "acct-1").unwrap().password.as_deref(), Some("hunter2"));
+
+        store.lock();
+        assert!(store.is_locked(), "lock forgets the key");
+    }
+
+    #[test]
+    fn a_write_while_unlocked_is_sealed_to_the_drive() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sealed_with_one_account(dir.path());
+        store.unlock("drive passphrase").unwrap();
+        let mut blob = store.secrets().unwrap().credentials;
+        blob.insert("acct-2".to_string(), sample_account_json());
+        store.set_credentials(blob).unwrap();
+        store.set_ai_key(Some("sk-portable".to_string())).unwrap();
+
+        let on_disk = read_sealed(&dir.path().join("credentials.sealed"), "drive passphrase").unwrap();
+        assert_eq!(on_disk.credentials.len(), 2);
+        assert_eq!(on_disk.ai_endpoint_key.as_deref(), Some("sk-portable"));
+    }
+
+    #[test]
+    fn changing_the_passphrase_needs_the_old_one_and_reseals() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sealed_with_one_account(dir.path());
+        assert!(store.change_passphrase("wrong passphrase", "new passphrase").is_err());
+        store.change_passphrase("drive passphrase", "new passphrase").unwrap();
+
+        let path = dir.path().join("credentials.sealed");
+        assert!(read_sealed(&path, "drive passphrase").is_err());
+        assert_eq!(read_sealed(&path, "new passphrase").unwrap().credentials.len(), 1);
+    }
+
+    #[test]
+    fn unlocking_a_drive_with_no_store_yet_starts_an_empty_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SealedStore::new(dir.path().join("credentials.sealed"), CHEAP);
+        store.unlock("first passphrase").unwrap();
+        assert!(store.secrets().unwrap().credentials.is_empty());
+        assert!(read_sealed(&dir.path().join("credentials.sealed"), "first passphrase").is_ok());
+    }
+
     #[tokio::test]
     async fn ai_endpoint_key_round_trips_through_the_test_file_bypass() {
         let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
