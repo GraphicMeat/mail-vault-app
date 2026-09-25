@@ -106,6 +106,16 @@ describe('Keep the daemon running in the background', () => {
     expect((await toggle()).getAttribute('aria-disabled')).toBe('true');
   });
 
+  // A copy running from a drive must not register itself at login on the host.
+  it('says why when this is a portable copy', async () => {
+    invoke.mockResolvedValue({ supported: false, enabled: false, reason: 'portable', needsApproval: false });
+
+    render(<DaemonAlwaysOn />);
+
+    expect((await toggle()).getAttribute('aria-disabled')).toBe('true');
+    expect((await screen.findByTestId('daemon-always-on-reason')).textContent.length > 0).toBe(true);
+  });
+
   // Browser preview and older builds have no such command; the row goes quiet
   // rather than offering a switch that reaches nothing.
   it('renders nothing when the backend does not answer', async () => {
