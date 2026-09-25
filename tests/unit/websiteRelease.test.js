@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { JSDOM } from 'jsdom';
 import { LOCALES, render, keyOf } from '../../website/i18n/i18n.mjs';
 import { cacheControlForPath, retainedDemoAssets, shouldRetainDemoAsset } from '../../scripts/website-release.mjs';
@@ -131,39 +132,63 @@ describe('Caddy 404 patch', () => {
   const workflow = readFileSync('.github/workflows/deploy-website.yml', 'utf8');
   const stepMatch = workflow.match(/- name: Ensure Caddy returns 404 for missing pages[\s\S]*?\n {10}SCRIPT\n/);
   const stepText = stepMatch ? stepMatch[0] : '';
-  const guardMatch = stepText.match(/grep -qF '([^']+)' "\$CF"/);
-  const guard = guardMatch ? guardMatch[1] : null;
+  const snipMatch = stepText.match(/^\s*SNIP=(\S+)$/m);
+  const snip = snipMatch ? snipMatch[1] : null;
   const awkMatch = stepText.match(/awk '([\s\S]*?)' "\$CF"/);
-
-  function dedent(text) {
-    const lines = text.split('\n');
-    const indents = lines.filter((l) => l.trim() !== '').map((l) => l.match(/^ */)[0].length);
-    const min = indents.length ? Math.min(...indents) : 0;
-    return lines.map((l) => (l.trim() === '' ? l : l.slice(min))).join('\n');
-  }
-
-  const program = awkMatch ? dedent(awkMatch[1]) : null;
+  const program = awkMatch ? awkMatch[1] : null;
+  const printMatch = stepText.match(/print "(\s*import \S+)"/);
+  const printedImportLine = printMatch ? printMatch[1].trim() : null;
   const fixture = resolve('tests/fixtures/caddy/mailvaultapp.caddyfile');
   const oldTryFiles = 'try_files {path} {path}.html {path}/ /index.html';
   const newTryFiles = 'try_files {path} {path}.html {path}/';
 
-  it('adds the step with a guard and an awk program', () => {
+  function withTmpDir(fn) {
+    const dir = mkdtempSync(join(tmpdir(), 'mv-caddy-'));
+    try {
+      return fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('adds the step with an absolute-path snippet and an awk program', () => {
     expect(stepText).not.toBe('');
     expect(program).toBeTruthy();
-    expect(guard).toBe('import mailvault-404.caddy');
+    expect(snip).toBe('/etc/caddy/mailvault-404.caddy');
   });
 
-  it('rewrites try_files and inserts the import before handle /api/*, leaving everything else untouched', () => {
+  it('imports the snippet by absolute path, both in the awk insert and the idempotence guard', () => {
+    // Regression for a live-deploy failure: Caddy resolves a relative `import`
+    // against the importing file's directory, and the step validates a copy
+    // living elsewhere, so a relative import broke `caddy validate` on every run.
+    expect(printedImportLine).toBe(`import ${snip}`);
+    expect(stepText).toContain('grep -qF "import $SNIP" "$CF"');
+  });
+
+  it('validates and installs next to the real Caddyfile, not in /tmp', () => {
+    expect(stepText).toContain('caddy validate --config "$CF.new" --adapter caddyfile');
+    expect(stepText).not.toContain('/tmp/Caddyfile.new');
+  });
+
+  it('writes the snippet heredoc before checking the early-exit guard, so a snippet-only change is not skipped', () => {
+    const catIdx = stepText.indexOf('cat > "$NEW"');
+    const guardIdx = stepText.indexOf('grep -qF "import $SNIP" "$CF" && cmp -s "$NEW" "$SNIP"');
+    expect(catIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(catIdx).toBeLessThan(guardIdx);
+  });
+
+  it('rewrites try_files and inserts the absolute import before handle /api/*, leaving everything else untouched', () => {
     const before = readFileSync(fixture, 'utf8');
     const out = execFileSync('awk', [program, fixture], { encoding: 'utf8' });
 
     expect(out).not.toContain(oldTryFiles);
     expect(out.match(new RegExp(newTryFiles.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(1);
-    expect(out.match(/import mailvault-404\.caddy/g)).toHaveLength(1);
-    expect(out.indexOf('import mailvault-404.caddy')).toBeLessThan(out.indexOf('handle /api/* {'));
+    expect(out.match(/import \/etc\/caddy\/mailvault-404\.caddy/g)).toHaveLength(1);
+    expect(out.indexOf('import /etc/caddy/mailvault-404.caddy')).toBeLessThan(out.indexOf('handle /api/* {'));
 
     const beforeLines = before.split('\n');
-    const outWithoutImport = out.split('\n').filter((l) => l.trim() !== 'import mailvault-404.caddy');
+    const outWithoutImport = out.split('\n').filter((l) => l.trim() !== 'import /etc/caddy/mailvault-404.caddy');
     expect(outWithoutImport).toHaveLength(beforeLines.length);
     outWithoutImport.forEach((line, i) => {
       if (beforeLines[i].includes(oldTryFiles)) {
@@ -176,30 +201,27 @@ describe('Caddy 404 patch', () => {
 
   it('fails loudly instead of installing a half-patched file when an anchor is missing', () => {
     const base = readFileSync(fixture, 'utf8');
-    const tmpNoTryFiles = resolve('tests/fixtures/caddy/.tmp-no-tryfiles.caddyfile');
-    const tmpNoApi = resolve('tests/fixtures/caddy/.tmp-no-api.caddyfile');
-    writeFileSync(tmpNoTryFiles, base.split('\n').filter((l) => !l.includes(oldTryFiles)).join('\n'));
-    writeFileSync(tmpNoApi, base.split('\n').filter((l) => !l.includes('handle /api/* {')).join('\n'));
-    try {
+    withTmpDir((dir) => {
+      const tmpNoTryFiles = join(dir, 'no-tryfiles.caddyfile');
+      const tmpNoApi = join(dir, 'no-api.caddyfile');
+      writeFileSync(tmpNoTryFiles, base.split('\n').filter((l) => !l.includes(oldTryFiles)).join('\n'));
+      writeFileSync(tmpNoApi, base.split('\n').filter((l) => !l.includes('handle /api/* {')).join('\n'));
       expect(() => execFileSync('awk', [program, tmpNoTryFiles], { encoding: 'utf8' })).toThrow();
       expect(() => execFileSync('awk', [program, tmpNoApi], { encoding: 'utf8' })).toThrow();
-    } finally {
-      rmSync(tmpNoTryFiles);
-      rmSync(tmpNoApi);
-    }
+    });
   });
 
-  it('does not touch a similar try_files line from a different site block', () => {
-    const decoy = 'try_files {path} {path}.html {path}/index.html'; // no space before /index.html
-    const before = readFileSync(fixture, 'utf8').replace(oldTryFiles, decoy);
-    const tmpDecoy = resolve('tests/fixtures/caddy/.tmp-decoy.caddyfile');
-    writeFileSync(tmpDecoy, before);
-    try {
-      // The old line is gone (replaced by the decoy), so the anchor is missing: exit 1.
-      expect(() => execFileSync('awk', [program, tmpDecoy], { encoding: 'utf8' })).toThrow();
-    } finally {
-      rmSync(tmpDecoy);
-    }
+  it('replaces only the exact live try_files line, leaving a similar decoy line from another site block untouched', () => {
+    const decoyBlock = 'other.example.com {\n    handle {\n        try_files {path} {path}.html {path}/index.html\n    }\n}\n';
+    const base = readFileSync(fixture, 'utf8');
+    withTmpDir((dir) => {
+      const tmpPath = join(dir, 'with-decoy.caddyfile');
+      writeFileSync(tmpPath, decoyBlock + base);
+      const out = execFileSync('awk', [program, tmpPath], { encoding: 'utf8' });
+      const outLines = out.split('\n');
+      expect(outLines.filter((l) => l.trim() === 'try_files {path} {path}.html {path}/index.html')).toHaveLength(1);
+      expect(outLines.filter((l) => l.trim() === newTryFiles)).toHaveLength(1);
+    });
   });
 
   it('covers exactly the locales exported by i18n.mjs, in order, so a new locale cannot silently get the English 404', () => {
