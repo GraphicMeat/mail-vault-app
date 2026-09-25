@@ -496,6 +496,22 @@ pub fn holds_account(st: &SearchIndexState, account_id: &str) -> Result<bool, St
         .map_err(|e| e.to_string())
 }
 
+/// The view editor's sender suggestions. None while the index is off or
+/// closed: a suggestion list is a convenience, not a claim about the mail.
+pub fn suggest_senders(
+    st: &SearchIndexState,
+    accounts: &[String],
+    prefix: &str,
+    limit: usize,
+) -> Result<Vec<core::query::SenderSuggestion>, String> {
+    if *g(&st.enabled) == Some(false) {
+        return Ok(Vec::new());
+    }
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Ok(Vec::new()) };
+    core::query::suggest_senders(conn, accounts, prefix, limit)
+}
+
 /// The index's list rows for `uids` of one folder: `row_json` (headers,
 /// attachments list, no body) with `flags` and `isArchived` read off the
 /// CURRENT filename, so a flag rename since the last sweep is not stale here.

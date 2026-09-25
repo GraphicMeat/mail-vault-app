@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Pick senders and tags for a view as you type.** In the view editor, the sender field suggests the people and domains your indexed mail actually comes from, with how many messages each has sent, and the tags field offers your tags by name. Use the arrow keys and Enter, or click, to add one; anything else you type still works as before, and Backspace in an empty field takes off the last one.
+
 ## [2.16.0] - 2026-09-25
 
 ### Added

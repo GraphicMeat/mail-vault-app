@@ -402,6 +402,90 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     Ok(SearchPage { hits, total: u64::try_from(total).unwrap_or(0), needles: plan.needles })
 }
 
+/// A sender the index has seen, or a whole domain (`@acme.test`, no name).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SenderSuggestion {
+    pub address: String,
+    pub name: String,
+    pub count: u64,
+}
+
+/// What a view's sender field can offer for `prefix`, read off the rows the
+/// view itself runs on. Best first: the address starts with it, then a word of
+/// the name, then the domain, then anywhere; more mail first within each. A
+/// sender word matches as a substring, so a domain is a valid word too: it is
+/// offered as `@domain` when the prefix is one (`@ac`) or a domain starts with
+/// it. No `accounts` is every account.
+/// ponytail: one scan of `messages` per (debounced) keystroke; index
+/// `from_addr_lc` if a large vault makes it slow.
+pub fn suggest_senders(
+    conn: &rusqlite::Connection,
+    accounts: &[String],
+    prefix: &str,
+    limit: usize,
+) -> Result<Vec<SenderSuggestion>, String> {
+    let p = prefix.trim().to_lowercase();
+    if p.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The display name lives only in `row_json`; one row that is not JSON
+    // must not fail the lot.
+    let mut sql = String::from(
+        "SELECT from_addr_lc,
+                MAX(CASE WHEN json_valid(row_json) THEN COALESCE(json_extract(row_json, '$.from.name'), '') ELSE '' END),
+                COUNT(*)
+         FROM messages
+         WHERE from_addr_lc != '' AND (instr(from_addr_lc, ?1) > 0 OR instr(from_name_lc, ?1) > 0)",
+    );
+    if !accounts.is_empty() {
+        sql += &format!(" AND account_id IN ({})", vec!["?"; accounts.len()].join(", "));
+    }
+    sql += " GROUP BY from_addr_lc";
+    let args: Vec<Value> = std::iter::once(p.clone()).chain(accounts.iter().cloned()).map(Value::Text).collect();
+    let mut st = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows: Vec<(String, String, u64)> = st
+        .query_map(rusqlite::params_from_iter(args.iter()), |r| {
+            Ok((r.get(0)?, r.get(1)?, u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0)))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+    // `ann@ac` is a local part being typed, not a domain.
+    let domain_query = match p.find('@') {
+        Some(0) => Some(&p[1..]),
+        Some(_) => None,
+        None => Some(p.as_str()),
+    };
+    let domain_of = |address: &str| address.rsplit_once('@').map(|(_, d)| d.to_string()).filter(|d| !d.is_empty());
+    let mut domains: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    let mut ranked: Vec<(u8, SenderSuggestion)> = Vec::new();
+    for (address, name, count) in rows {
+        let domain = domain_of(&address);
+        let domain_hit = matches!((domain_query, &domain), (Some(q), Some(d)) if d.starts_with(q));
+        if domain_hit {
+            *domains.entry(format!("@{}", domain.unwrap_or_default())).or_default() += count;
+        }
+        let name_lc = name.to_lowercase();
+        let rank = if address.starts_with(&p) {
+            0
+        } else if name_lc.starts_with(&p) || name_lc.split_whitespace().any(|word| word.starts_with(&p)) {
+            1
+        } else if domain_hit {
+            2
+        } else {
+            3
+        };
+        ranked.push((rank, SenderSuggestion { address, name, count }));
+    }
+    let domain_rank = if p.starts_with('@') { 0 } else { 2 };
+    ranked.extend(
+        domains.into_iter().map(|(address, count)| (domain_rank, SenderSuggestion { address, name: String::new(), count })),
+    );
+    ranked.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.count.cmp(&a.1.count)).then_with(|| a.1.address.cmp(&b.1.address)));
+    Ok(ranked.into_iter().take(limit).map(|(_, s)| s).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

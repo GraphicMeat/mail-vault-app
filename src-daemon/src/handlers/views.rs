@@ -149,6 +149,15 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             }
             Ok(Value::Object(counts))
         }
+        // The editor's sender typeahead: `[{ address, name, count }]`, from
+        // the same index the view runs on. No accounts named is every account.
+        "views.suggest_senders" => {
+            let prefix = params.get("prefix").and_then(Value::as_str).unwrap_or("");
+            let accounts: Vec<String> = serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null))
+                .unwrap_or_default();
+            let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(8).min(50) as usize;
+            json_of(crate::search_index::suggest_senders(&state.search_index, &accounts, prefix, limit)?)
+        }
         _ => Err(format!("Unknown method: {method}")),
     }
 }

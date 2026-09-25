@@ -105,6 +105,18 @@
 .settings-window .view-editor .view-emoji-picker { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; grid-template-columns: repeat(8, 32px); gap: 2px; padding: 6px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
 .settings-window .view-editor .view-emoji-picker button { width: 32px; height: 32px; border-radius: 6px; font-size: 18px; line-height: 1; }
 .settings-window .view-editor .view-emoji-picker button:hover, .settings-window .view-editor .view-emoji-picker button[aria-pressed="true"] { background: var(--mail-surface-hover); }
+/* TypeaheadChips: chips, an input, and the matches under it. */
+.typeahead-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.view-query-entry .typeahead-chips { flex: 0 1 240px; }
+.typeahead-field { position: relative; display: inline-flex; flex: 1 1 160px; min-width: 0; }
+.typeahead-field input { width: 100%; min-width: 0; }
+.settings-window .view-editor .typeahead-chip { cursor: default; }
+.typeahead-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
+.typeahead-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: max-content; min-width: 100%; max-width: min(360px, 90vw); max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+.typeahead-list [role="option"] { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--mail-text); font-size: 13px; cursor: pointer; }
+.typeahead-list [role="option"][data-active="true"] { background: var(--mail-surface-hover); }
+.typeahead-label, .typeahead-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.typeahead-detail { color: var(--mail-text-muted); font-size: 12px; }
 @media (max-width: 680px) { .settings-window .views-settings { padding: 16px; } }
 .mail-list-with-timeline { padding-left: 46px; }
 body[data-auxiliary-window="settings"] .fixed:has(.settings-window) { padding: 0; }

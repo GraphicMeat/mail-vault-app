@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "Letztes Jahr",
   "views.sender.placeholder": "Absender hinzufügen",
   "views.sender.hint": "Alle Namen oder Adressen in einem Feld müssen zum Absender passen (UND); mit ODER verbundene Felder sind Alternativen. Mit Enter hinzufügen, || tippen oder ODER drücken für ein neues Feld.",
+  "views.tags.placeholder": "Tag hinzufügen",
   "views.download.title": "Anhänge herunterladen",
   "views.download.all": "Alles",
   "views.download.done_one": "{{count}} Datei heruntergeladen",

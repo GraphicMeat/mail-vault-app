@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "L’anno scorso",
   "views.sender.placeholder": "Aggiungi un mittente",
   "views.sender.hint": "Tutti i nomi o indirizzi di un riquadro devono corrispondere al mittente (E); i riquadri uniti da O sono alternative. Premi Invio per aggiungere, digita || o premi O per un nuovo riquadro.",
+  "views.tags.placeholder": "Aggiungi un tag",
   "views.download.title": "Scarica allegati",
   "views.download.all": "Tutto",
   "views.download.done_one": "{{count}} file scaricato",

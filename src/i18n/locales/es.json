@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "El año pasado",
   "views.sender.placeholder": "Añade un remitente",
   "views.sender.hint": "Todos los nombres o direcciones de un recuadro deben coincidir con el remitente (Y); los recuadros unidos por O son alternativas. Pulsa Intro para añadir, escribe || o pulsa O para un recuadro nuevo.",
+  "views.tags.placeholder": "Añade una etiqueta",
   "views.download.title": "Descargar adjuntos",
   "views.download.all": "Todo",
   "views.download.done_one": "{{count}} archivo descargado",
