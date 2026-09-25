@@ -377,6 +377,21 @@ describe('_mergePersistedSettings (persist merge for keyboardShortcuts)', () => 
     expect(merged.keyboardShortcuts.archive).toBe('y');
   });
 
+  // Snooze's B arrived after installs that may already use B for something
+  // else: the new default must not take it from them.
+  it('leaves a new default unbound when a customised shortcut already uses its key', () => {
+    const { snooze, ...rest } = DEFAULT_SHORTCUTS;
+    const persisted = { keyboardShortcuts: { ...rest, archive: 'b' } };
+
+    const merged = _mergePersistedSettings(persisted, { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } });
+
+    expect(snooze).toBe('b');
+    expect(merged.keyboardShortcuts.archive).toBe('b');
+    expect(merged.keyboardShortcuts.snooze).toBe('');
+    expect(_mergePersistedSettings({ keyboardShortcuts: rest }, { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } })
+      .keyboardShortcuts.snooze).toBe('b');
+  });
+
   it('keeps a shortcut the user explicitly cleared (empty string) rather than backfilling it', () => {
     const current = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } };
     const persisted = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS, archive: '' } };

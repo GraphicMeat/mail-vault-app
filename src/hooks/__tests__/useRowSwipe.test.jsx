@@ -93,7 +93,7 @@ describe('useRowSwipe', () => {
   });
 
   it('a side set to none moves nothing and runs nothing', () => {
-    useSettingsStore.setState({ swipeLeftAction: 'none' });
+    act(() => { useSettingsStore.setState({ swipeLeftAction: 'none' }); });
     for (let i = 0; i < 10; i++) wheel(16);
     expect(screen.queryByTestId('backdrop')).toBeNull();
     act(() => { vi.advanceTimersByTime(200); });
