@@ -4,6 +4,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QuickActionsSettings } from '../QuickActionsSettings';
 import { quickActionScopeKey } from '../../../utils/quickActions';
+import { pinQuickActionScope } from '../../../hooks/useQuickActionConfiguration';
 
 const state = vi.hoisted(() => ({
   quickActions: null,
@@ -43,7 +44,7 @@ state.setQuickActionStyle.mockImplementation((surface, _scope, updates) => {
   };
 });
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); pinQuickActionScope(undefined); });
 
 describe('QuickActionsSettings', () => {
   it('uses surface tabs with one matching preview, scope inheritance, mode and ordered action controls', () => {
@@ -178,5 +179,16 @@ describe('QuickActionsSettings', () => {
     view.rerender(<QuickActionsSettings />);
     expect(checked('Current view')).toBe('true');
     expect(screen.getByRole('button', { name: 'Customize this view' })).toBeTruthy();
+  });
+
+  it('edits the scope a detached window was handed, not its own INBOX', () => {
+    const work = { kind: 'mailbox', accountId: 'acct-1', mailbox: 'Work' };
+    state.quickActions = { defaults: {}, overrides: { [quickActionScopeKey(work)]: readerOverride[inboxKey] } };
+    pinQuickActionScope(work);
+    render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    expect(checked('Current view')).toBe('true');
+    expect(checked('Radial')).toBe('true');
+    expect(document.querySelector('.quick-actions-choice-hint').textContent).toContain('Work');
   });
 });
