@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { injectNav } from './nav.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -883,41 +884,55 @@ export function missing(spec) {
 
 const SITEMAP = path.join(ROOT, 'sitemap.xml');
 
+// English-only pages that are still worth indexing (EXCLUDE keeps them out of translation).
+const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html'];
+
+const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+// The deploy checks out one commit, where every page would get that commit's date,
+// so a shallow clone keeps the dates the committed sitemap already has.
+const SHALLOW = (() => { try { return git(['rev-parse', '--is-shallow-repository']) === 'true'; } catch { return true; } })();
+const today = () => new Date().toISOString().slice(0, 10);
+
+function lastmodOf(rel, previous) {
+  if (SHALLOW) return previous || today();
+  try {
+    if (git(['status', '--porcelain', '--', rel])) return today(); // edited, not committed yet
+    return git(['log', '-1', '--format=%cs', '--', rel]) || previous || today();
+  } catch {
+    return previous || today();
+  }
+}
+
 function buildSitemap() {
-  const src = fs.readFileSync(SITEMAP, 'utf8');
-  const blocks = [...src.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
-  // Regenerating reads the file this function last wrote, so the locale entries
-  // it already added have to be dropped before expanding again — otherwise every
-  // build multiplies them.
-  const generated = LOCALES.map((l) => `${ORIGIN}/${l.dir}/`);
-  const out = [];
-  for (const b of blocks) {
+  // Previous dates and priorities, by URL, so a shallow build changes nothing.
+  const old = {};
+  for (const [, b] of fs.readFileSync(SITEMAP, 'utf8').matchAll(/<url>([\s\S]*?)<\/url>/g)) {
     const loc = (b.match(/<loc>([^<]+)<\/loc>/) || [])[1];
-    if (!loc) continue;
-    if (generated.some((prefix) => loc.startsWith(prefix))) continue;
-    const lastmod = (b.match(/<lastmod>([^<]+)<\/lastmod>/) || [])[1];
-    const priority = (b.match(/<priority>([^<]+)<\/priority>/) || [])[1];
-    const abs = loc.replace(ORIGIN, '') || '/';
+    if (loc) old[loc] = { lastmod: (b.match(/<lastmod>([^<]+)<\/lastmod>/) || [])[1], priority: (b.match(/<priority>([^<]+)<\/priority>/) || [])[1] };
+  }
+  const indexable = (rel) => !/<meta name="robots" content="noindex/.test(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const out = [];
+  for (const rel of [...sourcePages(), ...SITEMAP_EXTRA].filter(indexable)) {
+    const abs = rel === 'index.html' ? '/' : `/${rel}`;
+    const loc = ORIGIN + abs;
+    const lastmod = lastmodOf(rel, old[loc]?.lastmod);
+    const priority = old[loc]?.priority;
     const localizable = LOCALIZABLE.has(abs);
     const alts = localizable ? [
       `      <xhtml:link rel="alternate" hreflang="en" href="${ORIGIN}${abs}"/>`,
       ...LOCALES.map((l) => `      <xhtml:link rel="alternate" hreflang="${l.hreflang}" href="${ORIGIN}${localizePath(abs, l)}"/>`),
       `      <xhtml:link rel="alternate" hreflang="x-default" href="${ORIGIN}${abs}"/>`,
     ].join('\n') : '';
-
-    const entry = (href, extraAlts) => [
+    const entry = (href) => [
       '  <url>',
       `    <loc>${href}</loc>`,
-      lastmod ? `    <lastmod>${lastmod}</lastmod>` : null,
+      `    <lastmod>${lastmod}</lastmod>`,
       priority ? `    <priority>${priority}</priority>` : null,
-      extraAlts || null,
+      alts || null,
       '  </url>',
     ].filter(Boolean).join('\n');
-
-    out.push(entry(loc, alts));
-    if (localizable) {
-      for (const l of LOCALES) out.push(entry(ORIGIN + localizePath(abs, l), alts));
-    }
+    out.push(entry(loc));
+    if (localizable) for (const l of LOCALES) out.push(entry(ORIGIN + localizePath(abs, l)));
   }
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n'

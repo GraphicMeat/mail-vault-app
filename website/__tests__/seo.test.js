@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
+import { sourcePages } from '../i18n/i18n.mjs';
 
 const root = resolve('website');
 const doc = (rel) => new JSDOM(readFileSync(resolve(root, rel), 'utf8')).window.document;
@@ -56,5 +57,25 @@ describe('404 page', () => {
       const v = el.getAttribute('href') ?? el.getAttribute('src');
       expect(/^(\/|#|https?:|mailto:)/.test(v), `${rel}: ${v}`).toBe(true);
     }
+  });
+});
+
+describe('sitemap', () => {
+  const xml = readFileSync(resolve(root, 'sitemap.xml'), 'utf8');
+  const locs = new Set([...xml.matchAll(/<loc>https:\/\/mailvaultapp\.com([^<]*)<\/loc>/g)].map((m) => m[1]));
+  const noindex = (rel) => /<meta name="robots" content="noindex/.test(readFileSync(resolve(root, rel), 'utf8'));
+  const url = (rel) => (rel === 'index.html' ? '/' : '/' + rel);
+
+  it('lists every indexable page and no noindex page', () => {
+    for (const rel of [...sourcePages(), 'changelog.html', 'privacy.html', 'terms.html']) {
+      expect(locs.has(url(rel)), rel).toBe(!noindex(rel));
+    }
+    expect(locs.has('/de/features/tags.html')).toBe(true);
+    expect(locs.has('/404.html')).toBe(false);
+  });
+
+  it('dates every entry', () => {
+    const entries = xml.match(/<url>[\s\S]*?<\/url>/g);
+    for (const e of entries) expect(e, e.slice(0, 80)).toMatch(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
   });
 });
