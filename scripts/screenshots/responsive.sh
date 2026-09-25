@@ -6,12 +6,12 @@
 #   scripts/screenshots/responsive.sh de --prune-png   # and drop the PNGs after
 #
 # This did not exist before the localized set: postprocess.sh only quantises the
-# PNGs and derives the six README images, so the 54 `-720/-1440/-2880.webp`
+# PNGs, so the 54 `-720/-1440/-2880.webp`
 # files under website/screenshots were made by hand. 672 more cannot be.
 #
 # Locale directories ship webp only — eight sets of 2880px PNGs is ~70MB of git
-# nobody serves. English keeps its PNGs: they are the README's source and the
-# only thing a re-encode can start from.
+# nobody serves. English keeps its PNGs: they are the only thing a re-encode
+# can start from. The README shows the English `-1440.webp` files directly.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

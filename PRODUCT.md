@@ -73,7 +73,7 @@ Backup tools do not read mail. Mail clients do not let you empty a server safely
 
 ## Evidence on Hand
 
-- **Real product screenshots**, all captured from the running app against one scripted demo mailbox on a HiDPI Mac (`screenshots/`, `.github/images/`, `website/screenshots/`, generated via `wdio.screenshots.conf.js`). Use these; do not mock up fake UI.
+- **Real product screenshots**, all captured from the running app against one scripted demo mailbox on a HiDPI Mac (`screenshots/`, `website/screenshots/`, which the README also shows, generated via `wdio.screenshots.conf.js`). Use these; do not mock up fake UI.
 - **Third-party mentions** (`website/mentioned-in.html`): a TaskBounty independent test-coverage measurement (July 2026) and a PeerPush indie-product directory listing (March 2026).
 - **Changelog** (`CHANGELOG.md`, `website/changelog.html`) and a public GitHub repository.
 - **Measured performance figures** in the README (binary size, idle memory, startup, list size) — real, and the only numbers that may be quoted.

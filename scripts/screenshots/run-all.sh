@@ -84,12 +84,10 @@ for loc in "${LOCALES[@]}"; do
     # `onboarding-` prefix and land in the same directory.
     [ "$ONBOARDING_PASS" = "0" ] || run_pass tour "$loc" "$theme" 1
     # Convert once both passes have written their PNGs. English keeps its
-    # masters (the README source, and the only thing a re-encode can start
-    # from); every other locale ships webp only.
+    # masters (the only thing a re-encode can start from); every other locale ships webp only.
     if [ "$loc" = "en" ]; then
       scripts/screenshots/responsive.sh en
-      # English keeps its DARK masters — the README is built from them and a
-      # re-encode has to start somewhere. The light ones are marketing-only and
+      # English keeps its DARK masters: a re-encode has to start somewhere. The light ones are marketing-only and
       # nothing reads them again, so they are ~10MB of git for nothing.
       rm -f website/screenshots/*-light.png
     else
