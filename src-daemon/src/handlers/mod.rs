@@ -40,6 +40,7 @@ pub(crate) mod oauth2;
 pub(crate) mod restore;
 pub(crate) mod scheduled;
 pub(crate) mod search_index;
+pub(crate) mod snooze;
 pub(crate) mod smtp;
 pub(crate) mod tags;
 pub(crate) mod transfer;

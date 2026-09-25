@@ -37,6 +37,7 @@ mod scheduled_send_worker;
 mod server;
 pub mod search_index;
 mod snapshot;
+mod snooze_worker;
 pub mod sync_engine;
 
 // Note: backup, external_location modules require tauri::AppHandle for data
