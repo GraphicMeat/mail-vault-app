@@ -77,7 +77,7 @@ describe('English acquisition journey', () => {
     ['mobile', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'fallback'],
   ])('uses %s hero action for %s', (_name, userAgent, visible) => {
     const {doc} = page('index.html', '', undefined, {userAgent});
-    for (const action of ['mac','windows','linux','fallback']) expect(doc.querySelector('[data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
+    for (const action of ['mac','windows','linux','fallback']) expect(doc.querySelector('.hm-hero-actions [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
     expect(doc.querySelector('a[href="/get-started.html?plan=free#platforms"]')).not.toBeNull();
   });
   it('puts the visitor’s own platform first on the download page, Windows included', async () => {
