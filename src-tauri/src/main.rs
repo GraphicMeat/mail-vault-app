@@ -457,10 +457,25 @@ fn test_credentials_path() -> Option<std::path::PathBuf> {
 // Store all credentials as a single JSON object in keychain
 // This triggers the keychain modal only once instead of per-account
 // Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
+/// A portable copy keeps its secrets in the daemon's sealed store on the
+/// drive, never in this host's keychain: both credential commands forward.
+fn portable_credentials_call(app: tauri::AppHandle, method: &'static str, params: serde_json::Value) -> impl std::future::Future<Output = Result<serde_json::Value, String>> {
+    async move {
+        tokio::task::spawn_blocking(move || daemon_call_blocking(&app, method, params, std::time::Duration::from_secs(30)))
+            .await
+            .map_err(|e| format!("Credential task panicked: {}", e))?
+    }
+}
+
 #[tauri::command]
-async fn store_credentials(credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
+async fn store_credentials(app_handle: tauri::AppHandle, credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
     info!("=== STORE CREDENTIALS START ===");
     info!("Storing credentials for {} account(s)", credentials.len());
+
+    if mailvault_core::paths::portable_root().is_some() {
+        let params = serde_json::json!({ "credentials": credentials });
+        return portable_credentials_call(app_handle, "portable.set_credentials", params).await.map(|_| ());
+    }
 
     if let Some(path) = test_credentials_path() {
         warn!("MAILVAULT_TEST_CREDENTIALS set — writing credentials to {:?}, NOT the keychain", path);
@@ -550,8 +565,15 @@ fn quiet_get_password(entry: &Entry) -> keyring::Result<String> {
 // granted/denied/cancelled/timed_out/empty/unavailable outcomes.
 // Async: runs on a background thread so a slow keychain never blocks the main thread
 #[tauri::command]
-async fn get_credentials() -> Result<serde_json::Value, String> {
+async fn get_credentials(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
     info!("=== GET CREDENTIALS START ===");
+
+    if mailvault_core::paths::portable_root().is_some() {
+        // Unreachable daemon: the same "unavailable" a failed keychain read gives.
+        return Ok(portable_credentials_call(app_handle, "portable.get_credentials", serde_json::json!({}))
+            .await
+            .unwrap_or_else(|e| serde_json::json!({ "status": "unavailable", "message": e })));
+    }
 
     if let Some(path) = test_credentials_path() {
         warn!("MAILVAULT_TEST_CREDENTIALS set — reading credentials from {:?}, NOT the keychain", path);
@@ -662,6 +684,11 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
 // Legacy function - store single password (kept for migration)
 #[tauri::command]
 fn store_password(account_id: String, password: String) -> Result<(), String> {
+    // Portable: nothing secret on the host. The caller saves the account
+    // right after, which seals the new password on the drive.
+    if mailvault_core::paths::portable_root().is_some() {
+        return Ok(());
+    }
     info!("=== STORE PASSWORD START ===");
     info!("store_password called for account: {}", account_id);
     info!("Service name: {}", KEYRING_SERVICE);

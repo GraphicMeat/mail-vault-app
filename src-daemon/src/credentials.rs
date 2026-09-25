@@ -38,12 +38,117 @@ fn test_credentials_path() -> Option<PathBuf> {
     None
 }
 
+// ── Portable: the sealed store on the drive ─────────────────────────────────
+//
+// A portable copy (`paths::portable_root`) never touches the host keychain:
+// every read and write below goes to `<root>/data/credentials.sealed`
+// instead. It starts locked each launch; `portable.unlock` holds the
+// passphrase and the opened secrets in memory until the daemon exits or
+// `portable.lock`.
+
+pub(crate) const E_PORTABLE_LOCKED: &str = "E_PORTABLE_LOCKED";
+
+pub(crate) fn sealed_store_path(root: Option<&std::path::Path>) -> Option<PathBuf> {
+    root.map(|r| mailvault_core::paths::portable_data_dir(r).join(mailvault_core::portable::SEALED_FILE))
+}
+
+/// This copy's sealed store, `None` in an installed one.
+pub(crate) fn sealed() -> Option<&'static SealedStore> {
+    static STORE: std::sync::OnceLock<Option<SealedStore>> = std::sync::OnceLock::new();
+    STORE
+        .get_or_init(|| {
+            sealed_store_path(mailvault_core::paths::portable_root())
+                .map(|p| SealedStore::new(p, mailvault_core::transfer::crypto::EXPORT_PARAMS))
+        })
+        .as_ref()
+}
+
+type Opened = (zeroize::Zeroizing<String>, mailvault_core::portable::Secrets);
+
+pub(crate) struct SealedStore {
+    path: PathBuf,
+    params: mailvault_core::transfer::crypto::Params,
+    open: std::sync::Mutex<Option<Opened>>,
+}
+
+impl SealedStore {
+    pub(crate) fn new(path: PathBuf, params: mailvault_core::transfer::crypto::Params) -> Self {
+        Self { path, params, open: std::sync::Mutex::new(None) }
+    }
+
+    fn opened(&self) -> std::sync::MutexGuard<'_, Option<Opened>> {
+        self.open.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn is_locked(&self) -> bool {
+        self.opened().is_none()
+    }
+
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// A drive with no store yet (never set up, or the file was deleted)
+    /// starts an empty one under the first passphrase it is given.
+    pub(crate) fn unlock(&self, passphrase: &str) -> Result<(), String> {
+        use mailvault_core::portable::{read_sealed, write_sealed, Secrets};
+        let secrets = if self.path.exists() {
+            read_sealed(&self.path, passphrase)?
+        } else {
+            write_sealed(&self.path, passphrase, &Secrets::default(), self.params)?;
+            Secrets::default()
+        };
+        *self.opened() = Some((zeroize::Zeroizing::new(passphrase.to_string()), secrets));
+        Ok(())
+    }
+
+    pub(crate) fn lock(&self) {
+        *self.opened() = None;
+    }
+
+    pub(crate) fn secrets(&self) -> Result<mailvault_core::portable::Secrets, String> {
+        self.opened().as_ref().map(|(_, s)| s.clone()).ok_or_else(|| E_PORTABLE_LOCKED.to_string())
+    }
+
+    /// Locked refuses: the caller's copy may be the empty one it got while
+    /// locked, and sealing that would drop every other account.
+    fn update(&self, f: impl FnOnce(&mut mailvault_core::portable::Secrets)) -> Result<(), String> {
+        let mut guard = self.opened();
+        let Some((passphrase, current)) = guard.as_mut() else { return Err(E_PORTABLE_LOCKED.to_string()) };
+        let mut next = current.clone();
+        f(&mut next);
+        mailvault_core::portable::write_sealed(&self.path, passphrase, &next, self.params)?;
+        *current = next;
+        Ok(())
+    }
+
+    pub(crate) fn set_credentials(&self, blob: HashMap<String, String>) -> Result<(), String> {
+        self.update(|s| s.credentials = blob)
+    }
+
+    pub(crate) fn set_ai_key(&self, key: Option<String>) -> Result<(), String> {
+        self.update(|s| s.ai_endpoint_key = key)
+    }
+
+    /// Reads with `old` (so a wrong one changes nothing), reseals with `new`,
+    /// and leaves the store unlocked under `new`.
+    pub(crate) fn change_passphrase(&self, old: &str, new: &str) -> Result<(), String> {
+        let secrets = mailvault_core::portable::read_sealed(&self.path, old)?;
+        mailvault_core::portable::write_sealed(&self.path, new, &secrets, self.params)?;
+        *self.opened() = Some((zeroize::Zeroizing::new(new.to_string()), secrets));
+        Ok(())
+    }
+}
+
 /// Load the full credentials blob: `{ accountId: JSON-string-of-account }`,
 /// same shape `store_credentials`/`get_credentials` read and write.
 ///
 /// `interactive`: whether macOS may show its prompt for this read (see
 /// `with_interaction`).
 fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, String> {
+    if let Some(store) = sealed() {
+        return store.secrets().map(|s| s.credentials);
+    }
     if let Some(path) = test_credentials_path() {
         let json = std::fs::read_to_string(&path)
             .map_err(|e| format!("failed to read test credentials {:?}: {}", path, e))?;
@@ -642,6 +747,9 @@ fn test_ai_key_path() -> Option<PathBuf> {
 }
 
 fn store_ai_endpoint_key(key: &str) -> Result<(), String> {
+    if let Some(store) = sealed() {
+        return store.set_ai_key(Some(key.to_string()));
+    }
     if let Some(path) = test_ai_key_path() {
         return std::fs::write(&path, key).map_err(|e| format!("failed to write test ai key file: {e}"));
     }
@@ -652,6 +760,9 @@ fn store_ai_endpoint_key(key: &str) -> Result<(), String> {
 /// `Ok(None)` (not an error) means nothing has been stored yet — the normal
 /// state for an endpoint (e.g. Ollama) that needs no key at all.
 fn resolve_ai_endpoint_key(interactive: bool) -> Result<Option<String>, String> {
+    if let Some(store) = sealed() {
+        return store.secrets().map(|s| s.ai_endpoint_key);
+    }
     if let Some(path) = test_ai_key_path() {
         return match std::fs::read_to_string(&path) {
             Ok(s) => Ok(Some(s)),

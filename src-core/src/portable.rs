@@ -1,4 +1,47 @@
 //! Portable mode's files: the sealed credential store on the drive.
+//!
+//! A portable copy writes nothing secret to the host. Account passwords,
+//! OAuth tokens and the AI endpoint key live in `<root>/data/credentials.sealed`,
+//! the `.mvtransfer` container (`transfer::crypto`: argon2id + XChaCha20-Poly1305)
+//! around one JSON object, sealed with a passphrase the user types once per launch.
+
+use crate::transfer::crypto::{self, Params, TransferError};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
+use zeroize::Zeroizing;
+
+pub const SEALED_FILE: &str = "credentials.sealed";
+/// Wrong passphrase or a modified file; deliberately one answer for both.
+pub const E_PASSPHRASE: &str = "E_PORTABLE_PASSPHRASE";
+
+/// What the host keychain holds in an installed copy.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Secrets {
+    /// `{ accountId: JSON-string-of-account }`, the keychain blob's shape.
+    pub credentials: HashMap<String, String>,
+    #[serde(default)]
+    pub ai_endpoint_key: Option<String>,
+}
+
+/// Seal `secrets` into `path`, whole or not at all (temp file + rename).
+pub fn write_sealed(path: &Path, passphrase: &str, secrets: &Secrets, params: Params) -> Result<(), String> {
+    let plain = Zeroizing::new(serde_json::to_vec(secrets).map_err(|e| e.to_string())?);
+    let sealed = crypto::encrypt_with(passphrase, &plain, params).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("sealed-writing");
+    std::fs::write(&tmp, sealed).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))
+}
+
+pub fn read_sealed(path: &Path, passphrase: &str) -> Result<Secrets, String> {
+    let data = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let plain = Zeroizing::new(crypto::decrypt(passphrase, &data).map_err(|e| match e {
+        TransferError::Decrypt => E_PASSPHRASE.to_string(),
+        other => other.to_string(),
+    })?);
+    serde_json::from_slice(&plain).map_err(|e| format!("sealed store unreadable: {e}"))
+}
 
 #[cfg(test)]
 mod tests {

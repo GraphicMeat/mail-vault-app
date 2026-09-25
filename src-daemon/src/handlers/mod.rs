@@ -37,6 +37,7 @@ pub(crate) mod mail_search;
 pub(crate) mod mbox;
 pub(crate) mod migration;
 pub(crate) mod oauth2;
+pub(crate) mod portable;
 pub(crate) mod restore;
 pub(crate) mod scheduled;
 pub(crate) mod search_index;
