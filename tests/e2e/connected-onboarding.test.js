@@ -260,8 +260,15 @@ describe('onboarding', function () {
         const frame = await browser.execute(() => ({
           feature: document.querySelector('[data-testid="premium-detail"]').dataset.feature,
           // Sub-pixel: getLocation() rounds, and the defect was 12px but a
-          // regression need not be.
-          top: document.querySelector('[data-testid="onboarding-continue"]').getBoundingClientRect().top,
+          // regression need not be. Layout position, not viewport position:
+          // where the list runs past a small window (15 tiles on Windows), a
+          // WebDriver click scrolls Next into view, which moves nothing.
+          top: (() => {
+            const button = document.querySelector('[data-testid="onboarding-continue"]');
+            let top = button.getBoundingClientRect().top + window.scrollY;
+            for (let el = button.parentElement; el; el = el.parentElement) top += el.scrollTop;
+            return top;
+          })(),
         }));
         seen.push(frame.feature);
         tops.push(frame.top);

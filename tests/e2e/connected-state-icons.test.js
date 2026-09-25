@@ -237,7 +237,13 @@ describe('Message state icons', function () {
       // failure of this assertion's premise — not a reason to skip it.
       expect(idx).toBeGreaterThanOrEqual(0);
 
-      expect(await focusIcon('msg-state-icon', idx)).toBe(true);
+      // `idx` counts rows, and a row without a state icon would shift an
+      // index into the icons themselves: focus the one inside that row.
+      expect(await browser.execute((i) => {
+        const el = document.querySelectorAll('[data-testid="email-row"]')[i]?.querySelector('[data-testid="msg-state-icon"]');
+        el?.focus();
+        return !!el && document.activeElement === el;
+      }, idx)).toBe(true);
       await browser.waitUntil(async () => !!(await tooltipText()), {
         timeout: 5_000, interval: 100, timeoutMsg: 'Archived row tooltip never opened',
       });
