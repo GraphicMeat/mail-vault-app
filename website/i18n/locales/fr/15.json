@@ -221,5 +221,13 @@
   "4e8baca8eaca": "Un client de messagerie gratuit pour macOS, Windows et Linux",
   "892a17c5b677": "MailVault est une application de bureau. Ouvrez cette page sur votre ordinateur Mac, Windows ou Linux pour l’installer.",
   "dae6959e08eb": "Windows 10 ou 11 sur Intel ou AMD 64 bits.",
-  "3906e4b6a1e2": "Lancez le programme d’installation, puis ouvrez MailVault depuis le menu Démarrer."
+  "3906e4b6a1e2": "Lancez le programme d’installation, puis ouvrez MailVault depuis le menu Démarrer.",
+  "0c27d83456d4": "Mots de passe dans le magasin du système : trousseau sur macOS, Gestionnaire d'identification sur Windows, Secret Service sur Linux",
+  "c79f8db3fcbc": "Installeur Windows (Intel ou AMD 64 bits) et paquets Linux (x86_64 et aarch64) via le Snap Store et .deb",
+  "a911ca5c251d": "Envoi programmé : envoyez un message à une date et une heure exactes, dans n'importe quel fuseau horaire",
+  "db05f23e1879": "Capsule temporelle : parcourez une boîte mail telle qu'elle était à une date antérieure",
+  "0bfb41b3fe01": "Sauvegardes planifiées : programmes quotidiens, hebdomadaires ou personnalisés par compte, avec des contrôles de sécurité par dossier",
+  "c70099029b15": "Étiquetage auto : des règles qui étiquettent le courrier correspondant à son arrivée",
+  "1a80043db441": "Vues enregistrées et champs personnalisés : des filtres qui se comportent comme des boîtes de réception, plus vos propres champs sur n'importe quel message",
+  "53d81f60d1d5": "Aide à l'écriture par IA : rédigez, raccourcissez, changez le ton ou résumez un fil avec un modèle qui tourne sur votre ordinateur, ou un modèle de votre choix"
 }

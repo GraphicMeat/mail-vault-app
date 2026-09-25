@@ -221,5 +221,13 @@
   "4e8baca8eaca": "适用于 macOS、Windows 和 Linux 的免费电子邮件客户端",
   "892a17c5b677": "MailVault 是桌面应用。请在 Mac、Windows 或 Linux 电脑上打开此页面进行安装。",
   "dae6959e08eb": "64 位 Intel 或 AMD 处理器上的 Windows 10 或 11。",
-  "3906e4b6a1e2": "运行安装程序，然后从开始菜单打开 MailVault。"
+  "3906e4b6a1e2": "运行安装程序，然后从开始菜单打开 MailVault。",
+  "0c27d83456d4": "密码保存在系统存储中：macOS 上是钥匙串，Windows 上是 Credential Manager，Linux 上是 Secret Service",
+  "c79f8db3fcbc": "Windows 安装程序（64 位 Intel 或 AMD）以及通过 Snap Store 和 .deb 提供的 Linux 软件包（x86_64 与 aarch64）",
+  "a911ca5c251d": "定时发送：在任意时区的精确日期和时间发送一封邮件",
+  "db05f23e1879": "时间胶囊：按邮箱在早前某个日期的样子浏览",
+  "0bfb41b3fe01": "定时备份：按账户设置每天、每周或自定义计划，并按文件夹给出安全检查",
+  "c70099029b15": "自动标签：在匹配邮件到达时自动打标签的规则",
+  "1a80043db441": "已保存的视图和自定义字段：像收件箱一样使用的筛选条件，加上可加到任何邮件的自定义字段",
+  "53d81f60d1d5": "AI 写作助手：用你电脑上运行的模型或自选模型起草、精简、改变语气或总结会话"
 }
