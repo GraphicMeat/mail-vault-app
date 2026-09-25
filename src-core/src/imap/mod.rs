@@ -1651,6 +1651,17 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
     .await
 }
 
+/// Resolve or create the folder Snooze moves mail into
+/// (`app_db::snooze::SNOOZED_MAILBOX`). An existing "Snoozed" anywhere in the
+/// tree (e.g. `INBOX.Snoozed`) is reused.
+// ponytail: CREATE is always the bare root name, like `ensure_sent_mailbox`;
+// a server that only allows folders under INBOX refuses it. Prefix with the
+// namespace if that ever shows up in a report.
+pub async fn ensure_snoozed_mailbox(session: &mut ImapSession) -> Result<String, String> {
+    let name = crate::app_db::snooze::SNOOZED_MAILBOX;
+    ensure_role_mailbox(session, "snoozed", name, &[name]).await
+}
+
 /// Where a folder goes when "deleted": under Trash, keeping its leaf name —
 /// Thunderbird's model, and Rokas' call for MailVault (2026-09-05). A real
 /// DELETE is for a folder that already sits under Trash.
@@ -2117,6 +2128,19 @@ async fn search_message_id_in(
         }
         Err(e) => Err(format!("SEARCH in {} failed: {}", mailbox, e)),
     }
+}
+
+/// The uids `message_id` has in one folder. A folder that refuses the SELECT
+/// or the SEARCH is an error here, not an empty answer: the caller (Snooze's
+/// wake) treats empty as "the user moved it away" and would drop the row.
+pub async fn message_id_uids_in(session: &mut ImapSession, mailbox: &str, message_id: &str) -> Result<Vec<u32>, String> {
+    let term = message_id_search_term(message_id);
+    if term.is_empty() {
+        return Err("Message-ID search: empty Message-ID".to_string());
+    }
+    search_message_id_in(session, mailbox, &term)
+        .await?
+        .ok_or_else(|| format!("{mailbox} refused the Message-ID search"))
 }
 
 /// Ask the server whether a Message-ID exists in ANY folder.

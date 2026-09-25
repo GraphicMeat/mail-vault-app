@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -201,6 +201,28 @@ CREATE TABLE auto_tag_decisions (
 );
 ";
 
+/// Snooze's queue: messages the app moved to the server's Snoozed folder and
+/// `snooze_worker` moves back at `wake_at`. Keyed on `message_id` rather than
+/// `msg_key` because it is only ever used to find the message on the server
+/// again (`app_db::snooze`'s module doc); `uid_in_snoozed` is a hint.
+const SCHEMA_V5: &str = "
+CREATE TABLE snoozes (
+  id              TEXT PRIMARY KEY,
+  account_id      TEXT NOT NULL,
+  from_mailbox    TEXT NOT NULL,
+  snoozed_mailbox TEXT NOT NULL,
+  uid_in_snoozed  INTEGER,
+  message_id      TEXT NOT NULL,
+  wake_at         INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL,
+  state           TEXT NOT NULL,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  retry_at        INTEGER NOT NULL DEFAULT 0,
+  last_error      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX snoozes_due ON snoozes(state, wake_at);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -338,6 +360,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         if version < 4 {
             conn.execute_batch(&format!(
                 "{SCHEMA_V4} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4');"
+            ))
+            .map_err(sql)?;
+        }
+        if version < 5 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V5} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '5');"
             ))
             .map_err(sql)?;
         }

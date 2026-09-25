@@ -68,8 +68,43 @@ pub fn backoff_ms(attempt: i64) -> i64 {
 /// the search confirms it (a duplicate copy of the same message may sit next
 /// to it); otherwise the newest hit; `None` means it is not there at all.
 pub fn pick_uid(stored: Option<u32>, found: &[u32]) -> Option<u32> {
-    let _ = (stored, found);
-    todo!()
+    match stored {
+        Some(uid) if found.contains(&uid) => Some(uid),
+        _ => found.iter().copied().max(),
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+const COLUMNS: &str =
+    "id, account_id, from_mailbox, snoozed_mailbox, uid_in_snoozed, message_id, wake_at, created_at, state, attempts, retry_at, last_error";
+
+fn row_to_snooze(r: &rusqlite::Row) -> rusqlite::Result<Snooze> {
+    Ok(Snooze {
+        id: r.get(0)?,
+        account_id: r.get(1)?,
+        from_mailbox: r.get(2)?,
+        snoozed_mailbox: r.get(3)?,
+        uid_in_snoozed: r.get(4)?,
+        message_id: r.get(5)?,
+        wake_at: r.get(6)?,
+        created_at: r.get(7)?,
+        state: r.get(8)?,
+        attempts: r.get(9)?,
+        retry_at: r.get(10)?,
+        last_error: r.get(11)?,
+    })
+}
+
+fn query(conn: &Connection, sql: &str, args: impl rusqlite::Params) -> Result<Vec<Snooze>, String> {
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(args, row_to_snooze).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 pub fn insert(
@@ -82,46 +117,79 @@ pub fn insert(
     message_id: &str,
     wake_at: i64,
 ) -> Result<(), String> {
-    let _ = (conn, id, account_id, from_mailbox, snoozed_mailbox, uid_in_snoozed, message_id, wake_at);
-    todo!()
+    conn.execute(
+        "INSERT INTO snoozes(id, account_id, from_mailbox, snoozed_mailbox, uid_in_snoozed, message_id, wake_at, created_at, state)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'snoozed')",
+        params![id, account_id, from_mailbox, snoozed_mailbox, uid_in_snoozed, message_id, wake_at, now_ms()],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 pub fn get(conn: &Connection, id: &str) -> Result<Option<Snooze>, String> {
-    let _ = (conn, id);
-    todo!()
+    conn.query_row(&format!("SELECT {COLUMNS} FROM snoozes WHERE id = ?1"), [id], |r| row_to_snooze(r))
+        .optional()
+        .map_err(|e| e.to_string())
 }
 
 /// Every `snoozed` or `failed` row (woken ones are history), soonest first,
 /// optionally narrowed to one account.
 pub fn list(conn: &Connection, account_id: Option<&str>) -> Result<Vec<Snooze>, String> {
-    let _ = (conn, account_id);
-    todo!()
+    let base = format!("SELECT {COLUMNS} FROM snoozes WHERE state IN ('snoozed', 'failed')");
+    match account_id {
+        Some(a) => query(conn, &format!("{base} AND account_id = ?1 ORDER BY wake_at ASC"), params![a]),
+        None => query(conn, &format!("{base} ORDER BY wake_at ASC"), params![]),
+    }
 }
 
 /// `snoozed` rows whose `max(wake_at, retry_at)` has passed, soonest first.
 pub fn due(conn: &Connection, now_ms: i64) -> Result<Vec<Snooze>, String> {
-    let _ = (conn, now_ms);
-    todo!()
+    query(
+        conn,
+        &format!(
+            "SELECT {COLUMNS} FROM snoozes WHERE state = 'snoozed' AND MAX(wake_at, retry_at) <= ?1
+             ORDER BY MAX(wake_at, retry_at) ASC"
+        ),
+        params![now_ms],
+    )
 }
 
 /// The worker's sleep target: the earliest `max(wake_at, retry_at)` over
 /// `snoozed` rows.
 pub fn next_wake_at(conn: &Connection) -> Result<Option<i64>, String> {
-    let _ = conn;
-    todo!()
+    conn.query_row("SELECT MIN(MAX(wake_at, retry_at)) FROM snoozes WHERE state = 'snoozed'", [], |r| r.get(0))
+        .map_err(|e| e.to_string())
 }
 
 /// A new wake time from the user. Re-arms a `failed` row with a fresh retry
 /// ladder; a `woken` row is left alone, there is nothing left to wake.
 pub fn reschedule(conn: &Connection, id: &str, wake_at: i64) -> Result<(), String> {
-    let _ = (conn, id, wake_at);
-    todo!()
+    conn.execute(
+        "UPDATE snoozes SET wake_at = ?2, state = 'snoozed', attempts = 0, retry_at = 0, last_error = ''
+         WHERE id = ?1 AND state IN ('snoozed', 'failed')",
+        params![id, wake_at],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Write what a wake attempt came to. Returns the row's state afterwards.
 pub fn record_outcome(conn: &Connection, id: &str, outcome: &WakeOutcome, now_ms: i64) -> Result<String, String> {
-    let _ = (conn, id, outcome, now_ms);
-    todo!()
+    let changed = match outcome {
+        WakeOutcome::Woken | WakeOutcome::NotFound => {
+            conn.execute("UPDATE snoozes SET state = 'woken', retry_at = 0, last_error = '' WHERE id = ?1", [id])
+        }
+        WakeOutcome::Wait(msg) => conn.execute("UPDATE snoozes SET last_error = ?2 WHERE id = ?1", params![id, msg]),
+        WakeOutcome::Transient(msg) => conn.execute(
+            "UPDATE snoozes SET attempts = attempts + 1, last_error = ?2,
+                 state = CASE WHEN attempts + 1 >= ?3 THEN 'failed' ELSE state END,
+                 retry_at = ?4 + ?5 * (1 << MIN(attempts, 10))
+             WHERE id = ?1",
+            params![id, msg, MAX_ATTEMPTS, now_ms, backoff_ms(1)],
+        ),
+    };
+    changed.map_err(|e| e.to_string())?;
+    conn.query_row("SELECT state FROM snoozes WHERE id = ?1", [id], |r| r.get(0)).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

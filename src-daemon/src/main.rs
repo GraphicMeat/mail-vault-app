@@ -465,6 +465,7 @@ async fn daemon_main() {
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
+        snooze: snooze_worker::SnoozeState::default(),
         auto_tag_worker,
     });
 
@@ -519,11 +520,17 @@ async fn daemon_main() {
     // (the normal case — the daemon dies with the app in on-demand mode),
     // then sleeps until the next fire_at or a wake from handlers::scheduled.
     scheduled_send_worker::start(Arc::clone(&state));
+    // Snooze's worker: same catch-up-then-sleep shape.
+    snooze_worker::start(Arc::clone(&state));
     // Watches keychain access so a locked keychain is noticed without waiting
-    // for something to ask for credentials; an unlock wakes the queued sends.
+    // for something to ask for credentials; an unlock wakes the queued sends
+    // and the snoozes it held back.
     {
         let state = Arc::clone(&state);
-        credentials::start_watcher(move || state.scheduled_send.wake());
+        credentials::start_watcher(move || {
+            state.scheduled_send.wake();
+            state.snooze.wake();
+        });
     }
 
     // Auto Tags' standing worker: sweeps enabled rules over newly-cached
