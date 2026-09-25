@@ -2852,5 +2852,7 @@
   "views.download.all": "Alles",
   "views.download.done_one": "{{count}} Datei heruntergeladen",
   "views.download.done_other": "{{count}} Dateien heruntergeladen",
-  "views.download.none": "Keine Anhänge gefunden"
+  "views.download.none": "Keine Anhänge gefunden",
+  "views.download.skipped_one": "{{count}} Nachricht ist nicht im Tresor",
+  "views.download.skipped_other": "{{count}} Nachrichten sind nicht im Tresor"
 }

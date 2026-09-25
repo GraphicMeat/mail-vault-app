@@ -2852,5 +2852,7 @@
   "views.download.all": "Everything",
   "views.download.done_one": "{{count}} file downloaded",
   "views.download.done_other": "{{count}} files downloaded",
-  "views.download.none": "No attachments found"
+  "views.download.none": "No attachments found",
+  "views.download.skipped_one": "{{count}} message is not in the vault",
+  "views.download.skipped_other": "{{count}} messages are not in the vault"
 }

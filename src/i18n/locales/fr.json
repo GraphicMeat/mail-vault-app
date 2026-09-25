@@ -2852,5 +2852,7 @@
   "views.download.all": "Tout",
   "views.download.done_one": "{{count}} fichier téléchargé",
   "views.download.done_other": "{{count}} fichiers téléchargés",
-  "views.download.none": "Aucune pièce jointe trouvée"
+  "views.download.none": "Aucune pièce jointe trouvée",
+  "views.download.skipped_one": "{{count}} message n’est pas dans le coffre",
+  "views.download.skipped_other": "{{count}} messages ne sont pas dans le coffre"
 }

@@ -247,6 +247,9 @@ fn messages_of(
     use mailvault_core::search_index::query::MAX_LIMIT;
     let now = now_secs();
     let mut out = Vec::new();
+    // Mail indexed mid-walk shifts later pages by a row; the same message
+    // twice would land as `photo.png` and `photo (1).png`.
+    let mut seen = std::collections::HashSet::new();
     for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
         let mut request = SearchRequest { limit: Some(MAX_LIMIT), ..request_for(def, account, keys, now) };
         loop {
@@ -257,7 +260,10 @@ fn messages_of(
                 let (mailbox, local_only, _) =
                     crate::handlers::mail_search::mailbox_for_vault_dir(&hit.vault_dir, &account.known_mailboxes);
                 let mailbox = if local_only { hit.vault_dir.clone() } else { mailbox };
-                out.push((account.account_id.clone(), mailbox, hit.uid));
+                let message = (account.account_id.clone(), mailbox, hit.uid);
+                if seen.insert(message.clone()) {
+                    out.push(message);
+                }
             }
             if page.hits.len() < MAX_LIMIT {
                 break;

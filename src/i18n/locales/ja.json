@@ -2852,5 +2852,7 @@
   "views.download.all": "すべて",
   "views.download.done_one": "{{count}} 件のファイルをダウンロードしました",
   "views.download.done_other": "{{count}} 件のファイルをダウンロードしました",
-  "views.download.none": "添付ファイルが見つかりません"
+  "views.download.none": "添付ファイルが見つかりません",
+  "views.download.skipped_one": "{{count}} 件のメールは保管庫にありません",
+  "views.download.skipped_other": "{{count}} 件のメールは保管庫にありません"
 }

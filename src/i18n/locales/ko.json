@@ -2852,5 +2852,7 @@
   "views.download.all": "전체",
   "views.download.done_one": "파일 {{count}}개 다운로드됨",
   "views.download.done_other": "파일 {{count}}개 다운로드됨",
-  "views.download.none": "첨부 파일이 없습니다"
+  "views.download.none": "첨부 파일이 없습니다",
+  "views.download.skipped_one": "메일 {{count}}개가 보관함에 없습니다",
+  "views.download.skipped_other": "메일 {{count}}개가 보관함에 없습니다"
 }

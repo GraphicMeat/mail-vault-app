@@ -90,4 +90,23 @@ describe('downloading a view’s attachments', () => {
     await waitFor(() => expect(exportRowAttachments).toHaveBeenCalledWith(rows, '/Users/me/Downloads/Search results - email.attachments.folderName'));
     expect(exportAttachments).not.toHaveBeenCalled();
   });
+
+  it('rows the vault never stored are counted, not reported as "none found"', async () => {
+    exportRowAttachments.mockResolvedValueOnce({ dir: '/x', files: 0, skipped: 2 });
+    render(<ViewAttachmentsDownload rows={[{ _accountId: 'a', _mailbox: 'INBOX', uid: 4 }]} name="Search results" />);
+    fireEvent.click(screen.getByTestId('view-download-attachments'));
+    await waitFor(() => expect(screen.getByTestId('view-download-attachments').textContent).toBe('views.download.skipped:{"count":2}'));
+  });
+
+  it('arrow keys go round the wheel', () => {
+    render(<ViewAttachmentsDownload view={view({ withinDays: 30 })} />);
+    fireEvent.click(screen.getByTestId('view-download-attachments'));
+    const wedges = screen.getAllByRole('menuitem');
+    wedges[0].focus();
+    fireEvent.keyDown(wedges[0], { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(wedges[1]);
+    fireEvent.keyDown(wedges[1], { key: 'ArrowLeft' });
+    fireEvent.keyDown(wedges[0], { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(wedges[2]);
+  });
 });

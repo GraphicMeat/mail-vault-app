@@ -2852,5 +2852,7 @@
   "views.download.all": "Todo",
   "views.download.done_one": "{{count}} archivo descargado",
   "views.download.done_other": "{{count}} archivos descargados",
-  "views.download.none": "No se encontraron adjuntos"
+  "views.download.none": "No se encontraron adjuntos",
+  "views.download.skipped_one": "{{count}} mensaje no está en la bóveda",
+  "views.download.skipped_other": "{{count}} mensajes no están en la bóveda"
 }

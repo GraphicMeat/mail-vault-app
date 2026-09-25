@@ -2852,5 +2852,7 @@
   "views.download.all": "Tutto",
   "views.download.done_one": "{{count}} file scaricato",
   "views.download.done_other": "{{count}} file scaricati",
-  "views.download.none": "Nessun allegato trovato"
+  "views.download.none": "Nessun allegato trovato",
+  "views.download.skipped_one": "{{count}} messaggio non è nella cassaforte",
+  "views.download.skipped_other": "{{count}} messaggi non sono nella cassaforte"
 }

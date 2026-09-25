@@ -59,6 +59,8 @@ describe('view query groups', () => {
 
   it('a sender without an operator is one name, spaces and all', () => {
     expect(parseSenders('Ann Lee')).toEqual([['Ann Lee']]);
+    expect(parseSenders(' Smith, John ')).toEqual([['Smith, John']]);
+    expect(serializeGroups(parseSenders('Smith, John'))).toBe('Smith, John');
     expect(parseSenders('')).toEqual([[]]);
     expect(parseSenders(null)).toEqual([[]]);
     expect(parseSenders('acme && billing || Ann Lee')).toEqual([['acme', 'billing'], ['Ann Lee']]);

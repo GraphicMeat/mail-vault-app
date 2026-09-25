@@ -2852,5 +2852,7 @@
   "views.download.all": "Tudo",
   "views.download.done_one": "{{count}} arquivo baixado",
   "views.download.done_other": "{{count}} arquivos baixados",
-  "views.download.none": "Nenhum anexo encontrado"
+  "views.download.none": "Nenhum anexo encontrado",
+  "views.download.skipped_one": "{{count}} mensagem não está no cofre",
+  "views.download.skipped_other": "{{count}} mensagens não estão no cofre"
 }

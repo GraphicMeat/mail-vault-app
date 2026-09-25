@@ -21,8 +21,13 @@ export function parseGroups(query) {
 }
 
 /// A sender filter in the same notation. Saved before groups existed it is one
-/// name, spaces and all — "John Smith" never meant John AND Smith.
-export const parseSenders = text => (OPERATOR.test(text || '') ? parseGroups(text) : [words(text || '')]);
+/// name, spaces and commas and all — "Smith, John" never meant Smith AND John,
+/// and the daemon still reads it whole.
+export function parseSenders(text) {
+  if (OPERATOR.test(text || '')) return parseGroups(text);
+  const name = (text || '').trim();
+  return [name ? [name] : []];
+}
 
 export const serializeGroups = groups => groups.filter(group => group.length)
   .map(group => group.join(' && ')).join(' || ');
