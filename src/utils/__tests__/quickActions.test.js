@@ -157,3 +157,20 @@ describe('tag entries after the move to daemon-owned tags', () => {
     expect(entries.some(entry => entry.action === 'tag')).toBe(false);
   });
 });
+
+describe('snooze quick action', () => {
+  it('is a saved action that survives normalization', () => {
+    const { entries } = normalizeQuickActions({ defaults: { row: { entries: [{ action: 'snooze' }] } } }).defaults.row;
+    expect(entries).toEqual([{ id: 'snooze', action: 'snooze' }]);
+  });
+
+  // Appended, never inserted: the selection bar shows its first three
+  // entries inline, and the reader's grouped layout keys off its exact list.
+  it('comes last in the row and selection defaults and is not added to the reader', () => {
+    expect(DEFAULT_QUICK_ACTIONS.defaults.row.entries.at(-1).action).toBe('snooze');
+    expect(DEFAULT_QUICK_ACTIONS.defaults.selection.entries.at(-1).action).toBe('snooze');
+    expect(DEFAULT_QUICK_ACTIONS.defaults.selection.entries.slice(0, 3).map(entry => entry.action))
+      .toEqual(['markRead', 'markUnread', 'archive']);
+    expect(DEFAULT_QUICK_ACTIONS.defaults.reader.entries.some(entry => entry.action === 'snooze')).toBe(false);
+  });
+});

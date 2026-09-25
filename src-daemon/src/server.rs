@@ -181,6 +181,9 @@ pub struct DaemonState {
     /// (create/reschedule/cancel), same shape `classification`'s `notify`
     /// wakes its own worker.
     pub scheduled_send: crate::scheduled_send_worker::ScheduledSendState,
+    /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
+    /// create/reschedule and holds the lock for an immediate unsnooze.
+    pub snooze: crate::snooze_worker::SnoozeState,
     /// Auto Tags' wake signal — woken by the same "new mail arrived" points
     /// that already feed the classification path (`handle_sync_now`,
     /// `idle_watch`), shared with `idle` via `IdleWatchers::set_auto_tag_notify`
@@ -569,6 +572,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::scheduled::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::snooze::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::ai::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -595,6 +601,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
             // than at the worker's next look.
             if result["ok"] == true {
                 state.scheduled_send.wake();
+                state.snooze.wake();
             }
             RpcResponse::success(id, result)
         }
@@ -738,6 +745,7 @@ impl DaemonState {
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
+            snooze: crate::snooze_worker::SnoozeState::default(),
             auto_tag_worker,
         })
     }

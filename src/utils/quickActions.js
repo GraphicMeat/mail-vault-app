@@ -5,7 +5,7 @@ export const QUICK_ACTION_TYPES = [
   'archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere',
   'toggleRead', 'markRead', 'markUnread', 'star', 'unstar', 'tag', 'move',
   'spam', 'reply', 'replyAll', 'forward', 'replyTemplate', 'export', 'newMessage',
-  'open', 'source', 'theme',
+  'open', 'source', 'theme', 'snooze',
 ];
 
 const entry = (action, extra = {}) => ({ id: action, action, ...extra });
@@ -16,13 +16,13 @@ export const DEFAULT_QUICK_ACTIONS = {
       entries: [
         entry('archive'), entry('unarchive'), entry('toggleRead'), entry('star'), entry('unstar'),
         entry('reply'), entry('replyAll'), entry('forward'), entry('newMessage'), entry('move'),
-        entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'),
+        entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'), entry('snooze'),
       ],
       favoriteId: 'archive', palette: 'semantic', radialPagination: false,
     },
     selection: {
       mode: 'inline',
-      entries: ['markRead', 'markUnread', 'archive', 'unarchive', 'move', 'deleteServer', 'deleteEverywhere', 'export']
+      entries: ['markRead', 'markUnread', 'archive', 'unarchive', 'move', 'deleteServer', 'deleteEverywhere', 'export', 'snooze']
         .map(action => entry(action)),
       favoriteId: 'archive', palette: 'semantic', radialPagination: false,
       selectionDisplay: 'icon-label', selectionActionLimit: 3,

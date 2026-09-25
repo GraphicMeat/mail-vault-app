@@ -42,6 +42,7 @@ pub(crate) mod release_notes;
 pub(crate) mod restore;
 pub(crate) mod scheduled;
 pub(crate) mod search_index;
+pub(crate) mod snooze;
 pub(crate) mod smtp;
 pub(crate) mod tags;
 pub(crate) mod transfer;

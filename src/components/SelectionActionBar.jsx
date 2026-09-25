@@ -5,6 +5,7 @@ import { useSelectionStore } from "../stores/selectionStore";
 import { useMessageListStore } from "../stores/messageListStore";
 import { useSearchStore } from "../stores/searchStore";
 import {
+  AlarmClock,
   Archive,
   ArchiveRestore,
   FolderSymlink,
@@ -20,6 +21,8 @@ import {
   X,
 } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
+import { SnoozePicker } from "./SnoozePicker";
+import { canSnooze } from "../services/workflows/snooze";
 import { vaultClause } from "../utils/custodyCopy";
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
@@ -73,6 +76,7 @@ export function SelectionActionBar() {
   // triggered it. null means the popover is closed.
   const [deleteMode, setDeleteMode] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const [snoozeRect, setSnoozeRect] = useState(null);
   const [moveLeft, setMoveLeft] = useState(0);
   const moveButtonRef = useRef(null);
   const barRef = useRef(null);
@@ -360,6 +364,8 @@ export function SelectionActionBar() {
       ? t("rowMenu.unstar")
       : entry.action === "move"
       ? t("selection.moveFolder")
+      : entry.action === "snooze"
+      ? t("snooze.action")
       : t("quickActions.title");
     const disabledAction = [
       "open",
@@ -405,6 +411,11 @@ export function SelectionActionBar() {
               ))
         ))) ||
       entry.action === "spam" && (!allServerBacked || !selectionJunkPath) ||
+      entry.action === "snooze" &&
+        (!selectionIsFullyResolved || !selectedRows.length ||
+          !selectedRows.every((email) =>
+            canSnooze(email, useMailStore.getState())
+          )) ||
       entry.action === "tag" &&
         (!localLabels.some((item) => item.id === entry.params?.tagId) ||
           !resolved);
@@ -423,6 +434,7 @@ export function SelectionActionBar() {
       unstar: StarOff,
       tag: Tag,
       spam: ShieldAlert,
+      snooze: AlarmClock,
     }[entry.action];
     return {
       id: entry.id,
@@ -448,13 +460,16 @@ export function SelectionActionBar() {
       expanded: entry.action === "move" ? showMoveDropdown : undefined,
       restoreFocus: ![
         "move",
+        "snooze",
         "delete",
         "deleteServer",
         "deleteEverywhere",
         "unarchive",
       ].includes(entry.action),
-      onActivate: async () => {
-        if (entry.action === "markRead") await handleAction(markSelectedAsRead);
+      onActivate: async (event) => {
+        if (entry.action === "snooze") {
+          setSnoozeRect(event.currentTarget.getBoundingClientRect());
+        } else if (entry.action === "markRead") await handleAction(markSelectedAsRead);
         else if (entry.action === "markUnread") {
           await handleAction(markSelectedAsUnread);
         } else if (entry.action === "toggleRead") {
@@ -572,6 +587,13 @@ export function SelectionActionBar() {
                 onClose={() => setShowMoveDropdown(false)}
               />
             </div>
+          )}
+          {snoozeRect && (
+            <SnoozePicker
+              keys={selectionKeys}
+              anchorRect={{ left: snoozeRect.left, bottom: Math.max(8, snoozeRect.top - 300) }}
+              onClose={() => setSnoozeRect(null)}
+            />
           )}
         </motion.div>
       )}

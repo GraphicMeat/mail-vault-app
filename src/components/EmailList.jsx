@@ -58,6 +58,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { RowQuickActions } from './RowQuickActions';
+import { SwipeBackdrop } from './SwipeBackdrop';
+import { useRowSwipe } from '../hooks/useRowSwipe';
 import { TagChips } from './TagChips';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
@@ -352,6 +354,18 @@ function EmailListComponent({ stacked = false }) {
     setPendingDelete({ executor, copy, ...options });
   }, []);
   const scrollContainerRef = useRef(null);
+  // Two-finger trackpad swipes on the chronological list's rows (not the
+  // sender grouping, not the explorer). The row is found under the pointer
+  // through its virtual wrapper, the one element that carries `data-index`.
+  const trackpadSwipeEnabled = useSettingsStore(s => s.trackpadSwipeEnabled);
+  const swipe = useRowSwipe(scrollContainerRef, {
+    enabled: trackpadSwipeEnabled && !isExplorer && emailListGrouping !== 'sender',
+    resolveRow: (el) => {
+      const wrapper = el?.closest?.('[data-index]');
+      const row = wrapper && scrollContainerRef.current?.contains(wrapper) ? wrapper.querySelector('.virtual-row') : null;
+      return row ? { index: Number(wrapper.dataset.index), row, wrapper } : null;
+    },
+  });
   useEffect(() => {
     const element = scrollContainerRef.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
@@ -1154,7 +1168,7 @@ function EmailListComponent({ stacked = false }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`flex-1 min-h-0 ${isExplorer ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'} ${showScrubber ? 'mail-list-with-timeline' : ''}`}
+        className={`flex-1 min-h-0 ${isExplorer ? 'flex flex-col overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} ${showScrubber ? 'mail-list-with-timeline' : ''}`}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || isRefreshing) && (
@@ -1555,6 +1569,7 @@ function EmailListComponent({ stacked = false }) {
                     className={monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                   >
                     {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
+                    {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
                     <ThreadRowComponent
                       key={rowId}
                       rowId={rowId}
@@ -1597,6 +1612,7 @@ function EmailListComponent({ stacked = false }) {
                   className={item.type === 'thread-member' ? 'thread-member' : monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                 >
                   {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
+                  {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
                   <RowComponent
                     key={item.email.uid}
                     rowId={item.email.uid}

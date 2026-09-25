@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArchiveRestore, Forward, FolderInput, ImageDown, Mail, MailOpen,
-  MailPlus, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2,
+  MailPlus, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2, AlarmClock,
 } from 'lucide-react';
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
@@ -16,6 +16,9 @@ import { setDeleteUndo, reloadListInView } from '../services/workflows/messageMu
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
+import { SnoozePicker } from './SnoozePicker';
+import { canSnooze } from '../services/workflows/snooze';
+import { registerRowActions } from '../utils/rowActionRegistry';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
@@ -25,7 +28,7 @@ const ICONS = {
   deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail,
   star: Star, unstar: StarOff, tag: Tag, move: FolderInput, spam: ShieldAlert,
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
-  export: ImageDown, newMessage: MailPlus,
+  export: ImageDown, newMessage: MailPlus, snooze: AlarmClock,
 };
 const DESTRUCTIVE = new Set(['delete', 'deleteServer', 'deleteEverywhere']);
 const EMPTY_ARRAY = Object.freeze([]);
@@ -56,10 +59,13 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const setSelectedFlagged = useMailStore(state => state.setSelectedFlagged);
   const purgeSelected = useMailStore(state => state.purgeSelectedEverywhere);
   const [moveRect, setMoveRect] = useState(null);
-  useEffect(() => setMoveRect(null), [identity]);
+  const [snoozeRect, setSnoozeRect] = useState(null);
+  useEffect(() => { setMoveRect(null); setSnoozeRect(null); }, [identity]);
   const state = useMailStore.getState();
   const backupScan = useBackupScan();
   const keys = useMemo(() => emails.map(email => selectionKey(email, useMailStore.getState())), [emails, identity]);
+  const describeRef = useRef(null);
+  const registerMarker = useCallback(node => registerRowActions(node, describeRef), []);
   if (!emails.length) return null;
 
   const newest = emails.reduce((a, b) => new Date(b.date) > new Date(a.date) ? b : a);
@@ -164,9 +170,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     if (entry.action === 'forward') return t('emailActionBar.forward');
     if (entry.action === 'export') return t('common.export');
     if (entry.action === 'newMessage') return t('rowMenu.newMessageTo', { name: getSenderName(newest) });
+    if (entry.action === 'snooze') return t('snooze.action');
     return t('quickActions.title');
   };
-  const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(entry => {
+  // One entry's descriptor. Also what a trackpad swipe runs an action through
+  // (utils/rowActionRegistry.js), whether or not the row's menu lists it.
+  const describe = entry => {
     const template = templates.find(item => item.id === entry.params?.templateId);
     const label = localLabels.find(item => item.id === entry.params?.tagId);
     const savedTargetAccount = entry.params?.accountId || (oneAccount ? locs[0].accountId : null);
@@ -187,14 +196,15 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       || entry.action === 'move' && (!canServerAction || (entry.params?.mailbox ? !targetMatches || !destination : !oneAccount))
       || entry.action === 'spam' && (!junkPath || !oneAccount || !canServerAction)
       || entry.action === 'replyTemplate' && !template
-      || entry.action === 'newMessage' && !senderAddress;
+      || entry.action === 'newMessage' && !senderAddress
+      || entry.action === 'snooze' && !emails.every(email => canSnooze(email, state));
     return {
       id: entry.id, action: entry.action, label: actionLabel(entry), Icon: ICONS[entry.action],
       disabled: !!disabledAction,
       hidden: entry.action === 'deleteServer' && !hasServerBacked,
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
-      restoreFocus: !['move', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
+      restoreFocus: !['move', 'snooze', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
       onActivate: async event => {
         if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !email.isArchived))); onClose?.(); }
         else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
@@ -213,6 +223,8 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
           await useMailStore.getState().moveEmails(keys, entry.params.mailbox); onClose?.();
         } else if (entry.action === 'move') {
           setMoveRect(event.currentTarget.getBoundingClientRect());
+        } else if (entry.action === 'snooze') {
+          setSnoozeRect(event.currentTarget.getBoundingClientRect());
         } else if (entry.action === 'spam') {
           await useMailStore.getState().moveEmails(keys, junkPath); onClose?.();
         } else if (entry.action === 'reply') { onClose?.(); await openReply('reply'); }
@@ -226,13 +238,18 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
         } else if (entry.action === 'newMessage') { onClose?.(); openNewMessage(); }
       },
     };
-  });
+  };
+  const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(describe);
+  describeRef.current = describe;
 
   return <>
+    <span hidden data-row-actions ref={registerMarker} />
     <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}
       onClose={() => { setMoveRect(null); onClose?.(); }} />}
+    {snoozeRect && <SnoozePicker keys={keys} anchorRect={snoozeRect}
+      onClose={() => { setSnoozeRect(null); onClose?.(); }} />}
   </>;
 }

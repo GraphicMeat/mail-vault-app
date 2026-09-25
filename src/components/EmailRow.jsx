@@ -15,9 +15,11 @@ import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { RowQuickActions } from './RowQuickActions';
 import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
 import { TagChips } from './TagChips';
-import { formatEmailDate } from '../utils/dateFormat';
+import { formatEmailDate, intlLocale, hour12For } from '../utils/dateFormat';
+import { useSnoozeStore, wakeAtFor } from '../stores/snoozeStore';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import {
+  AlarmClock,
   Paperclip,
   Star,
 } from 'lucide-react';
@@ -78,6 +80,21 @@ function StarToggle({ email, actions, size }) {
     >
       <Star size={size} className={isFlagged ? 'text-amber-400 fill-amber-400' : 'text-mail-text-muted hover:text-amber-400'} />
     </button>
+  );
+}
+
+// A snoozed message (it sits in Snoozed) shows when it comes back instead of
+// when it arrived.
+function RowDate({ email }) {
+  const t = useT();
+  const timeFormat = useSettingsStore(s => s.timeFormat);
+  const wakeAt = useSnoozeStore(s => wakeAtFor(s.rows, email._accountId || useMailStore.getState().activeAccountId, email.messageId));
+  if (wakeAt == null) return formatEmailDate(email.date);
+  const when = new Intl.DateTimeFormat(intlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12For(timeFormat) }).format(wakeAt);
+  return (
+    <span data-testid="row-snoozed-until" title={t('snooze.until', { time: when })} className="inline-flex items-center gap-1">
+      <AlarmClock size={11} aria-hidden="true" />{when}
+    </span>
   );
 }
 
@@ -198,7 +215,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <TagChips email={email} />
         <AttachmentGlyph email={email} size={14} />
         <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
-          {formatEmailDate(email.date)}
+          <RowDate email={email} />
         </span>
       </div>
 
@@ -287,7 +304,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />
           <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} size={12} />
           <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
-            {formatEmailDate(email.date)}
+            <RowDate email={email} />
           </span>
         </div>
         {/* Line 2: Subject + attachment. Nothing before the subject, so its

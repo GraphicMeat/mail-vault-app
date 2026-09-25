@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  AlarmClock,
   Archive,
   ArchiveRestore,
   Code,
@@ -67,6 +68,7 @@ const ICONS = {
   open: ExternalLink,
   source: Code,
   theme: Moon,
+  snooze: AlarmClock,
 };
 const LABELS = {
   archive: "common.archive",
@@ -91,6 +93,7 @@ const LABELS = {
   open: "common.open",
   source: "emailActionBar.source",
   theme: "emailActionBar.dark",
+  snooze: "snooze.action",
 };
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const EMPTY_ARRAY = Object.freeze([]);
@@ -113,6 +116,7 @@ const SURFACE_ACTIONS = {
     "move",
     "spam",
     "export",
+    "snooze",
   ],
   reader: QUICK_ACTION_TYPES.filter((action) => action !== "newMessage"),
 };

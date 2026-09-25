@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -201,6 +201,28 @@ CREATE TABLE auto_tag_decisions (
 );
 ";
 
+/// Snooze's queue: messages the app moved to the server's Snoozed folder and
+/// `snooze_worker` moves back at `wake_at`. Keyed on `message_id` rather than
+/// `msg_key` because it is only ever used to find the message on the server
+/// again (`app_db::snooze`'s module doc); `uid_in_snoozed` is a hint.
+const SCHEMA_V5: &str = "
+CREATE TABLE snoozes (
+  id              TEXT PRIMARY KEY,
+  account_id      TEXT NOT NULL,
+  from_mailbox    TEXT NOT NULL,
+  snoozed_mailbox TEXT NOT NULL,
+  uid_in_snoozed  INTEGER,
+  message_id      TEXT NOT NULL,
+  wake_at         INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL,
+  state           TEXT NOT NULL,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  retry_at        INTEGER NOT NULL DEFAULT 0,
+  last_error      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX snoozes_due ON snoozes(state, wake_at);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -341,6 +363,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 5 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V5} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '5');"
+            ))
+            .map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -417,10 +445,10 @@ mod tests {
     fn open_creates_the_schema_and_is_idempotent() {
         let dir = scratch("create");
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("5"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -441,7 +469,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM classifications", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         for table in [
@@ -454,6 +482,7 @@ mod tests {
             "auto_tag_rules",
             "auto_tag_backfills",
             "auto_tag_decisions",
+            "snoozes",
         ] {
             let found: i64 = conn
                 .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
@@ -481,7 +510,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v2 row must survive the v3+v4 migration");
         let found: i64 = conn
@@ -511,7 +540,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM scheduled_sends", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v3 row must survive the v4 migration");
         for table in ["auto_tag_rules", "auto_tag_backfills", "auto_tag_decisions"] {
@@ -520,6 +549,36 @@ mod tests {
                 .unwrap();
             assert_eq!(found, 1, "{table} is missing after the migration");
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v5 adds Snooze's queue on top of a v4 store (Auto Tags) without losing
+    /// what v4 already held — same shape as the tests above.
+    #[test]
+    fn a_v4_store_gains_snoozes_and_keeps_its_rows() {
+        let dir = scratch("v4");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 {SCHEMA_V4}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '4');
+                 INSERT INTO auto_tag_rules(id, name, instruction, constraints, tag_id, inbox_action, min_confidence, created_at, updated_at)
+                 VALUES ('r1', 'Receipts', 'receipts', '{{}}', 't1', 'none', 0.5, 0, 0);"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM auto_tag_rules", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v4 row must survive the v5 migration");
+        let found: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='snoozes'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(found, 1, "snoozes is missing after the migration");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
