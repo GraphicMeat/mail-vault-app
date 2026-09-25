@@ -2,8 +2,25 @@ import { useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useViewStore, effectiveViewConfig } from '../stores/viewStore';
+import { useViewStore, effectiveViewConfig, currentListView } from '../stores/viewStore';
 import { currentQuickActionScope, quickActionScopeKey, resolveQuickActions } from '../utils/quickActions';
+
+// The detached Settings window has none of the main window's mail, search or
+// view state, so on its own it resolved every surface for INBOX. It is handed
+// the main window's scope instead and pins it here.
+// ponytail: pinned once at open; forward scope changes from the main window if
+// someone keeps a detached Settings open while moving between views.
+let pinnedScope;
+export function pinQuickActionScope(scope) { pinnedScope = scope; }
+
+/// The scope the main window's surfaces resolve right now, read outside React.
+export function currentQuickActionScopeSnapshot() {
+  const { activeMailbox, activeAccountId, viewMode, unifiedInbox, unifiedFolder, mailboxScope } = useMailStore.getState();
+  return currentQuickActionScope({
+    activeMailbox, activeAccountId, viewMode, unifiedInbox, unifiedFolder, mailboxScope,
+    isSearchResults: useSearchStore.getState().searchActive,
+  }, { emailListView: currentListView() });
+}
 
 export function useQuickActionConfiguration(surface, scopeOverride = undefined) {
   const quickActions = useSettingsStore(state => state.quickActions);
@@ -20,7 +37,9 @@ export function useQuickActionConfiguration(surface, scopeOverride = undefined) 
   const mailboxScope = useMailStore(state => state.mailboxScope);
   const searchActive = useSearchStore(state => state.searchActive);
   const context = { activeMailbox, activeAccountId, viewMode, unifiedInbox, unifiedFolder, mailboxScope, isSearchResults: searchActive };
-  const scope = scopeOverride === undefined ? currentQuickActionScope(context, { emailListView }) : scopeOverride;
+  const scope = scopeOverride !== undefined ? scopeOverride
+    : pinnedScope !== undefined ? pinnedScope
+      : currentQuickActionScope(context, { emailListView });
   const key = quickActionScopeKey(scope);
   const resolved = useMemo(() => resolveQuickActions(quickActions, surface, scope), [quickActions, surface, key]);
   return { ...resolved, scope };

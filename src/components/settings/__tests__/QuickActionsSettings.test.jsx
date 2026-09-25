@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QuickActionsSettings } from '../QuickActionsSettings';
+import { quickActionScopeKey } from '../../../utils/quickActions';
 
 const state = vi.hoisted(() => ({
   quickActions: null,
@@ -10,6 +11,7 @@ const state = vi.hoisted(() => ({
   setQuickActionSurface: vi.fn(),
   setQuickActionStyle: vi.fn(),
   setQuickActionStyleLink: vi.fn(),
+  resetQuickActionScope: vi.fn(),
   resetQuickActions: vi.fn(),
 }));
 vi.mock('../../../stores/settingsStore', () => ({
@@ -137,5 +139,44 @@ describe('QuickActionsSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
     expect(state.quickActions.defaults.row.entries[0].action).toBe('archive');
     expect(state.quickActions.defaults.reader).toMatchObject({ mode: 'menu', palette: 'custom' });
+  });
+
+  // The view on screen: INBOX of acct-1, as mailState above describes it.
+  const inboxKey = quickActionScopeKey({ kind: 'mailbox', accountId: 'acct-1', mailbox: 'INBOX' });
+  const readerOverride = { [inboxKey]: { reader: { mode: 'radial', entries: [{ id: 'reply', action: 'reply' }], favoriteId: 'reply', palette: 'semantic' } } };
+  const checked = name => screen.getByRole('radio', { name }).getAttribute('aria-checked');
+
+  it('opens each surface on the scope that governs the current view', () => {
+    state.quickActions = { defaults: {}, overrides: readerOverride };
+    render(<QuickActionsSettings />);
+    expect(checked('All views')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    expect(checked('Current view')).toBe('true');
+    expect(checked('Radial')).toBe('true');
+  });
+
+  it('follows an override created while Settings is open, but keeps an explicit choice', () => {
+    state.quickActions = { defaults: {}, overrides: {} };
+    const view = render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    expect(checked('All views')).toBe('true');
+    state.quickActions = { defaults: {}, overrides: readerOverride };
+    view.rerender(<QuickActionsSettings />);
+    expect(checked('Current view')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: 'All views' }));
+    view.rerender(<QuickActionsSettings />);
+    expect(checked('All views')).toBe('true');
+    expect(checked('Inline')).toBe('true');
+  });
+
+  it('stays on Current view after the view goes back to the all-view defaults', () => {
+    state.quickActions = { defaults: {}, overrides: readerOverride };
+    state.resetQuickActionScope.mockImplementation(() => { state.quickActions = { defaults: {}, overrides: {} }; });
+    const view = render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use all-view defaults' }));
+    view.rerender(<QuickActionsSettings />);
+    expect(checked('Current view')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Customize this view' })).toBeTruthy();
   });
 });

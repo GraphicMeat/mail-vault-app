@@ -56,6 +56,7 @@ import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSettingsWindow } from './hooks/useSettingsWindow';
+import { currentQuickActionScopeSnapshot } from './hooks/useQuickActionConfiguration';
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
@@ -754,6 +755,7 @@ function App() {
             getAccountCacheMailboxes(account.id) || (account.id === state.activeAccountId ? state.mailboxes : [])])),
           settings: Object.fromEntries(Object.entries(useSettingsStore.getState()).filter(([, value]) => typeof value !== 'function')),
           theme: { theme: useThemeStore.getState().theme, palette: useThemeStore.getState().palette },
+          quickActionScope: currentQuickActionScopeSnapshot(),
         });
         stopReady?.();
       });

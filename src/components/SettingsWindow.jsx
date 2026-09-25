@@ -10,6 +10,7 @@ import { saveRestoreDescriptor } from '../services/cacheManager';
 import { useTagStore } from '../stores/tagStore';
 import { useAutoTagStore } from '../stores/autoTagStore';
 import { useFieldStore } from '../stores/fieldStore';
+import { pinQuickActionScope } from '../hooks/useQuickActionConfiguration';
 
 const token = new URLSearchParams(window.location.search).get('settings');
 // Each window owns its own render epoch. Relaying it would bounce setLocale
@@ -61,6 +62,8 @@ export function SettingsWindow() {
           if (mailboxes?.length) saveRestoreDescriptor({ accountId, mailbox: 'INBOX', viewMode: 'live', mailboxes });
         });
         useSettingsStore.setState(payload.settings);
+        // Quick actions edit the view the main window shows, not this window's INBOX.
+        if (payload.quickActionScope) pinQuickActionScope(payload.quickActionScope);
         useThemeStore.setState(payload.theme);
         useThemeStore.getState().initTheme();
         await setLocale(payload.settings.language || 'en');

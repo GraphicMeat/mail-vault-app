@@ -186,11 +186,10 @@ export function QuickActionsSettings() {
   const activeMailbox = useMailStore((state) => state.activeMailbox);
   const accounts = useMailStore((state) => state.accounts) || EMPTY_ARRAY;
   const [surface, setSurfaceId] = useState("row");
-  const [scopeChoices, setScopeChoices] = useState({
-    row: "global",
-    selection: "global",
-    reader: "global",
-  });
+  // Only what the person picked. Until then each surface opens on the scope
+  // that actually governs the current view: a view with its own override shown
+  // as "All views" made every edit there look ignored.
+  const [scopeChoices, setScopeChoices] = useState({});
   const [newLabelName, setNewLabelName] = useState("");
   const [addType, setAddType] = useState("archive");
   const [tagId, setTagId] = useState("");
@@ -198,8 +197,13 @@ export function QuickActionsSettings() {
   const [templateId, setTemplateId] = useState("");
   const [previewStatus, setPreviewStatus] = useState("");
   const { scope } = useQuickActionConfiguration(surface);
-  const scopeChoice = scopeChoices[surface] || "global";
   const scopeKey = quickActionScopeKey(scope);
+  const normalized = useMemo(() => normalizeQuickActions(quickActions), [
+    quickActions,
+  ]);
+  const scopeChoice = scopeChoices[surface] ||
+    (scopeKey && normalized.overrides[scopeKey]?.[surface] ? "current" : "global");
+  const pickScope = (choice) => setScopeChoices((choices) => ({ ...choices, [surface]: choice }));
   const isGlobal = scopeChoice === "global";
   const activeAccount = accounts.find((account) =>
     account.id === scope.accountId || account.id === activeAccountId
@@ -209,9 +213,6 @@ export function QuickActionsSettings() {
     : t(`quickActions.scope.kind.${scope.kind}`);
   const scopeDescription = [scopeName, activeAccount?.email, scope.mailbox]
     .filter(Boolean).join(" · ");
-  const normalized = useMemo(() => normalizeQuickActions(quickActions), [
-    quickActions,
-  ]);
   const resolved = isGlobal
     ? { config: normalized.defaults[surface], inherited: false }
     : resolveQuickActions(normalized, surface, scope);
@@ -349,7 +350,7 @@ export function QuickActionsSettings() {
             <SegmentedChoice
               label={t("quickActions.scope")}
               value={scopeChoice}
-              onChange={(choice) => setScopeChoices((choices) => ({ ...choices, [surface]: choice }))}
+              onChange={pickScope}
               options={[
                 { value: "global", label: t("quickActions.scope.global") },
                 { value: "current", label: t("quickActions.scope.current"), disabled: !scopeKey },
@@ -475,7 +476,8 @@ export function QuickActionsSettings() {
         <div className="quick-actions-scope-status text-xs text-mail-text-muted">
           {!isGlobal && <>
             <span role="status">{resolved.inherited ? t("quickActions.scope.inherited") : t("quickActions.scope.current")}</span>
-            <button type="button" onClick={() => resolved.inherited ? persist(config) : resetScope(scope, surface)}>
+            {/* Pinned: once the override is gone the fallback would jump to All views. */}
+            <button type="button" onClick={() => { pickScope("current"); resolved.inherited ? persist(config) : resetScope(scope, surface); }}>
               {resolved.inherited ? t("quickActions.customizeScope") : t("quickActions.inherit")}
             </button>
           </>}
