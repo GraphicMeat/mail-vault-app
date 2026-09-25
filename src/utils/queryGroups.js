@@ -33,6 +33,13 @@ export function addTyped(groups, text) {
   return [...next, ...rest];
 }
 
+/// The OR adds an empty group to type into, never a second one.
+export const addGroup = groups => groups[groups.length - 1]?.length === 0 ? groups : [...groups, []];
+
+export function removeGroup(groups, g) {
+  return tidy(groups.filter((_, index) => index !== g));
+}
+
 export function removeWord(groups, g, i) {
   const next = groups.map(group => [...group]);
   next[g].splice(i, 1);
@@ -46,7 +53,7 @@ export function removeWord(groups, g, i) {
 export function dropItem(groups, item, target) {
   const next = groups.map(group => [...group]);
   if (item.kind === 'or') {
-    if (target.g === 'new' || !(target.i > 0)) return [...next, []];
+    if (target.g === 'new' || !(target.i > 0)) return addGroup(next);
     next.splice(target.g, 1, next[target.g].slice(0, target.i), next[target.g].slice(target.i));
     return next;
   }

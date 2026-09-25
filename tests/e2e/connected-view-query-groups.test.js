@@ -190,4 +190,56 @@ describe('View query OR groups', function () {
     await browser.waitUntil(async () => (await previewSubjects())?.includes(a),
       { timeout: 30_000, interval: 500, timeoutMsg: `"${a} && of" should find ${a} by its body` });
   });
+
+  // Clicking OR twice used to stack two empty groups, and an empty group had no
+  // X: the only way out was to leave the editor.
+  it('adds one empty OR group however often OR is clicked, and removes it again', async function () {
+    if (!(await browser.execute(() => !!document.querySelector('[data-testid="views-new"]')))) {
+      await openSettings();
+      await browser.pause(400);
+      await clickSettingsNav('Views');
+    }
+    await browser.waitUntil(async () => browser.execute(() => {
+      const button = document.querySelector('[data-testid="views-new"]');
+      return !!button && !button.disabled;
+    }), { timeout: 15_000, timeoutMsg: 'the + for a new view never became usable' });
+    const listViews = () => browser.executeAsync((done) => {
+      window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'views.list', params: {} })
+        .then((views) => done((views || []).filter((v) => !v.builtin)), () => done(null));
+    });
+    const before = (await listViews()).map((v) => v.id);
+    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
+      { timeout: 10_000, timeoutMsg: 'the view builder never opened' });
+    // The previous editor can still be unmounting: wait for a name field to set.
+    await browser.waitUntil(() => browser.execute((value) => {
+      const input = document.querySelector('[data-testid="view-name"]');
+      if (!(input instanceof HTMLInputElement)) return false;
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }, 'E2E empty OR'), { timeout: 5_000, interval: 100, timeoutMsg: 'the view builder showed no name field' });
+    await query(a);
+
+    const groups = () => browser.execute(() => [...document.querySelectorAll('[data-testid^="view-query-group-"]')]
+      .map((g) => ({
+        words: [...g.querySelectorAll('.view-query-key')].map((n) => n.textContent.trim()),
+        removable: !!g.querySelector('[data-testid^="view-query-remove-group-"]'),
+      })));
+    await browser.execute(() => document.querySelector('[data-testid="view-query-or"]').click());
+    await browser.execute(() => document.querySelector('[data-testid="view-query-or"]').click());
+    expect(await groups()).toEqual([{ words: [a], removable: false }, { words: [], removable: true }]);
+
+    await browser.execute(() => document.querySelector('[data-testid="view-query-remove-group-1"]').click());
+    await browser.waitUntil(async () => (await groups()).length === 1,
+      { timeout: 5_000, interval: 100, timeoutMsg: 'the empty OR group was not removed' });
+    expect(await groups()).toEqual([{ words: [a], removable: false }]);
+
+    await browser.execute(() => document.querySelector('[data-testid="view-editor-form"]').requestSubmit());
+    const saved = await browser.waitUntil(async () => {
+      const views = await listViews();
+      return (views || []).find((v) => !before.includes(v.id)) || false;
+    }, { timeout: 15_000, timeoutMsg: 'the view was never stored' });
+    expect(saved.def.query).toBe(a);
+  });
 });

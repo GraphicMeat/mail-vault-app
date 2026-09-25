@@ -17,7 +17,7 @@ import { ToggleSwitch } from './settings/ToggleSwitch';
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
-import { addTyped, dropItem, parseGroups, removeWord, serializeGroups } from '../utils/queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, removeGroup, removeWord, serializeGroups } from '../utils/queryGroups';
 // The drag ghost reuses the reorder list's preview style.
 import '../styles/account-settings-navigation.css';
 
@@ -277,6 +277,11 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
           <div className={`view-query-group${isOver({ g }) ? ' is-over' : ''}`} data-drop={`g:${g}`}
             data-testid={`view-query-group-${g}`} role="group" aria-label={t('views.query.group', { n: g + 1 })}>
             {!group.length && <span className="view-query-empty">{t('views.query.empty')}</span>}
+            {!group.length && groups.length > 1 && <button type="button" className="view-query-key-remove"
+              data-testid={`view-query-remove-group-${g}`} aria-label={`${t('common.remove')} ${t('views.query.group', { n: g + 1 })}`}
+              onClick={() => setGroups(current => removeGroup(current, g))}>
+              <X size={12} aria-hidden="true" />
+            </button>}
             {group.map((key, i) => <Fragment key={key}>
               {i > 0 && <span className="view-query-and" aria-hidden="true">{t('views.query.and')}</span>}
               {/* The word is the handle; only the X removes, so a press that
@@ -305,7 +310,7 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
         <button type="button" data-testid="view-query-or" data-drop="new"
           className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
           title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' }, `|| ${t('views.query.or')}`)}
-          onClick={unlessDragged(() => { setGroups([...allGroups, []]); setQueryInput(''); })}>
+          onClick={unlessDragged(() => { setGroups(addGroup(allGroups)); setQueryInput(''); })}>
           || {t('views.query.or')}
         </button>
       </div>

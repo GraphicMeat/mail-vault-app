@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTyped, dropItem, parseGroups, removeWord, serializeGroups } from '../queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, removeGroup, removeWord, serializeGroups } from '../queryGroups';
 
 describe('view query groups', () => {
   it('reads the notation back as OR groups of AND words', () => {
@@ -42,5 +42,18 @@ describe('view query groups', () => {
     expect(dropItem([['a', 'b', 'c']], { kind: 'or' }, { g: 0, i: 1 })).toEqual([['a'], ['b', 'c']]);
     expect(dropItem([['a', 'b']], { kind: 'or' }, { g: 0, i: 0 })).toEqual([['a', 'b'], []]);
     expect(dropItem([['a']], { kind: 'or' }, { g: 0 })).toEqual([['a'], []]);
+  });
+
+  it('the OR adds one empty group to type into, never a second', () => {
+    expect(addGroup([['a']])).toEqual([['a'], []]);
+    const open = [['a'], []];
+    expect(addGroup(open)).toBe(open);
+    expect(dropItem(open, { kind: 'or' }, { g: 'new' })).toEqual([['a'], []]);
+  });
+
+  it('removes an empty group, never the only one', () => {
+    expect(removeGroup([['a'], []], 1)).toEqual([['a']]);
+    expect(removeGroup([[], ['b']], 0)).toEqual([['b']]);
+    expect(removeGroup([[]], 0)).toEqual([[]]);
   });
 });
