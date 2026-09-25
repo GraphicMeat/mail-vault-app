@@ -25,6 +25,7 @@ import {
   seedIndexBacklog,
   seedDamagedSearchIndex,
   MOCK_PASSWORD,
+  SLOW_APPEND_MARKER,
 } from './tests/e2e/mockImap.js';
 import { startMockGraph } from './tests/e2e/mockGraph.js';
 
@@ -153,7 +154,13 @@ let MOCK_ACCOUNTS = [
       'Kunden/Company XY/Project A/Invoices/erledigt',
       'Kunden/Company XY/Project B/Invoices/erledigt',
     ],
-    faults: bodyFetchDropsAlways(9301),
+    faults: [
+      ...bodyFetchDropsAlways(9301),
+      // connected-sent-single-copy: one reply's Sent APPEND is stored only
+      // after the client gave up on it, and answered after the old 30 s
+      // compose listener. Scoped to that message by its Subject token.
+      slowCommandWith('APPEND', SLOW_APPEND_MARKER, 40_000),
+    ],
   },
   {
     id: '22222222-2222-4222-8222-222222222222',

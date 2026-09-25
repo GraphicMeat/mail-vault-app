@@ -1028,6 +1028,17 @@ export const SMTP_REFUSED_DOMAIN = 'refused.test';
 export const SEND_REFUSED_TO = `bounce@${SMTP_REFUSED_DOMAIN}`;
 
 /**
+ * A Subject token whose Sent APPEND the mock stalls 40 s before storing it
+ * (luke's faults in wdio.conf.js). The daemon gives up on the APPEND after
+ * 20 s, the mock files the message at 40 s anyway (a slow server that kept
+ * what the client timed out on), and the completion event arrives after the
+ * 30 s the compose listener used to wait. Matched on the uploaded message
+ * itself, so only a message a spec titles with it pays the delay. Keep it
+ * short and ASCII: a folded Subject line would split it.
+ */
+export const SLOW_APPEND_MARKER = 'slow-sent-append';
+
+/**
  * Snapshot a mailbox on a mock server, and hand back the undo.
  *
  * A send that SUCCEEDS is APPENDed to the account's Sent folder by the app, and
