@@ -178,6 +178,14 @@ describe('Caddy 404 patch', () => {
     expect(catIdx).toBeLessThan(guardIdx);
   });
 
+  it('repeats the site security headers on 404s, since the error route skips the site header block', () => {
+    const snippet = (stepText.match(/<<'CADDY'\n([\s\S]*?)\n\s*CADDY\n/) || [])[1] || '';
+    const siteHeaders = readFileSync(fixture, 'utf8').match(/\n {4}header \{\n([\s\S]*?)\n {4}\}/)[1]
+      .split('\n').map((l) => l.trim()).filter(Boolean);
+    expect(siteHeaders.length).toBeGreaterThan(0);
+    for (const h of siteHeaders) expect(snippet, h).toContain(h);
+  });
+
   it('rewrites try_files and inserts the absolute import before handle /api/*, leaving everything else untouched', () => {
     const before = readFileSync(fixture, 'utf8');
     const out = execFileSync('awk', [program, fixture], { encoding: 'utf8' });

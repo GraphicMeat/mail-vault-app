@@ -317,6 +317,13 @@ jobs:
           # extensionless .html, then let a real 404 reach handle_errors.
           cat > "$NEW" <<'CADDY'
           handle_errors 404 {
+              # The error route skips the site's header block: repeat it.
+              header {
+                  Strict-Transport-Security "max-age=31536000; includeSubDomains"
+                  X-Content-Type-Options nosniff
+                  Referrer-Policy no-referrer
+                  -Server
+              }
               root * /var/www/mailvaultapp
               @locale path_regexp locale ^/(de|fr|es|it|ja|ko|zh|pt-br)/
               handle @locale {
