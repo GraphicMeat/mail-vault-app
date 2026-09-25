@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -45,6 +45,9 @@ const VIEW = {
 
 const saved = () => useViewStoreMock.getState().saveView.mock.calls[0][0];
 const submit = () => fireEvent.submit(screen.getByTestId('view-editor-form'));
+// The editor's native selects hold role=option too: only the typeahead's list counts.
+const suggestions = async () => within(await screen.findByRole('listbox')).getAllByRole('option');
+const listed = () => within(screen.getByRole('listbox')).getAllByRole('option');
 
 beforeEach(() => {
   daemonCall = vi.fn(async method => (method === 'views.suggest_senders' ? SUGGESTIONS : null));
@@ -71,7 +74,7 @@ describe('sender typeahead', () => {
   it('suggests indexed senders for what is typed, from every account when none is chosen', async () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     fireEvent.change(screen.getByTestId('view-sender'), { target: { value: 'ac' } });
-    const options = await screen.findAllByRole('option');
+    const options = await suggestions();
     expect(options).toHaveLength(2);
     expect(options[0].textContent).toContain('Ann Lee');
     expect(options[0].textContent).toContain('ann@acme.test');
@@ -84,7 +87,7 @@ describe('sender typeahead', () => {
   it('asks only the accounts the view is narrowed to', async () => {
     render(<ViewEditor view={{ ...VIEW, def: { ...VIEW.def, accounts: ['acct-2'] } }} onClose={() => {}} showPreview={false} />);
     fireEvent.change(screen.getByTestId('view-sender'), { target: { value: 'ac' } });
-    await screen.findAllByRole('option');
+    await suggestions();
     expect(daemonCall).toHaveBeenCalledWith('views.suggest_senders', { prefix: 'ac', accounts: ['acct-2'], limit: 8 });
   });
 
@@ -92,15 +95,15 @@ describe('sender typeahead', () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     const input = screen.getByTestId('view-sender');
     fireEvent.change(input, { target: { value: 'ac' } });
-    await screen.findAllByRole('option');
+    await suggestions();
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(input.getAttribute('aria-activedescendant')).toBe(screen.getAllByRole('option')[0].id);
+    expect(input.getAttribute('aria-activedescendant')).toBe(listed()[0].id);
     // The field sits inside the editor's form: an Enter that picks must not
     // also submit it.
     expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false);
     expect(useViewStoreMock.getState().saveView).not.toHaveBeenCalled();
     expect(input.value).toBe('');
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
     expect(screen.getByTestId('view-sender-group-0').textContent).toContain('ann@acme.test');
     submit();
     expect(saved().def.sender).toBe('billing && ann@acme.test');
@@ -109,7 +112,7 @@ describe('sender typeahead', () => {
   it('a click on a suggestion adds it too, a domain as well as an address', async () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     fireEvent.change(screen.getByTestId('view-sender'), { target: { value: '@ac' } });
-    const options = await screen.findAllByRole('option');
+    const options = await suggestions();
     fireEvent.mouseDown(options[1]);
     fireEvent.click(options[1]);
     submit();
@@ -120,7 +123,7 @@ describe('sender typeahead', () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     const input = screen.getByTestId('view-sender');
     fireEvent.change(input, { target: { value: 'ac' } });
-    await screen.findAllByRole('option');
+    await suggestions();
     fireEvent.keyDown(input, { key: 'Enter' });
     submit();
     expect(saved().def.sender).toBe('billing && ac');
@@ -132,7 +135,7 @@ describe('sender typeahead', () => {
     const input = screen.getByTestId('view-sender');
     fireEvent.change(input, { target: { value: 'stripe' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
     submit();
     expect(saved().def.sender).toBe('billing && stripe');
   });
@@ -144,7 +147,7 @@ describe('sender typeahead', () => {
     fireEvent.change(input, { target: { value: 'ac' } });
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(daemonCall).toHaveBeenCalled();
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
     fireEvent.keyDown(input, { key: 'Enter' });
     submit();
     expect(saved().def.sender).toBe('billing && ac');
@@ -154,9 +157,9 @@ describe('sender typeahead', () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     const input = screen.getByTestId('view-sender');
     fireEvent.change(input, { target: { value: 'ac' } });
-    await screen.findAllByRole('option');
+    await suggestions();
     fireEvent.keyDown(input, { key: 'Escape' });
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
     expect(input.value).toBe('ac');
   });
 
@@ -172,7 +175,7 @@ describe('sender typeahead', () => {
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'ac' } });
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(daemonCall).not.toHaveBeenCalledWith('views.suggest_senders', expect.anything());
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 });
 
@@ -183,14 +186,14 @@ describe('tag typeahead', () => {
     expect(screen.queryByTestId('view-tag-t2')).toBeNull();
     fireEvent.change(screen.getByTestId('view-tags'), { target: { value: 're' } });
     // "Receipts" is already chosen, so nothing else matches.
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
   it('typing part of a name and Enter adds that tag', () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     const input = screen.getByTestId('view-tags');
     fireEvent.change(input, { target: { value: 'cli' } });
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Clients', 'Client archive']);
+    expect(listed().map(option => option.textContent)).toEqual(['Clients', 'Client archive']);
     expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false);
     expect(input.value).toBe('');
     submit();
