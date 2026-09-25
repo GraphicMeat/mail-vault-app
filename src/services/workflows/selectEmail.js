@@ -15,15 +15,25 @@ import { probeServerCopy } from './probeServerCopy';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
 
-// Module-level mark-as-read timer
+// Module-level mark-as-read timer, and the message it is counting down for
+// (`accountId-mailbox-uid`, the flag core's target key).
 let _markAsReadTimer = null;
 let _markAsReadStore = null;
+let _markAsReadTarget = null;
 
 function _clearPendingMarkRead() {
   if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
   _markAsReadTimer = null;
+  _markAsReadTarget = null;
   _markAsReadStore?.setState({ markReadProgress: null });
   _markAsReadStore = null;
+}
+
+// The user set this message's read state by hand while its countdown ran. The
+// countdown is "mark it read unless you say otherwise", and they just did:
+// marking it unread and watching it turn read three seconds later undid them.
+export function cancelPendingMarkRead(targetKeys) {
+  if (_markAsReadTarget && targetKeys.has(_markAsReadTarget)) _clearPendingMarkRead();
 }
 
 let _insightsSelectionGeneration = 0;
@@ -91,11 +101,16 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
   };
   const stillCurrent = () => isCurrent() && selectionIsCurrent();
 
+  // The fence is for the WRITE: nothing is marked for a reader that has moved
+  // on. Once the server holds \Seen, every row showing this message has to
+  // say so, whatever the reader did during the round trip — the next message,
+  // the close button, a thread. Re-checking here is what left the server read
+  // and the row bold. applySeenLocally matches rows by account, folder and uid
+  // and touches the open copy only when it is this message.
   const doMark = async () => {
     if (!stillCurrent()) return;
     try {
       await markOnServer();
-      if (!stillCurrent()) return;
       applySeenLocally(useMailStore, { accountId, mailbox, uid, read: true, isUnified });
     } catch (e) {
       console.warn('[selectEmail] Mark as read failed:', e);
@@ -107,9 +122,11 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
     const startedAt = Date.now();
     const delay = (markAsReadDelay || 3) * 1000;
     _markAsReadStore = useMailStore;
+    _markAsReadTarget = `${accountId}-${mailbox}-${uid}`;
     useMailStore.setState({ markReadProgress: { startedAt, endsAt: startedAt + delay } });
     _markAsReadTimer = setTimeout(() => {
       _markAsReadTimer = null;
+      _markAsReadTarget = null;
       useMailStore.setState({ markReadProgress: null });
       _markAsReadStore = null;
       void doMark();
@@ -314,8 +331,9 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     // message. Delayed marks are cancelled when the Insights detail closes.
     email = await _autoMarkRead(useMailStore, {
       email, accountId, mailbox, uid, isUnified: true, isCurrent,
+      // No fence of its own: doMark checks, then calls this with no await in
+      // between, and a resolve here means "written" to the repaint after it.
       markOnServer: async () => {
-        if (!isCurrent()) return;
         if (localOnly || header._insightsNoServerActions) {
           await api.vaultApplyFlags(accountId, mailbox, account.email || null,
             [{ uid, flags: [...new Set([...(email.flags || []), '\\Seen'])] }]);
@@ -374,8 +392,17 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     }
   }
 
-  const accountId = unified?.accountId || state.activeAccountId;
-  const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
+  // A single folder's list can still hand over another folder's or another
+  // account's message: a merged Sent copy, or a search or saved-View hit. The
+  // explorer sends its full selection key, a row click the bare uid plus the
+  // row, and both name the message's own place. Only a bare uid with nothing
+  // behind it is the view's. Taking the view's account for a View row of
+  // another account fetched, marked and repainted a message the View never
+  // showed.
+  const own = isUnified ? null : _parseSelKey(uid);
+  const rowLoc = isUnified ? null : resolveEmailLocation(clickedRow, state);
+  const accountId = unified?.accountId || own?.accountId || rowLoc?.accountId || state.activeAccountId;
+  const rawMailbox = mailboxOverride || unified?.mailbox || own?.mailbox || rowLoc?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
   // The uid the server knows. In a spanning view the argument is a whole
   // selection key ("acct:INBOX:7") — App.jsx's j/k step() sends exactly that —
@@ -383,7 +410,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // mailbox): the row lookup, the cache key, the fetch, the flag write. Same
   // rule and same name as deleteEmailFromServer. Only the refusal above wants
   // the key itself, and it has already run.
-  const realUid = unified?.uid ?? uid;
+  const realUid = unified?.uid ?? own?.uid ?? uid;
   // A draft the user wrote here reopens in compose, not the viewer — before
   // the token refresh below, because continuing a local draft needs no server
   // at all. The index read that proves provenance is gated on the flag the

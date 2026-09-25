@@ -106,6 +106,20 @@ describe('Explorer browsing', () => {
     expect(within(screen.getByRole('navigation', { name: 'Explorer path' })).getByText('August')).toBeTruthy();
   });
 
+  // Reading a message under the Unread filter used to cut its row the moment
+  // it turned read — the open one included. The list keeps the open row and
+  // the ones read this filter session (`unreadKeep`); so does the explorer.
+  it('keeps the open message and the ones read this session under the Unread filter', () => {
+    const rows = emails.map(email => ({ ...email, date: '2026-09-09T12:00:00', flags: ['\\Seen'] }));
+    render(<explorerModule.ExplorerView emails={rows} context={context} rootLabel="Inbox" unreadOnly
+      selectedEmailId={keyOf(rows[0])} unreadKeep={new Set([keyOf(rows[2])])}
+      selectedEmailIds={new Set()} getSelectionKey={keyOf} onSetSelection={() => {}} renderEmail={renderEmail} />);
+    enter('2026'); enter('September');
+    expect(screen.getByText('Invoice September')).toBeTruthy();
+    expect(screen.getByText('Meeting')).toBeTruthy();
+    expect(screen.queryByText('Invoice August')).toBeNull();
+  });
+
   it('opens conversation groups and offers the complete conversation', () => {
     const open = vi.fn(); mount({ onOpenThread: open }); grouping('conversation'); enter('2026'); enter('September'); enter('Invoice September');
     fireEvent.click(screen.getByRole('button', { name: 'Open full conversation' }));
