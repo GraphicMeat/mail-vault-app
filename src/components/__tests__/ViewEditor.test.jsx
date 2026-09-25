@@ -9,6 +9,8 @@ vi.mock('lucide-react', () => {
   return new Proxy({}, { get: (_t, name) => typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name)), has: () => true });
 });
 vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => (key, vars) => (vars ? `${key}:${JSON.stringify(vars)}` : key) }));
+// The sender field asks the daemon for suggestions; these tests type free text.
+vi.mock('../../services/daemonClient', () => ({ daemonCall: async () => [] }));
 
 let useViewStoreMock;
 let useTagStoreMock;
@@ -58,8 +60,9 @@ describe('editing a saved view', () => {
     expect(screen.getByTestId('view-name').value).toBe('Receipts');
     expect(screen.getByText('invoice')).toBeTruthy();
     expect(screen.getByTestId('view-attachments').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('view-tag-t1').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('view-tag-t2').getAttribute('aria-pressed')).toBe('false');
+    // A chosen tag is a chip; the others are offered as the tag field is typed in.
+    expect(screen.getByTestId('view-tag-t1')).toBeTruthy();
+    expect(screen.queryByTestId('view-tag-t2')).toBeNull();
   });
 
   it('saves the name, the text and the filters together', () => {
@@ -67,6 +70,7 @@ describe('editing a saved view', () => {
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
     fireEvent.click(screen.getByRole('button', { name: 'common.remove invoice' }));
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'overdue' } });
+    fireEvent.change(screen.getByTestId('view-tags'), { target: { value: 'cli' } });
     fireEvent.click(screen.getByTestId('view-tag-t2'));
     fireEvent.click(screen.getByTestId('view-starred-yes'));
     fireEvent.submit(screen.getByTestId('view-editor-form'));

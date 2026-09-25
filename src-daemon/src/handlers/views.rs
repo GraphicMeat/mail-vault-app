@@ -755,4 +755,25 @@ mod tests {
         assert_eq!(out["reason"], "unavailable");
         assert!(out["rows"].as_array().map_or(true, |rows| rows.is_empty()));
     }
+
+    /// The view editor's sender typeahead reads the same index the view runs
+    /// on: every sender it offers is one the view can find.
+    #[tokio::test]
+    async fn suggest_senders_offers_the_indexed_senders_with_their_counts() {
+        let s = st();
+        index(&s);
+        let out = call(&s, "views.suggest_senders", json!({ "prefix": "An", "accounts": ["a"], "limit": 8 })).await;
+        assert_eq!(out, json!([{ "address": "ann@x.test", "name": "", "count": 3 }]));
+        let other = call(&s, "views.suggest_senders", json!({ "prefix": "an", "accounts": ["b"] })).await;
+        assert_eq!(other, json!([]), "another account's senders are not offered");
+    }
+
+    /// A suggestion list is a convenience: while the index is closed there is
+    /// nothing to offer, which is not a failure the editor should show.
+    #[tokio::test]
+    async fn suggest_senders_offers_nothing_while_the_index_is_closed() {
+        let s = st();
+        let out = call(&s, "views.suggest_senders", json!({ "prefix": "ann", "accounts": ["a"] })).await;
+        assert_eq!(out, json!([]));
+    }
 }
