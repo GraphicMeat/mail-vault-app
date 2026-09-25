@@ -1,0 +1,42 @@
+mailvaultapp.com, www.mailvaultapp.com {
+    tls /etc/caddy/certs/mailvaultapp.com.crt /etc/caddy/certs/mailvaultapp.com.key {
+        client_auth {
+            mode require_and_verify
+            trust_pool file /etc/caddy/certs/cloudflare-origin-pull-ca.pem
+        }
+    }
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+    @gm path /gm.js /gm-overlay.js /gm/* /_analytics /_analytics/*
+    handle @gm {
+        reverse_proxy 127.0.0.1:3001 {
+            header_up X-Real-IP {remote}
+        }
+    }
+    # mailvault-demo-cache-policy
+    @demo_assets path /demo/assets/*
+    header @demo_assets Cache-Control "public, max-age=604800, immutable"
+    @demo_html path /demo /demo/ /demo/index.html /
+    header @demo_html Cache-Control "no-cache"
+    @site_html path_regexp html \.html$
+    header @site_html Cache-Control "no-cache"
+    @locale_roots path /de /de/ /fr /fr/ /es /es/ /it /it/ /ja /ja/ /ko /ko/ /zh /zh/ /pt-br /pt-br/
+    header @locale_roots Cache-Control "no-cache"
+    encode zstd gzip
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3001 {
+            header_up X-Real-IP {remote}
+        }
+    }
+    handle {
+        root * /var/www/mailvaultapp
+        try_files {path} {path}.html {path}/ /index.html
+        file_server
+    }
+}
+

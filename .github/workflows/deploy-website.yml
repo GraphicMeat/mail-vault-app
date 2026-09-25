@@ -304,6 +304,42 @@ jobs:
           }
           SCRIPT
 
+      - name: Ensure Caddy returns 404 for missing pages
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s <<'SCRIPT'
+          set -e
+          CF=/etc/caddy/Caddyfile
+          grep -qF 'import mailvault-404.caddy' "$CF" && exit 0
+          cp "$CF" "$CF.bak-$(date +%Y%m%d-%H%M%S)"
+          # Missing pages used to fall back to the homepage with 200: a soft 404
+          # on every mistyped URL. Try the file, the folder's index and the
+          # extensionless .html, then let a real 404 reach handle_errors.
+          cat > /etc/caddy/mailvault-404.caddy <<'CADDY'
+          handle_errors 404 {
+              root * /var/www/mailvaultapp
+              @locale path_regexp locale ^/(de|fr|es|it|ja|ko|zh|pt-br)/
+              handle @locale {
+                  rewrite * /{re.locale.1}/404.html
+                  file_server
+              }
+              handle {
+                  rewrite * /404.html
+                  file_server
+              }
+          }
+          CADDY
+          awk '
+            index($0, "try_files {path} {path}.html {path}/ /index.html") && !t { sub(/try_files .*/, "try_files {path} {path}.html {path}/"); t=1 }
+            /handle \/api\/\* \{/ && !done { print "    import mailvault-404.caddy"; done=1 }
+            { print }
+            END { if (!t || !done) exit 1 }' "$CF" > /tmp/Caddyfile.new
+          caddy validate --config /tmp/Caddyfile.new --adapter caddyfile
+          install -m 644 /tmp/Caddyfile.new "$CF"
+          rm -f /tmp/Caddyfile.new
+          systemctl reload caddy
+          SCRIPT
+
       - name: Install deps + restart service
         run: |
           ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
