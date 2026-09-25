@@ -28,6 +28,60 @@ pub fn is_newer(installed: &str, offered: &str) -> bool {
     }
 }
 
+/// One entry of GitHub's `GET /repos/{owner}/{repo}/releases`, the fields the
+/// update dialog reads.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubRelease {
+    pub tag_name: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub published_at: Option<String>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub draft: bool,
+    #[serde(default)]
+    pub prerelease: bool,
+}
+
+/// What the update dialog shows for one release.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseNote {
+    pub version: String,
+    pub name: String,
+    pub published_at: String,
+    pub body: String,
+}
+
+/// The published releases an update from `from` to `to` brings in, newest
+/// first: after `from`, up to and including `to`, in the same order
+/// `is_newer` uses. Drafts never; prereleases only when asked. A tag that is
+/// not a version (the rolling `nightly` release) and an unreadable `from` or
+/// `to` give nothing rather than every release.
+pub fn release_notes_between(releases: Vec<GithubRelease>, from: &str, to: &str, include_prereleases: bool) -> Vec<ReleaseNote> {
+    let (Some(from), Some(to)) = (rank(from), rank(to)) else {
+        return Vec::new();
+    };
+    let mut kept: Vec<_> = releases
+        .into_iter()
+        .filter(|r| !r.draft && (include_prereleases || !r.prerelease))
+        .filter_map(|r| {
+            let version = r.tag_name.strip_prefix('v').unwrap_or(&r.tag_name).to_string();
+            let at = rank(&version).filter(|at| *at > from && *at <= to)?;
+            Some((at, ReleaseNote {
+                version,
+                name: r.name.unwrap_or_default(),
+                published_at: r.published_at.unwrap_or_default(),
+                body: r.body.unwrap_or_default(),
+            }))
+        })
+        .collect();
+    kept.sort_by(|a, b| b.0.cmp(&a.0));
+    kept.into_iter().map(|(_, note)| note).collect()
+}
+
 fn rank(version: &str) -> Option<(u64, u64, u64, u64)> {
     let version = version.split('+').next()?;
     let (core, pre) = match version.split_once('-') {
@@ -130,9 +184,9 @@ mod tests {
 
     #[test]
     fn release_notes_skip_prereleases_unless_asked() {
-        let releases = || vec![release("v2.16.0", false, false), release("v2.17.0-beta.1", false, true)];
+        let releases = || vec![release("v2.16.0", false, false), release("v2.16.1-beta.1", false, true)];
         assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", false)), ["2.16.0"]);
-        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", true)), ["2.17.0-beta.1", "2.16.0"]);
+        assert_eq!(versions(&release_notes_between(releases(), "2.15.0", "2.17.0", true)), ["2.16.1-beta.1", "2.16.0"]);
     }
 
     #[test]

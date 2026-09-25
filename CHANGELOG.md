@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **Settings search takes you to the setting itself.** Clicking a result opens its page, scrolls the setting into view, briefly outlines it and puts the keyboard on its control. Backup results now open the right tab too, whether that is Backup & Restore, Backup Settings or Backup Schedule.
+- **The update window lists what changed.** When a new version is offered, MailVault shows the release notes of every version between yours and the new one in a scrollable list, read from the project's GitHub releases. If they cannot be fetched, the notes that came with the update are shown as before.
+
 ## [2.16.0] - 2026-09-25
 
 ### Added
