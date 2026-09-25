@@ -29,6 +29,7 @@ const SKIP_DIRS = new Set(['api', 'node_modules', 'src', 'i18n', 'assets', 'scre
 const SKIP_FILES = new Set([
   'faq.html', 'docs.html', 'blog.html', 'index.html', 'mentioned-in.html',
   'billing-cancel.html', 'billing-success.html', 'download-stats.html', 'changelog.html',
+  '404.html',
 ]);
 
 // Markers planted where the tags used to be, so one pass can strip the markup

@@ -44,3 +44,17 @@ describe('llms.txt', () => {
     }
   });
 });
+
+describe('404 page', () => {
+  it.each(['404.html', 'de/404.html'])('%s is noindex and works from any path', (rel) => {
+    const d = doc(rel);
+    expect(d.querySelector('meta[name="robots"]').content).toMatch(/noindex/);
+    expect(d.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(d.querySelector('a[href="/"], a[href="/de/"]')).not.toBeNull();
+    // Served at whatever URL was missing, so a relative URL resolves somewhere random.
+    for (const el of d.querySelectorAll('[href], [src]')) {
+      const v = el.getAttribute('href') ?? el.getAttribute('src');
+      expect(/^(\/|#|https?:|mailto:)/.test(v), `${rel}: ${v}`).toBe(true);
+    }
+  });
+});
