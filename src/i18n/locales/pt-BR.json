@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "Ano passado",
   "views.sender.placeholder": "Adicione um remetente",
   "views.sender.hint": "Todos os nomes ou endereços de uma caixa precisam corresponder ao remetente (E); caixas ligadas por OU são alternativas. Pressione Enter para adicionar, digite || ou pressione OU para uma nova caixa.",
+  "views.tags.placeholder": "Adicione uma tag",
   "views.download.title": "Baixar anexos",
   "views.download.all": "Tudo",
   "views.download.done_one": "{{count}} arquivo baixado",

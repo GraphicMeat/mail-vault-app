@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "昨年",
   "views.sender.placeholder": "差出人を追加",
   "views.sender.hint": "同じ枠の名前やアドレスはすべて差出人に一致する必要があります（かつ）。「または」でつながる枠は選択肢です。Enter で追加、|| を入力するか「または」を押すと新しい枠になります。",
+  "views.tags.placeholder": "タグを追加",
   "views.download.title": "添付ファイルをダウンロード",
   "views.download.all": "すべて",
   "views.download.done_one": "{{count}} 件のファイルをダウンロードしました",

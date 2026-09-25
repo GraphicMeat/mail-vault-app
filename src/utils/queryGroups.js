@@ -55,6 +55,13 @@ export function removeWord(groups, g, i) {
   return next.length > 1 && !next[g].length ? tidy(next) : next;
 }
 
+/// Backspace in an empty input: the last word goes, else the empty box an OR left.
+export function removeLast(groups) {
+  const g = groups.length - 1;
+  if (groups[g].length) return removeWord(groups, g, groups[g].length - 1);
+  return removeGroup(groups, g);
+}
+
 /// A drag ends: `item` is `{ kind: 'word', g, i }` or `{ kind: 'or' }`;
 /// `target` is a word (`{ g, i }`), a group (`{ g }`) or `{ g: 'new' }`.
 /// The OR dropped on a word splits its group there; a word dropped on the OR

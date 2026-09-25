@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "작년",
   "views.sender.placeholder": "발신자 추가",
   "views.sender.hint": "한 상자의 이름이나 주소는 모두 발신자와 맞아야 합니다(그리고). 또는으로 이어진 상자는 대안입니다. Enter로 추가하고, || 입력 또는 또는을 눌러 새 상자를 만드세요.",
+  "views.tags.placeholder": "태그 추가",
   "views.download.title": "첨부 파일 다운로드",
   "views.download.all": "전체",
   "views.download.done_one": "파일 {{count}}개 다운로드됨",

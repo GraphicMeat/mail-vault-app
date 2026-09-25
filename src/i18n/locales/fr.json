@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "L’année dernière",
   "views.sender.placeholder": "Ajouter un expéditeur",
   "views.sender.hint": "Tous les noms ou adresses d’une case doivent correspondre à l’expéditeur (ET) ; les cases reliées par OU sont des alternatives. Entrée pour ajouter, tapez || ou OU pour une nouvelle case.",
+  "views.tags.placeholder": "Ajouter un tag",
   "views.download.title": "Télécharger les pièces jointes",
   "views.download.all": "Tout",
   "views.download.done_one": "{{count}} fichier téléchargé",

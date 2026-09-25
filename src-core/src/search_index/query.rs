@@ -402,6 +402,90 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     Ok(SearchPage { hits, total: u64::try_from(total).unwrap_or(0), needles: plan.needles })
 }
 
+/// A sender the index has seen, or a whole domain (`@acme.test`, no name).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SenderSuggestion {
+    pub address: String,
+    pub name: String,
+    pub count: u64,
+}
+
+/// What a view's sender field can offer for `prefix`, read off the rows the
+/// view itself runs on. Best first: the address starts with it, then a word of
+/// the name, then the domain, then anywhere; more mail first within each. A
+/// sender word matches as a substring, so a domain is a valid word too: it is
+/// offered as `@domain` when the prefix is one (`@ac`) or a domain starts with
+/// it. No `accounts` is every account.
+/// ponytail: one scan of `messages` per (debounced) keystroke; index
+/// `from_addr_lc` if a large vault makes it slow.
+pub fn suggest_senders(
+    conn: &rusqlite::Connection,
+    accounts: &[String],
+    prefix: &str,
+    limit: usize,
+) -> Result<Vec<SenderSuggestion>, String> {
+    let p = prefix.trim().to_lowercase();
+    if p.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The display name lives only in `row_json`; one row that is not JSON
+    // must not fail the lot.
+    let mut sql = String::from(
+        "SELECT from_addr_lc,
+                MAX(CASE WHEN json_valid(row_json) THEN COALESCE(json_extract(row_json, '$.from.name'), '') ELSE '' END),
+                COUNT(*)
+         FROM messages
+         WHERE from_addr_lc != '' AND (instr(from_addr_lc, ?1) > 0 OR instr(from_name_lc, ?1) > 0)",
+    );
+    if !accounts.is_empty() {
+        sql += &format!(" AND account_id IN ({})", vec!["?"; accounts.len()].join(", "));
+    }
+    sql += " GROUP BY from_addr_lc";
+    let args: Vec<Value> = std::iter::once(p.clone()).chain(accounts.iter().cloned()).map(Value::Text).collect();
+    let mut st = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows: Vec<(String, String, u64)> = st
+        .query_map(rusqlite::params_from_iter(args.iter()), |r| {
+            Ok((r.get(0)?, r.get(1)?, u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0)))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+    // `ann@ac` is a local part being typed, not a domain.
+    let domain_query = match p.find('@') {
+        Some(0) => Some(&p[1..]),
+        Some(_) => None,
+        None => Some(p.as_str()),
+    };
+    let domain_of = |address: &str| address.rsplit_once('@').map(|(_, d)| d.to_string()).filter(|d| !d.is_empty());
+    let mut domains: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    let mut ranked: Vec<(u8, SenderSuggestion)> = Vec::new();
+    for (address, name, count) in rows {
+        let domain = domain_of(&address);
+        let domain_hit = matches!((domain_query, &domain), (Some(q), Some(d)) if d.starts_with(q));
+        if domain_hit {
+            *domains.entry(format!("@{}", domain.unwrap_or_default())).or_default() += count;
+        }
+        let name_lc = name.to_lowercase();
+        let rank = if address.starts_with(&p) {
+            0
+        } else if name_lc.starts_with(&p) || name_lc.split_whitespace().any(|word| word.starts_with(&p)) {
+            1
+        } else if domain_hit {
+            2
+        } else {
+            3
+        };
+        ranked.push((rank, SenderSuggestion { address, name, count }));
+    }
+    let domain_rank = if p.starts_with('@') { 0 } else { 2 };
+    ranked.extend(
+        domains.into_iter().map(|(address, count)| (domain_rank, SenderSuggestion { address, name: String::new(), count })),
+    );
+    ranked.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.count.cmp(&a.1.count)).then_with(|| a.1.address.cmp(&b.1.address)));
+    Ok(ranked.into_iter().take(limit).map(|(_, s)| s).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -877,5 +961,111 @@ mod tests {
         let coverage = db::scope_coverage(&conn, "a", Some(&["Projects/2026".into(), "Projects_2026".into()])).unwrap();
         assert_eq!((coverage.indexed, coverage.total, coverage.complete), (2, 2, true));
         assert!(coverage.uncovered_vault_dirs.is_empty());
+    }
+
+    /// Senders for the view editor's typeahead: one row per message, the
+    /// display name only in `row_json`, exactly as the indexer writes them.
+    fn sender_fixture(rows: &[(&str, &str, &str)]) -> (tempfile::TempDir, rusqlite::Connection) {
+        let (tmp, conn) = coverage_fixture();
+        for (i, (account, address, name)) in rows.iter().enumerate() {
+            let uid = i as u32 + 1;
+            let row = serde_json::json!({ "from": { "address": address, "name": name } }).to_string();
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, from_addr_lc, from_name_lc, row_json)
+                 VALUES (?1, 'INBOX', ?2, ?3, 1, 1, 1, ?4, ?5, ?6)",
+                rusqlite::params![account, uid, format!("{uid}{INFO_PREFIX}.eml"), address.to_lowercase(), name.to_lowercase(), row],
+            )
+            .unwrap();
+        }
+        (tmp, conn)
+    }
+
+    fn addresses(found: &[SenderSuggestion]) -> Vec<&str> {
+        found.iter().map(|s| s.address.as_str()).collect()
+    }
+
+    const SENDERS: &[(&str, &str, &str)] = &[
+        ("a", "ann@acme.test", "Ann Lee"),
+        ("a", "ann@acme.test", "Ann Lee"),
+        ("a", "billing@acme.test", "Acme Billing"),
+        ("a", "billing@acme.test", "Acme Billing"),
+        ("a", "billing@acme.test", "Acme Billing"),
+        ("a", "zed@other.test", "Zed Acker"),
+        ("a", "acorn@shop.test", ""),
+        ("b", "bob@acme.test", "Bob"),
+    ];
+
+    #[test]
+    fn a_sender_whose_address_starts_with_the_prefix_comes_first_with_its_name_and_count() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        let found = suggest_senders(&conn, &[], "ann", 8).unwrap();
+        assert_eq!(found[0], SenderSuggestion { address: "ann@acme.test".into(), name: "Ann Lee".into(), count: 2 });
+    }
+
+    #[test]
+    fn a_name_matches_on_the_start_of_any_of_its_words() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        // "lee" is nowhere in the address, only the name's second word.
+        assert_eq!(addresses(&suggest_senders(&conn, &[], "Lee", 8).unwrap()), vec!["ann@acme.test"]);
+    }
+
+    #[test]
+    fn address_prefix_beats_name_prefix_beats_domain_and_count_orders_within_each() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        let found = suggest_senders(&conn, &["a".into()], "ac", 8).unwrap();
+        assert_eq!(
+            addresses(&found),
+            vec![
+                // the address starts with "ac"
+                "acorn@shop.test",
+                // a word of the name does: Acme Billing (3) before Zed Acker (1)
+                "billing@acme.test",
+                "zed@other.test",
+                // the domain does: the whole domain first, it holds more mail
+                "@acme.test",
+                "ann@acme.test",
+            ]
+        );
+        let domain = found.iter().find(|s| s.address == "@acme.test").unwrap();
+        assert_eq!((domain.name.as_str(), domain.count), ("", 5), "a domain counts every sender under it");
+    }
+
+    #[test]
+    fn a_prefix_starting_with_at_offers_the_matching_domains_first() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        let found = suggest_senders(&conn, &["a".into()], "@ac", 8).unwrap();
+        assert_eq!(found[0], SenderSuggestion { address: "@acme.test".into(), name: String::new(), count: 5 });
+        assert!(!addresses(&found).contains(&"@other.test") && !addresses(&found).contains(&"@shop.test"));
+    }
+
+    #[test]
+    fn a_local_part_before_the_at_offers_no_domain() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        assert_eq!(addresses(&suggest_senders(&conn, &[], "ann@ac", 8).unwrap()), vec!["ann@acme.test"]);
+    }
+
+    #[test]
+    fn only_the_accounts_asked_for_and_none_named_is_every_account() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        assert!(suggest_senders(&conn, &["a".into()], "bob", 8).unwrap().is_empty());
+        assert_eq!(addresses(&suggest_senders(&conn, &["b".into()], "bob", 8).unwrap()), vec!["bob@acme.test"]);
+        assert_eq!(addresses(&suggest_senders(&conn, &[], "bob", 8).unwrap()), vec!["bob@acme.test"]);
+    }
+
+    #[test]
+    fn the_limit_caps_the_list_and_a_blank_prefix_suggests_nothing() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        assert_eq!(suggest_senders(&conn, &[], "ac", 2).unwrap().len(), 2);
+        assert!(suggest_senders(&conn, &[], "  ", 8).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_row_whose_json_does_not_parse_still_suggests_its_address() {
+        let (_t, conn) = sender_fixture(&[("a", "ann@acme.test", "Ann")]);
+        conn.execute("UPDATE messages SET row_json = ''", []).unwrap();
+        assert_eq!(
+            suggest_senders(&conn, &[], "ann", 8).unwrap(),
+            vec![SenderSuggestion { address: "ann@acme.test".into(), name: String::new(), count: 1 }]
+        );
     }
 }

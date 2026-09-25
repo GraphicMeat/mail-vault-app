@@ -2848,6 +2848,7 @@
   "views.within.lastYear": "Last year",
   "views.sender.placeholder": "Add a sender",
   "views.sender.hint": "Every name or address in one box must match the sender (AND); boxes joined by OR are alternatives. Press Enter to add, type || or press OR for a new box.",
+  "views.tags.placeholder": "Add a tag",
   "views.download.title": "Download attachments",
   "views.download.all": "Everything",
   "views.download.done_one": "{{count}} file downloaded",

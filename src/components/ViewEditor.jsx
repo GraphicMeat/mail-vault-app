@@ -1,4 +1,4 @@
-import React, { Fragment, useRef, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, X } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
@@ -9,6 +9,8 @@ import { useMailStore } from '../stores/mailStore';
 import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
+import { TypeaheadChips } from './ui/TypeaheadChips';
+import { daemonCall } from '../services/daemonClient';
 import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
 import { SettingRow } from './settings/SettingRow';
 import { ToggleSwitch } from './settings/ToggleSwitch';
@@ -17,7 +19,7 @@ import { ToggleSwitch } from './settings/ToggleSwitch';
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
-import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups } from '../utils/queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeLast, removeWord, serializeGroups } from '../utils/queryGroups';
 import { CALENDAR_RANGES } from '../utils/viewRange';
 // The drag ghost reuses the reorder list's preview style.
 import '../styles/account-settings-navigation.css';
@@ -63,10 +65,22 @@ const dropTargetAt = (event, root) => {
 
 /// Boxes of AND-words, OR between boxes: the one shape a person can read at a
 /// glance, and the one the daemon evaluates. The query words and the senders
-/// both use it.
-function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput }) {
+/// both use it. `suggest` (the senders only) turns the input into a typeahead:
+/// text in, `[{ value, label, detail }]` out, never a rejection.
+function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest }) {
   const t = useT();
   const root = useRef(null);
+  const [suggestions, setSuggestions] = useState([]);
+  // Debounced, and a reply for text since replaced is dropped. Text carrying
+  // an operator is a group being written, not one sender being looked up.
+  useEffect(() => {
+    if (!suggest) return undefined;
+    const text = input.trim();
+    if (!text || /&&|\|\||,/.test(text)) { setSuggestions([]); return undefined; }
+    let live = true;
+    const timer = setTimeout(() => { void suggest(text).then(found => { if (live) setSuggestions(found); }); }, 120);
+    return () => { live = false; clearTimeout(timer); };
+  }, [input, suggest]);
   /// Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
   /// HTML5 drag events on Windows.
   const drag = useRef(null);
@@ -151,12 +165,17 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
       </Fragment>)}
     </div>
     <div className="view-query-entry" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-      <input id={prefix} data-testid={prefix} value={input} maxLength={200}
-        aria-label={label} placeholder={placeholder}
-        aria-describedby={`${prefix}-hint`}
-        onChange={event => setInput(event.target.value)}
-        onKeyDown={event => { if (event.key === 'Enter' && input.trim()) { event.preventDefault(); addKeys(); } }}
-        onBlur={addKeys} />
+      {suggest
+        ? <TypeaheadChips id={prefix} testId={prefix} label={label} placeholder={placeholder}
+          describedBy={`${prefix}-hint`} value={input} onChange={setInput} options={suggestions}
+          onPick={option => setGroups(addTyped(groups, option.value))}
+          onEnterText={addKeys} onBackspaceEmpty={() => setGroups(removeLast)} onBlur={addKeys} />
+        : <input id={prefix} data-testid={prefix} value={input} maxLength={200}
+          aria-label={label} placeholder={placeholder}
+          aria-describedby={`${prefix}-hint`}
+          onChange={event => setInput(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && input.trim()) { event.preventDefault(); addKeys(); } }}
+          onBlur={addKeys} />}
       <button type="button" data-testid={`${prefix}-or`} data-drop="new"
         className={`view-query-or-token${isOver({ g: 'new' }) ? ' is-over' : ''}`}
         title={t('views.query.orHint')} onPointerDown={startDrag({ kind: 'or' }, `|| ${t('views.query.or')}`)}
@@ -205,6 +224,7 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const [dateFrom, setDateFrom] = useState(toDateInput(def.dateFrom));
   const [dateTo, setDateTo] = useState(toDateInput(def.dateTo));
   const [chosenTags, setChosenTags] = useState(def.tags || []);
+  const [tagInput, setTagInput] = useState('');
   /// Field id → `{ op, value }`. The operator is part of what was saved: read
   /// back as a bare value, an `isNot` view would silently reopen as `is`.
   const [fieldFilters, setFieldFilters] = useState(() => Object.fromEntries(
@@ -220,6 +240,24 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
   const [confirming, setConfirming] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  /// Senders the index holds, in the accounts the view reads (none chosen is
+  /// every account). Joined into a key so the lookup is stable across renders.
+  const accountKey = (chosenAccounts.length ? chosenAccounts : accounts.map(account => account.id)).join('\n');
+  const suggestSenders = useCallback(prefix => daemonCall('views.suggest_senders', {
+    prefix, accounts: accountKey ? accountKey.split('\n') : [], limit: 8,
+  }).then(found => (Array.isArray(found) ? found : []).map(sender => ({
+    value: sender.address,
+    label: sender.name || sender.address,
+    detail: [sender.name ? sender.address : '', sender.count].filter(Boolean).join(' · '),
+  }))).catch(() => []), [accountKey]);
+
+  const tagChips = chosenTags.map(id => tags.find(tag => tag.id === id)).filter(Boolean)
+    .map(tag => ({ key: tag.id, label: tag.name, color: tag.color, testId: `view-tag-${tag.id}` }));
+  const tagNeedle = tagInput.trim().toLocaleLowerCase();
+  const tagOptions = tags
+    .filter(tag => !chosenTags.includes(tag.id) && tag.name.toLocaleLowerCase().includes(tagNeedle))
+    .map(tag => ({ value: tag.id, label: tag.name, color: tag.color, testId: `view-tag-${tag.id}` }));
 
   const filterFor = id => fieldFilters[id] || NO_FILTER;
   const setFilter = (id, patch) =>
@@ -340,7 +378,8 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
       hint={t('views.query.hint')} groups={groups} setGroups={setGroups} input={queryInput} setInput={setQueryInput} />
 
     <QueryGroupsField prefix="view-sender" label={t('views.filter.sender')} placeholder={t('views.sender.placeholder')}
-      hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput} />
+      hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput}
+      suggest={suggestSenders} />
 
     </SettingsSection>
 
@@ -442,13 +481,10 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     {(tags.length > 0 || schema.length > 0) && <SettingsSection title={t('views.filter.more')} description={t('views.moreHint')}>
     {tags.length > 0 && <div className="view-choice-field">
       <span>{t('views.filter.tags')}</span>
-      <div className="view-choice-group" role="group" aria-label={t('views.filter.tags')}>
-        {tags.map(tag => <button key={tag.id} type="button" data-testid={`view-tag-${tag.id}`}
-          className="view-choice-button" aria-pressed={chosenTags.includes(tag.id)}
-          onClick={() => setChosenTags(current => (current.includes(tag.id)
-            ? current.filter(id => id !== tag.id)
-            : [...current, tag.id]))}>{tag.name}</button>)}
-      </div>
+      <TypeaheadChips id="view-tags" testId="view-tags" label={t('views.filter.tags')}
+        placeholder={t('views.tags.placeholder')} value={tagInput} onChange={setTagInput}
+        chips={tagChips} onRemove={chip => setChosenTags(current => current.filter(id => id !== chip.key))}
+        options={tagOptions} onPick={option => setChosenTags(current => [...current, option.value])} />
     </div>}
 
     {schema.length > 0 && <div className="view-editor-row">
