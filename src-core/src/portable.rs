@@ -94,9 +94,16 @@ pub fn copy_preserving_links(src: &Path, dst: &Path, n: &mut (usize, u64)) -> Re
         }
         return Ok(());
     }
-    std::fs::copy(src, dst).map_err(|e| format!("copy {}: {e}", src.display()))?;
+    // Checked against what was written, not the source: app data keeps
+    // changing on the host while the mail copies, and the drive copy is a
+    // snapshot of the moment it was taken.
+    let written = std::fs::copy(src, dst).map_err(|e| format!("copy {}: {e}", src.display()))?;
+    let landed = std::fs::metadata(dst).map(|m| m.len()).map_err(|e| format!("{} is missing from the drive: {e}", dst.display()))?;
+    if landed != written {
+        return Err(format!("{} copied as {landed} bytes, expected {written}", dst.display()));
+    }
     n.0 += 1;
-    n.1 += meta.len();
+    n.1 += written;
     Ok(())
 }
 
@@ -177,6 +184,8 @@ pub struct CreateOptions<'a> {
     pub dest: &'a Path,
     pub payload: &'a [PathBuf],
     pub app_dir: &'a Path,
+    /// Accounts, settings and app.db; off, the copy starts empty.
+    pub copy_config: bool,
     /// Where the mail is now; `None` leaves it behind.
     pub mail_dir: Option<&'a Path>,
     pub secrets: &'a Secrets,
@@ -211,6 +220,10 @@ pub(crate) fn create_with(
     if is_portable_root(&root) {
         return Err(format!("{E_EXISTS}: {}", root.display()));
     }
+    // A copy into the data it copies would walk into itself.
+    if opts.dest.starts_with(opts.app_dir) || opts.mail_dir.is_some_and(|m| opts.dest.starts_with(m)) {
+        return Err("Choose a folder outside MailVault's own data and mail folders.".to_string());
+    }
     let data = portable_data_dir(&root);
     std::fs::create_dir_all(&data).map_err(|e| format!("mkdir {}: {e}", data.display()))?;
     let mut n = (0usize, 0u64);
@@ -222,30 +235,31 @@ pub(crate) fn create_with(
         progress("app", i + 1, opts.payload.len());
     }
 
-    progress("settings", 0, 1);
-    let mut copied = Vec::new();
-    for entry in std::fs::read_dir(opts.app_dir).map_err(|e| format!("read {}: {e}", opts.app_dir.display()))?.flatten() {
-        let name = entry.file_name();
-        if stays_on_host(&name.to_string_lossy()) {
-            continue;
+    if opts.copy_config {
+        progress("settings", 0, 1);
+        for entry in std::fs::read_dir(opts.app_dir).map_err(|e| format!("read {}: {e}", opts.app_dir.display()))?.flatten() {
+            let name = entry.file_name();
+            if !stays_on_host(&name.to_string_lossy()) {
+                copy_preserving_links(&entry.path(), &data.join(&name), &mut n)?;
+            }
         }
-        copy_preserving_links(&entry.path(), &data.join(&name), &mut n)?;
-        copied.push(name);
-    }
-    // A live WAL database is never copied raw: a snapshot through SQLite.
-    let db = data.join(crate::app_db::db::DB_FILE);
-    let _ = std::fs::remove_file(&db); // a previous, unmarked attempt's
-    crate::app_db::with(opts.app_dir, |c| {
-        c.execute("VACUUM INTO ?1", [db.to_string_lossy()]).map(|_| ()).map_err(|e| format!("snapshot app.db: {e}"))
-    })?;
-    {
+        // A live WAL database is never copied raw: a snapshot through SQLite.
+        let db = data.join(crate::app_db::db::DB_FILE);
+        let _ = std::fs::remove_file(&db); // a previous, unmarked attempt's
+        crate::app_db::with(opts.app_dir, |c| {
+            c.execute("VACUUM INTO ?1", [db.to_string_lossy()]).map(|_| ()).map_err(|e| format!("snapshot app.db: {e}"))
+        })?;
         // Host folders mean nothing on another computer: the copy keeps its
         // mail in its own data dir, and backups are set up again there.
         let conn = crate::app_db::db::open(&data).map_err(|e| e.to_string())?;
         crate::app_db::locations::clear(&conn, "vault")?;
         crate::app_db::locations::clear(&conn, "external-backup")?;
+        let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+        if check != "ok" {
+            return Err(format!("the copied app.db failed its integrity check: {check}"));
+        }
+        progress("settings", 1, 1);
     }
-    progress("settings", 1, 1);
 
     let mut mail_dirs = Vec::new();
     if let Some(mail) = opts.mail_dir {
@@ -262,20 +276,12 @@ pub(crate) fn create_with(
     for item in opts.payload {
         verify_preserving_links(item, &opts.dest.join(item.file_name().unwrap_or_default()))?;
     }
-    for name in &copied {
-        verify_preserving_links(&opts.app_dir.join(name), &data.join(name))?;
-    }
+    // The vault is closed while this runs, so the mail can be held to its
+    // source; app data was checked as it landed.
     if let Some(mail) = opts.mail_dir {
         for dir in &mail_dirs {
             crate::vault_ops::verify_tree(&mail.join(dir), &data.join(dir))?;
         }
-    }
-    let check: String = crate::app_db::db::open(&data)
-        .map_err(|e| e.to_string())?
-        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
-    if check != "ok" {
-        return Err(format!("the copied app.db failed its integrity check: {check}"));
     }
     if read_sealed(&data.join(SEALED_FILE), opts.passphrase)? != *opts.secrets {
         return Err("the sealed credentials did not read back".to_string());

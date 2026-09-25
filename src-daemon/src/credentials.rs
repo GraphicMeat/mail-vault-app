@@ -202,10 +202,22 @@ pub(crate) async fn read_host_secrets() -> Result<mailvault_core::portable::Secr
     Ok(mailvault_core::portable::Secrets { credentials, ai_endpoint_key })
 }
 
+/// `delete_host_secrets` off the async workers, never prompting, under a
+/// clock: a keychain that wants a password here must not hang the offload
+/// after a copy that already succeeded.
+pub(crate) async fn delete_host_secrets_guarded() -> Result<(), String> {
+    let delete = tokio::task::spawn_blocking(|| with_interaction(false, delete_host_secrets));
+    match tokio::time::timeout(AI_KEY_TIMEOUT, delete).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(format!("the keychain delete panicked: {e}")),
+        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+    }
+}
+
 /// After a verified portable copy, when the user asked: the host keeps no
 /// MailVault secret. The blob's parts (Windows) go before its primary, so a
 /// failure half way leaves a primary that still names what is left.
-pub(crate) fn delete_host_secrets() -> Result<(), String> {
+fn delete_host_secrets() -> Result<(), String> {
     let gone = |r: std::io::Result<()>| match r {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
         _ => Ok(()),

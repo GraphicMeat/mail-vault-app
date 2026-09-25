@@ -149,6 +149,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         if remove_from_host && !(copy_mail && copy_config) {
             return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "removeFromHost needs copyMail and copyConfig".to_string()));
         }
+        // Mail is filed under account ids: without the accounts it is unreadable.
+        if copy_mail && !copy_config {
+            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "copyMail needs copyConfig".to_string()));
+        }
         let dest = std::path::PathBuf::from(req!(str_arg(&id, params, "dest")));
         let payload = match this_app_payload() {
             Ok(p) => p,
@@ -265,6 +269,7 @@ pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, pay
             dest: &dest,
             payload: &copy_payload,
             app_dir: &st.app_dir,
+            copy_config: req.copy_config,
             mail_dir: req.copy_mail.then_some(st.data_dir.as_path()),
             secrets: &secrets,
             passphrase: &req.passphrase,
@@ -286,13 +291,14 @@ pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, pay
     let removed = if req.remove_from_host {
         let st = Arc::clone(state);
         let dirs = created.mail_dirs.clone();
-        blocking(move || {
+        let mail = blocking(move || {
             let mail = mailvault_core::vault_ops::remove_sources(&st.data_dir, &dirs);
-            let secrets = credentials::delete_host_secrets().map_err(|e| tracing::warn!("[portable] {e}")).is_ok();
             let accounts = std::fs::remove_file(st.app_dir.join("accounts.json"));
-            mail && secrets && accounts.map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
+            mail && accounts.map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
         })
-        .await?
+        .await?;
+        let secrets = credentials::delete_host_secrets_guarded().await.map_err(|e| tracing::warn!("[portable] {e}")).is_ok();
+        mail && secrets
     } else {
         reopen_vault(state).await;
         false

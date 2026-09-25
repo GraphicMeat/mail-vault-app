@@ -88,8 +88,10 @@ function PortableWizard() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
-  // Removal is only offered for a full copy: what is not on the drive would be gone everywhere.
-  const canRemove = copyMail && copyConfig;
+  // Mail is filed under its accounts, so it only goes with them; removal is
+  // only offered for a full copy: what is not on the drive would be gone everywhere.
+  const mail = copyMail && copyConfig;
+  const canRemove = mail;
   const remove = removeFromHost && canRemove;
   const mismatch = confirm !== '' && password !== confirm;
   const enough = !estimate || estimate.freeBytes == null || estimate.freeBytes >= estimate.neededBytes;
@@ -123,7 +125,7 @@ function PortableWizard() {
     } catch { /* no events: the button's spinner still shows */ }
     try {
       const reply = await daemonCall('portable.create', {
-        dest, passphrase: password, copyMail, copyConfig, removeFromHost: remove,
+        dest, passphrase: password, copyMail: mail, copyConfig, removeFromHost: remove,
       });
       setPassword('');
       setConfirm('');
@@ -191,8 +193,8 @@ function PortableWizard() {
           <input type="checkbox" className="accent-mail-accent" checked={copyConfig} onChange={e => setCopyConfig(e.target.checked)} data-testid="portable-copy-config" />
           {t('portable.copyConfig')}
         </label>
-        <label className="flex items-center gap-2 text-sm text-mail-text">
-          <input type="checkbox" className="accent-mail-accent" checked={copyMail} onChange={e => setCopyMail(e.target.checked)} data-testid="portable-copy-mail" />
+        <label className={`flex items-center gap-2 text-sm ${copyConfig ? 'text-mail-text' : 'text-mail-text-muted'}`}>
+          <input type="checkbox" className="accent-mail-accent" checked={mail} disabled={!copyConfig} onChange={e => setCopyMail(e.target.checked)} data-testid="portable-copy-mail" />
           {t('portable.copyMail')}
         </label>
         <label className={`flex items-center gap-2 text-sm ${canRemove ? 'text-mail-text' : 'text-mail-text-muted'}`}>
