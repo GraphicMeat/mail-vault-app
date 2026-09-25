@@ -1,0 +1,28 @@
+# MailVault
+
+> MailVault is a free, private desktop email app for macOS, Windows and Linux. It reads, sends and searches mail from Gmail, Microsoft 365, Outlook.com and IMAP accounts, and keeps a copy of the messages you choose on your own computer as plain .eml files, even after you delete them from the server. There is no MailVault account and no MailVault server in the path of your mail. Premium ($4/month or $25/year) adds scheduled backups, tracker removal, Time Capsule, cleanup rules and migration.
+
+## Product
+
+- [Features](https://mailvaultapp.com/features.html): every feature with screenshots, one page each
+- [Pricing](https://mailvaultapp.com/pricing.html): what Free includes and what Premium adds
+- [Download](https://mailvaultapp.com/get-started.html): installers for macOS, Windows and Linux
+- [Live demo](https://mailvaultapp.com/demo/): the real app in the browser with sample mail, no signup
+
+## Help
+
+- [FAQ](https://mailvaultapp.com/faq.html): accounts, storage, backups, Premium, troubleshooting
+- [Setup guide](https://mailvaultapp.com/docs.html): connecting each provider
+- [What's new](https://mailvaultapp.com/changelog.html): release notes
+
+## Comparisons
+
+- [MailVault vs Thunderbird](https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html)
+- [MailVault vs Apple Mail](https://mailvaultapp.com/compare/mailvault-vs-apple-mail.html)
+- [MailVault vs paying for more storage](https://mailvaultapp.com/compare/mailvault-vs-paying-for-storage.html)
+
+## Optional
+
+- [Blog](https://mailvaultapp.com/blog.html)
+- [Use cases](https://mailvaultapp.com/use-cases.html)
+- [Source code](https://github.com/GraphicMeat/mail-vault-app)
