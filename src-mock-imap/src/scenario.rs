@@ -19,7 +19,9 @@ pub enum Trigger {
     /// Every occurrence of a command whose arguments contain `needle`
     /// (case-insensitive). The only way to fault one FETCH shape and not the
     /// others: a body read is `BODY.PEEK[]`, a header page is
-    /// `BODY.PEEK[HEADER.FIELDS (…)]`, and both arrive as "FETCH".
+    /// `BODY.PEEK[HEADER.FIELDS (…)]`, and both arrive as "FETCH". An APPEND
+    /// is also matched on the message it uploads, so a needle in a Subject
+    /// faults that one message only.
     OnCommandWith(String, String),
     /// The nth occurrence (1-based) of a command whose arguments contain
     /// `needle` (case-insensitive). Unlike `OnNthCommand`, unrelated commands

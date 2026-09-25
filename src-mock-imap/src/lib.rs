@@ -244,7 +244,7 @@ fn handle_conn(
             continue;
         }
 
-        let actions = match_faults(&faults, &cmd.name, &cmd.args, &counts);
+        let actions = match_faults(&faults, &cmd.name, &fault_haystack(&cmd.args, &cmd.literal), &counts);
 
         if actions.contains(&Action::DropConnection) {
             return Ok(());
@@ -395,6 +395,18 @@ fn read_literal(
 
     let head = line[..open].trim_end().to_string();
     Ok((format!("{} {}", head, tail.trim()).trim_end().to_string(), buf))
+}
+
+/// What a `...With` trigger's needle is looked for in: the arguments, plus the
+/// literal an APPEND carries. The needle may sit in the message itself (a
+/// Subject line), which is the only way to fault ONE message's upload on a
+/// server the whole e2e run shares.
+fn fault_haystack(args: &str, literal: &[u8]) -> String {
+    if literal.is_empty() {
+        args.to_string()
+    } else {
+        format!("{} {}", args, String::from_utf8_lossy(literal))
+    }
 }
 
 fn match_faults(
@@ -610,7 +622,7 @@ fn write_line(out: &mut TcpStream, line: &[u8]) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::match_faults;
+    use super::{fault_haystack, match_faults};
     use crate::scenario::{Action, Fault, Trigger};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -630,5 +642,18 @@ mod tests {
             vec![Action::DropConnection],
         );
         assert!(match_faults(&faults, "SEARCH", "SUBJECT \"RETRY-ONCE\"", &counts).is_empty());
+    }
+
+    /// An APPEND is matched on the message it carries, not only its args.
+    #[test]
+    fn append_is_matched_on_its_literal() {
+        let slow = Action::Delay(std::time::Duration::from_secs(1));
+        let faults = [Fault { trigger: Trigger::with("APPEND", "slow-append-7"), action: slow.clone() }];
+        let counts = Arc::new(Mutex::new(HashMap::new()));
+        let args = "\"Sent\" (\\Seen) {40}";
+        let other = fault_haystack(args, b"Subject: other\r\n\r\nbody");
+        assert!(match_faults(&faults, "APPEND", &other, &counts).is_empty());
+        let ours = fault_haystack(args, b"Subject: Re: x slow-append-7\r\n\r\nbody");
+        assert_eq!(match_faults(&faults, "APPEND", &ours, &counts), vec![slow]);
     }
 }
