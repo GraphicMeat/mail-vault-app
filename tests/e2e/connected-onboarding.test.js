@@ -253,7 +253,7 @@ describe('onboarding', function () {
      */
     it('does not move the Continue button while browsing every feature', async function () {
       const total = await $$('[data-testid^="premium-tile-"]').length;
-      expect(total).toBe(14);
+      expect(total).toBe(15);
 
       const seen = [], tops = [];
       for (let i = 0; i < total; i++) {

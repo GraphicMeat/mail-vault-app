@@ -122,7 +122,7 @@ where
     for row in due {
         let id = row.id.clone();
         let outcome = wake(row).await;
-        match app_db::with(app_dir, |c| snooze::record_outcome(c, &id, &outcome, now_ms())) {
+        match app_db::with(app_dir, |c| snooze::record_outcome(c, &id, &outcome, now)) {
             Ok(row_state) => results.push((id, outcome, row_state)),
             Err(e) => warn!("[snooze] could not record {outcome:?} for {id}: {e}"),
         }

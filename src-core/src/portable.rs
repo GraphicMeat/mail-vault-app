@@ -376,7 +376,7 @@ mod tests {
         std::fs::write(app_dir.join("logs/daemon.log"), b"log").unwrap();
         let cur = app_dir.join("Maildir/acct/INBOX/cur");
         std::fs::create_dir_all(&cur).unwrap();
-        std::fs::write(cur.join("1.eml:2,S"), b"From: a@example.com\r\n\r\nhello").unwrap();
+        std::fs::write(cur.join(format!("1.eml{}S", crate::maildir::INFO_PREFIX)), b"From: a@example.com\r\n\r\nhello").unwrap();
         let dest = tmp.path().join("USB");
         std::fs::create_dir_all(&dest).unwrap();
         Host { app_dir, payload: vec![app], dest, _tmp: tmp }
@@ -408,7 +408,7 @@ mod tests {
 
         let data = portable_data_dir(&root);
         assert_eq!(std::fs::read(data.join("frontend-settings.json")).unwrap(), b"{\"theme\":\"dark\"}");
-        assert!(data.join("Maildir/acct/INBOX/cur/1.eml:2,S").exists());
+        assert!(data.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", crate::maildir::INFO_PREFIX)).exists());
         assert!(!data.join("daemon.pid").exists(), "host process state stays behind");
         assert!(!data.join("logs").exists());
         assert_eq!(read_sealed(&data.join(SEALED_FILE), "drive passphrase").unwrap(), s);
@@ -471,7 +471,7 @@ mod tests {
         std::fs::write(app_dir.join("frontend-settings.json"), b"{}").unwrap();
         std::fs::write(app_dir.join("daemon.pid"), b"123").unwrap();
         std::fs::write(app_dir.join("logs/daemon.log"), b"log").unwrap();
-        std::fs::write(app_dir.join("Maildir/cur/1.eml:2,S"), b"hello").unwrap();
+        std::fs::write(app_dir.join(format!("Maildir/cur/1.eml{}S", crate::maildir::INFO_PREFIX)), b"hello").unwrap();
         let payload = vec![app];
         // pid file, logs and the WAL stay on the host; app.db counts at its file size.
         assert_eq!(estimate(&payload, &app_dir, Some(&app_dir)), 6 + 4096 + 2 + 5);
@@ -493,12 +493,12 @@ mod tests {
         let s = secrets();
         let root = h.dest.join(PORTABLE_DIR);
         let truncate = |data: &Path| {
-            std::fs::write(data.join("Maildir/acct/INBOX/cur/1.eml:2,S"), b"trunc").unwrap();
+            std::fs::write(data.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", crate::maildir::INFO_PREFIX)), b"trunc").unwrap();
         };
         let err = create_with(&opts(&h, true, &s), &|_, _, _| {}, &truncate).unwrap_err();
         assert!(err.contains("1.eml"), "{err}");
         assert!(!is_portable_root(&root), "no marker: the drive copy is not used");
-        assert!(h.app_dir.join("Maildir/acct/INBOX/cur/1.eml:2,S").exists(), "the host copy is untouched");
+        assert!(h.app_dir.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", crate::maildir::INFO_PREFIX)).exists(), "the host copy is untouched");
     }
 
     #[cfg(unix)]

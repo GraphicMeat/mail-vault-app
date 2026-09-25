@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "解锁",
   "portable.unlock.error": "MailVault 无法解锁驱动器。请检查它是否仍已连接。",
   "portable.unlock.title": "解锁你的便携版 MailVault",
-  "portable.unsupportedBuild": "此 MailVault 无法复制到驱动器。请使用 MailVault 官网版本，或在 Linux 上使用 AppImage。",
+  "portable.unsupportedBuild": "此 MailVault 无法复制到驱动器。请在 Windows 或 macOS 上使用 MailVault 官网版本。",
   "portable.updateHint": "要更新便携版，请退出 MailVault，然后用更新的版本替换驱动器上的应用。旁边的 MailVault Data 文件夹保持不变。",
   "premium.attachmentSearch.blurb": "可搜索 PDF、Word、Excel 和 PowerPoint 附件中的内容，与邮件搜索一同进行。",
   "premium.attachmentSearch.title": "附件搜索",

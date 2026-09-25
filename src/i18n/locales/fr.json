@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "Déverrouiller",
   "portable.unlock.error": "MailVault n’a pas pu déverrouiller le disque. Vérifiez qu’il est toujours branché.",
   "portable.unlock.title": "Déverrouillez votre MailVault portable",
-  "portable.unsupportedBuild": "Cette installation de MailVault ne peut pas être copiée sur un disque. Utilisez la version du site de MailVault, ou l’AppImage sous Linux.",
+  "portable.unsupportedBuild": "Cette installation de MailVault ne peut pas être copiée sur un disque. Utilisez la version du site de MailVault, sous Windows ou macOS.",
   "portable.updateHint": "Pour mettre à jour une copie portable, quittez MailVault et remplacez l’app du disque par une version plus récente. Le dossier MailVault Data à côté reste tel quel.",
   "premium.attachmentSearch.blurb": "Recherchez dans les pièces jointes PDF, Word, Excel et PowerPoint, aux côtés de vos messages.",
   "premium.attachmentSearch.title": "Recherche dans les pièces jointes",

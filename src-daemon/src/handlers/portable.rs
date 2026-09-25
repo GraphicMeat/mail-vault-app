@@ -402,7 +402,7 @@ mod tests {
         let app_dir = tmp.path().join("host");
         let cur = app_dir.join("Maildir/acct/INBOX/cur");
         std::fs::create_dir_all(&cur).unwrap();
-        let eml = cur.join("1.eml:2,S");
+        let eml = cur.join(format!("1.eml{}S", mailvault_core::maildir::INFO_PREFIX));
         std::fs::write(&eml, b"From: a@example.com\r\n\r\nhello").unwrap();
         let creds = tmp.path().join("credentials.json");
         std::fs::write(&creds, json!({"acct-1": "{\"email\":\"a@example.com\",\"password\":\"hunter2\"}"}).to_string()).unwrap();
@@ -443,7 +443,7 @@ mod tests {
         let data = h.dest.join("MailVault Data/data");
         let sealed = mailvault_core::portable::read_sealed(&data.join("credentials.sealed"), "drive passphrase").unwrap();
         assert!(sealed.credentials.contains_key("acct-1"));
-        assert!(data.join("Maildir/acct/INBOX/cur/1.eml:2,S").exists());
+        assert!(data.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
         assert!(h.eml.exists() && h.creds.exists(), "nothing removed unless asked");
         assert!(!h.state.vault_closed.load(std::sync::atomic::Ordering::SeqCst), "the vault is open again");
     }
@@ -472,7 +472,7 @@ mod tests {
         assert_eq!(reply.expect("created")["removedFromHost"], json!(true));
         assert!(!h.eml.exists(), "host mail removed after the verified copy");
         assert!(!h.creds.exists(), "host credentials removed after the verified copy");
-        assert!(h.dest.join("MailVault Data/data/Maildir/acct/INBOX/cur/1.eml:2,S").exists());
+        assert!(h.dest.join(format!("MailVault Data/data/Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
     }
 
     #[tokio::test]

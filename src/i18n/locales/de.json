@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "Entsperren",
   "portable.unlock.error": "MailVault konnte das Laufwerk nicht entsperren. Prüfen Sie, ob es noch angeschlossen ist.",
   "portable.unlock.title": "Portables MailVault entsperren",
-  "portable.unsupportedBuild": "Diese MailVault-Installation lässt sich nicht auf ein Laufwerk kopieren. Verwenden Sie die Version von der MailVault-Website oder unter Linux das AppImage.",
+  "portable.unsupportedBuild": "Diese MailVault-Installation lässt sich nicht auf ein Laufwerk kopieren. Verwenden Sie die Version von der MailVault-Website, unter Windows oder macOS.",
   "portable.updateHint": "Um eine portable Kopie zu aktualisieren, beenden Sie MailVault und ersetzen Sie die App auf dem Laufwerk durch eine neuere Version. Der Ordner MailVault Data daneben bleibt, wie er ist.",
   "premium.attachmentSearch.blurb": "Durchsuchen Sie PDF-, Word-, Excel- und PowerPoint-Anhänge direkt neben Ihren Nachrichten.",
   "premium.attachmentSearch.title": "Anhangsuche",

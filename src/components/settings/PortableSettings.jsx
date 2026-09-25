@@ -66,11 +66,11 @@ function PortableUpsell({ onUpgrade }) {
   );
 }
 
-function errorLine(t, err) {
+function errorLine(translate, err) {
   const message = String(err?.message || err);
-  if (message.includes('E_PORTABLE_EXISTS')) return t('portable.error.exists');
-  if (message.includes('E_PORTABLE_UNSUPPORTED_BUILD')) return t('portable.unsupportedBuild');
-  return t('portable.error.failed', { message });
+  if (message.includes('E_PORTABLE_EXISTS')) return translate('portable.error.exists');
+  if (message.includes('E_PORTABLE_UNSUPPORTED_BUILD')) return translate('portable.unsupportedBuild');
+  return translate('portable.error.failed', { message });
 }
 
 function PortableWizard() {

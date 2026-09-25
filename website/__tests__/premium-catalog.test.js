@@ -7,7 +7,7 @@ it('publishes fast multi-folder search with app copy',()=>{
  const detail=d.getElementById('premium-fast-multi-folder-search');
  expect(detail).not.toBeNull();
  expect(detail.textContent).toContain('Search up to five server mailboxes');
- expect(d.querySelectorAll('.mv-premium-detail')).toHaveLength(14);
+ expect(d.querySelectorAll('.mv-premium-detail')).toHaveLength(15);
  expect(detail.querySelector('summary').textContent).toBe(strings['premium.fastMultiFolderSearch.title']);
  expect(detail.textContent).toContain(strings['premium.fastMultiFolderSearch.blurb']);
 });

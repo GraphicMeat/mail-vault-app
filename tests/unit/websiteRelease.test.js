@@ -128,7 +128,11 @@ describe('static cache policy', () => {
   });
 });
 
-describe('Caddy 404 patch', () => {
+// The patch runs on the Linux deploy host. Git for Windows keeps awk off the
+// PATH a plain shell gets, so the box that runs this suite may not have it.
+const hasAwk = (() => { try { execFileSync('awk', ['BEGIN{}']); return true; } catch { return false; } })();
+
+describe.skipIf(!hasAwk)('Caddy 404 patch', () => {
   const workflow = readFileSync('.github/workflows/deploy-website.yml', 'utf8');
   const stepMatch = workflow.match(/- name: Ensure Caddy returns 404 for missing pages[\s\S]*?\n {10}SCRIPT\n/);
   const stepText = stepMatch ? stepMatch[0] : '';

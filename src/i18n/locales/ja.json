@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "ロック解除",
   "portable.unlock.error": "MailVault はドライブのロックを解除できませんでした。接続されているか確認してください。",
   "portable.unlock.title": "ポータブル版 MailVault のロックを解除",
-  "portable.unsupportedBuild": "この MailVault はドライブにコピーできません。MailVault の Web サイト版、または Linux では AppImage を使用してください。",
+  "portable.unsupportedBuild": "この MailVault はドライブにコピーできません。Windows または macOS で、MailVault の Web サイト版を使用してください。",
   "portable.updateHint": "ポータブル版を更新するには、MailVault を終了し、ドライブ上のアプリを新しいバージョンに置き換えてください。隣の MailVault Data フォルダはそのまま残ります。",
   "premium.attachmentSearch.blurb": "PDF、Word、Excel、PowerPointの添付ファイル内をメッセージと一緒に検索できます。",
   "premium.attachmentSearch.title": "添付ファイル検索",

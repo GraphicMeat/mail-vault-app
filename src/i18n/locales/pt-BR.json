@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "Desbloquear",
   "portable.unlock.error": "O MailVault não conseguiu desbloquear a unidade. Verifique se ela ainda está conectada.",
   "portable.unlock.title": "Desbloqueie seu MailVault portátil",
-  "portable.unsupportedBuild": "Esta instalação do MailVault não pode ser copiada para uma unidade. Use a versão do site do MailVault ou, no Linux, o AppImage.",
+  "portable.unsupportedBuild": "Esta instalação do MailVault não pode ser copiada para uma unidade. Use a versão do site do MailVault, no Windows ou no macOS.",
   "portable.updateHint": "Para atualizar uma cópia portátil, feche o MailVault e substitua o app na unidade por uma versão mais recente. A pasta MailVault Data ao lado permanece como está.",
   "premium.attachmentSearch.blurb": "Pesquise dentro de anexos em PDF, Word, Excel e PowerPoint, junto com suas mensagens.",
   "premium.attachmentSearch.title": "Busca em anexos",

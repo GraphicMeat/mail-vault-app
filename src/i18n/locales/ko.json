@@ -1063,7 +1063,7 @@
   "portable.unlock.button": "잠금 해제",
   "portable.unlock.error": "MailVault가 드라이브 잠금을 해제하지 못했습니다. 아직 연결되어 있는지 확인하세요.",
   "portable.unlock.title": "휴대용 MailVault 잠금 해제",
-  "portable.unsupportedBuild": "이 MailVault는 드라이브에 복사할 수 없습니다. MailVault 웹사이트 버전이나 Linux의 AppImage를 사용하세요.",
+  "portable.unsupportedBuild": "이 MailVault는 드라이브에 복사할 수 없습니다. Windows 또는 macOS에서 MailVault 웹사이트 버전을 사용하세요.",
   "portable.updateHint": "휴대용 사본을 업데이트하려면 MailVault를 종료하고 드라이브의 앱을 새 버전으로 교체하세요. 옆에 있는 MailVault Data 폴더는 그대로 유지됩니다.",
   "premium.attachmentSearch.blurb": "PDF, Word, Excel, PowerPoint 첨부 파일 안까지 메시지와 함께 검색합니다.",
   "premium.attachmentSearch.title": "첨부 파일 검색",

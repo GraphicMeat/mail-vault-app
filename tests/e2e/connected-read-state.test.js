@@ -95,16 +95,17 @@ describe('Email read state', function () {
     await waitForRow(subject, r => !r.unread, `Row "${subject}" kept its unread styling after being opened`);
   });
 
-  it('closes the viewer when the email is marked unread', async function () {
+  it('keeps the viewer open when the email is marked unread', async function () {
     expect(await clickButton('Mark unread')).toBe(true);
 
-    await browser.waitUntil(
-      async () => browser.execute(() =>
-        document.querySelector('button[title="Reply"]') === null
-        && document.body.innerText.includes('Select an email to read')),
-      { timeout: 15_000, interval: 300, timeoutMsg: 'Viewer stayed open after Mark unread' },
-    );
+    // Marking unread is a flag change, not a close: the message stays on
+    // screen, now offering "Mark read", and the reading timer does not flip it
+    // straight back.
+    await waitForButton('Mark read', `"${subject}" never offered "Mark read" after Mark unread`);
     await waitForRow(subject, r => r.unread, `Row "${subject}" never returned to unread styling`);
+    await browser.pause(4_000);
+    expect(await browser.execute(() => document.querySelector('button[title="Reply"]') !== null)).toBe(true);
+    expect(await hasButton('Mark read')).toBe(true);
   });
 
   it('reopens the cached email, marks it read again, and offers "Mark unread"', async function () {
