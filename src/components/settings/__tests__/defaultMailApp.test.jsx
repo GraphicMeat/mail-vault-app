@@ -60,6 +60,16 @@ describe('Default email app row', () => {
     expect(button.dataset.action).toBe('howto');
   });
 
+  // A portable copy never registers the drive's app as the host's mail handler.
+  it('explains that a portable copy cannot become the default', async () => {
+    invoke.mockResolvedValue(status({ canSet: false, hint: 'portable' }));
+
+    render(<DefaultMailApp />);
+
+    const hint = await screen.findByTestId('default-mail-hint');
+    expect(hint.textContent.length > 0).toBe(true);
+  });
+
   it('does not claim success when the attempt left us undefaulted', async () => {
     // The Mac App Store build carries no helper, so the attempt cannot even be
     // made and the re-query still says no. A row that flipped optimistically on

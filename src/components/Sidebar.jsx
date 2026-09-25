@@ -31,6 +31,8 @@ import { FocusTimerButton } from './FocusTimerButton';
 import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
 import { useKeychainGateStore } from '../stores/keychainGateStore';
+import { usePortableStore } from '../stores/portableStore';
+import { PortableBadge } from './PortableIndicators';
 import { mailboxLabel } from '../utils/imapUtf7';
 import {
   Inbox,
@@ -688,7 +690,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // place that says so: the account's "Password missing" or timeout notice
   // would be the same problem told twice, in worse words.
   const keychainBlocked = useKeychainGateStore(s => s.blocked);
-  const showError = !keychainBlocked && errorReadyFor !== null && errorReadyFor === activeAccountId;
+  // Same for a portable copy's unlock card.
+  const portableLocked = usePortableStore(s => s.status.portable && s.status.locked);
+  const showError = !keychainBlocked && !portableLocked && errorReadyFor !== null && errorReadyFor === activeAccountId;
 
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
@@ -1281,6 +1285,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               {(loading || cacheFilling) && <RefreshCw size={10} className="animate-spin text-mail-accent-text" />}
             </div>}
             <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>
+            <PortableBadge onClick={() => onOpenSettings?.('portable')} />
           </div>
           <Button variant="ghost" icon size="sm" onClick={toggleTheme}
             title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>

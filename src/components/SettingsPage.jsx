@@ -28,6 +28,7 @@ import {
   Tag,
   LayoutList,
   Maximize2,
+  Usb,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -50,6 +51,8 @@ import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { AiProvidersSettings } from './settings/AiProvidersSettings';
 import { AutoTagSettings } from './settings/AutoTagSettings';
 import { ViewsSettings } from './settings/ViewsSettings';
+import { PortableSettings } from './settings/PortableSettings';
+import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
 
@@ -59,6 +62,8 @@ const featureTabs = [
   { id: 'tracking', labelKey: 'settings.tab.tracking', icon: EyeOff },
   { id: 'migration', labelKey: 'settings.tab.migration', icon: ArrowLeftRight },
   { id: 'backup', labelKey: 'settings.tab.backup', icon: HardDriveDownload },
+  // Not in the App Store build: a sandboxed store app cannot run from a drive.
+  ...(IS_APPSTORE_BUILD ? [] : [{ id: 'portable', labelKey: 'settings.tab.portable', icon: Usb }]),
 ];
 
 const settingsTabs = [
@@ -89,9 +94,9 @@ const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
 const sections = [
   { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'views', 'ai-providers', 'auto-tags', 'language'] },
-  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'security', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
+  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'security', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
   { labelKey: 'settings.navigation.supportSystem', ids: ['billing', 'migration', 'daemon', 'logs', 'help'] },
-].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]) }));
+].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]).filter(Boolean) }));
 
 // Labels are resolved at render time, so search follows the current language.
 // A result points to the same page and section that contain its real control.
@@ -297,6 +302,16 @@ export const settingSearchGroups = [
     ['settings.migration.selectSourceAccount', 'migrate mailbox move emails between accounts servers'],
     ['settings.migration.migrationHistory', 'migration history past migrations log'],
   ] },
+  ...(IS_APPSTORE_BUILD ? [] : [{ id: 'portable', settings: [
+    ['portable.title', 'portable usb stick external drive run from drive copy take with you'],
+    ['portable.copyConfig', 'portable copy accounts settings to drive'],
+    ['portable.copyMail', 'portable copy all mail emails to drive'],
+    ['portable.removeFromHost', 'portable remove offload delete mail accounts from this computer'],
+    ['portable.newPassword', 'portable password passphrase set new'],
+    ['settings.transfer.confirmPassword', 'portable password passphrase confirm repeat'],
+    ['portable.running.title', 'portable running from drive usb eject lock'],
+    ['portable.currentPassword', 'portable password passphrase change current'],
+  ] }]),
 ];
 
 const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;
@@ -640,6 +655,10 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
 
             {activeTab === 'data-usage' && (
               <DataUsageSettings initialAccountId={initialAccountId} />
+            )}
+
+            {activeTab === 'portable' && (
+              <PortableSettings onUpgrade={() => handleTabChange('billing')} />
             )}
 
             {activeTab === 'backup' && (

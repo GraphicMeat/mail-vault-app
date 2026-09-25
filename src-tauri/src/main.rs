@@ -127,13 +127,13 @@ struct LogDir(PathBuf);
 /// is `<local data>/com.mailvault.app/logs`, i.e. `<app_data_dir>/logs`, which
 /// is spelled out here so Windows follows `paths`' env override with the rest.
 fn get_log_dir(app_handle: &tauri::AppHandle) -> PathBuf {
+    // A portable copy keeps its logs on the drive with everything else.
     #[cfg(target_os = "macos")]
-    return app_handle.path().app_log_dir().unwrap_or_else(|_| PathBuf::from("."));
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app_handle;
-        mailvault_core::paths::app_data_dir().map(|d| d.join("logs")).unwrap_or_else(|_| PathBuf::from("."))
+    if mailvault_core::paths::portable_root().is_none() {
+        return app_handle.path().app_log_dir().unwrap_or_else(|_| PathBuf::from("."));
     }
+    let _ = app_handle;
+    mailvault_core::paths::app_data_dir().map(|d| d.join("logs")).unwrap_or_else(|_| PathBuf::from("."))
 }
 
 fn setup_logging(log_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {
@@ -229,11 +229,14 @@ fn take_pending_mailto(state: tauri::State<mailto::PendingMailto>) -> Vec<String
 
 #[tauri::command]
 fn mailto_default_status() -> mailto::MailtoStatus {
-    mailto::status()
+    mailto::portable_status().unwrap_or_else(mailto::status)
 }
 
 #[tauri::command]
 async fn mailto_make_default() -> mailto::MailtoStatus {
+    if let Some(status) = mailto::portable_status() {
+        return status;
+    }
     // macOS launches a helper and then polls LaunchServices for up to five
     // seconds; Linux shells out to `xdg-settings`. Neither belongs on the main
     // thread — the window would freeze for the duration.
@@ -454,10 +457,25 @@ fn test_credentials_path() -> Option<std::path::PathBuf> {
 // Store all credentials as a single JSON object in keychain
 // This triggers the keychain modal only once instead of per-account
 // Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
+/// A portable copy keeps its secrets in the daemon's sealed store on the
+/// drive, never in this host's keychain: both credential commands forward.
+fn portable_credentials_call(app: tauri::AppHandle, method: &'static str, params: serde_json::Value) -> impl std::future::Future<Output = Result<serde_json::Value, String>> {
+    async move {
+        tokio::task::spawn_blocking(move || daemon_call_blocking(&app, method, params, std::time::Duration::from_secs(30)))
+            .await
+            .map_err(|e| format!("Credential task panicked: {}", e))?
+    }
+}
+
 #[tauri::command]
-async fn store_credentials(credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
+async fn store_credentials(app_handle: tauri::AppHandle, credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
     info!("=== STORE CREDENTIALS START ===");
     info!("Storing credentials for {} account(s)", credentials.len());
+
+    if mailvault_core::paths::portable_root().is_some() {
+        let params = serde_json::json!({ "credentials": credentials });
+        return portable_credentials_call(app_handle, "portable.set_credentials", params).await.map(|_| ());
+    }
 
     if let Some(path) = test_credentials_path() {
         warn!("MAILVAULT_TEST_CREDENTIALS set — writing credentials to {:?}, NOT the keychain", path);
@@ -547,8 +565,15 @@ fn quiet_get_password(entry: &Entry) -> keyring::Result<String> {
 // granted/denied/cancelled/timed_out/empty/unavailable outcomes.
 // Async: runs on a background thread so a slow keychain never blocks the main thread
 #[tauri::command]
-async fn get_credentials() -> Result<serde_json::Value, String> {
+async fn get_credentials(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
     info!("=== GET CREDENTIALS START ===");
+
+    if mailvault_core::paths::portable_root().is_some() {
+        // Unreachable daemon: the same "unavailable" a failed keychain read gives.
+        return Ok(portable_credentials_call(app_handle, "portable.get_credentials", serde_json::json!({}))
+            .await
+            .unwrap_or_else(|e| serde_json::json!({ "status": "unavailable", "message": e })));
+    }
 
     if let Some(path) = test_credentials_path() {
         warn!("MAILVAULT_TEST_CREDENTIALS set — reading credentials from {:?}, NOT the keychain", path);
@@ -659,6 +684,11 @@ async fn get_credentials() -> Result<serde_json::Value, String> {
 // Legacy function - store single password (kept for migration)
 #[tauri::command]
 fn store_password(account_id: String, password: String) -> Result<(), String> {
+    // Portable: nothing secret on the host. The caller saves the account
+    // right after, which seals the new password on the drive.
+    if mailvault_core::paths::portable_root().is_some() {
+        return Ok(());
+    }
     info!("=== STORE PASSWORD START ===");
     info!("store_password called for account: {}", account_id);
     info!("Service name: {}", KEYRING_SERVICE);
@@ -1575,6 +1605,10 @@ fn update_feed_override(track: Option<&str>, app_version: &str) -> Option<String
 /// "off", so a corrupt settings file costs a background daemon, never a
 /// stray one the user cannot see or stop.
 fn daemon_always_on() -> bool {
+    // A portable copy's daemon dies with the app: the drive may leave next.
+    if mailvault_core::paths::portable_root().is_some() {
+        return false;
+    }
     let Ok(dir) = mailvault_core::paths::app_data_dir() else { return false };
     let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
     mailvault_core::autostart::always_on_from_settings(&raw)
@@ -1645,12 +1679,36 @@ async fn check_for_updates_now(handle: tauri::AppHandle) {
     check_for_updates(handle, true).await;
 }
 
+/// A portable copy is updated by the user replacing the app on the drive with
+/// a newer one (`MailVault Data` beside it stays), never in place: an updater
+/// would install onto the host or rewrite a bundle on a drive that may leave
+/// mid-install.
+#[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
+fn portable_skips_updates(handle: &tauri::AppHandle, show_no_update: bool) -> bool {
+    if mailvault_core::paths::portable_root().is_none() {
+        return false;
+    }
+    info!("Portable copy: update check skipped");
+    if show_no_update {
+        use tauri_plugin_dialog::DialogExt;
+        handle.dialog()
+            .message("This is a portable copy of MailVault, so it does not update itself. To update it, quit MailVault and replace the app on the drive with a newer version. The MailVault Data folder beside it keeps your mail and settings.")
+            .title("Updates")
+            .show(|_| {});
+    }
+    true
+}
+
 /// Shared update check logic for both manual menu trigger and startup auto-check.
 /// `show_no_update` controls whether to show a dialog when already up-to-date.
 #[cfg(any(target_os = "linux", windows))]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_updater::UpdaterExt;
     use tauri_plugin_dialog::DialogExt;
+
+    if portable_skips_updates(&handle, show_no_update) {
+        return;
+    }
 
     // Single-flight guard: reject overlapping checks
     let guard = handle.state::<UpdateCheckGuard>();
@@ -1788,6 +1846,10 @@ async fn check_for_updates(_handle: tauri::AppHandle, _show_no_update: bool) {
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+
+    if portable_skips_updates(&handle, show_no_update) {
+        return;
+    }
 
     // Single-flight guard: reject overlapping checks
     let guard = handle.state::<UpdateCheckGuard>();
@@ -2155,12 +2217,22 @@ fn spawn_detached_daemon() -> Result<(), String> {
         .find(|c| c.exists())
         .ok_or_else(|| format!("mailvault-daemon not found next to {}", exe.display()))?;
 
-    Command::new(bin)
+    daemon_command(bin)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("could not start {}: {e}", bin.display()))
+}
+
+/// The daemon, told which portable root this app resolved, so the two can
+/// never disagree about where the data is, wherever the daemon binary sits.
+fn daemon_command(bin: &Path) -> Command {
+    let mut cmd = Command::new(bin);
+    if let Some(root) = mailvault_core::paths::portable_root() {
+        cmd.env(mailvault_core::paths::PORTABLE_ENV, root);
+    }
+    cmd
 }
 
 /// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
@@ -2234,7 +2306,7 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
 
     info!("Spawning daemon on-demand: {:?}", daemon_bin);
 
-    let child = Command::new(&daemon_bin)
+    let child = daemon_command(&daemon_bin)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -3060,6 +3132,15 @@ fn daemon_channel_notify(method: String, params: serde_json::Value) {
 }
 
 fn main() {
+    // WebView2 keeps localStorage/IndexedDB under the host's LOCALAPPDATA; a
+    // portable copy keeps them on the drive. Set before any webview exists.
+    // UNVERIFIED on a Windows box: that the variable wins over the
+    // `data_directory` Tauri forces there.
+    #[cfg(windows)]
+    if let Some(root) = mailvault_core::paths::portable_root() {
+        std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", root.join("webview"));
+    }
+
     // Autostart on Linux and Windows points at *this* binary rather than at
     // the sidecar, because the sidecar's path depends on the packaging (an
     // AppImage's mount root is gone by the next login). Started that way the
@@ -3121,6 +3202,7 @@ fn main() {
     // failed session would make every subsequent launch exit(0) immediately — the harness
     // then reports "App did not report plugin port in time" for the rest of the suite.
     let automation = std::env::var_os("TAURI_WEBVIEW_AUTOMATION").is_some();
+    let portable = mailvault_core::paths::portable_root().is_some();
 
     // Linux fallback: flock-based lock to prevent multiple instances.
     // The tauri-plugin-single-instance uses D-Bus which may not work in all Linux environments
@@ -3171,7 +3253,12 @@ fn main() {
     let builder = tauri::Builder::default();
     // Same automation carve-out as the flock above: the D-Bus single-instance plugin
     // would make a second test-launched instance forward-and-exit instead of starting.
-    let builder = if automation {
+    // A portable copy skips it too: the plugin keys on the bundle identifier,
+    // so an installed MailVault running on this host would take the portable
+    // launch and close it. Linux keeps its flock, which lives in the (per-drive)
+    // data dir. ponytail: two launches of one portable copy on macOS/Windows
+    // both open; the daemon's own singleton lock keeps the data safe.
+    let builder = if automation || portable {
         builder
     } else {
         builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -3201,8 +3288,11 @@ fn main() {
     // Updater plugins — Sparkle on macOS (non-MAS), tauri-plugin-updater on
     // Linux and Windows. MAS builds (`appstore`, no `sparkle` feature) get
     // updates via the App Store.
+    // Not at all in a portable copy: Sparkle schedules checks of its own, and
+    // switching them off would persist into the host's defaults, which an
+    // installed copy shares.
     #[cfg(all(target_os = "macos", feature = "sparkle"))]
-    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
+    let builder = if portable { builder } else { builder.plugin(tauri_plugin_sparkle_updater::init()) };
     #[cfg(any(target_os = "linux", windows))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
@@ -3335,12 +3425,16 @@ fn main() {
                 }
                 // Linux and Windows register at runtime; macOS is static, from
                 // `CFBundleURLTypes` in the bundle.
+                // Never from a portable copy: it would make the host open mail
+                // links with an app on a drive that may not be plugged in.
                 #[cfg(any(target_os = "linux", target_os = "windows"))]
-                let _ = app.deep_link().register_all();
-                // The scheme alone does not put MailVault in Windows' Default
-                // apps list; the registered-application entry does.
-                #[cfg(target_os = "windows")]
-                mailto::register();
+                if mailvault_core::paths::portable_root().is_none() {
+                    let _ = app.deep_link().register_all();
+                    // The scheme alone does not put MailVault in Windows' Default
+                    // apps list; the registered-application entry does.
+                    #[cfg(target_os = "windows")]
+                    mailto::register();
+                }
             }
 
             // WebKitGTK's checker is off until it is switched on, and it needs a

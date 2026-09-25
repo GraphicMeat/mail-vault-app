@@ -1,7 +1,8 @@
 import {
   CalendarClock, ShieldCheck, Sparkles, Clock, EyeOff,
-  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge,
+  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge, Usb,
 } from 'lucide-react';
+import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 
 /**
  * Every premium feature, once. The onboarding gallery, the Billing list, the
@@ -30,4 +31,8 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
   { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: null,                       tab: 'storage' },
   { id: 'fast-multi-folder-search', icon: Gauge, titleKey: 'premium.fastMultiFolderSearch.title', blurbKey: 'premium.fastMultiFolderSearch.blurb', shot: null, tab: 'storage' },
+  // Not sold in the App Store build, which cannot run from a drive.
+  ...(IS_APPSTORE_BUILD ? [] : [
+    { id: 'portable',       icon: Usb,            titleKey: 'premium.portable.title',        blurbKey: 'premium.portable.blurb',        shot: null,                       tab: 'portable' },
+  ]),
 ]);
