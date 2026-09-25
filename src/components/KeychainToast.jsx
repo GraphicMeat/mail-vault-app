@@ -4,6 +4,7 @@ import { ToastShell } from './ui/ToastShell';
 import { KeyRound, X, RefreshCw } from 'lucide-react';
 import * as keychainSession from '../services/keychainSession';
 import { useKeychainGateStore } from '../stores/keychainGateStore';
+import { usePortableStore } from '../stores/portableStore';
 import { t as tr, useT  } from '../i18n/index.js';
 
 // Each of these states has a different way out, and the toast has the two
@@ -47,8 +48,10 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
   // The keychain gate's card sits in the same corner and already says what
   // to do: while it shows, this one steps aside.
   const gateBlocked = useKeychainGateStore(s => s.blocked);
+  // So does a portable copy's unlock card: the "unavailable" read is the lock.
+  const portableLocked = usePortableStore(s => s.status.portable && s.status.locked);
 
-  if (!visible || !status || gateBlocked) return null;
+  if (!visible || !status || gateBlocked || portableLocked) return null;
 
   return (
     <AnimatePresence>

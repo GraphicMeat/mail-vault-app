@@ -38,6 +38,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { KeychainUnlockCard } from './components/KeychainUnlockCard';
+import { PortableUnlockCard } from './components/PortableUnlockCard';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
 import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -1465,6 +1466,7 @@ function App() {
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
       <KeychainUnlockCard />
+      <PortableUnlockCard />
       <OnboardingRefreshPrompt ready={onboardingPromptReady} />
       <OnboardingResumePrompt ready={onboardingPromptReady} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />

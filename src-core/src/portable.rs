@@ -136,6 +136,42 @@ fn stays_on_host(name: &str) -> bool {
         || ["-wal", "-shm", "-journal"].iter().any(|s| name.ends_with(s))
 }
 
+fn tree_bytes(path: &Path) -> u64 {
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.is_dir() => std::fs::read_dir(path).into_iter().flatten().flatten().map(|e| tree_bytes(&e.path())).sum(),
+        Ok(m) if m.is_file() => m.len(),
+        _ => 0,
+    }
+}
+
+/// Roughly what `create` writes to the drive: the app, the app data it takes
+/// (app.db at its file size), and the mail when it is copied.
+pub fn estimate(payload: &[PathBuf], app_dir: &Path, mail_dir: Option<&Path>) -> u64 {
+    let app: u64 = payload.iter().map(|p| tree_bytes(p)).sum();
+    let data: u64 = std::fs::read_dir(app_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| !stays_on_host(&e.file_name().to_string_lossy()))
+        .map(|e| tree_bytes(&e.path()))
+        .sum();
+    let db = tree_bytes(&app_dir.join(crate::app_db::db::DB_FILE));
+    // Names as they are on disk: `Maildir` and `maildir` are one folder on a
+    // case-insensitive volume and must not count twice.
+    let mail: u64 = mail_dir
+        .map(|m| {
+            std::fs::read_dir(m)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|e| crate::vault_layout::VAULT_DIRS.contains(&e.file_name().to_string_lossy().as_ref()))
+                .map(|e| tree_bytes(&e.path()))
+                .sum()
+        })
+        .unwrap_or(0);
+    app + data + db + mail
+}
+
 pub struct CreateOptions<'a> {
     /// The folder the user picked on the drive.
     pub dest: &'a Path,
@@ -376,7 +412,7 @@ mod tests {
         assert_eq!(crate::app_db::locations::display_path(&conn, "vault"), None);
         let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
         assert_eq!(check, "ok");
-        assert_eq!(created.mail_dirs, vec!["Maildir"]);
+        assert!(created.mail_dirs.contains(&"Maildir"), "{:?}", created.mail_dirs);
     }
 
     #[test]

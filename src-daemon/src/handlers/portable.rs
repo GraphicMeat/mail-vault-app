@@ -82,6 +82,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     if method == "portable.status" {
         return Some(done(id, blocking(move || status_json(store)).await));
     }
+    if method == "portable.estimate" {
+        let dest = std::path::PathBuf::from(req!(str_arg(&id, params, "dest")));
+        let state = Arc::clone(state);
+        return Some(done(
+            id,
+            blocking(move || {
+                let payload = this_app_payload();
+                let mail = state.mail_dir_ok.then_some(state.data_dir.as_path());
+                json!({
+                    "freeBytes": free_bytes(&dest),
+                    "neededBytes": mailvault_core::portable::estimate(payload.as_deref().unwrap_or_default(), &state.app_dir, mail),
+                    "supported": payload.is_ok(),
+                })
+            })
+            .await,
+        ));
+    }
     if method == "portable.create" {
         if store.is_some() {
             return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_FROM_PORTABLE.to_string()));
@@ -98,9 +115,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "removeFromHost needs copyMail and copyConfig".to_string()));
         }
         let dest = std::path::PathBuf::from(req!(str_arg(&id, params, "dest")));
-        let exe = std::env::current_exe().map_err(|e| e.to_string());
-        let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
-        let payload = match exe.and_then(|exe| mailvault_core::portable::app_payload(&exe, appimage.as_deref(), cfg!(windows))) {
+        let payload = match this_app_payload() {
             Ok(p) => p,
             Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
         };
@@ -162,6 +177,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// can be lost, so the passphrase is all that stands in front of it.
 pub(crate) const MIN_PASSPHRASE: usize = 12;
 pub(crate) const E_PASSPHRASE_SHORT: &str = "E_PORTABLE_PASSPHRASE_SHORT";
+/// What of this installed app goes to the drive. The daemon sits inside the
+/// same bundle / folder / AppImage as the app, so it finds it from its own path.
+fn this_app_payload() -> Result<Vec<std::path::PathBuf>, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
+    mailvault_core::portable::app_payload(&exe, appimage.as_deref(), cfg!(windows))
+}
+
 /// A portable copy is made from an installed one, never from another.
 pub(crate) const E_FROM_PORTABLE: &str = "E_PORTABLE_FROM_PORTABLE";
 
