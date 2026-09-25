@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import HardBreak from '@tiptap/extension-hard-break';
@@ -8,12 +9,19 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
-  List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck
+  List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck,
+  ExternalLink, Pencil, Unlink, Trash2
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSpellcheckStatus } from '../hooks/useSpellcheckStatus';
 import { SpellcheckHelpDialog } from './SpellcheckHelpDialog';
 import { t, useT  } from '../i18n/index.js';
+import { Popover, MenuItem } from './ui/Popover';
+import { Button } from './ui/Button';
+import { FIELD_TRIGGER } from './ui/field';
+import { Z } from './ui/layers';
+import { hasOpenDialog } from '../hooks/useDialogA11y';
+import { linkRangeAt, applyLink, removeLink, removeLinkWithText, openLink } from '../utils/editorLinks';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -37,7 +45,7 @@ function ToolbarDivider() {
   return <div className="w-px h-5 bg-mail-border mx-0.5" />;
 }
 
-function Toolbar({ editor }) {
+function Toolbar({ editor, onLink }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
@@ -49,17 +57,6 @@ function Toolbar({ editor }) {
   // claiming to be a switch and becomes the way to fix it.
   const noDictionary = !!spellcheckStatus?.needsDictionary
     && spellcheckStatus.dictionaries.length === 0;
-
-  const setLink = useCallback(() => {
-    const previousUrl = editor.getAttributes('link').href;
-    const url = window.prompt('URL', previousUrl || 'https://');
-    if (url === null) return;
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-  }, [editor]);
 
   // Just the preference. Retracting the underlines already on screen is the
   // editor's job, below — re-entering the editable does not do it, whatever
@@ -109,7 +106,7 @@ function Toolbar({ editor }) {
       <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('editor.codeBlock')}>
         <Code size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={setLink} active={editor.isActive('link')} title={t('editor.insertLink')}>
+      <ToolbarButton onClick={() => onLink()} active={editor.isActive('link')} title={t('editor.insertLink')}>
         <LinkIcon size={S} />
       </ToolbarButton>
 
@@ -145,6 +142,93 @@ function Toolbar({ editor }) {
         confined={!!spellcheckStatus?.confined}
       />
     </div>
+  );
+}
+
+/**
+ * Text and address of one link. Save goes through applyLink, whose setLink
+ * refuses an address TipTap does not allow; the field is marked and the panel
+ * stays open. Escape and an outside click cancel (Popover).
+ */
+function LinkPanel({ link, onSave, onRemove, onCancel }) {
+  const t = useT();
+  const [text, setText] = useState(link.text);
+  const [href, setHref] = useState(link.href);
+  const [invalid, setInvalid] = useState(false);
+  const field = `${FIELD_TRIGGER} w-full mt-1`;
+  return (
+    <Popover
+      open
+      onClose={onCancel}
+      variant="panel"
+      handlesTab
+      role="dialog"
+      aria-label={t('editor.insertLink')}
+      data-testid="link-editor"
+      className="w-80 shadow-xl"
+      style={{ top: link.top, left: link.left }}
+    >
+      <form
+        className="flex flex-col gap-2"
+        onSubmit={(e) => { e.preventDefault(); if (!onSave(text, href)) setInvalid(true); }}
+      >
+        <label className="text-xs text-mail-text-muted">
+          {t('editor.link.text')}
+          <input data-testid="link-editor-text" className={field} value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+        <label className="text-xs text-mail-text-muted">
+          {t('editor.link.url')}
+          <input
+            data-testid="link-editor-url"
+            className={`${field} ${invalid ? 'border-mail-danger' : ''}`}
+            value={href}
+            onChange={(e) => { setHref(e.target.value); setInvalid(false); }}
+            aria-invalid={invalid || undefined}
+            inputMode="url"
+            autoFocus
+            spellCheck={false}
+          />
+        </label>
+        <div className="flex items-center gap-2 pt-1">
+          {link.edit && (
+            <Button variant="dangerTint" size="sm" data-testid="link-editor-remove" onClick={onRemove}>
+              {t('editor.link.remove')}
+            </Button>
+          )}
+          <span className="flex-1" />
+          <Button size="sm" data-testid="link-editor-cancel" onClick={onCancel}>{t('common.cancel')}</Button>
+          <Button variant="primary" size="sm" type="submit" data-testid="link-editor-save">{t('common.save')}</Button>
+        </div>
+      </form>
+    </Popover>
+  );
+}
+
+/** What a hovered link offers. Plain mouseover/mouseout drive it (the e2e harness has no pointer events). */
+function LinkCard({ card, onAction, onEnter, onLeave }) {
+  const t = useT();
+  const item = (action, Icon, label, tone, disabled) => (
+    <MenuItem data-link-action={action} tone={tone} disabled={disabled} onClick={() => onAction(action)}>
+      <Icon size={14} aria-hidden="true" />{label}
+    </MenuItem>
+  );
+  return createPortal(
+    <div
+      data-testid="link-card"
+      role="menu"
+      aria-label={card.href}
+      className={`fixed ${hasOpenDialog() ? Z.dialogPopover : Z.popover} bg-mail-bg border border-mail-border rounded-lg py-1 min-w-[200px] max-w-[320px] shadow-xl`}
+      style={{ top: card.top, left: card.left }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      <div className="px-3 pt-1 pb-1.5 text-xs text-mail-text-muted truncate" title={card.href}>{card.href}</div>
+      {item('open', ExternalLink, t('editor.link.open'), undefined, !/^(https?:|mailto:)/i.test(card.href))}
+      {item('edit', Pencil, t('editor.link.edit'))}
+      {item('remove', Unlink, t('editor.link.remove'))}
+      {item('remove-text', Trash2, t('editor.link.removeWithText'), 'danger')}
+    </div>,
+    document.body
   );
 }
 
@@ -227,7 +311,9 @@ export const editorExtensions = (placeholder) => [
   }),
   MailHardBreak,
   Underline,
-  Link.configure({
+  // Not inclusive: text typed at a link's end is plain text. Stock TipTap
+  // ties this to `autolink`, so a pasted URL swallowed everything after it.
+  Link.extend({ inclusive: () => false }).configure({
     openOnClick: false,
     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
   }),
@@ -259,6 +345,8 @@ export function padEmptyLines(html) {
 export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
+  const [card, setCard] = useState(null);          // hovered link: { a, href, top, left }
+  const [linkEdit, setLinkEdit] = useState(null);  // link panel: { from, to, text, href, edit, top, left }
   const editor = useEditor({
     // Build the editor in useEditor's mount effect, never during render. Built
     // during render, @tiptap/react arms a 1 ms timer that destroys it unless
@@ -271,6 +359,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     extensions: editorExtensions(placeholder),
     content,
     onUpdate: ({ editor }) => {
+      setCard(null);
       onUpdate(padEmptyLines(editor.getHTML()));
     },
     editorProps: {
@@ -349,14 +438,86 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     }
   }, [content, editor]);
 
+  // The link button and the card's Edit. With no range given, the link the
+  // caret is in (or just after); a selection counts only when it lies inside
+  // that link, otherwise its text becomes the new link's text.
+  const openLinkEditor = useCallback((range) => {
+    if (!editor) return;
+    setCard(null);
+    const { from, to, empty } = editor.state.selection;
+    let link = range;
+    if (!link) {
+      const at = linkRangeAt(editor, from);
+      link = at && (empty || (from >= at.from && to <= at.to)) ? at : null;
+    }
+    const text = editor.state.doc.textBetween(from, to, ' ');
+    // A selection with no text in it (a picture) is kept: the link goes after it.
+    const target = link || (text ? { from, to, href: '', text } : { from: to, to, href: '', text: '' });
+    let place = { top: 120, left: 120 };
+    try {
+      const c = editor.view.coordsAtPos(target.from);
+      place = { top: c.bottom + 6, left: c.left };
+    } catch { /* not laid out: the Popover keeps it on screen */ }
+    setLinkEdit({ ...target, edit: !!link, ...place });
+  }, [editor]);
+
+  const closeLinkEditor = useCallback(() => {
+    setLinkEdit(null);
+    editor?.commands.focus();
+  }, [editor]);
+
+  const hideTimer = useRef(null);
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+  const keepCard = () => clearTimeout(hideTimer.current);
+  // Long enough for the pointer to travel from the link onto the card.
+  const hideCardSoon = () => { keepCard(); hideTimer.current = setTimeout(() => setCard(null), 300); };
+  const linkIn = (e) => e.target.closest?.('.ProseMirror a[href]');
+  const onMouseOver = (e) => {
+    const a = linkIn(e);
+    if (!a || linkEdit) return;
+    keepCard();
+    const r = a.getBoundingClientRect();
+    setCard((c) => (c?.a === a ? c : { a, href: a.getAttribute('href') || '', top: r.bottom + 4, left: r.left }));
+  };
+  const onMouseOut = (e) => {
+    const a = linkIn(e);
+    if (a && !a.contains(e.relatedTarget)) hideCardSoon();
+  };
+
+  const onCardAction = (action) => {
+    const { a, href } = card || {};
+    setCard(null);
+    if (action === 'open') { openLink(href); return; }
+    let range = null;
+    try { range = a?.isConnected ? linkRangeAt(editor, editor.view.posAtDOM(a, 0)) : null; } catch { range = null; }
+    if (!range) return;
+    if (action === 'edit') { openLinkEditor(range); return; }
+    if (action === 'remove') removeLink(editor, range);
+    else removeLinkWithText(editor, range);
+    editor.commands.focus();
+  };
+
   return (
     // spellCheck is inherited by the contenteditable below — ProseMirror never
     // sets the attribute itself, so nothing here overrides it.
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg" spellCheck={spellcheckEnabled}>
-      <Toolbar editor={editor} />
-      <div className="flex-1 overflow-y-auto">
+      <Toolbar editor={editor} onLink={openLinkEditor} />
+      <div className="flex-1 overflow-y-auto" onMouseOver={onMouseOver} onMouseOut={onMouseOut}>
         <EditorContent editor={editor} className="h-full" />
       </div>
+      {card && <LinkCard card={card} onAction={onCardAction} onEnter={keepCard} onLeave={hideCardSoon} />}
+      {linkEdit && (
+        <LinkPanel
+          link={linkEdit}
+          onCancel={closeLinkEditor}
+          onRemove={() => { removeLink(editor, linkEdit); closeLinkEditor(); }}
+          onSave={(text, href) => {
+            if (!applyLink(editor, linkEdit, { text, href })) return false;
+            closeLinkEditor();
+            return true;
+          }}
+        />
+      )}
     </div>
   );
 }
