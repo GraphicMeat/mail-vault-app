@@ -37,7 +37,7 @@ on:
       - '.github/workflows/ci.yml'
 jobs:
   unit-integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -53,7 +53,7 @@ jobs:
   # IMAP client behavior against the scriptable mock server. Deterministic and
   # offline — this is the suite that gates every push.
   imap-mock:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable

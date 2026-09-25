@@ -24,7 +24,7 @@ jobs:
   promote:
     # Auto-publish on release publish, but never for prereleases.
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
 
