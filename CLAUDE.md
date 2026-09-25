@@ -67,6 +67,16 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 - Keep root `index.html` in sync with `website/index.html` when homepage content changes.
 - If a change affects product messaging or discoverability, consider whether `README.md`, `website/index.html`, and `website/faq.html` should also be updated.
 
+### Website crawl files (every page added, removed, renamed, or amended)
+
+- `website/sitemap.xml` is generated: run `cd website && node i18n/i18n.mjs build` and commit the result. Never hand-edit it. `noindex` pages are left out automatically; English-only pages to index go in `SITEMAP_EXTRA` in `i18n.mjs`.
+- `website/llms.txt` is hand-kept: add the page if it is a product, help, or comparison page, and fix any listed URL, price, platform, or Premium claim the change touched. `seo.test.js` checks every link resolves.
+- `website/robots.txt` stays `Allow: /` plus the `Sitemap:` line. Check it whenever a new top-level section or a path that must stay private appears; never block AI or search crawlers without asking Rokas.
+- Every page carries the Meatlytics tag exactly like its siblings (`<script defer src="/gm.js?…" data-site="mailvault" data-tag="…">`, copy it from a neighbouring page); `english-acquisition.test.js` checks it. New trackable CTAs follow the existing `data-acquisition-*` attributes.
+- Structured data (JSON-LD) claims such as platforms, features, and prices must match the page they sit on. `softwareVersion` and `datePublished` belong to the release tooling.
+- A page served at arbitrary URLs (the 404 page) uses root-absolute URLs only, and is `noindex` with no canonical.
+- Missing URLs return a real 404 through the Caddy step in `.github/workflows/deploy-website.yml`; a new locale needs its `404.html` and a place in that step's locale list (a test enforces both).
+
 ## Maintenance Standard
 
 Update this file only for stable repo-specific guidance. Do not turn it back into a dump of implementation details, hardcoded secrets, or rapidly changing internals.
