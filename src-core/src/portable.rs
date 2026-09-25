@@ -8,7 +8,7 @@
 use crate::transfer::crypto::{self, Params, TransferError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 pub const SEALED_FILE: &str = "credentials.sealed";
@@ -41,6 +41,214 @@ pub fn read_sealed(path: &Path, passphrase: &str) -> Result<Secrets, String> {
         other => other.to_string(),
     })?);
     serde_json::from_slice(&plain).map_err(|e| format!("sealed store unreadable: {e}"))
+}
+
+// ── Making a portable copy ──────────────────────────────────────────────────
+
+/// The destination already holds a finished portable copy.
+pub const E_EXISTS: &str = "E_PORTABLE_EXISTS";
+/// This build is not something that can be copied to a drive (a distro
+/// package, a dev build).
+pub const E_UNSUPPORTED_BUILD: &str = "E_PORTABLE_UNSUPPORTED_BUILD";
+
+/// What to copy so the app runs from the drive: the `.app` bundle, the
+/// AppImage file, or (Windows) the install folder's files minus the host's
+/// uninstaller.
+pub fn app_payload(exe: &Path, appimage: Option<&Path>, windows: bool) -> Result<Vec<PathBuf>, String> {
+    if let Some(bundle) = exe.ancestors().find(|a| a.extension().is_some_and(|e| e == "app")) {
+        return Ok(vec![bundle.to_path_buf()]);
+    }
+    if let Some(img) = appimage {
+        return Ok(vec![img.to_path_buf()]);
+    }
+    if !windows {
+        return Err(E_UNSUPPORTED_BUILD.to_string());
+    }
+    let dir = exe.parent().ok_or_else(|| E_UNSUPPORTED_BUILD.to_string())?;
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("read {}: {e}", dir.display()))?;
+    Ok(entries
+        .flatten()
+        .filter(|e| !e.file_name().to_string_lossy().eq_ignore_ascii_case("uninstall.exe"))
+        .map(|e| e.path())
+        .collect())
+}
+
+/// Copy a file or tree, recreating symlinks rather than following them: a
+/// dereferenced `Versions/Current` breaks a macOS framework's signature.
+/// `n` counts (files, bytes).
+pub fn copy_preserving_links(src: &Path, dst: &Path, n: &mut (usize, u64)) -> Result<(), String> {
+    let meta = std::fs::symlink_metadata(src).map_err(|e| format!("read {}: {e}", src.display()))?;
+    if meta.file_type().is_symlink() {
+        let target = std::fs::read_link(src).map_err(|e| format!("read {}: {e}", src.display()))?;
+        let _ = std::fs::remove_file(dst);
+        #[cfg(unix)]
+        return std::os::unix::fs::symlink(&target, dst).map_err(|e| format!("link {}: {e}", dst.display()));
+        // ponytail: Windows payloads carry no symlinks; copy the target if one ever does.
+        #[cfg(not(unix))]
+        return std::fs::copy(src, dst).map(|_| ()).map_err(|e| format!("copy {} ({target:?}): {e}", src.display()));
+    }
+    if meta.is_dir() {
+        std::fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
+        for entry in std::fs::read_dir(src).map_err(|e| format!("read {}: {e}", src.display()))?.flatten() {
+            copy_preserving_links(&entry.path(), &dst.join(entry.file_name()), n)?;
+        }
+        return Ok(());
+    }
+    std::fs::copy(src, dst).map_err(|e| format!("copy {}: {e}", src.display()))?;
+    n.0 += 1;
+    n.1 += meta.len();
+    Ok(())
+}
+
+/// Every file arrived at its size, every symlink with its target.
+pub fn verify_preserving_links(src: &Path, dst: &Path) -> Result<(), String> {
+    let meta = std::fs::symlink_metadata(src).map_err(|e| format!("read {}: {e}", src.display()))?;
+    let missing = |e: std::io::Error| format!("{} is missing from the drive: {e}", dst.display());
+    if meta.file_type().is_symlink() {
+        if std::fs::read_link(src).ok() != std::fs::read_link(dst).ok() {
+            return Err(format!("{} did not arrive as the same link", dst.display()));
+        }
+        return Ok(());
+    }
+    if meta.is_dir() {
+        for entry in std::fs::read_dir(src).map_err(|e| format!("read {}: {e}", src.display()))?.flatten() {
+            verify_preserving_links(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+        return Ok(());
+    }
+    let len = std::fs::metadata(dst).map_err(missing)?.len();
+    if len != meta.len() {
+        return Err(format!("{} copied as {len} bytes, expected {}", dst.display(), meta.len()));
+    }
+    Ok(())
+}
+
+/// App data entries that stay on the host: the mail (copied as the vault),
+/// the live databases (snapshotted instead), and this host's process state,
+/// logs and derived caches keyed by host paths.
+fn stays_on_host(name: &str) -> bool {
+    const HOST_ONLY: [&str; 8] = [
+        "logs", "daemon.pid", "daemon.lock", "daemon.token", "mailvault.lock", "EBWebView",
+        crate::app_db::db::DB_FILE, crate::vault_registry::DB_FILE,
+    ];
+    crate::vault_layout::VAULT_DIRS.contains(&name)
+        || HOST_ONLY.contains(&name)
+        || ["-wal", "-shm", "-journal"].iter().any(|s| name.ends_with(s))
+}
+
+pub struct CreateOptions<'a> {
+    /// The folder the user picked on the drive.
+    pub dest: &'a Path,
+    pub payload: &'a [PathBuf],
+    pub app_dir: &'a Path,
+    /// Where the mail is now; `None` leaves it behind.
+    pub mail_dir: Option<&'a Path>,
+    pub secrets: &'a Secrets,
+    pub passphrase: &'a str,
+    pub params: Params,
+}
+
+#[derive(Debug)]
+pub struct Created {
+    pub root: PathBuf,
+    /// The vault dirs copied, for a later removal from the host.
+    pub mail_dirs: Vec<&'static str>,
+    pub files: usize,
+    pub bytes: u64,
+}
+
+/// Copy the app, its data, the mail and the sealed secrets to `dest`, verify
+/// all of it, and only then write the marker that makes it a portable root.
+/// A copy that fails anywhere is left unmarked: the app never runs from it,
+/// and running create again resumes it. `progress(phase, done, total)`.
+pub fn create(opts: &CreateOptions, progress: &dyn Fn(&str, usize, usize)) -> Result<Created, String> {
+    create_with(opts, progress, &|_| {})
+}
+
+pub(crate) fn create_with(
+    opts: &CreateOptions,
+    progress: &dyn Fn(&str, usize, usize),
+    before_verify: &dyn Fn(&Path),
+) -> Result<Created, String> {
+    use crate::paths::{is_portable_root, portable_data_dir, PORTABLE_DIR, PORTABLE_MARKER};
+    let root = opts.dest.join(PORTABLE_DIR);
+    if is_portable_root(&root) {
+        return Err(format!("{E_EXISTS}: {}", root.display()));
+    }
+    let data = portable_data_dir(&root);
+    std::fs::create_dir_all(&data).map_err(|e| format!("mkdir {}: {e}", data.display()))?;
+    let mut n = (0usize, 0u64);
+
+    progress("app", 0, opts.payload.len());
+    for (i, item) in opts.payload.iter().enumerate() {
+        let name = item.file_name().ok_or_else(|| format!("{} has no name", item.display()))?;
+        copy_preserving_links(item, &opts.dest.join(name), &mut n)?;
+        progress("app", i + 1, opts.payload.len());
+    }
+
+    progress("settings", 0, 1);
+    let mut copied = Vec::new();
+    for entry in std::fs::read_dir(opts.app_dir).map_err(|e| format!("read {}: {e}", opts.app_dir.display()))?.flatten() {
+        let name = entry.file_name();
+        if stays_on_host(&name.to_string_lossy()) {
+            continue;
+        }
+        copy_preserving_links(&entry.path(), &data.join(&name), &mut n)?;
+        copied.push(name);
+    }
+    // A live WAL database is never copied raw: a snapshot through SQLite.
+    let db = data.join(crate::app_db::db::DB_FILE);
+    let _ = std::fs::remove_file(&db); // a previous, unmarked attempt's
+    crate::app_db::with(opts.app_dir, |c| {
+        c.execute("VACUUM INTO ?1", [db.to_string_lossy()]).map(|_| ()).map_err(|e| format!("snapshot app.db: {e}"))
+    })?;
+    {
+        // Host folders mean nothing on another computer: the copy keeps its
+        // mail in its own data dir, and backups are set up again there.
+        let conn = crate::app_db::db::open(&data).map_err(|e| e.to_string())?;
+        crate::app_db::locations::clear(&conn, "vault")?;
+        crate::app_db::locations::clear(&conn, "external-backup")?;
+    }
+    progress("settings", 1, 1);
+
+    let mut mail_dirs = Vec::new();
+    if let Some(mail) = opts.mail_dir {
+        let (present, files, bytes) = crate::vault_ops::copy_and_verify(mail, &data, &|p| progress("mail", p.copied, p.total))?;
+        mail_dirs = present;
+        n.0 += files;
+        n.1 += bytes;
+    }
+
+    write_sealed(&data.join(SEALED_FILE), opts.passphrase, opts.secrets, opts.params)?;
+
+    before_verify(&data);
+    progress("verifying", 0, 1);
+    for item in opts.payload {
+        verify_preserving_links(item, &opts.dest.join(item.file_name().unwrap_or_default()))?;
+    }
+    for name in &copied {
+        verify_preserving_links(&opts.app_dir.join(name), &data.join(name))?;
+    }
+    if let Some(mail) = opts.mail_dir {
+        for dir in &mail_dirs {
+            crate::vault_ops::verify_tree(&mail.join(dir), &data.join(dir))?;
+        }
+    }
+    let check: String = crate::app_db::db::open(&data)
+        .map_err(|e| e.to_string())?
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    if check != "ok" {
+        return Err(format!("the copied app.db failed its integrity check: {check}"));
+    }
+    if read_sealed(&data.join(SEALED_FILE), opts.passphrase)? != *opts.secrets {
+        return Err("the sealed credentials did not read back".to_string());
+    }
+
+    let marker = serde_json::json!({"version": 1, "createdAt": crate::vault_layout::now_millis()});
+    std::fs::write(root.join(PORTABLE_MARKER), marker.to_string()).map_err(|e| format!("write marker: {e}"))?;
+    progress("verifying", 1, 1);
+    Ok(Created { root, mail_dirs, files: n.0, bytes: n.1 })
 }
 
 #[cfg(test)]
@@ -164,7 +372,7 @@ mod tests {
 
         // The copied app.db is a consistent snapshot, and no longer points
         // the vault at a folder on the host.
-        let conn = crate::app_db::open(&data).unwrap();
+        let conn = crate::app_db::db::open(&data).unwrap();
         assert_eq!(crate::app_db::locations::display_path(&conn, "vault"), None);
         let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
         assert_eq!(check, "ok");

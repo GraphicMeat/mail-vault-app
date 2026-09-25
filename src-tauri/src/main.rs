@@ -1679,9 +1679,10 @@ async fn check_for_updates_now(handle: tauri::AppHandle) {
     check_for_updates(handle, true).await;
 }
 
-/// A portable copy is updated by copying a newer MailVault to the drive again
-/// (Settings > Portable), never in place: an updater would install onto the
-/// host or rewrite a bundle on a drive that may leave mid-install.
+/// A portable copy is updated by the user replacing the app on the drive with
+/// a newer one (`MailVault Data` beside it stays), never in place: an updater
+/// would install onto the host or rewrite a bundle on a drive that may leave
+/// mid-install.
 #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
 fn portable_skips_updates(handle: &tauri::AppHandle, show_no_update: bool) -> bool {
     if mailvault_core::paths::portable_root().is_none() {
@@ -1691,7 +1692,7 @@ fn portable_skips_updates(handle: &tauri::AppHandle, show_no_update: bool) -> bo
     if show_no_update {
         use tauri_plugin_dialog::DialogExt;
         handle.dialog()
-            .message("This is a portable copy of MailVault. To update it, install the new version on a computer and copy it to the drive again from Settings > Portable.")
+            .message("This is a portable copy of MailVault, so it does not update itself. To update it, quit MailVault and replace the app on the drive with a newer version. The MailVault Data folder beside it keeps your mail and settings.")
             .title("Updates")
             .show(|_| {});
     }

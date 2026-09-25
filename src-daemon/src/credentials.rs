@@ -156,11 +156,18 @@ fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, S
             .map_err(|e| format!("failed to parse test credentials: {}", e));
     }
 
+    keychain_blob(interactive)?.ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))
+}
+
+/// The keychain's blob; `None` when nothing was ever stored.
+fn keychain_blob(interactive: bool) -> Result<Option<HashMap<String, String>>, String> {
     let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
         .map_err(|e| format!("failed to create keyring entry: {}", e))?;
-    let json = read_entry(&entry, CREDENTIALS_KEY, interactive)
+    let Some(json) = read_entry(&entry, CREDENTIALS_KEY, interactive)
         .map_err(|e| format!("failed to read keychain: {}", e))?
-        .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))?;
+    else {
+        return Ok(None);
+    };
     // Parts of a split blob (Windows) are plain reads: only the primary item
     // feeds the gate.
     let json = mailvault_core::keychain::join_secret(CREDENTIALS_KEY, &json, &mut |name| {
@@ -171,7 +178,53 @@ fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, S
         }
     })
     .map_err(|e| format!("failed to read keychain: {}", e))?;
-    serde_json::from_str(&json).map_err(|e| format!("failed to parse credentials: {}", e))
+    serde_json::from_str(&json).map(Some).map_err(|e| format!("failed to parse credentials: {}", e))
+}
+
+/// Every secret this host holds for MailVault, for a portable copy's sealed
+/// store. Nothing stored is an empty set; any other failure fails the whole
+/// read, because sealing part of the accounts would lose the rest.
+pub(crate) async fn read_host_secrets() -> Result<mailvault_core::portable::Secrets, String> {
+    let credentials = guarded(
+        CREDENTIALS_KEY,
+        unshared(|| match test_credentials_path() {
+            Some(path) => match std::fs::read_to_string(&path) {
+                Ok(json) => serde_json::from_str(&json).map_err(|e| format!("failed to parse test credentials: {e}")),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
+                Err(e) => Err(format!("failed to read test credentials {path:?}: {e}")),
+            },
+            None => keychain_blob(true).map(Option::unwrap_or_default),
+        }),
+        RETRY_TIMEOUT,
+    )
+    .await?;
+    let ai_endpoint_key = resolve_ai_endpoint_key_guarded().await?;
+    Ok(mailvault_core::portable::Secrets { credentials, ai_endpoint_key })
+}
+
+/// After a verified portable copy, when the user asked: the host keeps no
+/// MailVault secret. The blob's parts (Windows) go before its primary, so a
+/// failure half way leaves a primary that still names what is left.
+pub(crate) fn delete_host_secrets() -> Result<(), String> {
+    let gone = |r: std::io::Result<()>| match r {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+        _ => Ok(()),
+    };
+    if let Some(path) = test_credentials_path() {
+        gone(std::fs::remove_file(path))?;
+        return test_ai_key_path().map_or(Ok(()), |p| gone(std::fs::remove_file(p)));
+    }
+    let delete = |name: &str| match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential()) {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("could not remove {name} from the keychain: {e}")),
+    };
+    let primary = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY).and_then(|e| e.get_password()).ok();
+    let nothing = mailvault_core::keychain::SplitSecret { primary: String::new(), parts: Vec::new() };
+    for part in mailvault_core::keychain::stale_parts(CREDENTIALS_KEY, primary.as_deref(), &nothing) {
+        delete(&part)?;
+    }
+    delete(CREDENTIALS_KEY)?;
+    delete(AI_ENDPOINT_KEY_ENTRY)
 }
 
 /// Resolve one account's `ImapConfig` (password / oauth2AccessToken included)

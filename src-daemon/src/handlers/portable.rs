@@ -82,6 +82,38 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     if method == "portable.status" {
         return Some(done(id, blocking(move || status_json(store)).await));
     }
+    if method == "portable.create" {
+        if store.is_some() {
+            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_FROM_PORTABLE.to_string()));
+        }
+        let passphrase = Zeroizing::new(req!(str_arg(&id, params, "passphrase")));
+        if passphrase.chars().count() < MIN_PASSPHRASE {
+            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_PASSPHRASE_SHORT.to_string()));
+        }
+        let flag = |k: &str| params.get(k).and_then(Value::as_bool).unwrap_or(false);
+        let (copy_mail, copy_config, remove_from_host) = (flag("copyMail"), flag("copyConfig"), flag("removeFromHost"));
+        // Removing from the host is only ever offered for a full copy: what
+        // is not on the drive would be gone everywhere.
+        if remove_from_host && !(copy_mail && copy_config) {
+            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "removeFromHost needs copyMail and copyConfig".to_string()));
+        }
+        let dest = std::path::PathBuf::from(req!(str_arg(&id, params, "dest")));
+        let exe = std::env::current_exe().map_err(|e| e.to_string());
+        let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
+        let payload = match exe.and_then(|exe| mailvault_core::portable::app_payload(&exe, appimage.as_deref(), cfg!(windows))) {
+            Ok(p) => p,
+            Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+        };
+        let req = CreateRequest {
+            dest,
+            passphrase,
+            copy_mail,
+            copy_config,
+            remove_from_host,
+            params: mailvault_core::transfer::crypto::EXPORT_PARAMS,
+        };
+        return Some(done(id, run_create(state, req, payload).await));
+    }
     let Some(store) = store else {
         return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_PORTABLE_OFF.to_string()));
     };
@@ -130,6 +162,123 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// can be lost, so the passphrase is all that stands in front of it.
 pub(crate) const MIN_PASSPHRASE: usize = 12;
 pub(crate) const E_PASSPHRASE_SHORT: &str = "E_PORTABLE_PASSPHRASE_SHORT";
+/// A portable copy is made from an installed one, never from another.
+pub(crate) const E_FROM_PORTABLE: &str = "E_PORTABLE_FROM_PORTABLE";
+
+pub(crate) struct CreateRequest {
+    pub dest: std::path::PathBuf,
+    pub passphrase: Zeroizing<String>,
+    pub copy_mail: bool,
+    pub copy_config: bool,
+    pub remove_from_host: bool,
+    pub params: mailvault_core::transfer::crypto::Params,
+}
+
+async fn reopen_vault(state: &Arc<DaemonState>) {
+    if let Some(resp) = crate::handlers::search_index::route(state, "vault_reopen", &json!({}), Value::Null).await {
+        if let Some(err) = resp.error {
+            tracing::warn!("[portable] vault_reopen after create failed: {}", err.message);
+        }
+    }
+}
+
+/// `portable.create` with the app payload passed in (tests use a stub).
+///
+/// The vault is closed for the copy exactly as for a vault move, so custody
+/// and the index are checkpointed and nothing writes under the copier. The
+/// host is only touched after `portable::create` verified the drive copy and
+/// marked it; on removal the vault stays closed, since the app quits next.
+pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, payload: Vec<std::path::PathBuf>) -> Result<Value, String> {
+    if req.copy_mail && !state.mail_dir_ok {
+        return Err("The current mail storage folder is unreachable, so there is no mail to copy right now.".to_string());
+    }
+    let secrets = if req.copy_config { credentials::read_host_secrets().await? } else { Default::default() };
+
+    crate::handlers::search_index::route(state, "vault_close", &json!({}), Value::Null).await;
+    let st = Arc::clone(state);
+    let dest = req.dest.clone();
+    let copy_payload = payload.clone();
+    let created = blocking(move || {
+        let events = st.events.clone();
+        let progress = move |phase: &str, done: usize, total: usize| {
+            events.emit("portable-create-progress", json!({"phase": phase, "done": done, "total": total}));
+        };
+        let opts = mailvault_core::portable::CreateOptions {
+            dest: &dest,
+            payload: &copy_payload,
+            app_dir: &st.app_dir,
+            mail_dir: req.copy_mail.then_some(st.data_dir.as_path()),
+            secrets: &secrets,
+            passphrase: &req.passphrase,
+            params: req.params,
+        };
+        mailvault_core::portable::create(&opts, &progress)
+    })
+    .await
+    .and_then(|r| r);
+    let created = match created {
+        Ok(c) => c,
+        Err(e) => {
+            reopen_vault(state).await;
+            return Err(e);
+        }
+    };
+    let quarantine_cleared = clear_quarantine(&req.dest, &payload);
+
+    let removed = if req.remove_from_host {
+        let st = Arc::clone(state);
+        let dirs = created.mail_dirs.clone();
+        blocking(move || {
+            let mail = mailvault_core::vault_ops::remove_sources(&st.data_dir, &dirs);
+            let secrets = credentials::delete_host_secrets().map_err(|e| tracing::warn!("[portable] {e}")).is_ok();
+            let accounts = std::fs::remove_file(st.app_dir.join("accounts.json"));
+            mail && secrets && accounts.map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
+        })
+        .await?
+    } else {
+        reopen_vault(state).await;
+        false
+    };
+    Ok(json!({
+        "root": created.root.to_string_lossy(),
+        "files": created.files,
+        "bytes": created.bytes,
+        "removedFromHost": removed,
+        "quarantineCleared": quarantine_cleared,
+    }))
+}
+
+/// A sandboxed app's copies arrive quarantined, and a quarantined app run
+/// from a drive is translocated to a random path, where it no longer sees
+/// `MailVault Data` beside it. Best effort: the sandbox may refuse, and the
+/// UI then tells the user how to clear it.
+#[cfg(target_os = "macos")]
+fn clear_quarantine(dest: &Path, payload: &[std::path::PathBuf]) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    fn walk(p: &Path, ok: &mut bool) {
+        let Ok(c) = std::ffi::CString::new(p.as_os_str().as_bytes()) else { return };
+        // SAFETY: both arguments are NUL-terminated C strings that outlive the call.
+        let r = unsafe { libc::removexattr(c.as_ptr(), c"com.apple.quarantine".as_ptr(), libc::XATTR_NOFOLLOW) };
+        if r != 0 && std::io::Error::last_os_error().raw_os_error() != Some(libc::ENOATTR) {
+            *ok = false;
+        }
+        if std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir()) {
+            for entry in std::fs::read_dir(p).into_iter().flatten().flatten() {
+                walk(&entry.path(), ok);
+            }
+        }
+    }
+    let mut ok = true;
+    for item in payload {
+        walk(&dest.join(item.file_name().unwrap_or_default()), &mut ok);
+    }
+    ok
+}
+
+#[cfg(not(target_os = "macos"))]
+fn clear_quarantine(_dest: &Path, _payload: &[std::path::PathBuf]) -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {
@@ -218,9 +367,12 @@ mod tests {
         let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let h = host();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
+        // Never the runner's real keychain for the AI key.
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", h.creds.with_file_name("ai_key"));
 
         let reply = run_create(&h.state, request(&h, false), h.payload.clone()).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
 
         let reply = reply.expect("created");
         assert_eq!(reply["removedFromHost"], json!(false));
@@ -237,6 +389,8 @@ mod tests {
         let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let h = host();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
+        // Never the runner's real keychain for the AI key.
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", h.creds.with_file_name("ai_key"));
 
         // A finished portable copy is already there: create refuses, so
         // nothing may leave the host.
@@ -249,6 +403,7 @@ mod tests {
         std::fs::remove_dir_all(h.dest.join("MailVault Data")).unwrap();
         let reply = run_create(&h.state, request(&h, true), h.payload.clone()).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
 
         assert_eq!(reply.expect("created")["removedFromHost"], json!(true));
         assert!(!h.eml.exists(), "host mail removed after the verified copy");
