@@ -113,6 +113,7 @@ export function ShortcutsSettings({ active = true }) {
     undo: t('settings.shortcuts.undo'),
     delete: t('common.delete'),
     moveToFolder: t('rowMenu.moveFolder'),
+    snooze: t('snooze.action'),
     compose: t('sidebar.compose'),
     toggleSelect: t('settings.shortcuts.selectDeselect'),
     escape: t('settings.shortcuts.clearSelectionClose'),
@@ -123,7 +124,7 @@ export function ShortcutsSettings({ active = true }) {
 
   const SHORTCUT_CATEGORIES = [
     { title: t('settings.shortcuts.navigation'), actions: ['nextEmail', 'prevEmail', 'goToInbox', 'goToSent', 'goToDrafts'] },
-    { title: t('settings.shortcuts.actions'), actions: ['reply', 'replyAll', 'forward', 'archive', 'toggleStar', 'delete', 'moveToFolder', 'compose', 'undo'] },
+    { title: t('settings.shortcuts.actions'), actions: ['reply', 'replyAll', 'forward', 'archive', 'toggleStar', 'delete', 'moveToFolder', 'snooze', 'compose', 'undo'] },
     { title: t('settings.shortcuts.selection'), actions: ['toggleSelect', 'escape'] },
     { title: 'UI', actions: ['focusSearch', 'showShortcuts', 'openSettings'] },
   ];

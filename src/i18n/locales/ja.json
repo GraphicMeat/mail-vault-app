@@ -2854,5 +2854,19 @@
   "views.download.done_other": "{{count}} 件のファイルをダウンロードしました",
   "views.download.none": "添付ファイルが見つかりません",
   "views.download.skipped_one": "{{count}} 件のメールは保管庫にありません",
-  "views.download.skipped_other": "{{count}} 件のメールは保管庫にありません"
+  "views.download.skipped_other": "{{count}} 件のメールは保管庫にありません",
+  "snooze.action": "スヌーズ",
+  "snooze.title": "スヌーズの期限",
+  "snooze.preset.laterToday": "今日の後ほど",
+  "snooze.preset.tomorrow": "明日",
+  "snooze.preset.weekend": "今週末",
+  "snooze.preset.nextWeek": "来週",
+  "snooze.preset.custom": "日時を選択",
+  "snooze.pickTime": "日付と時刻を選んでください",
+  "snooze.confirm": "スヌーズ",
+  "snooze.failed": "スヌーズできませんでした: {{err}}",
+  "snooze.offline": "スヌーズにはメールサーバーへの接続が必要です。オンラインになってから再度お試しください。",
+  "snooze.until": "{{time}} までスヌーズ中",
+  "undo.snoozed_one": "{{count}} 件をスヌーズしました",
+  "undo.snoozed_other": "{{count}} 件をスヌーズしました"
 }

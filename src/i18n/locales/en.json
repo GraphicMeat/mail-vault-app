@@ -2854,5 +2854,19 @@
   "views.download.done_other": "{{count}} files downloaded",
   "views.download.none": "No attachments found",
   "views.download.skipped_one": "{{count}} message is not in the vault",
-  "views.download.skipped_other": "{{count}} messages are not in the vault"
+  "views.download.skipped_other": "{{count}} messages are not in the vault",
+  "snooze.action": "Snooze",
+  "snooze.title": "Snooze until",
+  "snooze.preset.laterToday": "Later today",
+  "snooze.preset.tomorrow": "Tomorrow",
+  "snooze.preset.weekend": "This weekend",
+  "snooze.preset.nextWeek": "Next week",
+  "snooze.preset.custom": "Pick date and time",
+  "snooze.pickTime": "Choose a date and time",
+  "snooze.confirm": "Snooze",
+  "snooze.failed": "Could not snooze: {{err}}",
+  "snooze.offline": "Snooze needs a connection to the mail server. Try again when you are online.",
+  "snooze.until": "Snoozed until {{time}}",
+  "undo.snoozed_one": "Snoozed {{count}} message",
+  "undo.snoozed_other": "Snoozed {{count}} messages"
 }

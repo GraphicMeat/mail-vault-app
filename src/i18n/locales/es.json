@@ -2854,5 +2854,19 @@
   "views.download.done_other": "{{count}} archivos descargados",
   "views.download.none": "No se encontraron adjuntos",
   "views.download.skipped_one": "{{count}} mensaje no está en la bóveda",
-  "views.download.skipped_other": "{{count}} mensajes no están en la bóveda"
+  "views.download.skipped_other": "{{count}} mensajes no están en la bóveda",
+  "snooze.action": "Posponer",
+  "snooze.title": "Posponer hasta",
+  "snooze.preset.laterToday": "Más tarde hoy",
+  "snooze.preset.tomorrow": "Mañana",
+  "snooze.preset.weekend": "Este fin de semana",
+  "snooze.preset.nextWeek": "La próxima semana",
+  "snooze.preset.custom": "Elegir fecha y hora",
+  "snooze.pickTime": "Elige una fecha y hora",
+  "snooze.confirm": "Posponer",
+  "snooze.failed": "No se pudo posponer: {{err}}",
+  "snooze.offline": "Posponer necesita conexión con el servidor de correo. Inténtalo de nuevo cuando estés en línea.",
+  "snooze.until": "Pospuesto hasta {{time}}",
+  "undo.snoozed_one": "{{count}} mensaje pospuesto",
+  "undo.snoozed_other": "{{count}} mensajes pospuestos"
 }

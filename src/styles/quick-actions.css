@@ -14,7 +14,7 @@
   --quick-action-move: #71cde4; --quick-action-spam: #f2a26c; --quick-action-reply: #75c7f1;
   --quick-action-reply-all: #84b5ff; --quick-action-forward: #9cacff; --quick-action-reply-template: #b2a4ea;
   --quick-action-export: #d1c789; --quick-action-new-message: #68d4bd; --quick-action-open: #9abbd0;
-  --quick-action-source: #d0aedf; --quick-action-theme: #d5bd77;
+  --quick-action-source: #d0aedf; --quick-action-theme: #d5bd77; --quick-action-snooze: #e8b07a;
 }
 
 [data-theme="light"] {
@@ -25,7 +25,7 @@
   --quick-action-move: #116e89; --quick-action-spam: #9c4c18; --quick-action-reply: #16729e;
   --quick-action-reply-all: #2e5ca4; --quick-action-forward: #3e4faa; --quick-action-reply-template: #55488e;
   --quick-action-export: #655d20; --quick-action-new-message: #116c5c; --quick-action-open: #315f7c;
-  --quick-action-source: #68457a; --quick-action-theme: #72530a;
+  --quick-action-source: #68457a; --quick-action-theme: #72530a; --quick-action-snooze: #8a4b12;
 }
 
 .quick-actions-trigger,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
 import { initScheduledSend } from './stores/scheduledStore';
+import { initSnooze } from './stores/snoozeStore';
 import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
@@ -35,6 +36,7 @@ import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { SettingsBubble } from './components/settings/SettingsBubble';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
+import { SnoozePicker } from './components/SnoozePicker';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { KeychainUnlockCard } from './components/KeychainUnlockCard';
@@ -510,6 +512,7 @@ function App() {
   const [pendingOperation, setPendingOperation] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const [snoozeKeys, setSnoozeKeys] = useState(null);
   const mainContainerRef = useRef(null);
   // Clamp list pane width so the viewer always has at least MIN_VIEWER_WIDTH.
   const sidebarWidth = sidebarCollapsed ? 56 : 256;
@@ -682,6 +685,13 @@ function App() {
       if (selectedEmailIds.size > 0 || selectedEmailId) {
         setShowMoveDropdown(true);
       }
+    },
+    // Gmail's key. The picker refuses nothing itself; snoozeEmails skips what
+    // cannot be snoozed.
+    snooze: () => {
+      const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
+      const keys = selectedEmailIds.size > 0 ? [...selectedEmailIds] : selectedEmailId ? [selectedEmailId] : [];
+      if (keys.length) setSnoozeKeys(keys);
     },
   }, { allowedActions: insightsOpen ? INSIGHTS_SHORTCUTS : null });
 
@@ -1138,6 +1148,8 @@ function App() {
           // Loads the queue, recomputes every queued row's fireAt against the
           // current tz rules, and subscribes to live status updates.
           initScheduledSend();
+          // Snooze rows and their wake events (the worker lives in the daemon).
+          initSnooze();
           // Loads Auto Tag rules and subscribes to backfill progress/completion.
           initAutoTags();
         }).catch((err) => {
@@ -1507,6 +1519,8 @@ function App() {
           </div>
         );
       })()}
+
+      {snoozeKeys && <SnoozePicker keys={snoozeKeys} onClose={() => setSnoozeKeys(null)} />}
 
       <ChunkErrorBoundary name="Update">
       <Suspense fallback={null}>

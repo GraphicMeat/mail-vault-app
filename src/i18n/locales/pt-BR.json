@@ -2854,5 +2854,19 @@
   "views.download.done_other": "{{count}} arquivos baixados",
   "views.download.none": "Nenhum anexo encontrado",
   "views.download.skipped_one": "{{count}} mensagem não está no cofre",
-  "views.download.skipped_other": "{{count}} mensagens não estão no cofre"
+  "views.download.skipped_other": "{{count}} mensagens não estão no cofre",
+  "snooze.action": "Adiar",
+  "snooze.title": "Adiar até",
+  "snooze.preset.laterToday": "Mais tarde hoje",
+  "snooze.preset.tomorrow": "Amanhã",
+  "snooze.preset.weekend": "Neste fim de semana",
+  "snooze.preset.nextWeek": "Na próxima semana",
+  "snooze.preset.custom": "Escolher data e hora",
+  "snooze.pickTime": "Escolha uma data e hora",
+  "snooze.confirm": "Adiar",
+  "snooze.failed": "Não foi possível adiar: {{err}}",
+  "snooze.offline": "Adiar precisa de conexão com o servidor de e-mail. Tente de novo quando estiver online.",
+  "snooze.until": "Adiado até {{time}}",
+  "undo.snoozed_one": "{{count}} mensagem adiada",
+  "undo.snoozed_other": "{{count}} mensagens adiadas"
 }

@@ -21,6 +21,7 @@ export const ACTION_COLORS = {
   open: "var(--quick-action-open)",
   source: "var(--quick-action-source)",
   theme: "var(--quick-action-theme)",
+  snooze: "var(--quick-action-snooze)",
 };
 
 /** Returns the rendered action color for a palette, or undefined for neutral. */

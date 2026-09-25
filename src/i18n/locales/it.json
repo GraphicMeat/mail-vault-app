@@ -2854,5 +2854,19 @@
   "views.download.done_other": "{{count}} file scaricati",
   "views.download.none": "Nessun allegato trovato",
   "views.download.skipped_one": "{{count}} messaggio non è nella cassaforte",
-  "views.download.skipped_other": "{{count}} messaggi non sono nella cassaforte"
+  "views.download.skipped_other": "{{count}} messaggi non sono nella cassaforte",
+  "snooze.action": "Posticipa",
+  "snooze.title": "Posticipa fino a",
+  "snooze.preset.laterToday": "Più tardi oggi",
+  "snooze.preset.tomorrow": "Domani",
+  "snooze.preset.weekend": "Questo fine settimana",
+  "snooze.preset.nextWeek": "La prossima settimana",
+  "snooze.preset.custom": "Scegli data e ora",
+  "snooze.pickTime": "Scegli una data e un’ora",
+  "snooze.confirm": "Posticipa",
+  "snooze.failed": "Impossibile posticipare: {{err}}",
+  "snooze.offline": "Per posticipare serve una connessione al server di posta. Riprova quando sei online.",
+  "snooze.until": "Posticipato fino a {{time}}",
+  "undo.snoozed_one": "{{count}} messaggio posticipato",
+  "undo.snoozed_other": "{{count}} messaggi posticipati"
 }

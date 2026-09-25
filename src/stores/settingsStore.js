@@ -74,6 +74,7 @@ export const DEFAULT_SHORTCUTS = {
   toggleStar: 's',
   delete: '#',
   moveToFolder: 'm',
+  snooze: 'b',
   compose: 'c',
   toggleSelect: 'x',
   escape: 'Escape',
