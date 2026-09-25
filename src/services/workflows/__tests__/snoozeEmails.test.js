@@ -18,7 +18,11 @@ vi.mock('../messageMutations', () => ({
   moveEmails: (...a) => mockMove(...a),
   reloadListInView: (...a) => mockReload(...a),
 }));
-vi.mock('../../api', () => ({ moveEmails: (...a) => mockApiMove(...a) }));
+const mockFind = vi.fn();
+vi.mock('../../api', () => ({
+  moveEmails: (...a) => mockApiMove(...a),
+  findMessageId: (...a) => mockFind(...a),
+}));
 vi.mock('../../daemonClient', () => ({ daemonCall: (...a) => mockDaemon(...a) }));
 vi.mock('../../authUtils', () => ({ ensureFreshToken: (a) => Promise.resolve(a) }));
 vi.mock('../../graphConfig', () => ({ isGraphAccount: (a) => a?.oauth2Transport === 'graph' }));
@@ -107,6 +111,38 @@ describe('snoozeEmails', () => {
     });
     await expect(snoozeEmails([key(state.emails[0])], WAKE)).rejects.toThrow('disk full');
     expect(mockApiMove).toHaveBeenCalledWith(account, [41], 'Snoozed', 'INBOX');
+  });
+
+  // One failed row must not strand the messages after it: each gets its row
+  // or goes back, and the error is reported once at the end.
+  it('keeps going after one row fails, and puts back only the one that failed', async () => {
+    mockMove.mockResolvedValue({
+      moved: [{ account, accountId: 'a1', from: 'INBOX', to: 'Snoozed', srcUids: [1, 4], dstUids: [41, 44], messageIds: ['<1@x>', '<4@x>'] }],
+    });
+    mockDaemon.mockImplementation(async (method, params) => {
+      if (method === 'snooze.ensure_folder') return 'Snoozed';
+      if (params.uid === 41) throw new Error('disk full');
+      return { id: `row-${params.uid}`, ...params, state: 'snoozed' };
+    });
+    await expect(snoozeEmails([key(state.emails[0])], WAKE)).rejects.toThrow('disk full');
+    expect(mockApiMove).toHaveBeenCalledTimes(1);
+    expect(mockApiMove).toHaveBeenCalledWith(account, [41], 'Snoozed', 'INBOX');
+    expect(mockDaemon).toHaveBeenCalledWith('snooze.create', expect.objectContaining({ uid: 44 }));
+    // The row that was written can still be undone.
+    expect(setUndo.mock.calls[0][0].labelParams).toEqual({ count: 1 });
+  });
+
+  it('finds a message with no COPYUID by Message-ID to put it back', async () => {
+    mockMove.mockResolvedValue({
+      moved: [{ account, accountId: 'a1', from: 'INBOX', to: 'Snoozed', srcUids: [1], dstUids: null, messageIds: ['<1@x>'] }],
+    });
+    mockFind.mockResolvedValue({ found: [{ mailbox: 'INBOX', uid: 1 }, { mailbox: 'Snoozed', uid: 77 }] });
+    mockDaemon.mockImplementation(async (method) => {
+      if (method === 'snooze.ensure_folder') return 'Snoozed';
+      throw new Error('disk full');
+    });
+    await expect(snoozeEmails([key(state.emails[0])], WAKE)).rejects.toThrow('disk full');
+    expect(mockApiMove).toHaveBeenCalledWith(account, [77], 'Snoozed', 'INBOX');
   });
 
   it('offers an undo that unsnoozes through the daemon', async () => {
