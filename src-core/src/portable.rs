@@ -381,6 +381,7 @@ mod tests {
             dest: &h.dest,
             payload: &h.payload,
             app_dir: &h.app_dir,
+            copy_config: true,
             mail_dir: copy_mail.then_some(h.app_dir.as_path()),
             secrets,
             passphrase: "drive passphrase",
@@ -426,15 +427,49 @@ mod tests {
     }
 
     #[test]
-    fn the_estimate_counts_what_create_copies_and_nothing_it_leaves() {
+    fn without_the_configuration_nothing_of_the_host_setup_travels() {
         let h = host();
-        let app_db = std::fs::metadata(h.app_dir.join("app.db")).unwrap().len();
-        let settings = b"{\"theme\":\"dark\"}".len() as u64;
-        let mail = b"From: a@example.com\r\n\r\nhello".len() as u64;
-        let app = b"binary".len() as u64;
-        // pid file and logs stay on the host; app.db counts at its file size.
-        assert_eq!(estimate(&h.payload, &h.app_dir, Some(&h.app_dir)), app + app_db + settings + mail);
-        assert_eq!(estimate(&h.payload, &h.app_dir, None), app + app_db + settings);
+        let s = Secrets::default();
+        let o = CreateOptions { copy_config: false, ..opts(&h, false, &s) };
+        create(&o, &|_, _, _| {}).unwrap();
+        let data = portable_data_dir(&h.dest.join(PORTABLE_DIR));
+        assert!(!data.join("frontend-settings.json").exists());
+        assert!(!data.join("app.db").exists(), "the portable copy starts its own");
+        assert!(is_portable_root(&h.dest.join(PORTABLE_DIR)));
+    }
+
+    #[test]
+    fn a_destination_inside_the_data_being_copied_is_refused() {
+        // The copy would walk into itself.
+        let h = host();
+        let s = secrets();
+        let inside = h.app_dir.join("USB");
+        std::fs::create_dir_all(&inside).unwrap();
+        let o = CreateOptions { dest: &inside, ..opts(&h, true, &s) };
+        assert!(create(&o, &|_, _, _| {}).is_err());
+        assert!(!inside.join(PORTABLE_DIR).exists(), "refused before anything is written");
+    }
+
+    #[test]
+    fn the_estimate_counts_what_create_copies_and_nothing_it_leaves() {
+        // Plain files, no live database: sizes are exact.
+        let tmp = tempfile::tempdir().unwrap();
+        let app = tmp.path().join("MailVault.app");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join("MailVault"), b"binary").unwrap();
+        let app_dir = tmp.path().join("host");
+        std::fs::create_dir_all(app_dir.join("logs")).unwrap();
+        std::fs::create_dir_all(app_dir.join("Maildir/cur")).unwrap();
+        std::fs::write(app_dir.join("app.db"), vec![0u8; 4096]).unwrap();
+        std::fs::write(app_dir.join("app.db-wal"), vec![0u8; 100]).unwrap();
+        std::fs::write(app_dir.join("frontend-settings.json"), b"{}").unwrap();
+        std::fs::write(app_dir.join("daemon.pid"), b"123").unwrap();
+        std::fs::write(app_dir.join("logs/daemon.log"), b"log").unwrap();
+        std::fs::write(app_dir.join("Maildir/cur/1.eml:2,S"), b"hello").unwrap();
+        let payload = vec![app];
+        // pid file, logs and the WAL stay on the host; app.db counts at its file size.
+        assert_eq!(estimate(&payload, &app_dir, Some(&app_dir)), 6 + 4096 + 2 + 5);
+        assert_eq!(estimate(&payload, &app_dir, None), 6 + 4096 + 2);
     }
 
     #[test]

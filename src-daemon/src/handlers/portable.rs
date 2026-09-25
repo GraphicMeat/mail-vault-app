@@ -483,6 +483,15 @@ mod tests {
         .await
         .unwrap();
         assert!(partial.error.is_some(), "removing from the host needs the mail and the accounts on the drive");
+        let orphan_mail = route(
+            &s,
+            "portable.create",
+            &json!({"dest": "/tmp", "passphrase": "long enough passphrase", "copyMail": true, "copyConfig": false}),
+            json!(1),
+        )
+        .await
+        .unwrap();
+        assert!(orphan_mail.error.is_some(), "mail is filed under accounts: it never goes without them");
     }
 
     /// Drive pulled while running: writes stop (no second archive on the

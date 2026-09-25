@@ -21,6 +21,7 @@ const openDialog = vi.fn(() => Promise.resolve('/Volumes/USB'));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openDialog(...a) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
 vi.mock('../../../services/workflows/retryKeychainAccess', () => ({ retryKeychainAccess: vi.fn(() => Promise.resolve(true)) }));
+vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
 
 const { PortableSettings } = await import('../PortableSettings');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
@@ -117,6 +118,16 @@ describe('PortableSettings', () => {
     expect(remove.disabled).toBe(false);
     fireEvent.click(screen.getByTestId('portable-copy-config'));
     expect(remove.disabled).toBe(true);
+  });
+
+  // Mail is filed under its accounts: without them on the drive it is unreadable.
+  it('copies mail only together with the accounts', async () => {
+    await fillWizard();
+    fireEvent.click(screen.getByTestId('portable-copy-config'));
+    expect(screen.getByTestId('portable-copy-mail').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('portable-create'));
+    await waitFor(() => expect(createCalls()).toHaveLength(1));
+    expect(createCalls()[0][1]).toMatchObject({ copyConfig: false, copyMail: false });
   });
 
   it('shows the running copy its drive instead of the wizard', async () => {
