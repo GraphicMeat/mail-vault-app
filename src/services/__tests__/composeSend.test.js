@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   invoke, sendEmail, buildOutgoingMime, appendLocalIndex, deleteLocalDraft, markAnswered, markForwarded, createSchedule, ensureFreshToken,
-  replaceSchedule, cancelSchedule, billing,
+  replaceSchedule, cancelSchedule, billing, listeners,
 } = vi.hoisted(() => ({
+  // Every `listen` subscription: its event name, handler, and unlisten spy.
+  listeners: [],
   billing: { premium: true },
   replaceSchedule: vi.fn().mockResolvedValue(undefined),
   cancelSchedule: vi.fn().mockResolvedValue(undefined),
@@ -23,7 +25,13 @@ const {
   ensureFreshToken: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(async (name, handler) => {
+    const entry = { name, handler, unlisten: vi.fn() };
+    listeners.push(entry);
+    return entry.unlisten;
+  }),
+}));
 vi.mock('../transport', () => ({ send: (...args) => invoke(...args) }));
 vi.mock('../api', () => ({
   sendEmail: (...args) => sendEmail(...args),
@@ -99,6 +107,8 @@ beforeEach(() => {
   state.sentEmails = [];
   state.emails = [];
   buildOutgoingMime.mockResolvedValue({ rawBase64: 'raw', rawSize: 3, messageId: '<one@example.test>' });
+  listeners.length = 0;
+  vi.useRealTimers();
 });
 
 describe('buildOutgoingPayload', () => {
@@ -203,6 +213,57 @@ describe('createComposeSend', () => {
     await createComposeSend({ snapshot: switchedDraft, mode: 'new', replyTo: null, account: sender, settings: { displayName: 'Sender B' } })();
 
     expect(deleteLocalDraft).toHaveBeenCalledWith({ accountId: 'acct-a', mailbox: 'Drafts', uid: 42 });
+  });
+});
+
+describe('the Sent copy the send leaves behind', () => {
+  const appendListener = () => listeners.find(l => l.name === 'send-server-append-complete');
+  const appendEvent = (payload) => ({ payload: { accountId: 'me@example.test', mailbox: 'Sent', ok: true, ...payload } });
+  const cleanupCalls = () => invoke.mock.calls.filter(([command]) => command === 'maildir_delete' || command === 'local_index_remove');
+
+  /// One message, one Message-ID: the wire copy carries the id the local
+  /// Sent copy was staged under, or the server's copy (and every reply to
+  /// it) can never be matched back to it.
+  it('sends under the Message-ID the local copy was staged with', async () => {
+    sendEmail.mockResolvedValue({ messageId: '250 OK' });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ messageId: '<one@example.test>' }), 'Sent',
+    );
+    // Only the send carries it: the MIME build mints the id in the first place.
+    expect(buildOutgoingMime.mock.calls[0][1].messageId).toBeUndefined();
+  });
+
+  /// The daemon gives the Sent APPEND up to 60 s. A listener gone after 30 s
+  /// missed every slow server's answer, and with it the local-copy cleanup.
+  it('keeps listening for the Sent APPEND past the daemon\'s 60 s timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    sendEmail.mockResolvedValue({ messageId: '250 OK' });
+    await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();
+    const { unlisten } = appendListener();
+
+    vi.advanceTimersByTime(61_000);
+    expect(unlisten).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60_000);
+    expect(unlisten).toHaveBeenCalled();
+  });
+
+  /// Same account, another message (a scheduled send, a second reply): its
+  /// APPEND says nothing about this copy, so this copy stays put.
+  it('cleans up only on its own message\'s APPEND', async () => {
+    sendEmail.mockResolvedValue({ messageId: '250 OK' });
+    await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();
+    const { handler, unlisten } = appendListener();
+
+    await handler(appendEvent({ messageId: '250 OK' }));
+    await handler(appendEvent({ messageIdHeader: 'someone-else@example.test' }));
+    expect(cleanupCalls()).toEqual([]);
+    expect(unlisten).not.toHaveBeenCalled();
+
+    await handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(cleanupCalls().map(([command]) => command)).toEqual(['maildir_delete', 'local_index_remove']);
+    expect(unlisten).toHaveBeenCalled();
   });
 });
 

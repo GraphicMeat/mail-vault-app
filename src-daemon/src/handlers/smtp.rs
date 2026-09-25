@@ -71,6 +71,34 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
     })
 }
 
+/// UID of the message carrying `message_id` (brackets stripped) in the Sent
+/// `mailbox`, asked on a fresh session: the one the APPEND ran on may be the
+/// thing that hung. Bounded, because it runs after the APPEND's own 60 s.
+async fn sent_copy_uid(account: &ImapConfig, mailbox: &str, message_id: &str) -> Option<u32> {
+    let check = async {
+        let mut session = imap::create_imap_session_no_compress(account).await?;
+        imap::select_mailbox(&mut session, mailbox).await.map(|_| ())?;
+        let found = imap::uid_of_message_id(&mut session, message_id).await;
+        let _ = session.logout().await;
+        found
+    };
+    match tokio::time::timeout(std::time::Duration::from_secs(SENT_RECHECK_SECS), check).await {
+        Ok(Ok(uid)) => uid,
+        Ok(Err(e)) => {
+            tracing::warn!("[send:server_append_recheck_fail] mailbox={} error={}", mailbox, e);
+            None
+        }
+        Err(_) => {
+            tracing::warn!("[send:server_append_recheck_timeout] mailbox={} timeout={}s", mailbox, SENT_RECHECK_SECS);
+            None
+        }
+    }
+}
+
+/// The re-check's budget. With the APPEND's 60 s it bounds when the completion
+/// event can arrive; compose listens for 90 s (`APPEND_LISTEN_MS`).
+const SENT_RECHECK_SECS: u64 = 15;
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "smtp_test_connection" => {
@@ -234,7 +262,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             res
                         },
                     ).await;
-                    let (ok, verify_payload) = match verified_result {
+                    let (mut ok, mut verify_payload) = match verified_result {
                         Ok(Ok((before, after, found_uid))) => {
                             let delta = after as i64 - before as i64;
                             info!(
@@ -264,6 +292,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             (false, json!({"error": "timeout"}))
                         }
                     };
+                    // A client that gave up is not a server that refused: a
+                    // slow server keeps an APPEND the client timed out on
+                    // (Hostinger went silent 15s+ and still filed it). Ask it.
+                    // A failure reported for a message it holds left the
+                    // staged local copy beside the server's for good.
+                    if !ok {
+                        if let Some(mid) = message_id_header_bg.as_deref() {
+                            if let Some(uid) = sent_copy_uid(&account_clone, &mailbox_for_log, mid).await {
+                                info!(
+                                    "[send:server_append_recovered] account={} mailbox={} uid={} — the APPEND reported failure but the server holds the message",
+                                    account_id_bg, mailbox_for_log, uid
+                                );
+                                ok = true;
+                                verify_payload = json!({"recovered": true, "error": verify_payload["error"].clone(), "foundUid": uid});
+                            }
+                        }
+                    }
                     let payload = json!({
                         "accountId": account_id_bg,
                         "mailbox": mailbox_for_log,
@@ -431,6 +476,117 @@ mod tests {
         assert_eq!(payload["accountId"], json!("luke@mock.test"));
         assert_eq!(payload["mailbox"], json!("Sent"));
         assert_eq!(payload["ok"], json!(true));
+    }
+
+    /// The id compose staged its local copy under is the id of the message
+    /// the SMTP server received, of the server's Sent copy, and of the one the
+    /// completion event names — so the local copy and the server's can be
+    /// matched, and a listener can tell its own send's event from another's.
+    #[tokio::test]
+    async fn send_email_keeps_the_staged_message_id_end_to_end() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let mut email = outgoing_email("partner@example.com");
+        email["messageId"] = json!("<staged.99@mock.test>");
+
+        let resp = call(
+            &s,
+            "smtp_send_email",
+            json!({"account": account_json(&server), "email": email, "sentMailbox": "Sent"}),
+        )
+        .await;
+        resp.result.expect("success");
+
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("send-server-append-complete must be emitted")
+            .unwrap();
+        let (_, payload) = mailvault_core::daemon_ipc::parse_event(&line).expect("a valid event line");
+        assert_eq!(payload["ok"], json!(true));
+        assert_eq!(payload["messageIdHeader"], json!("staged.99@mock.test"));
+
+        let has_id = |raw: &[u8]| String::from_utf8_lossy(raw).contains("Message-ID: <staged.99@mock.test>\r\n");
+        let sent = server.sent_messages();
+        assert_eq!(sent.len(), 1);
+        assert!(has_id(&sent[0]), "SMTP got: {}", String::from_utf8_lossy(&sent[0]));
+        let state = server.state();
+        let copies = &state.find("Sent").expect("Sent").messages;
+        assert_eq!(copies.len(), 1);
+        assert!(has_id(&copies[0].raw), "Sent copy: {}", String::from_utf8_lossy(&copies[0].raw));
+    }
+
+    /// Send with a staged id to a server whose APPEND misbehaves as `action`,
+    /// and return the completion event's payload.
+    async fn append_event_when(action: mock_imap::Action) -> (MockImap, Value) {
+        plaintext();
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(mock_imap::state::Mailbox::new("Sent"))
+                .fault(mock_imap::Trigger::on("APPEND"), action),
+        );
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let mut email = outgoing_email("partner@example.com");
+        email["messageId"] = json!("<staged.5@mock.test>");
+        let resp = call(
+            &s,
+            "smtp_send_email",
+            json!({"account": account_json(&server), "email": email, "sentMailbox": "Sent"}),
+        )
+        .await;
+        resp.result.expect("the SMTP send itself succeeds");
+        let line = tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv())
+            .await
+            .expect("send-server-append-complete must be emitted")
+            .unwrap();
+        let (_, payload) = mailvault_core::daemon_ipc::parse_event(&line).expect("a valid event line");
+        (server, payload)
+    }
+
+    /// The client gave up on the APPEND (a refusal here; a timeout on a slow
+    /// server) but the server kept the message. Reporting that as a failure
+    /// left the staged local copy beside the server's for good: the event has
+    /// to say what the server holds.
+    #[tokio::test]
+    async fn an_append_reported_failed_that_the_server_kept_counts_as_landed() {
+        let (server, payload) = append_event_when(mock_imap::Action::Respond("NO".into(), "Try again later".into())).await;
+        assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1, "the fault stores, then refuses");
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(payload["messageIdHeader"], json!("staged.5@mock.test"));
+        assert_eq!(payload["verify"]["recovered"], json!(true), "{payload}");
+        assert!(payload["verify"]["foundUid"].as_u64().is_some(), "{payload}");
+    }
+
+    /// And an APPEND that really never landed stays a failure.
+    #[tokio::test]
+    async fn an_append_the_server_never_got_stays_a_failure() {
+        let (server, payload) = append_event_when(mock_imap::Action::DropConnection).await;
+        assert!(server.state().find("Sent").unwrap().messages.is_empty());
+        assert_eq!(payload["ok"], json!(false), "{payload}");
+    }
+
+    /// A header injection through the id is dropped at the daemon boundary: a
+    /// fresh id goes out and no smuggled header reaches the wire.
+    #[tokio::test]
+    async fn send_email_refuses_an_injected_message_id() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let mut email = outgoing_email("partner@example.com");
+        email["messageId"] = json!("<x@mock.test>\r\nBcc: evil@attacker.test");
+
+        let resp = call(&s, "smtp_send_email", json!({"account": account_json(&server), "email": email})).await;
+        resp.result.expect("success");
+
+        let sent = server.sent_messages();
+        assert_eq!(sent.len(), 1);
+        let raw = String::from_utf8_lossy(&sent[0]).to_string();
+        assert!(!raw.contains("evil@attacker.test"), "{raw}");
+        assert!(!raw.contains("<x@mock.test>"), "{raw}");
+        let log = server.smtp_commands();
+        assert!(!log.iter().any(|l| l.contains("evil@attacker.test")), "{log:?}");
     }
 
     #[tokio::test]

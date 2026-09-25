@@ -114,6 +114,13 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
 }
 
 const parseAddresses = raw => splitRecipients(raw || '').map(address => ({ address, name: '' }));
+const bareMessageId = id => (id || '').trim().replace(/^</, '').replace(/>$/, '');
+
+// smtp_send_email answers within 60 s (the APPEND) plus 15 s (asking the
+// server whether a failed APPEND landed anyway). The listener must outlive
+// both, or a slow server's answer lands after it is gone and the staged local
+// copy stays beside the server's.
+const APPEND_LISTEN_MS = 90_000;
 
 function cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseudoUid, builtMime, allowCleanup }) {
   return async (event) => {
@@ -238,10 +245,14 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       const { listen } = await import('@tauri-apps/api/event');
       let handled = false;
       const handler = cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseudoUid, builtMime, allowCleanup: localStageDone });
+      const ownId = bareMessageId(builtMime?.messageId);
       unlistenAppend = await listen('send-server-append-complete', async event => {
         if (handled) return;
         const payload = event.payload || {};
         if (payload.accountId !== freshAccount.email && payload.accountId !== freshAccount.id) return;
+        // Only this message's APPEND: another send from the same account (a
+        // scheduled one names no id) says nothing about this staged copy.
+        if (ownId && bareMessageId(payload.messageIdHeader) !== ownId) return;
         handled = true;
         try { await handler(event); } finally { try { unlistenAppend?.(); } catch {} }
       });
@@ -251,8 +262,11 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
     }
 
     try {
+      // Sent under the staged copy's Message-ID, so the server's copy (and
+      // every reply to it) matches the local one.
       await api.sendEmail(
-        { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined }, outgoingPayload, sentMailbox,
+        { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
+        { ...outgoingPayload, messageId: builtMime?.messageId || undefined }, sentMailbox,
       );
       // An edited scheduled email sent now instead: its row must not fire as
       // well. It stayed queued until here, so an undo or a failed send still
@@ -269,7 +283,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       if (snapshot._draftUid && snapshot._draftMailbox) {
         await deleteLocalDraft({ accountId: snapshot._draftAccountId || snapshot._accountId || freshAccount.id, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid });
       }
-      setTimeout(() => { try { unlistenAppend?.(); } catch {} }, 30000);
+      setTimeout(() => { try { unlistenAppend?.(); } catch {} }, APPEND_LISTEN_MS);
     } catch (err) {
       try { unlistenAppend?.(); } catch {}
       markLocalStageDone();

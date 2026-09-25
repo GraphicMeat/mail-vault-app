@@ -1796,6 +1796,16 @@ pub async fn bounded<T>(
     }
 }
 
+/// Highest UID in the SELECTED mailbox whose Message-ID header contains
+/// `message_id` (pass it without brackets: SEARCH HEADER matches a substring,
+/// so the bare id hits `<id>` whether or not a server stores the brackets).
+pub async fn uid_of_message_id(session: &mut ImapSession, message_id: &str) -> Result<Option<u32>, String> {
+    let escaped = message_id.replace('\\', "\\\\").replace('"', "\\\"");
+    let criteria = format!("HEADER Message-ID \"{}\"", escaped);
+    let set = session.uid_search(&criteria).await.map_err(|e| e.to_string())?;
+    Ok(set.iter().copied().max())
+}
+
 /// APPEND with pre/post verification. Returns the mailbox EXISTS count before
 /// and after the APPEND, and whether a UID SEARCH for the Message-ID header
 /// finds the new message. Used by the compose send flow so logs can prove
@@ -1876,13 +1886,10 @@ pub async fn append_email_verified(
 
     // Try to locate the new message via UID SEARCH HEADER Message-ID.
     let found_uid = if let Some(mid) = message_id.filter(|s| !s.is_empty()) {
-        let escaped = mid.replace('\\', "\\\\").replace('"', "\\\"");
-        let criteria = format!("HEADER Message-ID \"{}\"", escaped);
-        tracing::info!("[append_verified:search_start] criteria=\"{}\"", criteria);
-        match session.uid_search(&criteria).await {
-            Ok(set) => {
-                let max_uid = set.iter().copied().max();
-                tracing::info!("[append_verified:search_ok] matches={} max_uid={:?}", set.len(), max_uid);
+        tracing::info!("[append_verified:search_start] message_id=\"{}\"", mid);
+        match uid_of_message_id(session, mid).await {
+            Ok(max_uid) => {
+                tracing::info!("[append_verified:search_ok] max_uid={:?}", max_uid);
                 max_uid
             }
             Err(e) => {

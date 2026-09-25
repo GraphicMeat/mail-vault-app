@@ -36,6 +36,27 @@ pub struct OutgoingEmail {
     pub references: Option<String>,
     #[serde(default)]
     pub attachments: Option<Vec<OutgoingAttachment>>,
+    /// The Message-ID to send under, brackets included: the id compose staged
+    /// its local Sent copy with (`smtp_build_mime`). Without it the send built
+    /// a second id, and the local copy never matched the server's. Used only
+    /// when `safe_message_id` accepts it; otherwise one is generated.
+    #[serde(default, rename = "messageId")]
+    pub message_id: Option<String>,
+}
+
+/// A caller-supplied Message-ID goes into a header verbatim (lettre does not
+/// check it), so only a plain `<left@right>` of printable ASCII is taken: no
+/// whitespace or control bytes (a CRLF would inject a header), no brackets
+/// inside, exactly one `@` with text on both sides, and RFC 5322's 998-byte
+/// line limit well clear.
+fn safe_message_id(id: &str) -> bool {
+    let Some(inner) = id.strip_prefix('<').and_then(|s| s.strip_suffix('>')) else { return false };
+    let Some((left, right)) = inner.split_once('@') else { return false };
+    id.len() <= 255
+        && !left.is_empty()
+        && !right.is_empty()
+        && !right.contains('@')
+        && inner.bytes().all(|b| b.is_ascii_graphic() && b != b'<' && b != b'>')
 }
 
 /// Send result with message ID and raw RFC2822 bytes for Sent folder append.
@@ -169,15 +190,25 @@ fn build_mime_opts(
     // is a raw passthrough (lettre only wraps on the `None` branch, where it
     // generates its own id), and RFC 5322 §3.6.4 requires `msg-id = "<" ... ">"`.
     let domain = from_address.splitn(2, '@').nth(1).unwrap_or("mailvault.local");
-    let msg_id_value = format!(
-        "<{}.{}@{}>",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0),
-        rand::random::<u32>(),
-        domain
-    );
+    let requested = email.message_id.as_deref().filter(|id| {
+        let ok = safe_message_id(id);
+        if !ok {
+            warn!("[smtp] ignoring an unsafe caller Message-ID ({} bytes); generating one", id.len());
+        }
+        ok
+    });
+    let msg_id_value = match requested {
+        Some(id) => id.to_string(),
+        None => format!(
+            "<{}.{}@{}>",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+            rand::random::<u32>(),
+            domain
+        ),
+    };
 
     let mut builder = Message::builder()
         .from(from_mailbox.clone())
@@ -757,6 +788,7 @@ mod tests {
             in_reply_to: None,
             references: None,
             attachments: None,
+            message_id: None,
         }
     }
 
@@ -897,6 +929,62 @@ mod tests {
         let inner = &value[1..value.len() - 1];
         assert!(!inner.contains('<') && !inner.contains('>'), "message-id was: {}", value);
         assert!(inner.contains('@'), "message-id was: {}", value);
+    }
+
+    /// Built from JSON on purpose: this is the shape compose sends over the
+    /// wire (`messageId` beside the rest), and it is what the daemon parses.
+    fn outgoing_with_id(message_id: &str) -> OutgoingEmail {
+        serde_json::from_value(serde_json::json!({
+            "to": "someone@example.com", "subject": "Hi", "text": "body", "messageId": message_id,
+        }))
+        .expect("OutgoingEmail from JSON")
+    }
+
+    fn message_id_value(raw: &str) -> String {
+        message_id_line(raw).splitn(2, ':').nth(1).unwrap_or("").trim().to_string()
+    }
+
+    /// One message, one Message-ID: compose stages its local Sent copy under
+    /// the id `smtp_build_mime` gave it, and the copy that goes out (and the
+    /// server's Sent copy, and every reply to it) must carry that same id, or
+    /// nothing can ever match the local copy to the server's.
+    #[test]
+    fn a_caller_message_id_is_reused_verbatim() {
+        let built = build_mime(&account("me@x.com", None), &outgoing_with_id("<staged.42@x.com>")).expect("build_mime");
+        let raw = String::from_utf8_lossy(&built.raw_rfc2822).to_string();
+        assert_eq!(message_id_value(&raw), "<staged.42@x.com>", "{raw}");
+    }
+
+    /// The id arrives from the frontend and lands in a header verbatim (lettre
+    /// does not check it), so anything that is not a plain `<left@right>` is
+    /// dropped for a fresh one — a CRLF in it would be a header injection.
+    #[test]
+    fn an_unsafe_message_id_is_replaced_by_a_generated_one() {
+        let long = format!("<{}@x.com>", "a".repeat(990));
+        let bad = [
+            "<a@x.com>\r\nBcc: evil@attacker.test",
+            "<a@x.com>\nBcc: evil@attacker.test",
+            "a@x.com",
+            "<a b@x.com>",
+            "<a\t@x.com>",
+            "<nodomain>",
+            "<@x.com>",
+            "<a@>",
+            "<a@b@x.com>",
+            "<<a@x.com>>",
+            "<a@x.com",
+            "<ä@x.com>",
+            "",
+            long.as_str(),
+        ];
+        for id in bad {
+            let built = build_mime(&account("me@x.com", None), &outgoing_with_id(id)).expect("build_mime");
+            let raw = String::from_utf8_lossy(&built.raw_rfc2822).to_string();
+            let value = message_id_value(&raw);
+            assert_ne!(value, id, "unsafe id {id:?} was used");
+            assert!(value.starts_with('<') && value.ends_with("@x.com>"), "id {id:?} produced {value}");
+            assert!(!raw.to_lowercase().contains("evil@attacker.test"), "id {id:?} injected a header: {raw}");
+        }
     }
 
     #[test]
@@ -1054,6 +1142,33 @@ mod tests {
             let log = server.smtp_commands();
             assert!(log.iter().any(|l| l.starts_with("AUTH")), "{:?}", log);
             assert!(log.iter().any(|l| l.starts_with("RCPT TO:<partner@example.com>")), "{:?}", log);
+        }
+
+        /// What the SMTP server takes in carries the id compose staged the
+        /// local copy under — `send_email` builds its own MIME, and used to
+        /// mint a second id for it.
+        #[tokio::test]
+        async fn send_email_delivers_the_caller_message_id() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+            let cfg = config_for(&server);
+            let email: OutgoingEmail = serde_json::from_value(serde_json::json!({
+                "to": "partner@example.com", "subject": "Wire subject", "text": "body",
+                "messageId": "<staged.7@mock.test>",
+            }))
+            .unwrap();
+
+            let result = send_email(&cfg, &email).await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            let result = result.expect("send against the mock SMTP server");
+
+            let sent = server.sent_messages();
+            assert_eq!(sent.len(), 1);
+            let raw = String::from_utf8_lossy(&sent[0]).to_string();
+            assert!(raw.contains("Message-ID: <staged.7@mock.test>\r\n"), "{raw}");
+            // And the bytes handed back for the Sent APPEND are those same bytes.
+            assert_eq!(result.raw_rfc2822, sent[0]);
         }
 
         #[tokio::test]
