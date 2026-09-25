@@ -26,6 +26,8 @@
 - **First-time setup starts from the recommended look.** A new install begins with the Graphite palette, threads that expand in place, and a colored radial menu for the quick actions on message rows, with the selection bar and reading pane actions inline and in color. Settings you have already chosen are kept.
 
 ### Fixed
+- **Quick actions settings show the layout the view really uses.** A view with its own quick actions, for example after "Use everywhere" with Current view, kept its layout while Settings opened on All views, so changing the layout there seemed to do nothing. Each section now opens on the scope that applies to the view you are in, and a detached Settings window edits that same view.
+- **An empty OR box in the view editor can be removed.** Pressing OR again no longer adds more empty boxes, and an empty box has its own remove button.
 - **Two delayed sends in a row both go out.** Sending a second email while the first was still in its send delay replaced the first: it never went, and the second could go out early. Each email now keeps its own countdown, and Undo takes back only the one on screen.
 - **The green SPF/DKIM shield is back on opened messages.** Opening a message showed no sender verification shield, even for mail that passed SPF and DKIM, because the opened copy did not keep the authentication results the message list already had. The shield and its details now show again.
 - **A view's account choice now narrows what it finds.** Choosing accounts for a saved view changed nothing: the view, its count in the sidebar and the preview in Settings all kept reading every account. They now read only the accounts you picked, and picking none still means all of them.
