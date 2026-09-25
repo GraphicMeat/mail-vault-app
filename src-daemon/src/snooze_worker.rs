@@ -251,6 +251,46 @@ mod tests {
         assert_eq!(row(&dir, "a").state, "woken");
     }
 
+    /// The real wake against the mock server: found by Message-ID even though
+    /// the stored uid is stale, `\Seen` cleared, moved back to INBOX.
+    #[tokio::test]
+    async fn wake_row_moves_the_message_back_unread() {
+        use mock_imap::state::{Mailbox, Message};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let raw = "Message-ID: <snz-1@example.com>\r\nFrom: a@example.com\r\nTo: user@example.com\r\nSubject: Later\r\nDate: Fri, 25 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(Mailbox::new("INBOX"))
+                .mailbox(Mailbox::new("Snoozed").push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
+        );
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let creds = dir.join("credentials.json");
+        let account = serde_json::json!({
+            "id": "acct", "email": "user@example.com", "password": "hunter2",
+            "imapHost": server.host(), "imapPort": server.port(),
+        })
+        .to_string();
+        std::fs::write(&creds, serde_json::json!({ "acct": account }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+
+        app_db::with(&dir, |c| snooze::insert(c, "a", "acct", "INBOX", "Snoozed", Some(99), "<snz-1@example.com>", 1_000)).unwrap();
+        let outcome = wake_row(&state, &row(&dir, "a")).await;
+
+        app_db::with(&dir, |c| snooze::insert(c, "b", "acct", "INBOX", "Snoozed", Some(1), "<gone@example.com>", 1_000)).unwrap();
+        let gone = wake_row(&state, &row(&dir, "b")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(outcome, WakeOutcome::Woken);
+        let after = server.state();
+        assert!(after.find("Snoozed").unwrap().messages.is_empty(), "it must leave Snoozed");
+        let inbox = after.find("INBOX").unwrap();
+        assert_eq!(inbox.messages.len(), 1, "and land back in INBOX");
+        assert!(!inbox.messages[0].has_flag("\\Seen"), "unread");
+        assert_eq!(gone, WakeOutcome::NotFound, "a message no longer in Snoozed is not an error");
+    }
+
     /// Locked keychain: the worker waits, the row is never marked failed.
     #[tokio::test]
     async fn locked_credentials_leave_the_row_due_and_unburned() {
