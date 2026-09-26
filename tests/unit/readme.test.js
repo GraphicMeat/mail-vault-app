@@ -13,6 +13,7 @@ const localRefs = [
   ...readme.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g),
   ...readme.matchAll(/\]\(((?!https?:|#|mailto:)[^)\s]+)\)/g),
   ...readme.matchAll(/<img[^>]+src="((?!https?:)[^"]+)"/g),
+  ...readme.matchAll(/<source[^>]+srcset="((?!https?:)[^"]+)"/g),
 ].map((m) => m[1].split('#')[0]);
 const shots = localRefs.filter((p) => p.startsWith('website/screenshots/'));
 

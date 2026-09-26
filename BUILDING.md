@@ -206,6 +206,68 @@ To run unsigned apps:
 sudo spctl --master-disable
 ```
 
+## Browser demo
+
+The website includes a browser-only demo of the real React client. Build it
+into the static site and serve `website/` with any static server:
+
+```sh
+npm ci --ignore-scripts
+npm run build:demo
+npm run capture:demo-preview
+npm run update:demo-preview
+node website/i18n/i18n.mjs build
+python3 -m http.server 4174 --directory website
+```
+
+Then open [http://127.0.0.1:4174/demo/](http://127.0.0.1:4174/demo/). It covers
+the inbox, threaded chat, Explorer, Insights, compose, search, archive/delete,
+attachments, snapshots, account-scoped folders, and all Settings pages using
+300 fictional seeded messages, with 100 messages in each of the three sample
+accounts and a 75-message primary Inbox spread across months and years, including
+long conversations and HTML newsletters. Reset restores the initial mailbox and
+settings.
+
+The demo runs entirely in the visitor's browser. It does not contact an IMAP
+server, send mail, collect credentials, open native dialogs, run Rust, or
+perform billing and OAuth actions. Mailbox changes, drafts, and settings are
+stored in a dedicated IndexedDB workspace with a fixed seven-day expiry and a
+5 MB limit. Expired workspaces reset when the demo opens or resumes. If browser
+storage is unavailable, the demo continues in memory and explains the limitation.
+Exports download sample files in the browser, while import buttons use a
+canned sample and arbitrary file import and native filesystem access are
+unavailable. The generated bundle is written to
+`website/demo/` and rebuilt by the website deployment workflow.
+
+The homepage hero button and preview image open the demo separately; the homepage
+loads only a responsive preview image, with no demo JavaScript or iframe.
+Localized pages pass an explicit app language, such as `/demo/?lang=de` or
+`/demo/?lang=pt-BR`. The demo header, tour, and explanations support the app's
+nine languages. Fictional sample email bodies remain in English.
+
+The website release builds the demo from the shared React app, captures fresh
+light/dark WebP previews, then regenerates the localized pages. Run the capture
+locally after `build:demo` with `npm run capture:demo-preview` and
+`npm run update:demo-preview` (requires Chrome and `cwebp`; WebdriverIO provisions
+an isolated driver), then `node website/i18n/i18n.mjs build`. Content-hashed demo assets
+receive a seven-day HTTP cache policy; HTML revalidates on navigation. Old
+assets are retained through an additional grace period for open demo tabs.
+New native commands still need a demo adapter and a regression test when added
+to the shared app.
+
+## Screenshots
+
+Documentation screenshots come from a scripted demo mailbox captured from the
+real app on a HiDPI Mac, in light and dark. This README shows the website set
+in `website/screenshots/` directly, so a reshoot updates both. The homepage demo preview is captured from the browser
+build during website releases, as described above:
+
+```sh
+scripts/screenshots/prepare-build.sh
+npm run build && cargo build -p mailvault --features webdriver
+npx wdio run wdio.screenshots.conf.js
+```
+
 ## Architecture
 
 ```
