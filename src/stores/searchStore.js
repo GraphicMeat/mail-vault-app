@@ -3,7 +3,7 @@ import { startMailSearch, cancelMailSearch } from '../services/mailSearch.js';
 import { buildSearchTargets } from '../services/searchTargets.js';
 import { useMailStore } from './mailStore';
 import { effectiveSearchMailboxConcurrency, useSettingsStore } from './settingsStore';
-import { emailKey } from './slices/unifiedHelpers';
+import { emailKey, SPECIAL_USE_MAP } from './slices/unifiedHelpers';
 import { parseSearchQuery } from '../utils/searchQuery';
 import { useTagStore } from './tagStore';
 import { useFieldStore } from './fieldStore';
@@ -373,7 +373,19 @@ export const useSearchStore = create((set, get) => ({
       activeAccountId: mail.activeAccountId,
       activeMailbox: mail.activeMailbox,
     };
-    const { text: queryText, tags: tagNames, fields: fieldTerms } = parseSearchQuery(query);
+    const {
+      text: queryText, tags: tagNames, fields: fieldTerms, exclude, ...operators
+    } = parseSearchQuery(query);
+    // Typed operators win over the filter panel, for this search only: they
+    // land on the copy, never on `searchFilters`.
+    for (const [key, value] of Object.entries(operators)) {
+      if (value) filters[key] = value;
+    }
+    // `in:sent` names a role every account has, so a unified view searches
+    // each account's own Sent. A folder picked in the panel is one account's.
+    if (operators.folder && (operators.folder === 'INBOX' || SPECIAL_USE_MAP[operators.folder])) {
+      filters.everyAccount = true;
+    }
     // A name nobody has a tag for resolves to nothing, and a search for it
     // must return nothing rather than silently ignoring the filter.
     const tagIds = tagNames.map(name => {
@@ -389,7 +401,8 @@ export const useSearchStore = create((set, get) => ({
       value: term.value,
     }));
     const hasCriteria = !!(queryText || tagIds.length || fieldConditions.length || filters.sender || filters.dateFrom
-      || filters.dateTo || filters.hasAttachments);
+      || filters.dateTo || filters.hasAttachments || filters.to || filters.unread || exclude.length
+      || operators.folder);
 
     set({
       searchGeneration: runGeneration,
@@ -419,6 +432,9 @@ export const useSearchStore = create((set, get) => ({
         searchId,
         query: queryText,
         sender: filters.sender || null,
+        to: filters.to || null,
+        unread: filters.unread ? true : null,
+        exclude,
         dateFrom: toEpochSeconds(filters.dateFrom),
         dateTo: toEpochSeconds(filters.dateTo, true),
         hasAttachments: !!filters.hasAttachments,

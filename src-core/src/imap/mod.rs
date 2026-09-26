@@ -1916,6 +1916,60 @@ pub async fn append_email_verified(
     Ok((exists_before, exists_after, found_uid))
 }
 
+/// What a server-side search asks for. Every set field is ANDed, the way
+/// `UID SEARCH` reads a list of keys.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ServerSearch<'a> {
+    pub query: Option<&'a str>,
+    pub from: Option<&'a str>,
+    pub to: Option<&'a str>,
+    pub subject: Option<&'a str>,
+    /// `YYYY-MM-DD`, inclusive.
+    pub since: Option<&'a str>,
+    /// `YYYY-MM-DD`, exclusive.
+    pub before: Option<&'a str>,
+    pub unseen: bool,
+    /// Words or phrases a match must not hold: `NOT TEXT`.
+    pub exclude: &'a [String],
+}
+
+/// An IMAP quoted string. CR/LF cannot travel in one, so they become spaces
+/// rather than splicing a second command onto the wire.
+fn search_quoted(value: &str) -> String {
+    format!("\"{}\"", value.replace(['\r', '\n'], " ").replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+impl ServerSearch<'_> {
+    /// The `UID SEARCH` keys, empty when nothing was asked.
+    pub fn criteria(&self) -> Vec<String> {
+        let mut parts = Vec::new();
+        let set = |value: Option<&str>| value.map(str::trim).filter(|v| !v.is_empty()).map(search_quoted);
+        for (key, value) in [("TEXT", self.query), ("FROM", self.from), ("TO", self.to), ("SUBJECT", self.subject)] {
+            if let Some(value) = set(value) {
+                parts.push(format!("{key} {value}"));
+            }
+        }
+        let day = |value: Option<&str>| {
+            value.and_then(|v| chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d").ok()).map(|d| d.format("%d-%b-%Y"))
+        };
+        if let Some(since) = day(self.since) {
+            parts.push(format!("SINCE {since}"));
+        }
+        if let Some(before) = day(self.before) {
+            parts.push(format!("BEFORE {before}"));
+        }
+        if self.unseen {
+            parts.push("UNSEEN".into());
+        }
+        for term in self.exclude {
+            if let Some(term) = set(Some(term)) {
+                parts.push(format!("NOT TEXT {term}"));
+            }
+        }
+        parts
+    }
+}
+
 /// Search emails using IMAP SEARCH
 pub async fn search_emails(
     session: &mut ImapSession,
@@ -1926,40 +1980,19 @@ pub async fn search_emails(
     since: Option<&str>,
     before: Option<&str>,
 ) -> Result<(Vec<EmailHeader>, u32), String> {
+    let search = ServerSearch { query, from: from_filter, subject: subject_filter, since, before, ..Default::default() };
+    search_emails_by(session, mailbox, &search).await
+}
+
+/// `search_emails` for every key `ServerSearch` carries.
+pub async fn search_emails_by(
+    session: &mut ImapSession,
+    mailbox: &str,
+    search: &ServerSearch<'_>,
+) -> Result<(Vec<EmailHeader>, u32), String> {
     let _mbox = select_mailbox(session, mailbox).await?;
 
-    let mut criteria_parts: Vec<String> = Vec::new();
-
-    if let Some(q) = query {
-        if !q.is_empty() {
-            criteria_parts.push(format!("TEXT \"{}\"", q.replace('"', "\\\"")));
-        }
-    }
-    if let Some(f) = from_filter {
-        if !f.is_empty() {
-            criteria_parts.push(format!("FROM \"{}\"", f.replace('"', "\\\"")));
-        }
-    }
-    if let Some(s) = subject_filter {
-        if !s.is_empty() {
-            criteria_parts.push(format!("SUBJECT \"{}\"", s.replace('"', "\\\"")));
-        }
-    }
-    if let Some(s) = since {
-        if !s.is_empty() {
-            if let Ok(dt) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-                criteria_parts.push(format!("SINCE {}", dt.format("%d-%b-%Y")));
-            }
-        }
-    }
-    if let Some(b) = before {
-        if !b.is_empty() {
-            if let Ok(dt) = chrono::NaiveDate::parse_from_str(b, "%Y-%m-%d") {
-                criteria_parts.push(format!("BEFORE {}", dt.format("%d-%b-%Y")));
-            }
-        }
-    }
-
+    let criteria_parts = search.criteria();
     if criteria_parts.is_empty() {
         return Ok((Vec::new(), 0));
     }

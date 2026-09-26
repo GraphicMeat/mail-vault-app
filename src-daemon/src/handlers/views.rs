@@ -232,6 +232,7 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         answered: def.answered,
         to_any: (def.to_me && !address.is_empty()).then(|| vec![address.clone()]).unwrap_or_default(),
         from_none: (def.not_from_me && !address.is_empty()).then(|| vec![address]).unwrap_or_default(),
+        exclude_terms: Vec::new(),
         // A tag or field filter with no identities behind it matches nothing,
         // which is the correct answer for a tag nobody has used.
         msg_keys: narrows_by_metadata(def).then(|| keys.get(&account.account_id).cloned().unwrap_or_default()),

@@ -28,6 +28,15 @@ pub(crate) struct MailSearchStart {
     pub query: String,
     #[serde(default)]
     pub sender: Option<String>,
+    /// The search box's `to:`: a recipient address or name.
+    #[serde(default)]
+    pub to: Option<String>,
+    /// `is:unread`. `None` leaves the read state alone.
+    #[serde(default)]
+    pub unread: Option<bool>,
+    /// `-term`: words or phrases a match must not hold.
+    #[serde(default)]
+    pub exclude: Vec<String>,
     #[serde(default)]
     pub date_from: Option<i64>,
     #[serde(default)]
@@ -959,6 +968,9 @@ async fn run_server_lane(
     let has_attachments = request.has_attachments;
     let search_id = request.search_id.clone();
     let query = request.query.clone();
+    let to = request.to.clone();
+    let unseen = request.unread == Some(true);
+    let exclude = request.exclude.clone();
     let mut jobs = run_bounded_jobs(jobs, request.effective_concurrency(), {
         let state = Arc::clone(&state);
         let run = Arc::clone(&run);
@@ -968,6 +980,8 @@ async fn run_server_lane(
             let run = Arc::clone(&run);
             let query = request_query.clone();
             let filters = filters.clone();
+            let to = to.clone();
+            let exclude = exclude.clone();
             async move {
                 if run.is_cancelled() {
                     return None;
@@ -980,16 +994,20 @@ async fn run_server_lane(
                         let mailbox = job.mailbox.clone();
                         let query = query.clone();
                         let filters = filters.clone();
+                        let to = to.clone();
+                        let exclude = exclude.clone();
                         async move {
-                            let (emails, _) = mailvault_core::imap::search_emails(
-                                &mut session,
-                                &mailbox,
-                                nonempty(&query),
-                                filters.from.as_deref(),
-                                None,
-                                filters.since.as_deref(),
-                                filters.before.as_deref(),
-                            )
+                            let search = mailvault_core::imap::ServerSearch {
+                                query: nonempty(&query),
+                                from: filters.from.as_deref(),
+                                to: to.as_deref(),
+                                since: filters.since.as_deref(),
+                                before: filters.before.as_deref(),
+                                unseen,
+                                exclude: &exclude,
+                                ..Default::default()
+                            };
+                            let (emails, _) = mailvault_core::imap::search_emails_by(&mut session, &mailbox, &search)
                             .await
                             .map_err(|error| format!("Failed to search emails: {error}"))?;
                             let mut rows = Vec::new();
@@ -1099,6 +1117,9 @@ fn request_to_index(request: &MailSearchStart, target: &MailSearchTarget) -> Sea
         date_from: request.date_from,
         date_to: request.date_to,
         has_attachments: request.has_attachments,
+        unread: request.unread,
+        to_any: request.to.iter().map(|to| to.trim()).filter(|to| !to.is_empty()).map(str::to_owned).collect(),
+        exclude_terms: request.exclude.clone(),
         limit: None,
         // Saved-view filters: a plain search sets none of them.
         ..SearchRequest::default()
@@ -1252,6 +1273,18 @@ pub(crate) fn matches_local_row(row: &LightEmail, request: &MailSearchStart) -> 
         })
         && (!request.has_attachments || row.has_attachments)
         && date_inclusive(row.date.as_deref(), request.date_from, request.date_to)
+        && request.unread.is_none_or(|unread| unread != row.flags.iter().any(|f| f == "\\Seen" || f == "seen"))
+        && request.to.as_deref().map(str::trim).filter(|to| !to.is_empty()).is_none_or(|to| {
+            let to = to.to_lowercase();
+            row.to.iter().any(|a| {
+                a.address.to_lowercase().contains(&to) || a.name.as_deref().unwrap_or("").to_lowercase().contains(&to)
+            })
+        })
+        && request
+            .exclude
+            .iter()
+            .map(|term| term.trim().to_lowercase())
+            .all(|term| term.is_empty() || !haystack.contains(&term))
 }
 
 fn date_inclusive(value: Option<&str>, from: Option<i64>, to: Option<i64>) -> bool {
@@ -2497,6 +2530,53 @@ mod tests {
             ..req.clone()
         };
         assert!(!matches_local_row(&row, &wrong_sender));
+    }
+
+    #[test]
+    fn local_filters_match_recipient_unread_and_excluded_words() {
+        let mut row: LightEmail = serde_json::from_value(json!({
+            "uid": 1, "messageId": null, "subject": "Quarterly report",
+            "from": {"name": "Alice Example", "address": "alice@example.test"},
+            "to": [{"name": "Bob Boss", "address": "bob@example.test"}],
+            "cc": [], "bcc": [], "replyTo": [], "date": null, "flags": [],
+            "text": "revenue update", "html": null, "attachments": [],
+            "hasAttachments": false, "isArchived": false
+        }))
+        .unwrap();
+        let req = |extra: Value| -> MailSearchStart {
+            let mut base = json!({"searchId": "ops", "location": "local", "targets": []});
+            base.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            serde_json::from_value(base).unwrap()
+        };
+        assert!(matches_local_row(&row, &req(json!({"to": "BOB@"}))));
+        assert!(matches_local_row(&row, &req(json!({"to": "boss"}))), "a name matches too");
+        assert!(!matches_local_row(&row, &req(json!({"to": "alice"}))), "the sender is not a recipient");
+        assert!(matches_local_row(&row, &req(json!({"unread": true}))));
+        assert!(!matches_local_row(&row, &req(json!({"exclude": ["REVENUE"]}))));
+        assert!(!matches_local_row(&row, &req(json!({"exclude": ["zzz", "quarterly report"]}))));
+        assert!(matches_local_row(&row, &req(json!({"exclude": ["zzz"]}))));
+        row.flags = vec!["seen".into(), "\\Seen".into()];
+        assert!(!matches_local_row(&row, &req(json!({"unread": true}))));
+        assert!(matches_local_row(&row, &req(json!({}))));
+    }
+
+    #[test]
+    fn index_request_carries_recipient_unread_and_excluded_words() {
+        let request: MailSearchStart = serde_json::from_value(json!({
+            "searchId": "ops", "location": "local", "query": "report", "to": " bob@example.test ",
+            "unread": true, "exclude": ["draft", "weekly digest"], "targets": []
+        }))
+        .unwrap();
+        let target: MailSearchTarget = serde_json::from_value(json!({"accountId": "acct", "account": null})).unwrap();
+        let index = request_to_index(&request, &target);
+        assert_eq!(index.unread, Some(true));
+        assert_eq!(index.to_any, vec!["bob@example.test".to_string()]);
+        assert_eq!(index.exclude_terms, vec!["draft".to_string(), "weekly digest".to_string()]);
+        let plain: MailSearchStart =
+            serde_json::from_value(json!({"searchId": "p", "location": "local", "targets": []})).unwrap();
+        let index = request_to_index(&plain, &target);
+        assert_eq!(index.unread, None);
+        assert!(index.to_any.is_empty() && index.exclude_terms.is_empty());
     }
 
     mod server {

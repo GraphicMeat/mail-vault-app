@@ -54,6 +54,11 @@ pub struct SearchRequest {
     /// Drop a message sent by any of these. "Needs reply" excludes your own
     /// sent mail this way.
     pub from_none: Vec<String>,
+    /// Drop a message that holds any of these words or phrases anywhere the
+    /// query itself would look: the search box's `-term`.
+    /// ponytail: a message whose body is not indexed yet can only be excluded
+    /// by its headers; it goes once the body sweep reaches it.
+    pub exclude_terms: Vec<String>,
     /// Restrict to these identities (`app_db::identity::msg_key`). This is how
     /// a view filtered by tag or by a custom field narrows: the identities come
     /// from `app.db`, the rows from here. `Some(empty)` matches nothing, which
@@ -344,6 +349,15 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     for address in &req.from_none {
         clauses.push("m.from_addr_lc NOT LIKE ? ESCAPE '\\'".into());
         args.push(Value::Text(like_pattern(&address.trim().to_lowercase())));
+    }
+    for term in &req.exclude_terms {
+        // Normalized the way the query words are: the LIKE branch compares
+        // against the `*_lc` columns.
+        let term = term.replace('"', " ").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+        if !term.is_empty() {
+            let clause = word_clause(&term, &mut args);
+            clauses.push(format!("NOT ({clause})"));
+        }
     }
     if let Some(keys) = &req.msg_keys {
         // A temp table rather than an `IN (?, ?, ...)`: a view's identity list
@@ -656,6 +670,48 @@ mod tests {
         let hits = uids(&db, SearchRequest { from_none: vec!["billing@acme.test".into()], ..req("luke", "") });
         assert!(!hits.contains(&("INBOX".to_string(), 2)));
         assert_eq!(hits.len(), 3);
+    }
+
+    #[test]
+    fn exclude_terms_drop_the_messages_that_hold_them() {
+        let (_tmp, db) = fixture();
+        let all = uids(&db, req("luke", ""));
+        assert_eq!(all.len(), 4);
+        // A body word, a subject word and a sender, in any case.
+        let kept = uids(&db, SearchRequest { exclude_terms: vec!["ATTACHED".into()], ..req("luke", "") });
+        assert!(!kept.contains(&("INBOX".to_string(), 2)), "uid 2's body says attached: {kept:?}");
+        assert_eq!(kept.len(), 3);
+        let kept = uids(&db, SearchRequest { exclude_terms: vec!["budget".into(), "zoe@x.test".into()], ..req("luke", "") });
+        assert!(!kept.contains(&("INBOX".to_string(), 3)));
+        assert_eq!(kept.len(), 3);
+        // A phrase, a short word that only a header holds, and one no message has.
+        let kept = uids(&db, SearchRequest { exclude_terms: vec!["\"please find\"".into()], ..req("luke", "") });
+        assert_eq!(kept.len(), 3);
+        let kept = uids(&db, SearchRequest { exclude_terms: vec!["PO".into()], ..req("luke", "") });
+        assert!(!kept.contains(&("INBOX".to_string(), 2)));
+        assert_eq!(uids(&db, SearchRequest { exclude_terms: vec!["zzzz".into()], ..req("luke", "") }).len(), 4);
+        // Beside a query: the count and the page bind the same arguments.
+        assert_eq!(uids(&db, req("luke", "x.test")).len(), 4, "precondition: the query alone finds all four");
+        let with_query = SearchRequest { exclude_terms: vec!["invoice".into()], ..req("luke", "x.test") };
+        let hits = uids(&db, with_query.clone());
+        assert_eq!(hits.len(), 3);
+        assert!(!hits.contains(&("INBOX".to_string(), 2)));
+        let g = crate::search_index::lock(&db);
+        assert_eq!(search(g.as_ref().unwrap(), &with_query).unwrap().total, 3);
+    }
+
+    #[test]
+    fn to_unread_and_exclude_narrow_together() {
+        let (tmp, db) = fixture();
+        star(&tmp, &db, "luke", "INBOX", 1, "S");
+        let mut hits = uids(&db, SearchRequest {
+            to_any: vec!["me@x.test".into()],
+            unread: Some(true),
+            exclude_terms: vec!["budget".into()],
+            ..req("luke", "")
+        });
+        hits.sort();
+        assert_eq!(hits, vec![("INBOX".to_string(), 2), ("Projects_2026".to_string(), 1)]);
     }
 
     /// How a view filtered by tag finds its messages: the identities come from

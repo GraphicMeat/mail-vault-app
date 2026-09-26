@@ -401,6 +401,53 @@ describe('daemon-backed search lifecycle', () => {
 
     expect(useSearchStore.getState().searchResults).toBe(before);
   });
+
+  it('sends typed operators over the panel filters without touching the panel', async () => {
+    const run = await startSearch('from:bob to:ann@x.test is:unread has:attachment after:2026-09-01 before:2026-09-10 invoice -paid -"weekly digest"', {
+      sender: 'alice@example.test', folder: 'current',
+    });
+
+    expect(run.request).toMatchObject({
+      query: 'invoice',
+      sender: 'bob',
+      to: 'ann@x.test',
+      unread: true,
+      exclude: ['paid', 'weekly digest'],
+      hasAttachments: true,
+      dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
+      dateTo: Date.parse('2026-09-09T23:59:59Z') / 1000,
+    });
+    expect(useSearchStore.getState().searchFilters).toEqual({
+      ...DEFAULT_FILTERS, sender: 'alice@example.test', folder: 'current',
+    });
+  });
+
+  it('sends no operator fields when the query has none', async () => {
+    const run = await startSearch('invoice', { sender: 'alice@example.test' });
+    expect(run.request).toMatchObject({ sender: 'alice@example.test', to: null, unread: null, exclude: [] });
+  });
+
+  it.each([['is:unread'], ['to:ann@x.test'], ['-paid'], ['in:sent']])('%s alone starts a search', async (query) => {
+    const run = await startSearch(query);
+    expect(run).toBeTruthy();
+    expect(run.request.query).toBe('');
+  });
+
+  it('in:sent scopes the targets to each account\'s Sent, not just the open one', async () => {
+    await startSearch('in:sent invoice');
+    expect(harness.buildSearchTargets).toHaveBeenCalledWith(
+      harness.mailState,
+      harness.settingsState,
+      expect.objectContaining({ folder: 'Sent', everyAccount: true }),
+    );
+  });
+
+  it('in: a named folder stays one account\'s folder', async () => {
+    await startSearch('in:Projects invoice');
+    const filters = harness.buildSearchTargets.mock.calls.at(-1)[2];
+    expect(filters.folder).toBe('Projects');
+    expect(filters.everyAccount).toBeUndefined();
+  });
 });
 
 describe('narrowing a search by tag', () => {

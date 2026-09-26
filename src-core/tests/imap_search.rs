@@ -173,6 +173,62 @@ async fn search_filters_by_from_and_subject() {
     assert_eq!(by_subject[0].subject, "Lunch");
 }
 
+/// The search box's `to:`, `is:unread` and `-term` reach the server as TO,
+/// UNSEEN and NOT TEXT, ANDed with the rest.
+#[async_std::test]
+async fn search_filters_by_recipient_unread_and_excluded_words() {
+    let mut mb = Mailbox::new("INBOX");
+    mb.add(mock_imap::Message::new(1, eml("Invoice March", "acct@vendor.com", "paid in full")).with_flags(&["\\Seen"]));
+    mb.add(mock_imap::Message::new(2, eml("Invoice April", "acct@vendor.com", "still open")));
+    mb.add(mock_imap::Message::new(
+        3,
+        eml("Invoice May", "acct@vendor.com", "still open").replace("To: user@example.com", "To: boss@example.com"),
+    ));
+    let server = MockImap::start(Scenario::new().mailbox(mb));
+    let mut sess = session(&server).await;
+    let subjects = |rows: Vec<EmailHeader>| {
+        let mut s: Vec<String> = rows.into_iter().map(|h| h.subject).collect();
+        s.sort();
+        s
+    };
+
+    let unread = ServerSearch { query: Some("Invoice"), unseen: true, ..Default::default() };
+    let (rows, _) = search_emails_by(&mut sess, "INBOX", &unread).await.expect("unseen search");
+    assert_eq!(subjects(rows), ["Invoice April", "Invoice May"]);
+
+    let to = ServerSearch { to: Some("boss@"), ..Default::default() };
+    let (rows, _) = search_emails_by(&mut sess, "INBOX", &to).await.expect("to search");
+    assert_eq!(subjects(rows), ["Invoice May"]);
+
+    let exclude = ["paid".to_string(), "April".to_string()];
+    let not = ServerSearch { query: Some("Invoice"), exclude: &exclude, ..Default::default() };
+    let (rows, _) = search_emails_by(&mut sess, "INBOX", &not).await.expect("not search");
+    assert_eq!(subjects(rows), ["Invoice May"]);
+
+    let sent = server.commands().join("\n");
+    assert!(sent.contains("UID SEARCH TEXT \"Invoice\" UNSEEN"), "{sent}");
+    assert!(sent.contains("UID SEARCH TO \"boss@\""), "{sent}");
+    assert!(sent.contains("NOT TEXT \"paid\" NOT TEXT \"April\""), "{sent}");
+}
+
+#[test]
+fn server_search_quotes_every_value_and_drops_blank_ones() {
+    let exclude = ["  ".to_string(), "a\"b\\c".to_string()];
+    let search = ServerSearch {
+        query: Some(" hi\r\nA0 LOGOUT "),
+        from: Some(""),
+        since: Some("2026-09-01"),
+        before: Some("not a date"),
+        exclude: &exclude,
+        ..Default::default()
+    };
+    assert_eq!(
+        search.criteria(),
+        ["TEXT \"hi  A0 LOGOUT\"", "SINCE 01-Sep-2026", "NOT TEXT \"a\\\"b\\\\c\""]
+    );
+    assert!(ServerSearch::default().criteria().is_empty());
+}
+
 #[async_std::test]
 async fn pooled_text_search_retries_a_dropped_search_and_returns_its_match() {
     let query = "Yoda message 901";

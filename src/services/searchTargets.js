@@ -68,7 +68,8 @@ export async function mailboxTreeFor(accountId, mail) {
 
 export async function buildSearchTargets(mail, settings, searchFilters) {
   const folder = searchFilters?.folder || 'current';
-  const crossAccountUnifiedScope = mail.unifiedInbox && (folder === 'current' || folder === 'all');
+  const crossAccountUnifiedScope = mail.unifiedInbox
+    && (folder === 'current' || folder === 'all' || !!searchFilters?.everyAccount);
   const visibleAccounts = (mail.accounts || []).filter(account => !settings?.hiddenAccounts?.[account.id]);
   const accounts = visibleAccounts.filter(account =>
     crossAccountUnifiedScope || account.id === mail.activeAccountId);

@@ -128,6 +128,40 @@ describe('saved views', () => {
     expect(def.sender).toBe('ann@x.test');
     expect(def.hasAttachments).toBe(true);
   });
+
+  /// `from:bob` used to stay in the text; now it is a filter, and a view that
+  /// kept only the text would search for nothing but "invoice".
+  it('carries typed operators into the view instead of dropping them', () => {
+    useSearchStore.setState({
+      searchQuery: 'from:bob invoice is:unread has:attachment after:2026-09-01 before:2026-09-10 to:x@y.test in:sent -paid',
+      searchFilters: { location: 'all', folder: 'current', sender: 'ann@x.test', dateFrom: null, dateTo: null, hasAttachments: false },
+    });
+    const def = useViewStore.getState().defFromSearch([]);
+    expect(def).toEqual({
+      query: 'invoice',
+      tags: [],
+      sender: 'bob',
+      hasAttachments: true,
+      unread: true,
+      dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
+      dateTo: Date.parse('2026-09-09T00:00:00Z') / 1000,
+    });
+  });
+
+  it('a search with no operators saves as it always did', () => {
+    useSearchStore.setState({
+      searchQuery: 'invoice',
+      searchFilters: { location: 'all', folder: 'current', sender: 'ann@x.test', dateFrom: '2026-09-01', dateTo: null, hasAttachments: false },
+    });
+    expect(useViewStore.getState().defFromSearch([])).toEqual({
+      query: 'invoice',
+      tags: [],
+      sender: 'ann@x.test',
+      hasAttachments: false,
+      dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
+      dateTo: null,
+    });
+  });
 });
 
 /// Field values arriving one rendered row at a time would group every row as

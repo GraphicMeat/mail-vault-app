@@ -360,6 +360,7 @@ export const SPECIAL_USE_MAP = {
   'Sent': '\\Sent',
   'Drafts': '\\Drafts',
   'Trash': '\\Trash',
+  'Junk': '\\Junk',
   'Archive': '\\Archive',
 };
 

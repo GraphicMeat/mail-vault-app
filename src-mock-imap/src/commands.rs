@@ -406,7 +406,7 @@ fn header_value(raw: &[u8], name: &str) -> Option<String> {
 }
 
 fn matches_criteria(msg: &Message, criteria: &str) -> bool {
-    let mut rest = criteria.trim();
+    let rest = criteria.trim();
     if rest.is_empty() || rest.eq_ignore_ascii_case("ALL") {
         return true;
     }
@@ -414,67 +414,71 @@ fn matches_criteria(msg: &Message, criteria: &str) -> bool {
 
     // All criteria are ANDed, matching how the client builds them.
     let mut s = rest;
-    loop {
-        let Some(key) = next_arg(&mut s) else { break };
-        let ok = match key.to_uppercase().as_str() {
-            "ALL" => true,
-            // Clients prepend `CHARSET <name>` for non-ASCII values; matching is
-            // byte-oriented here, so consume and ignore it rather than silently
-            // matching nothing.
-            "CHARSET" => {
-                next_arg(&mut s);
-                true
-            }
-            "UNSEEN" => !msg.has_flag("\\Seen"),
-            "SEEN" => msg.has_flag("\\Seen"),
-            "HEADER" => {
-                let name = next_arg(&mut s).unwrap_or_default();
-                let want = next_arg(&mut s).unwrap_or_default();
-                header_value(&msg.raw, &name)
-                    .map(|v| v.to_lowercase().contains(&want.to_lowercase()))
-                    .unwrap_or(false)
-            }
-            "TEXT" => {
-                let want = next_arg(&mut s).unwrap_or_default();
-                text.contains(&want.to_lowercase())
-            }
-            "FROM" | "TO" | "CC" | "SUBJECT" => {
-                let want = next_arg(&mut s).unwrap_or_default();
-                header_value(&msg.raw, &key)
-                    .map(|v| v.to_lowercase().contains(&want.to_lowercase()))
-                    .unwrap_or(false)
-            }
-            "SINCE" | "BEFORE" => {
-                let when = next_arg(&mut s).unwrap_or_default();
-                match (
-                    chrono::NaiveDate::parse_from_str(&when, "%d-%b-%Y"),
-                    chrono::NaiveDate::parse_from_str(
-                        msg.internal_date.split(' ').next().unwrap_or(""),
-                        "%d-%b-%Y",
-                    ),
-                ) {
-                    (Ok(bound), Ok(actual)) => {
-                        if key.eq_ignore_ascii_case("SINCE") {
-                            actual >= bound
-                        } else {
-                            actual < bound
-                        }
-                    }
-                    _ => true,
-                }
-            }
-            // Unknown key: do not silently pass — a test relying on it should fail loudly.
-            _ => false,
-        };
-        if !ok {
+    while let Some(key) = next_arg(&mut s) {
+        if !matches_one(msg, &text, &key, &mut s) {
             return false;
-        }
-        rest = s;
-        if rest.trim().is_empty() {
-            break;
         }
     }
     true
+}
+
+/// One search key and the arguments it takes off the front of `s`.
+fn matches_one(msg: &Message, text: &str, key: &str, s: &mut &str) -> bool {
+    match key.to_uppercase().as_str() {
+        "ALL" => true,
+        // `NOT <key>` negates the one key after it (RFC 3501 §6.4.4).
+        "NOT" => {
+            let Some(inner) = next_arg(s) else { return false };
+            !matches_one(msg, text, &inner, s)
+        }
+        // Clients prepend `CHARSET <name>` for non-ASCII values; matching is
+        // byte-oriented here, so consume and ignore it rather than silently
+        // matching nothing.
+        "CHARSET" => {
+            next_arg(s);
+            true
+        }
+        "UNSEEN" => !msg.has_flag("\\Seen"),
+        "SEEN" => msg.has_flag("\\Seen"),
+        "HEADER" => {
+            let name = next_arg(s).unwrap_or_default();
+            let want = next_arg(s).unwrap_or_default();
+            header_value(&msg.raw, &name)
+                .map(|v| v.to_lowercase().contains(&want.to_lowercase()))
+                .unwrap_or(false)
+        }
+        "TEXT" => {
+            let want = next_arg(s).unwrap_or_default();
+            text.contains(&want.to_lowercase())
+        }
+        "FROM" | "TO" | "CC" | "SUBJECT" => {
+            let want = next_arg(s).unwrap_or_default();
+            header_value(&msg.raw, key)
+                .map(|v| v.to_lowercase().contains(&want.to_lowercase()))
+                .unwrap_or(false)
+        }
+        "SINCE" | "BEFORE" => {
+            let when = next_arg(s).unwrap_or_default();
+            match (
+                chrono::NaiveDate::parse_from_str(&when, "%d-%b-%Y"),
+                chrono::NaiveDate::parse_from_str(
+                    msg.internal_date.split(' ').next().unwrap_or(""),
+                    "%d-%b-%Y",
+                ),
+            ) {
+                (Ok(bound), Ok(actual)) => {
+                    if key.eq_ignore_ascii_case("SINCE") {
+                        actual >= bound
+                    } else {
+                        actual < bound
+                    }
+                }
+                _ => true,
+            }
+        }
+        // Unknown key: do not silently pass — a test relying on it should fail loudly.
+        _ => false,
+    }
 }
 
 fn do_search(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Action]) -> Response {

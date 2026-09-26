@@ -72,6 +72,30 @@ describe('buildSearchTargets', () => {
     expect(auth.ensureFreshToken).toHaveBeenCalledTimes(2);
   });
 
+  it('in:spam resolves each account\'s own Junk by special-use in a unified view', async () => {
+    const junkA = box('Bulk', 'Bulk', { specialUse: '\\Junk' });
+    const spamB = box('Spam', '[Gmail]/Spam', { specialUse: '\\Junk' });
+    auth.getAccountCacheMailboxes.mockImplementation(() => [box('INBOX', 'INBOX'), spamB]);
+    const mail = {
+      accounts: [account('a'), account('b')],
+      activeAccountId: 'a',
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      mailboxes: [box('INBOX', 'INBOX'), junkA],
+    };
+
+    const targets = await buildSearchTargets(mail, settings(), { ...filters('Junk'), everyAccount: true });
+
+    expect(targets.map(target => [target.accountId, target.localMailboxes, target.serverMailboxes])).toEqual([
+      ['a', ['Bulk'], ['Bulk']],
+      ['b', ['[Gmail]/Spam'], ['[Gmail]/Spam']],
+    ]);
+    // The same folder picked in the panel stays the open account's.
+    const picked = await buildSearchTargets(mail, settings(), filters('Junk'));
+    expect(picked.map(target => target.accountId)).toEqual(['a']);
+  });
+
   it('maps unified all to every selectable server folder but all local directories', async () => {
     const tree = [
       box('Archive', 'Archive'),

@@ -253,13 +253,19 @@ export const useViewStore = create((set, get) => ({
     const named = parsed.tags.map(name => tags
       .find(tag => tag.name?.toLocaleLowerCase() === name.toLocaleLowerCase())?.id)
       .filter(Boolean);
+    // Typed operators win, as they do for the search itself. A view has no
+    // home for `to:`, `in:` or `-word`; they are left out rather than
+    // searched for as text.
+    const dateFrom = parsed.dateFrom || searchFilters?.dateFrom;
+    const dateTo = parsed.dateTo || searchFilters?.dateTo;
     return {
       query: parsed.text,
       tags: named,
-      sender: searchFilters?.sender || null,
-      hasAttachments: !!searchFilters?.hasAttachments,
-      dateFrom: searchFilters?.dateFrom ? Math.floor(new Date(searchFilters.dateFrom).getTime() / 1000) : null,
-      dateTo: searchFilters?.dateTo ? Math.floor(new Date(searchFilters.dateTo).getTime() / 1000) : null,
+      sender: parsed.sender || searchFilters?.sender || null,
+      hasAttachments: parsed.hasAttachments || !!searchFilters?.hasAttachments,
+      ...(parsed.unread ? { unread: true } : {}),
+      dateFrom: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : null,
+      dateTo: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : null,
     };
   },
 }));
