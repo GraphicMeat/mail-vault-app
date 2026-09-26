@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메일 클라이언트 vs 메일 보관함: 거울은 잊고, 보관함은 지킵니다</title>
+  <meta name="description" content="메일 클라이언트는 서버를 그대로 반영합니다. 그곳에서 무언가를 지우면 어디서든 사라집니다. 보관함은 다릅니다. 서버 삭제, 계정 해지, 공급자 변경을 모두 견디는 로컬 사본입니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/compare/mail-client-vs-mail-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/compare/mail-client-vs-mail-vault.html">
+  <meta property="og:title" content="메일 클라이언트 vs 메일 보관함: 거울은 잊고, 보관함은 지킵니다">
+  <meta property="og:description" content="메일 클라이언트는 서버를 그대로 반영합니다. 그곳에서 무언가를 지우면 어디서든 사라집니다. 보관함은 다릅니다. 서버 삭제, 계정 해지, 공급자 변경을 모두 견디는 로컬 사본입니다.">
+  <meta property="og:image:alt" content="MailVault: 새 메일을 위한 공간을 만드세요. 이전 메일은 보관하세요. macOS와 Linux용 무료 앱이며 앱 미리보기도 제공합니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="메일 클라이언트 vs 메일 보관함: 거울은 잊고, 보관함은 지킵니다">
+  <meta name="twitter:description" content="메일 클라이언트는 서버를 그대로 반영합니다. 그곳에서 무언가를 지우면 어디서든 사라집니다. 보관함은 다릅니다. 서버 삭제, 계정 해지, 공급자 변경을 모두 견디는 로컬 사본입니다.">
+  <meta name="twitter:image:alt" content="MailVault: 새 메일을 위한 공간을 만드세요. 이전 메일은 보관하세요. macOS와 Linux용 무료 앱이며 앱 미리보기도 제공합니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "메일 클라이언트 vs 메일 보관함: 거울은 잊고, 보관함은 지킵니다",
+  "description": "메일 클라이언트는 서버를 그대로 반영합니다. 그곳에서 무언가를 지우면 어디서든 사라집니다. 보관함은 다릅니다. 서버 삭제, 계정 해지, 공급자 변경을 모두 견디는 로컬 사본입니다.",
+  "url": "https://mailvaultapp.com/ko/compare/mail-client-vs-mail-vault.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-09-26",
+  "dateModified": "2026-09-26",
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v2.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/compare/mail-client-vs-mail-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/compare/mail-client-vs-mail-vault.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/compare/mail-client-vs-mail-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/compare/mail-client-vs-mail-vault.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/compare/mail-client-vs-mail-vault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/compare/mail-client-vs-mail-vault.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/compare/mail-client-vs-mail-vault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/compare/mail-client-vs-mail-vault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/compare/mail-client-vs-mail-vault.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/compare/mail-client-vs-mail-vault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/compare/mail-client-vs-mail-vault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary>
+<nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">메일 클라이언트 vs 메일 보관함: 거울은 잊고, 보관함은 지킵니다</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            지금까지 써온 모든 메일 클라이언트는 거울입니다. 서버에 있는 것을 보여주고, 속도를 위해 로컬 캐시를 유지하며, 동기화 상태를 유지합니다. 설계는 그것이 전부입니다. 서버가 무엇을 가지고 있든, 클라이언트는 그것을 그대로 반영합니다.
+          </p>
+
+          <p>
+            바로 그래서 거울은 잊어버립니다. 서버가 메시지를 삭제하거나, 만료 정책이 적용되거나, 계정 자체가 사라지면 그 반영도 함께 사라집니다. <strong>보관함</strong>은 다르게 작동합니다. 서버에 종속되지 않는 사본입니다. 메시지가 보관함에 들어가면, 그 위에서 무슨 일이 일어나든 손대지 못합니다. 그것이 MailVault의 핵심 발상입니다. 보관함을 갖춘 완전한 메일 클라이언트입니다. 다른 어떤 클라이언트에서처럼 메일을 읽고, 검색하고, 스레드를 따라가고, 답장을 보낼 수 있습니다. 그리고 보관해 둔 메시지는 표준 .eml 파일로 내 디스크에 저장되어 어떤 프로그램으로도 열 수 있습니다. 공급자가 그것을 지우든, 만료시키든, 추가 저장 공간 비용을 요구하든, 내 사본은 상관하지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">핵심 차이</h3>
+
+          <p>
+            거울과 보관함은 같은 질문("내 메일은 어디에 있는가")에 아주 다르게 답합니다. 거울의 답은 언제나 <em>서버에, 여기 반영되어</em> 입니다. 서버가 바뀌면 거울도 함께 바뀝니다. 보관함의 답은 <em>내 디스크에, 파일로</em> 입니다. 서버가 아무리 바뀌어도 그 파일은 움직이지 않습니다.
+          </p>
+
+          <p>
+            둘 다 틀리지 않았습니다. 거울 덕분에 여러 기기에서 메일이 제대로 작동합니다. 휴대폰, 노트북, 웹에서 같은 받은편지함이 항상 일치합니다. 보관함 덕분에 메일이 서버, 계정, 공급자보다 <em>오래 살아남습니다</em>. MailVault는 이 둘을 동시에 갖추고 있습니다. 일상적으로 쓰는 완전한 메일 클라이언트이면서, 처음부터 보관함을 갖추고 만들어졌지, 나중에 덧붙인 것이 아닙니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">기능 비교</h3>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold"></th>
+                  <th class="py-3 pr-4 font-semibold">일반적인 메일 클라이언트 (거울)</th>
+                  <th class="py-3 font-semibold">MailVault (보관함)</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">서버가 메시지를 삭제하거나 만료시킴</td>
+                  <td class="py-3 pr-4">받은편지함에서도 사라짐</td>
+                  <td class="py-3">그대로 남음. 반영이 아니라 디스크에 있는 파일이므로</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">계정이나 공급자가 사라짐</td>
+                  <td class="py-3 pr-4">그것을 통해 동기화된 모든 것이 함께 사라짐</td>
+                  <td class="py-3">영향 없음. 아카이브는 구독이 아니므로</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">저장 형식</td>
+                  <td class="py-3 pr-4">그 앱에 묶인 독점 로컬 캐시</td>
+                  <td class="py-3">표준 Maildir + .eml (RFC 5322), 어떤 클라이언트로도 읽을 수 있음</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">오프라인 검색</td>
+                  <td class="py-3 pr-4">우연히 캐시된 것만</td>
+                  <td class="py-3">아카이브한 모든 것을 자체 로컬 인덱스에서 완전히 검색</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">백업</td>
+                  <td class="py-3 pr-4">원래 그 일을 하는 게 아님</td>
+                  <td class="py-3">외장 드라이브나 폴더로의 예약 백업 (Premium)</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">내보내기</td>
+                  <td class="py-3 pr-4">가능하다면 한 번에 메시지 하나씩</td>
+                  <td class="py-3">전체를 ZIP으로 내보내거나, 스레드 하나를 이미지나 독립 실행 페이지로 내보내기</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">공급자 변경</td>
+                  <td class="py-3 pr-4">이전의 번거로움, 메일이 계정에 묶여 있음</td>
+                  <td class="py-3">이미 내 것. 예전 계정을 닫기 전에 아카이브해 둘 수 있음</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">일상적인 메일</td>
+                  <td class="py-3 pr-4">지원</td>
+                  <td class="py-3">예. 스레드, 검색, 작성, 답장</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">거울로 충분할 때</h3>
+
+          <p>
+            대부분의 날에는 거울이 정확히 필요한 전부이고, 그 이상은 필요 없습니다. 공급자 자체의 보존 정책이 수년치 메일을 유지하고, 저장 공간이 한 번도 문제였던 적이 없고, 계정 자체가 사라질까 걱정하지 않는다면, 거울은 제 몫을 다하고 있는 것입니다. 많은 사람이 보관함을 전혀 필요로 하지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">보관함이 필요할 때</h3>
+
+          <p>
+            거울의 전제가 깨지는 순간, 서버가 더 이상 모든 것을 무기한 보관하지 않는 순간부터 보관함이 중요해집니다.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>서버가 삭제나 만료를 강제한다.</strong> 어떤 공급자는 오래된 메일을 자동으로 만료시키고, 어떤 메일함은 용량 제한이 있어 오래된 메시지를 지워야 합니다.</li>
+            <li><strong>공급자를 해지하거나 바꾼다.</strong> 계정을 닫기 전에 전부 아카이브해 두세요. 닫은 뒤에는 늦습니다.</li>
+            <li><strong>저장 공간 비용이 쌓인다.</strong> 오래된 메일을 서버에서 옮기고, 공간을 되찾고, 그곳에 계속 두기 위해 돈을 내는 걸 그만두세요.</li>
+            <li><strong>메일이 단일 공급자보다 오래 남아야 한다.</strong> 컴플라이언스, 보존 의무, 또는 단순히 수년치 서신이 한 회사가 계속 존재하는지에 좌우되길 원치 않는 경우입니다.</li>
+            <li><strong>오프라인에서 검색하고 싶다.</strong> 보관함은 연결 없이도 자체 인덱스에서 즉시 답합니다.</li>
+          </ul>
+
+          <p>
+            이 중 하나라도 익숙하게 들린다면, <a href="/ko/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">서버 삭제 후에도 메일을 지키는 방법 가이드</a>에서 자세한 원리를 다룹니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">바꾼다고 전부 아니면 전무인 것은 아닙니다</h3>
+
+          <p>
+            MailVault로 옮기는 것이 첫날부터 무언가를 포기해야 한다는 뜻은 아닙니다. 다른 어떤 클라이언트와 마찬가지로 IMAP으로 계정에 연결되므로, 휴대폰이나 다른 컴퓨터에서는 예전 클라이언트를 계속 쓰면서 여기서 MailVault를 써볼 수 있습니다. 한 계정에 여러 클라이언트를 동시에 연결할 수 있으며, MailVault를 추가해도 다른 곳에서 이미 돌아가고 있는 것은 깨지지 않습니다.
+          </p>
+
+          <p>
+            보관함은 계정을 연결하는 순간부터 백그라운드에서 스스로 만들어집니다. MailVault가 결국 유일한 클라이언트가 되든, 여러 개 중 하나가 되든 마찬가지입니다. 위쪽에서 무언가 사라져도, 이미 보관함에 있는 사본은 사라지지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">중요한 것을 지킬 준비가 되셨나요?</h3>
+
+          <p>
+            MailVault는 무료이며 어떤 IMAP 메일 계정과도 함께 작동합니다. 다운로드하고 계정을 연결하면 몇 분 안에 보관함을 만들기 시작할 수 있습니다.
+          </p>
+
+          <p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity no-underline">MailVault 무료로 내려받기</a>
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            <a href="/ko/features.html" class="text-primary-500 hover:text-primary-600 underline">모든 기능</a>을 보거나, <a href="/ko/faq.html" class="text-primary-500 hover:text-primary-600 underline">FAQ</a>를 읽거나, MailVault를 <a href="/ko/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">Apple Mail</a>, <a href="/ko/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">Thunderbird</a>, <a href="/ko/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">추가 저장 공간 비용 지불</a>과 비교해 보세요.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>메일을 읽고, 메일을 보관하세요.</p>
+</div>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20260926-mobile"></script>
+</body>
+</html>

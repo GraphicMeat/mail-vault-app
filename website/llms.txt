@@ -21,6 +21,7 @@
 - [MailVault vs Thunderbird](https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html)
 - [MailVault vs Apple Mail](https://mailvaultapp.com/compare/mailvault-vs-apple-mail.html)
 - [MailVault vs paying for more storage](https://mailvaultapp.com/compare/mailvault-vs-paying-for-storage.html)
+- [Mail client vs mail vault](https://mailvaultapp.com/compare/mail-client-vs-mail-vault.html): a mirror forgets, a vault keeps
 
 ## Optional
 
