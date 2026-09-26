@@ -336,8 +336,13 @@ impl IdleWatchers {
         if let Some(notify) = self.auto_tag_notify.get() {
             notify.notify_one();
         }
+        // Its own task: the IDLE is re-issued now, not after the downloads,
+        // so a message that lands meanwhile still raises its EXISTS.
         if let Some(state) = self.daemon.get().and_then(Weak::upgrade) {
-            crate::handlers::imap::cache_arrivals(&state, &account, "INBOX", &result.arrival_uids).await;
+            let uids = result.arrival_uids;
+            tokio::spawn(async move {
+                crate::handlers::imap::cache_arrivals(&state, &account, "INBOX", &uids).await;
+            });
         }
     }
 
