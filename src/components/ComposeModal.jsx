@@ -1138,7 +1138,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         data-dragging={dragging ? 'true' : 'false'}
         aria-busy={detaching || undefined}
         className={`compose-window bg-mail-surface border rounded-2xl
-                   ${detached ? 'compose-window-detached h-screen w-screen border-0 rounded-none' : 'w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] relative'} flex flex-col overflow-hidden
+                   ${detached ? 'compose-window-detached h-screen w-screen border-0 rounded-none' : 'w-[min(100%,56rem)] max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] relative'} flex flex-col overflow-hidden
                    ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
         onDragEnter={(e) => { if (detaching || !hasFiles(e)) return; dragDepth.current += 1; setDragging(true); }}

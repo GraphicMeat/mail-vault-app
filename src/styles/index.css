@@ -31,7 +31,9 @@
 
 /* Embedded compose is deliberately a native CSS resize surface: it needs no
    drag bookkeeping and works with every desktop webview. The keyboard divider
-   beside its reading context covers users who cannot use the resize corner. */
+   beside its reading context covers users who cannot use the resize corner.
+   These maxima are how far a resize may go; the opening width is capped in
+   ComposeModal, since this max-width overrides a Tailwind max-w-* there. */
 .compose-window {
   container-type: inline-size;
   container-name: compose;
