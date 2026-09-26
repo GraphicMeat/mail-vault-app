@@ -214,6 +214,7 @@ vi.mock('../../stores/settingsStore', async () => {
     hashColor: () => '#888',
     hasPremiumAccess: () => false,
     isTrackerBlockingActive: () => false,
+    normalizeListPreviewLines: (v) => ([0, 1, 2, 3].includes(v) ? v : 0),
   };
 });
 
