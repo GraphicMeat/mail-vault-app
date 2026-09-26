@@ -829,7 +829,10 @@ mod noop_timeout_tests {
     fn config_for(server: &MockImap) -> ImapConfig {
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         serde_json::from_value(serde_json::json!({
-            "email": "user@example.com",
+            // Not `user@example.com`: the transfer-stats tests in this binary
+            // read that account's bytes from the process-global counters,
+            // which every connection here feeds.
+            "email": "noop-pool@example.com",
             "password": "hunter2",
             "imapHost": server.host(),
             "imapPort": server.port(),
