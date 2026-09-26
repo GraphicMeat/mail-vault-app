@@ -86,6 +86,11 @@ pub enum Action {
     /// Send only the first N bytes of the response, then keep the socket open.
     TruncateResponse(usize),
 
+    /// Send only the first N bytes of the response, then go silent with the
+    /// socket held open until the client closes it: a peer that died
+    /// mid-reply. Unlike `TruncateResponse`, no EOF ever tells the client.
+    StallMidResponse(usize),
+
     /// Write the response in N-byte chunks with a flush between each,
     /// forcing the client's parser to handle TCP fragmentation.
     SplitWrites(usize),

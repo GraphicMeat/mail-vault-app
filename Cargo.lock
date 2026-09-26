@@ -4357,6 +4357,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "async-imap",
+ "async-io",
  "async-native-tls",
  "async-std",
  "base64 0.22.1",

@@ -261,10 +261,11 @@ impl IdleWatchers {
                     s.last_error = None;
                 }
                 // The StopSource must outlive the future: dropping it early
-                // interrupts the IDLE we just asked for.
+                // interrupts the IDLE we just asked for. Silence is the normal
+                // state of an IDLE, so the command deadline is off for the wait.
                 let response = {
                     let (wait, _stop) = handle.wait_with_timeout(idle_timeout);
-                    wait.await
+                    imap::expecting_silence(wait).await
                 };
                 state.lock().unwrap().idling = false;
 
@@ -571,6 +572,36 @@ mod tests {
         // IDLE one was never redialled.
         assert_eq!(server.connection_count(), 2, "and it is not a reconnect either");
         assert_eq!(watchers.status().await[0].wakeups, 0);
+
+        watchers.shutdown().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// IDLE connects through the same transport as every command, and its
+    /// wait is silent by design: the command deadline (`CMD_STALL`) must not
+    /// read it as a dead socket. `CMD_STALL` is the only timer that could cut
+    /// it, so surviving past it is the same as surviving the 29 minutes.
+    #[tokio::test]
+    async fn a_silent_idle_outlives_the_command_deadline() {
+        let dir = scratch_dir("idle_silent");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let engine = Arc::new(engine_for(&dir));
+        let watchers = IdleWatchers::new(
+            Arc::clone(&engine),
+            Arc::new(imap::ImapPool::new()),
+            gate(true),
+            Duration::from_millis(50),
+        );
+
+        watchers.watch(account_for(&server), imap::CMD_STALL * 2).await;
+        wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "the first IDLE").await;
+        tokio::time::sleep(imap::CMD_STALL + Duration::from_secs(5)).await;
+
+        let status = watchers.status().await;
+        assert_eq!(status[0].last_error, None, "a silent IDLE is not an error");
+        assert!(status[0].idling, "still parked in the first IDLE");
+        assert_eq!(server.count_commands("IDLE"), 1, "IDLE was never re-issued");
+        assert_eq!(server.connection_count(), 2, "and the IDLE connection was never redialled");
 
         watchers.shutdown().await;
         let _ = std::fs::remove_dir_all(&dir);

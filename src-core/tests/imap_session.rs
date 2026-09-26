@@ -311,6 +311,89 @@ async fn a_read_whose_socket_dies_retries_once_on_a_new_connection() {
     );
 }
 
+/// Track A (2026-09-26): a half-open pooled socket takes the SELECT and never
+/// answers. It used to hang the body fetch to the daemon's 45s timeout, and the
+/// dead-socket retry above never ran because nothing failed. `CMD_STALL` of
+/// silence now reads as a dead socket, and the retry delivers the message.
+#[async_std::test]
+async fn a_read_whose_select_goes_silent_retries_on_a_fresh_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(Trigger::nth("SELECT", 1), Action::Delay(Duration::from_secs(40))),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let started = std::time::Instant::now();
+    let email = async_std::future::timeout(
+        CMD_STALL + Duration::from_secs(2),
+        pool.run_read(&config, true, |mut session| async move {
+            let r = fetch_email_by_uid_light(&mut session, "INBOX", 1).await?;
+            Ok((r, session, Some("INBOX".to_string())))
+        }),
+    )
+    .await
+    .expect("a silent socket must be given up on after CMD_STALL, not waited out")
+    .expect("the retry must deliver the message");
+
+    assert!(email.is_some(), "uid 1 is in this mailbox");
+    assert!(started.elapsed() >= CMD_STALL, "a live server is not cut off early: {:?}", started.elapsed());
+    assert_eq!(server.connection_count(), 2, "the retry must open a NEW connection");
+}
+
+/// The same dead socket, but it died halfway through the body: some bytes
+/// arrived, then nothing. The deadline resets on bytes, so it still fires
+/// `CMD_STALL` after the last one.
+#[async_std::test]
+async fn a_body_fetch_that_stalls_mid_reply_retries_on_a_fresh_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(Trigger::nth_with("FETCH", "BODY.PEEK[]", 1), Action::StallMidResponse(40)),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let email = async_std::future::timeout(
+        CMD_STALL + Duration::from_secs(2),
+        pool.run_read(&config, true, |mut session| async move {
+            let r = fetch_email_by_uid_light(&mut session, "INBOX", 1).await?;
+            Ok((r, session, Some("INBOX".to_string())))
+        }),
+    )
+    .await
+    .expect("a reply that stops mid-way must be given up on after CMD_STALL")
+    .expect("the retry must deliver the message");
+
+    assert!(email.is_some(), "uid 1 is in this mailbox");
+    assert_eq!(server.connection_count(), 2, "the retry must open a NEW connection");
+}
+
+/// A server that accepts the socket and never greets. Only TCP had a timeout,
+/// so this held the caller for as long as the server liked.
+#[async_std::test]
+async fn a_server_that_never_greets_fails_the_connect_after_the_greeting_timeout() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::OnConnect, Action::Delay(Duration::from_secs(40))),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let err = async_std::future::timeout(
+        GREETING_TIMEOUT + Duration::from_secs(2),
+        create_imap_session(&config, &pool),
+    )
+    .await
+    .expect("a missing greeting must be given up on after GREETING_TIMEOUT")
+    .err()
+    .expect("a server that never greets cannot give a session");
+
+    assert!(err.contains("greeting"), "error should name the step: {err}");
+}
+
 /// Task A1: `run_read_timed` writes each stage into the `ReadTimings` it is
 /// given, so `imap_get_email_light`'s stall log has real numbers to show —
 /// which stage of the 09-26 Gmail body-fetch regression actually stalled.

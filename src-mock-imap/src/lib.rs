@@ -283,6 +283,12 @@ fn handle_conn(
         emit(&mut out, &bytes, &actions)?;
         responses_sent += 1;
 
+        // Silent until the client gives up on the socket and closes it.
+        if actions.iter().any(|a| matches!(a, Action::StallMidResponse(_))) {
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+            return Ok(());
+        }
+
         // A truncated response also closes the socket. Leaving it open would just
         // hang the client forever, which makes for a useless (and slow) test.
         let truncated = actions
@@ -604,9 +610,9 @@ fn replace_bytes(haystack: &[u8], needle: &[u8], with: &[u8]) -> Vec<u8> {
 }
 
 fn emit(out: &mut TcpStream, bytes: &[u8], actions: &[Action]) -> std::io::Result<()> {
-    if let Some(Action::TruncateResponse(n)) = actions
+    if let Some(Action::TruncateResponse(n) | Action::StallMidResponse(n)) = actions
         .iter()
-        .find(|a| matches!(a, Action::TruncateResponse(_)))
+        .find(|a| matches!(a, Action::TruncateResponse(_) | Action::StallMidResponse(_)))
     {
         out.write_all(&bytes[..(*n).min(bytes.len())])?;
         return out.flush();

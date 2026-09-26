@@ -23,6 +23,9 @@ async-imap = { version = "0.11", features = ["compress"] }
 imap-proto = "0.16"
 async-native-tls = "0.5"
 async-std = { version = "1", features = ["attributes"] }
+# Runtime-agnostic timer for the IMAP command deadline (`CountingStream`):
+# the same sessions run under tokio (daemon) and async-std (tests).
+async-io = "2"
 futures = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 hickory-resolver = "0.26"

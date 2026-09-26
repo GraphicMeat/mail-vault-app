@@ -18,6 +18,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -68,17 +69,64 @@ impl Counters {
 
 // ── CountingStream ──────────────────────────────────────────────────────────
 
-/// Transparent stream wrapper that counts bytes read (down) and written (up).
+/// Transparent stream wrapper that counts bytes read (down) and written (up),
+/// and enforces the IMAP command deadline (`imap::CMD_STALL`): once the client
+/// has written, `stall` without a byte back fails the read as a dead socket.
+///
+/// It sits under TLS and COMPRESS, so it cannot see where one IMAP response
+/// ends. It does not need to: the client only reads while it waits for a
+/// reply, and every command starts with a write, which re-arms the deadline.
+/// The one read that waits on purpose is IDLE's, run inside
+/// `expecting_silence`.
 #[derive(Debug)]
 pub struct CountingStream<S> {
     inner: S,
     counters: Arc<Counters>,
+    stall: std::time::Duration,
+    /// When the current silence becomes a dead socket. `None` until the
+    /// first write: the greeting is read before anything is sent, and has
+    /// its own timeout.
+    deadline: Option<std::time::Instant>,
+    timer: async_io::Timer,
 }
 
 impl<S> CountingStream<S> {
-    pub fn new(inner: S, counters: Arc<Counters>) -> Self {
-        Self { inner, counters }
+    pub fn new(inner: S, counters: Arc<Counters>, stall: std::time::Duration) -> Self {
+        Self { inner, counters, stall, deadline: None, timer: async_io::Timer::never() }
     }
+
+    /// `Err` once the deadline has passed, arming the timer to wake this task
+    /// at it otherwise.
+    fn check_deadline(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<usize>> {
+        let Some(deadline) = self.deadline else { return Poll::Pending };
+        if IDLING.try_with(|_| ()).is_ok() {
+            return Poll::Pending;
+        }
+        self.timer.set_at(deadline);
+        if std::time::Instant::now() < deadline && Pin::new(&mut self.timer).poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        // "connection lost" is a `pool::is_connection_lost` needle: `run_read`
+        // retries on a fresh connection. `TimedOut` keeps the text intact
+        // through the macOS TLS layer, which turns some kinds (reset,
+        // not-found, would-block) into something else.
+        Poll::Ready(Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("connection lost: no reply from the server for {}s", self.stall.as_secs()),
+        )))
+    }
+}
+
+tokio::task_local! {
+    /// Set while a read is silent by design (IDLE's wait).
+    static IDLING: ();
+}
+
+/// Run `fut` with the command deadline off: for IDLE's wait, which a live
+/// server may leave silent for 29 minutes. Keep IDLE's `init` and `done`
+/// outside it, so a dead socket is still caught when IDLE starts or ends.
+pub async fn expecting_silence<F: Future>(fut: F) -> F::Output {
+    IDLING.scope((), fut).await
 }
 
 impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
@@ -88,10 +136,17 @@ impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
         buf: &mut [u8],
     ) -> Poll<std::io::Result<usize>> {
         let polled = Pin::new(&mut self.inner).poll_read(cx, buf);
-        if let Poll::Ready(Ok(n)) = polled {
-            self.counters.down.fetch_add(n as u64, Ordering::Relaxed);
+        match polled {
+            Poll::Ready(Ok(n)) if n > 0 => {
+                self.counters.down.fetch_add(n as u64, Ordering::Relaxed);
+                if self.deadline.is_some() {
+                    self.deadline = Some(std::time::Instant::now() + self.stall);
+                }
+                polled
+            }
+            Poll::Pending => self.check_deadline(cx),
+            _ => polled,
         }
-        polled
     }
 }
 
@@ -104,6 +159,9 @@ impl<S: async_std::io::Write + Unpin> async_std::io::Write for CountingStream<S>
         let polled = Pin::new(&mut self.inner).poll_write(cx, buf);
         if let Poll::Ready(Ok(n)) = polled {
             self.counters.up.fetch_add(n as u64, Ordering::Relaxed);
+            if n > 0 {
+                self.deadline = Some(std::time::Instant::now() + self.stall);
+            }
         }
         polled
     }
@@ -340,12 +398,12 @@ mod tests {
     fn counting_stream_counts_both_directions() {
         let counters = Arc::new(Counters::default());
         async_std::task::block_on(async {
-            let mut reader = CountingStream::new(Cursor::new(b"hello world".to_vec()), Arc::clone(&counters));
+            let mut reader = CountingStream::new(Cursor::new(b"hello world".to_vec()), Arc::clone(&counters), STALL);
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).await.unwrap();
             assert_eq!(buf, b"hello world");
 
-            let mut writer = CountingStream::new(Cursor::new(Vec::new()), Arc::clone(&counters));
+            let mut writer = CountingStream::new(Cursor::new(Vec::new()), Arc::clone(&counters), STALL);
             writer.write_all(b"A1 NOOP\r\n").await.unwrap();
             writer.flush().await.unwrap();
         });
@@ -355,6 +413,88 @@ mod tests {
         assert_eq!(counters.pending(), DayBucket { down: 11, up: 9 });
         assert_eq!(counters.take_pending(), DayBucket { down: 11, up: 9 });
         assert_eq!(counters.pending(), DayBucket::default(), "flushed bytes must not be counted twice");
+    }
+
+    // ── The command deadline, against a real loopback socket ───────────────
+
+    const STALL: std::time::Duration = std::time::Duration::from_millis(300);
+
+    /// A loopback peer that reads the client's command, then runs `reply`.
+    fn peer(reply: impl FnOnce(&mut std::net::TcpStream) + Send + 'static) -> std::net::SocketAddr {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut cmd = [0u8; 64];
+            let _ = sock.read(&mut cmd);
+            reply(&mut sock);
+        });
+        addr
+    }
+
+    async fn send_command(addr: std::net::SocketAddr) -> CountingStream<async_std::net::TcpStream> {
+        let tcp = async_std::net::TcpStream::connect(addr).await.unwrap();
+        let mut stream = CountingStream::new(tcp, Arc::new(Counters::default()), STALL);
+        stream.write_all(b"A1 UID FETCH 1 BODY.PEEK[]\r\n").await.unwrap();
+        stream
+    }
+
+    fn write_slowly(sock: &mut std::net::TcpStream, chunks: usize, gap: std::time::Duration) {
+        use std::io::Write;
+        for _ in 0..chunks {
+            std::thread::sleep(gap);
+            sock.write_all(b"x").unwrap();
+        }
+    }
+
+    /// A big body on a slow link: every byte resets the deadline, so a reply
+    /// that takes far longer than the stall in total still completes.
+    #[test]
+    fn a_reply_that_trickles_in_for_longer_than_the_stall_still_completes() {
+        let addr = peer(|sock| write_slowly(sock, 8, STALL / 3));
+        async_std::task::block_on(async {
+            let mut stream = send_command(addr).await;
+            let mut buf = Vec::new();
+            stream.read_to_end(&mut buf).await.expect("a reply that keeps coming is alive");
+            assert_eq!(buf.len(), 8);
+        });
+    }
+
+    /// Some bytes, then nothing: the peer died mid-reply. The error must read
+    /// as a dead socket so `run_read` retries on a fresh connection.
+    #[test]
+    fn silence_after_a_command_is_a_dead_socket() {
+        let addr = peer(|sock| {
+            write_slowly(sock, 1, std::time::Duration::ZERO);
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        });
+        async_std::task::block_on(async {
+            let mut stream = send_command(addr).await;
+            let started = std::time::Instant::now();
+            let mut buf = Vec::new();
+            let err = stream.read_to_end(&mut buf).await.expect_err("a silent peer is dead");
+            assert!(started.elapsed() < std::time::Duration::from_secs(2), "took {:?}", started.elapsed());
+            assert!(
+                crate::imap::pool::is_connection_lost(&format!("SELECT INBOX failed: io: {err}")),
+                "must read as a dead socket: {err}"
+            );
+        });
+    }
+
+    /// IDLE's wait is silent by design, for up to 29 minutes.
+    #[test]
+    fn silence_while_expecting_it_is_not_a_dead_socket() {
+        let addr = peer(|sock| {
+            write_slowly(sock, 1, std::time::Duration::ZERO);
+            write_slowly(sock, 1, STALL * 3);
+        });
+        async_std::task::block_on(async {
+            let mut stream = send_command(addr).await;
+            let mut buf = Vec::new();
+            expecting_silence(stream.read_to_end(&mut buf)).await.expect("IDLE is not a stall");
+            assert_eq!(buf.len(), 2);
+        });
     }
 
     fn seed(dir: &Path, account: &str, source: &str, day: &str, down: u64, up: u64) {

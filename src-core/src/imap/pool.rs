@@ -889,6 +889,34 @@ mod noop_timeout_tests {
         );
     }
 
+    /// A pooled socket that died in the pool answers neither NOOP nor LOGOUT.
+    /// `CMD_STALL` fails the NOOP as a lost connection at about the same
+    /// moment `NOOP_TIMEOUT` would, and the stale-session branch then logs
+    /// out. That LOGOUT must not wait out a second `CMD_STALL` (it does not:
+    /// async-imap stops reading a stream after its first read error), so a
+    /// dead reused session costs one wait, then a fresh connection.
+    #[tokio::test]
+    async fn a_dead_pooled_session_costs_one_noop_wait_not_two() {
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .fault(Trigger::on("NOOP"), Action::Delay(Duration::from_secs(40))),
+        );
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let guard = pool.get_background(&config).await.expect("first checkout");
+        pool.return_background(&config, guard).await;
+        age_pooled_sessions(&pool, &config, Duration::from_secs(NOOP_SKIP_SECS + 1)).await;
+
+        let guard = tokio::time::timeout(NOOP_TIMEOUT + Duration::from_secs(3), pool.get_background(&config))
+            .await
+            .expect("a dead pooled session must cost one NOOP wait, not a LOGOUT wait on top")
+            .expect("a fresh connection replaces it");
+        pool.return_background(&config, guard).await;
+        assert_eq!(server.connection_count(), 2, "the dead session was replaced");
+    }
+
     /// Fix round 1 (review of this task): the NOOP wait used to vanish —
     /// `reused = true` and `connect_ms = 0` charged it to nothing. It is
     /// exactly the stage the A0 evidence blames for the Gmail stalls, so it

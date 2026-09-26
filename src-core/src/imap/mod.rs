@@ -5,9 +5,11 @@ use async_native_tls::TlsConnector;
 use async_std::net::TcpStream;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tracing::{info, warn};
 
 use crate::transfer_stats::CountingStream;
+pub use crate::transfer_stats::expecting_silence;
 
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
@@ -259,13 +261,32 @@ pub struct LightFullEmail {
 
 // ── Connection creation ─────────────────────────────────────────────────────
 
+/// No bytes from the server for this long while a command is outstanding =
+/// dead socket. A half-open pooled socket (NAT timeout, laptop sleep) takes
+/// the command and never answers; without this, SELECT/FETCH on it hung until
+/// the daemon's 45s body-fetch timeout, and the dead-socket retry never ran
+/// because nothing ever failed (Track A, 2026-09-26). Armed on every write,
+/// reset by every read that returns bytes, so a big body on a slow link still
+/// completes; a throttled Gmail answers each command in ~10s, so this stays
+/// well above that. `CountingStream` enforces it; IDLE's wait is exempt
+/// (`transfer_stats::expecting_silence`).
+pub const CMD_STALL: Duration = Duration::from_secs(15);
+
+/// Per-step bounds on a new connection. Before these only TCP had one, so a
+/// server that accepted the socket and then said nothing held the caller for
+/// minutes. Also used by the connection test.
+pub const DNS_TIMEOUT: Duration = Duration::from_secs(10);
+pub const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const TLS_TIMEOUT: Duration = Duration::from_secs(15);
+pub const GREETING_TIMEOUT: Duration = Duration::from_secs(15);
+pub const AUTH_TIMEOUT: Duration = Duration::from_secs(20);
+
 /// Resolve the config's host:port to IPv4 addresses.
 /// IPv4-only avoids IPv6 connect hangs (especially with Outlook).
 async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>, String> {
     use async_std::net::ToSocketAddrs;
     let addr = format!("{}:{}", config.host, config.effective_port());
-    let addrs: Vec<std::net::SocketAddr> = addr
-        .to_socket_addrs()
+    let addrs: Vec<std::net::SocketAddr> = async_std::io::timeout(DNS_TIMEOUT, addr.to_socket_addrs())
         .await
         .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
         .filter(|a| a.is_ipv4())
@@ -289,12 +310,9 @@ async fn connect_transport(
     config: &ImapConfig,
     addrs: &[std::net::SocketAddr],
 ) -> Result<(Box<dyn ImapTransport>, bool), String> {
-    let tcp = async_std::io::timeout(
-        std::time::Duration::from_secs(15),
-        TcpStream::connect(addrs),
-    )
-    .await
-    .map_err(|e| format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e))?;
+    let tcp = async_std::io::timeout(TCP_CONNECT_TIMEOUT, TcpStream::connect(addrs))
+        .await
+        .map_err(|e| format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e))?;
 
     // Byte counting sits on the raw stream: COMPRESS=DEFLATE wraps the boxed
     // transport later, so what we count here is what crossed the wire.
@@ -305,26 +323,38 @@ async fn connect_transport(
 
     if plaintext_requested && all_loopback {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 — TLS DISABLED for loopback {:?}", addrs);
-        return Ok((Box::new(CountingStream::new(tcp, counters)), false));
+        return Ok((Box::new(CountingStream::new(tcp, counters, CMD_STALL)), false));
     }
     if plaintext_requested {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 ignored — {} is not loopback", config.host);
     }
 
-    let stream = CountingStream::new(tcp, counters);
+    let stream = CountingStream::new(tcp, counters, CMD_STALL);
     match config.effective_security() {
         ImapSecurity::None => {
             info!("[IMAP] imapSecurity=none — connecting to {} without TLS", config.host);
             Ok((Box::new(stream), false))
         }
         ImapSecurity::Ssl => {
-            let tls_stream = build_tls_connector(all_loopback)
-                .connect(&config.host, stream)
+            let connector = build_tls_connector(all_loopback);
+            let tls_stream = bounded_step(TLS_TIMEOUT, connector.connect(&config.host, stream))
                 .await
                 .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
             Ok((Box::new(tls_stream), false))
         }
         ImapSecurity::StartTls => Ok((starttls_upgrade(config, stream, all_loopback).await?, true)),
+    }
+}
+
+/// `fut` bounded by `limit`, a timeout reading as "timed out after Ns" in the
+/// step's own error text.
+async fn bounded_step<T, E: std::fmt::Display>(
+    limit: Duration,
+    fut: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, String> {
+    match async_std::future::timeout(limit, fut).await {
+        Ok(r) => r.map_err(|e| e.to_string()),
+        Err(_) => Err(format!("timed out after {}s", limit.as_secs())),
     }
 }
 
@@ -360,8 +390,7 @@ async fn starttls_upgrade(
     // Consume the greeting (`* OK ...`) — otherwise it would be mistaken for
     // the STARTTLS response.
     let mut greeting = String::new();
-    reader
-        .read_line(&mut greeting)
+    async_std::io::timeout(GREETING_TIMEOUT, reader.read_line(&mut greeting))
         .await
         .map_err(|e| format!("STARTTLS: failed to read greeting from {}: {}", config.host, e))?;
 
@@ -392,8 +421,8 @@ async fn starttls_upgrade(
         // Untagged response (e.g. a CAPABILITY line) — keep reading.
     }
 
-    let tls_stream = build_tls_connector(all_loopback)
-        .connect(&config.host, reader.into_inner())
+    let connector = build_tls_connector(all_loopback);
+    let tls_stream = bounded_step(TLS_TIMEOUT, connector.connect(&config.host, reader.into_inner()))
         .await
         .map_err(|e| format!("STARTTLS TLS handshake with {} failed: {}", config.host, e))?;
 
@@ -411,8 +440,7 @@ async fn authenticate_client(
     greeting_consumed: bool,
 ) -> Result<ImapSession, String> {
     if !greeting_consumed {
-        let _greeting = client
-            .read_response()
+        let _greeting = bounded_step(GREETING_TIMEOUT, client.read_response())
             .await
             .map_err(|e| format!("Failed to read server greeting: {}", e))?;
     }
@@ -424,18 +452,19 @@ async fn authenticate_client(
             .ok_or_else(|| "OAuth2 access token missing".to_string())?;
         info!("[IMAP] Using XOAUTH2 for {} (token length: {})", config.email, token.len());
         let xoauth2 = build_xoauth2(&config.email, token);
-        client
-            .authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
+        let auth = client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()));
+        async_std::future::timeout(AUTH_TIMEOUT, auth)
             .await
+            .map_err(|_| format!("XOAUTH2 auth for {} timed out after {}s", config.email, AUTH_TIMEOUT.as_secs()))?
             .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))
     } else {
         let password = config
             .password
             .as_deref()
             .ok_or_else(|| "Password missing".to_string())?;
-        client
-            .login(&config.email, password)
+        async_std::future::timeout(AUTH_TIMEOUT, client.login(&config.email, password))
             .await
+            .map_err(|_| format!("Login for {} timed out after {}s", config.email, AUTH_TIMEOUT.as_secs()))?
             .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))
     }
 }
