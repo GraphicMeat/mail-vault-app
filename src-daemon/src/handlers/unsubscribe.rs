@@ -160,7 +160,20 @@ fn senders(state: &Arc<DaemonState>, account_id: Option<String>) -> Result<Value
     if account_ids.is_empty() {
         return Ok(json!([]));
     }
-    let begin = begin_snapshot(state, &account_ids);
+    // A sync writing headers mid-walk makes a snapshot stale; that is a
+    // reason to look again, not a failure to show.
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match read_snapshot(state, &account_ids) {
+            Err(code) if code == "snapshotStale" && attempt < 3 => continue,
+            other => return other.map(|rows| Value::Array(senders_from_rows(&rows))),
+        }
+    }
+}
+
+fn read_snapshot(state: &Arc<DaemonState>, account_ids: &[String]) -> Result<Vec<Value>, String> {
+    let begin = begin_snapshot(state, account_ids);
     if begin["ok"] != true {
         return Err(begin["error"]["code"].as_str().unwrap_or("snapshotUnavailable").to_string());
     }
@@ -181,8 +194,7 @@ fn senders(state: &Arc<DaemonState>, account_id: Option<String>) -> Result<Value
         }
     };
     state.insights.release(&id);
-    read?;
-    Ok(Value::Array(senders_from_rows(&rows)))
+    read.map(|()| rows)
 }
 
 /// Is this a response body a sender logo may be? SVG only (an `<img>` never
@@ -422,6 +434,36 @@ mod tests {
         assert_eq!(senders[0]["lastAt"], "2026-09-03T00:00:00Z");
         assert_eq!(senders[0]["listUnsubscribe"], "<https://brand.test/u2>");
         assert_eq!(senders[0]["method"], "one-click");
+    }
+
+    /// Through the real Insights snapshot: the sender shows under all
+    /// accounts and its own, never under another account.
+    #[tokio::test]
+    async fn senders_route_is_scoped_by_account() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        std::fs::write(app_dir.path().join("accounts.json"), json!([{"id": "a"}, {"id": "b"}]).to_string()).unwrap();
+        let seed = |account: &str, from: &str, list: Option<&str>| {
+            crate::custody::with_conn(&s, |c| {
+                use mailvault_core::custody::cache;
+                cache::save_mailboxes(c, account, &json!({"mailboxes":[{"path": "INBOX"}]}).to_string())?;
+                let emails = json!({"emails":[{"uid": 1, "messageId": format!("<1@{account}>"), "subject": "s",
+                    "from": {"address": from}, "listUnsubscribe": list, "receivedAt": "2026-09-01T00:00:00Z"}]});
+                cache::save_headers(c, account, "INBOX", &emails.to_string())
+            })
+            .unwrap();
+        };
+        seed("a", "news@brand.test", Some("<mailto:leave@brand.test>"));
+        seed("b", "friend@x.test", None);
+        let listed = |v: Value| v.as_array().unwrap().iter().map(|s| s["address"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        let all = handle_request_for_test(&s, "unsubscribe.senders", json!({"accountId": null})).await.result.unwrap();
+        assert_eq!(listed(all), vec!["news@brand.test"]);
+        let a = handle_request_for_test(&s, "unsubscribe.senders", json!({"accountId": "a"})).await.result.unwrap();
+        assert_eq!(listed(a.clone()), vec!["news@brand.test"]);
+        assert_eq!(a[0]["method"], "mailto");
+        let b = handle_request_for_test(&s, "unsubscribe.senders", json!({"accountId": "b"})).await.result.unwrap();
+        assert_eq!(b, json!([]));
     }
 
     #[test]
