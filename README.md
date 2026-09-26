@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Read your mail. Keep your mail.</b><br>
-  A local-first email client that files every message on your own disk as a plain <code>.eml</code>, and keeps it after the server lets go.
+  A local-first email client that files every message on your own disk as a plain <code>.eml</code>, so you can delete it from the server and still keep your copy.
 </p>
 
 <p align="center">
