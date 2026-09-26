@@ -57,7 +57,7 @@ describe('Connected Compose Reply Modes', function () {
   let EMAIL = null;
   let accountOne = null;
 
-  /** Click any element by data-testid (the quoted toggle is a plain button). */
+  /** Click any element by data-testid (the context toggle is a plain button). */
   async function clickTestid(testid) {
     const ok = await browser.execute((id) => {
       const el = document.querySelector(`[data-testid="${id}"]`);
@@ -120,7 +120,8 @@ describe('Connected Compose Reply Modes', function () {
     await mailStoreSet({ selectedEmail: null, selectedEmailId: null, selectedThread: null });
     // The last-sent identity is global settings state: a case that seeds one
     // has to put it back, or every later compose in this run opens on it.
-    await browser.execute(() => window.__SETTINGS_STORE__.setState({ lastComposeIdentity: null }));
+    // Same for the reading context: its toggle is remembered for the next reply.
+    await browser.execute(() => window.__SETTINGS_STORE__.setState({ lastComposeIdentity: null, composeContextVisible: true }));
     for (const a of browser.mockAccounts || []) {
       await settingsCall('setSignature', a.id, SIG_OFF);
     }
@@ -130,7 +131,11 @@ describe('Connected Compose Reply Modes', function () {
   // Reply
   // -------------------------------------------------------------------------
 
-  it('prefills a Reply and keeps the original behind a collapsible toggle', async function () {
+  /** Whether the reply's reading context is open, by its toggle's own state. */
+  const contextShown = () => browser.execute(() =>
+    document.querySelector('[data-testid="compose-context-toggle"]')?.getAttribute('aria-expanded') ?? null);
+
+  it('prefills a Reply and keeps the original beside it behind a toggle', async function () {
     await openMode(EMAIL, 'r');
 
     expect(await modalTitle()).toBe('Reply');
@@ -139,23 +144,14 @@ describe('Connected Compose Reply Modes', function () {
     // A plain reply goes to the sender only — nobody is carried into Cc.
     expect(await fieldValue('compose-cc')).toBe('');
 
-    // The original is quoted OUTSIDE the editor, collapsed by default, so the
-    // user types into an empty body.
-    expect(await testidPresent('compose-quoted-toggle')).toBe(true);
-    expect(await testidText('compose-quoted-toggle')).toBe('Show original message');
-    expect(await testidPresent('compose-quoted')).toBe(false);
+    // The original is quoted OUTSIDE the editor, in a reading context shown
+    // beside it by default, so the user types into an empty body.
+    expect(await contextShown()).toBe('true');
     expect((await editorText()) || '').not.toContain('Original Message');
-
-    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
-    await browser.waitUntil(() => testidPresent('compose-quoted'), {
-      timeout: 10_000,
-      interval: 200,
-      timeoutMsg: 'The quoted original did not expand when its toggle was clicked',
-    });
     await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
       timeout: 10_000,
       interval: 200,
-      timeoutMsg: 'The expanded quote never showed the original body',
+      timeoutMsg: 'The reading context never showed the original body',
     });
     const quoted = await quotedText();
     expect(quoted).toContain('Original Message');
@@ -163,15 +159,22 @@ describe('Connected Compose Reply Modes', function () {
     expect(quoted).toContain(SUBJECT);
     // The original body itself, not just its headers.
     expect(quoted).toContain('Original html body');
-    expect(await testidText('compose-quoted-toggle')).toBe('Hide original message');
 
-    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
+    expect(await clickTestid('compose-context-toggle')).toBe(true);
     await browser.waitUntil(async () => !(await testidPresent('compose-quoted')), {
       timeout: 10_000,
       interval: 200,
-      timeoutMsg: 'The quoted original did not collapse again on a second toggle click',
+      timeoutMsg: 'The reading context did not hide when its toggle was clicked',
     });
-    expect(await testidText('compose-quoted-toggle')).toBe('Show original message');
+    expect(await contextShown()).toBe('false');
+
+    expect(await clickTestid('compose-context-toggle')).toBe(true);
+    await browser.waitUntil(() => testidPresent('compose-quoted'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The reading context did not come back on a second toggle click',
+    });
+    expect(await contextShown()).toBe('true');
   });
 
   it('keeps a single "Re:" when replying to a subject that already has one', async function () {
@@ -246,12 +249,10 @@ describe('Connected Compose Reply Modes', function () {
     // A forward has no recipient yet — that is the one thing the user must add.
     expect(await fieldValue('compose-to')).toBe('');
 
-    // Unlike a reply, the original is part of the editable body, so there is no
-    // collapsed-quote toggle to expand.
+    // Unlike a reply, the original is part of the editable body.
     const body = (await editorText()) || '';
     expect(body).toContain('Original Message');
     expect(body).toContain('Original html body');
-    expect(await testidPresent('compose-quoted-toggle')).toBe(false);
 
     expect(await attachments()).toContain('deck.pdf');
     expect(await testidText('compose-attachments')).toContain('1 Attachment(s)');
@@ -338,12 +339,10 @@ describe('Connected Compose Reply Modes', function () {
     expect(await fieldValue('compose-subject')).toBe(`Re: ${SUBJECT}`);
     // The quoted original travels with the draft: losing it on restore would
     // silently strip the conversation out of the reply.
-    expect(await testidPresent('compose-quoted-toggle')).toBe(true);
-    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
     await browser.waitUntil(() => testidPresent('compose-quoted'), {
       timeout: 10_000,
       interval: 200,
-      timeoutMsg: 'The restored draft had a quoted toggle but no quoted original behind it',
+      timeoutMsg: 'The restored draft came back without its reading context',
     });
     await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
       timeout: 10_000,
@@ -370,11 +369,11 @@ describe('Connected Compose Reply Modes', function () {
   });
 
   async function expandQuote() {
-    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
+    // A reply opens with its reading context shown.
     await browser.waitUntil(() => testidPresent('compose-quoted'), {
       timeout: 10_000,
       interval: 200,
-      timeoutMsg: 'The quoted original did not expand when its toggle was clicked',
+      timeoutMsg: 'The reply opened without its quoted original beside it',
     });
     // Long enough for a broken image to fail and a handler to fire.
     await browser.pause(1500);

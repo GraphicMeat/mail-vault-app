@@ -409,18 +409,18 @@ describe('Reply entry points — header, thread message, row menu', function () 
       expect(compose.to).toBe('partner@example.com');
       expect(compose.subject).toBe(`Re: ${CROSS_FOLDER_SUBJECT}`);
 
-      expect(await clickTestid('compose-quoted-toggle')).toBe(true);
+      // A reply opens with the original beside it.
       await waitFor(
         () => testidPresent('compose-quoted'),
         (present) => present,
-        'the quoted original never expanded, so what the reply quotes is unproven',
+        'the reply never showed its quoted original, so what it quotes is unproven',
         10_000,
         200,
       );
       const quoted = await waitFor(
         quotedText,
         (text) => !!text && text.includes(CROSS_FOLDER_INBOX_BODY),
-        'the expanded quote never showed the body of the message it answers',
+        'the quote never showed the body of the message it answers',
         10_000,
         200,
       );
@@ -460,18 +460,17 @@ describe('Reply entry points — header, thread message, row menu', function () 
 
     // The menu only ever holds the row's header: the quote proves the body
     // was resolved before compose opened.
-    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
     await waitFor(
       () => testidPresent('compose-quoted'),
       (present) => present,
-      'the quoted original never expanded on a reply opened from the row menu',
+      'a reply opened from the row menu never showed its quoted original',
       10_000,
       200,
     );
     const quoted = await waitFor(
       quotedText,
       (text) => !!text && text.includes(BODY),
-      'the expanded quote never showed the body the row menu resolved',
+      'the quote never showed the body the row menu resolved',
       10_000,
       200,
     );
@@ -488,8 +487,8 @@ describe('Reply entry points — header, thread message, row menu', function () 
     );
 
     expect(compose.to).toBe(SENDER);
-    // A fresh conversation: no subject, and nothing quoted to toggle.
+    // A fresh conversation: no subject, and no original to read beside it.
     expect(compose.subject).toBe('');
-    expect(await testidPresent('compose-quoted-toggle')).toBe(false);
+    expect(await testidPresent('compose-context-toggle')).toBe(false);
   });
 });
