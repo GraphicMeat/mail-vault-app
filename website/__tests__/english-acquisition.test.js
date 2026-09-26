@@ -134,6 +134,18 @@ describe('English acquisition journey', () => {
     if (text) expect(proof.querySelector('[data-download-total]').textContent).toBe(text);
     expect(proof.querySelector('a').getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app/releases');
   });
+  it('switches the theme from the bar and from the phone menu', () => {
+    const {w,doc}=page('features.html');
+    const [bar,menu]=doc.querySelectorAll('.mv-theme');
+    expect(menu.classList.contains('mv-menu-theme')).toBe(true);
+    const dark=doc.documentElement.classList.contains('dark');
+    menu.click();
+    expect(doc.documentElement.classList.contains('dark')).toBe(!dark);
+    bar.click();
+    expect(doc.documentElement.classList.contains('dark')).toBe(dark);
+    expect(bar.getAttribute('aria-label')).toBe(menu.getAttribute('aria-label'));
+    expect(w.localStorage.theme).toBe(dark ? 'dark' : 'light');
+  });
   it('shows GitHub stars and sends one heart from the header', async () => {
     let posts=0;
     const fetch=vi.fn(async (url,options)=>{
@@ -142,7 +154,7 @@ describe('English acquisition journey', () => {
     });
     const {doc}=page('features.html','',fetch);
     await tick(); await tick();
-    expect([...doc.querySelectorAll('[data-github-stars]')].map(n=>[n.textContent,n.hidden])).toEqual([['1,234',false],['1,234',false]]);
+    expect([...doc.querySelectorAll('[data-github-stars]')].map(n=>[n.textContent,n.hidden])).toEqual([['1,234',false]]);
     expect(doc.querySelector('[data-vote-count]').textContent).toBe('42');
     const heart=doc.querySelector('.mv-nav-social [data-vote]');
     heart.click(); await tick(); await tick();

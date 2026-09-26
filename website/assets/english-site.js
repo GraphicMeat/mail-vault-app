@@ -28,9 +28,10 @@
   try {
     html.classList.toggle('dark', localStorage.theme === 'dark' || (!localStorage.theme && matchMedia('(prefers-color-scheme: dark)').matches));
   } catch { html.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches); }
-  const theme = document.querySelector('.mv-theme');
+  // The bar's theme button, plus its twin in the phone menu.
+  const themes = document.querySelectorAll('.mv-theme');
   function labelTheme() {
-    if (pageLanguage === 'en') theme?.setAttribute('aria-label', html.classList.contains('dark') ? 'Switch to light theme' : 'Switch to dark theme');
+    if (pageLanguage === 'en') themes.forEach(theme => theme.setAttribute('aria-label', html.classList.contains('dark') ? 'Switch to light theme' : 'Switch to dark theme'));
   }
   labelTheme();
   // Screenshots ship in a light and a dark set. `<source media="(prefers-color-
@@ -43,12 +44,12 @@
     shotSources.forEach(source => { source.media = dark ? 'all' : 'not all'; });
   }
   syncShots();
-  theme?.addEventListener('click', () => {
+  themes.forEach(theme => theme.addEventListener('click', () => {
     html.classList.toggle('dark');
     try { localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light'; } catch { /* preference is optional */ }
     labelTheme();
     syncShots();
-  });
+  }));
   document.querySelectorAll('.mv-navlinks a, .mv-mobile-menu nav a').forEach(link => {
     const target = new URL(link.href);
     if (!target.hash && target.pathname === location.pathname) link.setAttribute('aria-current', 'page');

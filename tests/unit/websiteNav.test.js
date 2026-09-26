@@ -56,11 +56,12 @@ describe('website nav', () => {
         const doc = dom.window.document;
         expect([...doc.querySelectorAll('.mv-navlinks a')].map(a => a.getAttribute('href')), file).toEqual(expected);
         expect([...doc.querySelectorAll('.mv-mobile-menu nav > a')].map(a => a.getAttribute('href')), file).toEqual([...expected, '/demo/?lang=en', '/get-started.html?plan=free']);
-        // GitHub stars and the heart sit in the bar on desktop and in the menu on phones.
-        for (const where of ['.mv-nav-social', '.mv-mobile-menu nav .mv-mobile-social']) {
-          expect(doc.querySelector(where + ' a[href="https://github.com/GraphicMeat/mail-vault-app"] [data-github-stars]'), file + where).not.toBeNull();
-          expect(doc.querySelector(where + ' button[data-vote] [data-vote-count]'), file + where).not.toBeNull();
-        }
+        // GitHub stars and the heart sit in the bar at every width; on phones the
+        // theme switch moves into the menu to make room for them.
+        expect(doc.querySelector('.mv-navtools > .mv-nav-social a[href="https://github.com/GraphicMeat/mail-vault-app"] [data-github-stars]'), file).not.toBeNull();
+        expect(doc.querySelector('.mv-navtools > .mv-nav-social button[data-vote] [data-vote-count]'), file).not.toBeNull();
+        expect(doc.querySelector('.mv-mobile-menu nav button.mv-theme.mv-menu-theme'), file).not.toBeNull();
+        expect(doc.querySelector('.mv-mobile-menu summary .mv-menu-label')?.textContent, file).toBeTruthy();
         expect([...doc.querySelectorAll('.mv-navtools > a.mv-button')].map(a => a.getAttribute('href')), file).toEqual(['/demo/?lang=en', '/get-started.html?plan=free']);
         expect(doc.querySelector('.mv-mobile-menu summary'), file).not.toBeNull();
         expect(doc.querySelector('.mv-language a[hreflang="de"]'), file).not.toBeNull();
