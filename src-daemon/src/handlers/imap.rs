@@ -436,8 +436,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let outcome = tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await;
             let t = *timings.lock().expect("timings mutex poisoned");
             let timing_fields = format!(
-                "permit_wait_ms={} connect_ms={} reused={} idle_secs_since_last_use={} select_ms={} fetch_ms={} bytes={} attempt={}",
-                t.permit_wait_ms, t.connect_ms, t.reused, t.idle_secs_since_last_use, t.select_ms, t.fetch_ms, t.bytes, t.attempt
+                "permit_wait_ms={} connect_ms={} reused={} idle_secs_since_last_use={} noop_ms={} select_ms={} fetch_ms={} bytes={} attempt={}",
+                t.permit_wait_ms, t.connect_ms, t.reused, t.idle_secs_since_last_use, t.noop_ms, t.select_ms, t.fetch_ms, t.bytes, t.attempt
             );
 
             let email = match outcome {

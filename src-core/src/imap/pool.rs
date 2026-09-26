@@ -33,17 +33,30 @@ pub struct PooledSession {
 /// shows which stage actually stalled instead of just a total.
 ///
 /// `checkout` fills `permit_wait_ms`/`connect_ms`/`reused`/
-/// `idle_secs_since_last_use`/`attempt`; a caller whose `f` does a SELECT and
-/// a FETCH (`fetch_email_by_uid_light_timed`) fills `select_ms`/`fetch_ms`/
-/// `bytes` through the same lock. `connect_ms` is 0 when `reused` is true —
-/// no connect happened — and `idle_secs_since_last_use` is 0 when `reused` is
-/// false, for the same reason.
+/// `idle_secs_since_last_use`/`noop_ms`/`attempt`; a caller whose `f` does a
+/// SELECT and a FETCH (`fetch_email_by_uid_light_timed`) fills `select_ms`/
+/// `fetch_ms`/`bytes` through the same lock. `connect_ms` is 0 when `reused`
+/// is true — no connect happened — and `idle_secs_since_last_use` is 0 when
+/// `reused` is false, for the same reason.
+///
+/// `noop_ms` (Fix round 1, review of this task): the pool's own health check
+/// on a session older than `NOOP_SKIP_SECS` — up to `NOOP_TIMEOUT` (15s since
+/// A0) when the peer is slow rather than dead. That wait used to be invisible:
+/// it happens inside `get_from_pool` and, on the common case where the slow
+/// session turns out to still be alive, ends with `reused = true` and
+/// `connect_ms = 0`, so none of the other fields ever charged for it. It is
+/// exactly the stage the A0 daemon-log evidence blames for the 09-26 Gmail
+/// stalls. 0 when the check was skipped (reused within `NOOP_SKIP_SECS`, or a
+/// fresh connection was made instead of a pooled one). When the NOOP fails or
+/// times out and a new connection follows, `connect_ms` counts only the new
+/// connection — `noop_ms` is subtracted out — so the two fields never overlap.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ReadTimings {
     pub permit_wait_ms: u64,
     pub connect_ms: u64,
     pub reused: bool,
     pub idle_secs_since_last_use: u64,
+    pub noop_ms: u64,
     pub select_ms: u64,
     pub fetch_ms: u64,
     pub bytes: u64,
@@ -223,14 +236,22 @@ impl ImapPool {
         let permit_wait_ms = wait_start.elapsed().as_millis() as u64;
 
         let connect_start = Instant::now();
-        let (session, last_selected, reused, idle_secs_since_last_use) = if fresh {
+        let (session, last_selected, reused, idle_secs_since_last_use, noop_ms) = if fresh {
             info!("Creating new IMAP connection for {} (retry)", config.email);
-            (create_imap_session(config, self).await?, None, false, 0)
+            (create_imap_session(config, self).await?, None, false, 0, 0)
         } else {
             let pool = if priority { &self.priority } else { &self.background };
             self.get_from_pool(pool, config).await?
         };
-        let connect_ms = if reused { 0 } else { connect_start.elapsed().as_millis() as u64 };
+        // `connect_start` also spans a failed/timed-out NOOP when the pooled
+        // session turned out to be dead (get_from_pool falls through to a new
+        // connection in that branch) — subtract it out so `connect_ms` is
+        // only the new connection, not the wasted health check too.
+        let connect_ms = if reused {
+            0
+        } else {
+            (connect_start.elapsed().as_millis() as u64).saturating_sub(noop_ms)
+        };
 
         if let Some(t) = timings {
             *t.lock().expect("timings mutex poisoned") = ReadTimings {
@@ -238,6 +259,7 @@ impl ImapPool {
                 connect_ms,
                 reused,
                 idle_secs_since_last_use,
+                noop_ms,
                 attempt: if fresh { 2 } else { 1 },
                 select_ms: 0,
                 fetch_ms: 0,
@@ -467,16 +489,21 @@ impl ImapPool {
         logout_sessions(to_logout).await;
     }
 
-    /// `bool`/`u64` in the return: whether the session came from the pool, and
-    /// (when it did) how many seconds it sat there — Task A1's `reused` /
-    /// `idle_secs_since_last_use`, read by `checkout` and otherwise unused
-    /// here.
+    /// `bool`/`u64`/`u64` in the return: whether the session came from the
+    /// pool, how many seconds it sat there, and how long the NOOP health
+    /// check took (0 if skipped) — Task A1's `reused` / `idle_secs_since_last_use`
+    /// / `noop_ms`, read by `checkout` and otherwise unused here.
     async fn get_from_pool(
         &self,
         pool: &Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
         config: &ImapConfig,
-    ) -> Result<(ImapSession, Option<String>, bool, u64), String> {
+    ) -> Result<(ImapSession, Option<String>, bool, u64, u64), String> {
         let key = conn_key(config);
+        // Set only when the branch below actually runs the NOOP — carried
+        // forward to the fallthrough "create new connection" case too, so a
+        // NOOP that timed out or came back stale still reports its cost even
+        // though the session it checked is not the one returned.
+        let mut noop_ms = 0u64;
 
         // Try to reuse existing connection from the Vec
         if let Some(pooled) = {
@@ -489,14 +516,20 @@ impl ImapPool {
 
             // Skip NOOP if session was used recently (within NOOP_SKIP_SECS)
             if idle_secs < NOOP_SKIP_SECS {
-                return Ok((session, last_sel, true, idle_secs));
+                return Ok((session, last_sel, true, idle_secs, 0));
             }
 
             // Verify the session is still alive with a NOOP (outside lock).
             // Both the NOOP and the follow-up logout are bounded: a half-open
-            // socket answers neither.
-            match tokio::time::timeout(NOOP_TIMEOUT, session.noop()).await {
-                Ok(Ok(_)) => return Ok((session, last_sel, true, idle_secs)),
+            // socket answers neither. Timed regardless of outcome (Fix round
+            // 1): a slow-but-alive reply can take up to NOOP_TIMEOUT, and that
+            // wait is exactly what A0 raised the timeout to tolerate — it must
+            // show up in `noop_ms` even when the session is kept and reused.
+            let noop_start = Instant::now();
+            let noop_result = tokio::time::timeout(NOOP_TIMEOUT, session.noop()).await;
+            noop_ms = noop_start.elapsed().as_millis() as u64;
+            match noop_result {
+                Ok(Ok(_)) => return Ok((session, last_sel, true, idle_secs, noop_ms)),
                 Ok(Err(e)) => {
                     warn!("Pooled IMAP session stale for {}: {}, creating new", config.email, e);
                     let _ = tokio::time::timeout(NOOP_TIMEOUT, session.logout()).await;
@@ -525,7 +558,7 @@ impl ImapPool {
             warn!("IMAP connection failed for {}: {}", config.email, e);
             e
         })?;
-        Ok((session, None, false, 0))
+        Ok((session, None, false, 0, noop_ms))
     }
 
     async fn return_to_pool(
@@ -850,6 +883,41 @@ mod noop_timeout_tests {
             server.connection_count(),
             after_first,
             "a slow but live NOOP must not force a relogin"
+        );
+    }
+
+    /// Fix round 1 (review of this task): the NOOP wait used to vanish —
+    /// `reused = true` and `connect_ms = 0` charged it to nothing. It is
+    /// exactly the stage the A0 evidence blames for the Gmail stalls, so it
+    /// needs its own field rather than silently undercounting the total.
+    #[tokio::test]
+    async fn a_slow_but_live_noop_reports_its_cost_as_noop_ms() {
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .fault(Trigger::on("NOOP"), Action::Delay(Duration::from_secs(6))),
+        );
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let guard = pool.get_background(&config).await.expect("first checkout");
+        pool.return_background(&config, guard).await;
+        age_pooled_sessions(&pool, &config, Duration::from_secs(NOOP_SKIP_SECS + 1)).await;
+
+        let timings = std::sync::Mutex::new(ReadTimings::default());
+        let guard = pool
+            .checkout(&config, false, false, Some(&timings))
+            .await
+            .expect("second checkout must survive the slow NOOP");
+        pool.return_background(&config, guard).await;
+
+        let t = *timings.lock().unwrap();
+        assert!(t.reused, "the slow-but-live session must still be the one reused");
+        assert_eq!(t.connect_ms, 0, "no connect happened on a reused session");
+        assert!(
+            t.noop_ms >= 5_000,
+            "the 6s NOOP delay must show up in noop_ms, not vanish into connect_ms=0: got {}",
+            t.noop_ms
         );
     }
 }

@@ -345,6 +345,7 @@ async fn run_read_timed_reports_stage_costs_and_reuse() {
     assert!(!t.reused, "the first checkout is a brand-new connection");
     assert_eq!(t.attempt, 1);
     assert_eq!(t.idle_secs_since_last_use, 0, "nothing to be idle since on a new connection");
+    assert_eq!(t.noop_ms, 0, "a brand-new connection never runs the NOOP health check");
     assert!(t.bytes > 0, "a real message body must be counted");
 
     // Second call: the session the first call returned is reused.
@@ -368,6 +369,7 @@ async fn run_read_timed_reports_stage_costs_and_reuse() {
     assert!(t.reused, "the second checkout must reuse the pooled session");
     assert_eq!(t.connect_ms, 0, "no connect happened on a reused session");
     assert_eq!(t.attempt, 1, "the session answered fine, no retry needed");
+    assert_eq!(t.noop_ms, 0, "well within NOOP_SKIP_SECS, so the health check itself is skipped");
     assert!(t.bytes > 0);
     assert_eq!(server.connection_count(), 1, "only one TCP connection for both fetches");
 }

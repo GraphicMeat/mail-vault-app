@@ -3027,6 +3027,12 @@ pub async fn fetch_email_by_uid_light(
     fetch_email_by_uid_light_timed(session, mailbox, uid, &timings).await
 }
 
+/// Lock `timings` and mutate it — a one-line stand-in for the lock/mutate/drop
+/// this file would otherwise repeat at every stage boundary.
+fn with_timings(timings: &std::sync::Mutex<pool::ReadTimings>, f: impl FnOnce(&mut pool::ReadTimings)) {
+    f(&mut timings.lock().expect("timings mutex poisoned"));
+}
+
 /// Same as `fetch_email_by_uid_light`, but writes `select_ms`/`fetch_ms`/
 /// `bytes` into `timings` as the SELECT and the FETCH each finish, rather
 /// than only on a successful return — `imap_get_email_light`'s stall
@@ -3040,7 +3046,7 @@ pub async fn fetch_email_by_uid_light_timed(
 ) -> Result<Option<LightFullEmail>, String> {
     let select_start = std::time::Instant::now();
     let _mbox = select_mailbox(session, mailbox).await?;
-    timings.lock().expect("timings mutex poisoned").select_ms = select_start.elapsed().as_millis() as u64;
+    with_timings(timings, |t| t.select_ms = select_start.elapsed().as_millis() as u64);
 
     let fetch_start = std::time::Instant::now();
     let fetch_stream = session
@@ -3060,7 +3066,7 @@ pub async fn fetch_email_by_uid_light_timed(
             Err(e) => return Err(format!("UID FETCH {} failed: {}", uid, e)),
         }
     }
-    timings.lock().expect("timings mutex poisoned").fetch_ms = fetch_start.elapsed().as_millis() as u64;
+    with_timings(timings, |t| t.fetch_ms = fetch_start.elapsed().as_millis() as u64);
 
     let fetch = match fetches.first() {
         Some(f) => f,
@@ -3081,7 +3087,7 @@ pub async fn fetch_email_by_uid_light_timed(
     let body = fetch
         .body()
         .ok_or_else(|| "No body in FETCH response".to_string())?;
-    timings.lock().expect("timings mutex poisoned").bytes = body.len() as u64;
+    with_timings(timings, |t| t.bytes = body.len() as u64);
 
     let parsed = mailparse::parse_mail(body)
         .map_err(|e| format!("Failed to parse email: {}", e))?;
