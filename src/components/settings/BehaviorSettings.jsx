@@ -1,7 +1,7 @@
 import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore, SWIPE_ACTIONS } from '../../stores/settingsStore';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
 import { ComposeOpenMode } from './ComposeOpenMode';

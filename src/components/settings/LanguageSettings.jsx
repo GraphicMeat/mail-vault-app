@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { LOCALES, setLocale, useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { TranslationIssueReport } from './TranslationIssueReport';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 /**
  * The language is picked by hand and defaults to English — the OS locale is
@@ -14,7 +15,7 @@ export function LanguageSettings() {
   const active = useSettingsStore(s => s.language);
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       <div>
         <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.language.title')}</h4>
         <p className="text-xs text-mail-text-muted mb-4">{t('settings.language.subtitle')}</p>
@@ -57,6 +58,6 @@ export function LanguageSettings() {
       </div>
 
       <TranslationIssueReport />
-    </div>
+    </SettingsPageLayout>
   );
 }

@@ -4,12 +4,13 @@ import { useSettingsStore } from '../../stores/settingsStore';
 
 // See aiClient.js's FALLBACK_AI_SETTINGS.
 const FALLBACK_AI_SETTINGS = { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false };
-import { ToggleSwitch } from './ToggleSwitch';
-import { SettingRow } from './SettingRow';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { SettingRow } from '../ui/SettingRow';
 import { Button } from '../ui/Button';
 import { AiContextPreview } from '../ai/AiContextPreview';
 import { currentProvider, listProviders, generate, setEndpointKey } from '../../services/aiClient';
 import { useT } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 const TEST_PROMPT = 'Reply with exactly one short sentence confirming you received this.';
 
@@ -74,7 +75,7 @@ export function AiProvidersSettings() {
   };
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       <SettingRow
         label={t('ai.settings.enable')}
         description={t('ai.settings.enableHint')}
@@ -176,6 +177,6 @@ export function AiProvidersSettings() {
         onCancel={() => setPendingTest(false)}
         onConfirm={confirmTest}
       />
-    </div>
+    </SettingsPageLayout>
   );
 }

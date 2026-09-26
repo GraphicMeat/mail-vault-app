@@ -4,7 +4,7 @@ import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SearchIndexSettings } from './SearchIndexSettings';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
@@ -28,6 +28,7 @@ import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, useT  } from '../../i18n/index.js';
 import { formatCount } from '../../utils/formatCount';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
@@ -138,7 +139,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
   };
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {/* Current Storage Status */}
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
@@ -791,6 +792,6 @@ export function StorageSettings({ accounts, onUpgrade }) {
         }}
       />
 
-    </div>
+    </SettingsPageLayout>
   );
 }

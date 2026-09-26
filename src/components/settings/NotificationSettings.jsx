@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
 import { getNotificationDecisions, clearNotificationDecisions } from '../../stores/focusStore';
 import { reasonI18nKey } from '../../utils/notificationPolicy.js';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Bell, ChevronUp, ChevronDown, HardDrive, Mail, Volume2, Star, History, Trash2 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { useT } from '../../i18n/index.js';

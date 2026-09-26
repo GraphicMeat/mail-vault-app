@@ -4,7 +4,7 @@ import { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } from '../..
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { ViewEditor } from '../ViewEditor';
 import { Button } from '../ui/Button';
-import { SettingsSection } from '../ui/SettingsForm';
+import { SettingsSection, SettingsPageLayout } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 import { ViewIcon } from '../ViewIcon';
 import { AccountReorderList } from './AccountReorderList';
@@ -97,7 +97,7 @@ export function ViewsSettings({ onUpgrade }) {
 
   const editing = views.find(view => view.id === editingId);
 
-  return <section className="views-settings settings-form" aria-label={t('views.section')}>
+  return <SettingsPageLayout as="section" spaced={false} className="views-settings" aria-label={t('views.section')}>
     <SettingsSection>
       <Button variant="secondary" size="sm" type="button" data-testid="views-new" disabled={full}
         aria-label={t('views.new')} onClick={startNew}><Plus size={14} /> {t('views.new')}</Button>
@@ -147,5 +147,5 @@ export function ViewsSettings({ onUpgrade }) {
         setError(cause?.message || String(cause));
       } finally { switching.current = false; }
     }} />}
-  </section>;
+  </SettingsPageLayout>;
 }

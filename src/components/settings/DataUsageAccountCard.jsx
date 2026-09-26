@@ -1,6 +1,6 @@
 import React, { forwardRef, useState } from 'react';
 import { useSettingsStore, getAccountColor, getAccountInitial } from '../../stores/settingsStore';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
 import { isGmailAccount, resolveDailyLimitBytes } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';

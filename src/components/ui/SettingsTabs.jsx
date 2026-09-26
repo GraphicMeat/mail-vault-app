@@ -1,4 +1,5 @@
 import React, { useId, useRef, useEffect } from 'react';
+import { SettingsPageLayout } from './SettingsForm';
 
 /** The same keyboard navigation and pinned tab row for every settings subpage. */
 export function SettingsTabs({ tabs, value, onChange, label, children }) {
@@ -29,10 +30,9 @@ export function SettingsTabs({ tabs, value, onChange, label, children }) {
           </button>
         ))}
       </div>
-      <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${value}`}
-        tabIndex={0} className="settings-form space-y-6">
+      <SettingsPageLayout id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${value}`} tabIndex={0}>
         {children}
-      </div>
+      </SettingsPageLayout>
     </div>
   );
 }

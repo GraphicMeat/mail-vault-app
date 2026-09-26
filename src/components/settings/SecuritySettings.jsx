@@ -1,9 +1,10 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT, getLocale } from '../../i18n/index.js';
 import { SafetyAlertLegend } from '../SafetyAlertLegend.jsx';
+import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
 export function SecuritySettings() {
   const t = useT();
@@ -17,11 +18,8 @@ export function SecuritySettings() {
   const setLinkSafetyClickConfirm = useSettingsStore(s => s.setLinkSafetyClickConfirm);
 
   return (
-    <div className="settings-form space-y-6">
-      <section className="settings-section">
-        <h4 className="flex items-center gap-2 font-semibold text-mail-text mb-5">
-          <Shield size={18} className="text-mail-accent-text" />{t('settings.tab.security')}
-        </h4>
+    <SettingsPageLayout>
+      <SettingsCard icon={Shield} headingClassName="mb-5" title={t('settings.tab.security')}>
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
@@ -44,7 +42,7 @@ export function SecuritySettings() {
         </div>
       </div>
 
-      </section>
+      </SettingsCard>
 
       {/* Every mark the app can put on a message, with the screenshot of the
           alert it opens. This used to be two lines covering only the LINK
@@ -58,6 +56,6 @@ export function SecuritySettings() {
           {t('settings.security.allScanningPerformedLocallyDevice')}
         </p>
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 }

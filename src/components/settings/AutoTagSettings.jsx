@@ -8,9 +8,9 @@ import { useMailStore } from '../../stores/mailStore';
 import { currentProvider } from '../../services/aiClient';
 import { AiContextPreview } from '../ai/AiContextPreview';
 import { Button } from '../ui/Button';
-import { SettingsField, SettingsSection, SegmentedControl } from '../ui/SettingsForm';
+import { SettingsField, SettingsSection, SegmentedControl, SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 import { TomSelectField } from '../ui/TomSelectField';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
 
 const EMPTY_CONSTRAINTS = {
@@ -253,12 +253,8 @@ export function AutoTagSettings() {
   const backfillState = editing?.mode === 'edit' ? backfills[editing.id] : null;
 
   return (
-    <div className="settings-form space-y-6">
-      <div data-testid="settings-auto-tags" className="settings-section">
-        <h4 className="font-semibold text-mail-text mb-2 flex items-center gap-2">
-          <Tag size={18} className="text-mail-accent-text" />
-          {t('autoTag.tabLabel')}
-        </h4>
+    <SettingsPageLayout>
+      <SettingsCard data-testid="settings-auto-tags" icon={Tag} headingClassName="mb-2" title={t('autoTag.tabLabel')}>
         <p className="text-sm text-mail-text-muted mb-4">{t('autoTag.intro')}</p>
 
         <div className="space-y-3">
@@ -457,7 +453,7 @@ export function AutoTagSettings() {
             )}
           </AnimatePresence>
         </div>
-      </div>
+      </SettingsCard>
 
       <AiContextPreview
         open={pendingRemoteConfirm}
@@ -466,6 +462,6 @@ export function AutoTagSettings() {
         onCancel={() => setPendingRemoteConfirm(false)}
         onConfirm={confirmAllowRemote}
       />
-    </div>
+    </SettingsPageLayout>
   );
 }

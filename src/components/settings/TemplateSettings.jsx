@@ -9,6 +9,7 @@ import {
   Save,
 } from 'lucide-react';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
 export function TemplateSettings() {
   const t = useT();
@@ -24,13 +25,8 @@ export function TemplateSettings() {
   const [templateBody, setTemplateBody] = useState('');
 
   return (
-    <div className="settings-form space-y-6">
-      <div data-testid="settings-templates" className="settings-section">
-        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <FileText size={18} className="text-mail-accent-text" />
-          {t('settings.templates.emailTemplates')}
-        </h4>
-
+    <SettingsPageLayout>
+      <SettingsCard data-testid="settings-templates" icon={FileText} headingClassName="mb-4" title={t('settings.templates.emailTemplates')}>
         <p className="text-sm text-mail-text-muted mb-4">
           {t('settings.templates.createReusableTemplatesCommonEmails')}
         </p>
@@ -167,7 +163,7 @@ export function TemplateSettings() {
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </SettingsCard>
+    </SettingsPageLayout>
   );
 }

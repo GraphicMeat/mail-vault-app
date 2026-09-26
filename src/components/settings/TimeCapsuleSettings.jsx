@@ -3,6 +3,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { Clock, Lock, Info } from 'lucide-react';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { useT } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function TimeCapsuleSettings() {
   const t = useT();
@@ -15,7 +16,7 @@ export function TimeCapsuleSettings() {
 
   if (!isPremium) {
     return (
-      <div className="settings-form">
+      <SettingsPageLayout spaced={false}>
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-mail-text mb-2">{t('settings.timeCapsule.timeCapsuleRequiresPremium')}</h3>
@@ -24,12 +25,12 @@ export function TimeCapsuleSettings() {
           </p>
           <PremiumFeaturesLink className="mt-4" />
         </div>
-      </div>
+      </SettingsPageLayout>
     );
   }
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {/* Explainer */}
       <div className="settings-section">
         <div className="flex items-center gap-3 mb-3">
@@ -131,6 +132,6 @@ export function TimeCapsuleSettings() {
       <p className="text-xs text-mail-text-muted">
         {t('settings.timeCapsule.canAlwaysTakeManualSnapshot')}
       </p>
-    </div>
+    </SettingsPageLayout>
   );
 }

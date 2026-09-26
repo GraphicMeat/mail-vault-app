@@ -3,7 +3,7 @@ import { BehaviorSettings } from './BehaviorSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { ShortcutsSettings } from './ShortcutsSettings';
 import { FieldsSettings } from './FieldsSettings';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs } from '../ui/SettingsTabs';
 import { useT } from '../../i18n/index.js';
 
 const validSubTab = value => ['behavior', 'notifications', 'fields', 'shortcuts'].includes(value) ? value : 'behavior';

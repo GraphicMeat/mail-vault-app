@@ -15,6 +15,7 @@ import { Dialog } from '../ui/Dialog';
 import { Z } from '../ui/layers';
 import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
+import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
 // ponytail: same two links as the native Help menu (src-tauri/src/main.rs).
 // Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
@@ -42,13 +43,8 @@ export function HelpSettings({ onClose, onReportBug }) {
 
   return (
     <>
-    <div className="settings-form space-y-6">
-      <div className="settings-section">
-        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Mail size={18} className="text-mail-accent-text" />
-          Help & Support
-        </h4>
-
+    <SettingsPageLayout>
+      <SettingsCard icon={Mail} headingClassName="mb-4" title={t('settings.tab.help')}>
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
@@ -135,8 +131,8 @@ export function HelpSettings({ onClose, onReportBug }) {
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </SettingsCard>
+    </SettingsPageLayout>
 
     <Dialog open={galleryOpen} onClose={() => setGalleryOpen(false)} z={Z.alert} portal size="lg"
             aria-labelledby={galleryTitleId}

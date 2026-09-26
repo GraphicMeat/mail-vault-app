@@ -3,8 +3,9 @@ import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import DataUsageAccountCard from './DataUsageAccountCard';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Button } from '../ui/Button';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 
 const REFRESH_MS = 30_000;
@@ -54,7 +55,7 @@ export default function DataUsageSettings({ initialAccountId }) {
   }, [initialAccountId]);
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {error && (
         <div role="alert" className="flex items-center justify-between gap-4 text-sm text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-4">
           <div><p className="font-medium">{t('settings.dataUsage.loadFailed')}</p><p className="text-xs mt-1 break-words">{error}</p></div>
@@ -89,6 +90,6 @@ export default function DataUsageSettings({ initialAccountId }) {
           <p className="text-sm text-mail-text-muted">{t('settings.dataUsage.addEmailAccountFirstSee')}</p>
         </div>
       )}
-    </div>
+    </SettingsPageLayout>
   );
 }

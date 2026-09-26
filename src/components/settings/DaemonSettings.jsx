@@ -7,6 +7,7 @@ import { t, useT  } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PendingActionsSettings } from './PendingActionsSettings';
 import { DaemonAlwaysOn } from './DaemonAlwaysOn';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function DaemonSettings() {
   const t = useT();
@@ -34,7 +35,7 @@ export function DaemonSettings() {
   useEffect(() => { checkConnection(); }, []);
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {/* Connection Status */}
       <div className="settings-section">
         <div className="flex items-center gap-3 mb-4">
@@ -86,6 +87,6 @@ export function DaemonSettings() {
       <div className="text-xs text-mail-text-muted space-y-1">
         {isDemo ? <><p>{t('settings.daemon.demoAboutTab')}</p><p>{t('settings.daemon.demoAboutNoHelper')}</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t(alwaysOn ? 'settings.daemon.alwaysOn.aboutRunsAtLogin' : 'settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 }

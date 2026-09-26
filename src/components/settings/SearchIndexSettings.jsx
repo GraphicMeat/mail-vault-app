@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { status, rebuild, destroy, onProgress, onDaemonReconnected } from '../../services/searchIndex';
 import { formatBytes } from '../../utils/formatBytes';

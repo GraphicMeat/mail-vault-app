@@ -11,6 +11,7 @@ import {
   Info, Brain, ChevronDown, ChevronRight, Save, Plus,
 } from 'lucide-react';
 import { t as tr, tErr, useT  } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function AISettings() {
   const t = useT();
@@ -80,7 +81,7 @@ export function AISettings() {
 
   if (!isPremium) {
     return (
-      <div className="settings-form">
+      <SettingsPageLayout spaced={false}>
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-mail-text mb-2">{t('settings.ai.aiFeaturesRequirePremium')}</h3>
@@ -89,12 +90,12 @@ export function AISettings() {
           </p>
           <PremiumFeaturesLink className="mt-4" />
         </div>
-      </div>
+      </SettingsPageLayout>
     );
   }
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {error && (
         <div className="p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-xs text-mail-danger flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
@@ -378,6 +379,6 @@ export function AISettings() {
           )}
         </form>
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 }

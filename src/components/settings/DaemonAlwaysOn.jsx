@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { SettingRow } from './SettingRow';
-import { ToggleSwitch } from './ToggleSwitch';
+import { SettingRow } from '../ui/SettingRow';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useT } from '../../i18n/index.js';
 

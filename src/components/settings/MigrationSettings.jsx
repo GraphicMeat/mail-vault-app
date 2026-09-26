@@ -18,6 +18,7 @@ import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { t, useT  } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 import { formatCount } from '../../utils/formatCount';
 
 function formatDuration(secs) {
@@ -319,7 +320,7 @@ export default function MigrationSettings({ onUpgrade }) {
 
   // ---- Premium gate ----
   const mainContent = (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       {/* Error display */}
       {error && (
         <div className="bg-mail-danger/10 border border-mail-danger/30 rounded-lg p-3 flex items-start gap-2">
@@ -641,12 +642,12 @@ export default function MigrationSettings({ onUpgrade }) {
           </div>
         )}
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 
   if (!isPaidUser) {
     return (
-      <div className="settings-form">
+      <SettingsPageLayout spaced={false}>
         <section className="settings-feature-gate">
           <ArrowLeftRight size={32} className="text-mail-accent-text" />
           <h3 className="text-lg font-semibold text-mail-text">{t('common.premiumFeature')}</h3>
@@ -654,7 +655,7 @@ export default function MigrationSettings({ onUpgrade }) {
           {!IS_APPSTORE_BUILD && <p className="text-xs text-mail-text-muted">{priceBlurb}</p>}
           {!IS_APPSTORE_BUILD && onUpgrade && <Button variant="primary" onClick={onUpgrade}>{t('common.upgrade')}</Button>}
         </section>
-      </div>
+      </SettingsPageLayout>
     );
   }
 

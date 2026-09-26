@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { SettingsTabs } from '../SettingsTabs';
+import { SettingsTabs } from '../../ui/SettingsTabs';
 import { ColorSchemeSettings } from '../ColorSchemeSettings';
 import { useThemeStore } from '../../../stores/themeStore';
 import { useMailStore } from '../../../stores/mailStore';

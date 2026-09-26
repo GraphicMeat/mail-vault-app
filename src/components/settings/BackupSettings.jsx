@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import BackupRestore from './BackupRestore';
 import BackupConfig from './BackupConfig';
 import BackupSchedule from './BackupSchedule';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs } from '../ui/SettingsTabs';
 import { t, useT } from '../../i18n/index.js';
 
 const backupSubTabs = () => ([

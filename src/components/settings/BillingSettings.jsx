@@ -34,6 +34,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
@@ -450,7 +451,7 @@ export function BillingSettings({ onNavigate }) {
   };
 
   return (
-    <div ref={rootRef} className="settings-form space-y-6">
+    <SettingsPageLayout ref={rootRef}>
       {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
         <div className="p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20 text-xs text-mail-warning">
@@ -796,6 +797,6 @@ export function BillingSettings({ onNavigate }) {
           onClose={() => setLogoutToast(null)}
         />
       )}
-    </div>
+    </SettingsPageLayout>
   );
 }

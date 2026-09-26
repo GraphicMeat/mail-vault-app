@@ -18,6 +18,7 @@ import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, tErr, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
+import { SettingsPageLayout } from './ui/SettingsForm';
 
 const ROW_HEIGHT = 56;
 
@@ -137,7 +138,7 @@ function PremiumGate({ onUpgrade }) {
 export function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onRetry, onDelete, onConfirmDelete, accountEmail }) {
   const t = useT();
   return (
-    <div className="settings-form space-y-6 overflow-y-auto h-full">
+    <SettingsPageLayout className="overflow-y-auto h-full">
       {/* Header card */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -214,7 +215,7 @@ export function SnapshotList({ snapshots, loading, creating, error, confirmDelet
           ))}
         </div>
       )}
-    </div>
+    </SettingsPageLayout>
   );
 }
 

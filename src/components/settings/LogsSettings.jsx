@@ -10,6 +10,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function LogsSettings() {
   const t = useT();
@@ -41,7 +42,7 @@ export function LogsSettings() {
   }, []);
 
   return (
-    <div className="settings-form space-y-6 h-full flex flex-col">
+    <SettingsPageLayout className="h-full flex flex-col">
       <div className="settings-section flex-1 flex flex-col min-h-0">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h4 className="font-semibold text-mail-text flex items-center gap-2">
@@ -186,6 +187,6 @@ export function LogsSettings() {
           )}
         </div>
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 }

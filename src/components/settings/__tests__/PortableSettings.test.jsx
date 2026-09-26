@@ -67,6 +67,18 @@ describe('PortableSettings', () => {
     expect(screen.queryByTestId('portable-upsell')).toBeNull();
   });
 
+  // Every settings page hand-rolled this wrapper, and Portable forgot it —
+  // see settingsPageLayout.test.jsx for the guard that now catches a repeat.
+  it('renders the upsell and the wizard inside the shared settings-form page shell', async () => {
+    useSettingsStore.setState({ billingProfile: null });
+    render(<PortableSettings onUpgrade={() => {}} />);
+    expect((await screen.findByTestId('portable-upsell')).closest('.settings-form')).toBeTruthy();
+    cleanup();
+    useSettingsStore.setState({ billingProfile: PREMIUM });
+    render(<PortableSettings />);
+    expect((await screen.findByTestId('portable-create')).closest('.settings-form')).toBeTruthy();
+  });
+
   it('shows the free space against what the copy needs once a drive is picked', async () => {
     await fillWizard();
     expect(daemonCall).toHaveBeenCalledWith('portable.estimate', { dest: '/Volumes/USB' });

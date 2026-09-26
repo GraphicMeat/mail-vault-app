@@ -5,7 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';
-import { SettingsTabs } from '../settings/SettingsTabs';
+import { SettingsTabs } from '../ui/SettingsTabs';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { QuickActions } from '../QuickActions';
 import { ColorOptionPreview } from '../settings/PreferencePreview';

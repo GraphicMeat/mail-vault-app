@@ -10,7 +10,7 @@ import { suggestSendAsAddresses } from '../../utils/sendAsSuggestions';
 import { isFastmailAccount } from '../AccountModal.jsx';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs } from '../ui/SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
 import { AccountTransfer } from './AccountTransfer';
 import '../../styles/account-settings-navigation.css';

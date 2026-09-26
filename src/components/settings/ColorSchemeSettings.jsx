@@ -2,7 +2,7 @@ import React from 'react';
 import { Check, Moon, Sun } from 'lucide-react';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { SettingRow } from './SettingRow';
+import { SettingRow } from '../ui/SettingRow';
 import { ColorOptionPreview, EmailThemePreview } from './PreferencePreview';
 import { useT } from '../../i18n';
 

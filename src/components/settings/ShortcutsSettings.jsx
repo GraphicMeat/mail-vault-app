@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../stores/settingsStore';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 

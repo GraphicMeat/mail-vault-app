@@ -3,7 +3,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { backupScheduler } from '../../services/backupScheduler';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import BackupAccountCard from './BackupAccountCard';
 import {
   Clock,

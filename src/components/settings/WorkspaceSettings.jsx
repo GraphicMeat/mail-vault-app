@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 import { Check, Columns, Rows } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { SettingRow } from './SettingRow';
+import { SettingRow } from '../ui/SettingRow';
 import { SidebarLayoutPreview, WorkspacePreview } from './PreferencePreview';
 import { useT } from '../../i18n/index.js';
 

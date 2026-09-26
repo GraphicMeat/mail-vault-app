@@ -10,6 +10,7 @@ import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { formatBytes } from '../../utils/formatBytes';
 import { TRANSFER_INPUT } from '../transfer/transferStyles';
 import { useT } from '../../i18n/index.js';
+import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
 /** Same floor the daemon enforces (handlers/portable.rs MIN_PASSPHRASE). */
 const MIN_PASSWORD = 12;
@@ -26,14 +27,15 @@ const quit = () => import('@tauri-apps/plugin-process').then(m => m.exit(0)).cat
  */
 export function PortableSettings({ onUpgrade }) {
   const t = useT();
-  if (IS_APPSTORE_BUILD) {
-    return (
-      <div className="settings-section" data-testid="portable-appstore">
-        <p className="text-sm text-mail-text-muted">{t('portable.appStore')}</p>
-      </div>
-    );
-  }
-  return <PortablePage onUpgrade={onUpgrade} />;
+  return (
+    <SettingsPageLayout>
+      {IS_APPSTORE_BUILD
+        ? <SettingsCard data-testid="portable-appstore">
+            <p className="text-sm text-mail-text-muted">{t('portable.appStore')}</p>
+          </SettingsCard>
+        : <PortablePage onUpgrade={onUpgrade} />}
+    </SettingsPageLayout>
+  );
 }
 
 function PortablePage({ onUpgrade }) {
@@ -49,20 +51,17 @@ function PortableUpsell({ onUpgrade }) {
   const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   return (
-    <div className="settings-section" data-testid="portable-upsell">
-      <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-        <HardDrive size={18} className="text-mail-accent-text" />
-        {t('portable.title')}
-        <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
-          {t('common.premium')}
-        </span>
-      </h4>
+    <SettingsCard data-testid="portable-upsell" icon={HardDrive} headingClassName="mb-4"
+      title={t('portable.title')}
+      badge={<span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
+        {t('common.premium')}
+      </span>}>
       <div className="space-y-4">
         <p className="text-sm text-mail-text-muted max-w-xl">{t('portable.intro')}</p>
         <p className="text-xs text-mail-text-muted">{priceBlurb}</p>
         {onUpgrade && <Button variant="primary" size="sm" onClick={onUpgrade}>{t('common.upgrade')}</Button>}
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -142,11 +141,7 @@ function PortableWizard() {
   const phase = progress && t(`portable.progress.${progress.phase}`, { done: progress.done, total: progress.total });
 
   return (
-    <div className="settings-section space-y-4">
-      <h4 className="font-semibold text-mail-text flex items-center gap-2">
-        <HardDrive size={18} className="text-mail-accent-text" />
-        {t('portable.title')}
-      </h4>
+    <SettingsCard className="space-y-4" icon={HardDrive} title={t('portable.title')}>
       <p className="text-sm text-mail-text-muted max-w-xl">{t('portable.intro')}</p>
 
       <div className="space-y-1">
@@ -237,7 +232,7 @@ function PortableWizard() {
         cancelLabel={t('common.cancel')}
         destructive
       />
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -270,11 +265,7 @@ function RunningPortable({ status }) {
   };
 
   return (
-    <div className="settings-section space-y-4" data-testid="portable-running">
-      <h4 className="font-semibold text-mail-text flex items-center gap-2">
-        <HardDrive size={18} className="text-mail-accent-text" />
-        {t('portable.running.title')}
-      </h4>
+    <SettingsCard className="space-y-4" data-testid="portable-running" icon={HardDrive} title={t('portable.running.title')}>
       <p className="text-sm text-mail-text-muted">{t('portable.running.body', { drive: status.drive })}</p>
       {status.freeBytes != null && (
         <p className="text-xs text-mail-text-muted">{t('portable.running.free', { size: formatBytes(status.freeBytes) })}</p>
@@ -317,6 +308,6 @@ function RunningPortable({ status }) {
       </div>
 
       <p className="text-xs text-mail-text-muted">{t('portable.updateHint')}</p>
-    </div>
+    </SettingsCard>
   );
 }

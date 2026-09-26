@@ -12,8 +12,8 @@ import { SettingsSection } from './ui/SettingsForm';
 import { TypeaheadChips } from './ui/TypeaheadChips';
 import { daemonCall } from '../services/daemonClient';
 import { ViewIcon, VIEW_ICON_PRESETS } from './ViewIcon';
-import { SettingRow } from './settings/SettingRow';
-import { ToggleSwitch } from './settings/ToggleSwitch';
+import { SettingRow } from './ui/SettingRow';
+import { ToggleSwitch } from './ui/ToggleSwitch';
 
 // Offered when the emoji field is focused; typing any other emoji still works.
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',

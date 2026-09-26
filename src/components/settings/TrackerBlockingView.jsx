@@ -6,8 +6,9 @@ import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { TRACKER_PATTERNS } from '../../utils/trackerList';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Button } from '../ui/Button';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 import { t as tr, t, useT   } from '../../i18n/index.js';
 
 /** The beacon, exactly as senders ship it. Shown verbatim — this is the point. */
@@ -100,7 +101,7 @@ export function TrackerBlockingView({ onUpgrade }) {
   }, [trackerAlerts]);
 
   return (
-    <div className="settings-form space-y-6" data-testid="settings-tracker-blocking">
+    <SettingsPageLayout data-testid="settings-tracker-blocking">
       {/* Header + the switch itself */}
       <div className="settings-section">
         <div className="flex items-start justify-between gap-4">
@@ -234,6 +235,6 @@ export function TrackerBlockingView({ onUpgrade }) {
           ))}
         </div>
       </div>
-    </div>
+    </SettingsPageLayout>
   );
 }

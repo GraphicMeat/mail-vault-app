@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { QuickActions } from "../QuickActions";
 import { EmailActionBar } from "../email/EmailActionBar";
-import { SettingsTabs } from "./SettingsTabs";
+import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
 import { useMailStore } from "../../stores/mailStore";
 import { useTagStore } from "../../stores/tagStore";

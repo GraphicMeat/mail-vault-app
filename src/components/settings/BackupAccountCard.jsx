@@ -5,7 +5,7 @@ import { useBackupStore } from '../../stores/backupStore';
 import { backupScheduler } from '../../services/backupScheduler';
 import * as api from '../../services/api';
 import { resolveServerAccount } from '../../services/authUtils';
-import { ToggleSwitch } from './ToggleSwitch';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
