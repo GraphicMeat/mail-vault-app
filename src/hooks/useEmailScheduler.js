@@ -194,8 +194,17 @@ export function useEmailScheduler() {
         // in the same reply must stop the loop before the next one starts —
         // checking `stopped` only before the loop let a change after the
         // first still fire post-unmount.
-        let repaint = false;
+        // One banner per folder, not per change: the preview is the folder's
+        // newest message, so a launch after a night closed, which collects
+        // every arrival in one reply, repeated that message once per arrival.
+        const byFolder = new Map();
         for (const c of reply?.changes || []) {
+          const key = `${c.accountId}\x01${c.mailbox}`;
+          const seen = byFolder.get(key);
+          byFolder.set(key, seen ? { ...seen, newEmails: (seen.newEmails || 0) + (c.newEmails || 0) } : c);
+        }
+        let repaint = false;
+        for (const c of byFolder.values()) {
           if (stopped) break;
           if (await onSyncChange(c)) repaint = true;
         }
@@ -204,7 +213,7 @@ export function useEmailScheduler() {
         // arguments and always reloads the view that is open, so deduping by
         // (account, mailbox) deduped the keys and not the work: in All
         // Inboxes, a reply naming two accounts' INBOXes fired two concurrent
-        // reloads of the one list. Notifications still fire once per change.
+        // reloads of the one list. Notifications fire once per folder.
         if (repaint) {
           // 'UNIFIED' is a sentinel, not a mailbox. loadEmails has no
           // reference to it and would walk on to SELECT "UNIFIED", fail, and

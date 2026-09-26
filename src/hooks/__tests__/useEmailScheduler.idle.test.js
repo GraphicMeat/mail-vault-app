@@ -216,6 +216,24 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       { accountId: 'a2', folder: 'INBOX', from: 'b@two.co', domain: 'two.co', viewIds: [] });
   });
 
+  // A launch after a night closed collects every arrival at once. The preview
+  // is the folder's newest message, so one banner per change repeated that
+  // same message once per arrival: one banner per folder, counting them all.
+  it('announces several changes to one folder as one banner', async () => {
+    mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from: { name: 'Netflix' }, subject: 'Tonight?' }] });
+    const change = (gen, accountId, newEmails) => ({ gen, accountId, mailbox: 'INBOX', newEmails, updatedFlags: 0, at: gen });
+    eventReplies = [reply({ gen: 4, changes: [change(1, 'a1', 1), change(2, 'a2', 1), change(3, 'a1', 2), change(4, 'a1', 0)] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockNotify.mock.calls.map(c => [c[3].accountId, c[0]])).toEqual([
+      ['a1', '3 New Emails'],
+      ['a2', 'Netflix'],
+    ]);
+  });
+
   it('attaches the selected sound to incoming mail', async () => {
     settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, sound: 'Ping' } });
     mailStore.setState({ accounts: [IMAP_A] });
@@ -482,6 +500,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-    expect(mockNotify).toHaveBeenCalledTimes(2);
+    // and one banner counting both, not the same preview twice
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
   });
 });
