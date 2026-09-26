@@ -273,5 +273,9 @@
   "cf021fbe06df": "MailVault {release} für Windows wird heruntergeladen. Falls nichts passiert, nutze die Schaltfläche oben.",
   "5a7f5fcf612f": "Die Schaltfläche öffnet die neueste Release-Seite. Wähle dort die Datei, die auf -setup.exe endet.",
   "e19b0b03f776": "Der Download konnte nicht von selbst starten. Die Schaltfläche öffnet die neueste Release-Seite; wähle dort die Datei, die auf -setup.exe endet.",
-  "b8a88fbf1d7d": "Downloads auf GitHub"
+  "b8a88fbf1d7d": "Downloads auf GitHub",
+  "86523285f2a2": "Eine private E-Mail-App, die jede Nachricht auf deinem eigenen Computer speichert und sie behält, wenn der Server sie löscht. Keine Werbung, kein MailVault-Konto, und niemand liest mit.",
+  "95deac00358d": "Auf der Festplatte geprüft, bevor die Server-Kopie geht",
+  "8c546f54e5a0": "50.000 Nachrichten in unter 15 ms durchsucht",
+  "a2a406478007": "Einfache .eml-Dateien, die sich in anderen Mail-Apps öffnen"
 }

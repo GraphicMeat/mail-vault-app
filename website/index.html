@@ -140,7 +140,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
-<link rel="stylesheet" href="/assets/home.css?v=17">
+<link rel="stylesheet" href="/assets/home.css?v=18">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Skip to content</a>
 <header class="mv-header">
@@ -190,7 +190,8 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">Free email app for macOS, Windows and Linux</p>
 <h1 id="hero-title">Your email.<br><span class="hm-grad">Yours to keep.</span></h1>
-<p class="hm-lead">A private email app that keeps your mail on your own computer. No ads, no MailVault account, and nobody reading along.</p>
+<p class="hm-lead">A private email app that saves every message on your own computer and keeps it after the server deletes it. No ads, no MailVault account, and nobody reading along.</p>
+<ul class="hm-facts"><li>Checked on disk before the server copy goes</li><li>50,000 messages searched in under 15 ms</li><li>Plain .eml files that open in other mail apps</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows and Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Download for macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="windows_page" href="/windows-download.html?start=1" hidden>Download for Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Download for Linux (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/get-started.html?plan=free">Download Free</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=en" target="_blank" rel="noopener" aria-label="Try the live demo in a new window">Try the live demo ↗</a></div>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> downloads on GitHub</a></p>
@@ -204,39 +205,7 @@
 </section>
 
 <div id="how-it-works" class="hm-pillars">
-<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Privacy</p>
-<h2 id="privacy-title">Your inbox is nobody's business.<br><span class="hm-grad">Not even ours.</span></h2>
-<p class="hm-body">Your email goes straight from your provider to your computer. It never passes through MailVault servers, so there is nothing for us to read, sell or train AI on.</p>
-<ul class="hm-benefits">
-<li><a href="/features/local-vault.html"><strong>Your mail lives on your disk</strong><span>Read and search it offline, in a folder you choose.</span></a></li>
-<li><a href="/features/no-account.html"><strong>No account with us</strong><span>Sign in with your provider. Passwords stay in your system keychain.</span></a></li>
-<li><a href="/features/sender-verification.html"><strong>Know who really sent it</strong><span>SPF, DKIM and DMARC results shown right on the message.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="Enlarge: MailVault vault settings showing where your mail is stored"><picture><img src="/screenshots/local-vault-2880.webp" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="MailVault vault settings showing where your mail is stored" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Tracker blocking</p>
-<h2 id="trackers-title">Read in private.<br><span class="hm-grad">Senders learn nothing.</span></h2>
-<p class="hm-body">Marketing emails hide tiny images that report when and where you open them. MailVault finds them in every message and warns you about links that lie about where they go.</p>
-<ul class="hm-benefits">
-<li><a href="/features/email-tracker-blocking.html"><strong>See every tracker</strong><span>A clear marker on each message that tries to watch you.</span></a></li>
-<li><a href="/features/email-tracker-blocking.html"><strong>Strip them before they load <em class="hm-chip">Premium</em></strong><span>Senders are never told you opened it.</span></a></li>
-<li><a href="/features/link-safety.html"><strong>Catch lying links</strong><span>A warning when the text of a link and its real destination do not match.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Tracker blocking settings with a message shown before and after its tracking pixel is removed"><picture><img src="/screenshots/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="Tracker blocking settings with a message shown before and after its tracking pixel is removed" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<section id="backups" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="backups-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Backups</p>
@@ -249,28 +218,11 @@
 <li><a href="/features/time-capsule.html"><strong>Time Capsule <em class="hm-chip">Premium</em></strong><span>Browse a mailbox as it looked on any earlier date.</span></a></li>
 </ul>
 </div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Auto-cleanup rules that archive old mail to the vault, then delete it from the server"><picture><img src="/screenshots/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/premium-auto-cleanup-detail-720.webp 720w, /screenshots/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="Auto-cleanup rules that archive old mail to the vault, then delete it from the server" loading="lazy" decoding="async"></picture></button></figure>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Auto-cleanup rules that archive old mail to the vault, then delete it from the server"><picture><img src="/screenshots/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="Auto-cleanup rules that archive old mail to the vault, then delete it from the server" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 
-<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Customization</p>
-<h2 id="customize-title">Email that fits the way you work.<br><span class="hm-grad">Change almost anything.</span></h2>
-<p class="hm-body">Threads, chat bubbles or a timeline. Two columns or three. Your shortcuts, your toolbar, your theme. Set it up once, then change your mind whenever you like.</p>
-<ul class="hm-benefits">
-<li><a href="/features/views.html"><strong>Pick how mail reads</strong><span>Conversations, chat view, Explorer or grouped by sender.</span></a></li>
-<li><a href="/features/layouts.html"><strong>Arrange your window</strong><span>Resizable 2 and 3 column layouts, light and dark themes.</span></a></li>
-<li><a href="/features/keyboard-shortcuts.html"><strong>Your keys, your actions</strong><span>Rebind shortcuts and choose which actions sit in the toolbar.</span></a></li>
-<li><a href="/features/notifications.html"><strong>Only the alerts you want</strong><span>Notification rules per account and per folder.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Layout settings with mail view, reading pane and sidebar options"><picture><img src="/screenshots/settings-layout-detail-light-1664.webp" srcset="/screenshots/settings-layout-detail-light-720.webp 720w, /screenshots/settings-layout-detail-light-1440.webp 1440w, /screenshots/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="Layout settings with mail view, reading pane and sidebar options" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<section id="notion-mail" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="notion-mail-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Coming from Notion Mail</p>
@@ -285,6 +237,55 @@
 <p class="hm-after-list"><a class="mv-text-link" href="/blog/notion-mail-closing.html">What Notion Mail users need to know →</a></p>
 </div>
 <figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Saved views list with Needs reply, Starred, Attachments and a custom Invoices view"><picture><img src="/screenshots/settings-views-detail-1708.webp" srcset="/screenshots/settings-views-detail-720.webp 720w, /screenshots/settings-views-detail-1440.webp 1440w, /screenshots/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="Saved views list with Needs reply, Starred, Attachments and a custom Invoices view" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="privacy" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Privacy</p>
+<h2 id="privacy-title">Your inbox is nobody's business.<br><span class="hm-grad">Not even ours.</span></h2>
+<p class="hm-body">Your email goes straight from your provider to your computer. It never passes through MailVault servers, so there is nothing for us to read, sell or train AI on.</p>
+<ul class="hm-benefits">
+<li><a href="/features/local-vault.html"><strong>Your mail lives on your disk</strong><span>Read and search it offline, in a folder you choose.</span></a></li>
+<li><a href="/features/no-account.html"><strong>No account with us</strong><span>Sign in with your provider. Passwords stay in your system keychain.</span></a></li>
+<li><a href="/features/sender-verification.html"><strong>Know who really sent it</strong><span>SPF, DKIM and DMARC results shown right on the message.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="Enlarge: MailVault vault settings showing where your mail is stored"><picture><img src="/screenshots/local-vault-light-2880.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="MailVault vault settings showing where your mail is stored" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Tracker blocking</p>
+<h2 id="trackers-title">Read in private.<br><span class="hm-grad">Senders learn nothing.</span></h2>
+<p class="hm-body">Marketing emails hide tiny images that report when and where you open them. MailVault finds them in every message and warns you about links that lie about where they go.</p>
+<ul class="hm-benefits">
+<li><a href="/features/email-tracker-blocking.html"><strong>See every tracker</strong><span>A clear marker on each message that tries to watch you.</span></a></li>
+<li><a href="/features/email-tracker-blocking.html"><strong>Strip them before they load <em class="hm-chip">Premium</em></strong><span>Senders are never told you opened it.</span></a></li>
+<li><a href="/features/link-safety.html"><strong>Catch lying links</strong><span>A warning when the text of a link and its real destination do not match.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Tracker blocking settings with a message shown before and after its tracking pixel is removed"><picture><img src="/screenshots/premium-tracker-blocking-detail-1904.webp" srcset="/screenshots/premium-tracker-blocking-detail-720.webp 720w, /screenshots/premium-tracker-blocking-detail-1440.webp 1440w, /screenshots/premium-tracker-blocking-detail-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="Tracker blocking settings with a message shown before and after its tracking pixel is removed" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Customization</p>
+<h2 id="customize-title">Email that fits the way you work.<br><span class="hm-grad">Change almost anything.</span></h2>
+<p class="hm-body">Threads, chat bubbles or a timeline. Two columns or three. Your shortcuts, your toolbar, your theme. Set it up once, then change your mind whenever you like.</p>
+<ul class="hm-benefits">
+<li><a href="/features/views.html"><strong>Pick how mail reads</strong><span>Conversations, chat view, Explorer or grouped by sender.</span></a></li>
+<li><a href="/features/layouts.html"><strong>Arrange your window</strong><span>Resizable 2 and 3 column layouts, light and dark themes.</span></a></li>
+<li><a href="/features/keyboard-shortcuts.html"><strong>Your keys, your actions</strong><span>Rebind shortcuts and choose which actions sit in the toolbar.</span></a></li>
+<li><a href="/features/notifications.html"><strong>Only the alerts you want</strong><span>Notification rules per account and per folder.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Enlarge: Layout settings with mail view, reading pane and sidebar options"><picture><img src="/screenshots/settings-layout-detail-light-1664.webp" srcset="/screenshots/settings-layout-detail-light-720.webp 720w, /screenshots/settings-layout-detail-light-1440.webp 1440w, /screenshots/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="Layout settings with mail view, reading pane and sidebar options" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 </div>
@@ -304,23 +305,6 @@
 <li>Your mail as open .eml files</li>
 </ul>
 <p class="hm-center mv-small">No ads. No MailVault account. No trial clock on the free app. <a class="mv-text-link" href="/pricing.html">See what Premium adds →</a></p>
-</div>
-</section>
-
-<section id="more" class="mv-section" aria-labelledby="more-title">
-<div class="mv-wrap">
-<div class="hm-center">
-<h2 id="more-title">Small things.<br><span class="hm-grad">Every day.</span></h2>
-</div>
-<div class="hm-cards">
-<a href="/features/unified-inbox.html"><strong>Every account, one inbox</strong><span>Gmail, Microsoft 365, Outlook.com and IMAP side by side.</span></a>
-<a href="/features/search.html"><strong>Find it in milliseconds</strong><span>Offline full-text search. 50,000 messages searched in under 15 ms in our test.</span></a>
-<a href="/features/insights.html"><strong>See your mail at a glance</strong><span>Insights maps who writes to you and when, from your own headers.</span></a>
-<a href="/features/undo-send.html"><strong>Take it back</strong><span>Undo Send with the delay you choose.</span></a>
-<a href="/features/native-app.html"><strong>Light on your computer</strong><span>A native desktop app built with Tauri, not a browser in a box.</span></a>
-<a href="/features/email-cleanup.html"><strong>A tidier inbox <em class="hm-chip">Premium</em></strong><span>Sort newsletters, receipts and promos, and clean up by rule.</span></a>
-</div>
-<p class="hm-center"><a class="mv-text-link" href="/features.html">All features →</a></p>
 </div>
 </section>
 
@@ -392,6 +376,23 @@
 <li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail: shutdown notice</a></li>
 </ul>
 </details>
+</div>
+</section>
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">Small things.<br><span class="hm-grad">Every day.</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/features/unified-inbox.html"><strong>Every account, one inbox</strong><span>Gmail, Microsoft 365, Outlook.com and IMAP side by side.</span></a>
+<a href="/features/search.html"><strong>Find it in milliseconds</strong><span>Offline full-text search. 50,000 messages searched in under 15 ms in our test.</span></a>
+<a href="/features/insights.html"><strong>See your mail at a glance</strong><span>Insights maps who writes to you and when, from your own headers.</span></a>
+<a href="/features/undo-send.html"><strong>Take it back</strong><span>Undo Send with the delay you choose.</span></a>
+<a href="/features/native-app.html"><strong>Light on your computer</strong><span>A native desktop app built with Tauri, not a browser in a box.</span></a>
+<a href="/features/email-cleanup.html"><strong>A tidier inbox <em class="hm-chip">Premium</em></strong><span>Sort newsletters, receipts and promos, and clean up by rule.</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/features.html">All features →</a></p>
 </div>
 </section>
 

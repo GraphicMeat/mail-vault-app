@@ -273,5 +273,9 @@
   "cf021fbe06df": "Download di MailVault {release} per Windows. Se non parte, usa il pulsante qui sopra.",
   "5a7f5fcf612f": "Il pulsante apre la pagina dell’ultima release. Scegli lì il file che termina con -setup.exe.",
   "e19b0b03f776": "Il download non è partito da solo. Il pulsante apre la pagina dell’ultima release; scegli lì il file che termina con -setup.exe.",
-  "b8a88fbf1d7d": "download su GitHub"
+  "b8a88fbf1d7d": "download su GitHub",
+  "86523285f2a2": "Un'app email privata che salva ogni messaggio sul tuo computer e lo conserva quando il server lo elimina. Niente pubblicità, nessun account MailVault, e nessuno che legge insieme a te.",
+  "95deac00358d": "Verificato sul disco prima che la copia sul server venga rimossa",
+  "8c546f54e5a0": "50.000 messaggi cercati in meno di 15 ms",
+  "a2a406478007": "Semplici file .eml che si aprono in altre app di posta"
 }

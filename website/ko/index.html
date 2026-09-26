@@ -142,7 +142,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
-<link rel="stylesheet" href="/assets/home.css?v=17">
+<link rel="stylesheet" href="/assets/home.css?v=18">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
 <header class="mv-header">
@@ -192,7 +192,8 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">macOS, Windows, Linux용 무료 이메일 앱</p>
 <h1 id="hero-title">내 이메일.<br><span class="hm-grad">내 것으로 간직하세요.</span></h1>
-<p class="hm-lead">내 메일을 내 컴퓨터에 보관하는 프라이빗 이메일 앱입니다. 광고도, MailVault 계정도 없고, 누구도 엿보지 않습니다.</p>
+<p class="hm-lead">모든 메시지를 내 컴퓨터에 저장하고, 서버에서 삭제되어도 그대로 보관하는 프라이빗 이메일 앱입니다. 광고도, MailVault 계정도 없고, 누구도 엿보지 않습니다.</p>
+<ul class="hm-facts"><li>서버 사본을 지우기 전에 디스크에서 확인</li><li>메시지 50,000개를 15ms 안에 검색</li><li>다른 메일 앱에서도 열리는 일반 .eml 파일</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows, Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS용 다운로드</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="windows_page" href="/ko/windows-download.html?start=1" hidden>Windows용 다운로드</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux용 다운로드 (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ko/get-started.html?plan=free">무료 다운로드</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 라이브 데모 사용해 보기">라이브 데모 사용해 보기 ↗</a></div>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 회 다운로드 (GitHub)</a></p>
@@ -206,39 +207,7 @@
 </section>
 
 <div id="how-it-works" class="hm-pillars">
-<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">개인정보</p>
-<h2 id="privacy-title">내 받은편지함은 누구의 일도 아닙니다.<br><span class="hm-grad">저희조차도요.</span></h2>
-<p class="hm-body">이메일은 제공업체에서 내 컴퓨터로 곧장 전달됩니다. MailVault 서버를 거치지 않으므로 저희가 읽거나, 팔거나, AI 학습에 쓸 것이 없습니다.</p>
-<ul class="hm-benefits">
-<li><a href="/ko/features/local-vault.html"><strong>내 메일은 내 디스크에 있습니다</strong><span>원하는 폴더에서 오프라인으로 읽고 검색하세요.</span></a></li>
-<li><a href="/ko/features/no-account.html"><strong>저희 계정은 필요 없습니다</strong><span>제공업체로 로그인하세요. 비밀번호는 시스템 키체인에 남습니다.</span></a></li>
-<li><a href="/ko/features/sender-verification.html"><strong>진짜 보낸 사람을 확인하세요</strong><span>SPF, DKIM, DMARC 결과를 메시지에 바로 표시합니다.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="확대: 메일 저장 위치를 보여주는 MailVault 보관함 설정"><picture><img src="/screenshots/ko/local-vault-2880.webp" srcset="/screenshots/ko/local-vault-720.webp 720w, /screenshots/ko/local-vault-1440.webp 1440w, /screenshots/ko/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="메일 저장 위치를 보여주는 MailVault 보관함 설정" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">추적기 차단</p>
-<h2 id="trackers-title">비공개로 읽으세요.<br><span class="hm-grad">보낸 사람은 아무것도 알 수 없습니다.</span></h2>
-<p class="hm-body">마케팅 메일은 언제 어디서 열었는지 알리는 작은 이미지를 숨겨 둡니다. MailVault는 모든 메시지에서 이를 찾아내고, 목적지를 속이는 링크도 경고합니다.</p>
-<ul class="hm-benefits">
-<li><a href="/ko/features/email-tracker-blocking.html"><strong>모든 추적기를 확인하세요</strong><span>나를 감시하려는 메시지마다 분명한 표시를 남깁니다.</span></a></li>
-<li><a href="/ko/features/email-tracker-blocking.html"><strong>불러오기 전에 제거하세요 <em class="hm-chip">Premium</em></strong><span>보낸 사람은 내가 열었다는 사실을 절대 알 수 없습니다.</span></a></li>
-<li><a href="/ko/features/link-safety.html"><strong>거짓말하는 링크를 잡아내세요</strong><span>링크 텍스트와 실제 목적지가 다르면 경고합니다.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 추적 픽셀 제거 전후 메시지를 보여주는 추적기 차단 설정"><picture><img src="/screenshots/ko/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/ko/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/ko/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/ko/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="추적 픽셀 제거 전후 메시지를 보여주는 추적기 차단 설정" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<section id="backups" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="backups-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">백업</p>
@@ -251,28 +220,11 @@
 <li><a href="/ko/features/time-capsule.html"><strong>타임캡슐 <em class="hm-chip">Premium</em></strong><span>메일함을 과거 어느 날짜의 모습 그대로 살펴보세요.</span></a></li>
 </ul>
 </div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 오래된 메일을 보관함에 보관한 뒤 서버에서 삭제하는 자동 정리 규칙"><picture><img src="/screenshots/ko/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/ko/premium-auto-cleanup-detail-720.webp 720w, /screenshots/ko/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/ko/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="오래된 메일을 보관함에 보관한 뒤 서버에서 삭제하는 자동 정리 규칙" loading="lazy" decoding="async"></picture></button></figure>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 오래된 메일을 보관함에 보관한 뒤 서버에서 삭제하는 자동 정리 규칙"><picture><img src="/screenshots/ko/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/ko/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/ko/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/ko/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="오래된 메일을 보관함에 보관한 뒤 서버에서 삭제하는 자동 정리 규칙" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 
-<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">사용자 설정</p>
-<h2 id="customize-title">내 방식에 맞는 이메일.<br><span class="hm-grad">거의 모든 것을 바꿀 수 있습니다.</span></h2>
-<p class="hm-body">스레드, 채팅 말풍선, 또는 타임라인. 2단 또는 3단. 내 단축키, 내 도구 모음, 내 테마. 한 번 설정해 두고, 언제든 마음을 바꿀 수 있습니다.</p>
-<ul class="hm-benefits">
-<li><a href="/ko/features/views.html"><strong>메일을 읽는 방식을 고르세요</strong><span>대화, 채팅 보기, Explorer, 또는 보낸 사람별 그룹화.</span></a></li>
-<li><a href="/ko/features/layouts.html"><strong>창을 원하는 대로 배치하세요</strong><span>크기 조절 가능한 2단, 3단 레이아웃과 밝은/어두운 테마.</span></a></li>
-<li><a href="/ko/features/keyboard-shortcuts.html"><strong>내 키, 내 동작</strong><span>단축키를 재지정하고 도구 모음에 둘 동작을 고르세요.</span></a></li>
-<li><a href="/ko/features/notifications.html"><strong>원하는 알림만</strong><span>계정별, 폴더별 알림 규칙.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 메일 보기, 읽기 창, 사이드바 옵션이 있는 레이아웃 설정"><picture><img src="/screenshots/ko/settings-layout-detail-light-1664.webp" srcset="/screenshots/ko/settings-layout-detail-light-720.webp 720w, /screenshots/ko/settings-layout-detail-light-1440.webp 1440w, /screenshots/ko/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="메일 보기, 읽기 창, 사이드바 옵션이 있는 레이아웃 설정" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<section id="notion-mail" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="notion-mail-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Notion Mail에서 넘어오신다면</p>
@@ -287,6 +239,55 @@
 <p class="hm-after-list"><a class="mv-text-link" href="/ko/blog/notion-mail-closing.html">Notion Mail 사용자가 알아야 할 것 →</a></p>
 </div>
 <figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 답장 필요, 별표 표시, 첨부파일, 사용자 지정 청구서 보기가 있는 저장된 보기 목록"><picture><img src="/screenshots/ko/settings-views-detail-1708.webp" srcset="/screenshots/ko/settings-views-detail-720.webp 720w, /screenshots/ko/settings-views-detail-1440.webp 1440w, /screenshots/ko/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="답장 필요, 별표 표시, 첨부파일, 사용자 지정 청구서 보기가 있는 저장된 보기 목록" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="privacy" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">개인정보</p>
+<h2 id="privacy-title">내 받은편지함은 누구의 일도 아닙니다.<br><span class="hm-grad">저희조차도요.</span></h2>
+<p class="hm-body">이메일은 제공업체에서 내 컴퓨터로 곧장 전달됩니다. MailVault 서버를 거치지 않으므로 저희가 읽거나, 팔거나, AI 학습에 쓸 것이 없습니다.</p>
+<ul class="hm-benefits">
+<li><a href="/ko/features/local-vault.html"><strong>내 메일은 내 디스크에 있습니다</strong><span>원하는 폴더에서 오프라인으로 읽고 검색하세요.</span></a></li>
+<li><a href="/ko/features/no-account.html"><strong>저희 계정은 필요 없습니다</strong><span>제공업체로 로그인하세요. 비밀번호는 시스템 키체인에 남습니다.</span></a></li>
+<li><a href="/ko/features/sender-verification.html"><strong>진짜 보낸 사람을 확인하세요</strong><span>SPF, DKIM, DMARC 결과를 메시지에 바로 표시합니다.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="확대: 메일 저장 위치를 보여주는 MailVault 보관함 설정"><picture><img src="/screenshots/ko/local-vault-light-2880.webp" srcset="/screenshots/ko/local-vault-light-720.webp 720w, /screenshots/ko/local-vault-light-1440.webp 1440w, /screenshots/ko/local-vault-light-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="메일 저장 위치를 보여주는 MailVault 보관함 설정" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">추적기 차단</p>
+<h2 id="trackers-title">비공개로 읽으세요.<br><span class="hm-grad">보낸 사람은 아무것도 알 수 없습니다.</span></h2>
+<p class="hm-body">마케팅 메일은 언제 어디서 열었는지 알리는 작은 이미지를 숨겨 둡니다. MailVault는 모든 메시지에서 이를 찾아내고, 목적지를 속이는 링크도 경고합니다.</p>
+<ul class="hm-benefits">
+<li><a href="/ko/features/email-tracker-blocking.html"><strong>모든 추적기를 확인하세요</strong><span>나를 감시하려는 메시지마다 분명한 표시를 남깁니다.</span></a></li>
+<li><a href="/ko/features/email-tracker-blocking.html"><strong>불러오기 전에 제거하세요 <em class="hm-chip">Premium</em></strong><span>보낸 사람은 내가 열었다는 사실을 절대 알 수 없습니다.</span></a></li>
+<li><a href="/ko/features/link-safety.html"><strong>거짓말하는 링크를 잡아내세요</strong><span>링크 텍스트와 실제 목적지가 다르면 경고합니다.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 추적 픽셀 제거 전후 메시지를 보여주는 추적기 차단 설정"><picture><img src="/screenshots/ko/premium-tracker-blocking-detail-1904.webp" srcset="/screenshots/ko/premium-tracker-blocking-detail-720.webp 720w, /screenshots/ko/premium-tracker-blocking-detail-1440.webp 1440w, /screenshots/ko/premium-tracker-blocking-detail-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="추적 픽셀 제거 전후 메시지를 보여주는 추적기 차단 설정" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">사용자 설정</p>
+<h2 id="customize-title">내 방식에 맞는 이메일.<br><span class="hm-grad">거의 모든 것을 바꿀 수 있습니다.</span></h2>
+<p class="hm-body">스레드, 채팅 말풍선, 또는 타임라인. 2단 또는 3단. 내 단축키, 내 도구 모음, 내 테마. 한 번 설정해 두고, 언제든 마음을 바꿀 수 있습니다.</p>
+<ul class="hm-benefits">
+<li><a href="/ko/features/views.html"><strong>메일을 읽는 방식을 고르세요</strong><span>대화, 채팅 보기, Explorer, 또는 보낸 사람별 그룹화.</span></a></li>
+<li><a href="/ko/features/layouts.html"><strong>창을 원하는 대로 배치하세요</strong><span>크기 조절 가능한 2단, 3단 레이아웃과 밝은/어두운 테마.</span></a></li>
+<li><a href="/ko/features/keyboard-shortcuts.html"><strong>내 키, 내 동작</strong><span>단축키를 재지정하고 도구 모음에 둘 동작을 고르세요.</span></a></li>
+<li><a href="/ko/features/notifications.html"><strong>원하는 알림만</strong><span>계정별, 폴더별 알림 규칙.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: 메일 보기, 읽기 창, 사이드바 옵션이 있는 레이아웃 설정"><picture><img src="/screenshots/ko/settings-layout-detail-light-1664.webp" srcset="/screenshots/ko/settings-layout-detail-light-720.webp 720w, /screenshots/ko/settings-layout-detail-light-1440.webp 1440w, /screenshots/ko/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="메일 보기, 읽기 창, 사이드바 옵션이 있는 레이아웃 설정" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 </div>
@@ -306,23 +307,6 @@
 <li>개방형 .eml 파일로 된 내 메일</li>
 </ul>
 <p class="hm-center mv-small">광고 없음. MailVault 계정 없음. 무료 앱에 체험판 기한도 없음. <a class="mv-text-link" href="/ko/pricing.html">Premium이 더하는 것 보기 →</a></p>
-</div>
-</section>
-
-<section id="more" class="mv-section" aria-labelledby="more-title">
-<div class="mv-wrap">
-<div class="hm-center">
-<h2 id="more-title">작은 것들.<br><span class="hm-grad">매일매일.</span></h2>
-</div>
-<div class="hm-cards">
-<a href="/ko/features/unified-inbox.html"><strong>모든 계정을 받은편지함 하나로</strong><span>Gmail, Microsoft 365, Outlook.com, IMAP을 나란히.</span></a>
-<a href="/ko/features/search.html"><strong>밀리초 만에 찾으세요</strong><span>오프라인 전문 검색. 테스트에서 5만 통을 15ms 이내에 검색했습니다.</span></a>
-<a href="/ko/features/insights.html"><strong>메일을 한눈에 보세요</strong><span>메일 분석은 내 헤더를 바탕으로 누가 언제 메일을 보냈는지 지도로 보여줍니다.</span></a>
-<a href="/ko/features/undo-send.html"><strong>다시 거둬들이세요</strong><span>내가 정한 지연 시간으로 발송을 취소하세요.</span></a>
-<a href="/ko/features/native-app.html"><strong>컴퓨터에 가볍게</strong><span>브라우저를 통째로 담지 않은, Tauri로 만든 네이티브 데스크톱 앱입니다.</span></a>
-<a href="/ko/features/email-cleanup.html"><strong>더 정돈된 받은편지함 <em class="hm-chip">Premium</em></strong><span>뉴스레터, 영수증, 프로모션을 분류하고 규칙에 따라 정리하세요.</span></a>
-</div>
-<p class="hm-center"><a class="mv-text-link" href="/ko/features.html">모든 기능 보기 →</a></p>
 </div>
 </section>
 
@@ -394,6 +378,23 @@
 <li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail: 종료 공지</a></li>
 </ul>
 </details>
+</div>
+</section>
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">작은 것들.<br><span class="hm-grad">매일매일.</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/ko/features/unified-inbox.html"><strong>모든 계정을 받은편지함 하나로</strong><span>Gmail, Microsoft 365, Outlook.com, IMAP을 나란히.</span></a>
+<a href="/ko/features/search.html"><strong>밀리초 만에 찾으세요</strong><span>오프라인 전문 검색. 테스트에서 5만 통을 15ms 이내에 검색했습니다.</span></a>
+<a href="/ko/features/insights.html"><strong>메일을 한눈에 보세요</strong><span>메일 분석은 내 헤더를 바탕으로 누가 언제 메일을 보냈는지 지도로 보여줍니다.</span></a>
+<a href="/ko/features/undo-send.html"><strong>다시 거둬들이세요</strong><span>내가 정한 지연 시간으로 발송을 취소하세요.</span></a>
+<a href="/ko/features/native-app.html"><strong>컴퓨터에 가볍게</strong><span>브라우저를 통째로 담지 않은, Tauri로 만든 네이티브 데스크톱 앱입니다.</span></a>
+<a href="/ko/features/email-cleanup.html"><strong>더 정돈된 받은편지함 <em class="hm-chip">Premium</em></strong><span>뉴스레터, 영수증, 프로모션을 분류하고 규칙에 따라 정리하세요.</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/ko/features.html">모든 기능 보기 →</a></p>
 </div>
 </section>
 

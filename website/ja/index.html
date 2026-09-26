@@ -142,7 +142,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
-<link rel="stylesheet" href="/assets/home.css?v=17">
+<link rel="stylesheet" href="/assets/home.css?v=18">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">本文へ移動</a>
 <header class="mv-header">
@@ -192,7 +192,8 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">macOS、Windows、Linux向けの無料メールアプリ</p>
 <h1 id="hero-title">あなたのメール。<br><span class="hm-grad">手元に残る。</span></h1>
-<p class="hm-lead">メールを自分のコンピューターに置く、非公開のメールアプリ。広告なし、MailVaultアカウントなし、誰にも覗かれません。</p>
+<p class="hm-lead">すべてのメッセージを自分のコンピューターに保存し、サーバーから削除されても残す、非公開のメールアプリ。広告なし、MailVaultアカウントなし、誰にも覗かれません。</p>
+<ul class="hm-facts"><li>サーバー上のコピーを消す前にディスク上で確認</li><li>50,000通を15ミリ秒未満で検索</li><li>ほかのメールアプリでも開けるシンプルな.emlファイル</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS、Windows、Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS版をダウンロード</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="windows_page" href="/ja/windows-download.html?start=1" hidden>Windows版をダウンロード</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux版をダウンロード (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ja/get-started.html?plan=free">無料でダウンロード</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでライブデモを試す">ライブデモを試す ↗</a></div>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 回のダウンロード（GitHub）</a></p>
@@ -206,39 +207,7 @@
 </section>
 
 <div id="how-it-works" class="hm-pillars">
-<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">プライバシー</p>
-<h2 id="privacy-title">受信トレイの中身は誰のものでもない。<br><span class="hm-grad">私たちのものでもない。</span></h2>
-<p class="hm-body">メールはプロバイダーからあなたのコンピューターへ直接届きます。MailVaultのサーバーを経由することはないので、私たちが読んだり、売ったり、AIの学習に使ったりすることはできません。</p>
-<ul class="hm-benefits">
-<li><a href="/ja/features/local-vault.html"><strong>メールはあなたのディスクにある</strong><span>選んだフォルダーで、オフラインのまま読んで検索できます。</span></a></li>
-<li><a href="/ja/features/no-account.html"><strong>MailVaultアカウントは不要</strong><span>プロバイダーでサインインします。パスワードはシステムのキーチェーンに残ります。</span></a></li>
-<li><a href="/ja/features/sender-verification.html"><strong>送信者の実態がわかる</strong><span>SPF、DKIM、DMARCの結果がメッセージ上にそのまま表示されます。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="拡大：メールの保存場所を示すMailVaultの保管庫設定"><picture><img src="/screenshots/ja/local-vault-2880.webp" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="メールの保存場所を示すMailVaultの保管庫設定" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">トラッカーのブロック</p>
-<h2 id="trackers-title">非公開で読める。<br><span class="hm-grad">送信者には何もわからない。</span></h2>
-<p class="hm-body">マーケティングメールには、いつどこで開いたかを知らせる小さな画像が隠されています。MailVaultはそれをすべてのメッセージから見つけ出し、行き先を偽るリンクについても警告します。</p>
-<ul class="hm-benefits">
-<li><a href="/ja/features/email-tracker-blocking.html"><strong>あらゆるトラッカーを検出</strong><span>あなたを監視しようとするメッセージに、はっきりした印がつきます。</span></a></li>
-<li><a href="/ja/features/email-tracker-blocking.html"><strong>読み込まれる前に除去 <em class="hm-chip">Premium</em></strong><span>開いたことは送信者に伝わりません。</span></a></li>
-<li><a href="/ja/features/link-safety.html"><strong>嘘をつくリンクを見抜く</strong><span>リンクの表示テキストと実際の行き先が一致しないときに警告します。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：トラッキングピクセルの除去前後のメッセージを示すトラッカーブロック設定"><picture><img src="/screenshots/ja/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/ja/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/ja/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/ja/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="トラッキングピクセルの除去前後のメッセージを示すトラッカーブロック設定" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<section id="backups" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="backups-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">バックアップ</p>
@@ -251,28 +220,11 @@
 <li><a href="/ja/features/time-capsule.html"><strong>タイムカプセル <em class="hm-chip">Premium</em></strong><span>過去の任意の日付のメールボックスをそのまま閲覧できます。</span></a></li>
 </ul>
 </div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：古いメールを保管庫にアーカイブしてからサーバーで削除する自動整理ルール"><picture><img src="/screenshots/ja/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/ja/premium-auto-cleanup-detail-720.webp 720w, /screenshots/ja/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/ja/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="古いメールを保管庫にアーカイブしてからサーバーで削除する自動整理ルール" loading="lazy" decoding="async"></picture></button></figure>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：古いメールを保管庫にアーカイブしてからサーバーで削除する自動整理ルール"><picture><img src="/screenshots/ja/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/ja/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/ja/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/ja/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="古いメールを保管庫にアーカイブしてからサーバーで削除する自動整理ルール" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 
-<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">カスタマイズ</p>
-<h2 id="customize-title">働き方に合わせるメール。<br><span class="hm-grad">ほぼ何でも変えられる。</span></h2>
-<p class="hm-body">スレッド、チャットの吹き出し、あるいはタイムライン。2列か3列か。自分のショートカット、自分のツールバー、自分のテーマ。一度設定すれば、あとはいつでも気が変わったときに変えられます。</p>
-<ul class="hm-benefits">
-<li><a href="/ja/features/views.html"><strong>読み方は選べる</strong><span>会話、チャット表示、Explorer、または送信者ごとのグループ化。</span></a></li>
-<li><a href="/ja/features/layouts.html"><strong>ウィンドウを自分好みに</strong><span>サイズ変更できる2列・3列レイアウト、ライトテーマとダークテーマ。</span></a></li>
-<li><a href="/ja/features/keyboard-shortcuts.html"><strong>自分のキー、自分の操作</strong><span>ショートカットを割り当て直し、ツールバーに置く操作を選べます。</span></a></li>
-<li><a href="/ja/features/notifications.html"><strong>必要な通知だけ</strong><span>アカウントごと、フォルダーごとの通知ルール。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：メール表示、閲覧ペイン、サイドバーのオプションを示すレイアウト設定"><picture><img src="/screenshots/ja/settings-layout-detail-light-1664.webp" srcset="/screenshots/ja/settings-layout-detail-light-720.webp 720w, /screenshots/ja/settings-layout-detail-light-1440.webp 1440w, /screenshots/ja/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="メール表示、閲覧ペイン、サイドバーのオプションを示すレイアウト設定" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<section id="notion-mail" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="notion-mail-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Notion Mailからの乗り換え</p>
@@ -287,6 +239,55 @@
 <p class="hm-after-list"><a class="mv-text-link" href="/ja/blog/notion-mail-closing.html">Notion Mailを使っていた方が知っておくべきこと →</a></p>
 </div>
 <figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：要返信、スター付き、添付ファイル、カスタムの「請求書」ビューが並ぶ保存ビューの一覧"><picture><img src="/screenshots/ja/settings-views-detail-1708.webp" srcset="/screenshots/ja/settings-views-detail-720.webp 720w, /screenshots/ja/settings-views-detail-1440.webp 1440w, /screenshots/ja/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="要返信、スター付き、添付ファイル、カスタムの「請求書」ビューが並ぶ保存ビューの一覧" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="privacy" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">プライバシー</p>
+<h2 id="privacy-title">受信トレイの中身は誰のものでもない。<br><span class="hm-grad">私たちのものでもない。</span></h2>
+<p class="hm-body">メールはプロバイダーからあなたのコンピューターへ直接届きます。MailVaultのサーバーを経由することはないので、私たちが読んだり、売ったり、AIの学習に使ったりすることはできません。</p>
+<ul class="hm-benefits">
+<li><a href="/ja/features/local-vault.html"><strong>メールはあなたのディスクにある</strong><span>選んだフォルダーで、オフラインのまま読んで検索できます。</span></a></li>
+<li><a href="/ja/features/no-account.html"><strong>MailVaultアカウントは不要</strong><span>プロバイダーでサインインします。パスワードはシステムのキーチェーンに残ります。</span></a></li>
+<li><a href="/ja/features/sender-verification.html"><strong>送信者の実態がわかる</strong><span>SPF、DKIM、DMARCの結果がメッセージ上にそのまま表示されます。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="拡大：メールの保存場所を示すMailVaultの保管庫設定"><picture><img src="/screenshots/ja/local-vault-light-2880.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="メールの保存場所を示すMailVaultの保管庫設定" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">トラッカーのブロック</p>
+<h2 id="trackers-title">非公開で読める。<br><span class="hm-grad">送信者には何もわからない。</span></h2>
+<p class="hm-body">マーケティングメールには、いつどこで開いたかを知らせる小さな画像が隠されています。MailVaultはそれをすべてのメッセージから見つけ出し、行き先を偽るリンクについても警告します。</p>
+<ul class="hm-benefits">
+<li><a href="/ja/features/email-tracker-blocking.html"><strong>あらゆるトラッカーを検出</strong><span>あなたを監視しようとするメッセージに、はっきりした印がつきます。</span></a></li>
+<li><a href="/ja/features/email-tracker-blocking.html"><strong>読み込まれる前に除去 <em class="hm-chip">Premium</em></strong><span>開いたことは送信者に伝わりません。</span></a></li>
+<li><a href="/ja/features/link-safety.html"><strong>嘘をつくリンクを見抜く</strong><span>リンクの表示テキストと実際の行き先が一致しないときに警告します。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：トラッキングピクセルの除去前後のメッセージを示すトラッカーブロック設定"><picture><img src="/screenshots/ja/premium-tracker-blocking-detail-1904.webp" srcset="/screenshots/ja/premium-tracker-blocking-detail-720.webp 720w, /screenshots/ja/premium-tracker-blocking-detail-1440.webp 1440w, /screenshots/ja/premium-tracker-blocking-detail-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="トラッキングピクセルの除去前後のメッセージを示すトラッカーブロック設定" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">カスタマイズ</p>
+<h2 id="customize-title">働き方に合わせるメール。<br><span class="hm-grad">ほぼ何でも変えられる。</span></h2>
+<p class="hm-body">スレッド、チャットの吹き出し、あるいはタイムライン。2列か3列か。自分のショートカット、自分のツールバー、自分のテーマ。一度設定すれば、あとはいつでも気が変わったときに変えられます。</p>
+<ul class="hm-benefits">
+<li><a href="/ja/features/views.html"><strong>読み方は選べる</strong><span>会話、チャット表示、Explorer、または送信者ごとのグループ化。</span></a></li>
+<li><a href="/ja/features/layouts.html"><strong>ウィンドウを自分好みに</strong><span>サイズ変更できる2列・3列レイアウト、ライトテーマとダークテーマ。</span></a></li>
+<li><a href="/ja/features/keyboard-shortcuts.html"><strong>自分のキー、自分の操作</strong><span>ショートカットを割り当て直し、ツールバーに置く操作を選べます。</span></a></li>
+<li><a href="/ja/features/notifications.html"><strong>必要な通知だけ</strong><span>アカウントごと、フォルダーごとの通知ルール。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="拡大：メール表示、閲覧ペイン、サイドバーのオプションを示すレイアウト設定"><picture><img src="/screenshots/ja/settings-layout-detail-light-1664.webp" srcset="/screenshots/ja/settings-layout-detail-light-720.webp 720w, /screenshots/ja/settings-layout-detail-light-1440.webp 1440w, /screenshots/ja/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="メール表示、閲覧ペイン、サイドバーのオプションを示すレイアウト設定" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 </div>
@@ -306,23 +307,6 @@
 <li>メールはオープンな.emlファイルとして</li>
 </ul>
 <p class="hm-center mv-small">広告なし。MailVaultアカウントなし。無料版に試用期限なし。<a class="mv-text-link" href="/ja/pricing.html">Premiumで加わるものを見る →</a></p>
-</div>
-</section>
-
-<section id="more" class="mv-section" aria-labelledby="more-title">
-<div class="mv-wrap">
-<div class="hm-center">
-<h2 id="more-title">小さな積み重ね。<br><span class="hm-grad">毎日の。</span></h2>
-</div>
-<div class="hm-cards">
-<a href="/ja/features/unified-inbox.html"><strong>すべてのアカウントを1つの受信トレイに</strong><span>Gmail、Microsoft 365、Outlook.com、IMAPを一緒に。</span></a>
-<a href="/ja/features/search.html"><strong>ミリ秒で見つかる</strong><span>オフラインの全文検索。当社のテストでは、5万通のメールを15ミリ秒未満で検索できました。</span></a>
-<a href="/ja/features/insights.html"><strong>メールをひと目で把握</strong><span>メール分析は、あなた自身のヘッダーから、誰がいつ送ってきたかを地図にします。</span></a>
-<a href="/ja/features/undo-send.html"><strong>送信を取り消す</strong><span>選んだ遅延時間で、送信を取り消せます。</span></a>
-<a href="/ja/features/native-app.html"><strong>コンピューターへの負担が軽い</strong><span>Tauriで作られたネイティブのデスクトップアプリ。箱に入ったブラウザではありません。</span></a>
-<a href="/ja/features/email-cleanup.html"><strong>整った受信トレイ <em class="hm-chip">Premium</em></strong><span>ニュースレター、領収書、プロモーションを仕分けし、ルールで整理します。</span></a>
-</div>
-<p class="hm-center"><a class="mv-text-link" href="/ja/features.html">すべての機能 →</a></p>
 </div>
 </section>
 
@@ -394,6 +378,23 @@
 <li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail：終了のお知らせ</a></li>
 </ul>
 </details>
+</div>
+</section>
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">小さな積み重ね。<br><span class="hm-grad">毎日の。</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/ja/features/unified-inbox.html"><strong>すべてのアカウントを1つの受信トレイに</strong><span>Gmail、Microsoft 365、Outlook.com、IMAPを一緒に。</span></a>
+<a href="/ja/features/search.html"><strong>ミリ秒で見つかる</strong><span>オフラインの全文検索。当社のテストでは、5万通のメールを15ミリ秒未満で検索できました。</span></a>
+<a href="/ja/features/insights.html"><strong>メールをひと目で把握</strong><span>メール分析は、あなた自身のヘッダーから、誰がいつ送ってきたかを地図にします。</span></a>
+<a href="/ja/features/undo-send.html"><strong>送信を取り消す</strong><span>選んだ遅延時間で、送信を取り消せます。</span></a>
+<a href="/ja/features/native-app.html"><strong>コンピューターへの負担が軽い</strong><span>Tauriで作られたネイティブのデスクトップアプリ。箱に入ったブラウザではありません。</span></a>
+<a href="/ja/features/email-cleanup.html"><strong>整った受信トレイ <em class="hm-chip">Premium</em></strong><span>ニュースレター、領収書、プロモーションを仕分けし、ルールで整理します。</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/ja/features.html">すべての機能 →</a></p>
 </div>
 </section>
 

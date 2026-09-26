@@ -142,7 +142,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
-<link rel="stylesheet" href="/assets/home.css?v=17">
+<link rel="stylesheet" href="/assets/home.css?v=18">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
 <header class="mv-header">
@@ -192,7 +192,8 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">App de e-mail grátis para macOS, Windows e Linux</p>
 <h1 id="hero-title">Seu e-mail.<br><span class="hm-grad">Seu para sempre.</span></h1>
-<p class="hm-lead">Um app de e-mail privado que guarda seu correio no seu próprio computador. Sem anúncios, sem conta do MailVault, e ninguém lendo junto.</p>
+<p class="hm-lead">Um app de e-mail privado que salva cada mensagem no seu próprio computador e a mantém quando o servidor a apaga. Sem anúncios, sem conta do MailVault, e ninguém lendo junto.</p>
+<ul class="hm-facts"><li>Conferido no disco antes de a cópia do servidor sair</li><li>50.000 mensagens pesquisadas em menos de 15 ms</li><li>Arquivos .eml simples que abrem em outros apps de e-mail</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows e Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Baixar para macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="windows_page" href="/pt-br/windows-download.html?start=1" hidden>Baixar para Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Baixar para Linux (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/pt-br/get-started.html?plan=free">Baixar grátis</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=pt-BR" target="_blank" rel="noopener" aria-label="Experimentar a demonstração ao vivo em uma nova janela">Experimentar a demonstração ao vivo ↗</a></div>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> downloads no GitHub</a></p>
@@ -206,39 +207,7 @@
 </section>
 
 <div id="how-it-works" class="hm-pillars">
-<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Privacidade</p>
-<h2 id="privacy-title">Sua caixa de entrada não é da conta de ninguém.<br><span class="hm-grad">Nem da nossa.</span></h2>
-<p class="hm-body">Seu e-mail vai direto do seu provedor para o seu computador. Ele nunca passa pelos servidores do MailVault, então não há nada para lermos, vendermos ou usarmos para treinar IA.</p>
-<ul class="hm-benefits">
-<li><a href="/pt-br/features/local-vault.html"><strong>Seu e-mail vive no seu disco</strong><span>Leia e pesquise offline, numa pasta que você escolhe.</span></a></li>
-<li><a href="/pt-br/features/no-account.html"><strong>Sem conta com a gente</strong><span>Entre com seu provedor. As senhas ficam no chaveiro do seu sistema.</span></a></li>
-<li><a href="/pt-br/features/sender-verification.html"><strong>Saiba quem enviou de verdade</strong><span>Resultados de SPF, DKIM e DMARC exibidos direto na mensagem.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações do cofre do MailVault mostrando onde seu e-mail é guardado"><picture><img src="/screenshots/pt-br/local-vault-2880.webp" srcset="/screenshots/pt-br/local-vault-720.webp 720w, /screenshots/pt-br/local-vault-1440.webp 1440w, /screenshots/pt-br/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="Configurações do cofre do MailVault mostrando onde seu e-mail é guardado" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Bloqueio de rastreadores</p>
-<h2 id="trackers-title">Leia em privado.<br><span class="hm-grad">Quem envia não fica sabendo de nada.</span></h2>
-<p class="hm-body">E-mails de marketing escondem imagens minúsculas que informam quando e onde você os abre. O MailVault as encontra em cada mensagem e avisa sobre links que mentem para onde levam.</p>
-<ul class="hm-benefits">
-<li><a href="/pt-br/features/email-tracker-blocking.html"><strong>Veja todo rastreador</strong><span>Um marcador claro em cada mensagem que tenta te vigiar.</span></a></li>
-<li><a href="/pt-br/features/email-tracker-blocking.html"><strong>Remova-os antes de carregar <em class="hm-chip">Premium</em></strong><span>Quem envia nunca fica sabendo que você abriu.</span></a></li>
-<li><a href="/pt-br/features/link-safety.html"><strong>Pegue links mentirosos</strong><span>Um aviso quando o texto de um link e seu destino real não batem.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações de bloqueio de rastreadores com uma mensagem mostrada antes e depois da remoção do pixel de rastreamento"><picture><img src="/screenshots/pt-br/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/pt-br/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/pt-br/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/pt-br/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="Configurações de bloqueio de rastreadores com uma mensagem mostrada antes e depois da remoção do pixel de rastreamento" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<section id="backups" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="backups-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Backups</p>
@@ -251,28 +220,11 @@
 <li><a href="/pt-br/features/time-capsule.html"><strong>Cápsula do tempo <em class="hm-chip">Premium</em></strong><span>Veja uma caixa postal como ela era em qualquer data anterior.</span></a></li>
 </ul>
 </div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: regras de limpeza automática que arquivam e-mail antigo no cofre e depois o apagam do servidor"><picture><img src="/screenshots/pt-br/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/pt-br/premium-auto-cleanup-detail-720.webp 720w, /screenshots/pt-br/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/pt-br/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="Regras de limpeza automática que arquivam e-mail antigo no cofre e depois o apagam do servidor" loading="lazy" decoding="async"></picture></button></figure>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: regras de limpeza automática que arquivam e-mail antigo no cofre e depois o apagam do servidor"><picture><img src="/screenshots/pt-br/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/pt-br/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/pt-br/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/pt-br/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="Regras de limpeza automática que arquivam e-mail antigo no cofre e depois o apagam do servidor" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 
-<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">Personalização</p>
-<h2 id="customize-title">E-mail que se encaixa no seu jeito de trabalhar.<br><span class="hm-grad">Mude quase tudo.</span></h2>
-<p class="hm-body">Conversas em thread, balões de chat ou uma linha do tempo. Duas colunas ou três. Seus atalhos, sua barra de ferramentas, seu tema. Configure uma vez e mude de ideia quando quiser.</p>
-<ul class="hm-benefits">
-<li><a href="/pt-br/features/views.html"><strong>Escolha como ler seu e-mail</strong><span>Conversas, chat, Explorer ou agrupado por remetente.</span></a></li>
-<li><a href="/pt-br/features/layouts.html"><strong>Organize sua janela</strong><span>Layouts de 2 e 3 colunas redimensionáveis, temas claro e escuro.</span></a></li>
-<li><a href="/pt-br/features/keyboard-shortcuts.html"><strong>Suas teclas, suas ações</strong><span>Reatribua atalhos e escolha quais ações ficam na barra de ferramentas.</span></a></li>
-<li><a href="/pt-br/features/notifications.html"><strong>Só os alertas que você quer</strong><span>Regras de notificação por conta e por pasta.</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações de layout com opções de visão de e-mail, painel de leitura e barra lateral"><picture><img src="/screenshots/pt-br/settings-layout-detail-light-1664.webp" srcset="/screenshots/pt-br/settings-layout-detail-light-720.webp 720w, /screenshots/pt-br/settings-layout-detail-light-1440.webp 1440w, /screenshots/pt-br/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="Configurações de layout com opções de visão de e-mail, painel de leitura e barra lateral" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<section id="notion-mail" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="notion-mail-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">Vindo do Notion Mail</p>
@@ -287,6 +239,55 @@
 <p class="hm-after-list"><a class="mv-text-link" href="/pt-br/blog/notion-mail-closing.html">O que usuários do Notion Mail precisam saber →</a></p>
 </div>
 <figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: lista de visões salvas com Precisa de resposta, Com estrela, Anexos e uma visão personalizada de Faturas"><picture><img src="/screenshots/pt-br/settings-views-detail-1708.webp" srcset="/screenshots/pt-br/settings-views-detail-720.webp 720w, /screenshots/pt-br/settings-views-detail-1440.webp 1440w, /screenshots/pt-br/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="Lista de visões salvas com Precisa de resposta, Com estrela, Anexos e uma visão personalizada de Faturas" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="privacy" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Privacidade</p>
+<h2 id="privacy-title">Sua caixa de entrada não é da conta de ninguém.<br><span class="hm-grad">Nem da nossa.</span></h2>
+<p class="hm-body">Seu e-mail vai direto do seu provedor para o seu computador. Ele nunca passa pelos servidores do MailVault, então não há nada para lermos, vendermos ou usarmos para treinar IA.</p>
+<ul class="hm-benefits">
+<li><a href="/pt-br/features/local-vault.html"><strong>Seu e-mail vive no seu disco</strong><span>Leia e pesquise offline, numa pasta que você escolhe.</span></a></li>
+<li><a href="/pt-br/features/no-account.html"><strong>Sem conta com a gente</strong><span>Entre com seu provedor. As senhas ficam no chaveiro do seu sistema.</span></a></li>
+<li><a href="/pt-br/features/sender-verification.html"><strong>Saiba quem enviou de verdade</strong><span>Resultados de SPF, DKIM e DMARC exibidos direto na mensagem.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações do cofre do MailVault mostrando onde seu e-mail é guardado"><picture><img src="/screenshots/pt-br/local-vault-light-2880.webp" srcset="/screenshots/pt-br/local-vault-light-720.webp 720w, /screenshots/pt-br/local-vault-light-1440.webp 1440w, /screenshots/pt-br/local-vault-light-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="Configurações do cofre do MailVault mostrando onde seu e-mail é guardado" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Bloqueio de rastreadores</p>
+<h2 id="trackers-title">Leia em privado.<br><span class="hm-grad">Quem envia não fica sabendo de nada.</span></h2>
+<p class="hm-body">E-mails de marketing escondem imagens minúsculas que informam quando e onde você os abre. O MailVault as encontra em cada mensagem e avisa sobre links que mentem para onde levam.</p>
+<ul class="hm-benefits">
+<li><a href="/pt-br/features/email-tracker-blocking.html"><strong>Veja todo rastreador</strong><span>Um marcador claro em cada mensagem que tenta te vigiar.</span></a></li>
+<li><a href="/pt-br/features/email-tracker-blocking.html"><strong>Remova-os antes de carregar <em class="hm-chip">Premium</em></strong><span>Quem envia nunca fica sabendo que você abriu.</span></a></li>
+<li><a href="/pt-br/features/link-safety.html"><strong>Pegue links mentirosos</strong><span>Um aviso quando o texto de um link e seu destino real não batem.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações de bloqueio de rastreadores com uma mensagem mostrada antes e depois da remoção do pixel de rastreamento"><picture><img src="/screenshots/pt-br/premium-tracker-blocking-detail-1904.webp" srcset="/screenshots/pt-br/premium-tracker-blocking-detail-720.webp 720w, /screenshots/pt-br/premium-tracker-blocking-detail-1440.webp 1440w, /screenshots/pt-br/premium-tracker-blocking-detail-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="Configurações de bloqueio de rastreadores com uma mensagem mostrada antes e depois da remoção do pixel de rastreamento" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">Personalização</p>
+<h2 id="customize-title">E-mail que se encaixa no seu jeito de trabalhar.<br><span class="hm-grad">Mude quase tudo.</span></h2>
+<p class="hm-body">Conversas em thread, balões de chat ou uma linha do tempo. Duas colunas ou três. Seus atalhos, sua barra de ferramentas, seu tema. Configure uma vez e mude de ideia quando quiser.</p>
+<ul class="hm-benefits">
+<li><a href="/pt-br/features/views.html"><strong>Escolha como ler seu e-mail</strong><span>Conversas, chat, Explorer ou agrupado por remetente.</span></a></li>
+<li><a href="/pt-br/features/layouts.html"><strong>Organize sua janela</strong><span>Layouts de 2 e 3 colunas redimensionáveis, temas claro e escuro.</span></a></li>
+<li><a href="/pt-br/features/keyboard-shortcuts.html"><strong>Suas teclas, suas ações</strong><span>Reatribua atalhos e escolha quais ações ficam na barra de ferramentas.</span></a></li>
+<li><a href="/pt-br/features/notifications.html"><strong>Só os alertas que você quer</strong><span>Regras de notificação por conta e por pasta.</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: configurações de layout com opções de visão de e-mail, painel de leitura e barra lateral"><picture><img src="/screenshots/pt-br/settings-layout-detail-light-1664.webp" srcset="/screenshots/pt-br/settings-layout-detail-light-720.webp 720w, /screenshots/pt-br/settings-layout-detail-light-1440.webp 1440w, /screenshots/pt-br/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="Configurações de layout com opções de visão de e-mail, painel de leitura e barra lateral" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 </div>
@@ -306,23 +307,6 @@
 <li>Seu e-mail como arquivos .eml abertos</li>
 </ul>
 <p class="hm-center mv-small">Sem anúncios. Sem conta do MailVault. Sem cronômetro de teste no app grátis. <a class="mv-text-link" href="/pt-br/pricing.html">Veja o que o Premium acrescenta →</a></p>
-</div>
-</section>
-
-<section id="more" class="mv-section" aria-labelledby="more-title">
-<div class="mv-wrap">
-<div class="hm-center">
-<h2 id="more-title">Coisas pequenas.<br><span class="hm-grad">Todo dia.</span></h2>
-</div>
-<div class="hm-cards">
-<a href="/pt-br/features/unified-inbox.html"><strong>Toda conta, uma caixa de entrada</strong><span>Gmail, Microsoft 365, Outlook.com e IMAP lado a lado.</span></a>
-<a href="/pt-br/features/search.html"><strong>Encontre em milissegundos</strong><span>Busca de texto completo offline. 50.000 mensagens pesquisadas em menos de 15 ms no nosso teste.</span></a>
-<a href="/pt-br/features/insights.html"><strong>Veja seu e-mail de relance</strong><span>O Estatísticas mapeia quem escreve para você e quando, a partir dos seus próprios cabeçalhos.</span></a>
-<a href="/pt-br/features/undo-send.html"><strong>Volte atrás</strong><span>Desfazer envio com o atraso que você escolher.</span></a>
-<a href="/pt-br/features/native-app.html"><strong>Leve no seu computador</strong><span>Um app de desktop nativo feito com Tauri, não um navegador disfarçado.</span></a>
-<a href="/pt-br/features/email-cleanup.html"><strong>Uma caixa de entrada mais organizada <em class="hm-chip">Premium</em></strong><span>Organize newsletters, recibos e promoções, e limpe por regra.</span></a>
-</div>
-<p class="hm-center"><a class="mv-text-link" href="/pt-br/features.html">Todos os recursos →</a></p>
 </div>
 </section>
 
@@ -394,6 +378,23 @@
 <li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail: aviso de encerramento</a></li>
 </ul>
 </details>
+</div>
+</section>
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">Coisas pequenas.<br><span class="hm-grad">Todo dia.</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/pt-br/features/unified-inbox.html"><strong>Toda conta, uma caixa de entrada</strong><span>Gmail, Microsoft 365, Outlook.com e IMAP lado a lado.</span></a>
+<a href="/pt-br/features/search.html"><strong>Encontre em milissegundos</strong><span>Busca de texto completo offline. 50.000 mensagens pesquisadas em menos de 15 ms no nosso teste.</span></a>
+<a href="/pt-br/features/insights.html"><strong>Veja seu e-mail de relance</strong><span>O Estatísticas mapeia quem escreve para você e quando, a partir dos seus próprios cabeçalhos.</span></a>
+<a href="/pt-br/features/undo-send.html"><strong>Volte atrás</strong><span>Desfazer envio com o atraso que você escolher.</span></a>
+<a href="/pt-br/features/native-app.html"><strong>Leve no seu computador</strong><span>Um app de desktop nativo feito com Tauri, não um navegador disfarçado.</span></a>
+<a href="/pt-br/features/email-cleanup.html"><strong>Uma caixa de entrada mais organizada <em class="hm-chip">Premium</em></strong><span>Organize newsletters, recibos e promoções, e limpe por regra.</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/pt-br/features.html">Todos os recursos →</a></p>
 </div>
 </section>
 

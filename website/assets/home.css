@@ -16,6 +16,8 @@
 .hm-hero h1 { font-size:clamp(2.8rem,6.4vw,5.4rem); letter-spacing:-.045em; margin-bottom:1.2rem; }
 .hm-lead { font-size:clamp(1.1rem,1.6vw,1.3rem); color:var(--mv-muted); max-width:36em; margin:0 auto 2rem !important; }
 .hm-hero-actions { justify-content:center; }
+.hm-facts { list-style:none; padding:0; margin:-1rem auto 1.6rem; display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px; font-size:.92rem; font-weight:560; }
+.hm-facts li::before { content:'✓'; margin-right:7px; font-weight:800; color:#86efac; }
 .hm-proof { margin:14px 0 0; font-size:.86rem; font-variant-numeric:tabular-nums; }
 .hm-proof a { color:inherit; opacity:.78; text-decoration:none; }
 .hm-proof a:hover { opacity:1; text-decoration:underline; }

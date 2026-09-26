@@ -142,7 +142,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
-<link rel="stylesheet" href="/assets/home.css?v=17">
+<link rel="stylesheet" href="/assets/home.css?v=18">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">跳至内容</a>
 <header class="mv-header">
@@ -192,7 +192,8 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">适用于 macOS、Windows 和 Linux 的免费邮箱应用</p>
 <h1 id="hero-title">你的邮件。<br><span class="hm-grad">属于你自己。</span></h1>
-<p class="hm-lead">一款把邮件留在你自己电脑上的私密邮箱应用。没有广告，不需要 MailVault 账户，也没有人在旁边偷看。</p>
+<p class="hm-lead">一款把每封邮件保存在你自己电脑上的私密邮箱应用，服务器删除后也照样保留。没有广告，不需要 MailVault 账户，也没有人在旁边偷看。</p>
+<ul class="hm-facts"><li>服务器副本删除前先在磁盘上核对</li><li>15 毫秒内搜索 50,000 封邮件</li><li>普通 .eml 文件，其他邮件应用也能打开</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS、Windows 和 Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>下载 macOS 版</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="windows_page" href="/zh/windows-download.html?start=1" hidden>下载 Windows 版</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="installer" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>下载 Linux 版 (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/zh/get-started.html?plan=free">免费下载</a><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中试用在线演示">试用在线演示 ↗</a></div>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 次下载（GitHub）</a></p>
@@ -206,39 +207,7 @@
 </section>
 
 <div id="how-it-works" class="hm-pillars">
-<section id="privacy" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="privacy-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">隐私</p>
-<h2 id="privacy-title">你的收件箱，与旁人无关。<br><span class="hm-grad">包括我们。</span></h2>
-<p class="hm-body">你的邮件直接从服务商传到你的电脑，从不经过 MailVault 的服务器，所以我们没有什么可读取、出售，或用来训练 AI 的内容。</p>
-<ul class="hm-benefits">
-<li><a href="/zh/features/local-vault.html"><strong>邮件存在你的磁盘上</strong><span>离线阅读和搜索，存放在你选择的文件夹里。</span></a></li>
-<li><a href="/zh/features/no-account.html"><strong>无需 MailVault 账户</strong><span>用你的邮箱服务商登录，密码留在系统密钥链中。</span></a></li>
-<li><a href="/zh/features/sender-verification.html"><strong>知道邮件真正的发件人</strong><span>SPF、DKIM 和 DMARC 校验结果直接显示在邮件上。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="放大：MailVault 保险库设置，显示邮件的存储位置"><picture><img src="/screenshots/zh/local-vault-2880.webp" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="MailVault 保险库设置，显示邮件的存储位置" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="trackers" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="trackers-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">追踪拦截</p>
-<h2 id="trackers-title">私下阅读。<br><span class="hm-grad">发件人一无所知。</span></h2>
-<p class="hm-body">营销邮件会藏一些极小的图片，用来汇报你何时何地打开了它们。MailVault 会在每封邮件中找出这些图片，也会提醒你那些目的地和显示不符的链接。</p>
-<ul class="hm-benefits">
-<li><a href="/zh/features/email-tracker-blocking.html"><strong>看清每一个追踪器</strong><span>凡是想监视你的邮件，都会有清晰标记。</span></a></li>
-<li><a href="/zh/features/email-tracker-blocking.html"><strong>加载前就移除追踪器 <em class="hm-chip">Premium</em></strong><span>发件人永远不会知道你打开过邮件。</span></a></li>
-<li><a href="/zh/features/link-safety.html"><strong>识破撒谎的链接</strong><span>当链接文字和真实目的地不一致时给出警告。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：追踪拦截设置，展示一封邮件在追踪像素被移除前后的样子"><picture><img src="/screenshots/zh/premium-tracker-blocking-detail-light-1904.webp" srcset="/screenshots/zh/premium-tracker-blocking-detail-light-720.webp 720w, /screenshots/zh/premium-tracker-blocking-detail-light-1440.webp 1440w, /screenshots/zh/premium-tracker-blocking-detail-light-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="追踪拦截设置，展示一封邮件在追踪像素被移除前后的样子" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="backups" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="backups-title">
+<section id="backups" class="hm-pillar" style="--hue:#2f8cf0;--hue2:#8b5cf6" aria-labelledby="backups-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">备份</p>
@@ -251,28 +220,11 @@
 <li><a href="/zh/features/time-capsule.html"><strong>时间胶囊 <em class="hm-chip">Premium</em></strong><span>浏览邮箱在过去任意日期的样子。</span></a></li>
 </ul>
 </div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：自动清理规则，把旧邮件归档到保险库，再从服务器删除"><picture><img src="/screenshots/zh/premium-auto-cleanup-detail-1792.webp" srcset="/screenshots/zh/premium-auto-cleanup-detail-720.webp 720w, /screenshots/zh/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/zh/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="自动清理规则，把旧邮件归档到保险库，再从服务器删除" loading="lazy" decoding="async"></picture></button></figure>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：自动清理规则，把旧邮件归档到保险库，再从服务器删除"><picture><img src="/screenshots/zh/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/zh/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/zh/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/zh/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 620px" width="896" height="341" alt="自动清理规则，把旧邮件归档到保险库，再从服务器删除" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 
-<section id="customize" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="customize-title">
-<div class="mv-wrap hm-pillar-grid">
-<div>
-<p class="mv-eyebrow">个性化</p>
-<h2 id="customize-title">邮件，配合你的工作方式。<br><span class="hm-grad">几乎一切都能改。</span></h2>
-<p class="hm-body">会话串、聊天气泡，或者时间线。两栏或三栏。你的快捷键、你的工具栏、你的主题。设置一次，之后随时可以改主意。</p>
-<ul class="hm-benefits">
-<li><a href="/zh/features/views.html"><strong>选择邮件的阅读方式</strong><span>会话、聊天视图、Explorer，或按发件人分组。</span></a></li>
-<li><a href="/zh/features/layouts.html"><strong>排布你的窗口</strong><span>可调整大小的两栏、三栏布局，浅色和深色主题。</span></a></li>
-<li><a href="/zh/features/keyboard-shortcuts.html"><strong>按键由你定义</strong><span>重新绑定快捷键，选择工具栏上放哪些操作。</span></a></li>
-<li><a href="/zh/features/notifications.html"><strong>只提醒你想要的</strong><span>按账户、按文件夹设置通知规则。</span></a></li>
-</ul>
-</div>
-<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：布局设置，包含邮件视图、阅读窗格和侧边栏选项"><picture><img src="/screenshots/zh/settings-layout-detail-light-1664.webp" srcset="/screenshots/zh/settings-layout-detail-light-720.webp 720w, /screenshots/zh/settings-layout-detail-light-1440.webp 1440w, /screenshots/zh/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="布局设置，包含邮件视图、阅读窗格和侧边栏选项" loading="lazy" decoding="async"></picture></button></figure>
-</div>
-</section>
-
-<section id="notion-mail" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="notion-mail-title">
+<section id="notion-mail" class="hm-pillar hm-flip" style="--hue:#8b5cf6;--hue2:#ec4899" aria-labelledby="notion-mail-title">
 <div class="mv-wrap hm-pillar-grid">
 <div>
 <p class="mv-eyebrow">从 Notion Mail 转过来</p>
@@ -287,6 +239,55 @@
 <p class="hm-after-list"><a class="mv-text-link" href="/zh/blog/notion-mail-closing.html">Notion Mail 用户需要知道的事 →</a></p>
 </div>
 <figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：已保存的视图列表，包含“待回复”“已加星标”“附件”和一个自定义的“发票”视图"><picture><img src="/screenshots/zh/settings-views-detail-1708.webp" srcset="/screenshots/zh/settings-views-detail-720.webp 720w, /screenshots/zh/settings-views-detail-1440.webp 1440w, /screenshots/zh/settings-views-detail-1708.webp 1708w" sizes="(max-width: 900px) 92vw, 620px" width="854" height="212" alt="已保存的视图列表，包含“待回复”“已加星标”“附件”和一个自定义的“发票”视图" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="privacy" class="hm-pillar" style="--hue:#ec4899;--hue2:#f97316" aria-labelledby="privacy-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">隐私</p>
+<h2 id="privacy-title">你的收件箱，与旁人无关。<br><span class="hm-grad">包括我们。</span></h2>
+<p class="hm-body">你的邮件直接从服务商传到你的电脑，从不经过 MailVault 的服务器，所以我们没有什么可读取、出售，或用来训练 AI 的内容。</p>
+<ul class="hm-benefits">
+<li><a href="/zh/features/local-vault.html"><strong>邮件存在你的磁盘上</strong><span>离线阅读和搜索，存放在你选择的文件夹里。</span></a></li>
+<li><a href="/zh/features/no-account.html"><strong>无需 MailVault 账户</strong><span>用你的邮箱服务商登录，密码留在系统密钥链中。</span></a></li>
+<li><a href="/zh/features/sender-verification.html"><strong>知道邮件真正的发件人</strong><span>SPF、DKIM 和 DMARC 校验结果直接显示在邮件上。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot"><button class="mv-shot" type="button" data-image aria-label="放大：MailVault 保险库设置，显示邮件的存储位置"><picture><img src="/screenshots/zh/local-vault-light-2880.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 900px) 92vw, 620px" width="1440" height="932" alt="MailVault 保险库设置，显示邮件的存储位置" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="trackers" class="hm-pillar hm-flip" style="--hue:#f97316;--hue2:#10b981" aria-labelledby="trackers-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">追踪拦截</p>
+<h2 id="trackers-title">私下阅读。<br><span class="hm-grad">发件人一无所知。</span></h2>
+<p class="hm-body">营销邮件会藏一些极小的图片，用来汇报你何时何地打开了它们。MailVault 会在每封邮件中找出这些图片，也会提醒你那些目的地和显示不符的链接。</p>
+<ul class="hm-benefits">
+<li><a href="/zh/features/email-tracker-blocking.html"><strong>看清每一个追踪器</strong><span>凡是想监视你的邮件，都会有清晰标记。</span></a></li>
+<li><a href="/zh/features/email-tracker-blocking.html"><strong>加载前就移除追踪器 <em class="hm-chip">Premium</em></strong><span>发件人永远不会知道你打开过邮件。</span></a></li>
+<li><a href="/zh/features/link-safety.html"><strong>识破撒谎的链接</strong><span>当链接文字和真实目的地不一致时给出警告。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：追踪拦截设置，展示一封邮件在追踪像素被移除前后的样子"><picture><img src="/screenshots/zh/premium-tracker-blocking-detail-1904.webp" srcset="/screenshots/zh/premium-tracker-blocking-detail-720.webp 720w, /screenshots/zh/premium-tracker-blocking-detail-1440.webp 1440w, /screenshots/zh/premium-tracker-blocking-detail-1904.webp 1904w" sizes="(max-width: 900px) 92vw, 620px" width="952" height="807" alt="追踪拦截设置，展示一封邮件在追踪像素被移除前后的样子" loading="lazy" decoding="async"></picture></button></figure>
+</div>
+</section>
+
+<section id="customize" class="hm-pillar" style="--hue:#10b981;--hue2:#06b6d4" aria-labelledby="customize-title">
+<div class="mv-wrap hm-pillar-grid">
+<div>
+<p class="mv-eyebrow">个性化</p>
+<h2 id="customize-title">邮件，配合你的工作方式。<br><span class="hm-grad">几乎一切都能改。</span></h2>
+<p class="hm-body">会话串、聊天气泡，或者时间线。两栏或三栏。你的快捷键、你的工具栏、你的主题。设置一次，之后随时可以改主意。</p>
+<ul class="hm-benefits">
+<li><a href="/zh/features/views.html"><strong>选择邮件的阅读方式</strong><span>会话、聊天视图、Explorer，或按发件人分组。</span></a></li>
+<li><a href="/zh/features/layouts.html"><strong>排布你的窗口</strong><span>可调整大小的两栏、三栏布局，浅色和深色主题。</span></a></li>
+<li><a href="/zh/features/keyboard-shortcuts.html"><strong>按键由你定义</strong><span>重新绑定快捷键，选择工具栏上放哪些操作。</span></a></li>
+<li><a href="/zh/features/notifications.html"><strong>只提醒你想要的</strong><span>按账户、按文件夹设置通知规则。</span></a></li>
+</ul>
+</div>
+<figure class="hm-shot hm-closeup"><button class="mv-shot" type="button" data-image aria-label="放大：布局设置，包含邮件视图、阅读窗格和侧边栏选项"><picture><img src="/screenshots/zh/settings-layout-detail-light-1664.webp" srcset="/screenshots/zh/settings-layout-detail-light-720.webp 720w, /screenshots/zh/settings-layout-detail-light-1440.webp 1440w, /screenshots/zh/settings-layout-detail-light-1664.webp 1664w" sizes="(max-width: 900px) 92vw, 620px" width="832" height="683" alt="布局设置，包含邮件视图、阅读窗格和侧边栏选项" loading="lazy" decoding="async"></picture></button></figure>
 </div>
 </section>
 </div>
@@ -306,23 +307,6 @@
 <li>以开放的 .eml 文件保存你的邮件</li>
 </ul>
 <p class="hm-center mv-small">没有广告，不需要 MailVault 账户，免费版也没有试用倒计时。 <a class="mv-text-link" href="/zh/pricing.html">看看 Premium 多了什么 →</a></p>
-</div>
-</section>
-
-<section id="more" class="mv-section" aria-labelledby="more-title">
-<div class="mv-wrap">
-<div class="hm-center">
-<h2 id="more-title">小事情，<br><span class="hm-grad">每天都在做好。</span></h2>
-</div>
-<div class="hm-cards">
-<a href="/zh/features/unified-inbox.html"><strong>所有账户，一个收件箱</strong><span>Gmail、Microsoft 365、Outlook.com 和 IMAP 并排显示。</span></a>
-<a href="/zh/features/search.html"><strong>毫秒之间找到它</strong><span>离线全文搜索。在我们的测试中，5 万封邮件的搜索耗时不到 15 毫秒。</span></a>
-<a href="/zh/features/insights.html"><strong>一眼看清你的邮件</strong><span>邮件分析根据你自己的邮件头，描绘出谁在什么时候给你写信。</span></a>
-<a href="/zh/features/undo-send.html"><strong>收回它</strong><span>按你选择的延迟时间撤销发送。</span></a>
-<a href="/zh/features/native-app.html"><strong>对你的电脑很轻量</strong><span>用 Tauri 构建的原生桌面应用，不是套了个壳的浏览器。</span></a>
-<a href="/zh/features/email-cleanup.html"><strong>更整洁的收件箱 <em class="hm-chip">Premium</em></strong><span>整理订阅邮件、收据和促销邮件，并按规则清理。</span></a>
-</div>
-<p class="hm-center"><a class="mv-text-link" href="/zh/features.html">查看所有功能 →</a></p>
 </div>
 </section>
 
@@ -394,6 +378,23 @@
 <li><a href="https://www.notion.com/help/notion-mail-inbox-is-going-away-what-to-do-next" rel="noopener" target="_blank">Notion Mail：停服公告</a></li>
 </ul>
 </details>
+</div>
+</section>
+
+<section id="more" class="mv-section" aria-labelledby="more-title">
+<div class="mv-wrap">
+<div class="hm-center">
+<h2 id="more-title">小事情，<br><span class="hm-grad">每天都在做好。</span></h2>
+</div>
+<div class="hm-cards">
+<a href="/zh/features/unified-inbox.html"><strong>所有账户，一个收件箱</strong><span>Gmail、Microsoft 365、Outlook.com 和 IMAP 并排显示。</span></a>
+<a href="/zh/features/search.html"><strong>毫秒之间找到它</strong><span>离线全文搜索。在我们的测试中，5 万封邮件的搜索耗时不到 15 毫秒。</span></a>
+<a href="/zh/features/insights.html"><strong>一眼看清你的邮件</strong><span>邮件分析根据你自己的邮件头，描绘出谁在什么时候给你写信。</span></a>
+<a href="/zh/features/undo-send.html"><strong>收回它</strong><span>按你选择的延迟时间撤销发送。</span></a>
+<a href="/zh/features/native-app.html"><strong>对你的电脑很轻量</strong><span>用 Tauri 构建的原生桌面应用，不是套了个壳的浏览器。</span></a>
+<a href="/zh/features/email-cleanup.html"><strong>更整洁的收件箱 <em class="hm-chip">Premium</em></strong><span>整理订阅邮件、收据和促销邮件，并按规则清理。</span></a>
+</div>
+<p class="hm-center"><a class="mv-text-link" href="/zh/features.html">查看所有功能 →</a></p>
 </div>
 </section>
 
