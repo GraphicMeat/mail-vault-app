@@ -105,14 +105,10 @@
   "1f0d80bfbbad": "Mise à jour automatique native avec Sparkle sous macOS — appcast signé, téléchargement et installation dans l'application",
   "5909138c80b5": "Multiplateforme — macOS (Apple Silicon &amp; Intel) et Linux (.deb, AppImage, Snap, Flatpak)",
   "094a4cb10347": "Zone de notification — synchronisation silencieuse en arrière-plan",
-  "fb903a3ea03a": "~8 Mo",
-  "1bb86b575f14": "Taille du binaire",
   "530f6ddbe6f5": "Mémoire utilisée",
-  "79e790b402ae": "~80 Mo",
   "1a5df9fcade6": "CPU au repos",
   "73298a10bd45": "Temps de démarrage",
   "d5252a8f2260": "&lt;1 s",
-  "55ea12739801": "contre les applications Electron : 200-500 Mo de RAM, binaire de plus de 150 Mo",
   "90a0dd1cdf2b": "Fonctionnalités Premium",
   "54929c663249": "Débloquez des capacités avancées avec un abonnement Premium. La formule annuelle commence par 14 jours d'essai gratuit.",
   "78434276f483": "14 jours offerts sur l'annuel",
@@ -228,5 +224,9 @@
   "d1ef2a7a09b6": "Hacker News",
   "cc0ec813c059": "StrictSeal",
   "1f390a63266b": "Tarifs MailVault — gratuit à vie, ou Premium à $4/mois (14 jours d'essai sur l'annuel)",
-  "47c1f11ed4d1": "&nbsp;"
+  "47c1f11ed4d1": "&nbsp;",
+  "6c9e76a9cc3f": "53 Mo",
+  "b42179d314d2": "Téléchargement macOS",
+  "84bc697cf703": "~345 Mo",
+  "b2da905515ba": "Mémoire mesurée sur un Mac avec une boîte de réception de 10 000 messages, tous les processus comptés, vue web comprise"
 }

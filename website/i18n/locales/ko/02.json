@@ -105,14 +105,10 @@
   "1f0d80bfbbad": "macOS의 네이티브 Sparkle 자동 업데이터 — 서명된 appcast, 앱 안에서 내려받아 설치",
   "5909138c80b5": "크로스 플랫폼 — macOS(Apple Silicon &amp; Intel)와 Linux(.deb, AppImage, Snap, Flatpak)",
   "094a4cb10347": "시스템 트레이 — 백그라운드에서 조용히 동기화",
-  "fb903a3ea03a": "~8 MB",
-  "1bb86b575f14": "앱 바이너리 크기",
   "530f6ddbe6f5": "메모리 사용량",
-  "79e790b402ae": "~80 MB",
   "1a5df9fcade6": "유휴 시 CPU",
   "73298a10bd45": "시작 시간",
   "d5252a8f2260": "&lt;1s",
-  "55ea12739801": "Electron 앱과 비교: RAM 200-500 MB, 바이너리 150 MB 이상",
   "90a0dd1cdf2b": "Premium 기능",
   "54929c663249": "Premium 구독으로 고급 기능을 사용하십시오. 연간 요금제는 14일 무료 체험으로 시작합니다.",
   "78434276f483": "연간 요금제 14일 무료",
@@ -228,5 +224,9 @@
   "d1ef2a7a09b6": "Hacker News",
   "cc0ec813c059": "StrictSeal",
   "1f390a63266b": "MailVault 가격 — 영구 무료 또는 월 $4 Premium (연간 요금제 14일 체험)",
-  "47c1f11ed4d1": "&nbsp;"
+  "47c1f11ed4d1": "&nbsp;",
+  "6c9e76a9cc3f": "53 MB",
+  "b42179d314d2": "macOS 다운로드",
+  "84bc697cf703": "~345 MB",
+  "b2da905515ba": "받은편지함에 메시지 10,000개가 있는 Mac에서 측정한 메모리, 웹 보기를 포함한 모든 프로세스 합계"
 }

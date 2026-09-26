@@ -105,14 +105,10 @@
   "1f0d80bfbbad": "macOS 上的原生 Sparkle 自动更新 —— 已签名的 appcast，应用内下载并安装",
   "5909138c80b5": "跨平台 —— macOS（Apple Silicon 与 Intel）和 Linux（.deb、AppImage、Snap、Flatpak）",
   "094a4cb10347": "系统托盘 —— 在后台静默同步",
-  "fb903a3ea03a": "~8 MB",
-  "1bb86b575f14": "应用体积",
   "530f6ddbe6f5": "内存占用",
-  "79e790b402ae": "~80 MB",
   "1a5df9fcade6": "空闲 CPU",
   "73298a10bd45": "启动时间",
   "d5252a8f2260": "&lt;1 秒",
-  "55ea12739801": "对比 Electron 应用：200-500 MB 内存，150+ MB 体积",
   "90a0dd1cdf2b": "Premium 功能",
   "54929c663249": "订阅 Premium 解锁进阶能力。年付方案从 14 天免费试用开始。",
   "78434276f483": "年付享 14 天免费",
@@ -228,5 +224,9 @@
   "d1ef2a7a09b6": "Hacker News",
   "cc0ec813c059": "StrictSeal",
   "1f390a63266b": "MailVault 定价 — 永久免费，或 $4/月 的 Premium（年付含 14 天试用）",
-  "47c1f11ed4d1": "&nbsp;"
+  "47c1f11ed4d1": "&nbsp;",
+  "6c9e76a9cc3f": "53 MB",
+  "b42179d314d2": "macOS 下载大小",
+  "84bc697cf703": "约 345 MB",
+  "b2da905515ba": "内存在收件箱有 10,000 封邮件的 Mac 上测得，统计全部进程，包括网页视图"
 }

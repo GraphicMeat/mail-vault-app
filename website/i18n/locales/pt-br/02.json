@@ -105,14 +105,10 @@
   "1f0d80bfbbad": "Atualizador Sparkle nativo no macOS — appcast assinado, download e instalação dentro do aplicativo",
   "5909138c80b5": "Multiplataforma — macOS (Apple Silicon e Intel) e Linux (.deb, AppImage, Snap, Flatpak)",
   "094a4cb10347": "Bandeja do sistema — sincroniza em silêncio em segundo plano",
-  "fb903a3ea03a": "~8 MB",
-  "1bb86b575f14": "Tamanho do binário",
   "530f6ddbe6f5": "Uso de memória",
-  "79e790b402ae": "~80 MB",
   "1a5df9fcade6": "CPU ociosa",
   "73298a10bd45": "Tempo de inicialização",
   "d5252a8f2260": "&lt;1s",
-  "55ea12739801": "vs aplicativos Electron: 200-500 MB de RAM, binário de 150+ MB",
   "90a0dd1cdf2b": "Recursos Premium",
   "54929c663249": "Libere recursos avançados com uma assinatura Premium. Comece com 14 dias de teste grátis no plano anual.",
   "78434276f483": "14 dias grátis no anual",
@@ -228,5 +224,9 @@
   "d1ef2a7a09b6": "Hacker News",
   "cc0ec813c059": "StrictSeal",
   "1f390a63266b": "Preços do MailVault — grátis para sempre ou Premium por $4/mês (14 dias de teste no anual)",
-  "47c1f11ed4d1": "&nbsp;"
+  "47c1f11ed4d1": "&nbsp;",
+  "6c9e76a9cc3f": "53 MB",
+  "b42179d314d2": "Download para macOS",
+  "84bc697cf703": "~345 MB",
+  "b2da905515ba": "Memória medida em um Mac com uma caixa de entrada de 10.000 mensagens, somando todos os processos, incluindo a visualização web"
 }
