@@ -16,6 +16,8 @@ function session(markup, saved, blocked = false) {
   runInNewContext(script, {
     document: dom.window.document, location, localStorage: storage,
     URL, URLSearchParams, matchMedia: () => ({ matches: false }), navigator: { userAgent: '' },
+    // The header's star and heart counters ask the network; these tests never answer.
+    sessionStorage: storage, AbortSignal: { timeout: () => undefined }, fetch: () => new Promise(() => {}),
   });
   return { dom, storage, location };
 }

@@ -124,23 +124,29 @@
     destination: link.dataset.acquisitionResult || (link.dataset.acquisitionDownload === 'snap' ? 'store' : 'fallback'),
   })));
   // Every other CTA: named by where it goes, not by its (localized) label.
-  const cta = 'a.mv-button, button.mv-button, .mv-text-link, .mv-navlinks a, .mv-mobile-menu nav a, .mv-footer nav a, .mv-community-actions > *';
+  const cta = 'a.mv-button, button.mv-button, .mv-text-link, .mv-navlinks a, .mv-mobile-menu nav a, .mv-footer nav a, .mv-community-actions > *, .mv-social';
   document.addEventListener('click', e => {
     const el = e.target.closest?.(cta);
     if (!el || el.matches('[data-acquisition-event], [data-acquisition-download]')) return;
     const href = el.getAttribute('href');
     const url = href && new URL(href, location.href);
-    const target = !url ? '#' + (el.id || 'button')
+    const target = !url ? '#' + (el.id || (el.matches('[data-vote]') ? 'heart' : 'button'))
       : url.origin === location.origin ? url.pathname.replace(/^\/(de|fr|es|it|ja|ko|zh|pt-br)\//, '/') + url.hash
       : url.hostname + url.pathname;
     const placement = el.closest('header') ? 'header' : el.closest('footer') ? 'footer' : el.closest('section[id]')?.id || 'page';
     acquisitionEvent('cta_click', { target, placement });
   });
 
+  // One .deb button for Linux: pick the ARM build when the browser says so.
+  if (/aarch64|arm64|armv8/i.test(navigator.userAgent)) document.querySelectorAll('[data-linux-deb]').forEach(link => {
+    link.dataset.download = 'arm64';
+    link.dataset.acquisitionDownload = 'arm64';
+  });
   const downloadStatus = document.querySelector('[data-download-status]');
   const downloadControls = document.querySelectorAll('[data-download="mac"], [data-download="windows"], [data-download="amd64"], [data-download="arm64"]');
+  let releaseLinks;
   if (downloadControls.length) {
-    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest', { signal: AbortSignal.timeout(10000) })
+    releaseLinks = fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest', { signal: AbortSignal.timeout(10000) })
       .then(r => { if (!r.ok) throw new Error('release unavailable'); return r.json(); })
       .then(release => {
         if (!Array.isArray(release.assets)) throw new Error('release unavailable');
@@ -157,7 +163,8 @@
           if (!asset || !wanted.includes(platform)) return;
           const url = new URL(asset.browser_download_url);
           if (url.origin !== 'https://github.com' || !url.pathname.startsWith('/GraphicMeat/mail-vault-app/releases/download/')) return;
-          document.querySelectorAll('[data-download="' + platform + '"]').forEach(link => { link.href = url.href; link.dataset.acquisitionResult = 'file'; });
+          // A [data-download-page] button leads to a page that starts the download itself.
+          document.querySelectorAll('[data-download="' + platform + '"]:not([data-download-page])').forEach(link => { link.href = url.href; link.dataset.acquisitionResult = 'file'; });
           resolved++;
         });
         if (downloadStatus) downloadStatus.textContent = resolved === wanted.length
@@ -165,7 +172,62 @@
           : (runtimeCopy.releasePartial || 'Some downloads open the latest release page. Choose the file for your computer there.');
       })
       .catch(() => { if (downloadStatus) downloadStatus.textContent = runtimeCopy.releaseFallback || 'Direct links could not load. The download buttons open the latest release page instead; choose the file for your computer there.'; });
+    // A click that beats the release lookup waits briefly for the direct file
+    // instead of dropping the visitor on the release page.
+    downloadControls.forEach(link => link.addEventListener('click', e => {
+      if (link.dataset.acquisitionResult === 'file' || link.hasAttribute('data-download-page') || link.target === '_blank') return;
+      e.preventDefault();
+      Promise.race([releaseLinks, new Promise(resolve => setTimeout(resolve, 4000))]).then(() => location.assign(link.href));
+    }));
+    // The Windows download page starts its installer when reached from a download button.
+    const autoDownload = document.querySelector('[data-auto-download]');
+    if (autoDownload && query.has('start')) {
+      try { history.replaceState(null, '', location.pathname + location.hash); } catch { /* a reload may download again */ }
+      // Clicking the button itself records the download like a visitor's click would.
+      releaseLinks.then(() => { if (autoDownload.dataset.acquisitionResult === 'file') autoDownload.click(); });
+    }
   }
+
+  // GitHub stars and hearts in the header. The homepage's community section
+  // loads the same counts, so this only fetches where that section is absent.
+  const countNodes = (name) => document.querySelectorAll('[data-' + name + '], #' + name);
+  function showCount(name, value) {
+    if (!Number.isInteger(value) || value < 0) return;
+    countNodes(name).forEach(node => { node.textContent = value.toLocaleString(pageLanguage); node.hidden = false; });
+  }
+  const voteButtons = document.querySelectorAll('[data-vote]');
+  let voted = false;
+  try { voted = localStorage.getItem('mailvault-voted') === 'true'; } catch { /* hearts still work without storage */ }
+  const reflectVote = () => voteButtons.forEach(button => button.setAttribute('aria-pressed', String(voted)));
+  reflectVote();
+  if (voteButtons.length && !document.getElementById('want-this-btn')) {
+    // Unauthenticated GitHub API calls are capped per visitor, so reuse the
+    // star count for the session instead of asking on every page.
+    let stars = NaN;
+    try { stars = Number(sessionStorage.getItem('mv-github-stars')); } catch { /* optional cache */ }
+    if (stars > 0) showCount('github-stars', stars);
+    else fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app', { signal: AbortSignal.timeout(10000) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(repo => {
+        showCount('github-stars', repo.stargazers_count);
+        try { sessionStorage.setItem('mv-github-stars', String(repo.stargazers_count)); } catch { /* optional cache */ }
+      }).catch(() => {});
+    fetch('/api/votes').then(r => r.ok ? r.json() : Promise.reject()).then(data => showCount('vote-count', data.count)).catch(() => {});
+  }
+  voteButtons.forEach(button => button.addEventListener('click', async () => {
+    if (voted || button.disabled) return;
+    voteButtons.forEach(b => { b.disabled = true; });
+    try {
+      const response = await fetch('/api/votes', { method: 'POST', headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('vote failed');
+      const data = await response.json();
+      showCount('vote-count', data.count);
+      voted = true;
+      try { localStorage.setItem('mailvault-voted', 'true'); } catch { /* counted server-side anyway */ }
+      reflectVote();
+    } catch { /* the heart stays unpressed so the visitor can try again */ }
+    finally { voteButtons.forEach(b => { b.disabled = false; }); }
+  }));
 
   const dialog = document.querySelector('.mv-lightbox');
   let previousFocus;

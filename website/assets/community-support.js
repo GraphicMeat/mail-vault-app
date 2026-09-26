@@ -15,9 +15,11 @@
   }
   function count(id, value) {
     if (!Number.isInteger(value) || value < 0) return;
-    const node = document.getElementById(id);
-    node.textContent = value.toLocaleString();
-    node.hidden = false;
+    // The header's star and heart counters share the ids as data attributes.
+    document.querySelectorAll('#' + id + ', [data-' + id + ']').forEach(node => {
+      node.textContent = value.toLocaleString();
+      node.hidden = false;
+    });
   }
   async function json(url, options) {
     const response = await fetch(url, options);
@@ -29,6 +31,7 @@
   json('https://api.github.com/repos/GraphicMeat/mail-vault-app')
     .then(data => count('github-stars', data.stargazers_count)).catch(() => {});
   button.addEventListener('click', async () => {
+    try { voted = voted || localStorage.getItem('mailvault-voted') === 'true'; } catch (_) {}
     if (voted) { status.textContent = runtimeText('voteAlreadyCounted', 'Your heart has already been counted. Thank you!'); return; }
     button.disabled = true;
     status.textContent = '';
@@ -39,6 +42,7 @@
       voted = true;
       try { localStorage.setItem('mailvault-voted', 'true'); } catch (_) {}
       reflectVote();
+      document.querySelectorAll('[data-vote]').forEach(heart => heart.setAttribute('aria-pressed', 'true'));
       status.textContent = runtimeText('voteSupporting', 'Thank you for supporting MailVault!');
     } catch (_) { status.textContent = runtimeText('voteSendError', 'Couldn’t send your heart. Please try again shortly.'); }
     finally { button.disabled = false; }

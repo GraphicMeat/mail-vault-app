@@ -97,6 +97,51 @@ describe('English acquisition journey', () => {
     await tick();
     expect(doc.querySelector('[data-hero-platform="mac"]').href).toBe(base+'MailVault.dmg');
   });
+  it('sends Windows visitors to the SmartScreen page and Linux visitors straight to the .deb', async () => {
+    const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
+    const release=()=>vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:['MailVault_2.16.0_x64-setup.exe','MailVault_2.16.0_amd64.deb','MailVault_2.16.0_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});
+    const win=page('index.html','',release(),{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
+    await tick();
+    for (const link of win.doc.querySelectorAll('[data-hero-platform="windows"]')) expect(link.getAttribute('href')).toBe('/windows-download.html?start=1');
+    const linux=page('index.html','',release(),{userAgent:'Mozilla/5.0 (X11; Linux x86_64)'});
+    await tick();
+    for (const link of linux.doc.querySelectorAll('[data-hero-platform="linux"]')) expect(link.href).toBe(base+'MailVault_2.16.0_amd64.deb');
+    const arm=page('index.html','',release(),{userAgent:'Mozilla/5.0 (X11; Linux aarch64)'});
+    await tick();
+    for (const link of arm.doc.querySelectorAll('[data-hero-platform="linux"]')) expect(link.href).toBe(base+'MailVault_2.16.0_arm64.deb');
+  });
+  it('starts the Windows installer only when the page is reached from a download button', async () => {
+    const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
+    const release=()=>vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:[{name:'MailVault_2.16.0_x64-setup.exe',browser_download_url:base+'MailVault_2.16.0_x64-setup.exe'}]})});
+    const clicked=[];
+    for (const search of ['?start=1','']) {
+      const markup=readFileSync(resolve(root,'windows-download.html'),'utf8');
+      const {w,doc}=page('windows-download.html',search,release(),{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',markup});
+      const button=doc.querySelector('[data-auto-download]');
+      button.addEventListener('click',e=>{ e.preventDefault(); clicked.push(button.href); });
+      await tick(); await tick();
+      expect(button.href).toBe(base+'MailVault_2.16.0_x64-setup.exe');
+      expect(w.location.search).toBe('');
+    }
+    expect(clicked).toEqual([base+'MailVault_2.16.0_x64-setup.exe']);
+  });
+  it('shows GitHub stars and sends one heart from the header', async () => {
+    let posts=0;
+    const fetch=vi.fn(async (url,options)=>{
+      if (options?.method==='POST') { posts++; return {ok:true,json:async()=>({count:43})}; }
+      return {ok:true,json:async()=>String(url).includes('api.github.com')?{stargazers_count:1234}:{count:42}};
+    });
+    const {doc}=page('features.html','',fetch);
+    await tick(); await tick();
+    expect([...doc.querySelectorAll('[data-github-stars]')].map(n=>[n.textContent,n.hidden])).toEqual([['1,234',false],['1,234',false]]);
+    expect(doc.querySelector('[data-vote-count]').textContent).toBe('42');
+    const heart=doc.querySelector('.mv-nav-social [data-vote]');
+    heart.click(); await tick(); await tick();
+    heart.click(); await tick();
+    expect(posts).toBe(1);
+    expect([...doc.querySelectorAll('[data-vote]')].every(b=>b.getAttribute('aria-pressed')==='true')).toBe(true);
+    expect(doc.querySelector('[data-vote-count]').textContent).toBe('43');
+  });
   it('keeps the macOS homepage fallback safe without release data or a tracker', async () => {
     const {doc}=page('index.html','',vi.fn().mockRejectedValue(new Error('offline')),{userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)'});
     await tick();

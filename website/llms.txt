@@ -7,6 +7,7 @@
 - [Features](https://mailvaultapp.com/features.html): every feature with screenshots, one page each
 - [Pricing](https://mailvaultapp.com/pricing.html): what Free includes and what Premium adds
 - [Download](https://mailvaultapp.com/get-started.html): installers for macOS, Windows and Linux
+- [Windows download help](https://mailvaultapp.com/windows-download.html): why Windows SmartScreen may warn about the installer, how to check its signature, and where to read the code
 - [Live demo](https://mailvaultapp.com/demo/): the real app in the browser with sample mail, no signup
 
 ## Help

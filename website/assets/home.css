@@ -50,6 +50,15 @@
 .hm-cards a:hover { transform:translateY(-2px); border-color:var(--mv-accent); }
 .hm-cards strong { display:flex; gap:8px; align-items:center; font-size:1.05rem; margin-bottom:6px; }
 .hm-cards span { color:var(--mv-muted); font-size:.93rem; }
+.hm-cards strong::after { content:'→'; margin-left:auto; color:var(--mv-accent); opacity:0; transition:opacity .16s ease,transform .16s ease; }
+.hm-cards a:hover strong::after { opacity:1; transform:translateX(2px); }
+/* Touch screens have no hover, so a card must look tappable at rest: arrow always on, card edge tinted. */
+@media (hover:none),(max-width:760px) {
+ .hm-benefits strong::after,.hm-cards strong::after { opacity:1; }
+ .hm-benefits a { background:var(--mv-card); }
+ .hm-cards a { border-color:color-mix(in oklab,var(--mv-accent) 35%,var(--mv-line)); }
+ .hm-benefits a:active,.hm-cards a:active { transform:scale(.99); }
+}
 
 /* Comparison: one hue per group (--g on each tbody). Cards below 900px, never a sideways scroll. */
 .hm-compare { --hue:#2f8cf0; --hue2:#10b981; background:linear-gradient(180deg,var(--mv-bg),color-mix(in oklab,#2f8cf0 6%,var(--mv-bg))); }

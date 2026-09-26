@@ -41,7 +41,7 @@ describe('homepage demo launcher', () => {
     expect(demoAction?.getAttribute('href')).toBe('/demo/?lang=en');
     expect(demoAction?.getAttribute('aria-label')).toBe('Try the live demo in a new window');
     expect(demoAction?.className).toContain('mv-secondary');
-    expect(dom.window.document.querySelectorAll('.hm-hero .mv-actions [data-acquisition-destination="installer"], .hm-hero .mv-actions [data-acquisition-destination="store"], .hm-hero .mv-actions [data-acquisition-destination="setup"]')).toHaveLength(4);
+    expect(dom.window.document.querySelectorAll('.hm-hero .mv-actions [data-acquisition-destination="installer"], .hm-hero .mv-actions [data-acquisition-destination="store"], .hm-hero .mv-actions [data-acquisition-destination="setup"], .hm-hero .mv-actions [data-acquisition-destination="windows_page"]')).toHaveLength(4);
     expect(html).not.toContain('See how it works');
     expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('A real inbox. Ready to explore.');
     expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('Search mail, switch views, and try archiving.');
