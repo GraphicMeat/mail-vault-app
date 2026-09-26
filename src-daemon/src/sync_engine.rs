@@ -1580,6 +1580,7 @@ mod tests {
             return_path: None,
             authentication_results: None,
             list_unsubscribe: None,
+            list_unsubscribe_post: None,
             list_id: None,
             precedence: None,
         }

@@ -481,7 +481,7 @@ async fn parses_an_icloud_message_id_with_unescaped_quotes() {
         r#"INTERNALDATE "01-Jan-2026 12:00:00 +0000" RFC822.SIZE 120 "#,
         r#"BODYSTRUCTURE ("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 10 1 NIL NIL NIL NIL) "#,
         r#"BODY[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To "#,
-        r#"List-Unsubscribe List-Id Precedence)] {2}\r\n"#,
+        r#"List-Unsubscribe List-Unsubscribe-Post List-Id Precedence)] {2}\r\n"#,
         r#"\r\n)\r\n"#,
         r#"{tag} OK FETCH completed\r\n"#,
     );

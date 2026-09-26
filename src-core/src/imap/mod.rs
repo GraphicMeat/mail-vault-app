@@ -154,6 +154,8 @@ pub struct EmailHeader {
     pub authentication_results: Option<String>,
     #[serde(rename = "listUnsubscribe", skip_serializing_if = "Option::is_none")]
     pub list_unsubscribe: Option<String>,
+    #[serde(rename = "listUnsubscribePost", skip_serializing_if = "Option::is_none")]
+    pub list_unsubscribe_post: Option<String>,
     #[serde(rename = "listId", skip_serializing_if = "Option::is_none")]
     pub list_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -534,7 +536,7 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 // both. Thunderbird fetches the size on every pass; BODYSTRUCTURE is a few
 // hundred bytes per multipart message under DEFLATE, and this exact spec has
 // served search results in production since the search feature shipped.
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence)])";
 
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
@@ -2509,6 +2511,9 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let list_unsubscribe = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "List-Unsubscribe"));
 
+    let list_unsubscribe_post = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "List-Unsubscribe-Post"));
+
     let list_id = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "List-Id"));
 
@@ -2578,6 +2583,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         return_path,
         authentication_results,
         list_unsubscribe,
+        list_unsubscribe_post,
         list_id,
         precedence,
     })

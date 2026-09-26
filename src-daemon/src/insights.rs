@@ -86,6 +86,8 @@ struct CachedHeader {
     graph_id: Option<String>,
     list_id: Option<String>,
     list_unsubscribe: Option<String>,
+    list_unsubscribe_post: Option<String>,
+    authentication_results: Option<String>,
     precedence: Option<String>,
     server_deleted: bool,
     server_absent: bool,
@@ -1008,7 +1010,8 @@ fn read_eml(path: &Path, uid: u32) -> Result<Value, String> {
         mailvault_core::vault_eml::parse_flags_from_filename(path.file_name().unwrap().to_str().unwrap_or_default());
     let mut value = json!({"uid":uid,"messageId":get("Message-ID"),"subject":get("Subject").unwrap_or_default(),"from":from,
         "to":addresses("To"),"cc":addresses("Cc"),"bcc":addresses("Bcc"),"date":get("Date"),"messageDate":get("Date"),
-        "flags":flags,"listId":get("List-Id"),"listUnsubscribe":get("List-Unsubscribe"),"precedence":get("Precedence")});
+        "flags":flags,"listId":get("List-Id"),"listUnsubscribe":get("List-Unsubscribe"),
+        "listUnsubscribePost":get("List-Unsubscribe-Post"),"authenticationResults":get("Authentication-Results"),"precedence":get("Precedence")});
     if value["messageDate"].is_null() {
         value.as_object_mut().unwrap().remove("messageDate");
     }
@@ -1137,7 +1140,8 @@ fn header_copy(raw: &Value, location: &Location, source: &str) -> Value {
         "source":source,"origin":origin,"messageId":text(raw,"messageId"),"from":address(&raw["from"]),"to":addrs("to"),"cc":addrs("cc"),"bcc":addrs("bcc"),
         "subject":text(raw,"subject").unwrap_or_default(),"messageDate":message_date,"receivedAt":received,"sentAt":sent,
         "dateEvidence":{"received":received_evidence,"sent":sent_evidence},"flags":raw.get("flags").and_then(Value::as_array).map(|a|a.iter().filter_map(Value::as_str).collect::<Vec<_>>()).unwrap_or_default(),
-        "specialUse":location.special_use,"listId":text(raw,"listId"),"listUnsubscribe":text(raw,"listUnsubscribe"),"precedence":text(raw,"precedence"),
+        "specialUse":location.special_use,"listId":text(raw,"listId"),"listUnsubscribe":text(raw,"listUnsubscribe"),"listUnsubscribePost":text(raw,"listUnsubscribePost"),
+        "authenticationResults":text(raw,"authenticationResults"),"precedence":text(raw,"precedence"),
         "serverDeleted":raw["serverDeleted"].as_bool().unwrap_or(false),"serverAbsent":raw["serverAbsent"].as_bool().unwrap_or(false),
         "localMailbox":location.local_mailbox,"serverMailbox":if location.limitation.is_none() {Some(&location.mailbox)} else {None},"locationLimitation":location.limitation})
 }

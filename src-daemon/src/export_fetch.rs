@@ -121,53 +121,73 @@ fn check_declared_len(len: Option<usize>) -> Result<(), String> {
     }
 }
 
-/// Fetch one remote asset for an export mirror.
+/// Send one request through the SSRF gate, following up to `MAX_REDIRECTS`
+/// redirects by hand. Also the transport for one-click unsubscribe and BIMI
+/// logos (`handlers::unsubscribe`), which pass `https_only` so no hop may
+/// drop to plain http.
 ///
-/// Deliberately anonymous: no Referer, capped redirects and size. reqwest is
-/// built here without the `cookies` feature, so the client has no cookie store
-/// to disable — the fetch cannot carry the user's session anywhere, which is
-/// the point: the exported file is an archive, not a session.
-pub async fn fetch_remote_asset(url: String) -> Result<RemoteAsset, String> {
-    let mut parsed = validate_url(&url)?;
+/// Redirects are followed manually (Policy::none()) so each hop's resolved
+/// address can be re-checked: reqwest's built-in redirect policy runs
+/// synchronously and can't do the async DNS lookup an SSRF check needs, so a
+/// hop could otherwise land on a blocked address. `build` makes the request
+/// for each hop. reqwest is built here without the `cookies` feature, so the
+/// client has no cookie store: nothing sent carries the user's session.
+pub(crate) async fn send_guarded(
+    url: &str,
+    timeout: Duration,
+    https_only: bool,
+    build: impl Fn(&reqwest::Client, reqwest::Url) -> reqwest::RequestBuilder,
+) -> Result<reqwest::Response, String> {
+    let scheme_ok = |u: &reqwest::Url| {
+        if https_only && u.scheme() != "https" {
+            Err(format!("refused scheme: {}", u.scheme()))
+        } else {
+            Ok(())
+        }
+    };
+    let mut parsed = validate_url(url)?;
+    scheme_ok(&parsed)?;
     validate_resolved(&parsed).await?;
 
-    // Redirects are followed manually (Policy::none()) so each hop's
-    // resolved address can be re-checked — reqwest's built-in redirect
-    // policy runs synchronously and can't do the async DNS lookup an
-    // SSRF check needs, so a hop could otherwise land on a blocked address.
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(TIMEOUT_SECS))
+        .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("client build failed: {}", e))?;
 
     let mut redirects = 0;
-    let response = loop {
-        let response = client
-            .get(parsed.clone())
+    loop {
+        let response = build(&client, parsed.clone())
             .header(reqwest::header::REFERER, "")
             .send()
             .await
             .map_err(|e| format!("fetch failed: {}", e))?;
 
-        if response.status().is_redirection() {
-            redirects += 1;
-            if redirects > MAX_REDIRECTS {
-                return Err("too many redirects".into());
-            }
-            let location = response
-                .headers()
-                .get(reqwest::header::LOCATION)
-                .and_then(|v| v.to_str().ok())
-                .ok_or_else(|| "redirect with no location".to_string())?;
-            let next = validate_redirect_target(&parsed, location)?;
-            validate_resolved(&next).await?;
-            parsed = next;
-            continue;
+        if !response.status().is_redirection() {
+            return Ok(response);
         }
+        redirects += 1;
+        if redirects > MAX_REDIRECTS {
+            return Err("too many redirects".into());
+        }
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| "redirect with no location".to_string())?;
+        let next = validate_redirect_target(&parsed, location)?;
+        scheme_ok(&next)?;
+        validate_resolved(&next).await?;
+        parsed = next;
+    }
+}
 
-        break response;
-    };
+/// Fetch one remote asset for an export mirror.
+///
+/// Deliberately anonymous: no Referer, capped redirects and size, no cookie
+/// store (`send_guarded`). The exported file is an archive, not a session.
+pub async fn fetch_remote_asset(url: String) -> Result<RemoteAsset, String> {
+    let response = send_guarded(&url, Duration::from_secs(TIMEOUT_SECS), false, |c, u| c.get(u)).await?;
 
     if !response.status().is_success() {
         return Err(format!("http {}", response.status().as_u16()));
@@ -264,6 +284,12 @@ mod tests {
         assert!(validate_url("http://169.254.169.254/latest/meta-data/").is_err());
         assert!(validate_url("http://[::1]/x").is_err());
         assert!(validate_url("http://93.184.216.34/x").is_ok());
+    }
+
+    #[tokio::test]
+    async fn https_only_refuses_plain_http_before_any_request() {
+        let r = send_guarded("http://example.test/x", Duration::from_secs(1), true, |c, u| c.get(u)).await;
+        assert!(r.unwrap_err().contains("refused scheme"));
     }
 
     #[tokio::test]

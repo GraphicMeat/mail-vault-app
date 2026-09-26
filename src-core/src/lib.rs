@@ -30,6 +30,7 @@ pub mod graph_ledger;
 pub mod keychain;
 pub mod oauth2;
 pub mod dns;
+pub mod unsubscribe;
 pub mod smtp;
 pub mod spellcheck;
 pub mod transfer_stats;

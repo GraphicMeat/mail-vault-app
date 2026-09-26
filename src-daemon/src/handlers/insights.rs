@@ -45,7 +45,7 @@ struct AccountsJsonEntry {
 /// file is an empty list (as today), a torn or unparseable one is an `Err`
 /// the caller maps to `accountConfigurationUnavailable`, never silently
 /// "no accounts".
-fn configured_account_ids(app_dir: &Path) -> Result<Vec<String>, String> {
+pub(crate) fn configured_account_ids(app_dir: &Path) -> Result<Vec<String>, String> {
     let path = app_dir.join("accounts.json");
     if !path.exists() {
         return Ok(Vec::new());
@@ -67,50 +67,55 @@ fn err(e: Value) -> Value {
     json!({"ok": false, "error": e})
 }
 
+/// `insights_begin_snapshot`'s body, also run in-process by
+/// `unsubscribe.senders` (`handlers::unsubscribe`), which pages the same
+/// snapshot instead of scanning the header cache a second way.
+pub(crate) fn begin_snapshot(state: &Arc<DaemonState>, account_ids: &[String]) -> Value {
+    let configured = match configured_account_ids(&state.app_dir) {
+        Ok(c) => c,
+        Err(_) => return err(insights::error("accountConfigurationUnavailable")),
+    };
+    // Scope validation before any caller-derived file resolution
+    // (same ordering the app's original command used, a
+    // redundant pre-check, since `begin_at` repeats it more
+    // thoroughly, but one that must run before `vault_root`).
+    if account_ids.iter().any(|a| !configured.contains(a)) {
+        return err(insights::error("invalidAccountScope"));
+    }
+    let root = match vault_root(&state) {
+        Ok(r) => r,
+        Err(_) => return err(insights::error("vaultUnavailable")),
+    };
+    let gen_fn = || custody::generation(&state);
+    let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
+        custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
+    };
+    let headers = |account: &str| -> Result<(Option<Value>, Vec<(String, Value)>), String> {
+        custody::with_conn(&state, |c| {
+            use mailvault_core::custody::cache;
+            let list = cache::load_mailboxes(c, account)?
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+            let mut out = Vec::new();
+            for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
+                let Some(blob) = cache::load_headers(c, account, &mailbox, None, cache::HeaderOrder::Date)? else { continue };
+                let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
+                out.push((mailbox, value));
+            }
+            Ok((list, out))
+        })
+    };
+    match state.insights.begin_at(&root, &rows, &headers, &configured, &account_ids, &gen_fn) {
+        Ok(v) => ok(v),
+        Err(e) => err(e),
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "insights_begin_snapshot" => {
             let account_ids: Vec<String> = req!(vec_arg(&id, params, "accountIds"));
             let state = Arc::clone(state);
-            let result = blocking(move || -> Value {
-                let configured = match configured_account_ids(&state.app_dir) {
-                    Ok(c) => c,
-                    Err(_) => return err(insights::error("accountConfigurationUnavailable")),
-                };
-                // Scope validation before any caller-derived file resolution
-                // (same ordering the app's original command used, a
-                // redundant pre-check, since `begin_at` repeats it more
-                // thoroughly, but one that must run before `vault_root`).
-                if account_ids.iter().any(|a| !configured.contains(a)) {
-                    return err(insights::error("invalidAccountScope"));
-                }
-                let root = match vault_root(&state) {
-                    Ok(r) => r,
-                    Err(_) => return err(insights::error("vaultUnavailable")),
-                };
-                let gen_fn = || custody::generation(&state);
-                let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
-                    custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
-                };
-                let headers = |account: &str| -> Result<(Option<Value>, Vec<(String, Value)>), String> {
-                    custody::with_conn(&state, |c| {
-                        use mailvault_core::custody::cache;
-                        let list = cache::load_mailboxes(c, account)?
-                            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
-                        let mut out = Vec::new();
-                        for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
-                            let Some(blob) = cache::load_headers(c, account, &mailbox, None, cache::HeaderOrder::Date)? else { continue };
-                            let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
-                            out.push((mailbox, value));
-                        }
-                        Ok((list, out))
-                    })
-                };
-                match state.insights.begin_at(&root, &rows, &headers, &configured, &account_ids, &gen_fn) {
-                    Ok(v) => ok(v),
-                    Err(e) => err(e),
-                }
-            })
+            let result = blocking(move || begin_snapshot(&state, &account_ids))
             .await
             .unwrap_or_else(|_| err(insights::error("snapshotUnavailable")));
             RpcResponse::success(id, result)

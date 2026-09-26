@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -223,6 +223,25 @@ CREATE TABLE snoozes (
 CREATE INDEX snoozes_due ON snoozes(state, wake_at);
 ";
 
+/// Unsubscribe history (one row per attempt, whatever it came to) and the
+/// BIMI logo cache: `svg` NULL is a cached "no logo" for the domain.
+const SCHEMA_V6: &str = "
+CREATE TABLE unsubscribes (
+  id              INTEGER PRIMARY KEY,
+  address         TEXT NOT NULL,
+  account_id      TEXT NOT NULL,
+  unsubscribed_at INTEGER NOT NULL,
+  method          TEXT NOT NULL,
+  status          TEXT NOT NULL
+);
+CREATE INDEX unsubscribes_account ON unsubscribes(account_id, unsubscribed_at);
+CREATE TABLE bimi_cache (
+  domain     TEXT PRIMARY KEY,
+  svg        BLOB,
+  expires_at INTEGER NOT NULL
+);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -369,6 +388,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 6 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V6} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6');"
+            ))
+            .map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -445,10 +470,10 @@ mod tests {
     fn open_creates_the_schema_and_is_idempotent() {
         let dir = scratch("create");
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&again, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -469,7 +494,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM classifications", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
         for table in [
@@ -510,7 +535,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v2 row must survive the v3+v4 migration");
         let found: i64 = conn
@@ -540,7 +565,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM scheduled_sends", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v3 row must survive the v4 migration");
         for table in ["auto_tag_rules", "auto_tag_backfills", "auto_tag_decisions"] {
@@ -572,13 +597,53 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM auto_tag_rules", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v4 row must survive the v5 migration");
         let found: i64 = conn
             .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='snoozes'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(found, 1, "snoozes is missing after the migration");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v6 adds unsubscribe history and the BIMI cache on top of a v5 store
+    /// (Snooze) without losing what v5 already held, and a second open of
+    /// the migrated file changes nothing.
+    #[test]
+    fn a_v5_store_gains_unsubscribes_and_bimi_cache_and_keeps_its_rows() {
+        let dir = scratch("v5");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 {SCHEMA_V4}
+                 {SCHEMA_V5}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '5');
+                 INSERT INTO snoozes(id, account_id, from_mailbox, snoozed_mailbox, message_id, wake_at, created_at, state)
+                 VALUES ('z1', 'acct', 'INBOX', 'Snoozed', '<m@x>', 0, 0, 'snoozed');"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("6"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM snoozes", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v5 row must survive the v6 migration");
+        conn.execute("INSERT INTO unsubscribes(address, account_id, unsubscribed_at, method, status) VALUES ('a@x', 'acct', 1, 'one-click', 'ok')", []).unwrap();
+        drop(conn);
+        let again = open(&dir).unwrap();
+        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("6"));
+        for table in ["unsubscribes", "bimi_cache"] {
+            let found: i64 = again
+                .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
+                .unwrap();
+            assert_eq!(found, 1, "{table} is missing after the migration");
+        }
+        let rows: i64 = again.query_row("SELECT COUNT(*) FROM unsubscribes", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 1, "reopening a v6 store must not rerun the step");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

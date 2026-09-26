@@ -47,6 +47,7 @@ pub(crate) mod snooze;
 pub(crate) mod smtp;
 pub(crate) mod tags;
 pub(crate) mod transfer;
+pub(crate) mod unsubscribe;
 pub(crate) mod vault;
 pub(crate) mod views;
 pub(crate) mod vault_files;

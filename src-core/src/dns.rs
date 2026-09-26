@@ -366,10 +366,19 @@ fn build_warnings(
 /// Fetch all TXT strings for a name. A lookup failure (NXDOMAIN etc.) yields an
 /// empty list rather than aborting the caller's whole probe.
 async fn txt_records(resolver: &TokioResolver, name: &str) -> Vec<String> {
-    let Ok(resp) = resolver.txt_lookup(name).await else {
-        return Vec::new();
+    txt_records_strict(resolver, name).await.unwrap_or_default()
+}
+
+/// Like `txt_records`, but only "the name has no TXT records" (NXDOMAIN or
+/// NODATA) is an empty answer; a timeout or SERVFAIL is an `Err`, since it
+/// says nothing about the name and must not be cached as "none".
+async fn txt_records_strict(resolver: &TokioResolver, name: &str) -> Result<Vec<String>, String> {
+    let resp = match resolver.txt_lookup(name).await {
+        Ok(resp) => resp,
+        Err(e) if e.is_no_records_found() => return Ok(Vec::new()),
+        Err(e) => return Err(format!("TXT lookup for {name} failed: {e}")),
     };
-    resp.answers()
+    Ok(resp.answers()
         .iter()
         .filter_map(|record| match &record.data {
             RData::TXT(txt) => Some(
@@ -380,7 +389,7 @@ async fn txt_records(resolver: &TokioResolver, name: &str) -> Vec<String> {
             ),
             _ => None,
         })
-        .collect()
+        .collect())
 }
 
 /// Probe MX/SPF/DMARC/DKIM for `domain` after a server change. Individual
@@ -453,12 +462,131 @@ pub async fn mail_dns_health(
     })
 }
 
+// ── BIMI ────────────────────────────────────────────────────────────────────
+
+/// `k=v; k=v` tags of a DMARC or BIMI record, keys lowercased.
+fn record_tags(record: &str) -> Vec<(String, String)> {
+    record
+        .split(';')
+        .filter_map(|t| {
+            let (k, v) = t.split_once('=')?;
+            Some((k.trim().to_ascii_lowercase(), v.trim().to_string()))
+        })
+        .collect()
+}
+
+fn tag<'a>(tags: &'a [(String, String)], key: &str) -> Option<&'a str> {
+    tags.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+}
+
+fn is_bimi(record: &str) -> bool {
+    tag(&record_tags(record), "v").is_some_and(|v| v.eq_ignore_ascii_case("BIMI1"))
+}
+
+/// The https logo URL a `v=BIMI1` record publishes. None for any other
+/// record, and for one that declines (`l=` empty). The `a=` evidence (a VMC
+/// certificate) is NOT validated: the logo is shown on the domain's DMARC
+/// enforcement alone, and nothing here claims a verified mark.
+pub fn bimi_logo_url(record: &str) -> Option<String> {
+    if !is_bimi(record) {
+        return None;
+    }
+    tag(&record_tags(record), "l")?
+        .split(',')
+        .map(str::trim)
+        .find(|u| u.len() > 8 && u[..8].eq_ignore_ascii_case("https://"))
+        .map(String::from)
+}
+
+/// Does this DMARC record enforce (quarantine or reject, on every message)?
+/// `subdomain`: the record came from the org domain for a subdomain sender,
+/// so its `sp=` wins when present.
+pub fn dmarc_enforces(record: &str, subdomain: bool) -> bool {
+    if !is_dmarc(record) {
+        return false;
+    }
+    let tags = record_tags(record);
+    let policy = subdomain.then(|| tag(&tags, "sp")).flatten().or_else(|| tag(&tags, "p"));
+    let enforced = policy.is_some_and(|p| p.eq_ignore_ascii_case("quarantine") || p.eq_ignore_ascii_case("reject"));
+    enforced && tag(&tags, "pct").is_none_or(|p| p.parse::<u32>().is_ok_and(|n| n >= 100))
+}
+
+/// The first TXT record at `<prefix>.<domain>` that `keep` accepts, falling
+/// back to the org domain. The bool says the org domain answered.
+/// ponytail: `base_domain` is the last two labels, wrong under public
+/// suffixes like co.uk (it then asks the suffix, which has no record); a
+/// public-suffix list would fix it.
+async fn txt_with_org_fallback(
+    resolver: &TokioResolver,
+    prefix: &str,
+    domain: &str,
+    keep: fn(&str) -> bool,
+) -> Result<Option<(String, bool)>, String> {
+    let org = base_domain(domain);
+    for (name, from_org) in [(domain, false), (org.as_str(), true)] {
+        if from_org && name == domain {
+            break;
+        }
+        let found = txt_records_strict(resolver, &format!("{prefix}.{name}")).await?;
+        if let Some(r) = found.into_iter().find(|r| keep(r)) {
+            return Ok(Some((r, from_org)));
+        }
+    }
+    Ok(None)
+}
+
+/// A From domain's BIMI logo URL, only when its DMARC policy enforces.
+/// `Ok(None)` is a definitive "no logo" (cacheable); `Err` is a lookup that
+/// failed and says nothing.
+pub async fn bimi_logo_url_for(domain: &str) -> Result<Option<String>, String> {
+    let domain = domain.trim_end_matches('.').to_ascii_lowercase();
+    let resolver = TokioResolver::builder_tokio()
+        .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
+        .build()
+        .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
+    let dmarc = txt_with_org_fallback(&resolver, "_dmarc", &domain, is_dmarc).await?;
+    if !dmarc.is_some_and(|(record, from_org)| dmarc_enforces(&record, from_org)) {
+        return Ok(None);
+    }
+    Ok(txt_with_org_fallback(&resolver, "default._bimi", &domain, is_bimi)
+        .await?
+        .and_then(|(record, _)| bimi_logo_url(&record)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn v(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+
+    #[test]
+    fn bimi_record_parse() {
+        assert_eq!(
+            bimi_logo_url("v=BIMI1; l=https://brand.test/logo.svg; a=https://brand.test/vmc.pem").as_deref(),
+            Some("https://brand.test/logo.svg")
+        );
+        assert_eq!(bimi_logo_url("v=BIMI1;l=https://a.test/x.svg").as_deref(), Some("https://a.test/x.svg"));
+        assert_eq!(bimi_logo_url("v=BIMI1; l=; a=;"), None, "an empty l= declines");
+        assert_eq!(bimi_logo_url("v=BIMI1; l=http://brand.test/logo.svg"), None, "https only");
+        assert_eq!(bimi_logo_url("v=spf1 -all"), None);
+        assert_eq!(bimi_logo_url("l=https://brand.test/logo.svg"), None, "no version tag");
+    }
+
+    #[test]
+    fn dmarc_policy_gate() {
+        assert!(dmarc_enforces("v=DMARC1; p=reject; rua=mailto:d@brand.test", false));
+        assert!(dmarc_enforces("v=DMARC1; p=quarantine; pct=100", false));
+        assert!(!dmarc_enforces("v=DMARC1; p=quarantine; pct=50", false), "partial pct is not enforcement");
+        assert!(!dmarc_enforces("v=DMARC1; p=none", false));
+        assert!(!dmarc_enforces("v=DMARC1", false));
+        assert!(!dmarc_enforces("v=spf1 p=reject", false));
+        // A subdomain sender under the org record: sp= wins when present.
+        assert!(!dmarc_enforces("v=DMARC1; p=reject; sp=none", true));
+        assert!(dmarc_enforces("v=DMARC1; p=reject; sp=none", false));
+        assert!(dmarc_enforces("v=DMARC1; p=reject", true));
     }
 
     #[test]

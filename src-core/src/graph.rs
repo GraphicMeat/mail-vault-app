@@ -209,8 +209,9 @@ impl GraphMessage {
             source: Some("graph".to_string()),
             reply_to: None,
             return_path: None,
-            authentication_results: None,
+            authentication_results: self.get_header("Authentication-Results"),
             list_unsubscribe: self.get_header("List-Unsubscribe"),
+            list_unsubscribe_post: self.get_header("List-Unsubscribe-Post"),
             list_id: self.get_header("List-Id"),
             precedence: self.get_header("Precedence"),
         }

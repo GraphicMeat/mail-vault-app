@@ -21,6 +21,7 @@ pub mod scheduled;
 pub mod snooze;
 pub mod stats;
 pub mod tags;
+pub mod unsubscribe;
 pub mod metadata;
 pub mod views;
 
