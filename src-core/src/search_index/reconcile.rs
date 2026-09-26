@@ -83,6 +83,18 @@ pub const BODY_INDEXED: i64 = 1;
 pub const BODY_DISABLED: i64 = 2;
 pub const BODY_UNPARSEABLE: i64 = 3;
 
+/// How much of the body the list's preview line keeps (`messages.snippet`):
+/// three lines of a wide list, not more.
+pub const SNIPPET_CHARS: usize = 200;
+
+/// The preview line of a body: its first `SNIPPET_CHARS` characters with every
+/// run of whitespace (line breaks, indentation, blank lines) folded to one
+/// space. Reads only the head of the body, however long it is.
+pub fn snippet_of(body: &str) -> String {
+    let head: String = body.chars().take(SNIPPET_CHARS * 4).collect();
+    head.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(SNIPPET_CHARS).collect()
+}
+
 fn closed() -> String {
     "search index closed".into()
 }
@@ -108,6 +120,8 @@ struct Row {
     /// `attachments` yet: either never reconciled since the attachments
     /// feature shipped, or reconciled while the setting was off.
     needs_attachment_backfill: bool,
+    /// `snippet IS NULL`: no preview line computed for it yet.
+    snippet_missing: bool,
 }
 
 /// `(account_id, vault_dir)` for every `Maildir/<account>/<dir>` holding a
@@ -246,6 +260,8 @@ pub fn reconcile_mailbox_guarded(
                 if row.size == file.size
                     && row.mtime_ns == file.mtime_ns
                     && !(row.body_state == BODY_PENDING && config.bodies)
+                    // Indexed before the preview line existed: read once more.
+                    && !(row.body_state == BODY_INDEXED && row.snippet_missing && config.bodies)
                     && !(row.needs_attachment_backfill && config.attachments) =>
             {
                 if row.filename == file.filename {
@@ -363,7 +379,8 @@ pub fn reconcile_mailbox_guarded(
 fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::Result<HashMap<u32, Row>> {
     let mut st = conn.prepare_cached(
         "SELECT m.id, m.uid, m.filename, m.size, m.mtime_ns, m.body_state,
-                m.has_attachments AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.message_row = m.id)
+                m.has_attachments AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.message_row = m.id),
+                m.snippet IS NULL
          FROM messages m WHERE m.account_id = ?1 AND m.vault_dir = ?2",
     )?;
     let rows = st.query_map(params![account_id, vault_dir], |r| {
@@ -376,6 +393,7 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
                 mtime_ns: r.get(4)?,
                 body_state: r.get(5)?,
                 needs_attachment_backfill: r.get(6)?,
+                snippet_missing: r.get(7)?,
             },
         ))
     })?;
@@ -413,13 +431,13 @@ fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]
 }
 
 const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
-    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc, snippet)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
   ON CONFLICT(account_id, vault_dir, uid) DO UPDATE SET filename=excluded.filename, size=excluded.size,
     mtime_ns=excluded.mtime_ns, message_id=excluded.message_id, date_utc=excluded.date_utc,
     from_addr_lc=excluded.from_addr_lc, from_name_lc=excluded.from_name_lc, subject_lc=excluded.subject_lc,
     addrs_lc=excluded.addrs_lc, has_attachments=excluded.has_attachments, body_state=excluded.body_state,
-    row_json=excluded.row_json, flags=excluded.flags, to_lc=excluded.to_lc
+    row_json=excluded.row_json, flags=excluded.flags, to_lc=excluded.to_lc, snippet=excluded.snippet
   RETURNING id";
 
 /// The Maildir flag letters a vault file name carries, as stored: the part
@@ -454,6 +472,12 @@ fn commit_batch(
                 (Some(_), false) => BODY_DISABLED,
             };
             let candidates = doc.as_ref().map(|d| d.attachment_candidates.clone()).unwrap_or_default();
+            // No body read (bodies off) = not computed; unparseable = nothing to show.
+            let snippet = match body_state {
+                BODY_INDEXED => doc.as_ref().map(|d| snippet_of(&d.body_text)),
+                BODY_UNPARSEABLE => Some(String::new()),
+                _ => None,
+            };
             let d = doc.unwrap_or_else(|| IndexDoc { row_json: "{}".into(), ..IndexDoc::default() });
             let addrs = d.addrs.join("\n");
             let id: i64 = upsert.query_row(
@@ -475,6 +499,7 @@ fn commit_batch(
                     d.row_json,
                     flags_of(&file.filename),
                     d.to_addrs.join("\n").to_lowercase(),
+                    snippet,
                 ],
                 |r| r.get(0),
             )?;
@@ -739,7 +764,7 @@ fn strip_bodies(conn: &Connection) -> rusqlite::Result<()> {
         insert_fts(conn, id, &subject, &addrs, "", "")?;
     }
     conn.execute(
-        "UPDATE messages SET body_state = ?1 WHERE body_state IN (?2, ?3)",
+        "UPDATE messages SET body_state = ?1, snippet = NULL WHERE body_state IN (?2, ?3)",
         [BODY_DISABLED, BODY_PENDING, BODY_INDEXED],
     )?;
     Ok(())
@@ -884,6 +909,69 @@ mod tests {
         // Starred reads this column. Leaving it at the parse-time value would
         // make every flag change invisible until the file was rewritten.
         assert_eq!(flags, "S");
+    }
+
+    fn snippets(v: &Vault, uids: &[u32]) -> HashMap<u32, String> {
+        let g = crate::search_index::lock(&v.db);
+        db::snippets(g.as_ref().unwrap(), "a1", "INBOX", uids).unwrap()
+    }
+
+    /// The list's preview line comes from the sweep that already reads every
+    /// body, so mail that was in the vault long before is covered, not only
+    /// new arrivals.
+    #[test]
+    fn indexing_stores_a_folded_preview_line_per_message() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}S.eml"), &eml("Old", "Hi Ann,\r\n\r\n   the  invoice\r\nis attached."));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml("Empty", ""));
+        run(&v, "a1", "INBOX", ON, &AtomicUsize::new(0));
+        let got = snippets(&v, &[1, 2, 3]);
+        assert_eq!(got.get(&1).map(String::as_str), Some("Hi Ann, the invoice is attached."));
+        assert!(!got.contains_key(&2), "no text, no preview line");
+        assert!(!got.contains_key(&3));
+    }
+
+    #[test]
+    fn a_long_body_keeps_only_the_head_of_its_preview_line() {
+        assert_eq!(snippet_of(&"word ".repeat(500)).chars().count(), SNIPPET_CHARS);
+    }
+
+    /// A star or a read receipt renames the file; the row keeps its preview.
+    #[test]
+    fn a_flag_rename_keeps_the_preview_line() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Hello", "keep me"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        let cur = v.root.join("Maildir/a1/INBOX/cur");
+        std::fs::rename(cur.join(format!("1{INFO_PREFIX}.eml")), cur.join(format!("1{INFO_PREFIX}FS.eml"))).unwrap();
+        run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(n.load(Ordering::SeqCst), 1, "a rename is not a re-read");
+        assert_eq!(snippets(&v, &[1]).get(&1).map(String::as_str), Some("keep me"));
+    }
+
+    /// An index built before the column existed gains the preview line on its
+    /// next sweep, without its rows ever reading as unindexed (which would
+    /// report search unavailable while it catches up).
+    #[test]
+    fn a_row_indexed_before_the_preview_line_gains_it_on_the_next_sweep() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml("Hello", "from before"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        crate::search_index::lock(&v.db).as_ref().unwrap().execute("UPDATE messages SET snippet = NULL", []).unwrap();
+        assert!(snippets(&v, &[1]).is_empty());
+
+        run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(snippets(&v, &[1]).get(&1).map(String::as_str), Some("from before"));
+        run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(n.load(Ordering::SeqCst), 2, "read once more, then never again");
+        let state: i64 = crate::search_index::lock(&v.db)
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT body_state FROM messages WHERE uid = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(state, BODY_INDEXED);
     }
 
     #[test]

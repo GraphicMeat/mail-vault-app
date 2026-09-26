@@ -698,6 +698,39 @@ pub fn nudge(st: &SearchIndexState, account_id: &str, mailbox: &str) {
     send(st, Signal::Nudge { account_id: account_id.into(), vault_dir: core::text::vault_dir_name(mailbox) });
 }
 
+/// Stamp each header row of one folder with the list's preview line
+/// (`snippet`), for the rows the index has read a body for. One query per
+/// call. A list read never waits on a sweep: the index is tried for at most
+/// ~50 ms, and rows it cannot answer for go out as they are, without one.
+pub fn attach_snippets(st: &SearchIndexState, account_id: &str, mailbox: &str, rows: &mut [Value]) {
+    let uids: Vec<u32> = rows.iter().filter_map(|r| r.get("uid")?.as_u64()).map(|u| u as u32).collect();
+    if uids.is_empty() {
+        return;
+    }
+    let vault_dir = core::text::vault_dir_name(mailbox);
+    let mut found = None;
+    for _ in 0..10 {
+        match st.db.try_lock() {
+            Ok(guard) => {
+                found = guard.as_ref().and_then(|c| db::snippets(c, account_id, &vault_dir, &uids).ok());
+                break;
+            }
+            Err(std::sync::TryLockError::Poisoned(p)) => {
+                found = p.into_inner().as_ref().and_then(|c| db::snippets(c, account_id, &vault_dir, &uids).ok());
+                break;
+            }
+            Err(std::sync::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(5)),
+        }
+    }
+    let Some(found) = found.filter(|f| !f.is_empty()) else { return };
+    for row in rows.iter_mut() {
+        let snippet = row.get("uid").and_then(Value::as_u64).and_then(|u| found.get(&(u as u32)));
+        if let (Some(snippet), Some(obj)) = (snippet, row.as_object_mut()) {
+            obj.insert("snippet".into(), Value::String(snippet.clone()));
+        }
+    }
+}
+
 /// A change wider than one folder (a mailbox rename moves whole directories): a full pass soon.
 pub fn sweep_soon(st: &SearchIndexState) {
     send(st, Signal::Sweep);

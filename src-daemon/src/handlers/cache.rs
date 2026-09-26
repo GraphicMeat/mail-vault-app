@@ -54,6 +54,16 @@ macro_rules! req {
     };
 }
 
+/// The list's first page (`load_email_cache_partial`, a JSON text) with each
+/// row's preview line from the search index (`search_index::attach_snippets`).
+/// Text that does not parse goes back untouched.
+fn with_snippets(state: &DaemonState, account_id: &str, mailbox: &str, text: String) -> String {
+    let Ok(mut entry) = serde_json::from_str::<Value>(&text) else { return text };
+    let Some(rows) = entry.get_mut("emails").and_then(Value::as_array_mut) else { return text };
+    crate::search_index::attach_snippets(&state.search_index, account_id, mailbox, rows);
+    serde_json::to_string(&entry).unwrap_or(text)
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
@@ -96,8 +106,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let order = header_order(&vault_root(&state)?, &account_id, &mailbox);
-                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, Some(limit), order))
-                        .map(|v| v.map_or(Value::Null, Value::String))
+                    let text = daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, Some(limit), order))?;
+                    Ok(text.map_or(Value::Null, |t| Value::String(with_snippets(&state, &account_id, &mailbox, t))))
                 })
                 .await
                 .and_then(|r| r),
@@ -127,7 +137,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     vault_root(&state)?;
-                    daemon_custody::with_conn(&state, |c| sql_cache::load_by_uids(c, &account_id, &mailbox, &uids)).map(Value::Array)
+                    let mut rows = daemon_custody::with_conn(&state, |c| sql_cache::load_by_uids(c, &account_id, &mailbox, &uids))?;
+                    crate::search_index::attach_snippets(&state.search_index, &account_id, &mailbox, &mut rows);
+                    Ok(Value::Array(rows))
                 })
                 .await
                 .and_then(|r| r),
@@ -329,6 +341,40 @@ mod tests {
         let r = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7]})).await.result.unwrap();
         assert!(r.is_array());
         assert_eq!(r[0]["subject"], "hi");
+    }
+
+    /// The list's preview line rides on the rows the list reads, from the
+    /// search index and not from the header cache, so a header rewrite (a
+    /// flag delta, a reconcile) cannot lose it.
+    #[tokio::test]
+    async fn list_reads_carry_the_indexed_preview_line_through_a_header_rewrite() {
+        let (_t, s) = st(true);
+        let index_dir = tempfile::tempdir().unwrap();
+        let conn = mailvault_core::search_index::db::open(index_dir.path()).unwrap();
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, snippet) VALUES ('a', 'INBOX', 7, '7:2,.eml', 1, 1, 1, 'Hi Ann, the invoice is attached.')",
+            [],
+        )
+        .unwrap();
+        *mailvault_core::search_index::lock(&s.search_index.db) = Some(conn);
+
+        let save = |flags: Value| {
+            let data = json!({"emails": [{"uid": 7, "flags": flags}, {"uid": 8, "flags": []}], "totalEmails": 2}).to_string();
+            call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": data}))
+        };
+        save(json!([])).await;
+        save(json!(["\\Seen"])).await; // the header rewrite
+
+        let page = call(&s, "load_email_cache_partial", json!({"accountId": "a", "mailbox": "INBOX", "limit": 50})).await.result.unwrap();
+        let page: Value = serde_json::from_str(page.as_str().expect("still a JSON string")).unwrap();
+        let by_uid = |rows: &Value, uid: u64| rows.as_array().unwrap().iter().find(|r| r["uid"] == uid).cloned().unwrap();
+        assert_eq!(by_uid(&page["emails"], 7)["snippet"], "Hi Ann, the invoice is attached.");
+        assert_eq!(by_uid(&page["emails"], 7)["flags"], json!(["\\Seen"]));
+        assert!(by_uid(&page["emails"], 8).get("snippet").is_none(), "no indexed body, no preview line");
+
+        let rows = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7, 8]})).await.result.unwrap();
+        assert_eq!(by_uid(&rows, 7)["snippet"], "Hi Ann, the invoice is attached.");
+        assert!(by_uid(&rows, 8).get("snippet").is_none());
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
 pub const DB_FILE: &str = "index.db";
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE messages (
@@ -81,6 +81,15 @@ CREATE INDEX messages_msgid ON messages (account_id, message_id);
 /// until the next reindex reaches it.
 const SCHEMA_V4: &str = "
 ALTER TABLE messages ADD COLUMN to_lc TEXT NOT NULL DEFAULT '';
+";
+
+/// The list's preview line: the start of the body text, whitespace collapsed.
+/// NULL = never computed (a row indexed before this column, or with bodies
+/// off); `''` = computed, and the message has no text. The sweep re-reads a
+/// NULL row with an indexed body once (`reconcile`), so existing mail gains
+/// its preview without a rebuild and without dropping out of search.
+const SCHEMA_V5: &str = "
+ALTER TABLE messages ADD COLUMN snippet TEXT;
 ";
 
 #[derive(Debug)]
@@ -210,13 +219,19 @@ fn migrate(conn: &Connection) -> Result<(), Fail> {
         ))
         .map_err(schema_sql)?;
     }
+    if version < 5 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V5} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '5'); COMMIT;"
+        ))
+        .map_err(schema_sql)?;
+    }
     Ok(())
 }
 
 fn validate_schema(conn: &Connection) -> Result<(), Fail> {
     for query in [
         "SELECT key, value FROM meta LIMIT 0",
-        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc FROM messages LIMIT 0",
+        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc, snippet FROM messages LIMIT 0",
         "SELECT account_id, vault_dir, scanned_at, file_count FROM mailbox_scan LIMIT 0",
         "SELECT message_row, part_index, filename, mime, size, state, text FROM attachments LIMIT 0",
         "SELECT rowid, subject, addrs, body, attach FROM msg_fts LIMIT 0",
@@ -356,6 +371,31 @@ pub fn counts(conn: &Connection) -> IndexCounts {
     counts_checked(conn).unwrap_or_default()
 }
 
+/// The non-empty preview lines of `uids` in one folder, for the list to show
+/// under each row. One query per call, never one per row.
+pub fn snippets(conn: &Connection, account_id: &str, vault_dir: &str, uids: &[u32]) -> Result<std::collections::HashMap<u32, String>, String> {
+    let mut out = std::collections::HashMap::new();
+    // SQLite's default variable limit is 32766; a list read asks for at most
+    // a few hundred at once.
+    for chunk in uids.chunks(900) {
+        let marks = (3..chunk.len() + 3).map(|n| format!("?{n}")).collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT uid, snippet FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid IN ({marks}) AND snippet IS NOT NULL AND snippet != ''"
+        );
+        let mut args = vec![Value::Text(account_id.to_string()), Value::Text(vault_dir.to_string())];
+        args.extend(chunk.iter().map(|&uid| Value::Integer(uid.into())));
+        let mut stmt = conn.prepare_cached(&sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params_from_iter(args.iter()), |r| Ok((r.get::<_, u32>(0)?, r.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (uid, snippet) = row.map_err(|e| e.to_string())?;
+            out.insert(uid, snippet);
+        }
+    }
+    Ok(out)
+}
+
 pub fn db_size_bytes(vault_root: &Path) -> u64 {
     let dir = vault_root.join(DB_DIR);
     ["", "-wal"]
@@ -382,7 +422,7 @@ mod tests {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         assert!(tmp.path().join("search_index/index.db").exists());
         assert!(!tmp.path().join("search_index/index.db-shm").exists(), "exclusive mode must not create a shared-memory file");
     }
@@ -409,7 +449,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let flags = |uid: u32| -> String {
             conn.query_row("SELECT flags FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
         };
@@ -480,7 +520,7 @@ mod tests {
     fn v2_migration_adds_attachments_table_and_bumps_version() {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'attachments'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1);
     }
@@ -506,7 +546,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("5"));
         let rows: i64 = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap();
         assert_eq!(rows, 1, "v1 rows survive the migration to v2");
         conn.execute(
