@@ -6,6 +6,7 @@ import { ViewPreview } from './ViewPreview';
 import { useTagStore } from '../stores/tagStore';
 import { useFieldStore } from '../stores/fieldStore';
 import { useMailStore } from '../stores/mailStore';
+import { useUnsavedStore } from '../stores/unsavedStore';
 import { useT } from '../i18n/index.js';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
@@ -44,6 +45,19 @@ const NO_FILTER = { op: 'is', value: '' };
 /// not rot the day after it was saved. An absolute range is the other choice,
 /// and the two would contradict each other — picking one clears the other.
 const WINDOWS = [7, 30, 90, 365];
+/// Query suggestions per page: the top 20, then 20 more as the list scrolls.
+const TERM_PAGE = 20;
+/// What each part of the form is called when leaving would lose an edit to
+/// it. The time range is four keys and one control, so one line.
+const CHANGE_LABELS = {
+  name: 'views.name', icon: 'views.icon', query: 'views.filter.query', sender: 'views.filter.sender',
+  unread: 'views.filter.unread', starred: 'views.filter.starred', answered: 'views.filter.answered',
+  hasAttachments: 'views.filter.attachments', toMe: 'views.filter.toMe', notFromMe: 'views.filter.notFromMe',
+  accounts: 'views.filter.accounts', range: 'views.filter.within', withinDays: 'views.filter.within',
+  dateFrom: 'views.filter.within', dateTo: 'views.filter.within', tags: 'views.filter.tags',
+  fields: 'views.filter.fields', group: 'views.filter.group', sort: 'views.filter.sort',
+  direction: 'views.filter.direction', showTimeline: 'views.showTimeline',
+};
 const SORTS = ['date', 'sender', 'subject'];
 const DIRECTIONS = ['desc', 'asc'];
 
@@ -65,22 +79,44 @@ const dropTargetAt = (event, root) => {
 
 /// Boxes of AND-words, OR between boxes: the one shape a person can read at a
 /// glance, and the one the daemon evaluates. The query words and the senders
-/// both use it. `suggest` (the senders only) turns the input into a typeahead:
-/// text in, `[{ value, label, detail }]` out, never a rejection.
-function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest }) {
+/// both use it. `suggest` turns the input into a typeahead: `(text, offset)`
+/// in, `[{ value, label, detail }]` out, never a rejection. With `pageSize`,
+/// a full page means there may be more, fetched as the list is scrolled.
+function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest, pageSize, minChars = 1 }) {
   const t = useT();
   const root = useRef(null);
   const [suggestions, setSuggestions] = useState([]);
-  // Debounced, and a reply for text since replaced is dropped. Text carrying
-  // an operator is a group being written, not one sender being looked up.
+  /// The text being paged, how far it got, and whether a page is in flight.
+  /// Replaced (not mutated) when the text changes, so a late page for old
+  /// text sees it is no longer current and is dropped.
+  const paging = useRef(null);
+  const fetchPage = useCallback(page => {
+    if (!suggest || page.busy || page.done) return;
+    page.busy = true;
+    void suggest(page.text, page.offset).then(found => {
+      if (paging.current !== page) return;
+      const first = page.offset === 0;
+      page.busy = false;
+      page.offset += found.length;
+      page.done = !pageSize || found.length < pageSize;
+      // Keyed by value: a term that moved across a page edge is listed once.
+      setSuggestions(current => (first ? found
+        : [...current, ...found.filter(option => !current.some(shown => shown.value === option.value))]));
+    });
+  }, [suggest, pageSize]);
+  // Debounced. Text carrying an operator is a group being written, not one
+  // word being looked up.
   useEffect(() => {
+    paging.current = null;
     if (!suggest) return undefined;
     const text = input.trim();
-    if (!text || /&&|\|\||,/.test(text)) { setSuggestions([]); return undefined; }
-    let live = true;
-    const timer = setTimeout(() => { void suggest(text).then(found => { if (live) setSuggestions(found); }); }, 120);
-    return () => { live = false; clearTimeout(timer); };
-  }, [input, suggest]);
+    if (text.length < minChars || /&&|\|\||,/.test(text)) { setSuggestions([]); return undefined; }
+    const page = { text, offset: 0, busy: false, done: false };
+    paging.current = page;
+    const timer = setTimeout(() => fetchPage(page), 120);
+    return () => clearTimeout(timer);
+  }, [input, suggest, minChars, fetchPage]);
+  const loadMore = () => { if (paging.current) fetchPage(paging.current); };
   /// Pointer drag, not HTML5 drag and drop: Tauri's file-drop handling eats
   /// HTML5 drag events on Windows.
   const drag = useRef(null);
@@ -169,7 +205,8 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
         ? <TypeaheadChips id={prefix} testId={prefix} label={label} placeholder={placeholder}
           describedBy={`${prefix}-hint`} value={input} onChange={setInput} options={suggestions}
           onPick={option => setGroups(addTyped(groups, option.value))}
-          onEnterText={addKeys} onBackspaceEmpty={() => setGroups(removeLast)} onBlur={addKeys} />
+          onEnterText={addKeys} onBackspaceEmpty={() => setGroups(removeLast)} onBlur={addKeys}
+          onLoadMore={pageSize ? loadMore : undefined} />
         : <input id={prefix} data-testid={prefix} value={input} maxLength={200}
           aria-label={label} placeholder={placeholder}
           aria-describedby={`${prefix}-hint`}
@@ -191,7 +228,9 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
   </div>;
 }
 
-export function ViewEditor({ view, onClose, showPreview = true, isNew = false }) {
+/// `onSaved` and `onDiscard` answer the unsaved-changes prompt for the host:
+/// a draft it created is kept once saved, deleted once discarded.
+export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = true, isNew = false }) {
   const t = useT();
   const saveView = useViewStore(state => state.saveView);
   const deleteView = useViewStore(state => state.deleteView);
@@ -251,6 +290,13 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     label: sender.name || sender.address,
     detail: [sender.name ? sender.address : '', sender.count].filter(Boolean).join(' · '),
   }))).catch(() => []), [accountKey]);
+  /// Words and phrases from the subjects and attachment names of the mail the
+  /// view reads, most messages first, a page at a time.
+  const suggestTerms = useCallback((prefix, offset) => daemonCall('views.suggest_terms', {
+    prefix, accounts: accountKey ? accountKey.split('\n') : [], offset, limit: TERM_PAGE,
+  }).then(found => (Array.isArray(found) ? found : []).map(term => ({
+    value: term.term, label: term.term, detail: String(term.count),
+  }))).catch(() => []), [accountKey]);
 
   const tagChips = chosenTags.map(id => tags.find(tag => tag.id === id)).filter(Boolean)
     .map(tag => ({ key: tag.id, label: tag.name, color: tag.color, testId: `view-tag-${tag.id}` }));
@@ -297,22 +343,51 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
 
   const edited = () => ({ ...view, name: name.trim() || (isNew ? view.name : ''), icon, def: editedDef() });
 
-  const submit = async (event) => {
-    event.preventDefault();
+  /// Saves the form; false when it cannot (no name, or the daemon refused).
+  const persist = async () => {
     // A starter carries no name of its own — the app translates it — so only a
     // view someone made needs one.
-    if (!name.trim() && !view.builtin && !isNew) return;
+    if (!name.trim() && !view.builtin && !isNew) return false;
     setSaveError('');
     setSaving(true);
     try {
       await saveView(edited());
-      onClose?.(true);
+      return true;
     } catch (cause) {
       setSaveError(cause?.message || String(cause));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (await persist()) onClose?.(true);
+  };
+
+  /// The form as it opened, per part, and the parts that differ from it now.
+  /// Typed-but-not-added words count: Save would keep them.
+  const snapshot = () => ({ ...editedDef(), name: name.trim(), icon });
+  const [baseline] = useState(snapshot);
+  const current = snapshot();
+  const changes = [...new Set(Object.keys(CHANGE_LABELS)
+    .filter(key => JSON.stringify(current[key] ?? null) !== JSON.stringify(baseline[key] ?? null))
+    .map(key => t(CHANGE_LABELS[key])))];
+  const answers = useRef(null);
+  answers.current = {
+    save: async () => { const saved = await persist(); if (saved) onSaved?.(); return saved; },
+    discard: async () => { await onDiscard?.(); },
+  };
+  const changesKey = changes.join('\n');
+  useEffect(() => {
+    useUnsavedStore.getState().setGuard(changes.length
+      ? { changes, save: () => answers.current.save(), discard: () => answers.current.discard() }
+      : null);
+    // Keyed on the list's text: a new array each render is not a new guard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changesKey]);
+  useEffect(() => () => useUnsavedStore.getState().setGuard(null), []);
 
   const remove = async () => {
     setSaveError('');
@@ -375,7 +450,8 @@ export function ViewEditor({ view, onClose, showPreview = true, isNew = false })
     </div>
 
     <QueryGroupsField prefix="view-query" label={t('views.filter.query')} placeholder={t('views.query.placeholder')}
-      hint={t('views.query.hint')} groups={groups} setGroups={setGroups} input={queryInput} setInput={setQueryInput} />
+      hint={t('views.query.hint')} groups={groups} setGroups={setGroups} input={queryInput} setInput={setQueryInput}
+      suggest={suggestTerms} pageSize={TERM_PAGE} minChars={2} />
 
     <QueryGroupsField prefix="view-sender" label={t('views.filter.sender')} placeholder={t('views.sender.placeholder')}
       hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput}

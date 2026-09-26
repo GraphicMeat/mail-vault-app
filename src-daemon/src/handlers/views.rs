@@ -158,6 +158,16 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(8).min(50) as usize;
             json_of(crate::search_index::suggest_senders(&state.search_index, &accounts, prefix, limit)?)
         }
+        // The editor's query-field typeahead: `[{ term, count }]`, 20 per
+        // page by default. No accounts named is every account.
+        "views.suggest_terms" => {
+            let prefix = params.get("prefix").and_then(Value::as_str).unwrap_or("");
+            let accounts: Vec<String> = serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null))
+                .unwrap_or_default();
+            let offset = params.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(20).min(50) as usize;
+            json_of(crate::search_index::suggest_terms(&state.search_index, &accounts, prefix, offset, limit)?)
+        }
         _ => Err(format!("Unknown method: {method}")),
     }
 }
@@ -784,6 +794,27 @@ mod tests {
     async fn suggest_senders_offers_nothing_while_the_index_is_closed() {
         let s = st();
         let out = call(&s, "views.suggest_senders", json!({ "prefix": "ann", "accounts": ["a"] })).await;
+        assert_eq!(out, json!([]));
+    }
+
+    /// The view editor's query-field typeahead reads the same index the view
+    /// runs on: every term it offers is one that index's subjects carry.
+    #[tokio::test]
+    async fn suggest_terms_offers_indexed_terms_with_counts() {
+        let s = st();
+        index(&s);
+        let out = call(&s, "views.suggest_terms", json!({ "prefix": "sta", "accounts": ["a"] })).await;
+        assert_eq!(out, json!([{ "term": "starred", "count": 1 }]));
+        let other = call(&s, "views.suggest_terms", json!({ "prefix": "sta", "accounts": ["b"] })).await;
+        assert_eq!(other, json!([]), "another account's terms are not offered");
+    }
+
+    /// Same convenience rule as `suggest_senders`: nothing to offer while the
+    /// index is closed is not a failure.
+    #[tokio::test]
+    async fn suggest_terms_offers_nothing_while_the_index_is_closed() {
+        let s = st();
+        let out = call(&s, "views.suggest_terms", json!({ "prefix": "sta", "accounts": ["a"] })).await;
         assert_eq!(out, json!([]));
     }
 }

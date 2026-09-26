@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } from '../../stores/viewStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
+import { useUnsavedStore } from '../../stores/unsavedStore';
 import { ViewEditor } from '../ViewEditor';
 import { Button } from '../ui/Button';
 import { SettingsSection, SettingsPageLayout } from '../ui/SettingsForm';
@@ -28,6 +29,10 @@ export function ViewsSettings({ onUpgrade }) {
   const premium = useSettingsStore(state => hasPremiumAccess(state.billingProfile));
   const [editingId, setEditingId] = useState(null);
   const [newlyCreatedId, setNewlyCreatedId] = useState(null);
+  /// The draft's id, read at the moment of discarding: a switch held by the
+  /// unsaved-changes prompt runs later than the render that queued it.
+  const draft = useRef(null);
+  const setDraft = id => { draft.current = id; setNewlyCreatedId(id); };
   const [refused, setRefused] = useState(false);
   const [error, setError] = useState('');
   const switching = useRef(false);
@@ -40,10 +45,16 @@ export function ViewsSettings({ onUpgrade }) {
 
   const full = viewLimitReached(views, premium);
 
+  /// A new view never saved goes with its editor. Once only: the prompt's
+  /// Discard and the switch it lets through both land here.
   const discardUnsaved = async () => {
-    if (newlyCreatedId && newlyCreatedId === editingId) await deleteView(newlyCreatedId);
-    setNewlyCreatedId(null);
+    const id = draft.current;
+    setDraft(null);
+    if (id && useViewStore.getState().views.some(view => view.id === id)) await deleteView(id);
   };
+
+  /// Every switch away from an open editor asks first when it holds edits.
+  const leave = action => useUnsavedStore.getState().leave(() => { void action(); });
 
   const startNew = async () => {
     if (switching.current) return;
@@ -67,7 +78,7 @@ export function ViewsSettings({ onUpgrade }) {
       if (!reply.ok) { setRefused(true); return; }
       setRefused(false);
       setEditingId(view.id);
-      setNewlyCreatedId(view.id);
+      setDraft(view.id);
     } catch (cause) {
       setError(cause?.message || String(cause));
     } finally { switching.current = false; }
@@ -78,8 +89,7 @@ export function ViewsSettings({ onUpgrade }) {
     switching.current = true;
     try {
       setError('');
-      if (newlyCreatedId && newlyCreatedId === editingId) await discardUnsaved();
-      else setNewlyCreatedId(null);
+      if (draft.current) await discardUnsaved();
       setEditingId(current => current === id ? null : id);
     } catch (cause) {
       setError(cause?.message || String(cause));
@@ -89,7 +99,7 @@ export function ViewsSettings({ onUpgrade }) {
   useEffect(() => {
     if (!pendingNew) return;
     useViewStore.setState({ pendingNew: false });
-    void startNew();
+    leave(startNew);
     // The intent is consumed the moment it arrives; re-running on every view
     // list change would make a second view out of one press.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,7 +110,7 @@ export function ViewsSettings({ onUpgrade }) {
   return <SettingsPageLayout as="section" spaced={false} className="views-settings" aria-label={t('views.section')}>
     <SettingsSection>
       <Button variant="secondary" size="sm" type="button" data-testid="views-new" disabled={full}
-        aria-label={t('views.new')} onClick={startNew}><Plus size={14} /> {t('views.new')}</Button>
+        aria-label={t('views.new')} onClick={() => leave(startNew)}><Plus size={14} /> {t('views.new')}</Button>
 
     {/* The cap is a fact about the plan, so it is stated before it bites, not
         only when the + refuses. */}
@@ -126,7 +136,7 @@ export function ViewsSettings({ onUpgrade }) {
       {view => <button type="button" data-testid={`views-row-${view.id}`}
             className={`views-row-button account-settings-account-button${editingId === view.id ? ' is-editing' : ''}`}
             aria-expanded={editingId === view.id}
-            onClick={() => { void selectView(view.id); }}>
+            onClick={() => leave(() => selectView(view.id))}>
             <ViewIcon icon={view.icon} size={14} />
             <span className="views-row-name">{viewLabel(view, t)}</span>
           </button>}
@@ -136,12 +146,13 @@ export function ViewsSettings({ onUpgrade }) {
 
     </SettingsSection>
 
-    {editing && <ViewEditor key={editing.id} view={editing} isNew={editing.id === newlyCreatedId} onClose={async saved => {
+    {editing && <ViewEditor key={editing.id} view={editing} isNew={editing.id === newlyCreatedId}
+      onSaved={() => setDraft(null)} onDiscard={discardUnsaved} onClose={async saved => {
       if (switching.current) return;
       switching.current = true;
       try {
         if (!saved) await discardUnsaved();
-        else setNewlyCreatedId(null);
+        else setDraft(null);
         setEditingId(null);
       } catch (cause) {
         setError(cause?.message || String(cause));

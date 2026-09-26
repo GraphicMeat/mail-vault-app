@@ -500,6 +500,121 @@ pub fn suggest_senders(
     Ok(ranked.into_iter().take(limit).map(|(_, s)| s).collect())
 }
 
+/// A word or phrase seen in a subject or attachment name, and how many
+/// distinct messages carry it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TermSuggestion {
+    pub term: String,
+    pub count: u64,
+}
+
+/// The view editor's query-field typeahead: words and phrases starting with
+/// `prefix`, best (most messages) first, paged by `offset`/`limit`.
+///
+/// Sources are `messages.subject_lc` and `attachments.filename`. The FTS
+/// tables are contentless (no body text stored), so message bodies are out of
+/// scope here.
+/// ponytail: full-text term suggestions need a `unicode61` vocab table (a
+/// schema bump + reindex) to cover bodies; add it if this gap is felt.
+///
+/// `subject_lc` is written with Rust's `to_lowercase` (see `reconcile.rs`), so
+/// it can be matched against a Rust-lowercased `prefix` directly. Attachment
+/// filenames keep their original case: SQLite's `lower()` only folds ASCII, so
+/// filtering non-ASCII prefixes in SQL would miss matches — the scoped
+/// filenames are fetched as-is and matched in Rust instead.
+/// ponytail: recomputed with one full scan per (debounced) keystroke; add an
+/// index or a vocab table if a large vault makes it slow.
+pub fn suggest_terms(
+    conn: &rusqlite::Connection,
+    accounts: &[String],
+    prefix: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<Vec<TermSuggestion>, String> {
+    let p = prefix.trim().to_lowercase();
+    if p.chars().count() < 2 {
+        return Ok(Vec::new());
+    }
+    let account_args: Vec<Value> = accounts.iter().cloned().map(Value::Text).collect();
+    let account_filter =
+        if accounts.is_empty() { String::new() } else { format!(" AND account_id IN ({})", vec!["?"; accounts.len()].join(", ")) };
+
+    let subject_sql = format!("SELECT id, subject_lc FROM messages WHERE subject_lc != '' AND instr(subject_lc, ?1) > 0{account_filter}");
+    let subject_args: Vec<Value> = std::iter::once(Value::Text(p.clone())).chain(account_args.iter().cloned()).collect();
+    let mut st = conn.prepare(&subject_sql).map_err(|e| e.to_string())?;
+    let subjects: Vec<(i64, String)> = st
+        .query_map(rusqlite::params_from_iter(subject_args.iter()), |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+    drop(st);
+
+    let attach_filter = if accounts.is_empty() { String::new() } else { format!(" AND m.account_id IN ({})", vec!["?"; accounts.len()].join(", ")) };
+    let attach_sql = format!(
+        "SELECT a.message_row, a.filename FROM attachments a JOIN messages m ON m.id = a.message_row WHERE a.filename != ''{attach_filter}"
+    );
+    let mut st = conn.prepare(&attach_sql).map_err(|e| e.to_string())?;
+    let attachments: Vec<(i64, String)> = st
+        .query_map(rusqlite::params_from_iter(account_args.iter()), |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+    drop(st);
+
+    // A term counts once per message even if it shows up twice (subject and
+    // an attachment, or twice in the subject), so terms are collected per
+    // message first and counted after.
+    let mut per_message: std::collections::HashMap<i64, std::collections::HashSet<String>> = std::collections::HashMap::new();
+    for (id, subject_lc) in &subjects {
+        per_message.entry(*id).or_default().extend(term_occurrences(subject_lc, &p));
+    }
+    for (id, filename) in &attachments {
+        per_message.entry(*id).or_default().extend(term_occurrences(&filename.to_lowercase(), &p));
+    }
+    let mut counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for terms in per_message.values() {
+        for term in terms {
+            *counts.entry(term.clone()).or_default() += 1;
+        }
+    }
+
+    let mut ranked: Vec<TermSuggestion> = counts.into_iter().map(|(term, count)| TermSuggestion { term, count }).collect();
+    // Total order (count, then term) so paging by offset never skips or repeats a row.
+    ranked.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.term.cmp(&b.term)));
+    Ok(ranked.into_iter().skip(offset).take(limit).collect())
+}
+
+/// Every occurrence of `prefix` in `text` (both already lowercase) that
+/// starts at a word boundary, extended to the end of the word the prefix ends
+/// in: "inv" in "invoice #12" yields "invoice"; "quarterly re" in "quarterly
+/// report 2025" yields "quarterly report". "voice" does not match "invoice"
+/// (the match does not start at a boundary).
+fn term_occurrences(text: &str, prefix: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if prefix.is_empty() {
+        return out;
+    }
+    let mut search_from = 0;
+    while let Some(rel) = text[search_from..].find(prefix) {
+        let start = search_from + rel;
+        let at_boundary = text[..start].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+        if at_boundary {
+            let mut end = start + prefix.len();
+            for c in text[end..].chars() {
+                if !c.is_alphanumeric() {
+                    break;
+                }
+                end += c.len_utf8();
+            }
+            out.push(text[start..end].to_string());
+        }
+        // Advance past the first char of this match (not just one byte: it
+        // may be multi-byte) so the next `find` starts on a char boundary.
+        search_from = start + text[start..].chars().next().map_or(1, |c| c.len_utf8());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1123,5 +1238,93 @@ mod tests {
             suggest_senders(&conn, &[], "ann", 8).unwrap(),
             vec![SenderSuggestion { address: "ann@acme.test".into(), name: String::new(), count: 1 }]
         );
+    }
+
+    /// Messages for the query-field typeahead: `(account, uid, subject, attachment filenames)`.
+    fn term_fixture(rows: &[(&str, u32, &str, &[&str])]) -> (tempfile::TempDir, rusqlite::Connection) {
+        let (tmp, conn) = coverage_fixture();
+        for (account, uid, subject, attachments) in rows {
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, subject_lc)
+                 VALUES (?1, 'INBOX', ?2, ?3, 1, 1, 1, ?4)",
+                rusqlite::params![account, uid, format!("{uid}{INFO_PREFIX}.eml"), subject.to_lowercase()],
+            )
+            .unwrap();
+            let id = conn.last_insert_rowid();
+            for (i, filename) in attachments.iter().enumerate() {
+                conn.execute(
+                    "INSERT INTO attachments (message_row, part_index, filename, size, state) VALUES (?1, ?2, ?3, 0, 'ok')",
+                    rusqlite::params![id, i as i64, filename],
+                )
+                .unwrap();
+            }
+        }
+        (tmp, conn)
+    }
+
+    fn terms(found: &[TermSuggestion]) -> Vec<&str> {
+        found.iter().map(|s| s.term.as_str()).collect()
+    }
+
+    #[test]
+    fn a_prefix_must_start_a_word_not_land_mid_word() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Invoice #12", &[])]);
+        assert!(terms(&suggest_terms(&conn, &[], "voice", 0, 20).unwrap()).is_empty(), "'voice' does not match inside 'invoice'");
+        assert_eq!(terms(&suggest_terms(&conn, &[], "inv", 0, 20).unwrap()), vec!["invoice"]);
+    }
+
+    #[test]
+    fn a_phrase_extends_to_the_end_of_the_word_the_prefix_ends_in() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Quarterly report 2025", &[])]);
+        assert_eq!(terms(&suggest_terms(&conn, &[], "quarterly re", 0, 20).unwrap()), vec!["quarterly report"]);
+    }
+
+    #[test]
+    fn a_message_counts_once_even_when_the_term_is_in_both_subject_and_an_attachment() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Invoice attached", &["invoice.pdf"]), ("a", 2, "Another invoice", &[])]);
+        assert_eq!(suggest_terms(&conn, &[], "invoice", 0, 20).unwrap(), vec![TermSuggestion { term: "invoice".into(), count: 2 }]);
+    }
+
+    #[test]
+    fn attachment_filenames_are_a_source() {
+        let (_t, conn) = term_fixture(&[("a", 1, "no match here", &["receipt.pdf"])]);
+        assert_eq!(terms(&suggest_terms(&conn, &[], "rece", 0, 20).unwrap()), vec!["receipt"]);
+    }
+
+    #[test]
+    fn accounts_scope_the_suggestions_and_none_named_is_every_account() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Invoice one", &[]), ("b", 2, "Invoice two", &[])]);
+        let a_only = suggest_terms(&conn, &["a".into()], "invoice", 0, 20).unwrap();
+        assert_eq!(a_only, vec![TermSuggestion { term: "invoice".into(), count: 1 }]);
+        let everyone = suggest_terms(&conn, &[], "invoice", 0, 20).unwrap();
+        assert_eq!(everyone, vec![TermSuggestion { term: "invoice".into(), count: 2 }]);
+    }
+
+    #[test]
+    fn offset_pages_the_same_total_order_with_no_gaps_or_repeats() {
+        let rows: Vec<(&str, u32, &str, &[&str])> =
+            vec![("a", 1, "Ink one", &[]), ("a", 2, "India two", &[]), ("a", 3, "Insect three", &[])];
+        let (_t, conn) = term_fixture(&rows);
+        let full = suggest_terms(&conn, &[], "in", 0, 20).unwrap();
+        assert_eq!(terms(&full), vec!["india", "ink", "insect"], "count ties break alphabetically");
+        let page1 = suggest_terms(&conn, &[], "in", 0, 2).unwrap();
+        let page2 = suggest_terms(&conn, &[], "in", 2, 2).unwrap();
+        assert_eq!([page1, page2].concat(), full, "two pages must reassemble the full list with no gap or repeat");
+    }
+
+    #[test]
+    fn non_ascii_prefixes_match_a_lowercased_subject_and_a_filename() {
+        let (_t, conn) = term_fixture(&[
+            ("a", 1, "Žinutė dėl sąskaitos", &[]),
+            ("a", 2, "no match here", &["Sąskaita.pdf"]),
+        ]);
+        assert_eq!(terms(&suggest_terms(&conn, &[], "sąs", 0, 20).unwrap()), vec!["sąskaita", "sąskaitos"]);
+    }
+
+    #[test]
+    fn a_prefix_under_two_chars_suggests_nothing() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Invoice", &[])]);
+        assert!(suggest_terms(&conn, &[], "i", 0, 20).unwrap().is_empty());
+        assert!(suggest_terms(&conn, &[], " ", 0, 20).unwrap().is_empty());
     }
 }

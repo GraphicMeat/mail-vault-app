@@ -55,6 +55,8 @@ import { PortableSettings } from './settings/PortableSettings';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
+import { useUnsavedStore } from '../stores/unsavedStore';
+import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 
 const featureTabs = [
   { id: 'cleanup', labelKey: 'settings.tab.cleanup', icon: Sparkles },
@@ -407,11 +409,16 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   }, [searchNavigation]);
 
   // Reset subView when switching tabs
-  const handleTabChange = (tabId) => {
+  const switchTab = (tabId) => {
     setActiveTab(normalizeTab(tabId));
     setSubView(null);
     setFeatureDetailActive(false);
   };
+  /// Every way off a page, or out of Settings, asks first when an editor on it
+  /// holds unsaved changes.
+  const leave = action => useUnsavedStore.getState().leave(action);
+  const handleTabChange = tabId => leave(() => switchTab(tabId));
+  const requestClose = () => leave(() => onClose?.());
 
   // A working Settings session owns its selected account, including while
   // minimized and the user switches mailboxes behind it. Only replace one
@@ -446,12 +453,12 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     const content = searchText([t(page.labelKey), page.sectionKey ? t(page.sectionKey) : '', page.keywords || ''].join(' '));
     return terms.every(term => content.includes(term));
   });
-  const openResult = page => {
+  const openResult = page => leave(() => {
     if (page.id === 'appearance' && page.section) setAppearanceSection(page.section);
     if (page.id === 'mail-preferences' && page.section) setGeneralSubTab(page.section);
     if (page.id === 'accounts' && page.section) setAccountSection(page.section);
     if (page.id === 'backup' && page.section) setBackupSubTab(page.section);
-    handleTabChange(page.id);
+    switchTab(page.id);
     // Cleanup and Time Capsule keep their settings behind the page's own
     // "Settings" sub-view (see subView above) — handleTabChange just reset it.
     if (accountPillTabIds.has(page.id) && page.section === 'config') setSubView('config');
@@ -459,7 +466,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     searchTargetRef.current = page.keywords ? page.labelKey : null;
     setQuery('');
     setSearchNavigation(value => value + 1);
-  };
+  });
   const renderSearchField = () => (
     <div className="settings-search">
       <Search size={15} aria-hidden="true" />
@@ -489,7 +496,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     <Dialog
       open={!minimized}
       keepMounted
-      onClose={onClose}
+      onClose={requestClose}
       size="custom"
       data-testid="settings-page"
       aria-labelledby={titleId}
@@ -574,7 +581,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
                 <Maximize2 size={18} aria-hidden="true" />
               </Button>}
               <Button variant="ghost" icon size="md"
-                aria-label={t('common.close')} title={t('common.close')} onClick={onClose}
+                aria-label={t('common.close')} title={t('common.close')} onClick={requestClose}
               >
                 <X size={20} className="text-mail-text-muted" />
               </Button>
@@ -695,10 +702,11 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
             )}
 
             {activeTab === 'help' && (
-              <HelpSettings onClose={onClose} onReportBug={onReportBug} />
+              <HelpSettings onClose={requestClose} onReportBug={onReportBug} />
             )}
           </div>
         </div>
+        <UnsavedChangesDialog />
     </Dialog>
   );
 }

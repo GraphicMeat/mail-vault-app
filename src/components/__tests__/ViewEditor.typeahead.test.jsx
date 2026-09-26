@@ -170,12 +170,77 @@ describe('sender typeahead', () => {
     expect(saved().def.sender).toBe('acme || billing');
   });
 
-  it('the query words get no suggestions', async () => {
+  it('the query field does not ask for senders', async () => {
     render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'ac' } });
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(daemonCall).not.toHaveBeenCalledWith('views.suggest_senders', expect.anything());
-    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+});
+
+describe('query word typeahead', () => {
+  /// `total` indexed terms, `word0`..`wordN`, served a page at a time.
+  const serveTerms = total => {
+    daemonCall = vi.fn(async (method, { offset = 0, limit = 20 } = {}) => (method === 'views.suggest_terms'
+      ? Array.from({ length: Math.max(0, Math.min(limit, total - offset)) }, (_, i) => ({ term: `word${offset + i}`, count: total - offset - i }))
+      : null));
+  };
+  const termCalls = () => daemonCall.mock.calls.filter(([method]) => method === 'views.suggest_terms');
+  /// jsdom lays nothing out: the list is at its end when these say so.
+  const scrollToEnd = list => {
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 600 });
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 240 });
+    Object.defineProperty(list, 'scrollTop', { configurable: true, value: 360 });
+    fireEvent.scroll(list);
+  };
+
+  it('asks nothing for one letter, and the top 20 with counts from two', async () => {
+    serveTerms(50);
+    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'w' } });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(termCalls()).toHaveLength(0);
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'wo' } });
+    const options = await suggestions();
+    expect(options).toHaveLength(20);
+    expect(options[0].textContent).toContain('word0');
+    expect(options[0].textContent).toContain('50');
+    expect(termCalls()[0][1]).toEqual({ prefix: 'wo', accounts: ['acct-1', 'acct-2'], offset: 0, limit: 20 });
+  });
+
+  it('scrolling to the end of the list loads the next 20, and stops at a short page', async () => {
+    serveTerms(45);
+    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'wo' } });
+    await suggestions();
+    scrollToEnd(screen.getByRole('listbox'));
+    await vi.waitFor(() => expect(listed()).toHaveLength(40));
+    expect(termCalls()[1][1].offset).toBe(20);
+    scrollToEnd(screen.getByRole('listbox'));
+    await vi.waitFor(() => expect(listed()).toHaveLength(45));
+    scrollToEnd(screen.getByRole('listbox'));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(termCalls()).toHaveLength(3);
+    expect(new Set(listed().map(option => option.querySelector('.typeahead-label').textContent)).size).toBe(45);
+  });
+
+  it('ArrowDown past the last option loads more, since a keyboard cannot scroll', async () => {
+    serveTerms(30);
+    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
+    const input = screen.getByTestId('view-query');
+    fireEvent.change(input, { target: { value: 'wo' } });
+    await suggestions();
+    for (let i = 0; i < 21; i += 1) fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await vi.waitFor(() => expect(listed()).toHaveLength(30));
+  });
+
+  it('a picked term becomes a query word', async () => {
+    serveTerms(5);
+    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'wo' } });
+    fireEvent.click((await suggestions())[2]);
+    submit();
+    await vi.waitFor(() => expect(saved().def.query).toBe('word2'));
   });
 });
 

@@ -36,6 +36,7 @@ vi.mock('../../ViewEditor', () => ({
 }));
 
 const { ViewsSettings } = await import('../ViewsSettings');
+const { useUnsavedStore } = await import('../../../stores/unsavedStore');
 
 const STARRED = { id: 'builtin-starred', name: '', icon: 'star', position: 0, builtin: 'starred', def: {} };
 const MINE = { id: 'v1', name: 'Receipts', icon: 'tag', position: 1, builtin: null, def: {} };
@@ -44,6 +45,7 @@ const THIRD = { id: 'v2', name: 'Clients', icon: 'tag', position: 2, builtin: nu
 const setViews = views => useViewStoreMock.setState({ views });
 
 beforeEach(() => {
+  useUnsavedStore.setState({ guard: null, pending: null, busy: false });
   useViewStoreMock = create((set, get) => ({
     views: [STARRED, MINE],
     pendingNew: false,
@@ -145,5 +147,19 @@ describe('the Views settings page', () => {
     await screen.findByTestId('views-list');
     expect(useViewStoreMock.getState().createView).toHaveBeenCalledTimes(1);
     expect(useViewStoreMock.getState().pendingNew).toBe(false);
+  });
+
+  /// An open builder with edits: picking another view waits for the answer.
+  it('asks before leaving a builder with unsaved changes', async () => {
+    setViews([STARRED, MINE, THIRD]);
+    render(<ViewsSettings />);
+    fireEvent.click(screen.getByTestId('views-row-v1'));
+    useUnsavedStore.getState().setGuard({ changes: ['views.name'], save: vi.fn(async () => true), discard: vi.fn(async () => {}) });
+    fireEvent.click(screen.getByTestId('views-row-v2'));
+    expect(screen.getByTestId('view-editor-v1')).toBeTruthy();
+    expect(useUnsavedStore.getState().pending).toBeTruthy();
+    await useUnsavedStore.getState().answer('discard');
+    await screen.findByTestId('view-editor-v2');
+    expect(screen.queryByTestId('view-editor-v1')).toBeNull();
   });
 });

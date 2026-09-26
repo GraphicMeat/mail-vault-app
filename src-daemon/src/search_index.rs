@@ -512,6 +512,24 @@ pub fn suggest_senders(
     core::query::suggest_senders(conn, accounts, prefix, limit)
 }
 
+/// The view editor's query-field suggestions (words/phrases from subjects and
+/// attachment names). None while the index is off or closed, same as
+/// `suggest_senders`.
+pub fn suggest_terms(
+    st: &SearchIndexState,
+    accounts: &[String],
+    prefix: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<Vec<core::query::TermSuggestion>, String> {
+    if *g(&st.enabled) == Some(false) {
+        return Ok(Vec::new());
+    }
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Ok(Vec::new()) };
+    core::query::suggest_terms(conn, accounts, prefix, offset, limit)
+}
+
 /// The index's list rows for `uids` of one folder: `row_json` (headers,
 /// attachments list, no body) with `flags` and `isArchived` read off the
 /// CURRENT filename, so a flag rename since the last sweep is not stale here.

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { SettingsPage } from './SettingsPage';
+import { useUnsavedStore } from '../stores/unsavedStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useMailStore } from '../stores/mailStore';
@@ -13,6 +14,16 @@ import { useFieldStore } from '../stores/fieldStore';
 import { pinQuickActionScope } from '../hooks/useQuickActionConfiguration';
 
 const token = new URLSearchParams(window.location.search).get('settings');
+
+/// The window's own close button bypasses React: unsaved edits stop it here
+/// and ask, and the answer closes it for real.
+function holdUnsavedClose(event) {
+  const unsaved = useUnsavedStore.getState();
+  const closed = () => emit('settings-window-closed', { token });
+  if (!unsaved.guard?.changes.length) { void closed(); return; }
+  event.preventDefault();
+  unsaved.leave(() => { void closed().finally(() => getCurrentWebviewWindow().destroy()); });
+}
 // Each window owns its own render epoch. Relaying it would bounce setLocale
 // between windows after the asynchronous catalog import completes.
 const plainState = state => Object.fromEntries(Object.entries(state).filter(([key, value]) => key !== 'localeEpoch' && typeof value !== 'function'));
@@ -91,9 +102,7 @@ export function SettingsWindow() {
           if (state.accounts !== previous.accounts) void emit('settings-window-change', { token, accounts: state.accounts });
         });
       });
-      unclose = await getCurrentWebviewWindow().onCloseRequested(() => {
-        void emit('settings-window-closed', { token });
-      });
+      unclose = await getCurrentWebviewWindow().onCloseRequested(holdUnsavedClose);
       if (!disposed) await emit('settings-window-ready', { token, label: getCurrentWebviewWindow().label });
     };
     void boot().catch(cause => setError(cause?.message || String(cause)));

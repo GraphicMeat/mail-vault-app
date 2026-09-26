@@ -35,6 +35,7 @@ import { UndoToast } from './components/UndoToast';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { SettingsBubble } from './components/settings/SettingsBubble';
+import { useUnsavedStore } from './stores/unsavedStore';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { SnoozePicker } from './components/SnoozePicker';
 import { MigrationToast } from './components/MigrationToast';
@@ -669,7 +670,7 @@ function App() {
       if (action === 'end-bulk-session') endBulkSession();
       else if (action === 'clear-selection') clearSelection();
       else if (action === 'close-compose') setComposeState(null);
-      else if (action === 'close-settings') closeSettings();
+      else if (action === 'close-settings') useUnsavedStore.getState().leave(closeSettings);
       else if (action === 'close-shortcuts') setShowShortcutsModal(false);
     },
     focusSearch: () => {
@@ -1386,7 +1387,8 @@ function App() {
       {/* Minimized windows share one stack so their restore buttons never overlap. */}
       {(settingsMinimized || composeWindows.some(w => w.minimized)) && (
         <div className="fixed top-16 right-4 z-40 flex flex-col gap-2">
-          {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings} onClose={closeSettings} />}
+          {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings}
+            onClose={() => useUnsavedStore.getState().leave(closeSettings)} />}
           {composeWindows.filter(w => w.minimized).map(w => {
             const subject = w.initialData?.subject || w.replyTo?.subject || '';
             const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
