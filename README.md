@@ -153,13 +153,15 @@ Unlimited accounts, each with its own display name and colour, all mergeable int
 
 | | |
 |---|---|
-| Binary | ~8 MB (Rust + Tauri, not Electron) |
-| Memory | ~80 MB idle |
+| Download | 53 MB macOS disk image, 20 MB Windows installer, 30 MB Linux .deb (2.16.0) |
+| Memory | about 345 MB on a Mac with a 10,000-message inbox loaded (2.16.0), about 200 MB in a test build of the next release; up to about 340 MB for a few seconds while the window first loads or a large inbox opens (measured, see below) |
 | Startup | under a second |
 | Search | SQLite FTS5, offline: 50,000 messages searched in under 15 ms in our test |
 | Sync | CONDSTORE delta sync: zero IMAP calls when nothing changed |
 | Bandwidth | COMPRESS=DEFLATE, 70–80% less on the wire |
 | Lists | virtual scrolling, comfortable past 17,000 messages |
+
+How the memory figure was measured: macOS physical footprint, the number in Activity Monitor's Memory column, added up over every process MailVault runs. That is the app, its background helper and the WebKit processes that draw the window, and the WebKit content process is most of it, about 130 MB. The app itself was about 25 MB and the helper about 17 MB; in 2.16.0 they stayed at about 85 MB and 107 MB, largely memory they had freed but not given back. Two test accounts, one with 50 messages and one with 10,000, on an M4 Mac mini with 16 GB and an optimized build, read after loading the large inbox, after scrolling through it and after ten idle minutes. More accounts and larger folders take more: on a real Mac with about 20 accounts, 2.16.0 used about 440 MB for the app and helper processes alone, not counting the WebKit content process. About 266 MB of that was memory the app owns without mapping it, most likely graphics memory the web view charges to the app; the test setup above does not reproduce it, and the next release does not change it.
 
 A background helper keeps mail syncing with the window closed, and the app updates itself with an in-app changelog.
 
