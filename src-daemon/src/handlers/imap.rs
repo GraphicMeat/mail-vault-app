@@ -400,7 +400,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", store_uid, err),
                         Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", store_uid, join_err),
                     }
-                    RpcResponse::success(id, json!({"success": true, "email": e, "cached": cached}))
+                    // OpenPGP: decrypted in memory whatever the cache did; the
+                    // decrypted copy is kept only when the vault holds the message.
+                    let raw = e.raw_source_bytes.clone();
+                    let state2 = Arc::clone(state);
+                    let rendered = blocking(move || crate::handlers::pgp::render(&state2, &aid, &mb, store_uid, raw, cached)).await;
+                    let mut email = json!(e);
+                    if let Ok((bytes, status)) = rendered {
+                        crate::handlers::pgp::overlay(&mut email, &bytes, store_uid, status);
+                    }
+                    RpcResponse::success(id, json!({"success": true, "email": email, "cached": cached}))
                 }
                 // Proven absence (a tagged OK on the second probe), not an
                 // error — `success:false, gone:true` is what api.js's

@@ -326,6 +326,8 @@ pub fn reconcile_mailbox_guarded(
                     continue;
                 }
             };
+            // An encrypted message is indexed from its decrypted copy, so it is searchable.
+            let raw = crate::pgp::readable(&cur, file.uid, raw);
             let doc = parse(&raw, file.uid, &file.filename).map(|mut d| {
                 // Cap before taking the lock: less memory per batch, shorter commits.
                 d.body_text = if config.bodies { cap_chars(d.body_text, MAX_BODY_CHARS) } else { String::new() };
@@ -677,6 +679,20 @@ fn prune(conn: &mut Connection, present: &[(String, String)], keep_going: &dyn F
 /// and addresses from `messages`) and `vacuum_pending` is set, all in one
 /// transaction; the file is compacted later by `compact_if_pending`. On:
 /// disabled rows become pending and the next sweep re-parses them.
+/// Make the next sweep of the folder re-read `uid`'s file although its size
+/// and mtime did not change: its decrypted copy was just written beside it.
+/// A closed index is a no-op; the next full sweep indexes the copy anyway.
+pub fn forget_file(db: &SharedConn, account_id: &str, vault_dir: &str, uid: u32) -> Result<(), String> {
+    let guard = lock(db);
+    let Some(conn) = guard.as_ref() else { return Ok(()) };
+    conn.execute(
+        "UPDATE messages SET mtime_ns = -1 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3",
+        params![account_id, vault_dir, uid],
+    )
+    .map(|_| ())
+    .map_err(db_err)
+}
+
 pub fn set_bodies_enabled(db: &SharedConn, enabled: bool) -> Result<(), String> {
     let mut guard = lock(db);
     let conn = guard.as_mut().ok_or_else(closed)?;
@@ -810,6 +826,25 @@ mod tests {
 
     const ON: IndexConfig = IndexConfig { bodies: true, attachments: false, image_text: false };
     const OFF: IndexConfig = IndexConfig { bodies: false, attachments: false, image_text: false };
+
+    #[test]
+    fn an_encrypted_message_is_indexed_from_its_decrypted_copy_once_forgotten() {
+        let v = vault();
+        let raw = eml("Sealed", "-----BEGIN PGP MESSAGE-----\r\nhQEMA\r\n-----END PGP MESSAGE-----");
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}S.eml"), &raw);
+        let n = AtomicUsize::new(0);
+        assert_eq!(run(&v, "a1", "INBOX", ON, &n).parsed, 1);
+        assert!(fts_hits(&v, "\"zebra\"").is_empty());
+        let cur = v.root.join("Maildir/a1/INBOX/cur");
+        let copy = format!("X-MailVault-Source: {}\r\n{}", crate::pgp::source_tag(raw.as_bytes()), eml("Sealed", "zebra crossing"));
+        crate::pgp::write_copy(&cur, 1, copy.as_bytes()).unwrap();
+        assert_eq!(run(&v, "a1", "INBOX", ON, &n).parsed, 0, "size and mtime alone never notice the copy");
+        forget_file(&v.db, "a1", "INBOX", 1).unwrap();
+        let s = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!((s.parsed, s.removed), (1, 0));
+        assert_eq!(fts_hits(&v, "\"zebra\"").len(), 1);
+        assert_eq!(run(&v, "a1", "INBOX", ON, &n).parsed, 0, "indexed once, then unchanged again");
+    }
 
     #[test]
     fn indexes_new_files_and_skips_unchanged_ones() {

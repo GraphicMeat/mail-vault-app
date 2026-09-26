@@ -36,7 +36,11 @@ zip = "2"
 argon2 = "0.5"
 chacha20poly1305 = "0.10"
 zeroize = "1"
+# OpenPGP decryption (src/pgp.rs): pure Rust, no gpg, so the sandboxed builds can use it.
+pgp = "0.20"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"
+# pgp 0.20 takes rand 0.8 RNGs; tests use it to make keys and encrypt fixtures.
+rand08 = { package = "rand", version = "0.8" }

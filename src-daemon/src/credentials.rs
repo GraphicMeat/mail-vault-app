@@ -224,6 +224,9 @@ fn delete_host_secrets() -> Result<(), String> {
     };
     if let Some(path) = test_credentials_path() {
         gone(std::fs::remove_file(path))?;
+        if let Some(p) = test_pgp_keys_path() {
+            gone(std::fs::remove_file(p))?;
+        }
         return test_ai_key_path().map_or(Ok(()), |p| gone(std::fs::remove_file(p)));
     }
     let delete = |name: &str| match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential()) {
@@ -236,6 +239,11 @@ fn delete_host_secrets() -> Result<(), String> {
         delete(&part)?;
     }
     delete(CREDENTIALS_KEY)?;
+    let pgp_primary = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY).and_then(|e| e.get_password()).ok();
+    for part in mailvault_core::keychain::stale_parts(PGP_KEYS_ENTRY, pgp_primary.as_deref(), &nothing) {
+        delete(&part)?;
+    }
+    delete(PGP_KEYS_ENTRY)?;
     delete(AI_ENDPOINT_KEY_ENTRY)
 }
 
@@ -856,6 +864,119 @@ pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
         Ok(Err(e)) => Err(format!("the keychain write panicked: {e}")),
         Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
     }
+}
+
+// ── OpenPGP secret keys ─────────────────────────────────────────────────────
+//
+// Every imported key in one entry, a JSON list of `mailvault_core::pgp::StoredKey`
+// (armored key + passphrase, kept so decryption runs unattended). An armored
+// key outgrows Windows' secret limit on its own, so the entry is split the
+// way the account blob is. Not in a portable copy's sealed store: a portable
+// copy reads no OpenPGP key, refuses an import, and the offload that empties
+// the host keychain removes this entry too.
+
+const PGP_KEYS_ENTRY: &str = "pgp_secret_keys";
+
+#[cfg(debug_assertions)]
+fn test_pgp_keys_path() -> Option<PathBuf> {
+    std::env::var_os("MAILVAULT_TEST_PGP_KEYS").map(PathBuf::from)
+}
+
+#[cfg(not(debug_assertions))]
+fn test_pgp_keys_path() -> Option<PathBuf> {
+    None
+}
+
+/// Nothing stored is an empty list; any other failure is an `Err`, never an
+/// empty list, because an import rewrites the whole entry from what it read.
+fn read_pgp_keys(interactive: bool) -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
+    if sealed().is_some() {
+        return Ok(Vec::new());
+    }
+    let json = match test_pgp_keys_path() {
+        Some(path) => match std::fs::read_to_string(&path) {
+            Ok(json) => json,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(format!("failed to read test pgp keys: {e}")),
+        },
+        None => {
+            let entry = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
+            let Some(primary) = read_entry(&entry, PGP_KEYS_ENTRY, interactive).map_err(|e| format!("failed to read keychain: {e}"))? else {
+                return Ok(Vec::new());
+            };
+            mailvault_core::keychain::join_secret(PGP_KEYS_ENTRY, &primary, &mut |name| {
+                match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
+                    Ok(value) => Ok(Some(value)),
+                    Err(keyring::Error::NoEntry) => Ok(None),
+                    Err(e) => Err(e.to_string()),
+                }
+            })
+            .map_err(|e| format!("failed to read keychain: {e}"))?
+        }
+    };
+    serde_json::from_str(&json).map_err(|e| format!("failed to parse the OpenPGP keys: {e}"))
+}
+
+/// Parts first, then the primary, then the previous generation's parts, the
+/// order `store_credentials` keeps: a reader always finds a complete set.
+fn write_pgp_keys(keys: &[mailvault_core::pgp::StoredKey]) -> Result<(), String> {
+    use mailvault_core::keychain::{secret_limit, split_secret, stale_parts};
+    if sealed().is_some() {
+        return Err("OpenPGP keys cannot be imported into a portable copy".to_string());
+    }
+    let json = serde_json::to_string(keys).map_err(|e| e.to_string())?;
+    if let Some(path) = test_pgp_keys_path() {
+        return std::fs::write(&path, json).map_err(|e| format!("failed to write test pgp keys: {e}"));
+    }
+    let entry = |name: &str| Entry::new(KEYRING_SERVICE, name).map_err(|e| format!("failed to create keyring entry: {e}"));
+    let primary = entry(PGP_KEYS_ENTRY)?;
+    let old = primary.get_password().ok();
+    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let split = split_secret(PGP_KEYS_ENTRY, &json, secret_limit(), &generation);
+    for (name, value) in &split.parts {
+        entry(name)?.set_password(value).map_err(|e| format!("failed to write keychain: {e}"))?;
+    }
+    primary.set_password(&split.primary).map_err(|e| format!("failed to write keychain: {e}"))?;
+    for name in stale_parts(PGP_KEYS_ENTRY, old.as_deref(), &split) {
+        if let Err(e) = entry(&name).and_then(|e| e.delete_credential().map_err(|e| e.to_string())) {
+            warn!("[pgp] could not remove stale keychain part {name}: {e}");
+        }
+    }
+    Ok(())
+}
+
+static PGP_KEYS_READ: SingleFlight<Vec<mailvault_core::pgp::StoredKey>> = SingleFlight::new();
+
+fn pgp_keys_read(interactive: bool) -> BoxFuture<'static, Result<Vec<mailvault_core::pgp::StoredKey>, String>> {
+    if test_pgp_keys_path().is_some() {
+        return unshared(move || read_pgp_keys(interactive)).boxed();
+    }
+    PGP_KEYS_READ.read(interactive, read_pgp_keys).boxed()
+}
+
+/// The imported OpenPGP keys, off the async workers and under a clock.
+pub async fn resolve_pgp_keys_guarded() -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
+    guarded(PGP_KEYS_ENTRY, pgp_keys_read(may_prompt()), AI_KEY_TIMEOUT).await
+}
+
+/// Read, change and write back the key list, one change at a time so two
+/// imports never lose one key. A failed read fails the change: starting from
+/// an empty list would drop every key already imported.
+pub async fn update_pgp_keys(
+    change: impl FnOnce(&mut Vec<mailvault_core::pgp::StoredKey>) -> Result<(), String>,
+) -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
+    static ONE_AT_A_TIME: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    let _held = ONE_AT_A_TIME.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;
+    let mut keys = resolve_pgp_keys_guarded().await?;
+    change(&mut keys)?;
+    let to_write = keys.clone();
+    let write = tokio::task::spawn_blocking(move || write_pgp_keys(&to_write));
+    match tokio::time::timeout(AI_KEY_TIMEOUT, write).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(e)) => return Err(format!("the keychain write panicked: {e}")),
+        Err(_) => return Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+    }
+    Ok(keys)
 }
 
 #[cfg(test)]

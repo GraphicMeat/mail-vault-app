@@ -4,7 +4,8 @@
 //! writer and readers (`store`, `read`, `list`, `delete`, `set_flags`, …)
 //! live in `vault_files`, not here.
 //! Layout: {root}/Maildir/{account_id}/{mailbox}/cur/{uid}:2,{flags}.eml
-//! (the app's own format).
+//! (the app's own format). Beside `cur/`, `.decrypted/{uid}.eml` holds an
+//! OpenPGP message's decrypted copy (`crate::pgp`): never a vault row.
 
 use std::fs;
 use std::path::{Path, PathBuf};

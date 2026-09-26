@@ -203,7 +203,7 @@ pub(crate) fn read_attachment_part(
     // is keyed by the raw email address (see vault_files::cur_path's doc).
     let cur = maildir_root.join(account_id).join(vault_dir).join("cur");
     let path = find_file_by_uid(&cur, uid)?;
-    let raw = std::fs::read(&path).ok()?;
+    let raw = mailvault_core::pgp::readable(&cur, uid, std::fs::read(&path).ok()?);
     let current_filename = path.file_name()?.to_string_lossy().into_owned();
     let parsed = mailparse::parse_mail(&raw).ok()?;
     let mut parts = Vec::new();

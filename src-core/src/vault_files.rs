@@ -90,6 +90,7 @@ pub fn delete_maildir_files(reg: &VaultRegistry, root: &Path, account_id: &str, 
             }
             match fs::remove_file(entry.path()) {
                 Ok(()) => {
+                    crate::pgp::remove_copy(&cur_dir, uid);
                     removed += 1;
                     gone.push(uid);
                 }
@@ -236,13 +237,24 @@ pub fn read_eml(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &st
         .ok_or_else(|| format!("Email UID {} not found", uid))
 }
 
+/// `read_eml` as a reader renders it: an OpenPGP-encrypted message's
+/// decrypted copy when there is one (`pgp::readable`). Every body, part and
+/// attachment index comes from these bytes; only the raw source view and the
+/// .eml export keep the original.
+pub fn read_body_eml(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Vec<u8>, String> {
+    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    Ok(crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw))
+}
+
 pub fn read(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<ParsedEmail>, String> {
     let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+    let raw = crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw);
     parse_eml_bytes(&raw, uid, parse_flags_from_filename(&name)).map(Some)
 }
 
 pub fn read_light(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<LightEmail>, String> {
     let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+    let raw = crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw);
     parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).map(Some)
 }
 
@@ -264,6 +276,7 @@ pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mail
             }
             let Some((name, raw)) = read_resolved_file(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
             let Ok(raw) = raw else { return Ok(None) };
+            let raw = crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw);
             Ok(parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok())
         })
         .collect()
@@ -290,7 +303,7 @@ fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uids: &[u32]
 
 pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, attachment_index: usize) -> Result<String, String> {
     use base64::Engine;
-    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
     let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
 
     let mut attach_parts: Vec<&mailparse::ParsedMail> = Vec::new();
@@ -309,7 +322,7 @@ pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailb
 /// message that cannot be found, read or parsed is an `Err` for the call.
 pub fn read_attachments(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, indices: &[usize]) -> Result<Vec<Option<String>>, String> {
     use base64::Engine;
-    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
     let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
@@ -413,6 +426,7 @@ pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str,
     let cur_dir = cur_path(root, account_id, mailbox);
     if let Some(path) = locate(reg, &cur_dir, account_id, mailbox, uid) {
         fs::remove_file(&path).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
+        crate::pgp::remove_copy(&cur_dir, uid);
         reg.remove(account_id, mailbox, &[uid]);
         info!("Deleted email UID {} from {:?}", uid, path);
         return Ok(true);
@@ -539,7 +553,12 @@ pub fn clear_cache(
             }
             gate(&mut || {
                 match fs::remove_file(entry.path()) {
-                    Ok(()) => deleted_count += 1,
+                    Ok(()) => {
+                        deleted_count += 1;
+                        if let (Some(cur), Some(uid)) = (entry.path().parent(), vault_filename_uid(&name)) {
+                            crate::pgp::remove_copy(cur, uid);
+                        }
+                    }
                     Err(e) => warn!("Failed to delete cached email {:?}: {}", entry.path(), e),
                 }
                 Ok(())
@@ -854,7 +873,7 @@ pub fn cache_attachment(root: &Path, raw: &[u8], account_id: &str, mailbox: &str
 /// The cached path of one attachment part, if the file exists.
 pub fn cached_attachment_path(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<String>, String> {
     let cache_dir = root.join("attachment_cache");
-    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
     Ok(cached_attachment_in(&cache_dir, &raw, account_id, mailbox, uid, index)?
         .map(|p| p.to_string_lossy().to_string()))
 }
@@ -919,7 +938,7 @@ pub fn export_attachments(
     if indices.is_empty() {
         return Err("No attachments to export".to_string());
     }
-    let raw = read_eml(reg, root, account_id, mailbox, uid)?;
+    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
     export_attachments_in(&raw, uid, indices, dest_dir)
 }
 
@@ -978,7 +997,7 @@ pub fn export_many_attachments(
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
     let (mut files, mut skipped) = (0, 0);
     for (account_id, mailbox, uid) in messages {
-        match read_eml(reg, root, account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
+        match read_body_eml(reg, root, account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
             Ok(written) => files += written,
             Err(e) => {
                 warn!("Bulk export skipped uid {} in {}: {}", uid, mailbox, e);
@@ -1056,6 +1075,7 @@ fn prefetch_attachments_in(
         if uid <= above_uid { break; }
         gate(&mut || {
             let Ok(raw) = fs::read(&path) else { return Ok(()) };
+            let raw = crate::pgp::readable(cur_dir, uid, raw);
             // A message with no Content-Disposition header has no attachment part.
             if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { return Ok(()); }
             let Ok(parsed) = mailparse::parse_mail(&raw) else { return Ok(()) };

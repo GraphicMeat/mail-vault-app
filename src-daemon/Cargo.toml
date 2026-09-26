@@ -50,6 +50,9 @@ zeroize = "1"
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"
+# OpenPGP handler tests make a key and encrypt a message (pgp 0.20 takes rand 0.8 RNGs).
+pgp = "0.20"
+rand08 = { package = "rand", version = "0.8" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }

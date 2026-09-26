@@ -298,6 +298,7 @@ pub fn read_light_at(cur_dir: &Path, uid: u32, hint: Option<&Path>) -> Option<Li
         Some(hit) => hit,
         None => read(&find_file_by_uid(cur_dir, uid)?)?,
     };
+    let raw = crate::pgp::readable(cur_dir, uid, raw);
     parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok()
 }
 
