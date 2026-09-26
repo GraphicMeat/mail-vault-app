@@ -11,7 +11,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
 import { ViewAttachmentsDownload } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
-import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
+import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
@@ -55,7 +55,7 @@ import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { EmailRow, CompactEmailRow } from './EmailRow';
+import { EmailRow, CompactEmailRow, listRowHeight } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { RowQuickActions } from './RowQuickActions';
 import { SwipeBackdrop } from './SwipeBackdrop';
@@ -75,8 +75,7 @@ const THREAD_MODE_LABEL = {
 // while nothing is open and the rows it feeds do not all repaint.
 const EMPTY_SET = Object.freeze(new Set());
 
-const ROW_HEIGHT_DEFAULT = 56;
-const ROW_HEIGHT_COMPACT = 52;
+const ROW_HEIGHT_DEFAULT = listRowHeight(false);
 
 function getDateRange(emails) {
   if (!emails || emails.length === 0) return null;
@@ -220,6 +219,7 @@ function EmailListComponent({ stacked = false }) {
   const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged }), [saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged]);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
+  const previewLines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const emailListView = useSettingsStore(s => s.emailListView);
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
@@ -280,7 +280,9 @@ function EmailListComponent({ stacked = false }) {
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const [narrowList, setNarrowList] = useState(false);
   const isCompact = emailListStyle === 'compact' || narrowList;
-  const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
+  // Every row the same height for a given N, whether or not its body has been
+  // indexed yet: the virtualizer places rows by arithmetic, never by measuring.
+  const ROW_HEIGHT = listRowHeight(isCompact, previewLines);
   const rowStyle = useMemo(() => ({ height: ROW_HEIGHT }), [ROW_HEIGHT]);
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 

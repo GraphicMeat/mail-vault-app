@@ -17,6 +17,7 @@ import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
+import { RowSnippet, WithSnippet } from './EmailRow';
 import {
   Paperclip,
   ChevronRight,
@@ -126,6 +127,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         <ConnectedStateIcon email={latestEmail} size={14} />
       </div>
 
+      <WithSnippet email={latestEmail}>
       {/*
         No `truncate` on the column itself — that clips the alert icons that
         now sit after the names. The names span truncates instead.
@@ -169,6 +171,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
           {formatEmailDate(latestEmail.date)}
         </span>
       </div>
+      </WithSnippet>
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
@@ -289,6 +292,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
             <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
           )}
         </div>
+        <RowSnippet email={latestEmail} />
       </div>
 
       {/* Hover actions */}

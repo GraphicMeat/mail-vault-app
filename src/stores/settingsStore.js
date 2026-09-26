@@ -102,6 +102,9 @@ const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
 // What a two-finger trackpad swipe on a message row does, per side.
 export const SWIPE_ACTIONS = ['archive', 'delete', 'toggleRead', 'star', 'snooze', 'move', 'none'];
 const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) ? value : fallback;
+// Lines of message preview under each list row: 0 (off, the list as it always
+// was), 1, 2 or 3. Anything else reads as off.
+export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ? value : 0;
 export const normalizeSearchMailboxConcurrency = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
@@ -188,6 +191,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   keyboardShortcuts: mergeShortcuts(persisted?.keyboardShortcuts),
   swipeLeftAction: normalizeSwipeAction(persisted?.swipeLeftAction, current.swipeLeftAction),
   swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
+  listPreviewLines: normalizeListPreviewLines(persisted?.listPreviewLines ?? current.listPreviewLines),
 });
 
 /**
@@ -428,6 +432,7 @@ export const useSettingsStore = create(
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'compact', // 'default' | 'compact'
+      listPreviewLines: 0, // 0 (off) | 1 | 2 | 3 lines of body text under each row
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       emailListView: 'list', // 'list' | 'explorer'
       listTimelineVisible: false,
@@ -1037,6 +1042,7 @@ export const useSettingsStore = create(
       setLayoutMode: (mode) => set({ layoutMode: mode }),
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
+      setListPreviewLines: (lines) => set({ listPreviewLines: normalizeListPreviewLines(lines) }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setInsightsPreferences: value => set({ insightsPreferences: normalizeInsightsPreferences(value) }),
       // Changing the endpoint URL points `endpointConsented` at a NEW
@@ -1318,6 +1324,7 @@ export const useSettingsStore = create(
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'compact',
+          listPreviewLines: 0,
           emailListGrouping: 'chronological',
           emailListView: 'list',
           listTimelineVisible: false,

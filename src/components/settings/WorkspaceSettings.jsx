@@ -1,15 +1,18 @@
 import React, { useId } from 'react';
 import { Check, Columns, Rows } from 'lucide-react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, normalizeListPreviewLines } from '../../stores/settingsStore';
 import { SettingRow } from '../ui/SettingRow';
 import { SidebarLayoutPreview, WorkspacePreview } from './PreferencePreview';
 import { useT } from '../../i18n/index.js';
+
+const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
 
 export function WorkspaceSettings({ windowIsNarrow }) {
   const t = useT();
   const settings = useSettingsStore();
   const choiceId = useId();
   const chat = settings.viewStyle === 'chat';
+  const previewLines = normalizeListPreviewLines(settings.listPreviewLines);
   const groups = [
     { key: 'viewStyle', setter: 'setViewStyle', title: 'mailExperience',
       options: [['list', 'emailView', 'emailViewHint'], ['chat', 'chatView', 'chatViewHint']] },
@@ -63,6 +66,18 @@ export function WorkspaceSettings({ windowIsNarrow }) {
           </div>
         </SettingRow>
       ))}
+      <SettingRow label={t('listPreview.title')}
+        description={chat ? undefined : t(previewLines ? 'listPreview.linesHint' : 'listPreview.offHint')}
+        preview={<WorkspacePreview setting="listPreviewLines" value={previewLines} label={t('listPreview.title')} disabled={chat} />}>
+        <div role="group" className="settings-segments" data-testid="list-preview-lines">
+          {PREVIEW_LINE_CHOICES.map(([value, key]) => (
+            <button type="button" key={value} aria-pressed={previewLines === value} disabled={chat}
+              onClick={() => settings.setListPreviewLines(value)}>
+              {t(key)}
+            </button>
+          ))}
+        </div>
+      </SettingRow>
       {chat && <p className="mt-2 text-xs text-mail-text-muted">{t('workspace.emailViewOnly')}</p>}
     </section>
   );

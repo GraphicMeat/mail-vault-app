@@ -123,6 +123,7 @@ export const settingSearchGroups = [
     ['workspace.backupStatusLocation', 'backup status location indicator icon badge avatar green check info hide hidden sidebar'],
     ['workspace.navigation', 'sidebar navigation folders bubbles list'],
     ['workspace.messageRows', 'message rows density compact single two lines'],
+    ['listPreview.title', 'preview snippet excerpt body text lines message list rows'],
   ] },
   { id: 'appearance', section: 'reading', sectionKey: 'settings.appearance.section.reading', settings: [
     ['settings.appearance.threadMode', 'conversation conversations thread threads grouping ungroup'],

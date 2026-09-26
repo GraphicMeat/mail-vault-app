@@ -1,6 +1,6 @@
 import React from 'react';
 import { displayText } from '../utils/bidiText';
-import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { getAccountColor, useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
 import { getRowPartyName } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
@@ -80,6 +80,47 @@ function StarToggle({ email, actions, size }) {
     >
       <Star size={size} className={isFlagged ? 'text-amber-400 fill-amber-400' : 'text-mail-text-muted hover:text-amber-400'} />
     </button>
+  );
+}
+
+// The list's preview line (Settings > Workspace > Preview lines): a fixed
+// line height, so a row is its layout's height plus N of these, the same for
+// every row whatever its text and the virtualizer never has to measure one.
+export const SNIPPET_LINE_PX = 16;
+const ROW_BASE_PX = { compact: 52, default: 56 };
+
+export function listRowHeight(compact, previewLines = 0) {
+  return (compact ? ROW_BASE_PX.compact : ROW_BASE_PX.default) + previewLines * SNIPPET_LINE_PX;
+}
+
+/**
+ * The start of the message's text under the row, clamped to the lines the
+ * user asked for. `snippet` comes from the offline search index, so a row
+ * whose body has not been indexed shows nothing here: no placeholder.
+ */
+export function RowSnippet({ email }) {
+  const lines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
+  if (!lines || !email?.snippet) return null;
+  return (
+    <div data-testid="row-snippet" dir="auto" className="row-snippet" style={{ WebkitLineClamp: lines, maxHeight: lines * SNIPPET_LINE_PX }}>
+      {email.snippet}
+    </div>
+  );
+}
+
+/**
+ * A single-line row's sender and subject columns, with the preview line under
+ * them when there is one. Without one this adds no element at all, so the row
+ * keeps exactly the layout it had before preview lines existed.
+ */
+export function WithSnippet({ email, children }) {
+  const lines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
+  if (!lines || !email?.snippet) return children;
+  return (
+    <div className="flex-1 min-w-0 flex flex-col justify-center">
+      <div className="flex items-center gap-3">{children}</div>
+      <RowSnippet email={email} />
+    </div>
   );
 }
 
@@ -169,6 +210,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <ConnectedStateIcon email={email} size={14} />
       </div>
 
+      <WithSnippet email={email}>
       {/*
         No `truncate` on the column itself — that clips the alert icons that
         now sit after the name. The name span truncates instead, which is what
@@ -218,6 +260,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
           <RowDate email={email} />
         </span>
       </div>
+      </WithSnippet>
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
@@ -317,6 +360,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <TagChips email={email} />
           <AttachmentGlyph email={email} size={12} />
         </div>
+        <RowSnippet email={email} />
       </div>
 
       {/* Hover actions */}

@@ -52,12 +52,14 @@ export function EmailThemePreview() {
   </PreviewFrame>;
 }
 
-function SampleRows({ singleLine = false }) {
+function SampleRows({ singleLine = false, previewLines = 0 }) {
   const t = useT();
   return <div className={`preview-message-rows ${singleLine ? 'preview-single-line' : ''}`}>
     {['Nell Okafor', 'Priya Raines'].map((sender, index) => <div className="preview-message-row" key={sender}>
       <Cloud aria-hidden="true" size={13} className="text-mail-server" />
-      <span className="preview-message-copy"><strong>{sender}</strong><span>{t(index ? 'preview.row4.subject' : 'settings.preview.subject')}</span></span>
+      <span className="preview-message-copy"><strong>{sender}</strong><span>{t(index ? 'preview.row4.subject' : 'settings.preview.subject')}</span>
+        {previewLines > 0 && <span className="preview-message-snippet" style={{ WebkitLineClamp: previewLines }}>{t('listPreview.sample')}</span>}
+      </span>
       <span className="preview-time">{formatTime(index ? FIRST_REPLY : SAMPLE_DATE)}</span>
     </div>)}
   </div>;
@@ -113,6 +115,8 @@ export function WorkspacePreview({ setting, value, label, disabled }) {
       <div><span className="preview-pane-label">{t('workspace.accounts')}</span><span className="preview-nav-item preview-nav-active"><span className="preview-account-initial">P</span>Prime Cut Studio</span><span className="preview-nav-item"><span className="preview-account-initial">R</span>Rowan Marsh</span></div>
       <div className="preview-folder-navigation"><span className="preview-pane-label">{t('sidebar.folders')}</span><span className="preview-nav-item preview-nav-active"><Inbox aria-hidden="true" size={13} />{t('sidebar.inbox')}</span><span className="preview-nav-item"><Archive aria-hidden="true" size={13} />{t('common.archive')}</span><span className="preview-nav-item"><Send aria-hidden="true" size={13} />{t('list.sent')}</span></div>
     </div>;
+  } else if (setting === 'listPreviewLines') {
+    content = <SampleRows previewLines={value} />;
   } else {
     content = <SampleRows singleLine={value === 'default'} />;
   }

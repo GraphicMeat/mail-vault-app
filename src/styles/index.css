@@ -92,6 +92,19 @@
   top: 26px;
 }
 
+/* The list's preview line (Settings > Workspace > Preview lines). Its line
+   height is SNIPPET_LINE_PX in EmailRow.jsx: a row is its layout's height plus
+   N of these, so the two must change together. */
+.row-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mail-text-muted);
+}
+
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:
    text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are
@@ -1161,6 +1174,7 @@ input[type="range"]::-moz-range-thumb:hover {
 .preview-message-copy > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-message-copy > span { color: var(--mail-text-muted); }
 .preview-time { flex-shrink: 0; color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
+.preview-message-copy > .preview-message-snippet { display: -webkit-box; -webkit-box-orient: vertical; white-space: normal; font-size: 12px; line-height: 16px; }
 .preview-single-line .preview-message-copy { flex-direction: row; gap: 10px; }
 .preview-single-line .preview-message-copy > strong { flex: 0 1 38%; }
 .preview-single-line .preview-message-copy > span { flex: 1; }
