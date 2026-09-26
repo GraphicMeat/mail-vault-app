@@ -273,5 +273,6 @@
   "50d2d1d020a4": "Windows 版 MailVault 即将开始下载。了解 Windows SmartScreen 为什么可能对新应用发出警告、如何检查安装程序的签名，以及在哪里阅读 GitHub 上的代码。",
   "cf021fbe06df": "正在下载 Windows 版 MailVault {release}。如果没有开始，请使用上方的按钮。",
   "5a7f5fcf612f": "该按钮会打开最新版本页面。请在那里选择以 -setup.exe 结尾的文件。",
-  "e19b0b03f776": "下载未能自动开始。该按钮会打开最新版本页面；请在那里选择以 -setup.exe 结尾的文件。"
+  "e19b0b03f776": "下载未能自动开始。该按钮会打开最新版本页面；请在那里选择以 -setup.exe 结尾的文件。",
+  "b8a88fbf1d7d": "次下载（GitHub）"
 }

@@ -1228,6 +1228,7 @@
     "dae6959e08eb": "Windows 10 or 11 on 64-bit Intel or AMD.",
     "3906e4b6a1e2": "Run the installer, then open MailVault from the Start menu.",
     "6e9f8673de09": "Download for Linux (.deb)",
+    "b8a88fbf1d7d": "downloads on GitHub",
     "0c27d83456d4": "Passwords in the system store: macOS Keychain, Windows Credential Manager, Linux Secret Service",
     "c79f8db3fcbc": "Windows installer (64-bit Intel or AMD) and Linux packages (x86_64 and aarch64) via Snap Store and .deb",
     "a911ca5c251d": "Scheduled Send: send a message at an exact date and time in any time zone",

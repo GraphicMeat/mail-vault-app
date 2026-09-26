@@ -125,6 +125,15 @@ describe('English acquisition journey', () => {
     }
     expect(clicked).toEqual([base+'MailVault_2.16.0_x64-setup.exe']);
   });
+  it.each([[2081,'2,000+',false],[12345,'12,000+',false],[950,'900+',false],[40,null,true],['nope',null,true]])('shows %s installer downloads under the hero as %s', async (installers, text, hidden) => {
+    const fetch=vi.fn(async url=>String(url)==='/api/downloads'?{ok:true,json:async()=>({installers})}:Promise.reject(new Error('offline')));
+    const {doc}=page('index.html','',fetch);
+    await tick(); await tick();
+    const proof=doc.querySelector('.hm-hero [data-download-proof]');
+    expect(proof.hidden).toBe(hidden);
+    if (text) expect(proof.querySelector('[data-download-total]').textContent).toBe(text);
+    expect(proof.querySelector('a').getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app/releases');
+  });
   it('shows GitHub stars and sends one heart from the header', async () => {
     let posts=0;
     const fetch=vi.fn(async (url,options)=>{

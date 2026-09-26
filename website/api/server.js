@@ -487,6 +487,24 @@ app.get('/api/latest-version', statusLimiter, async (req, res) => {
   }
 });
 
+// -------------------------------------------
+// Installer downloads (homepage proof line)
+// -------------------------------------------
+const { createDownloadCounter } = require('./downloads');
+const downloadCount = createDownloadCounter();
+
+app.get('/api/downloads', statusLimiter, async (req, res) => {
+  try {
+    const { installers, platforms, stale } = await downloadCount();
+    res.set('Cache-Control', stale ? 'public, max-age=60' : 'public, max-age=600');
+    res.json({ installers, platforms, ...(stale ? { stale: true } : {}) });
+  } catch (err) {
+    // No count yet: the page keeps the line hidden.
+    console.error('downloads:', err.message);
+    res.status(503).json({ error: 'unavailable' });
+  }
+});
+
 // In-memory billing status cache (key: customerId or email, TTL: 15s)
 const _billingCache = new Map();
 const BILLING_CACHE_TTL = 15_000;

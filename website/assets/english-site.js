@@ -188,6 +188,22 @@
     }
   }
 
+  // Homepage proof line: installer downloads across all releases, counted and
+  // cached hourly by the site's API. Rounded down so it reads as a floor.
+  const downloadTotals = document.querySelectorAll('[data-download-total]');
+  if (downloadTotals.length) {
+    fetch('/api/downloads', { signal: AbortSignal.timeout(8000) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        const total = data.installers;
+        if (!Number.isInteger(total) || total < 100) return;
+        const step = 10 ** Math.max(2, Math.floor(Math.log10(total)) - 1);
+        const floor = Math.floor(total / step) * step;
+        downloadTotals.forEach(node => { node.textContent = floor.toLocaleString(pageLanguage) + '+'; });
+        document.querySelectorAll('[data-download-proof]').forEach(el => { el.hidden = false; });
+      }).catch(() => {});
+  }
+
   // GitHub stars and hearts in the header. The homepage's community section
   // loads the same counts, so this only fetches where that section is absent.
   const countNodes = (name) => document.querySelectorAll('[data-' + name + '], #' + name);

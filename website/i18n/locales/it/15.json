@@ -273,5 +273,6 @@
   "50d2d1d020a4": "Il download di MailVault per Windows sta per iniziare. Perché Windows SmartScreen può avvisare per una nuova app, come verificare la firma del programma di installazione e dove leggere il codice su GitHub.",
   "cf021fbe06df": "Download di MailVault {release} per Windows. Se non parte, usa il pulsante qui sopra.",
   "5a7f5fcf612f": "Il pulsante apre la pagina dell’ultima release. Scegli lì il file che termina con -setup.exe.",
-  "e19b0b03f776": "Il download non è partito da solo. Il pulsante apre la pagina dell’ultima release; scegli lì il file che termina con -setup.exe."
+  "e19b0b03f776": "Il download non è partito da solo. Il pulsante apre la pagina dell’ultima release; scegli lì il file che termina con -setup.exe.",
+  "b8a88fbf1d7d": "download su GitHub"
 }
