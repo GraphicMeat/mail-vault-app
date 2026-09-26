@@ -3023,8 +3023,26 @@ pub async fn fetch_email_by_uid_light(
     mailbox: &str,
     uid: u32,
 ) -> Result<Option<LightFullEmail>, String> {
-    let _mbox = select_mailbox(session, mailbox).await?;
+    let timings = std::sync::Mutex::new(pool::ReadTimings::default());
+    fetch_email_by_uid_light_timed(session, mailbox, uid, &timings).await
+}
 
+/// Same as `fetch_email_by_uid_light`, but writes `select_ms`/`fetch_ms`/
+/// `bytes` into `timings` as the SELECT and the FETCH each finish, rather
+/// than only on a successful return — `imap_get_email_light`'s stall
+/// diagnostics (Task A1) need whatever got as far as completing even when the
+/// daemon's outer timeout drops this future first. See `ImapPool::run_read_timed`.
+pub async fn fetch_email_by_uid_light_timed(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    timings: &std::sync::Mutex<pool::ReadTimings>,
+) -> Result<Option<LightFullEmail>, String> {
+    let select_start = std::time::Instant::now();
+    let _mbox = select_mailbox(session, mailbox).await?;
+    timings.lock().expect("timings mutex poisoned").select_ms = select_start.elapsed().as_millis() as u64;
+
+    let fetch_start = std::time::Instant::now();
     let fetch_stream = session
         .uid_fetch(uid.to_string(), "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[])")
         .await
@@ -3042,6 +3060,7 @@ pub async fn fetch_email_by_uid_light(
             Err(e) => return Err(format!("UID FETCH {} failed: {}", uid, e)),
         }
     }
+    timings.lock().expect("timings mutex poisoned").fetch_ms = fetch_start.elapsed().as_millis() as u64;
 
     let fetch = match fetches.first() {
         Some(f) => f,
@@ -3062,6 +3081,7 @@ pub async fn fetch_email_by_uid_light(
     let body = fetch
         .body()
         .ok_or_else(|| "No body in FETCH response".to_string())?;
+    timings.lock().expect("timings mutex poisoned").bytes = body.len() as u64;
 
     let parsed = mailparse::parse_mail(body)
         .map_err(|e| format!("Failed to parse email: {}", e))?;

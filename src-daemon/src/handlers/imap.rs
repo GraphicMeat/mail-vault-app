@@ -415,23 +415,37 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let use_background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let mb_clone = mailbox.clone();
             let started = std::time::Instant::now();
+            // Written through by `checkout` (permit/connect/reuse) and by
+            // `fetch_email_by_uid_light_timed` (select/fetch/bytes) as each
+            // stage finishes, so a value is there to log even when the
+            // `tokio::time::timeout` below drops the fetch before it resolves
+            // — a plain `Ok`/`Err` from `run_read` cannot carry that. Task A1.
+            let timings = std::sync::Mutex::new(imap::pool::ReadTimings::default());
 
-            let fetch = state.imap_pool.run_read(&account, !use_background, |mut session| {
+            let fetch = state.imap_pool.run_read_timed(&account, !use_background, |mut session| {
                 let mb = mailbox.clone();
+                let timings = &timings;
                 async move {
-                    let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid)
+                    let result = imap::fetch_email_by_uid_light_timed(&mut session, &mb, uid, timings)
                         .await
                         .map_err(|e| format!("Failed to fetch email: {}", e))?;
                     Ok((result, session, Some(mb)))
                 }
-            });
+            }, Some(&timings));
 
-            let email = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
+            let outcome = tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await;
+            let t = *timings.lock().expect("timings mutex poisoned");
+            let timing_fields = format!(
+                "permit_wait_ms={} connect_ms={} reused={} idle_secs_since_last_use={} select_ms={} fetch_ms={} bytes={} attempt={}",
+                t.permit_wait_ms, t.connect_ms, t.reused, t.idle_secs_since_last_use, t.select_ms, t.fetch_ms, t.bytes, t.attempt
+            );
+
+            let email = match outcome {
                 Ok(Ok(email)) => email,
                 Ok(Err(e)) => {
                     tracing::info!(
-                        "[CMD] imap_get_email_light: FAILED uid={} mailbox={} background={} after {}ms: {}",
-                        uid, mb_clone, use_background, started.elapsed().as_millis(), e
+                        "[CMD] imap_get_email_light: FAILED uid={} mailbox={} background={} after {}ms {}: {}",
+                        uid, mb_clone, use_background, started.elapsed().as_millis(), timing_fields, e
                     );
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, conn_lost_message(&e, &account, uid)));
                 }
@@ -442,14 +456,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         uid,
                         mb_clone
                     );
-                    tracing::info!("[CMD] imap_get_email_light: {}", msg);
+                    tracing::info!("[CMD] imap_get_email_light: {} {}", msg, timing_fields);
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, msg));
                 }
             };
 
             tracing::info!(
-                "[CMD] imap_get_email_light: uid={} mailbox={} background={} found={} in {}ms",
-                uid, mb_clone, use_background, email.is_some(), started.elapsed().as_millis()
+                "[CMD] imap_get_email_light: uid={} mailbox={} background={} found={} in {}ms {}",
+                uid, mb_clone, use_background, email.is_some(), started.elapsed().as_millis(), timing_fields
             );
 
             match email {

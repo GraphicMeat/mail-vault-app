@@ -28,6 +28,28 @@ pub struct PooledSession {
     pub last_selected: Option<String>,
 }
 
+/// Per-stage cost of one `run_read_timed` attempt (Task A1), logged whole by
+/// `imap_get_email_light` so a slow Gmail body fetch (Track A, 2026-09-26)
+/// shows which stage actually stalled instead of just a total.
+///
+/// `checkout` fills `permit_wait_ms`/`connect_ms`/`reused`/
+/// `idle_secs_since_last_use`/`attempt`; a caller whose `f` does a SELECT and
+/// a FETCH (`fetch_email_by_uid_light_timed`) fills `select_ms`/`fetch_ms`/
+/// `bytes` through the same lock. `connect_ms` is 0 when `reused` is true —
+/// no connect happened — and `idle_secs_since_last_use` is 0 when `reused` is
+/// false, for the same reason.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ReadTimings {
+    pub permit_wait_ms: u64,
+    pub connect_ms: u64,
+    pub reused: bool,
+    pub idle_secs_since_last_use: u64,
+    pub select_ms: u64,
+    pub fetch_ms: u64,
+    pub bytes: u64,
+    pub attempt: u32,
+}
+
 /// Maximum number of pooled sessions per account per pool type.
 const MAX_POOL_SIZE: usize = 5;
 
@@ -158,20 +180,20 @@ impl ImapPool {
     /// Get or create a background connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent background sessions per account — excess callers queue.
     pub async fn get_background(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
-        self.checkout(config, false, false).await
+        self.checkout(config, false, false, None).await
     }
 
     /// Get or create a priority connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent priority sessions per account — excess callers queue.
     pub async fn get_priority(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
-        self.checkout(config, true, false).await
+        self.checkout(config, true, false, None).await
     }
 
     /// A brand-new background connection, never a pooled one: the second
     /// attempt of `retry_once_on_dead_socket` for callers that drive the
     /// session themselves rather than through `run_read`. See `checkout`.
     pub async fn get_background_fresh(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
-        self.checkout(config, false, true).await
+        self.checkout(config, false, true, None).await
     }
 
     /// Check out a session, optionally skipping the pool entirely.
@@ -180,25 +202,49 @@ impl ImapPool {
     /// popping another pooled session would likely hand back one killed by the
     /// same event (laptop sleep, NAT timeout, server restart), and its NOOP
     /// check is skipped for the first NOOP_SKIP_SECS of its life.
+    ///
+    /// `timings`, when given, gets `permit_wait_ms`/`connect_ms`/`reused`/
+    /// `idle_secs_since_last_use`/`attempt` overwritten wholesale — this is
+    /// the start of an attempt, so any `select_ms`/`fetch_ms`/`bytes` a
+    /// previous attempt wrote no longer apply (Task A1).
     async fn checkout(
         &self,
         config: &ImapConfig,
         priority: bool,
         fresh: bool,
+        timings: Option<&std::sync::Mutex<ReadTimings>>,
     ) -> Result<PooledSessionGuard, String> {
         let key = conn_key(config);
         let sem_map = if priority { &self.priority_sem } else { &self.background_sem };
         let sem = get_or_create_sem(sem_map, &key).await;
+        let wait_start = Instant::now();
         let permit = sem.acquire_owned().await
             .map_err(|_| "IMAP pool semaphore closed".to_string())?;
+        let permit_wait_ms = wait_start.elapsed().as_millis() as u64;
 
-        let (session, last_selected) = if fresh {
+        let connect_start = Instant::now();
+        let (session, last_selected, reused, idle_secs_since_last_use) = if fresh {
             info!("Creating new IMAP connection for {} (retry)", config.email);
-            (create_imap_session(config, self).await?, None)
+            (create_imap_session(config, self).await?, None, false, 0)
         } else {
             let pool = if priority { &self.priority } else { &self.background };
             self.get_from_pool(pool, config).await?
         };
+        let connect_ms = if reused { 0 } else { connect_start.elapsed().as_millis() as u64 };
+
+        if let Some(t) = timings {
+            *t.lock().expect("timings mutex poisoned") = ReadTimings {
+                permit_wait_ms,
+                connect_ms,
+                reused,
+                idle_secs_since_last_use,
+                attempt: if fresh { 2 } else { 1 },
+                select_ms: 0,
+                fetch_ms: 0,
+                bytes: 0,
+            };
+        }
+
         Ok(PooledSessionGuard { session, last_selected, _permit: permit })
     }
 
@@ -225,7 +271,36 @@ impl ImapPool {
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
-        self.run_retrying(config, priority, f).await
+        self.run_retrying(config, priority, f, None).await
+    }
+
+    /// Same as `run_read`, but writes each stage's cost into `timings` as it
+    /// happens instead of only on success.
+    ///
+    /// A plain `Ok`/`Err` return from `run_read` cannot carry timings on the
+    /// timeout path: the daemon wraps the call in `tokio::time::timeout`,
+    /// which drops this future without polling it to completion, so nothing
+    /// it would have *returned* ever reaches the caller. `timings` sidesteps
+    /// that by being written through as each stage finishes — `checkout`
+    /// fills `permit_wait_ms`/`connect_ms`/`reused`/`idle_secs_since_last_use`/
+    /// `attempt` here, and the caller's own `f` (e.g.
+    /// `fetch_email_by_uid_light_timed`) fills `select_ms`/`fetch_ms`/`bytes`
+    /// through the same lock — so the caller can read whatever got as far as
+    /// completing even after a drop. Only `imap_get_email_light`'s stall
+    /// diagnostics (Task A1) need this; every other `run_read` caller keeps
+    /// using the plain entry point above.
+    pub async fn run_read_timed<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+        timings: Option<&std::sync::Mutex<ReadTimings>>,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        self.run_retrying(config, priority, f, timings).await
     }
 
     /// Run a **UID-addressed delete** on a pooled session, once more on a
@@ -256,7 +331,7 @@ impl ImapPool {
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
-        self.run_retrying(config, priority, f).await
+        self.run_retrying(config, priority, f, None).await
     }
 
     async fn run_retrying<F, Fut, T>(
@@ -264,12 +339,13 @@ impl ImapPool {
         config: &ImapConfig,
         priority: bool,
         f: F,
+        timings: Option<&std::sync::Mutex<ReadTimings>>,
     ) -> Result<T, String>
     where
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
-        retry_once_on_dead_socket(|fresh| self.attempt(config, priority, fresh, &f)).await
+        retry_once_on_dead_socket(|fresh| self.attempt(config, priority, fresh, &f, timings)).await
     }
 
     /// One `run_read` attempt: check out, run, pool the session on success.
@@ -280,13 +356,14 @@ impl ImapPool {
         priority: bool,
         fresh: bool,
         f: &F,
+        timings: Option<&std::sync::Mutex<ReadTimings>>,
     ) -> Result<T, String>
     where
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
         let PooledSessionGuard { session, last_selected: _, _permit } =
-            self.checkout(config, priority, fresh).await?;
+            self.checkout(config, priority, fresh, timings).await?;
         let (result, session, selected) = f(session).await?;
         let guard = PooledSessionGuard { session, last_selected: selected, _permit };
         if priority {
@@ -390,11 +467,15 @@ impl ImapPool {
         logout_sessions(to_logout).await;
     }
 
+    /// `bool`/`u64` in the return: whether the session came from the pool, and
+    /// (when it did) how many seconds it sat there — Task A1's `reused` /
+    /// `idle_secs_since_last_use`, read by `checkout` and otherwise unused
+    /// here.
     async fn get_from_pool(
         &self,
         pool: &Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
         config: &ImapConfig,
-    ) -> Result<(ImapSession, Option<String>), String> {
+    ) -> Result<(ImapSession, Option<String>, bool, u64), String> {
         let key = conn_key(config);
 
         // Try to reuse existing connection from the Vec
@@ -404,17 +485,18 @@ impl ImapPool {
         } {
             let mut session = pooled.session;
             let last_sel = pooled.last_selected;
+            let idle_secs = pooled.last_used.elapsed().as_secs();
 
             // Skip NOOP if session was used recently (within NOOP_SKIP_SECS)
-            if pooled.last_used.elapsed().as_secs() < NOOP_SKIP_SECS {
-                return Ok((session, last_sel));
+            if idle_secs < NOOP_SKIP_SECS {
+                return Ok((session, last_sel, true, idle_secs));
             }
 
             // Verify the session is still alive with a NOOP (outside lock).
             // Both the NOOP and the follow-up logout are bounded: a half-open
             // socket answers neither.
             match tokio::time::timeout(NOOP_TIMEOUT, session.noop()).await {
-                Ok(Ok(_)) => return Ok((session, last_sel)),
+                Ok(Ok(_)) => return Ok((session, last_sel, true, idle_secs)),
                 Ok(Err(e)) => {
                     warn!("Pooled IMAP session stale for {}: {}, creating new", config.email, e);
                     let _ = tokio::time::timeout(NOOP_TIMEOUT, session.logout()).await;
@@ -443,7 +525,7 @@ impl ImapPool {
             warn!("IMAP connection failed for {}: {}", config.email, e);
             e
         })?;
-        Ok((session, None))
+        Ok((session, None, false, 0))
     }
 
     async fn return_to_pool(

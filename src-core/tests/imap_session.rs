@@ -311,6 +311,67 @@ async fn a_read_whose_socket_dies_retries_once_on_a_new_connection() {
     );
 }
 
+/// Task A1: `run_read_timed` writes each stage into the `ReadTimings` it is
+/// given, so `imap_get_email_light`'s stall log has real numbers to show —
+/// which stage of the 09-26 Gmail body-fetch regression actually stalled.
+/// `attempt`/`reused`/`connect_ms` come from `checkout`; `select_ms`/
+/// `fetch_ms`/`bytes` come from `fetch_email_by_uid_light_timed` through the
+/// same lock.
+#[async_std::test]
+async fn run_read_timed_reports_stage_costs_and_reuse() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "A body"))),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let first = std::sync::Mutex::new(mailvault_core::imap::pool::ReadTimings::default());
+    pool.run_read_timed(
+        &config,
+        true,
+        |mut session| {
+            let timings = &first;
+            async move {
+                let r = fetch_email_by_uid_light_timed(&mut session, "INBOX", 1, timings).await?;
+                Ok((r, session, Some("INBOX".to_string())))
+            }
+        },
+        Some(&first),
+    )
+    .await
+    .expect("first fetch");
+
+    let t = *first.lock().unwrap();
+    assert!(!t.reused, "the first checkout is a brand-new connection");
+    assert_eq!(t.attempt, 1);
+    assert_eq!(t.idle_secs_since_last_use, 0, "nothing to be idle since on a new connection");
+    assert!(t.bytes > 0, "a real message body must be counted");
+
+    // Second call: the session the first call returned is reused.
+    let second = std::sync::Mutex::new(mailvault_core::imap::pool::ReadTimings::default());
+    pool.run_read_timed(
+        &config,
+        true,
+        |mut session| {
+            let timings = &second;
+            async move {
+                let r = fetch_email_by_uid_light_timed(&mut session, "INBOX", 1, timings).await?;
+                Ok((r, session, Some("INBOX".to_string())))
+            }
+        },
+        Some(&second),
+    )
+    .await
+    .expect("second fetch");
+
+    let t = *second.lock().unwrap();
+    assert!(t.reused, "the second checkout must reuse the pooled session");
+    assert_eq!(t.connect_ms, 0, "no connect happened on a reused session");
+    assert_eq!(t.attempt, 1, "the session answered fine, no retry needed");
+    assert!(t.bytes > 0);
+    assert_eq!(server.connection_count(), 1, "only one TCP connection for both fetches");
+}
+
 /// Negative control for the test above: with every fetch dying, the retry
 /// cannot succeed — so the green above is the retry working, not the fault
 /// failing to fire. And the retry happens once: two connections, not a loop.
