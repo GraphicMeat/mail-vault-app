@@ -327,9 +327,13 @@ async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>,
 /// Returns the transport plus whether the server greeting was already consumed
 /// (STARTTLS must eat it before upgrading; no second greeting follows the TLS
 /// handshake, so the auth step must not wait for one).
+///
+/// `slot` is the account's connection slot (`ImapPool::connection_slot`): the
+/// socket holds it until it closes, so no connection can bypass the budget.
 async fn connect_transport(
     config: &ImapConfig,
     addrs: &[std::net::SocketAddr],
+    slot: tokio::sync::OwnedSemaphorePermit,
 ) -> Result<(Box<dyn ImapTransport>, bool), String> {
     let tcp = async_std::io::timeout(TCP_CONNECT_TIMEOUT, TcpStream::connect(addrs))
         .await
@@ -339,18 +343,19 @@ async fn connect_transport(
     // transport later, so what we count here is what crossed the wire.
     let counters = crate::transfer_stats::global().counters(&config.email);
 
+    let stream = CountingStream::new(tcp, counters, CMD_STALL).holding(slot);
+
     let plaintext_requested = std::env::var("MAILVAULT_IMAP_PLAINTEXT").as_deref() == Ok("1");
     let all_loopback = addrs.iter().all(|a| a.ip().is_loopback());
 
     if plaintext_requested && all_loopback {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 — TLS DISABLED for loopback {:?}", addrs);
-        return Ok((Box::new(CountingStream::new(tcp, counters, CMD_STALL)), false));
+        return Ok((Box::new(stream), false));
     }
     if plaintext_requested {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 ignored — {} is not loopback", config.host);
     }
 
-    let stream = CountingStream::new(tcp, counters, CMD_STALL);
     match config.effective_security() {
         ImapSecurity::None => {
             info!("[IMAP] imapSecurity=none — connecting to {} without TLS", config.host);
@@ -505,9 +510,10 @@ fn sign_in_error(config: &ImapConfig, rejected: &str, e: async_imap::error::Erro
 }
 
 /// Connect + authenticate, no capability caching or COMPRESS negotiation.
-async fn connect_and_auth(config: &ImapConfig) -> Result<ImapSession, String> {
+async fn connect_and_auth(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
+    let slot = pool.connection_slot(config).await?;
     let addrs = resolve_addrs(config).await?;
-    let (transport, greeting_consumed) = connect_transport(config, &addrs).await?;
+    let (transport, greeting_consumed) = connect_transport(config, &addrs, slot).await?;
     authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await
 }
 
@@ -519,10 +525,11 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
         config.is_oauth2()
     );
 
+    let slot = pool.connection_slot(config).await?;
     let addrs = resolve_addrs(config).await?;
     info!("[IMAP] DNS resolved to {:?}", addrs);
 
-    let (transport, greeting_consumed) = connect_transport(config, &addrs).await?;
+    let (transport, greeting_consumed) = connect_transport(config, &addrs, slot).await?;
     info!("[IMAP] Transport established, authenticating...");
 
     let mut session =
@@ -554,8 +561,9 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
             }
             Err(e) => {
                 warn!("[IMAP] COMPRESS=DEFLATE failed for {}: {}, reconnecting without compression", config.email, e);
-                // Session was consumed by compress() — create a new uncompressed session
-                let session = connect_and_auth(config)
+                // Session was consumed by compress() — create a new uncompressed session.
+                // The failed one is dropped by now, so its slot is free for this.
+                let session = connect_and_auth(config, pool)
                     .await
                     .map_err(|e| format!("Reconnect after COMPRESS failure: {}", e))?;
                 info!("[IMAP] Session established for {} (no compression)", config.email);
@@ -1039,19 +1047,22 @@ const QRESYNC_TIMEOUT_SECS: u64 = 60;
 /// connection, and the move, delete, expunge and IDLE paths all run on pooled
 /// sessions that were written for `EXPUNGE`. So this takes the account, not a
 /// session, and hands none back: the enabled session is opened here, used for
-/// this one SELECT and logged out here, whatever happened. It never touches
-/// an `ImapPool`, so it cannot reach one.
+/// this one SELECT and logged out here, whatever happened. `pool` is only for
+/// the account's connection slot; no pooled session is taken or returned.
+/// The slot wait sits inside the connect bound: the caller holds a session of
+/// its own, so on a full budget this falls back to the listing, never hangs.
 ///
 /// `uid_next` bounds the known UIDs (`1:<uid_next - 1>`), so the server does
 /// not report removals of mail the caller never saw.
 pub async fn qresync_changes(
     config: &ImapConfig,
+    pool: &ImapPool,
     mailbox: &str,
     uid_validity: u32,
     modseq: u64,
     uid_next: u32,
 ) -> Result<QresyncChanges, String> {
-    let mut session = bounded("QRESYNC connect", QRESYNC_TIMEOUT_SECS, connect_and_auth(config)).await?;
+    let mut session = bounded("QRESYNC connect", QRESYNC_TIMEOUT_SECS, connect_and_auth(config, pool)).await?;
     let result = bounded(
         "QRESYNC SELECT",
         QRESYNC_TIMEOUT_SECS,
@@ -2039,14 +2050,14 @@ pub async fn append_email(
 /// Observed: Hostinger + async_imap's compressed stream hangs indefinitely on
 /// APPEND literal upload. Sent-folder APPEND uses this helper instead of the
 /// pool-cached (compressed) session.
-pub async fn create_imap_session_no_compress(config: &ImapConfig) -> Result<ImapSession, String> {
+pub async fn create_imap_session_no_compress(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
     tracing::info!(
         "[imap_no_compress:connect_start] addr={}:{} oauth2={}",
         config.host,
         config.effective_port(),
         config.is_oauth2()
     );
-    let session = connect_and_auth(config).await?;
+    let session = connect_and_auth(config, pool).await?;
     tracing::info!("[imap_no_compress:session_established] account={}", config.email);
     Ok(session)
 }
@@ -2522,8 +2533,8 @@ pub async fn find_message_id(
 }
 
 /// Test IMAP connection
-pub async fn test_connection(config: &ImapConfig) -> Result<(), String> {
-    let mut session = connect_and_auth(config).await
+pub async fn test_connection(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
+    let mut session = connect_and_auth(config, pool).await
         .map_err(|e| format!("Connection test failed: {}", e))?;
 
     session

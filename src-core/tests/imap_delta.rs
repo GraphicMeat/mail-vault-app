@@ -175,7 +175,7 @@ async fn qresync_reports_vanished_uids_and_changed_flags_since_a_modseq() {
     server.mutate(|st| st.expunge("INBOX", &[2]));
     let config = common::config_for(&server);
 
-    let changes = qresync_changes(&config, "INBOX", 1, 20, 5).await.expect("qresync");
+    let changes = qresync_changes(&config, &common::pool(), "INBOX", 1, 20, 5).await.expect("qresync");
 
     assert_eq!(changes.uid_validity, Some(1));
     assert_eq!(changes.exists, 3);
@@ -194,6 +194,6 @@ async fn qresync_reports_vanished_uids_and_changed_flags_since_a_modseq() {
 async fn qresync_without_the_capability_is_an_error() {
     let server = MockImap::start(Scenario::new().mailbox(mailbox_with_modseqs()));
     let config = common::config_for(&server);
-    assert!(qresync_changes(&config, "INBOX", 1, 20, 5).await.is_err());
+    assert!(qresync_changes(&config, &common::pool(), "INBOX", 1, 20, 5).await.is_err());
     assert_eq!(server.count_commands("SELECT"), 0, "no QRESYNC SELECT without ENABLE");
 }

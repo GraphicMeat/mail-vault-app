@@ -425,7 +425,7 @@ async fn append_carries_the_internal_date() {
 async fn verified_append_carries_the_internal_date_too() {
     let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
     let config = common::config_for(&server);
-    let mut sess = create_imap_session_no_compress(&config).await.expect("session");
+    let mut sess = create_imap_session_no_compress(&config, &common::pool()).await.expect("session");
     let raw = eml("Old news", "a@example.com", "body");
 
     append_email_verified(&mut sess, "INBOX", raw.as_bytes(), "", None, Some("05-Mar-2019 08:15:00 +0100"))
@@ -457,7 +457,7 @@ async fn verified_append_sends_flags_then_date_then_a_non_sync_literal() {
             .mailbox(Mailbox::new("INBOX")),
     );
     let config = common::config_for(&server);
-    let mut sess = create_imap_session_no_compress(&config).await.expect("session");
+    let mut sess = create_imap_session_no_compress(&config, &common::pool()).await.expect("session");
     let raw = eml("Migrated", "a@example.com", "body");
 
     let (before, after, found) = append_email_verified(

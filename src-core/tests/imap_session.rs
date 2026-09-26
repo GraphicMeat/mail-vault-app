@@ -69,7 +69,7 @@ async fn falls_back_to_an_uncompressed_session_when_compress_is_refused() {
 #[async_std::test]
 async fn test_connection_succeeds_and_logs_out() {
     let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
-    test_connection(&config_for(&server)).await.expect("connection test");
+    test_connection(&config_for(&server), &pool()).await.expect("connection test");
     assert!(
         server.commands().iter().any(|c| c.to_uppercase().contains("LOGOUT")),
         "test_connection must not leave the session open for the server to time out"

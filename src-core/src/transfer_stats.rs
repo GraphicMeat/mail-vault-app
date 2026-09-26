@@ -91,11 +91,20 @@ pub struct CountingStream<S> {
     /// What `timer` is set to, so a pending poll only re-registers it when
     /// the deadline actually moved.
     timer_at: Option<std::time::Instant>,
+    /// The account's connection slot (`ImapPool::connection_slot`), freed
+    /// when the socket is: this wrapper lives exactly as long as it does.
+    _slot: Option<tokio::sync::OwnedSemaphorePermit>,
 }
 
 impl<S> CountingStream<S> {
     pub fn new(inner: S, counters: Arc<Counters>, stall: std::time::Duration) -> Self {
-        Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None }
+        Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None, _slot: None }
+    }
+
+    /// Hold `slot` until this stream is dropped.
+    pub fn holding(mut self, slot: tokio::sync::OwnedSemaphorePermit) -> Self {
+        self._slot = Some(slot);
+        self
     }
 
     /// `Err` once the deadline has passed, arming the timer to wake this task

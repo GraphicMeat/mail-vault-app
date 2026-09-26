@@ -964,7 +964,7 @@ impl SyncEngine {
         total: u32,
         sidecar_count: usize,
     ) -> bool {
-        let changes = match imap::qresync_changes(&account.imap_config, mailbox, uid_validity, modseq, uid_next).await {
+        let changes = match imap::qresync_changes(&account.imap_config, &self.pool, mailbox, uid_validity, modseq, uid_next).await {
             Ok(changes) if changes.uid_validity == Some(uid_validity) => changes,
             Ok(_) => {
                 warn!("[sync] QRESYNC for {} ({}) answered for another UIDVALIDITY", account.email, mailbox);

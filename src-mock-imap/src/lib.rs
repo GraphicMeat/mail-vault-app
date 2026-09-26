@@ -43,6 +43,8 @@ pub struct MockImap {
     log: Arc<Mutex<Vec<String>>>,
     /// Accepted TCP connections. Proves whether a session was reused or replaced.
     connections: Arc<AtomicUsize>,
+    /// Most connections open at once, for a client's connection budget.
+    peak: Arc<AtomicUsize>,
     /// What the SMTP listener took in — see `smtp.rs`.
     smtp: Arc<smtp::SmtpRecorder>,
 }
@@ -55,6 +57,8 @@ impl MockImap {
         let stop = Arc::new(AtomicBool::new(false));
         let log = Arc::new(Mutex::new(Vec::new()));
         let connections = Arc::new(AtomicUsize::new(0));
+        let live = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
         let counts: Arc<Mutex<HashMap<String, usize>>> = Arc::new(Mutex::new(HashMap::new()));
         let smtp_recorder = Arc::new(smtp::SmtpRecorder::new());
         let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone());
@@ -64,6 +68,7 @@ impl MockImap {
             let stop = stop.clone();
             let log = log.clone();
             let connections = connections.clone();
+            let (live, peak) = (live.clone(), peak.clone());
             let faults = scenario.faults.clone();
             let greeting = scenario
                 .greeting
@@ -77,6 +82,8 @@ impl MockImap {
                     }
                     let Ok(conn) = conn else { continue };
                     connections.fetch_add(1, Ordering::SeqCst);
+                    peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+                    let open = Open(live.clone());
                     let (state, log, faults, counts, greeting) = (
                         state.clone(),
                         log.clone(),
@@ -85,13 +92,13 @@ impl MockImap {
                         greeting.clone(),
                     );
                     std::thread::spawn(move || {
-                        let _ = handle_conn(conn, state, log, faults, counts, greeting);
+                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open);
                     });
                 }
             });
         }
 
-        MockImap { addr, smtp_addr, state, stop, log, connections, smtp: smtp_recorder }
+        MockImap { addr, smtp_addr, state, stop, log, connections, peak, smtp: smtp_recorder }
     }
 
     pub fn host(&self) -> String {
@@ -153,6 +160,11 @@ impl MockImap {
         self.connections.load(Ordering::SeqCst)
     }
 
+    /// Most connections that were open at the same time.
+    pub fn peak_connections(&self) -> usize {
+        self.peak.load(Ordering::SeqCst)
+    }
+
     /// Count of received command lines whose uppercase form contains `needle`.
     pub fn count_commands(&self, needle: &str) -> usize {
         let needle = needle.to_uppercase();
@@ -176,6 +188,15 @@ impl Drop for MockImap {
 
 // ── connection handling ─────────────────────────────────────────────────────
 
+/// One open connection in the live count; closing it (drop) takes it out.
+struct Open(Arc<AtomicUsize>);
+
+impl Drop for Open {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 fn handle_conn(
     conn: TcpStream,
     state: Arc<Mutex<ServerState>>,
@@ -183,7 +204,9 @@ fn handle_conn(
     faults: Vec<Fault>,
     counts: Arc<Mutex<HashMap<String, usize>>>,
     greeting: String,
+    open: Open,
 ) -> std::io::Result<()> {
+    let mut open = Some(open);
     conn.set_nodelay(true)?;
     let mut out = conn.try_clone()?;
     let mut reader = BufReader::new(conn);
@@ -278,6 +301,11 @@ fn handle_conn(
             commands::dispatch(&cmd, &mut st, &mut sess, &actions)
         };
         let close_after = response.close_after;
+        // Closed before the reply goes out, not after: once the client reads
+        // it, it may open its next connection before this thread returns.
+        if close_after {
+            open.take();
+        }
 
         let bytes = serialize(&cmd, response, &actions);
         emit(&mut out, &bytes, &actions)?;

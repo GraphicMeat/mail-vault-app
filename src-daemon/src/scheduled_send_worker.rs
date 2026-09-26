@@ -402,7 +402,7 @@ fn append_to_sent(
         let verified: Result<Result<(u32, u32, Option<u32>), String>, _> = tokio::time::timeout(
             Duration::from_secs(60),
             async {
-                let mut session = crate::imap::create_imap_session_no_compress(&account)
+                let mut session = crate::imap::create_imap_session_no_compress(&account, &state.imap_pool)
                     .await
                     .map_err(|e| format!("dedicated session create failed: {e}"))?;
                 let res = crate::imap::append_email_verified(&mut session, &mailbox_for_closure, &raw_bytes, "\\Seen", None, None).await;

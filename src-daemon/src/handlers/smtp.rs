@@ -74,9 +74,9 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
 /// UID of the message carrying `message_id` (brackets stripped) in the Sent
 /// `mailbox`, asked on a fresh session: the one the APPEND ran on may be the
 /// thing that hung. Bounded, because it runs after the APPEND's own 60 s.
-async fn sent_copy_uid(account: &ImapConfig, mailbox: &str, message_id: &str) -> Option<u32> {
+async fn sent_copy_uid(pool: &imap::ImapPool, account: &ImapConfig, mailbox: &str, message_id: &str) -> Option<u32> {
     let check = async {
-        let mut session = imap::create_imap_session_no_compress(account).await?;
+        let mut session = imap::create_imap_session_no_compress(account, pool).await?;
         imap::select_mailbox(&mut session, mailbox).await.map(|_| ())?;
         let found = imap::uid_of_message_id(&mut session, message_id).await;
         let _ = session.logout().await;
@@ -245,7 +245,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let verified_result: Result<Result<(u32, u32, Option<u32>), String>, tokio::time::error::Elapsed> = tokio::time::timeout(
                         std::time::Duration::from_secs(60),
                         async {
-                            let mut session = imap::create_imap_session_no_compress(&account_clone).await
+                            let mut session = imap::create_imap_session_no_compress(&account_clone, &state_clone.imap_pool).await
                                 .map_err(|e| format!("dedicated session create failed: {}", e))?;
                             info!("[send:dedicated_session_ok] account={} — calling append_email_verified", account_id_inner);
                             let res = imap::append_email_verified(
@@ -299,7 +299,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // staged local copy beside the server's for good.
                     if !ok {
                         if let Some(mid) = message_id_header_bg.as_deref() {
-                            if let Some(uid) = sent_copy_uid(&account_clone, &mailbox_for_log, mid).await {
+                            if let Some(uid) = sent_copy_uid(&state_clone.imap_pool, &account_clone, &mailbox_for_log, mid).await {
                                 info!(
                                     "[send:server_append_recovered] account={} mailbox={} uid={} — the APPEND reported failure but the server holds the message",
                                     account_id_bg, mailbox_for_log, uid

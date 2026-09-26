@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, TryAcquireError};
 use tokio::time::Instant;
 use tracing::{info, warn};
 
@@ -65,6 +65,21 @@ pub struct ReadTimings {
 
 /// Maximum number of pooled sessions per account per pool type.
 const MAX_POOL_SIZE: usize = 5;
+
+/// Most connections this install keeps open to one account at once: pooled
+/// (checked out or idle), the IDLE watcher, and every one-off session. Gmail
+/// allows 15 per account across all clients; two installs on one account (a
+/// backup copy, the portable build) used to go past that, and Google then
+/// throttled the account to ~10s per command for hours. Two installs at 7
+/// leave one for a phone.
+pub const MAX_CONNECTIONS_PER_ACCOUNT: usize = 7;
+
+/// How often a caller waiting on a full budget looks again.
+const SLOT_POLL: Duration = Duration::from_millis(100);
+
+/// Cap on the LOGOUT of an idle session closed to make room: the caller is
+/// waiting on it, and a dead socket would otherwise hold it for `CMD_STALL`.
+const EVICT_LOGOUT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Sessions used within this window skip the NOOP health check.
 const NOOP_SKIP_SECS: u64 = 60;
@@ -137,14 +152,15 @@ pub struct PooledSessionGuard {
     pub _permit: OwnedSemaphorePermit,
 }
 
-/// Get or create a semaphore for the given connection key.
+/// Get or create a semaphore of `permits` for the given connection key.
 async fn get_or_create_sem(
     sem_map: &Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
     key: &str,
+    permits: usize,
 ) -> Arc<Semaphore> {
     let mut map = sem_map.lock().await;
     map.entry(key.to_string())
-        .or_insert_with(|| Arc::new(Semaphore::new(MAX_POOL_SIZE)))
+        .or_insert_with(|| Arc::new(Semaphore::new(permits)))
         .clone()
 }
 
@@ -177,6 +193,9 @@ pub struct ImapPool {
     background_sem: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
     /// Per-account semaphores for priority pool — separate from background to avoid blocking
     priority_sem: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
+    /// Per-account connection budget (`MAX_CONNECTIONS_PER_ACCOUNT`), one
+    /// permit per open socket, pooled or not. See `connection_slot`.
+    budget: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
 }
 
 impl ImapPool {
@@ -187,7 +206,65 @@ impl ImapPool {
             capabilities: Arc::new(Mutex::new(HashMap::new())),
             background_sem: Arc::new(Mutex::new(HashMap::new())),
             priority_sem: Arc::new(Mutex::new(HashMap::new())),
+            budget: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// One of the account's `MAX_CONNECTIONS_PER_ACCOUNT` connection slots,
+    /// for a socket about to be opened. `connect_transport` takes it and the
+    /// socket holds it until it closes, so every connection pays, pooled or
+    /// not (IDLE, QRESYNC, the Sent-copy APPEND, the connection test).
+    ///
+    /// On a full budget an idle pooled session is closed to make room,
+    /// background before priority: idle sessions hold slots too, and nothing
+    /// else would ever close them, so a click (or a send) would otherwise wait
+    /// for ever behind sessions nobody is using. With none idle, every slot is
+    /// in use by live work and one frees when it ends.
+    ///
+    /// ponytail: polls instead of queueing on the semaphore. A queued waiter
+    /// would not wake when a session goes idle instead of closing, and tokio
+    /// hands a freed permit to the queue before the caller that freed it. The
+    /// cost is up to `SLOT_POLL` of extra wait on a full budget; a Notify on
+    /// return_to_pool is the upgrade if that ever shows up.
+    pub async fn connection_slot(&self, config: &ImapConfig) -> Result<OwnedSemaphorePermit, String> {
+        let budget = get_or_create_sem(&self.budget, &conn_key(config), MAX_CONNECTIONS_PER_ACCOUNT).await;
+        let mut logged = false;
+        loop {
+            match Arc::clone(&budget).try_acquire_owned() {
+                Ok(slot) => return Ok(slot),
+                Err(TryAcquireError::Closed) => return Err("IMAP connection budget closed".to_string()),
+                Err(TryAcquireError::NoPermits) => {}
+            }
+            if self.close_one_idle(config).await {
+                continue;
+            }
+            if !logged {
+                info!(
+                    "[IMAP pool] {} has {} connections open, waiting for one to close",
+                    config.email, MAX_CONNECTIONS_PER_ACCOUNT
+                );
+                logged = true;
+            }
+            async_io::Timer::after(SLOT_POLL).await;
+        }
+    }
+
+    /// Log out the oldest idle pooled session for `config`'s account,
+    /// background first. False when neither pool holds one.
+    async fn close_one_idle(&self, config: &ImapConfig) -> bool {
+        let key = conn_key(config);
+        for pool in [&self.background, &self.priority] {
+            let oldest = {
+                let mut map = pool.lock().await;
+                map.get_mut(&key).filter(|v| !v.is_empty()).map(|v| v.remove(0))
+            };
+            if let Some(mut idle) = oldest {
+                info!("[IMAP pool] Closing an idle session for {} to stay within the connection budget", config.email);
+                let _ = async_std::future::timeout(EVICT_LOGOUT_TIMEOUT, idle.session.logout()).await;
+                return true;
+            }
+        }
+        false
     }
 
     /// Get or create a background connection, guarded by a per-account semaphore.
@@ -229,7 +306,7 @@ impl ImapPool {
     ) -> Result<PooledSessionGuard, String> {
         let key = conn_key(config);
         let sem_map = if priority { &self.priority_sem } else { &self.background_sem };
-        let sem = get_or_create_sem(sem_map, &key).await;
+        let sem = get_or_create_sem(sem_map, &key, MAX_POOL_SIZE).await;
         let wait_start = Instant::now();
         let permit = sem.acquire_owned().await
             .map_err(|_| "IMAP pool semaphore closed".to_string())?;
@@ -464,6 +541,8 @@ impl ImapPool {
         self.capabilities.lock().await.remove(&key);
         self.background_sem.lock().await.remove(&key);
         self.priority_sem.lock().await.remove(&key);
+        // Not the budget: sessions still checked out hold its permits, and a
+        // fresh semaphore would let seven more connections open beside them.
 
         // Logout outside any lock — network I/O can be slow
         logout_sessions(to_logout).await;
@@ -826,7 +905,7 @@ mod noop_timeout_tests {
     use mock_imap::state::synthetic_mailbox;
     use mock_imap::{Action, MockImap, Scenario, Trigger};
 
-    fn config_for(server: &MockImap) -> ImapConfig {
+    pub(super) fn config_for(server: &MockImap) -> ImapConfig {
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         serde_json::from_value(serde_json::json!({
             // Not `user@example.com`: the transfer-stats tests in this binary
@@ -950,5 +1029,82 @@ mod noop_timeout_tests {
             "the 6s NOOP delay must show up in noop_ms, not vanish into connect_ms=0: got {}",
             t.noop_ms
         );
+    }
+}
+
+/// The per-account connection budget (Task A6), against the mock's own count
+/// of connections open at once.
+#[cfg(test)]
+mod connection_budget_tests {
+    use super::noop_timeout_tests::config_for;
+    use super::*;
+    use crate::imap::{create_imap_session, select_mailbox};
+    use mock_imap::state::synthetic_mailbox;
+    use mock_imap::{Action, MockImap, Scenario, Trigger};
+
+    /// Six clicks and six background reads at once. Each lane alone caps at
+    /// MAX_POOL_SIZE, so the two together used to open ten connections to
+    /// one account; two installs like that went past Gmail's fifteen.
+    #[tokio::test]
+    async fn twelve_concurrent_reads_open_at_most_seven_connections() {
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .fault(Trigger::on("SELECT"), Action::Delay(Duration::from_millis(300))),
+        );
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let reads = (0..12).map(|i| {
+            pool.run_read(&config, i % 2 == 0, |mut session| async move {
+                select_mailbox(&mut session, "INBOX").await?;
+                Ok(((), session, Some("INBOX".to_string())))
+            })
+        });
+        let results = tokio::time::timeout(Duration::from_secs(30), futures::future::join_all(reads))
+            .await
+            .expect("every read finishes");
+
+        assert!(results.iter().all(Result::is_ok), "all twelve complete: {results:?}");
+        assert!(
+            server.peak_connections() <= MAX_CONNECTIONS_PER_ACCOUNT,
+            "peak {} connections, budget {}",
+            server.peak_connections(),
+            MAX_CONNECTIONS_PER_ACCOUNT
+        );
+    }
+
+    /// A full budget of which five are idle background sessions: a click must
+    /// not wait behind sessions nobody is using. One idle background session
+    /// is closed to make room, and the click gets its connection at once.
+    #[tokio::test]
+    async fn a_click_on_a_full_budget_closes_an_idle_background_session() {
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let mut guards = Vec::new();
+        for _ in 0..MAX_POOL_SIZE {
+            guards.push(pool.get_background(&config).await.expect("background checkout"));
+        }
+        // Held outside both pools for the whole test, as the IDLE watcher and
+        // a Sent-copy APPEND hold theirs.
+        let _idle = create_imap_session(&config, &pool).await.expect("unpooled session");
+        let _append = create_imap_session(&config, &pool).await.expect("unpooled session");
+        for guard in guards {
+            pool.return_background(&config, guard).await;
+        }
+
+        let started = Instant::now();
+        let click = tokio::time::timeout(Duration::from_secs(5), pool.get_priority(&config))
+            .await
+            .expect("a click must not wait behind idle sessions")
+            .expect("priority checkout");
+        assert!(started.elapsed() < Duration::from_secs(1), "took {:?}", started.elapsed());
+
+        let idle_background = pool.background.lock().await.get(&conn_key(&config)).map_or(0, Vec::len);
+        assert_eq!(idle_background, MAX_POOL_SIZE - 1, "exactly one idle background session made room");
+        assert!(server.peak_connections() <= MAX_CONNECTIONS_PER_ACCOUNT, "peak {}", server.peak_connections());
+        pool.return_priority(&config, click).await;
     }
 }

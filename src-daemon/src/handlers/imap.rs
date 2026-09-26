@@ -545,7 +545,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // individual timeout of their own. Verbatim from commands.rs; the
             // RPC layer's own ceiling is already ≥45s (imap_get_email_light's
             // BODY_FETCH_TIMEOUT), so this stays well inside it.
-            let outcome = tokio::time::timeout(std::time::Duration::from_secs(20), imap::test_connection(&account)).await;
+            let outcome = tokio::time::timeout(std::time::Duration::from_secs(20), imap::test_connection(&account, &state.imap_pool)).await;
             match outcome {
                 Ok(Ok(())) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
                 Ok(Err(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
