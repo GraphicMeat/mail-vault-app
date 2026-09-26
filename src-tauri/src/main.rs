@@ -2229,6 +2229,10 @@ fn spawn_detached_daemon() -> Result<(), String> {
 /// never disagree about where the data is, wherever the daemon binary sits.
 fn daemon_command(bin: &Path) -> Command {
     let mut cmd = Command::new(bin);
+    // Same malloc mode Info.plist's LSEnvironment gives the app, for a daemon
+    // started from an app that LaunchServices did not launch (dev, e2e).
+    #[cfg(target_os = "macos")]
+    cmd.env("MallocSpaceEfficient", "1");
     if let Some(root) = mailvault_core::paths::portable_root() {
         cmd.env(mailvault_core::paths::PORTABLE_ENV, root);
     }

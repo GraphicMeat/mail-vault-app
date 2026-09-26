@@ -12,6 +12,17 @@
     <true/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+    <!-- macOS malloc otherwise keeps freed pages dirty until the system is
+         under memory pressure, so one large header load left the app and its
+         daemon (which inherits this environment) at their peak footprint for
+         minutes. Measured after syncing a 10,000-message inbox: daemon 107 MB
+         -> 15 MB, app 84 MB -> 26 MB. malloc_zone_pressure_relief() does not
+         release these pages on macOS 26; this switch does. -->
+    <key>LSEnvironment</key>
+    <dict>
+        <key>MallocSpaceEfficient</key>
+        <string>1</string>
+    </dict>
     <!-- Mail links elsewhere on the system open MailVault.
          Hand-written on purpose: tauri-plugin-deep-link writes CFBundleURLTypes
          only in its mobile/iOS branch (its build.rs calls
