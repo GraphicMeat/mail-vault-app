@@ -29,7 +29,7 @@ import { firstRecipient } from '../utils/mailto';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
-import { signatureCaretPos } from '../utils/signatureCaret';
+import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId }) {
@@ -352,6 +352,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     return () => { aliveRef.current = false; };
   }, []);
 
+  // The signature block the body carries for an account: a blank line, the
+  // standard "--" separator, then the signature. Empty when it signs nothing.
+  const signatureBlock = (accountId) => {
+    const signature = getSignature(accountId);
+    const sigBody = signature.html || textToHtml(signature.text || '');
+    return signature.enabled && sigBody ? '<p></p><p>--</p>' + sigBody : '';
+  };
+
   // Initialize form based on mode and replyTo email
   useEffect(() => {
     if (initializedRef.current) return;
@@ -363,14 +371,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       if (replyTemplateApplied.current) replyTemplateCurrentBody.current = next.body;
       setFormData(next);
     };
-    let signatureHtml = '';
-
-    // Add signature if enabled
-    const signature = getSignature(selectedAccountId);
-    const sigBody = signature.html || textToHtml(signature.text || '');
-    if (signature.enabled && sigBody) {
-      signatureHtml = '<p></p><p>--</p>' + sigBody;
-    }
+    const signatureHtml = signatureBlock(selectedAccountId);
 
     if (!replyTo) {
       if (initialData) {
@@ -488,6 +489,26 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // it while this draft is active must not rerun this initializer and erase
   // the text the person is currently writing.
   }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
+
+  // The initializer runs once, so a draft being written is never rebuilt.
+  // Changing From swaps the signature in place instead, and an untouched body
+  // stays untouched: its baseline moves with it.
+  const signedAccountRef = useRef(selectedAccountId);
+  useEffect(() => {
+    const previous = signedAccountRef.current;
+    signedAccountRef.current = selectedAccountId;
+    if (previous === selectedAccountId) return;
+    const from = signatureBlock(previous);
+    const to = signatureBlock(selectedAccountId);
+    if (from === to) return;
+    setFormData(prev => {
+      const body = swapSignature(prev.body || '', from, to, { above: mode === 'forward' });
+      if (initialSnapshot.current && initialSnapshot.current.body === prev.body) {
+        initialSnapshot.current = { ...initialSnapshot.current, body };
+      }
+      return { ...prev, body };
+    });
+  }, [selectedAccountId]);
 
   // Mine each account's Sent cache so the From list offers every address the
   // mailbox can actually send from, not just its login.
