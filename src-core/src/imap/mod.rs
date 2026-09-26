@@ -3665,3 +3665,68 @@ mod unescape_quoted_tests {
         assert_eq!(unescape_quoted(r"a\\\\b"), r"a\\b");
     }
 }
+
+/// The connection test's slot wait must never count against its own budget —
+/// that was Track B's root cause (a full 7-connection budget read as "the
+/// server did not answer in time"). Calls `test_connection_attempt` directly
+/// (skipping `test_connection`'s retry) so a regression that moves the slot
+/// acquire back inside `TEST_ATTEMPT_TIMEOUT` fails here instead of being
+/// masked by the retry getting a second 20s window. Lives here rather than
+/// `src-core/tests/` so `#[cfg(test)]` items (`test_connection_attempt`) stay
+/// visible — see `pool.rs`'s `noop_timeout_tests` for the same reasoning.
+#[cfg(test)]
+mod test_connection_budget_tests {
+    use super::*;
+    use mock_imap::{MockImap, Scenario};
+
+    /// Own account (`budget-wait@example.com`), not `noop-pool@example.com` or
+    /// `user@example.com` — this binary's transfer-stats counters are global
+    /// per email, and other suites in it read those (see 88b40930).
+    fn config_for(server: &MockImap) -> ImapConfig {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(serde_json::json!({
+            "email": "budget-wait@example.com",
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "imapSecure": true,
+        }))
+        .expect("build ImapConfig")
+    }
+
+    #[async_std::test]
+    async fn a_full_budget_waits_for_a_slot_instead_of_timing_out() {
+        let server = MockImap::start(Scenario::new());
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        // Fill every slot with a live, unpooled session (like the IDLE watcher
+        // or a Sent-copy APPEND) — nothing idle for `connection_slot` to evict,
+        // so the test's own attempt must genuinely wait for one to free.
+        let mut held = Vec::new();
+        for _ in 0..pool::MAX_CONNECTIONS_PER_ACCOUNT {
+            held.push(create_imap_session(&config, &pool).await.expect("fill the budget"));
+        }
+
+        let started = std::time::Instant::now();
+        let attempt = async_std::task::spawn({
+            let config = config.clone();
+            let pool = pool.clone();
+            async move { test_connection_attempt(&config, &pool).await }
+        });
+
+        // Held well past TEST_ATTEMPT_TIMEOUT before a slot frees: if the slot
+        // wait ever moved back inside the timed section, the attempt would
+        // already have failed with a timeout by the time this fires.
+        async_std::task::sleep(TEST_ATTEMPT_TIMEOUT + Duration::from_secs(5)).await;
+        drop(held.pop());
+
+        let result = attempt.await;
+        assert!(result.is_ok(), "a busy budget must read as a wait, not a timeout: {result:?}");
+        assert!(
+            started.elapsed() >= TEST_ATTEMPT_TIMEOUT,
+            "the slot must really have been held past the attempt budget: {:?}",
+            started.elapsed()
+        );
+    }
+}

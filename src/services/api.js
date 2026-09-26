@@ -84,7 +84,7 @@ export async function testConnection(account) {
   return httpRequest('/test-connection', {
     method: 'POST',
     body: JSON.stringify({ account }),
-    timeout: 20000,
+    timeout: 45000,
   });
 }
 
