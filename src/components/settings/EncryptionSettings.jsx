@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { KeyRound, Trash2 } from 'lucide-react';
-import { SettingRow } from './SettingRow';
+import { SettingRow } from '../ui/SettingRow';
 import { Button } from '../ui/Button';
+import { SettingsPageLayout } from '../ui/SettingsForm';
 import { pgpListKeys, pgpImportKey, pgpRemoveKey } from '../../services/api';
 import { useT, getLocale } from '../../i18n/index.js';
 
@@ -54,7 +55,7 @@ export function EncryptionSettings() {
   };
 
   return (
-    <div className="settings-form space-y-6">
+    <SettingsPageLayout>
       <section className="settings-section space-y-5">
         <h4 className="flex items-center gap-2 font-semibold text-mail-text">
           <KeyRound size={18} className="text-mail-accent-text" />{t('pgp.tab')}
@@ -118,6 +119,6 @@ export function EncryptionSettings() {
         {error && <p className="text-xs text-mail-danger" role="alert">{error}</p>}
         <p className="text-xs text-mail-text-muted">{t('pgp.decryptOnly')}</p>
       </section>
-    </div>
+    </SettingsPageLayout>
   );
 }

@@ -6,7 +6,7 @@ import { daemonCall } from '../../services/daemonClient';
 import { formatDateTime } from '../../utils/dateFormat';
 import { formatCount } from '../../utils/formatCount';
 import { Button } from '../ui/Button';
-import { SettingsSection } from '../ui/SettingsForm';
+import { SettingsPageLayout, SettingsSection } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 
 const CELL = 'py-1.5 px-2 text-left align-middle';
@@ -50,7 +50,7 @@ export function UnsubscribeSettings() {
   const statusLabel = status => status === 'ok' ? t('common.done')
     : status === 'failed' ? t('unsubscribe.statusFailed') : t('unsubscribe.statusOpened');
 
-  return <section className="settings-form" data-testid="unsubscribe-settings" aria-label={t('unsubscribe.tabLabel')}>
+  return <SettingsPageLayout as="section" spaced={false} data-testid="unsubscribe-settings" aria-label={t('unsubscribe.tabLabel')}>
     <SettingsSection title={t('unsubscribe.subscriptions')} description={t('unsubscribe.intro')}>
       <label className="flex items-center gap-2 text-sm mb-3">
         <span className="text-mail-text-muted">{t('unsubscribe.scope')}</span>
@@ -106,5 +106,5 @@ export function UnsubscribeSettings() {
         </tr>)}</tbody>
       </table>}
     </SettingsSection>
-  </section>;
+  </SettingsPageLayout>;
 }
