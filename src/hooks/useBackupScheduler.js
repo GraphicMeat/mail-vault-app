@@ -5,6 +5,11 @@ const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
 const IDLE_CHECK_INTERVAL_MS = 60_000;    // Check every 60 seconds
 const WAKE_SETTLE_MS = 10_000;            // Wait 10s after wake for network recovery
 const VISIBILITY_SETTLE_MS = 15_000;      // Wait 15s after tab visible + verify still idle
+// A heartbeat gap longer than this is a machine that slept. It must clear
+// what a merely hidden page does to a 15s interval: with the main window in
+// the tray (or minimized) Chromium/WebView2 runs chained timers at most once
+// a minute, so ~60-75s gaps are routine there and are not sleep.
+const SLEEP_GAP_MS = 150_000;
 
 /**
  * React bridge for the backup coordinator.
@@ -65,7 +70,7 @@ export function useBackupScheduler() {
       const now = Date.now();
       const gap = now - lastTick;
       lastTick = now;
-      if (gap > 30_000) {
+      if (gap > SLEEP_GAP_MS) {
         console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap)`);
         backupScheduler.onSleep(); // mark as paused_sleep first
         // Wait for network recovery, then resume
