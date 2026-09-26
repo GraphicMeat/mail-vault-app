@@ -219,6 +219,14 @@ pub(crate) const E_PASSPHRASE_SHORT: &str = "E_PORTABLE_PASSPHRASE_SHORT";
 /// What of this installed app goes to the drive. The daemon sits inside the
 /// same bundle / folder / AppImage as the app, so it finds it from its own path.
 fn this_app_payload() -> Result<Vec<std::path::PathBuf>, String> {
+    // ponytail: macOS is refused until a signed, sandboxed bundle proves it can
+    // read `MailVault Data` beside itself on a drive. A denied read looks like
+    // "not portable", so a Mac copy made after "remove from this computer"
+    // would open empty. Lift once the first-launch folder grant exists and a
+    // signed build has run from a stick.
+    if cfg!(target_os = "macos") {
+        return Err(mailvault_core::portable::E_UNSUPPORTED_BUILD.to_string());
+    }
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
     mailvault_core::portable::app_payload(&exe, appimage.as_deref(), cfg!(windows))
