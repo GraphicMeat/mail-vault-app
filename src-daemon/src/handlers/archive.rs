@@ -108,6 +108,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_json = req!(str_arg(&id, params, "accountJson"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
+            // A selection or a cleanup rule (`background: true`) must not
+            // take the priority sessions a click needs; a save the user just
+            // asked for stays in front.
+            let background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let state = Arc::clone(state);
             let root = match common::vault_root(&state) {
                 Ok(r) => r,
@@ -116,7 +120,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let ctx = archive_ctx(&state, root);
             let guard = RunGuard::register(&state, "archive");
             let cancel = guard.cancel();
-            let result = archive::run(ctx, account_id, account_json, mailbox, uids, cancel).await;
+            let result = archive::run(ctx, account_id, account_json, mailbox, uids, cancel, background).await;
             drop(guard);
             progress_reply(id, result)
         }
@@ -312,7 +316,7 @@ mod tests {
         let handle = tokio::spawn(async move {
             let guard = RunGuard::register(&s2, "archive");
             let cancel = guard.cancel();
-            let _ = archive::run(ctx, "acct".into(), "{\"email\":\"a\",\"imapHost\":\"h\"}".into(), "INBOX".into(), vec![1], cancel).await;
+            let _ = archive::run(ctx, "acct".into(), "{\"email\":\"a\",\"imapHost\":\"h\"}".into(), "INBOX".into(), vec![1], cancel, false).await;
         });
         let joined = handle.await;
         assert!(joined.is_err(), "the sink's panic must have propagated out of the run");

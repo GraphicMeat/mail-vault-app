@@ -434,7 +434,7 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
     if !missing.is_empty() {
         let archived = archive::run_with_backup(
             Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox.clone(), missing,
-            Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup",
+            Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup", false,
         ).await?;
         out.backed_up = archived.completed;
         out.errors = archived.errors;

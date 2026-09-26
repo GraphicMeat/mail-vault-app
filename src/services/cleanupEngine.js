@@ -114,6 +114,8 @@ async function cleanFolder(rule, account, freshAccount, box, stale, mailboxes) {
         accountJson: JSON.stringify(freshAccount),
         uids,
         mailbox: folder,
+        // Off the click lane: a cleanup rule must not queue the message the user opens.
+        background: true,
       });
     } catch (e) {
       console.error(`[CleanupEngine] Failed to archive emails for ${account.email}/${folder}:`, e);

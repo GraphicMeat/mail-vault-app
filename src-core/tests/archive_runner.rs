@@ -11,10 +11,11 @@ use common::{config_for, eml, pool};
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
 use mailvault_core::maildir::INFO_PREFIX;
 use mailvault_core::vault_registry::VaultRegistry;
-use mock_imap::state::Mailbox;
-use mock_imap::{MockImap, Scenario};
-use std::sync::atomic::AtomicBool;
+use mock_imap::state::{synthetic_mailbox, Mailbox};
+use mock_imap::{Action, MockImap, Scenario, Trigger};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 fn inbox_with_one(uid: u32) -> Mailbox {
     let mut mb = Mailbox::new("INBOX");
@@ -102,6 +103,7 @@ async fn a_custody_append_failure_does_not_fail_the_run() {
         "INBOX".to_string(),
         vec![1],
         Arc::new(AtomicBool::new(false)),
+        false,
     )
     .await
     .expect("run itself does not error");
@@ -145,6 +147,7 @@ async fn the_gate_wraps_the_write_entry_and_exit_bracket_it() {
         "INBOX".to_string(),
         vec![1],
         Arc::new(AtomicBool::new(false)),
+        false,
     )
     .await
     .expect("run does not error");
@@ -184,6 +187,7 @@ async fn a_gate_that_refuses_leaves_no_file_on_disk() {
         "INBOX".to_string(),
         vec![1],
         Arc::new(AtomicBool::new(false)),
+        false,
     )
     .await
     .expect("run does not error: the per-uid task reports the gate's refusal as a normal fetch error");
@@ -229,6 +233,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
         None,
         false, // remove_existing
         "archive",
+        false,
     )
     .await
     .expect("run does not error");
@@ -269,6 +274,7 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
         "INBOX".to_string(),
         vec![1],
         Arc::new(AtomicBool::new(false)),
+        false,
     )
     .await
     .expect("run does not error");
@@ -311,6 +317,7 @@ async fn a_run_leaves_its_rows_in_a_verified_registry_without_a_relisting() {
         "INBOX".to_string(),
         vec![1, 2],
         Arc::new(AtomicBool::new(false)),
+        false,
     )
     .await
     .expect("run does not error");
@@ -322,4 +329,55 @@ async fn a_run_leaves_its_rows_in_a_verified_registry_without_a_relisting() {
     let names = file_names(&cur_dir(root.path(), "acct", "INBOX"));
     let held = registry.resolve(root.path(), "acct", "INBOX", 1).unwrap().unwrap();
     assert!(names.contains(&held.file_name().unwrap().to_string_lossy().into_owned()), "{held:?} vs {names:?}");
+}
+
+// ── (f) a bulk archive leaves the click lane free (Task A3) ─────────────────
+
+/// Archiving a selection of 20 used to fetch on the priority lane, five
+/// workers at a time, so a message clicked meanwhile waited behind a whole
+/// body fetch. Run in the background, it leaves the click's lane empty.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_background_archive_does_not_queue_the_message_you_click() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 20))
+            .fault(Trigger::on("FETCH"), Action::Delay(Duration::from_secs(2))),
+    );
+    let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
+    let pool = Arc::new(pool());
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::clone(&pool),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry,
+    });
+    let cancel = Arc::new(AtomicBool::new(false));
+    let run = tokio::spawn(archive::run(
+        ctx,
+        "acct".to_string(),
+        account_json(&server),
+        "INBOX".to_string(),
+        (1..=20).collect(),
+        Arc::clone(&cancel),
+        true,
+    ));
+
+    // Every archive worker has its session and sits in a slow FETCH.
+    let waiting = Instant::now();
+    while server.count_commands("FETCH") < 5 {
+        assert!(waiting.elapsed() < Duration::from_secs(10), "the archive never started fetching");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    let config = config_for(&server);
+    let started = Instant::now();
+    let click = pool.get_priority(&config).await.expect("click checkout");
+    let waited = started.elapsed();
+    pool.return_priority(&config, click).await;
+    assert!(waited < Duration::from_secs(1), "the click waited {waited:?} behind the archive");
+
+    cancel.store(true, Ordering::Relaxed);
+    run.await.expect("archive task").expect("archive run");
 }

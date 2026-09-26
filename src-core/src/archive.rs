@@ -153,8 +153,9 @@ pub async fn run(
     mailbox: String,
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
+    background: bool,
 ) -> Result<ArchiveProgress, String> {
-    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive").await
+    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive", background).await
 }
 
 pub async fn run_with_backup(
@@ -174,6 +175,11 @@ pub async fn run_with_backup(
     // "archive" from a manual/daemon archive run, "backup" from backup.rs's
     // call (R3.2 / N3 - lets a listener take only its own event stream).
     operation: &'static str,
+    // Fetch on the pool's background lane: a bulk or scheduled run (a
+    // selection, a cleanup rule) whose five workers would otherwise
+    // hold every priority session and queue the message the user clicks.
+    // A save the user asked for right now stays on the priority lane.
+    background: bool,
 ) -> Result<ArchiveProgress, String> {
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
@@ -285,7 +291,7 @@ pub async fn run_with_backup(
 
             match fetch_and_store(
                 &ctx, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                listed, in_mirror, &pace,
+                listed, in_mirror, &pace, background,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -453,11 +459,16 @@ async fn fetch_and_store(
     // The run's mirror listing already holds this uid, under any name.
     in_mirror: bool,
     pace: &DrivePace,
+    background: bool,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
 
-    // Get a priority session for the fetch (semaphore-guarded)
-    let mut guard = ctx.pool.get_priority(account).await?;
+    // A session on the run's lane for the fetch (semaphore-guarded)
+    let mut guard = if background {
+        ctx.pool.get_background(account).await?
+    } else {
+        ctx.pool.get_priority(account).await?
+    };
 
     // Bounded: a socket the server (or a NAT) dropped while a slow disk held
     // this worker never answers, and an unbounded await here is what locks a
@@ -474,7 +485,11 @@ async fn fetch_and_store(
         })?;
 
     guard.last_selected = Some(mailbox.to_string());
-    ctx.pool.return_priority(account, guard).await;
+    if background {
+        ctx.pool.return_background(account, guard).await;
+    } else {
+        ctx.pool.return_priority(account, guard).await;
+    }
 
     let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
 
@@ -772,7 +787,9 @@ async fn delete_single_email(
     // delete look like a message resurrecting itself, except here it costs one
     // uid out of a bulk run and is reported as an error count nobody can act
     // on. See ImapPool::run_uid_delete for why re-sending this is safe.
-    pool.run_uid_delete(account, true, |mut session| async move {
+    // Background lane: the only caller is a bulk run (BulkOperationManager),
+    // whose five workers would otherwise queue the message the user clicks.
+    pool.run_uid_delete(account, false, |mut session| async move {
         // Cached at session creation — read after checkout, like the move path.
         let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
         imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;

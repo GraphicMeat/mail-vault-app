@@ -409,9 +409,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let account_id = opt_str_arg(params, "accountId");
             // Prefetch of the next rows is background work — left on the
-            // priority lane it would take one of that account's 3 permits,
-            // queueing the click the user actually made behind up to three
-            // whole message bodies. Same reasoning as commands.rs.
+            // priority lane it would take one of that account's 5 permits,
+            // queueing the click the user actually made behind up to five
+            // whole message bodies.
             let use_background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let mb_clone = mailbox.clone();
             let started = std::time::Instant::now();

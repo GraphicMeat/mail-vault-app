@@ -76,6 +76,8 @@ class BulkOperationManager {
             accountJson: JSON.stringify(freshAccount),
             mailbox,
             uids,
+            // Off the click lane: a bulk run must not queue the message the user opens.
+            background: true,
           });
         }
 

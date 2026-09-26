@@ -59,7 +59,7 @@ async fn run(state: Arc<DaemonState>) {
             let st = Arc::clone(&state);
             let results = process_due_with(&state.app_dir, now_ms(), move |row| {
                 let st = Arc::clone(&st);
-                async move { wake_row(&st, &row).await }
+                async move { wake_row(&st, &row, true).await }
             })
             .await;
             for (id, _, row_state) in &results {
@@ -133,7 +133,11 @@ where
 /// Move one row's message back where it came from, unread. Also what
 /// `snooze.cancel` calls to unsnooze now, so "now" is never a second path.
 /// The caller holds `SnoozeState::lock`.
-pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze) -> snooze::WakeOutcome {
+///
+/// `background`: the timed wake runs on the pool's background lane, so a
+/// batch of rows falling due never queues the message the user clicks; an
+/// unsnooze the user asked for stays on the priority lane.
+pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, background: bool) -> snooze::WakeOutcome {
     use snooze::WakeOutcome::*;
     let account = match credentials::resolve_account_credentials_guarded(&row.account_id).await {
         Ok(a) => a,
@@ -142,7 +146,12 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze) -> 
             return if credentials::GATE.is_blocked() { Wait(msg) } else { Transient(msg) };
         }
     };
-    let PooledSessionGuard { mut session, last_selected: _, _permit } = match state.imap_pool.get_priority(&account).await {
+    let checkout = if background {
+        state.imap_pool.get_background(&account).await
+    } else {
+        state.imap_pool.get_priority(&account).await
+    };
+    let PooledSessionGuard { mut session, last_selected: _, _permit } = match checkout {
         Ok(g) => g,
         Err(e) => return if state.net.note_failure(&e).await { Transient(e) } else { Wait(e) },
     };
@@ -160,7 +169,11 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze) -> 
     let moved = match moved {
         Ok(m) => {
             let guard = PooledSessionGuard { session, last_selected: Some(row.snoozed_mailbox.clone()), _permit };
-            state.imap_pool.return_priority(&account, guard).await;
+            if background {
+                state.imap_pool.return_background(&account, guard).await;
+            } else {
+                state.imap_pool.return_priority(&account, guard).await;
+            }
             m
         }
         // The session is dropped, not returned: a failed command can leave
@@ -277,10 +290,10 @@ mod tests {
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
 
         app_db::with(&dir, |c| snooze::insert(c, "a", "acct", "INBOX", "Snoozed", Some(99), "<snz-1@example.com>", 1_000)).unwrap();
-        let outcome = wake_row(&state, &row(&dir, "a")).await;
+        let outcome = wake_row(&state, &row(&dir, "a"), true).await;
 
         app_db::with(&dir, |c| snooze::insert(c, "b", "acct", "INBOX", "Snoozed", Some(1), "<gone@example.com>", 1_000)).unwrap();
-        let gone = wake_row(&state, &row(&dir, "b")).await;
+        let gone = wake_row(&state, &row(&dir, "b"), true).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert_eq!(outcome, WakeOutcome::Woken);

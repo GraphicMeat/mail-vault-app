@@ -25,6 +25,11 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
+const mockSend = vi.fn().mockResolvedValue({});
+vi.mock('../transport.js', () => ({
+  send: (...a) => mockSend(...a),
+}));
+
 let mockPurgeEverywhere;
 vi.mock('../workflows/messageMutations', () => ({
   purgeEverywhere: (...args) => mockPurgeEverywhere(...args),
@@ -135,5 +140,30 @@ describe('BulkOperationManager archive-progress account/mailbox filter', () => {
     });
     expect(bulkOperationManager.operation.completed).toBe(2);
     expect(bulkOperationManager.operation.errors).toBe(1);
+  });
+});
+
+// A bulk archive fetches on the daemon's background lane: on the priority
+// lane its five workers held every session a click needs, so the message
+// the user opened meanwhile waited behind whole body fetches.
+describe('BulkOperationManager archive lane', () => {
+  it('asks the daemon to archive in the background', async () => {
+    // Node test environment: no window unless this test makes one.
+    globalThis.window = { __TAURI__: { core: { invoke: () => {} } } };
+    try {
+      mockSend.mockClear();
+      const { bulkOperationManager } = await import('../BulkOperationManager.js');
+      await bulkOperationManager.start({
+        type: 'archive',
+        accountId: 'acc1',
+        account: { id: 'acc1', email: 'me@test.com' },
+        mailbox: 'INBOX',
+        uids: [1, 2, 3],
+        onProgress: () => {},
+      });
+      expect(mockSend).toHaveBeenCalledWith('archive_emails', expect.objectContaining({ background: true }));
+    } finally {
+      delete globalThis.window;
+    }
   });
 });

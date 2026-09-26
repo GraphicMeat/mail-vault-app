@@ -125,7 +125,7 @@ async fn cancel(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespons
     if row.state == "woken" {
         return done(id, json_of(row));
     }
-    let outcome = snooze_worker::wake_row(state, &row).await;
+    let outcome = snooze_worker::wake_row(state, &row, false).await;
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
     let recorded = app_db::with(&state.app_dir, |c| snooze::record_outcome(c, &row.id, &outcome, now));
     if let Ok(row_state) = &recorded {
