@@ -167,33 +167,14 @@ describe('loadEmails — new mail the daemon already cached lands without an acc
       uidValidity: 1, uidNext: 101, highestModseq: 5, totalEmails: 100, totalCached: 100,
     });
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 101, highestModseq: 5, exists: 100 });
-    mockListCachedUids.mockResolvedValue({ uids: STORE_UIDS, changed: [] });
 
     await useMailStore.getState().loadEmails();
 
     // Same array, not a rebuilt copy — a repaint that rewrites `emails` every
     // time re-derives every row and drops the sorted memo for nothing.
     expect(useMailStore.getState().emails).toBe(emails);
-    // One uid listing, and not a single row read.
+    // One meta read, and not a single sidecar touched.
+    expect(mockListCachedUids).not.toHaveBeenCalled();
     expect(mockGetEmailHeadersByUids).not.toHaveBeenCalled();
-  });
-
-  // One wake can carry an expunge AND an arrival: the cache then holds exactly
-  // as many rows as the store, and a gate that compared the two counts
-  // decided nothing was new, leaving the arrival off screen.
-  it('drains an arrival that came in the same wake as an expunge', async () => {
-    primeVisibleInbox(STORE_UIDS);
-    const cachedUids = [101, ...STORE_UIDS.filter((uid) => uid !== 1)];
-    mockGetEmailHeadersMeta.mockResolvedValue({
-      uidValidity: 1, uidNext: 102, highestModseq: 6, totalEmails: 100, totalCached: 100,
-    });
-    mockListCachedUids.mockResolvedValue({ uids: cachedUids, changed: [] });
-    mockGetEmailHeadersByUids.mockResolvedValue([mkHeader(101)]);
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 102, highestModseq: 6, exists: 100 });
-
-    await useMailStore.getState().loadEmails();
-
-    expect(mockGetEmailHeadersByUids).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [101]);
-    expect(useMailStore.getState().emails.map((e) => e.uid)).toContain(101);
   });
 });

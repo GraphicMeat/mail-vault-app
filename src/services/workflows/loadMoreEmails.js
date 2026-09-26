@@ -43,9 +43,13 @@ export async function _drainCache(accountId, mailbox, loadedUids) {
   try {
     const meta = await db.getEmailHeadersMeta(accountId, mailbox);
     const totalCached = meta?.totalCached || 0;
-    // No count gate: one wake can expunge a row and add another, leaving the
-    // cache exactly as big as the store with a new row the store lacks. Only
-    // the set difference below can tell.
+    // Keep the count gate. Without it a stale cache row the reconcile has not
+    // pruned yet (gone from the server) drains straight back into the list.
+    // It never hid an arrival: the IDLE watcher announces arrivals before the
+    // reconcile prunes (`sync_account_announcing`), so at that moment the
+    // cache holds every old row plus the new one and outnumbers the store.
+    if (totalCached <= loadedUids.size) return null;
+
     const listing = await db.listCachedUids(accountId, mailbox);
     if (!listing?.uids?.length) return null;
 
