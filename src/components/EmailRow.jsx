@@ -95,27 +95,31 @@ export function listRowHeight(compact, previewLines = 0) {
 
 /**
  * The start of the message's text under the row, clamped to the lines the
- * user asked for. `snippet` comes from the offline search index, so a row
- * whose body has not been indexed shows nothing here: no placeholder.
+ * user asked for: `previewText`, which the daemon attaches from the offline
+ * search index, or a vault row's own `snippet`. A row whose body nobody has
+ * read shows nothing here: no placeholder.
  */
 export function RowSnippet({ email }) {
   const lines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
-  if (!lines || !email?.snippet) return null;
+  const text = email?.previewText || email?.snippet;
+  if (!lines || !text) return null;
   return (
     <div data-testid="row-snippet" dir="auto" className="row-snippet" style={{ WebkitLineClamp: lines, maxHeight: lines * SNIPPET_LINE_PX }}>
-      {email.snippet}
+      {text}
     </div>
   );
 }
 
 /**
  * A single-line row's sender and subject columns, with the preview line under
- * them when there is one. Without one this adds no element at all, so the row
- * keeps exactly the layout it had before preview lines existed.
+ * them. With the setting off this adds no element at all, so the row keeps
+ * exactly the layout it had before preview lines existed. With it on, every
+ * row is wrapped, preview or not: the sender column is a share of its
+ * container, and a subject must start at the same x on every row.
  */
 export function WithSnippet({ email, children }) {
   const lines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
-  if (!lines || !email?.snippet) return children;
+  if (!lines) return children;
   return (
     <div className="flex-1 min-w-0 flex flex-col justify-center">
       <div className="flex items-center gap-3">{children}</div>

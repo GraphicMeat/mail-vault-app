@@ -64,6 +64,22 @@ fn with_snippets(state: &DaemonState, account_id: &str, mailbox: &str, text: Str
     serde_json::to_string(&entry).unwrap_or(text)
 }
 
+/// The rows the app writes back carry the `previewText` a read stamped on
+/// them. It belongs to the search index, never to the header cache: kept
+/// here, it would outlive the index row it came from.
+fn without_preview_text(data: String) -> String {
+    if !data.contains("\"previewText\"") {
+        return data;
+    }
+    let Ok(mut entry) = serde_json::from_str::<Value>(&data) else { return data };
+    for row in entry.get_mut("emails").and_then(Value::as_array_mut).into_iter().flatten() {
+        if let Some(obj) = row.as_object_mut() {
+            obj.remove("previewText");
+        }
+    }
+    serde_json::to_string(&entry).unwrap_or(data)
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
@@ -74,6 +90,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let data = without_preview_text(data);
                     with_vault_write(&state, |_root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))
                     }).map(|_| Value::Null)
@@ -368,13 +385,26 @@ mod tests {
         let page = call(&s, "load_email_cache_partial", json!({"accountId": "a", "mailbox": "INBOX", "limit": 50})).await.result.unwrap();
         let page: Value = serde_json::from_str(page.as_str().expect("still a JSON string")).unwrap();
         let by_uid = |rows: &Value, uid: u64| rows.as_array().unwrap().iter().find(|r| r["uid"] == uid).cloned().unwrap();
-        assert_eq!(by_uid(&page["emails"], 7)["snippet"], "Hi Ann, the invoice is attached.");
+        assert_eq!(by_uid(&page["emails"], 7)["previewText"], "Hi Ann, the invoice is attached.");
         assert_eq!(by_uid(&page["emails"], 7)["flags"], json!(["\\Seen"]));
-        assert!(by_uid(&page["emails"], 8).get("snippet").is_none(), "no indexed body, no preview line");
+        assert!(by_uid(&page["emails"], 8).get("previewText").is_none(), "no indexed body, no preview line");
 
         let rows = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7, 8]})).await.result.unwrap();
-        assert_eq!(by_uid(&rows, 7)["snippet"], "Hi Ann, the invoice is attached.");
-        assert!(by_uid(&rows, 8).get("snippet").is_none());
+        assert_eq!(by_uid(&rows, 7)["previewText"], "Hi Ann, the invoice is attached.");
+        assert!(by_uid(&rows, 8).get("previewText").is_none());
+    }
+
+    /// A row the app saves back still carries the preview a read stamped on
+    /// it; the header cache must not keep it, or it would outlive its index
+    /// row (body indexing turned off, the index rebuilt).
+    #[tokio::test]
+    async fn a_saved_row_never_carries_its_preview_into_the_header_cache() {
+        let (_t, s) = st(true);
+        let data = json!({"emails": [{"uid": 7, "subject": "hi", "previewText": "stale preview"}], "totalEmails": 1}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": data})).await;
+        let rows = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7]})).await.result.unwrap();
+        assert_eq!(rows[0]["subject"], "hi");
+        assert!(rows[0].get("previewText").is_none(), "no index row, so no preview: {}", rows[0]);
     }
 
     #[tokio::test]

@@ -699,8 +699,10 @@ pub fn nudge(st: &SearchIndexState, account_id: &str, mailbox: &str) {
 }
 
 /// Stamp each header row of one folder with the list's preview line
-/// (`snippet`), for the rows the index has read a body for. One query per
-/// call. A list read never waits on a sweep: the index is tried for at most
+/// (`previewText`, the index's `messages.snippet`), for the rows the index has
+/// read a body for. Its own name, not `snippet`: vault rows already carry
+/// one, and every reader of that must keep seeing exactly what it saw. One
+/// query per call. A list read never waits on a sweep: the index is tried for at most
 /// ~50 ms, and rows it cannot answer for go out as they are, without one.
 pub fn attach_snippets(st: &SearchIndexState, account_id: &str, mailbox: &str, rows: &mut [Value]) {
     let uids: Vec<u32> = rows.iter().filter_map(|r| r.get("uid")?.as_u64()).map(|u| u as u32).collect();
@@ -726,7 +728,7 @@ pub fn attach_snippets(st: &SearchIndexState, account_id: &str, mailbox: &str, r
     for row in rows.iter_mut() {
         let snippet = row.get("uid").and_then(Value::as_u64).and_then(|u| found.get(&(u as u32)));
         if let (Some(snippet), Some(obj)) = (snippet, row.as_object_mut()) {
-            obj.insert("snippet".into(), Value::String(snippet.clone()));
+            obj.insert("previewText".into(), Value::String(snippet.clone()));
         }
     }
 }

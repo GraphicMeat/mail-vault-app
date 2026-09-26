@@ -47,7 +47,7 @@ const SNIPPET = 'Hi Ann, the invoice for September is attached. Let me know if a
 const email = (extra = {}) => ({
   uid: 42, _accountId: 'acct-1', _mailbox: 'INBOX', source: 'server', isArchived: false,
   subject: 'Invoice', from: { name: 'Bob', address: 'bob@example.com' },
-  date: '2026-08-01T10:00:00Z', flags: ['\\Seen'], snippet: SNIPPET,
+  date: '2026-08-01T10:00:00Z', flags: ['\\Seen'], previewText: SNIPPET,
   ...extra,
 });
 const shared = () => ({
@@ -85,11 +85,44 @@ for (const [name, renderRow] of Object.entries(rows)) {
 
     it('shows nothing, not a placeholder, for a row whose body is not indexed', () => {
       act(() => useSettingsStore.setState({ listPreviewLines: 3 }));
-      const { container } = render(renderRow(email({ snippet: undefined })));
+      const { container } = render(renderRow(email({ previewText: undefined })));
       expect(container.querySelector('[data-testid="row-snippet"]')).toBeNull();
+    });
+
+    it("shows a vault row's own snippet when the index has not attached one", () => {
+      act(() => useSettingsStore.setState({ listPreviewLines: 1 }));
+      const { container } = render(renderRow(email({ previewText: undefined, snippet: 'From the vault' })));
+      expect(container.querySelector('[data-testid="row-snippet"]')?.textContent).toBe('From the vault');
+    });
+
+    // The sender column is a share of its container: a row with a preview
+    // and one without must put the subject at the same x, so both get the
+    // same wrapper.
+    it('lays out a row with a preview and one without the same way', () => {
+      act(() => useSettingsStore.setState({ listPreviewLines: 2 }));
+      const depth = (e) => {
+        const { container } = render(renderRow(e));
+        let n = 0;
+        for (let el = container.querySelector('[data-testid="row-sender"]'); el && el !== container; el = el.parentElement) n++;
+        cleanup();
+        return n;
+      };
+      expect(depth(email({ previewText: undefined }))).toBe(depth(email()));
     });
   });
 }
+
+describe('with the setting off', () => {
+  it('adds nothing to a row, however much preview text it carries', () => {
+    for (const renderRow of Object.values(rows)) {
+      const plain = render(renderRow(email({ previewText: undefined, snippet: undefined }))).container.innerHTML;
+      cleanup();
+      const carrying = render(renderRow(email({ snippet: 'vault text' }))).container.innerHTML;
+      cleanup();
+      expect(carrying).toBe(plain);
+    }
+  });
+});
 
 describe('row height', () => {
   it('is the layout height plus one fixed line per preview line', () => {
