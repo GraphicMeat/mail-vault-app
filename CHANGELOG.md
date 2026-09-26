@@ -49,6 +49,7 @@
 - **Compose opens at its usual size again.** Since 2.16.0 a new message filled the whole width of the window. It opens at its usual width again, and its corner still lets you make it as large as the window.
 - **The row menu offers "Delete everywhere" only when there is more than the server copy.** On a message that is only on your mail server it was shown greyed out, under a name that promised to clear your vault and backup as well.
 - **Setting the read state yourself keeps the message where it is.** Marking the open message unread no longer has the reading timer mark it read again a moment later, the thread reader shows the new state straight away, and with the Unread filter on in the explorer the message you are reading, and the ones you read since turning the filter on, stay on screen.
+- **Opening a message on a throttled Gmail account no longer takes 20-40 seconds.** A pooled connection that was simply slow to answer was treated as dead and replaced with a fresh login every time; it is now given enough time to answer before MailVault gives up on it.
 
 ## [2.16.0] - 2026-09-25
 

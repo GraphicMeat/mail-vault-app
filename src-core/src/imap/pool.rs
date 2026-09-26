@@ -39,7 +39,13 @@ const NOOP_SKIP_SECS: u64 = 60;
 /// never answers, so an unbounded `noop().await` stalls the caller until the
 /// OS gives up on the TCP retransmits — minutes. Past this, treat the session
 /// as dead and connect fresh.
-const NOOP_TIMEOUT: Duration = Duration::from_secs(5);
+///
+/// 5s used to cut off a session that was merely slow: a throttled Gmail
+/// account answered NOOP in ~10s, so every reuse past NOOP_SKIP_SECS dropped
+/// a live session and paid a ~30s re-login instead (Track A, 2026-09-26). 15s
+/// still catches a genuinely dead socket — those never answer at all — while
+/// giving a throttled-but-live one room to reply.
+const NOOP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Breather before the single connect retry — long enough to outlive a Wi-Fi
 /// hiccup, short enough that a sync tick still finishes.
@@ -688,5 +694,80 @@ mod read_retry_tests {
         .await;
         assert_eq!(result, Ok("new session"));
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+}
+
+/// The NOOP health-check timeout, exercised against a real (mock) server —
+/// `#[tokio::test]` because the NOOP branch is the only pool path that awaits
+/// `tokio::time::timeout`, and a plain `#[async_std::test]` has no tokio
+/// runtime under it for that call to find.
+///
+/// Lives inside `pool.rs` rather than `src-core/tests/` so it can backdate a
+/// pooled session's `last_used` directly — `#[cfg(test)]` items here are
+/// invisible to the separate integration-test binaries.
+#[cfg(test)]
+mod noop_timeout_tests {
+    use super::*;
+    use mock_imap::state::synthetic_mailbox;
+    use mock_imap::{Action, MockImap, Scenario, Trigger};
+
+    fn config_for(server: &MockImap) -> ImapConfig {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(serde_json::json!({
+            "email": "user@example.com",
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "imapSecure": true,
+        }))
+        .expect("build ImapConfig")
+    }
+
+    /// Backdate every pooled background session for `config` so the next
+    /// checkout's reuse check sees it as older than `age` — past
+    /// NOOP_SKIP_SECS, that forces the NOOP health check to run instead of
+    /// being skipped.
+    async fn age_pooled_sessions(pool: &ImapPool, config: &ImapConfig, age: Duration) {
+        let key = conn_key(config);
+        let mut map = pool.background.lock().await;
+        if let Some(sessions) = map.get_mut(&key) {
+            for s in sessions.iter_mut() {
+                s.last_used = Instant::now() - age;
+            }
+        }
+    }
+
+    /// A live Gmail session under throttle answers NOOP in ~10s (Track A,
+    /// 2026-09-26 daemon log). At the old 5s timeout that read as dead: the
+    /// session was dropped and the next checkout paid a fresh login, a second
+    /// TCP connection. At 15s the slow-but-live NOOP is given time to answer,
+    /// so the session is reused and the checkout costs zero connections.
+    #[tokio::test]
+    async fn a_slow_but_live_noop_keeps_the_pooled_session() {
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .fault(Trigger::on("NOOP"), Action::Delay(Duration::from_secs(6))),
+        );
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let guard = pool.get_background(&config).await.expect("first checkout");
+        let after_first = server.connection_count();
+        pool.return_background(&config, guard).await;
+
+        age_pooled_sessions(&pool, &config, Duration::from_secs(NOOP_SKIP_SECS + 1)).await;
+
+        let guard = pool
+            .get_background(&config)
+            .await
+            .expect("second checkout must survive a slow-but-live NOOP");
+        pool.return_background(&config, guard).await;
+
+        assert_eq!(
+            server.connection_count(),
+            after_first,
+            "a slow but live NOOP must not force a relogin"
+        );
     }
 }
