@@ -6,6 +6,9 @@ export const QUICK_ACTION_TYPES = [
   'toggleRead', 'markRead', 'markUnread', 'star', 'unstar', 'tag', 'move',
   'spam', 'reply', 'replyAll', 'forward', 'replyTemplate', 'export', 'newMessage',
   'open', 'source', 'theme', 'snooze',
+  // Not in any default: rows and the reader's grouped layout key off their
+  // exact default lists (see snooze), so people add it in Quick actions.
+  'unsubscribe',
 ];
 
 const entry = (action, extra = {}) => ({ id: action, action, ...extra });

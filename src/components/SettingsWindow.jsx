@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { SettingsPage } from './SettingsPage';
 import { useUnsavedStore } from '../stores/unsavedStore';
+import { UnsubscribeHost } from './UnsubscribeHost';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useMailStore } from '../stores/mailStore';
@@ -113,11 +114,15 @@ export function SettingsWindow() {
   if (!initial) return <div className="h-screen bg-mail-bg" aria-busy="true" />;
   const close = () => { void emit('settings-window-closed', { token }).finally(() => getCurrentWebviewWindow().destroy()); };
   const handoff = action => { void emit('settings-window-action', { token, action }).finally(close); };
-  return <SettingsPage initialTab={initial.tab} initialAccountId={initial.accountId} initialSection={initial.section}
-    onClose={close}
-    onAddAccount={() => handoff('add-account')}
-    /* Export and import run in the main window only (components/transfer/ explains why). */
-    onExportAccounts={() => handoff('export-accounts')}
-    onImportAccounts={() => handoff('import-accounts')}
-    onReportBug={() => handoff('report-bug')} />;
+  // Settings > Unsubscribe asks from this window too; App.jsx's host is not here.
+  return <>
+    <SettingsPage initialTab={initial.tab} initialAccountId={initial.accountId} initialSection={initial.section}
+      onClose={close}
+      onAddAccount={() => handoff('add-account')}
+      /* Export and import run in the main window only (components/transfer/ explains why). */
+      onExportAccounts={() => handoff('export-accounts')}
+      onImportAccounts={() => handoff('import-accounts')}
+      onReportBug={() => handoff('report-bug')} />
+    <UnsubscribeHost />
+  </>;
 }

@@ -353,3 +353,27 @@ describe('RowQuickActions', () => {
     ]);
   });
 });
+
+describe('RowQuickActions unsubscribe', () => {
+  it('shows only on a row carrying List-Unsubscribe and asks through the shared dialog', async () => {
+    const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
+    useUnsubscribeStore.setState({ pending: null });
+    setActions(action('unsubscribe'));
+    renderActions({ emails: [email()] });
+    expect(screen.queryByTestId('quick-action-unsubscribe')).toBeNull();
+    cleanup();
+
+    const list = email({
+      uid: 8, _accountId: ACCOUNT_B.id, listUnsubscribe: '<https://list.test/u>',
+      listUnsubscribePost: 'List-Unsubscribe=One-Click', authenticationResults: 'mx.test; dkim=pass',
+    });
+    // A thread row: the older message carries no list headers.
+    renderActions({ emails: [email({ uid: 3, date: '2026-08-01T10:00:00Z' }), list] });
+    fireEvent.click(screen.getByTestId('quick-action-unsubscribe'));
+    expect(useUnsubscribeStore.getState().pending).toEqual({
+      accountId: ACCOUNT_B.id, sender: 'sender@example.test', name: 'Sender',
+      listUnsubscribe: '<https://list.test/u>', listUnsubscribePost: 'List-Unsubscribe=One-Click',
+      authenticationResults: 'mx.test; dkim=pass',
+    });
+  });
+});

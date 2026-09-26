@@ -32,6 +32,7 @@ import { OnboardingResumePrompt } from './components/onboarding/OnboardingResume
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
 import { UndoToast } from './components/UndoToast';
+import { UnsubscribeHost } from './components/UnsubscribeHost';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { SettingsBubble } from './components/settings/SettingsBubble';
@@ -1487,6 +1488,7 @@ function App() {
       <OnboardingResumePrompt ready={onboardingPromptReady} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <UndoToast />
+      <UnsubscribeHost />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
       <SearchIndexProgress />

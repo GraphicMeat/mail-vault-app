@@ -2,8 +2,9 @@ import React, { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink,
-  Code, Sun, Moon, ImageDown, Star, ShieldAlert, ShieldX, Tag, MailPlus, AlarmClock,
+  Code, Sun, Moon, ImageDown, Star, ShieldAlert, ShieldX, Tag, MailPlus, AlarmClock, MailX,
 } from 'lucide-react';
+import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useMailStore } from '../../stores/mailStore';
@@ -23,7 +24,7 @@ const ICONS = {
   archive: Archive, unarchive: Archive, delete: Trash2, deleteServer: Trash2,
   deleteEverywhere: ShieldX, move: FolderInput, toggleRead: MailOpen, markRead: MailOpen,
   markUnread: Mail, star: Star, unstar: Star, spam: ShieldAlert, tag: Tag,
-  export: ImageDown, open: ExternalLink, source: Code, theme: Sun, newMessage: MailPlus, snooze: AlarmClock,
+  export: ImageDown, open: ExternalLink, source: Code, theme: Sun, newMessage: MailPlus, snooze: AlarmClock, unsubscribe: MailX,
 };
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -79,6 +80,7 @@ export const EmailActionBar = memo(function EmailActionBar({
     if (entry.action === 'forward') return t('emailActionBar.forward');
     if (entry.action === 'newMessage') return t('quickActions.action.newMessage');
     if (entry.action === 'snooze') return t('snooze.action');
+    if (entry.action === 'unsubscribe') return t('unsubscribe.action');
     return t('quickActions.title');
   };
 
@@ -117,6 +119,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       || entry.action === 'source' && !onViewSource
       || entry.action === 'theme' && !onToggleEmailTheme
       || entry.action === 'snooze' && (isLocalOnly || !canSnooze(email, state))
+      || entry.action === 'unsubscribe' && !email?.listUnsubscribe
       || entry.action === 'newMessage';
     const actionDisabled = !hidden && (
       ['archive', 'unarchive'].includes(entry.action) && !!disabled.archive
@@ -127,7 +130,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       || entry.action === 'tag' && !label
       || entry.action === 'replyTemplate' && (!template || isSentEmail)
     );
-    const special = ['move', 'snooze', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'open', 'source'].includes(entry.action)
+    const special = ['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'open', 'source'].includes(entry.action)
       || entry.action === 'archive' && isArchived;
     return {
       id: entry.id, action: entry.action, label: labelFor(entry), Icon: ICONS[entry.action],
@@ -141,6 +144,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       onActivate: async (event) => {
         if (onActionPreview) return onActionPreview(entry, email);
         if (entry.action === 'snooze') setSnoozeRect(event.currentTarget.getBoundingClientRect());
+        else if (entry.action === 'unsubscribe') useUnsubscribeStore.getState().request(unsubscribeTarget(email, accountId));
         else if (entry.action === 'tag') {
           if (onApplyLocalLabel) onApplyLocalLabel(email, entry.params.tagId);
           else applyTag(email, location, entry.params.tagId);

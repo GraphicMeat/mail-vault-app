@@ -349,3 +349,22 @@ it('keeps Insights detail read-only while retaining reply and source actions', (
   expect(visible).not.toContain('Star');
   expect(visible).toContain('Reply'); expect(visible).toContain('Forward'); expect(visible).toContain('Source');
 });
+
+describe('reader unsubscribe', () => {
+  const config = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: [{ id: 'unsubscribe', action: 'unsubscribe' }] };
+  const renderWith = email => render(<EmailActionBar email={email} configOverride={config} {...allHandlers()} />);
+
+  it('is offered only for a message with List-Unsubscribe, and opens the confirm flow', async () => {
+    const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
+    useUnsubscribeStore.setState({ pending: null });
+    renderWith(EMAIL);
+    expect(screen.queryByRole('button', { name: /Unsubscribe/ })).toBeNull();
+    cleanup();
+
+    renderWith({ ...EMAIL, from: { address: 'news@list.test', name: 'News' }, listUnsubscribe: '<mailto:leave@list.test>' });
+    fireEvent.click(screen.getByRole('button', { name: /Unsubscribe/ }));
+    expect(useUnsubscribeStore.getState().pending).toMatchObject({
+      sender: 'news@list.test', name: 'News', listUnsubscribe: '<mailto:leave@list.test>', accountId: 'acct-1',
+    });
+  });
+});

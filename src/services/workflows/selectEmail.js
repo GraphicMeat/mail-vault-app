@@ -463,6 +463,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       _mailbox: e._mailbox || mailbox,
       listId: e.listId ?? row?.listId,
       listUnsubscribe: e.listUnsubscribe ?? row?.listUnsubscribe,
+      listUnsubscribePost: e.listUnsubscribePost ?? row?.listUnsubscribePost,
       precedence: e.precedence ?? row?.precedence,
       // Same gap: the SPF/DKIM shield (SenderVerificationBadge) reads these.
       authenticationResults: e.authenticationResults ?? row?.authenticationResults,

@@ -548,6 +548,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (method === 'sync.status') return { status: 'idle', simulated: true };
         // Compose asks when its schedule panel opens; nothing is known here.
         if (method === 'scheduled.suggest_tz') return { headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null };
+        // Settings > Unsubscribe: the demo sends nothing anywhere, so nothing to list.
+        if (method === 'unsubscribe.senders' || method === 'unsubscribe.history') return [];
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         if (method === 'sync.events') {
           const timeoutMs = Math.min(25000, Math.max(1, Number(args.params?.timeoutMs ?? args.timeoutMs ?? 25000)));

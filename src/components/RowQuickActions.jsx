@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArchiveRestore, Forward, FolderInput, ImageDown, Mail, MailOpen,
-  MailPlus, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2, AlarmClock,
+  MailPlus, MailX, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2, AlarmClock,
 } from 'lucide-react';
+import { useUnsubscribeStore, unsubscribeTarget } from '../stores/unsubscribeStore';
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -28,7 +29,7 @@ const ICONS = {
   deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail,
   star: Star, unstar: StarOff, tag: Tag, move: FolderInput, spam: ShieldAlert,
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
-  export: ImageDown, newMessage: MailPlus, snooze: AlarmClock,
+  export: ImageDown, newMessage: MailPlus, snooze: AlarmClock, unsubscribe: MailX,
 };
 const DESTRUCTIVE = new Set(['delete', 'deleteServer', 'deleteEverywhere']);
 const EMPTY_ARRAY = Object.freeze([]);
@@ -71,6 +72,10 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const newest = emails.reduce((a, b) => new Date(b.date) > new Date(a.date) ? b : a);
   const senderAddress = newest.from?.address || '';
   const locs = locationsFor(emails, state);
+  // A thread row unsubscribes through its newest message that offers it.
+  const listIndex = emails.reduce((best, email, index) => email.listUnsubscribe
+    && (best < 0 || new Date(email.date) > new Date(emails[best].date)) ? index : best, -1);
+  const unsubscribe = listIndex < 0 ? null : unsubscribeTarget(emails[listIndex], locs[listIndex]?.accountId);
   const hasUnread = emails.some(email => !email.flags?.includes('\\Seen'));
   const hasRead = emails.some(email => email.flags?.includes('\\Seen'));
   const hasUnflagged = emails.some(email => !email.flags?.includes('\\Flagged'));
@@ -171,6 +176,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     if (entry.action === 'export') return t('common.export');
     if (entry.action === 'newMessage') return t('rowMenu.newMessageTo', { name: getSenderName(newest) });
     if (entry.action === 'snooze') return t('snooze.action');
+    if (entry.action === 'unsubscribe') return t('unsubscribe.action');
     return t('quickActions.title');
   };
   // One entry's descriptor. Also what a trackpad swipe runs an action through
@@ -202,10 +208,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       id: entry.id, action: entry.action, label: actionLabel(entry), Icon: ICONS[entry.action],
       disabled: !!disabledAction,
       // No copy of our own, no purge: it would only repeat "Delete from server".
-      hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge,
+      hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge
+        || entry.action === 'unsubscribe' && !unsubscribe,
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
-      restoreFocus: !['move', 'snooze', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
+      restoreFocus: !['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
       onActivate: async event => {
         if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !email.isArchived))); onClose?.(); }
         else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
@@ -237,6 +244,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
         } else if (entry.action === 'export') {
           useExportStore.getState().openExport({ messages: exportEmails }); onClose?.();
         } else if (entry.action === 'newMessage') { onClose?.(); openNewMessage(); }
+        else if (entry.action === 'unsubscribe') { onClose?.(); useUnsubscribeStore.getState().request(unsubscribe); }
       },
     };
   };

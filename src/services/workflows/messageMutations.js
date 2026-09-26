@@ -95,6 +95,7 @@ export function indexEntryFor(email, extra = {}) {
     bcc: email.bcc || [],
     listId: email.listId ?? null,
     listUnsubscribe: email.listUnsubscribe ?? null,
+    listUnsubscribePost: email.listUnsubscribePost ?? null,
     precedence: email.precedence ?? null,
     flags: email.flags || [],
     has_attachments: email.hasAttachments || email.has_attachments || false,

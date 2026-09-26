@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
 import {
@@ -12,6 +12,44 @@ import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
 import { getSenderName } from '../../utils/emailParser';
 import { t, useT  } from '../../i18n/index.js';
+import { parseAuthResults } from '../../utils/senderCheck';
+import { daemonCall } from '../../services/daemonClient';
+
+// Per-domain logo lookups for this session, so a thread asks once. A "no
+// logo" answer is not kept: the next message may carry a DMARC pass this one
+// lacked, and the daemon caches its own negatives anyway.
+const bimiLookups = new Map();
+
+/**
+ * The sender's BIMI logo, beside the SPF/DKIM/DMARC shield. Only asked for
+ * when the receiving server says the message passed DMARC; the daemon
+ * (`bimi_logo`) checks that the pass is for this From domain and that the
+ * domain's policy enforces, and returns an SVG data URI. An `<img>` never runs
+ * an SVG's scripts.
+ */
+function BimiLogo({ email }) {
+  const t = useT();
+  const domain = (email?.from?.address || '').split('@')[1]?.trim().toLowerCase() || '';
+  const auth = email?.authenticationResults || '';
+  const pass = !!domain && parseAuthResults(auth).dmarc === 'pass';
+  const [logo, setLogo] = useState(null);
+  useEffect(() => {
+    setLogo(null);
+    if (!pass) return undefined;
+    let live = true;
+    if (!bimiLookups.has(domain)) {
+      const lookup = daemonCall('bimi_logo', { domain, authenticationResults: auth })
+        .then(result => result?.logo || null, () => null);
+      bimiLookups.set(domain, lookup);
+      lookup.then(found => { if (!found) bimiLookups.delete(domain); });
+    }
+    bimiLookups.get(domain).then(found => { if (live) setLogo(found); });
+    return () => { live = false; };
+  }, [domain, auth, pass]);
+  if (!logo || !logo.startsWith('data:image/svg+xml;base64,')) return null;
+  return <img src={logo} alt={t('bimi.logoAlt', { domain })} data-testid="bimi-logo"
+    className="w-5 h-5 rounded flex-shrink-0 object-contain" />;
+}
 
 /**
  * Shared sender info component with two variants: single and thread.
@@ -119,6 +157,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
 
             {/* DKIM / verification badge */}
             <SenderVerificationBadge email={email} />
+            <BimiLogo email={email} />
 
             {/* Sender email (only when name differs from address) — the
                 compose target. */}

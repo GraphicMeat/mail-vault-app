@@ -4,6 +4,12 @@ import { layoutSenderMap } from '../../utils/insights/mapLayout';
 import SenderList from './SenderList';
 import { chartLocale, filterSenders, senderAccessibleLabel, senderLastDate } from '../../utils/insights/chartFormat';
 import '../../styles/insights-charts.css';
+import { MailX } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { useInsightsStore } from '../../stores/insightsStore';
+import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
+
+const EMPTY = Object.freeze([]);
 
 export default function SenderMap({ senders = [], endAt, selectedAddress, onSelect }) {
   const t = useT();
@@ -26,6 +32,13 @@ export default function SenderMap({ senders = [], endAt, selectedAddress, onSele
   const layout = useMemo(() => layoutSenderMap(visible, { width, height, endAt }), [visible, width, height, endAt]);
   const byAddress = useMemo(() => new Map(visible.map(s => [s.address, s])), [visible]);
   const selected = senders.find(s => s.address === selectedAddress);
+  // Selecting a bubble loads that sender's messages, newest first; the first
+  // copy carrying List-Unsubscribe is the one to unsubscribe through.
+  const messages = useInsightsStore(s => s.selection?.senderAddress === selectedAddress ? s.messages : EMPTY);
+  const unsubscribe = useMemo(() => {
+    const copy = messages.flatMap(message => message.copies || []).find(item => item.listUnsubscribe);
+    return copy ? unsubscribeTarget(copy) : null;
+  }, [messages]);
   const end = typeof endAt === 'number' ? endAt : Date.parse(endAt);
   const endLabel = Number.isFinite(end)
     ? new Intl.DateTimeFormat(chartLocale(), { day: 'numeric', month: 'long', year: 'numeric' }).format(end) : t('insights.chart.unknownDate');
@@ -95,6 +108,10 @@ export default function SenderMap({ senders = [], endAt, selectedAddress, onSele
       <span>{t('insights.chart.counts', { received: selected.received, sent: selected.sent })}</span>
       <span>{senderLastDate(selected, t)}</span>
       {selected.automationEvidence?.length > 0 && <span>{t('insights.chart.automation', { evidence: selected.automationEvidence.join(', ') })}</span>}
+      {unsubscribe && <Button variant="secondary" size="sm" data-testid="insights-unsubscribe"
+        onClick={() => useUnsubscribeStore.getState().request(unsubscribe)}>
+        <MailX size={14} aria-hidden="true" />{t('unsubscribe.action')}
+      </Button>}
     </div>}
     <SenderList senders={visible} selectedAddress={selectedAddress} onSelect={onSelect} searchable={false} />
   </section>;

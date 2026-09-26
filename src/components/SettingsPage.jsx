@@ -30,6 +30,7 @@ import {
   Maximize2,
   Usb,
   KeyRound,
+  MailX,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -52,6 +53,7 @@ import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { AiProvidersSettings } from './settings/AiProvidersSettings';
 import { AutoTagSettings } from './settings/AutoTagSettings';
 import { ViewsSettings } from './settings/ViewsSettings';
+import { UnsubscribeSettings } from './settings/UnsubscribeSettings';
 import { PortableSettings } from './settings/PortableSettings';
 import { EncryptionSettings } from './settings/EncryptionSettings';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
@@ -77,6 +79,7 @@ const settingsTabs = [
   { id: 'templates', labelKey: 'settings.tab.templates', icon: FileText },
   { id: 'ai-providers', labelKey: 'settings.tab.aiProviders', icon: Bot },
   { id: 'auto-tags', labelKey: 'autoTag.tabLabel', icon: Tag },
+  { id: 'unsubscribe', labelKey: 'unsubscribe.tabLabel', icon: MailX },
   { id: 'views', labelKey: 'views.section', descriptionKey: 'views.explainer', icon: LayoutList },
   { id: 'storage', labelKey: 'settings.tab.storage', icon: HardDrive },
   { id: 'data-usage', labelKey: 'settings.tab.dataUsage', icon: Gauge },
@@ -98,7 +101,7 @@ const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 
 const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
 const sections = [
-  { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'views', 'ai-providers', 'auto-tags', 'language'] },
+  { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'views', 'ai-providers', 'auto-tags', 'unsubscribe', 'language'] },
   { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'security', 'encryption', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
   { labelKey: 'settings.navigation.supportSystem', ids: ['billing', 'migration', 'daemon', 'logs', 'help'] },
 ].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]).filter(Boolean) }));
@@ -259,6 +262,10 @@ export const settingSearchGroups = [
     ['ai.settings.endpointModel', 'ai model name llama gguf'],
     ['ai.settings.endpointKey', 'ai api key token credential'],
     ['ai.settings.skipPreview', 'ai skip review preview before sending compose reply'],
+  ] },
+  { id: 'unsubscribe', settings: [
+    ['unsubscribe.subscriptions', 'unsubscribe newsletter mailing list one-click stop emails sender subscriptions'],
+    ['unsubscribe.history', 'unsubscribe history unsubscribed senders'],
   ] },
   { id: 'auto-tags', settings: [
     ['autoTag.name', 'auto tag rule name'],
@@ -666,6 +673,10 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
 
             {activeTab === 'views' && (
               <ViewsSettings onUpgrade={() => handleTabChange('billing')} />
+            )}
+
+            {activeTab === 'unsubscribe' && (
+              <UnsubscribeSettings />
             )}
 
             {activeTab === 'storage' && (

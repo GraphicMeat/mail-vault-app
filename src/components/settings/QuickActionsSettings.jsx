@@ -12,6 +12,7 @@ import {
   Mail,
   MailOpen,
   MailPlus,
+  MailX,
   Moon,
   Reply,
   ReplyAll,
@@ -69,6 +70,7 @@ const ICONS = {
   source: Code,
   theme: Moon,
   snooze: AlarmClock,
+  unsubscribe: MailX,
 };
 const LABELS = {
   archive: "common.archive",
@@ -94,6 +96,7 @@ const LABELS = {
   source: "emailActionBar.source",
   theme: "emailActionBar.dark",
   snooze: "snooze.action",
+  unsubscribe: "unsubscribe.action",
 };
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const EMPTY_ARRAY = Object.freeze([]);
