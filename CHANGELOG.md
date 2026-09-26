@@ -12,6 +12,10 @@
 
 ### Fixed
 - **A message marked read by the reading timer now shows as read in the list.** If you moved to the next message, closed the reader or opened a thread while the timer's change was reaching the server, the message was read on the server but stayed bold in the list, in a search and in a saved view. Every row now follows. A message from another account or folder opened from a saved view is also opened, and marked, in its own account instead of the one you were in.
+- **A new-mail notification names the message that just arrived.** When a message came in with a date older than mail you already had, such as a forwarded or migrated copy or a sender whose clock is wrong, the notification showed the sender and subject of an older message instead.
+- **Changing From changes the signature too.** Since 2.16.0, picking another account in From left the signature of the account you started with in the message. The new account's signature now replaces it, and whatever you have written stays as it is.
+- **Compose opens at its usual size again.** Since 2.16.0 a new message filled the whole width of the window. It opens at its usual width again, and its corner still lets you make it as large as the window.
+- **The row menu offers "Delete everywhere" only when there is more than the server copy.** On a message that is only on your mail server it was shown greyed out, under a name that promised to clear your vault and backup as well.
 - **Setting the read state yourself keeps the message where it is.** Marking the open message unread no longer has the reading timer mark it read again a moment later, the thread reader shows the new state straight away, and with the Unread filter on in the explorer the message you are reading, and the ones you read since turning the filter on, stay on screen.
 
 ## [2.16.0] - 2026-09-25
