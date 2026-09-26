@@ -5,9 +5,10 @@
  * Anti-vacuity: `ATTACHMENT_SEARCH_TOKEN` appears ONLY inside the attachment
  * — never in the subject or body (see `seedAttachmentSearchMessage` in
  * mockImap.js) — so a hit proves the `attach` FTS column matched, not
- * `subject`/`body`/`from`/`to`. `assemble_rows` (src-tauri/src/search_index.rs)
- * only ever labels `matchedIn` from those four fields, never `attach`, so the
- * assertion is: the row comes back, and `matchedIn` is empty.
+ * `subject`/`body`/`from`/`to`. `assemble_rows` (src-daemon/src/search_index.rs)
+ * labels `matchedIn` with `attachment` when the attachment column matched, so
+ * the assertion is: the row comes back, and `matchedIn` names the attachment
+ * alone.
  *
  * The seed is pre-boot (`seedAttachmentSearchMessage`, wired in wdio.conf.js
  * `beforeSession`): the search-index sweep that discovers it runs during app
@@ -110,9 +111,9 @@ describe('Attachment search', function () {
     });
 
     const hit = hits.find((r) => r.subject === ATTACHMENT_SEARCH_SUBJECT);
-    // The token is in neither subject nor body: an empty matchedIn is what
+    // The token is in neither subject nor body: the attachment alone is what
     // proves the hit came from the attachment column, not a false positive.
-    expect(hit.matchedIn).toEqual([]);
+    expect(hit.matchedIn).toEqual(['attachment']);
   });
 
   it('the index reports attachments as available once configured', async function () {

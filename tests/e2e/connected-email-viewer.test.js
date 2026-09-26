@@ -597,7 +597,7 @@ describe('Email Viewer — one body per message', function () {
  * `ImapPool::run_read` presses the button before the user sees it — once, on a
  * connection guaranteed to be new. luke's uid 9301 loses the socket on EVERY
  * body fetch (wdio.conf.js), which is the half a spec can observe: the retry
- * happens (the app's own log says so) and, when it cannot help, the viewer names
+ * happens (the daemon's log says so) and, when it cannot help, the viewer names
  * the connection instead of blaming a message sitting right there in the list.
  *
  * The retry COUNT is pinned in `src-core/tests/imap_session.rs`, not here — a
@@ -611,17 +611,18 @@ describe('Email Viewer — a body fetch whose connection dies', function () {
   const DIES = 'Flaky message 9301';
   const LOADS = 'Flaky message 9302';
 
-  // The app's own log, on the runner's disk under the spec's HOME: Tauri's
-  // log dir on macOS, `<app data>/logs` elsewhere (src-tauri `get_log_dir`).
-  const appLog = () => {
-    const dir = process.platform === 'darwin'
-      ? join(browser.testDataDir, 'Library/Logs/com.mailvault.app')
-      : join(appDataDir(browser.testDataDir), 'logs');
+  // The body fetch and its retry run in the daemon (src-core imap/pool.rs
+  // `retry_once_on_dead_socket`), which logs to `<app data>/logs/daemon.log`,
+  // not to the app's own Tauri log.
+  const daemonLog = () => {
+    const dir = join(appDataDir(browser.testDataDir), 'logs');
     if (!existsSync(dir)) return '';
     return readdirSync(dir)
+      .filter((f) => f.startsWith('daemon.log'))
       .map((f) => readFileSync(join(dir, f), 'utf-8'))
       .join('\n');
   };
+  const RETRIED = /UID FETCH 9301\b[^\n]*connection lost[^\n]*retrying once on a new connection/;
 
   const clickRow = (subject) => browser.execute((needle) => {
     const row = [...document.querySelectorAll('[data-testid="email-row"]')]
@@ -660,14 +661,14 @@ describe('Email Viewer — a body fetch whose connection dies', function () {
     // (the socket really died) and the app went back for a NEW connection rather
     // than handing the failure to the viewer.
     await browser.waitUntil(
-      async () => appLog().includes('UID FETCH 9301: connection lost — retrying once on a new connection'),
+      async () => RETRIED.test(daemonLog()),
       {
         timeout: 30_000,
         interval: 500,
         timeoutMsg: 'The app never logged a retry for a body fetch whose connection died',
       },
     );
-    expect(appLog()).toContain('Creating new IMAP connection for luke@mock.test (retry)');
+    expect(daemonLog()).toContain('Creating new IMAP connection for luke@mock.test (retry)');
   });
 
   it('names the connection when the retry loses the socket too', async function () {

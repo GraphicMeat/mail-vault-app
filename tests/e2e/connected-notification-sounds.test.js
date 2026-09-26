@@ -136,6 +136,8 @@ describe('Mac incoming email sounds', function () {
   it('offers five sounds and previews each through the native player', async () => {
     assert.deepEqual(await browser.execute(sel => [...document.querySelector(sel).options].map(option => option.value), SELECT),
       ['none', 'Glass', 'Ping', 'Pop', 'Purr', 'Tink']);
+    // New installs start on Glass, so Off has to be picked to see Preview idle.
+    await chooseSound('none');
     assert.equal(await browser.execute(sel => document.querySelector(sel).disabled, PREVIEW), true);
     for (const sound of ['Glass', 'Ping', 'Pop', 'Purr', 'Tink']) {
       await chooseSound(sound);
