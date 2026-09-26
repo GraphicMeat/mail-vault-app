@@ -729,7 +729,7 @@ function App() {
 
     setComposeState({
       initialData: {
-        to: 'hello@mailvaultapp.com',
+        to: 'prime@graphicmeat.com',
         subject: `[Bug Report] MailVault v${version}`,
         body: [
           section('System info (auto-collected)',

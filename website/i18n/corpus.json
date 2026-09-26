@@ -1578,6 +1578,10 @@
     "d467998bc880": "Ways to read in the MailVault window"
   },
   "16": {
+    "6c9e76a9cc3f": "53 MB",
+    "b42179d314d2": "macOS download",
+    "84bc697cf703": "~345 MB",
+    "b2da905515ba": "Memory measured on a Mac with a 10,000-message inbox, every process counted, the web view included",
     "2295c4dc47d4": "Where the memory goes",
     "79f42c0f48b6": "With 10,000 messages loaded, about four fifths of the memory belongs to WebView2, which draws the interface. The part that is really MailVault's own code, the app window and the background helper together, comes to about 35 MB.",
     "319a00193543": "Task Manager memory per part with 10,000 messages loaded, average of three runs, about 209 MB in total.",
@@ -1601,10 +1605,7 @@
     "84c4d360a1df": "MailVault on Windows 11 with the large test account selected. The inbox header reads 10,000 emails and the list shows the oldest test messages at the bottom.",
     "21f943d44c69": "Not if it can keep running in the background. Scheduled emails are sent by MailVault&rsquo;s background helper. Turn on <strong>Keep running in the background</strong> in Settings &rsaquo; <strong>Diagnostics</strong> &rsaquo; <strong>Background Daemon</strong> and the helper keeps running after you quit and starts when you log in, so emails go out on time while the app is closed.",
     "6c5fe8620902": "Not if it can keep running in the background. Scheduled emails are sent by MailVault’s background helper. Turn on Keep running in the background in Settings › Diagnostics › Background Daemon and the helper keeps running after you quit and starts when you log in, so emails go out on time while the app is closed. If that setting is off, or your copy of MailVault cannot keep running in the background, a scheduled email goes out the next time you open MailVault. The Scheduled folder says which applies to you and links to the setting.",
-    "6c9e76a9cc3f": "53 MB",
-    "b42179d314d2": "macOS download",
-    "84bc697cf703": "~345 MB",
-    "b2da905515ba": "Memory measured on a Mac with a 10,000-message inbox, every process counted, the web view included"
+    "fc9a7c52d616": "Know of a mention we're missing? <a href=\"mailto:prime@graphicmeat.com\" class=\"text-primary-500 hover:text-primary-600\">Let us know.</a>"
   },
   "01": {
     "fc338f87a058": "Features",
@@ -2863,7 +2864,6 @@
     "64590f8f00ea": "<strong>The snap build is a special case.</strong> A strictly confined snap cannot see dictionaries installed on the host, so it carries its own copy. If the snap reports no dictionary, install the .deb package instead — it uses the dictionaries already on your system."
   },
   "09": {
-    "3c8071da4d7b": "Know of a mention we're missing? <a href=\"mailto:hi@mailvaultapp.com\" class=\"text-primary-500 hover:text-primary-600\">Let us know.</a>",
     "300f64e4adf7": "Once someone accepts that their inbox isn't a backup &mdash; and it isn't, we've made <a href=\"/blog/email-provider-not-a-backup.html\" class=\"text-primary-500 hover:text-primary-600 underline\">the case for that in detail</a> &mdash; the next instinct is usually to reach for another cloud product to fix it: a third-party backup service that connects to Gmail or Microsoft 365 and continuously copies everything to its own servers. It feels like solving the problem. Structurally, it's closer to relocating it.",
     "a1822cfab7de": "When you're evaluating any backup approach for email, the question isn't just \"does a copy exist somewhere else.\" It's: <strong>who can read that copy, and for how long?</strong>",
     "13c965be1331": "MailVault connects to your existing IMAP or OAuth email account and archives every folder as individual <code>.eml</code> files &mdash; written straight to your own disk. There's no MailVault-operated server holding a copy of your mail in the middle. We can't read your archive, because we never receive it; the connection is between your device and your provider, and the resulting files live only where you put them.",

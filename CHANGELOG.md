@@ -18,6 +18,7 @@
 - **Sender logos next to the security badge.** A message that passed DMARC from a domain that enforces it shows the domain's BIMI logo beside the SPF, DKIM and DMARC shield. Logos are fetched once per domain and kept for a week; MailVault does not check the brand certificate some logos come with.
 
 ### Changed
+- **Bug reports go to a new address.** "Email the developer" in the bug report window now addresses the message to prime@graphicmeat.com; the old hello@mailvaultapp.com mailbox is no longer read.
 - **A shorter Settings menu.** Settings now has four groups, General, Accounts & import, Organize, and Vault & privacy, with Billing, Diagnostics and Help & Support kept at the bottom. Pages that belong together share one entry with tabs: Storage holds Data Usage, Privacy & security holds Security, Tracker Blocking and Encryption, Diagnostics holds Background Daemon and Logs, and Language is now a tab of Appearance. Links and search results that opened those pages still open them.
 - **Mail deleted elsewhere disappears sooner on Fastmail, Dovecot and other servers that support QRESYNC.** When a message is deleted from another device, MailVault now asks the server which messages are gone instead of listing every message in the folder again, which on a large mailbox can take close to a minute. Servers without it, Gmail among them, work as before.
 
