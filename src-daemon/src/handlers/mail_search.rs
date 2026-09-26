@@ -1008,8 +1008,8 @@ async fn run_server_lane(
                                 ..Default::default()
                             };
                             let (emails, _) = mailvault_core::imap::search_emails_by(&mut session, &mailbox, &search)
-                            .await
-                            .map_err(|error| format!("Failed to search emails: {error}"))?;
+                                .await
+                                .map_err(|error| format!("Failed to search emails: {error}"))?;
                             let mut rows = Vec::new();
                             for email in emails {
                                 if has_attachments && !email.has_attachments {

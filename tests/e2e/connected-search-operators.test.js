@@ -6,9 +6,11 @@
  * `from:sender1` is uids 1 and 10-19, both read and unread.
  *
  * The search runs with location 'all', so the local lane (index or scan) and
- * the server lane (the mock's UID SEARCH) both answer and are merged. A lane
+ * the server lane (the mock's UID SEARCH) are both asked and merged. A lane
  * that ignored an operator would put its extra rows in the result, which is
- * what each narrowing assertion would catch.
+ * what each narrowing assertion would catch. Which lane a row came from is
+ * not asserted here: the server lane's TO / UNSEEN / NOT TEXT are pinned in
+ * src-core/tests/imap_search.rs.
  *
  * Anti-vacuity: the baseline must hold read rows and "Luke message 12", or the
  * unread and exclude assertions would pass without narrowing anything.

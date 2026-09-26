@@ -265,7 +265,9 @@ export const useViewStore = create((set, get) => ({
       hasAttachments: parsed.hasAttachments || !!searchFilters?.hasAttachments,
       ...(parsed.unread ? { unread: true } : {}),
       dateFrom: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : null,
-      dateTo: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : null,
+      // The search's end day is inclusive (`toEpochSeconds`), so the view
+      // keeps that whole day too, not just its first second.
+      dateTo: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) + 86_399 : null,
     };
   },
 }));

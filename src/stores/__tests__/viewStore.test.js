@@ -144,7 +144,7 @@ describe('saved views', () => {
       hasAttachments: true,
       unread: true,
       dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
-      dateTo: Date.parse('2026-09-09T00:00:00Z') / 1000,
+      dateTo: Date.parse('2026-09-09T23:59:59Z') / 1000,
     });
   });
 
@@ -161,6 +161,16 @@ describe('saved views', () => {
       dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
       dateTo: null,
     });
+  });
+
+  /// The search counts its end day whole; a view saved from it used to stop
+  /// at that day's first second and leave the rest of its mail out.
+  it('keeps the whole end day of the search it was saved from', () => {
+    useSearchStore.setState({
+      searchQuery: 'invoice',
+      searchFilters: { location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: '2026-09-03', hasAttachments: false },
+    });
+    expect(useViewStore.getState().defFromSearch([]).dateTo).toBe(Date.parse('2026-09-03T23:59:59Z') / 1000);
   });
 });
 
