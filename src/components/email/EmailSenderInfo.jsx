@@ -15,9 +15,11 @@ import { t, useT  } from '../../i18n/index.js';
 import { parseAuthResults } from '../../utils/senderCheck';
 import { daemonCall } from '../../services/daemonClient';
 
-// Per-domain logo lookups for this session, so a thread asks once. A "no
-// logo" answer is not kept: the next message may carry a DMARC pass this one
-// lacked, and the daemon caches its own negatives anyway.
+// Logo lookups for this session, so a thread asks once. Keyed by domain AND
+// the message's Authentication-Results: the daemon's check that the DMARC
+// pass is for this From domain is per message, and a domain-only key would
+// hand a cached logo to a message that never passed it. A "no logo" answer is
+// not kept; the daemon caches its own negatives.
 const bimiLookups = new Map();
 
 /**
@@ -37,13 +39,14 @@ function BimiLogo({ email }) {
     setLogo(null);
     if (!pass) return undefined;
     let live = true;
-    if (!bimiLookups.has(domain)) {
+    const key = `${domain}\n${auth}`;
+    if (!bimiLookups.has(key)) {
       const lookup = daemonCall('bimi_logo', { domain, authenticationResults: auth })
         .then(result => result?.logo || null, () => null);
-      bimiLookups.set(domain, lookup);
-      lookup.then(found => { if (!found) bimiLookups.delete(domain); });
+      bimiLookups.set(key, lookup);
+      lookup.then(found => { if (!found) bimiLookups.delete(key); });
     }
-    bimiLookups.get(domain).then(found => { if (live) setLogo(found); });
+    bimiLookups.get(key).then(found => { if (live) setLogo(found); });
     return () => { live = false; };
   }, [domain, auth, pass]);
   if (!logo || !logo.startsWith('data:image/svg+xml;base64,')) return null;

@@ -94,15 +94,21 @@ async fn unsubscribe(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
         "mailto" => targets.mailto,
         _ => None,
     };
-    let row = Unsubscribe {
-        address: sender,
-        account_id,
+    let row = |method: &str, status: &str| Unsubscribe {
+        address: sender.clone(),
+        account_id: account_id.clone(),
         unsubscribed_at: now_ms(),
         method: method.into(),
         status: status.into(),
     };
+    // A failed one-click keeps its own history row beside the fallback's.
+    let mut rows = Vec::new();
+    if error.is_some() {
+        rows.push(row("one-click", "failed"));
+    }
+    rows.push(row(method, status));
     let app_dir = state.app_dir.clone();
-    blocking(move || app_db::with(&app_dir, |c| store::record(c, &row))).await??;
+    blocking(move || app_db::with(&app_dir, |c| rows.iter().try_for_each(|r| store::record(c, r)))).await??;
     Ok(json!({"method": method, "status": status, "url": url, "oneClickError": error}))
 }
 
@@ -378,6 +384,10 @@ mod tests {
         .unwrap();
         assert_eq!(v["method"], "browser");
         assert!(v["oneClickError"].is_string(), "{v}");
+        let history = handle_request_for_test(&s, "unsubscribe.history", json!({})).await.result.unwrap();
+        let kinds: Vec<_> = history.as_array().unwrap().iter().map(|r| format!("{}/{}", r["method"].as_str().unwrap(), r["status"].as_str().unwrap())).collect();
+        assert_eq!(kinds.len(), 2, "{history}");
+        assert!(kinds.contains(&"one-click/failed".to_string()) && kinds.contains(&"browser/opened".to_string()), "{kinds:?}");
     }
 
     /// The request the gate would send, sent straight to a loopback server:

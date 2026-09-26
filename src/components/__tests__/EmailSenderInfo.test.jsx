@@ -14,6 +14,9 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => children,
 }));
 
+const daemonCall = vi.hoisted(() => vi.fn());
+vi.mock('../../services/daemonClient', () => ({ daemonCall: (...args) => daemonCall(...args) }));
+
 const { EmailSenderInfo } = await import('../email/EmailSenderInfo');
 
 const EMAIL = {
@@ -142,5 +145,31 @@ describe('EmailSenderInfo click targets', () => {
     expect(onReply).not.toHaveBeenCalled();
     expect(onToggle).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('EmailSenderInfo BIMI logo', () => {
+  const brand = auth => ({ ...EMAIL, uid: 7, from: { name: 'Brand', address: 'news@brand.test' }, authenticationResults: auth });
+  const ALIGNED = 'mx.test; dkim=pass; dmarc=pass header.from=brand.test';
+  const MISALIGNED = 'mx.test; dmarc=pass header.from=evil.test';
+
+  it('asks the daemon per message, so a cached logo never reaches a message that did not pass for the domain', async () => {
+    daemonCall.mockImplementation(async (method, { authenticationResults }) =>
+      ({ logo: authenticationResults.includes('header.from=brand.test') ? 'data:image/svg+xml;base64,PHN2Zy8+' : null }));
+    render(<EmailSenderInfo email={brand(ALIGNED)} variant="single" />);
+    expect((await screen.findByTestId('bimi-logo')).getAttribute('src')).toBe('data:image/svg+xml;base64,PHN2Zy8+');
+    cleanup();
+
+    render(<EmailSenderInfo email={brand(MISALIGNED)} variant="single" />);
+    await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledWith('bimi_logo', { domain: 'brand.test', authenticationResults: MISALIGNED }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('bimi-logo')).toBeNull();
+  });
+
+  it('never asks without a DMARC pass', () => {
+    daemonCall.mockClear();
+    render(<EmailSenderInfo email={brand('mx.test; dkim=pass; dmarc=fail header.from=brand.test')} variant="single" />);
+    expect(daemonCall).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('bimi-logo')).toBeNull();
   });
 });
