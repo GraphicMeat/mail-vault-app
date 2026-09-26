@@ -132,6 +132,11 @@ pub struct SyncEngine {
     /// The last 64 changes, so a client that missed a notification still gets
     /// the detail instead of only the new generation number.
     recent: std::sync::Mutex<std::collections::VecDeque<ChangeRecord>>,
+    /// The highest cursor a poll has come back with: everything up to it the
+    /// app has handled. The daemon outlives the app, so a relaunched app has
+    /// no cursor of its own and resumes from here, not from 0 (which replayed
+    /// the whole `recent` ring as new mail on every cold start).
+    acked: std::sync::atomic::AtomicU64,
     /// `account_id\x01requested` → the path this server actually serves.
     /// Filled the first time a SELECT comes back "no such mailbox", so the
     /// LIST that resolves it costs one round trip per process, not per tick.
@@ -173,6 +178,7 @@ impl SyncEngine {
             changes,
             _changes_rx,
             recent: std::sync::Mutex::new(std::collections::VecDeque::new()),
+            acked: std::sync::atomic::AtomicU64::new(0),
             pool,
             data_dir,
             app_dir,
@@ -230,6 +236,12 @@ impl SyncEngine {
         *self.changes.borrow()
     }
 
+    /// Where a client with no cursor of its own (a freshly launched app)
+    /// resumes: after the last generation any poll acknowledged.
+    pub fn acked_gen(&self) -> u64 {
+        self.acked.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Record what a sync found and wake every long-poll. Returns the new gen.
     pub fn note_change(
         &self,
@@ -279,6 +291,7 @@ impl SyncEngine {
         if since > current {
             return (current, Vec::new());
         }
+        self.acked.fetch_max(since, std::sync::atomic::Ordering::Relaxed);
         if current == since {
             let _ = tokio::time::timeout(
                 std::time::Duration::from_millis(timeout_ms),

@@ -133,15 +133,17 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(Object.keys(methods('sync.watch')[0][1].account).sort()).toEqual(['email', 'id', 'imapConfig']);
   });
 
-  it('long-polls from 0, then from the generation it was handed', async () => {
+  it('long-polls without a cursor, then from the generation it was handed', async () => {
     mailStore.setState({ accounts: [IMAP_A] });
     eventReplies = [reply({ gen: 5, changes: [] })];
 
     renderHook(() => useEmailScheduler());
     await flush();
 
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([0, 5]);
+    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 5]);
     expect(methods('sync.events')[0][1].timeoutMs).toBe(25000);
+    // a first answer is not a daemon whose generation went backwards
+    expect(methods('sync.watch')).toHaveLength(1);
   });
 
   // The daemon's counter restarts at 0 when the daemon does, and it answers a
@@ -154,7 +156,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     renderHook(() => useEmailScheduler());
     await flush();
 
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([0, 900, 3]);
+    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 900, 3]);
   });
 
   // That lower generation is a daemon that restarted, and a restarted daemon
@@ -251,7 +253,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockNotify).not.toHaveBeenCalled();
     expect(mockLoadEmails).not.toHaveBeenCalled();
     // and the change was actually consumed — otherwise this asserts nothing
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([0, 1]);
+    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 1]);
   });
 
   it('pauses 30s when the daemon is offline, then polls again', async () => {

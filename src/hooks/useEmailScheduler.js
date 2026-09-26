@@ -161,7 +161,10 @@ export function useEmailScheduler() {
   // pins only its own connection. Nothing else needs a dedicated one.
   useEffect(() => {
     let stopped = false;
-    let since = 0;
+    // No cursor yet: the daemon outlives the app, and 0 asked it for its whole
+    // ring of recent changes — a day of arrivals re-announced on every cold
+    // start. Without one it resumes after what the last app acknowledged.
+    let since = null;
     // A restarted daemon holds no watchers: the app is its only account list,
     // and until the next scheduled refresh re-sent it, no account was idled.
     let unlisten = null;

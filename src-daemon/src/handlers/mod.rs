@@ -199,9 +199,10 @@ pub(crate) async fn handle_sync_unwatch(state: Arc<DaemonState>, params: Value, 
 }
 
 /// Long-poll for changes newer than `since`. The app re-issues it with the gen
-/// it was handed, so nothing is lost between polls.
+/// it was handed, so nothing is lost between polls. No `since` = a new app:
+/// resume after what the previous one acknowledged.
 pub(crate) async fn handle_sync_events(engine: Arc<sync_engine::SyncEngine>, params: Value, id: Value) -> RpcResponse {
-    let since = params.get("since").and_then(|v| v.as_u64()).unwrap_or(0);
+    let since = params.get("since").and_then(|v| v.as_u64()).unwrap_or_else(|| engine.acked_gen());
     let timeout_ms = params
         .get("timeoutMs")
         .and_then(|v| v.as_u64())

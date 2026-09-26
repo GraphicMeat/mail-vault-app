@@ -1060,6 +1060,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The daemon outlives the app. A relaunched app has no cursor, and
+    /// polling from 0 handed it the whole ring of recent changes, so every
+    /// arrival of the last day was announced again on each cold start. Without
+    /// a cursor it resumes after the last generation a poll acknowledged:
+    /// what arrived while no app was listening still comes back, nothing the
+    /// previous app already handled does.
+    #[tokio::test]
+    async fn sync_events_without_a_cursor_resumes_after_the_last_acknowledged_generation() {
+        let dir = scratch("syncevents_resume");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+
+        // The previous app saw gens 1 and 2 and came back with since=2.
+        state.sync_engine.note_change("a1", "INBOX", 1, 0);
+        state.sync_engine.note_change("a1", "INBOX", 1, 0);
+        let first = handle_request(&state, req("sync.events", json!({"since": 0, "timeoutMs": 10}))).await;
+        assert_eq!(first.result.expect("must succeed")["changes"].as_array().unwrap().len(), 2);
+        handle_request(&state, req("sync.events", json!({"since": 2, "timeoutMs": 10}))).await;
+
+        // It is killed; mail arrives while nobody listens; a new app polls cold.
+        state.sync_engine.note_change("a1", "INBOX", 1, 0);
+        let cold = handle_request(&state, req("sync.events", json!({"since": null, "timeoutMs": 10}))).await;
+
+        let result = cold.result.expect("must succeed");
+        assert_eq!(result["gen"], json!(3));
+        let gens: Vec<u64> = result["changes"].as_array().unwrap().iter().map(|c| c["gen"].as_u64().unwrap()).collect();
+        assert_eq!(gens, vec![3], "only the arrival nobody was told about");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn snapshot_list_without_an_account_is_invalid_params() {
         let dir = scratch("snaplist");
