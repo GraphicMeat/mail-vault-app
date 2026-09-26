@@ -2680,7 +2680,7 @@
   "unsubscribe.openedMailto": "{{sender}} への配信停止メールを開きました。送信すると完了します。",
   "unsubscribe.scope": "アカウント",
   "unsubscribe.statusFailed": "失敗",
-  "unsubscribe.statusOpened": "開いた",
+  "unsubscribe.statusOpened": "開きました",
   "unsubscribe.subscriptions": "購読",
   "unsubscribe.tabLabel": "配信停止",
   "update.appCannotUpdateItselfDue": "ファイルシステムの制限により、アプリは自動更新できません。新しいバージョンを手動でダウンロードしてください。",
