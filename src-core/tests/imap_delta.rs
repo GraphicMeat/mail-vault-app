@@ -166,3 +166,34 @@ async fn a_response_split_across_tcp_writes_still_parses() {
     let uids = search_all_uids(&mut sess, "INBOX", false).await.expect("enumerate");
     assert_eq!(uids.len(), 20);
 }
+
+/// QRESYNC (RFC 7162): one SELECT answers what vanished and what changed
+/// since a modseq, on a connection opened and logged out for that alone.
+#[tokio::test]
+async fn qresync_reports_vanished_uids_and_changed_flags_since_a_modseq() {
+    let server = MockImap::start(Scenario::new().with_cap("QRESYNC").mailbox(mailbox_with_modseqs()));
+    server.mutate(|st| st.expunge("INBOX", &[2]));
+    let config = common::config_for(&server);
+
+    let changes = qresync_changes(&config, "INBOX", 1, 20, 5).await.expect("qresync");
+
+    assert_eq!(changes.uid_validity, Some(1));
+    assert_eq!(changes.exists, 3);
+    assert_eq!(changes.highest_modseq, Some(41), "the expunge moved HIGHESTMODSEQ");
+    assert_eq!(changes.vanished, vec![2]);
+    let changed: Vec<u32> = changes.changed.iter().map(|(uid, _)| *uid).collect();
+    assert_eq!(changed, vec![3, 4], "only what changed after modseq 20");
+    let log = server.commands();
+    assert!(log.iter().any(|l| l.ends_with("SELECT \"INBOX\" (QRESYNC (1 20 1:4))")), "{log:#?}");
+    assert!(log.last().is_some_and(|l| l.contains("LOGOUT")), "the enabled connection is closed: {log:#?}");
+}
+
+/// A server that will not enable QRESYNC is an error the caller falls back
+/// on, not an empty answer that says nothing vanished.
+#[tokio::test]
+async fn qresync_without_the_capability_is_an_error() {
+    let server = MockImap::start(Scenario::new().mailbox(mailbox_with_modseqs()));
+    let config = common::config_for(&server);
+    assert!(qresync_changes(&config, "INBOX", 1, 20, 5).await.is_err());
+    assert_eq!(server.count_commands("SELECT"), 0, "no QRESYNC SELECT without ENABLE");
+}

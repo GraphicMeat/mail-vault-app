@@ -888,6 +888,142 @@ pub async fn fetch_changed_flags(
     Ok(results)
 }
 
+/// What a QRESYNC SELECT (RFC 7162 §3.2.5) reported against a known state.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct QresyncChanges {
+    pub exists: u32,
+    pub uid_validity: Option<u32>,
+    pub highest_modseq: Option<u64>,
+    /// UIDs the server says were expunged since the modseq asked about,
+    /// ascending. A server may report more than that (the RFC allows it after
+    /// its change log is trimmed), never fewer.
+    pub vanished: Vec<u32>,
+    /// Flags of the messages that changed since that modseq.
+    pub changed: Vec<(u32, Vec<String>)>,
+}
+
+/// How long the whole QRESYNC exchange (connect, login, ENABLE, SELECT) may
+/// take before the caller falls back to listing every UID.
+const QRESYNC_TIMEOUT_SECS: u64 = 60;
+
+/// Ask the server which messages vanished, and which changed flags, since
+/// `modseq`, on a connection of its own.
+///
+/// Its own connection on purpose. After `ENABLE QRESYNC` a server reports
+/// removals as `VANISHED` instead of `EXPUNGE` for the rest of that
+/// connection, and the move, delete, expunge and IDLE paths all run on pooled
+/// sessions that were written for `EXPUNGE`. So this takes the account, not a
+/// session, and hands none back: the enabled session is opened here, used for
+/// this one SELECT and logged out here, whatever happened. It never touches
+/// an `ImapPool`, so it cannot reach one.
+///
+/// `uid_next` bounds the known UIDs (`1:<uid_next - 1>`), so the server does
+/// not report removals of mail the caller never saw.
+pub async fn qresync_changes(
+    config: &ImapConfig,
+    mailbox: &str,
+    uid_validity: u32,
+    modseq: u64,
+    uid_next: u32,
+) -> Result<QresyncChanges, String> {
+    let mut session = bounded("QRESYNC connect", QRESYNC_TIMEOUT_SECS, connect_and_auth(config)).await?;
+    let result = bounded(
+        "QRESYNC SELECT",
+        QRESYNC_TIMEOUT_SECS,
+        qresync_select(&mut session, mailbox, uid_validity, modseq, uid_next),
+    )
+    .await;
+    let _ = bounded("QRESYNC LOGOUT", 5, async { session.logout().await.map_err(|e| e.to_string()) }).await;
+    result
+}
+
+/// `ENABLE QRESYNC` then `SELECT mailbox (QRESYNC (...))`, read to the tag.
+async fn qresync_select(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid_validity: u32,
+    modseq: u64,
+    uid_next: u32,
+) -> Result<QresyncChanges, String> {
+    use imap_proto::{AttributeValue, MailboxDatum, Response, ResponseCode};
+
+    let mut enabled = false;
+    read_to_tag(session, "ENABLE QRESYNC".to_string(), |response| {
+        if let Response::Capabilities(caps) = response {
+            enabled |= caps.iter().any(|c| matches!(c, imap_proto::Capability::Atom(a) if a.eq_ignore_ascii_case("QRESYNC")));
+        }
+    })
+    .await?;
+    if !enabled {
+        return Err("ENABLE QRESYNC: the server did not enable it".to_string());
+    }
+
+    let known = if uid_next > 1 { format!(" 1:{}", uid_next - 1) } else { String::new() };
+    let command = format!("SELECT {} (QRESYNC ({uid_validity} {modseq}{known}))", quote_mailbox(mailbox)?);
+    let mut changes = QresyncChanges::default();
+    let mut saw_flags = false;
+    read_to_tag(session, command, |response| match response {
+        Response::MailboxData(MailboxDatum::Exists(n)) => changes.exists = *n,
+        Response::MailboxData(MailboxDatum::Flags(_)) => saw_flags = true,
+        Response::Data { code: Some(ResponseCode::UidValidity(v)), .. } => changes.uid_validity = Some(*v),
+        Response::Data { code: Some(ResponseCode::HighestModSeq(v)), .. } => changes.highest_modseq = Some(*v),
+        Response::Vanished { uids, .. } => changes.vanished.extend(uids.iter().flat_map(|r| r.clone())),
+        Response::Fetch(_, attrs) => {
+            let uid = attrs.iter().find_map(|a| match a {
+                AttributeValue::Uid(u) => Some(*u),
+                _ => None,
+            });
+            let flags = attrs.iter().find_map(|a| match a {
+                AttributeValue::Flags(f) => Some(f.iter().map(|f| f.to_string()).collect::<Vec<_>>()),
+                _ => None,
+            });
+            if let (Some(uid), Some(flags)) = (uid, flags) {
+                changes.changed.push((uid, flags));
+            }
+        }
+        _ => {}
+    })
+    .await?;
+    // The same dead-socket rule as `selected()`: a SELECT that carried
+    // neither is not an empty mailbox with nothing vanished.
+    if changes.uid_validity.is_none() && !saw_flags {
+        return Err(format!("SELECT {} (QRESYNC) failed: connection lost", mailbox));
+    }
+    changes.vanished.sort_unstable();
+    changes.vanished.dedup();
+    Ok(changes)
+}
+
+/// Send `command` and hand every untagged response to `each` until its tag.
+/// A tagged NO/BAD, or a socket that ends first, is an error.
+async fn read_to_tag(
+    session: &mut ImapSession,
+    command: String,
+    mut each: impl FnMut(&imap_proto::Response<'_>),
+) -> Result<(), String> {
+    use imap_proto::{Response, Status};
+    let id = session
+        .run_command(&command)
+        .await
+        .map_err(|e| format!("{} failed: {}", command, e))?;
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .map_err(|e| format!("{} failed: {}", command, e))?
+            .ok_or_else(|| format!("{} failed: connection lost", command))?;
+        match response.parsed() {
+            Response::Done { tag, status, information, .. } if *tag == id => {
+                return match status {
+                    Status::Ok => Ok(()),
+                    _ => Err(format!("{} failed: {:?} {}", command, status, information.as_deref().unwrap_or(""))),
+                };
+            }
+            other => each(other),
+        }
+    }
+}
+
 /// Fetch flags (no headers) for every UID at or above `from_uid`.
 ///
 /// The cheap fallback for servers without CONDSTORE, where `fetch_changed_flags`

@@ -84,6 +84,9 @@ pub struct Mailbox {
     pub uid_next: u32,
     pub highest_modseq: u64,
     pub messages: Vec<Message>,
+    /// (uid, modseq it was expunged at): what a QRESYNC SELECT reports as
+    /// `VANISHED (EARLIER)` to a client that last saw an older modseq.
+    pub expunged: Vec<(u32, u64)>,
 }
 
 // Likewise: a derived Default would give uid_validity 0 and uid_next 0, and a
@@ -103,6 +106,7 @@ impl Mailbox {
             uid_next: 1,
             highest_modseq: 1,
             messages: vec![],
+            expunged: vec![],
         }
     }
 
@@ -151,6 +155,23 @@ impl Mailbox {
 
     pub fn by_uid_mut(&mut self, uid: u32) -> Option<&mut Message> {
         self.messages.iter_mut().find(|m| m.uid == uid)
+    }
+
+    /// Remove these UIDs and remember when. `bump_modseq` is RFC 7162's
+    /// "an expunge is a change": a QRESYNC server moves HIGHESTMODSEQ for it.
+    /// Off for everything else, so a CONDSTORE-only scenario reads exactly as
+    /// it did before the mock learned QRESYNC.
+    pub fn expunge(&mut self, uids: &[u32], bump_modseq: bool) {
+        let gone: Vec<u32> = self.messages.iter().map(|m| m.uid).filter(|u| uids.contains(u)).collect();
+        if gone.is_empty() {
+            return;
+        }
+        if bump_modseq {
+            self.highest_modseq += 1;
+        }
+        self.messages.retain(|m| !gone.contains(&m.uid));
+        let at = self.highest_modseq;
+        self.expunged.extend(gone.into_iter().map(|u| (u, at)));
     }
 
     pub fn unseen(&self) -> u32 {
@@ -225,5 +246,14 @@ impl ServerState {
 
     pub fn has_cap(&self, cap: &str) -> bool {
         self.capabilities.iter().any(|c| c.eq_ignore_ascii_case(cap))
+    }
+
+    /// Expunge from a test, the way another client would: recorded, so a
+    /// QRESYNC client that reconnects hears about it.
+    pub fn expunge(&mut self, mailbox: &str, uids: &[u32]) {
+        let qresync = self.has_cap("QRESYNC");
+        if let Some(mb) = self.find_mut(mailbox) {
+            mb.expunge(uids, qresync);
+        }
     }
 }

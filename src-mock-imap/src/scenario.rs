@@ -191,6 +191,15 @@ impl Scenario {
         self
     }
 
+    /// Add a capability the default set leaves out (`QRESYNC`): off by
+    /// default so every existing scenario is unchanged.
+    pub fn with_cap(mut self, cap: &str) -> Self {
+        if !self.state.has_cap(cap) {
+            self.state.capabilities.push(cap.to_string());
+        }
+        self
+    }
+
     /// Drop a capability — the point is exercising our fallback paths.
     pub fn without_cap(mut self, cap: &str) -> Self {
         self.state.capabilities.retain(|c| !c.eq_ignore_ascii_case(cap));

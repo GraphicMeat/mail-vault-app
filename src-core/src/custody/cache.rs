@@ -395,6 +395,21 @@ pub fn prune_headers(conn: &Connection, account: &str, mailbox: &str, live_uids:
     Ok(removed)
 }
 
+/// Drop exactly these rows: what the server said is gone. Unlike
+/// `prune_headers` it needs no list of what is live, so a row written between
+/// the server's answer and this delete is never taken with them.
+pub fn remove_headers(conn: &Connection, account: &str, mailbox: &str, uids: &[u32]) -> Result<usize, String> {
+    let tx = conn.unchecked_transaction().map_err(err)?;
+    let mut removed = 0;
+    let mut delete = tx.prepare_cached("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3").map_err(err)?;
+    for uid in uids {
+        removed += delete.execute(params![account, mailbox, uid]).map_err(err)?;
+    }
+    drop(delete);
+    tx.commit().map_err(err)?;
+    Ok(removed)
+}
+
 pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) -> Result<(), String> {
     conn.execute("UPDATE OR REPLACE header_cache SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
     conn.execute("UPDATE OR REPLACE header_cache_meta SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;

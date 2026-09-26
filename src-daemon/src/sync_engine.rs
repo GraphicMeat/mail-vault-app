@@ -814,7 +814,23 @@ impl SyncEngine {
         // it was, so the next sync disagrees again and retries — adopting the
         // unexplained total instead would forget the divergence for 6 hours.
         let mut sync_total = Some(total);
-        if counts_disagree || reconcile_due {
+        // A count that disagrees on a QRESYNC server asks the server which
+        // UIDs vanished instead of listing every one of them (4035 UIDs took
+        // ~51 s on Gmail, which has no QRESYNC and keeps the listing). Only
+        // an answer that accounts for the whole difference is taken; anything
+        // else, an error included, falls through to the listing below. The
+        // 6 h timer still lists, as the net under everything.
+        let mut explained = false;
+        if counts_disagree && !reconcile_due {
+            if let (Some(validity), Some(modseq)) = (uid_validity, cached_modseq) {
+                if self.pool.has_capability(&account.imap_config, "QRESYNC").await {
+                    explained = self
+                        .qresync_prune(account, &io, mailbox, validity, modseq, cached_uid_next, expected_total, total, sidecar_count)
+                        .await;
+                }
+            }
+        }
+        if (counts_disagree && !explained) || reconcile_due {
             match imap::search_all_uids(session, mailbox, false).await {
                 Ok(uids) if uids.is_empty() && total > 0 => {
                     warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
@@ -863,6 +879,67 @@ impl SyncEngine {
             total_emails: total,
             session_dirty,
         })
+    }
+
+    /// The QRESYNC half of the expunge gate: remove what the server says
+    /// vanished since `modseq` and report whether that explains the count.
+    /// `expected` is the daemon's baseline plus this sync's arrivals, `total`
+    /// the EXISTS it is checked against.
+    ///
+    /// Explained means both halves of the gate close: the baseline less the
+    /// vanished UIDs it held is EXISTS, and no more rows are cached than exist.
+    /// A server that over-reports (RFC 7162 lets it, after trimming its change
+    /// log) fails the first half, and the caller lists every UID as before.
+    /// The rows removed here are gone from the server either way.
+    #[allow(clippy::too_many_arguments)]
+    async fn qresync_prune(
+        &self,
+        account: &SyncAccount,
+        io: &CacheCtx,
+        mailbox: &str,
+        uid_validity: u32,
+        modseq: u64,
+        uid_next: u32,
+        expected: u32,
+        total: u32,
+        sidecar_count: usize,
+    ) -> bool {
+        let changes = match imap::qresync_changes(&account.imap_config, mailbox, uid_validity, modseq, uid_next).await {
+            Ok(changes) if changes.uid_validity == Some(uid_validity) => changes,
+            Ok(_) => {
+                warn!("[sync] QRESYNC for {} ({}) answered for another UIDVALIDITY", account.email, mailbox);
+                return false;
+            }
+            Err(e) => {
+                warn!("[sync] QRESYNC failed for {} ({}): {}", account.email, mailbox, e);
+                return false;
+            }
+        };
+        // Only UIDs the baseline counted: the known-UID range already asks for
+        // no others, and a server that sends more anyway must not skew this.
+        let vanished: Vec<u32> = changes.vanished.into_iter().filter(|uid| *uid < uid_next).collect();
+        let vanished_count = vanished.len() as u32;
+        let changed = changes.changed;
+        let removed = match cache_io(io, move |io| {
+            let removed = io.remove(&vanished)?;
+            io.patch_flags(&changed)?;
+            Ok(removed)
+        })
+        .await
+        {
+            Ok(removed) => removed,
+            Err(e) => {
+                warn!("[sync] QRESYNC prune failed for {} ({}): {}", account.email, mailbox, e);
+                return false;
+            }
+        };
+        let explained = expected.checked_sub(vanished_count) == Some(total)
+            && sidecar_count.saturating_sub(removed) as u32 <= total;
+        info!(
+            "[sync] QRESYNC for {} ({}): {} vanished, {} pruned, explained={}",
+            account.email, mailbox, vanished_count, removed, explained
+        );
+        explained
     }
 
     /// Get current sync state for all accounts.
@@ -1195,6 +1272,11 @@ impl CacheCtx {
         self.require_db(|conn| {
             mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes)
         })
+    }
+
+    fn remove(&self, uids: &[u32]) -> Result<usize, String> {
+        self.vault_open()?;
+        self.require_db(|conn| mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, uids))
     }
 
     fn prune(&self, live: &[u32]) -> Result<usize, String> {
@@ -2212,6 +2294,186 @@ mod tests {
         let cached = cached_uid_set(&engine, "INBOX");
         assert!(!cached.contains(&6));
         assert!(cached.contains(&8));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── QRESYNC ─────────────────────────────────────────────────────────
+    // RFC 7162: the server says which UIDs vanished since the modseq we last
+    // saw, so a disagreeing count no longer costs a listing of every UID.
+
+    /// The whole-mailbox listing the reconcile does. Not the CONDSTORE flag
+    /// fetch, which is `1:*` too but carries `CHANGEDSINCE`.
+    fn full_listings(server: &MockImap) -> usize {
+        server
+            .commands()
+            .iter()
+            .filter(|l| l.contains("UID FETCH 1:* (UID FLAGS)") && !l.contains("CHANGEDSINCE"))
+            .count()
+    }
+
+    /// A warm cache whose timed reconcile is not due, so only the count gate
+    /// can send this sync looking for expunges.
+    async fn warm(engine: &SyncEngine, server: &MockImap) {
+        let result = engine.sync_account(&account_for(server), "INBOX").await;
+        assert!(result.success, "cold sync failed: {:?}", result.error);
+        app_wrote_meta(engine, "INBOX", serde_json::json!({"lastReconcile": now_ms()}));
+    }
+
+    #[tokio::test]
+    async fn qresync_prunes_exactly_the_vanished_uids_without_listing_every_uid() {
+        let dir = scratch_dir("qresync_prune");
+        let server = MockImap::start(
+            Scenario::new()
+                .with_cap("QRESYNC")
+                .mailbox(synthetic_mailbox("INBOX", 20))
+                .mailbox(Mailbox::new("Archive")),
+        );
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        assert_eq!(cached_count(&engine, "INBOX"), 20);
+
+        server.mutate(|st| st.expunge("INBOX", &[5, 6, 7]));
+        let (listings, connections) = (full_listings(&server), server.connection_count());
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert_eq!(cached.len(), 17, "exactly the three expunged rows go");
+        assert!(![5, 6, 7].iter().any(|u| cached.contains(u)));
+        assert_eq!(full_listings(&server), listings, "QRESYNC answered; no UID listing:\n{:#?}", server.commands());
+        assert_eq!(cached_meta(&engine, "INBOX").sync_total_emails, Some(17), "the count is accounted for");
+
+        // The enabled connection is its own, it runs ENABLE, the one SELECT and
+        // LOGOUT, and nothing else ever enables QRESYNC.
+        let log = server.commands();
+        let enable = log.iter().position(|l| l.contains("ENABLE QRESYNC")).expect("ENABLE QRESYNC sent");
+        assert!(log[enable + 1].contains("SELECT \"INBOX\" (QRESYNC (1 "), "{:#?}", &log[enable..]);
+        assert!(log[enable + 1].ends_with(" 1:20))"), "known UIDs bound the answer: {}", log[enable + 1]);
+        assert!(log[enable + 2].contains("LOGOUT"), "{:#?}", &log[enable..]);
+        assert_eq!(server.count_commands("ENABLE"), 1);
+        assert_eq!(server.connection_count(), connections + 1, "one short-lived connection, the pooled one reused");
+
+        // The pooled session is untouched by it: a move and a delete through
+        // the pool still see EXPUNGE-shaped replies and land on the server.
+        let config = &account_for(&server).imap_config;
+        let mut guard = engine.pool.get_background(config).await.expect("pooled session");
+        imap::move_uids(&mut guard.session, "INBOX", "Archive", &[8], true, true).await.expect("move");
+        imap::delete_email(&mut guard.session, "INBOX", 9, true, true).await.expect("delete");
+        engine.pool.return_background(config, guard).await;
+        let state = server.state();
+        let inbox = state.find("INBOX").unwrap();
+        assert!(inbox.by_uid(8).is_none() && inbox.by_uid(9).is_none());
+        assert_eq!(state.find("Archive").unwrap().messages.len(), 1);
+        assert_eq!(server.count_commands("ENABLE"), 1, "the pool never enabled QRESYNC");
+
+        // And the next sync hears about the move and the delete the same way.
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(cached_count(&engine, "INBOX"), 15);
+        assert_eq!(full_listings(&server), listings);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Same expunge, no QRESYNC (Gmail): today's listing, and no ENABLE.
+    #[tokio::test]
+    async fn without_qresync_the_count_gate_still_lists_every_uid() {
+        let dir = scratch_dir("qresync_absent");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+
+        server.mutate(|st| st.expunge("INBOX", &[5]));
+        let listings = full_listings(&server);
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert!(!cached_uid_set(&engine, "INBOX").contains(&5));
+        assert_eq!(full_listings(&server), listings + 1);
+        assert_eq!(server.count_commands("ENABLE"), 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// RFC 7162 lets a server report UIDs vanished that the client never
+    /// counted (Dovecot does, once its change log is trimmed). The answer then
+    /// cannot explain the count, and the listing decides.
+    #[tokio::test]
+    async fn a_qresync_answer_that_does_not_add_up_falls_back_to_the_listing() {
+        let dir = scratch_dir("qresync_overreport");
+        let mut mailbox = synthetic_mailbox("INBOX", 20);
+        mailbox.messages.retain(|m| m.uid != 10);
+        let server = MockImap::start(Scenario::new().with_cap("QRESYNC").mailbox(mailbox));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        assert_eq!(cached_count(&engine, "INBOX"), 19);
+
+        server.mutate(|st| {
+            st.expunge("INBOX", &[5]);
+            // uid 10 was gone before the cache was made; reported again anyway.
+            st.find_mut("INBOX").unwrap().expunged.push((10, u64::MAX));
+        });
+        let listings = full_listings(&server);
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(server.count_commands("ENABLE QRESYNC"), 1, "QRESYNC was asked");
+        assert_eq!(full_listings(&server), listings + 1, "and did not add up, so the UIDs were listed");
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert!(!cached.contains(&5));
+        assert_eq!(cached.len(), 18);
+        assert_eq!(cached_meta(&engine, "INBOX").sync_total_emails, Some(18));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A refused QRESYNC is a fallback, not a failed sync.
+    #[tokio::test]
+    async fn a_failed_qresync_falls_back_to_the_listing() {
+        let dir = scratch_dir("qresync_refused");
+        let server = MockImap::start(
+            Scenario::new()
+                .with_cap("QRESYNC")
+                .mailbox(synthetic_mailbox("INBOX", 20))
+                .fault(Trigger::on("ENABLE"), Action::Respond("NO".into(), "not today".into())),
+        );
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+
+        server.mutate(|st| st.expunge("INBOX", &[5]));
+        let listings = full_listings(&server);
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(full_listings(&server), listings + 1);
+        assert!(!cached_uid_set(&engine, "INBOX").contains(&5));
+        assert_eq!(cached_count(&engine, "INBOX"), 19);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A new UID space is today's clear-and-reload, on a QRESYNC server too:
+    /// no QRESYNC is attempted against a UIDVALIDITY that no longer holds.
+    #[tokio::test]
+    async fn a_uidvalidity_change_on_a_qresync_server_clears_without_qresync() {
+        let dir = scratch_dir("qresync_uidvalidity");
+        let server = MockImap::start(Scenario::new().with_cap("QRESYNC").mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+
+        server.mutate(|st| {
+            st.expunge("INBOX", &[5]);
+            st.find_mut("INBOX").unwrap().uid_validity = 77;
+        });
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(server.count_commands("ENABLE"), 0);
+        assert_eq!(cached_meta(&engine, "INBOX").uid_validity, Some(77));
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert_eq!(cached.len(), 19);
+        assert!(!cached.contains(&5));
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -42,6 +42,9 @@ pub struct Session {
     pub authenticated: bool,
     pub selected: Option<String>,
     pub read_only: bool,
+    /// `ENABLE QRESYNC` went through: from here on this connection reports
+    /// removals as `VANISHED` (RFC 7162 §3.2.10), never as `EXPUNGE`.
+    pub qresync: bool,
 }
 
 // ── argument scanning ───────────────────────────────────────────────────────
@@ -181,6 +184,13 @@ pub fn dispatch(
         "DELETE" => do_delete(cmd, state),
         "RENAME" => do_rename(cmd, state),
         "SUBSCRIBE" | "UNSUBSCRIBE" => Response::ok("completed"),
+        // A server without QRESYNC is modelled as one without ENABLE at all:
+        // the BAD every unknown command gets, as before the mock knew it.
+        "ENABLE" if state.has_cap("QRESYNC") => {
+            let asked = cmd.args.split_whitespace().any(|c| c.eq_ignore_ascii_case("QRESYNC"));
+            sess.qresync |= asked;
+            Response::ok("ENABLE completed").line(if asked { "* ENABLED QRESYNC" } else { "* ENABLED" })
+        }
         "CLOSE" => {
             sess.selected = None;
             Response::ok("CLOSE completed")
@@ -273,6 +283,17 @@ fn do_select(cmd: &Command, state: &ServerState, sess: &mut Session, faults: &[A
         })
         .unwrap_or(mb.uid_next);
 
+    // `(CONDSTORE)` or `(QRESYNC (uidvalidity modseq [known-uids]))`.
+    let qresync = next_group(&mut args).and_then(|group| {
+        let mut rest = group.as_str();
+        let word = next_arg(&mut rest)?;
+        word.eq_ignore_ascii_case("QRESYNC").then(|| next_group(&mut rest)).flatten()
+    });
+    if qresync.is_some() && !sess.qresync {
+        // RFC 7162 §3.2.5: the parameter is an error until ENABLE QRESYNC.
+        return Response::bad("QRESYNC parameter without ENABLE QRESYNC");
+    }
+
     sess.selected = Some(mb.name.clone());
     sess.read_only = cmd.name == "EXAMINE";
 
@@ -296,7 +317,59 @@ fn do_select(cmd: &Command, state: &ServerState, sess: &mut Session, faults: &[A
             mb.highest_modseq
         ));
     }
+
+    // Known state from the client: what vanished and what changed since its
+    // modseq. A UIDVALIDITY that no longer matches gets neither (§3.2.5.1),
+    // the client has to start over.
+    if let Some(params) = qresync {
+        let mut params = params.split_whitespace();
+        let known_validity: Option<u32> = params.next().and_then(|v| v.parse().ok());
+        let since: u64 = params.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let known_uids = params.next();
+        if known_validity == Some(uid_validity) {
+            let mut gone: Vec<u32> = mb
+                .expunged
+                .iter()
+                .filter(|(_, at)| *at > since)
+                .map(|(uid, _)| *uid)
+                .collect();
+            if let Some(set) = known_uids {
+                let universe = gone.clone();
+                gone = expand_set(set, &universe);
+            }
+            gone.sort_unstable();
+            gone.dedup();
+            if !gone.is_empty() {
+                r = r.line(format!("* VANISHED (EARLIER) {}", uid_list(&gone)));
+            }
+            for msg in mb.messages.iter().filter(|m| m.modseq > since) {
+                r = r.line(format!(
+                    "* {} FETCH (UID {} FLAGS ({}) MODSEQ ({}))",
+                    mb.seq_of(msg.uid).unwrap_or(0),
+                    msg.uid,
+                    msg.flags.join(" "),
+                    msg.modseq
+                ));
+            }
+        }
+    }
     r
+}
+
+fn uid_list(uids: &[u32]) -> String {
+    uids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",")
+}
+
+/// How the untagged removals of an EXPUNGE or MOVE read on this connection:
+/// `VANISHED <uids>` once QRESYNC is enabled, an `EXPUNGE` per message
+/// otherwise, in descending sequence order since each one shifts the rest.
+fn removal_lines(sess: &Session, mb: &Mailbox, uids: &[u32]) -> Vec<String> {
+    if sess.qresync {
+        return if uids.is_empty() { vec![] } else { vec![format!("* VANISHED {}", uid_list(uids))] };
+    }
+    let mut seqs: Vec<u32> = uids.iter().filter_map(|u| mb.seq_of(*u)).collect();
+    seqs.sort_unstable_by(|a, b| b.cmp(a));
+    seqs.into_iter().map(|seq| format!("* {} EXPUNGE", seq)).collect()
 }
 
 fn do_status(cmd: &Command, state: &ServerState) -> Response {
@@ -720,19 +793,19 @@ fn do_copy(cmd: &Command, state: &mut ServerState, sess: &Session, is_move: bool
     };
 
     if is_move {
+        let bump = state.has_cap("QRESYNC");
         let src = state.find_mut(&src_name).unwrap();
-        let mut seqs: Vec<u32> = targets.iter().filter_map(|u| src.seq_of(*u)).collect();
-        seqs.sort_unstable_by(|a, b| b.cmp(a)); // descending — sequence numbers shift
-        src.messages.retain(|m| !targets.contains(&m.uid));
-        for seq in seqs {
-            r = r.line(format!("* {} EXPUNGE", seq));
+        for line in removal_lines(sess, src, &targets) {
+            r = r.line(line);
         }
+        src.expunge(&targets, bump);
     }
     let _ = src_validity;
     r
 }
 
 fn do_expunge(cmd: &Command, state: &mut ServerState, sess: &Session) -> Response {
+    let bump = state.has_cap("QRESYNC");
     let Some(mb) = selected_mut(state, sess) else {
         return Response::bad("No mailbox selected");
     };
@@ -753,14 +826,11 @@ fn do_expunge(cmd: &Command, state: &mut ServerState, sess: &Session) -> Respons
         .map(|m| m.uid)
         .collect();
 
-    let mut seqs: Vec<u32> = doomed.iter().filter_map(|u| mb.seq_of(*u)).collect();
-    seqs.sort_unstable_by(|a, b| b.cmp(a));
-    mb.messages.retain(|m| !doomed.contains(&m.uid));
-
     let mut r = Response::ok("EXPUNGE completed");
-    for seq in seqs {
-        r = r.line(format!("* {} EXPUNGE", seq));
+    for line in removal_lines(sess, mb, &doomed) {
+        r = r.line(line);
     }
+    mb.expunge(&doomed, bump);
     r
 }
 
