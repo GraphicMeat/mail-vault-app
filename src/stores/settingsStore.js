@@ -237,6 +237,9 @@ function normalizeCleanupRule(rule) {
  * v7 → v8: a Mac with AI still off moves from the backfilled local model to
  * Apple Intelligence. AI stays off; only the provider it would start on changes.
  *
+ * v8 → v9 / v9 → v10: Snooze, then Unsubscribe, are appended once to saved
+ * quick action lists.
+ *
  * Exported for tests: the disarm is the safety mechanism of the fix, so it
  * needs a test that can call it directly.
  */
@@ -286,6 +289,19 @@ export function migrateSettings(persisted, version) {
       quickActions: {
         ...next.quickActions,
         defaults: { ...next.quickActions.defaults, row: withSnooze('row'), selection: withSnooze('selection') },
+      },
+    };
+  }
+  // v9 -> v10: Unsubscribe joins the saved row list the same way, once. It
+  // only renders on a row carrying List-Unsubscribe.
+  if (version < 10 && Array.isArray(next.quickActions?.defaults?.row?.entries)
+    && !next.quickActions.defaults.row.entries.some(e => e?.action === 'unsubscribe')) {
+    const row = next.quickActions.defaults.row;
+    next = {
+      ...next,
+      quickActions: {
+        ...next.quickActions,
+        defaults: { ...next.quickActions.defaults, row: { ...row, entries: [...row.entries, { id: 'unsubscribe', action: 'unsubscribe' }] } },
       },
     };
   }
@@ -1370,7 +1386,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

@@ -1,6 +1,8 @@
 /**
- * E2E: unsubscribe (RFC 2369 / RFC 8058). The reader's Unsubscribe action
- * asks first, then the daemon (`unsubscribe` RPC) answers how; the Settings >
+ * E2E: unsubscribe (RFC 2369 / RFC 8058). The row's default quick actions
+ * offer Unsubscribe on a message carrying the header; the reader's
+ * always-visible Unsubscribe link (beside the sender) asks first, then the
+ * daemon (`unsubscribe` RPC) answers how; the Settings >
  * Unsubscribe page lists the sender under All accounts and under its own
  * account, not under another one, and keeps the history.
  *
@@ -103,12 +105,11 @@ describe('Unsubscribe', function () {
 
     await inInbox((client) => client.append('INBOX', newsletterRfc822(), [], new Date('2020-01-01T12:00:00Z')));
 
-    // The reader offers Unsubscribe once it is one of its quick actions.
+    // The shipped quick actions (whatever an earlier spec left), restored in `after`.
     priorQuickActions = await browser.execute(() => {
       const state = window.__SETTINGS_STORE__.getState();
-      const reader = state.quickActions.defaults.reader;
       const prior = JSON.parse(JSON.stringify(state.quickActions));
-      state.setQuickActionSurface('reader', null, { ...reader, entries: [{ id: 'unsubscribe', action: 'unsubscribe' }, ...reader.entries] });
+      state.resetQuickActions();
       return prior;
     });
 
@@ -143,13 +144,38 @@ describe('Unsubscribe', function () {
     });
   });
 
+  it("offers Unsubscribe in the row's default quick actions", async function () {
+    // The default row layout is the radial wheel: open it on the fixture's
+    // row and read its entries, then close it again.
+    const opened = await browser.execute((needle) => {
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((r) => r.offsetHeight > 0 && (r.innerText || '').includes(needle));
+      const trigger = row?.querySelector('.quick-actions[data-surface="row"] .quick-actions-trigger');
+      trigger?.click();
+      return !!trigger;
+    }, SUBJECT);
+    expect(opened).toBe(true);
+    const wheelActions = () => browser.execute(() =>
+      [...(document.querySelector('.quick-actions-radial[data-surface="row"]:not(.quick-actions-radial-preview)')
+        ?.querySelectorAll('[data-quick-action]') || [])].map((b) => b.dataset.quickAction));
+    await browser.waitUntil(async () => (await wheelActions()).length > 0, {
+      timeout: 5_000, interval: 100, timeoutMsg: "the fixture row's quick-action wheel never opened",
+    });
+    expect(await wheelActions()).toContain('unsubscribe');
+    await browser.execute(() => document.querySelector('.quick-actions-radial[data-surface="row"]')?.previousElementSibling?.click());
+    await browser.waitUntil(async () => (await wheelActions()).length === 0, {
+      timeout: 5_000, interval: 100, timeoutMsg: 'the row wheel did not close',
+    });
+  });
+
   it('asks before acting, then opens a prefilled unsubscribe email for a mailto-only list', async function () {
     await openMessage();
+    // The link beside the sender, shown whatever the action bar is set to.
     await browser.waitUntil(() => browser.execute(() => {
-      const button = [...document.querySelectorAll('[data-quick-action="unsubscribe"]')].find((b) => b.offsetHeight > 0);
-      button?.click();
-      return !!button;
-    }), { timeout: 15_000, interval: 300, timeoutMsg: 'the reader never offered Unsubscribe for a List-Unsubscribe message' });
+      const link = [...document.querySelectorAll('[data-testid="sender-unsubscribe"]')].find((b) => b.offsetHeight > 0);
+      link?.click();
+      return !!link;
+    }), { timeout: 15_000, interval: 300, timeoutMsg: 'the reader never showed its Unsubscribe link for a List-Unsubscribe message' });
 
     await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[role="alertdialog"]')), {
       timeout: 10_000, interval: 200, timeoutMsg: 'Unsubscribe did not ask for confirmation first',

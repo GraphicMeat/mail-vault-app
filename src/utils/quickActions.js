@@ -6,8 +6,9 @@ export const QUICK_ACTION_TYPES = [
   'toggleRead', 'markRead', 'markUnread', 'star', 'unstar', 'tag', 'move',
   'spam', 'reply', 'replyAll', 'forward', 'replyTemplate', 'export', 'newMessage',
   'open', 'source', 'theme', 'snooze',
-  // Not in any default: rows and the reader's grouped layout key off their
-  // exact default lists (see snooze), so people add it in Quick actions.
+  // Last in the row defaults (settingsStore's v10 migration appends it to a
+  // saved row list); never a reader default, since the reader's grouped
+  // layout keys off its exact list. Hidden on rows without List-Unsubscribe.
   'unsubscribe',
 ];
 
@@ -20,6 +21,7 @@ export const DEFAULT_QUICK_ACTIONS = {
         entry('archive'), entry('unarchive'), entry('toggleRead'), entry('star'), entry('unstar'),
         entry('reply'), entry('replyAll'), entry('forward'), entry('newMessage'), entry('move'),
         entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'), entry('snooze'),
+        entry('unsubscribe'),
       ],
       favoriteId: 'archive', palette: 'semantic', radialPagination: false,
     },

@@ -148,6 +148,25 @@ describe('EmailSenderInfo click targets', () => {
   });
 });
 
+describe('EmailSenderInfo unsubscribe link', () => {
+  it('shows only for a message with List-Unsubscribe and opens the confirm flow without folding the row', async () => {
+    const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
+    useUnsubscribeStore.setState({ pending: null });
+    const onToggle = vi.fn();
+    render(<EmailSenderInfo email={EMAIL} variant="single" onToggle={onToggle} />);
+    expect(screen.queryByTestId('sender-unsubscribe')).toBeNull();
+    cleanup();
+
+    const list = { ...EMAIL, _accountId: 'acc-1', listUnsubscribe: '<mailto:leave@mock.test>' };
+    render(<EmailSenderInfo email={list} variant="single" onToggle={onToggle} />);
+    fireEvent.click(screen.getByTestId('sender-unsubscribe'));
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(useUnsubscribeStore.getState().pending).toMatchObject({
+      accountId: 'acc-1', sender: 'prime@mock.test', listUnsubscribe: '<mailto:leave@mock.test>',
+    });
+  });
+});
+
 describe('EmailSenderInfo BIMI logo', () => {
   const brand = auth => ({ ...EMAIL, uid: 7, from: { name: 'Brand', address: 'news@brand.test' }, authenticationResults: auth });
   const ALIGNED = 'mx.test; dkim=pass; dmarc=pass header.from=brand.test';

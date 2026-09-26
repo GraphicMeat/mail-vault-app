@@ -14,6 +14,7 @@ import { getSenderName } from '../../utils/emailParser';
 import { t, useT  } from '../../i18n/index.js';
 import { parseAuthResults } from '../../utils/senderCheck';
 import { daemonCall } from '../../services/daemonClient';
+import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 
 // Logo lookups for this session, so a thread asks once. Keyed by domain AND
 // the message's Authentication-Results: the daemon's check that the DMARC
@@ -180,6 +181,20 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               <span className="text-xs text-mail-text-muted italic flex-shrink-0">
                 {t('email.viaList', { listName })}
               </span>
+            )}
+
+            {/* Unsubscribe, like Gmail's: always here when the message
+                offers one, whatever the action bar is configured to show.
+                The shared flow asks before it acts. */}
+            {email?.listUnsubscribe && (
+              <button
+                type="button"
+                data-testid="sender-unsubscribe"
+                onClick={(e) => { e.stopPropagation(); useUnsubscribeStore.getState().request(unsubscribeTarget(email)); }}
+                className="text-xs text-mail-text-muted hover:text-mail-text hover:underline flex-shrink-0"
+              >
+                {t('unsubscribe.action')}
+              </button>
             )}
 
             {/* Insights button */}
