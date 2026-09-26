@@ -25,15 +25,15 @@ const holdChanges = () => useUnsavedStore.getState().setGuard({
 it('leaving a page with unsaved changes asks first and lists them', async () => {
   render(<SettingsPage initialTab="language" onClose={() => {}} />);
   holdChanges();
-  fireEvent.click(nav('Security'));
-  expect(page()).toBe('language');
+  fireEvent.click(nav('Privacy & security'));
+  expect(page()).toBe('appearance');
   const dialog = await screen.findByTestId('unsaved-changes');
   expect(within(dialog).getByTestId('unsaved-list').textContent).toBe('View nameContains');
   fireEvent.click(within(dialog).getByTestId('unsaved-keep'));
-  expect(page()).toBe('language');
+  expect(page()).toBe('appearance');
   expect(screen.queryByTestId('unsaved-changes')).toBeNull();
 
-  fireEvent.click(nav('Security'));
+  fireEvent.click(nav('Privacy & security'));
   fireEvent.click(await screen.findByTestId('unsaved-discard'));
   await vi.waitFor(() => expect(page()).toBe('security'));
 });
@@ -50,7 +50,7 @@ it('closing Settings with unsaved changes waits for the answer', async () => {
 
 it('with nothing unsaved, pages switch at once', () => {
   render(<SettingsPage initialTab="language" onClose={() => {}} />);
-  fireEvent.click(nav('Security'));
+  fireEvent.click(nav('Privacy & security'));
   expect(page()).toBe('security');
   expect(screen.queryByTestId('unsaved-changes')).toBeNull();
 });

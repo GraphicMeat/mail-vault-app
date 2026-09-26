@@ -35,10 +35,10 @@ describe('Settings appearance navigation', function () {
     expect(await browser.execute(() => document.querySelector('[data-testid="settings-content"]')?.dataset.page)).toBe('appearance');
   });
 
-  it('offers Colors, Layout, Reading, Date & time and Quick actions sections', async function () {
+  it('offers Colors, Layout, Reading, Date & time, Quick actions and Language sections', async function () {
     const sections = await browser.execute(() => [...document.querySelectorAll('[data-testid="settings-content"] [role="tab"]')]
       .filter(tab => tab.offsetHeight > 0).map(tab => tab.textContent.trim()));
-    expect(sections).toEqual(['Colors', 'Layout', 'Reading', 'Date & time', 'Quick actions']);
+    expect(sections).toEqual(['Colors', 'Layout', 'Reading', 'Date & time', 'Quick actions', 'Language']);
   });
 
   it('exposes both Highlighting options under Reading with an associated label', async function () {

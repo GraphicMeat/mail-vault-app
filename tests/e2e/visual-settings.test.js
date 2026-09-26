@@ -8,7 +8,7 @@
  * timestamps, avatars, and animations that cause false positives.
  */
 
-import { waitForApp, openSettings, closeSettings } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
 /**
  * Freeze dynamic content before screenshots to prevent false positives.
@@ -42,18 +42,11 @@ async function freezeDynamicContent() {
 }
 
 /**
- * Click a settings tab by its visible text label.
+ * Click a settings tab by its visible text label, through its host entry
+ * when it is folded under one (Security sits under Privacy & security).
  */
 async function clickSettingsTab(tabName) {
-  await browser.execute((name) => {
-    const tabs = document.querySelectorAll('button');
-    for (const t of tabs) {
-      if (t.textContent.trim() === name && t.offsetHeight > 0) {
-        t.click();
-        break;
-      }
-    }
-  }, tabName);
+  await clickSettingsNav(tabName);
   await browser.pause(500);
 }
 

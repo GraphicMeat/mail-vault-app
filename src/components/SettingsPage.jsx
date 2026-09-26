@@ -31,6 +31,7 @@ import {
   Usb,
   KeyRound,
   MailX,
+  Activity,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -48,7 +49,6 @@ import { AISettings } from './settings/AISettings';
 import { DaemonSettings } from './settings/DaemonSettings';
 import { TimeCapsuleSettings } from './settings/TimeCapsuleSettings';
 import { CleanupView } from './settings/CleanupSettings';
-import { LanguageSettings } from './settings/LanguageSettings';
 import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { AiProvidersSettings } from './settings/AiProvidersSettings';
 import { AutoTagSettings } from './settings/AutoTagSettings';
@@ -56,6 +56,7 @@ import { ViewsSettings } from './settings/ViewsSettings';
 import { UnsubscribeSettings } from './settings/UnsubscribeSettings';
 import { PortableSettings } from './settings/PortableSettings';
 import { EncryptionSettings } from './settings/EncryptionSettings';
+import { SettingsTabs } from './ui/SettingsTabs';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
@@ -100,11 +101,24 @@ export const allTabs = [...featureTabs, ...settingsTabs, ...systemTabs];
 const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 
 const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
+// One nav entry over several pages, shown as tabs. Each page keeps its id as a
+// destination: it opens the host with that tab selected.
+export const settingsHosts = {
+  storage: { labelKey: 'settings.tab.storage', icon: HardDrive, pages: ['storage', 'data-usage'] },
+  privacy: { labelKey: 'settings.tab.privacySecurity', icon: Shield, pages: ['security', 'tracking', 'encryption'] },
+  diagnostics: { labelKey: 'settings.tab.diagnostics', icon: Activity, pages: ['daemon', 'logs'] },
+};
+const hostOf = Object.fromEntries(Object.entries(settingsHosts)
+  .flatMap(([id, host]) => host.pages.map(page => [page, { id, ...host }])));
+const navEntries = ids => ids.map(id => settingsHosts[id] ? { id, ...settingsHosts[id] } : tabsById[id]).filter(Boolean);
 const sections = [
-  { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'views', 'ai-providers', 'auto-tags', 'unsubscribe', 'language'] },
-  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'security', 'encryption', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
-  { labelKey: 'settings.navigation.supportSystem', ids: ['billing', 'migration', 'daemon', 'logs', 'help'] },
-].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]).filter(Boolean) }));
+  { labelKey: 'settings.navigation.general', ids: ['appearance', 'mail-preferences'] },
+  { labelKey: 'settings.navigation.accountsImport', ids: ['accounts', 'templates', 'migration'] },
+  { labelKey: 'settings.navigation.organize', ids: ['views', 'auto-tags', 'ai-providers', 'unsubscribe', 'cleanup'] },
+  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'time-capsule', 'privacy'] },
+].map(section => ({ ...section, tabs: navEntries(section.ids) }));
+// Support and system sit apart, pinned under the groups.
+const footerTabs = navEntries(['billing', 'diagnostics', 'help']);
 
 // Labels are resolved at render time, so search follows the current language.
 // A result points to the same page and section that contain its real control.
@@ -253,7 +267,7 @@ export const settingSearchGroups = [
     ['settings.templates.templateName', 'email template name create new'],
     ['settings.templates.templateBody', 'email template body content text canned response'],
   ] },
-  { id: 'language', settings: [
+  { id: 'appearance', section: 'language', sectionKey: 'settings.tab.language', settings: [
     ['settings.language.report.title', 'translation issue report wrong incorrect language bug'],
   ] },
   { id: 'ai-providers', settings: [
@@ -336,7 +350,8 @@ export const settingSearchGroups = [
   ] }]),
 ];
 
-const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;
+const normalizeTab = tab => tab === 'general' || tab === 'language' ? 'appearance' : tab === 'ai' ? 'cleanup'
+  : settingsHosts[tab]?.pages[0] || tab;
 const searchText = value => value.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 const settingText = value => value.replace(/\s+/g, ' ').trim();
 const CONTROL = 'input, select, textarea, button, [tabindex]';
@@ -370,7 +385,8 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   const resolvedInitialTab = normalizeTab(initialTab);
   const [activeTab, setActiveTab] = useState(allTabs.some(tab => tab.id === resolvedInitialTab) ? resolvedInitialTab : 'appearance');
   const [query, setQuery] = useState('');
-  const [appearanceSection, setAppearanceSection] = useState(resolvedInitialTab === 'appearance' ? initialSection || 'colors' : 'colors');
+  const [appearanceSection, setAppearanceSection] = useState(initialTab === 'language' ? 'language'
+    : resolvedInitialTab === 'appearance' ? initialSection || 'colors' : 'colors');
   const [generalSubTab, setGeneralSubTab] = useState(resolvedInitialTab === 'mail-preferences' ? initialSection || 'behavior' : 'behavior');
   const [accountSection, setAccountSection] = useState(resolvedInitialTab === 'accounts' ? initialSection || 'profile' : 'profile');
   const [subView, setSubView] = useState(null); // null = feature view, 'config' = settings sub-view
@@ -426,6 +442,8 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
 
   // Reset subView when switching tabs
   const switchTab = (tabId) => {
+    // Language became Appearance's last section; its old page id still leads there.
+    if (tabId === 'language') setAppearanceSection('language');
     setActiveTab(normalizeTab(tabId));
     setSubView(null);
     setFeatureDetailActive(false);
@@ -447,19 +465,24 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   const hasAccountPills = accountPillTabIds.has(activeTab);
   const hasConfigSubView = accountPillTabIds.has(activeTab);
   const currentTab = allTabs.find(t => t.id === activeTab);
+  const host = hostOf[activeTab];
+  const pageTab = host || currentTab;
   const sectionKey = activeTab === 'appearance'
-    ? { colors: 'settings.appearance.section.colors', layout: 'settings.appearance.section.layout', reading: 'settings.appearance.section.reading', 'date-time': 'settings.appearance.section.dateTime', 'quick-actions': 'quickActions.title' }[appearanceSection]
+    ? { colors: 'settings.appearance.section.colors', layout: 'settings.appearance.section.layout', reading: 'settings.appearance.section.reading', 'date-time': 'settings.appearance.section.dateTime', 'quick-actions': 'quickActions.title', language: 'settings.tab.language' }[appearanceSection]
     : activeTab === 'mail-preferences'
       ? { behavior: 'generalSettings.behavior', notifications: 'settings.notifications.notifications', shortcuts: 'shortcuts.keyboardShortcuts', fields: 'fields.section' }[generalSubTab]
       : activeTab === 'accounts'
         ? { profile: 'settings.accounts.sectionProfile', connection: 'settings.accounts.sectionConnection', advanced: 'settings.accounts.sectionAdvanced' }[accountSection]
-        : null;
+        : host && host.labelKey !== currentTab.labelKey ? currentTab.labelKey : null;
   const navigationLabel = subView === 'config'
     ? t('settingsPage.tabSettings', { tab: currentTab ? t(currentTab.labelKey) : '' })
-    : [currentTab && t(currentTab.labelKey), sectionKey && t(sectionKey)].filter(Boolean).join(' · ');
+    : [pageTab && t(pageTab.labelKey), sectionKey && t(sectionKey)].filter(Boolean).join(' · ');
   useEffect(() => { onNavigationLabelChange?.(navigationLabel); }, [navigationLabel, onNavigationLabelChange]);
   const searchPages = [
     ...allTabs,
+    // A host's nav name finds it too, unless its first page already has that name.
+    ...Object.values(settingsHosts).filter(({ labelKey, pages }) => labelKey !== tabsById[pages[0]].labelKey)
+      .map(({ labelKey, icon, pages }) => ({ ...tabsById[pages[0]], labelKey, icon })),
     ...settingSearchGroups.flatMap(group => group.settings.map(([labelKey, keywords]) => ({
       ...tabsById[group.id], ...group, labelKey, keywords,
     }))),
@@ -508,6 +531,117 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     </>
   );
 
+  const renderNavItem = tab => (
+    <button
+      key={tab.id}
+      onClick={() => handleTabChange(tab.id)}
+      aria-current={(host?.id || activeTab) === tab.id ? 'page' : undefined}
+      className="settings-nav-item"
+    >
+      <tab.icon size={17} aria-hidden="true" />
+      <span className="text-sm font-medium">{t(tab.labelKey)}</span>
+    </button>
+  );
+  const renderOption = tab => <option key={tab.id} value={tab.id}>{t(tab.labelKey)}</option>;
+
+  const pageContent = (
+    <>
+      {activeTab === 'cleanup' && (
+        subView === 'config'
+          ? <AISettings />
+          : <CleanupView active={!minimized} accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'time-capsule' && (
+        subView === 'config'
+          ? <TimeCapsuleSettings />
+          : <TimeCapsuleView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'tracking' && (
+        <TrackerBlockingView onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'appearance' && (
+        <AppearanceSettings initialSection={appearanceSection} onSectionChange={setAppearanceSection} />
+      )}
+
+      {activeTab === 'mail-preferences' && (
+        <GeneralSettings active={!minimized} initialSubTab={generalSubTab} onSubTabChange={setGeneralSubTab} accounts={accounts} />
+      )}
+
+      {activeTab === 'accounts' && (
+        <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
+          initialSection={accountSection} onSectionChange={setAccountSection} />
+      )}
+
+      {activeTab === 'templates' && (
+        <TemplateSettings />
+      )}
+
+      {activeTab === 'ai-providers' && (
+        <AiProvidersSettings />
+      )}
+
+      {activeTab === 'auto-tags' && (
+        <AutoTagSettings />
+      )}
+
+      {activeTab === 'views' && (
+        <ViewsSettings onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'unsubscribe' && (
+        <UnsubscribeSettings />
+      )}
+
+      {activeTab === 'storage' && (
+        <StorageSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'data-usage' && (
+        <DataUsageSettings initialAccountId={initialAccountId} />
+      )}
+
+      {activeTab === 'portable' && (
+        <PortableSettings onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'backup' && (
+        <BackupSettings initialAccountId={initialAccountId} initialSubTab={backupSubTab} onSubTabChange={setBackupSubTab}
+          onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'migration' && (
+        <MigrationSettings onUpgrade={() => handleTabChange('billing')} />
+      )}
+
+      {activeTab === 'daemon' && (
+        <DaemonSettings />
+      )}
+
+      {activeTab === 'billing' && (
+        <BillingSettings onNavigate={handleTabChange} />
+      )}
+
+      {activeTab === 'security' && (
+        <SecuritySettings />
+      )}
+
+      {activeTab === 'encryption' && (
+        <EncryptionSettings />
+      )}
+
+      {activeTab === 'logs' && (
+        <LogsSettings />
+      )}
+
+      {activeTab === 'help' && (
+        <HelpSettings onClose={requestClose} onReportBug={onReportBug} />
+      )}
+    </>
+  );
+
   return (
     <Dialog
       open={!minimized}
@@ -530,20 +664,11 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
             {query.trim() ? renderResults() : sections.map((section) => (
               <React.Fragment key={section.labelKey}>
                 <p className="settings-nav-heading">{t(section.labelKey)}</p>
-                {section.tabs.map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    aria-current={activeTab === tab.id ? 'page' : undefined}
-                    className="settings-nav-item"
-                  >
-                    <tab.icon size={17} aria-hidden="true" />
-                    <span className="text-sm font-medium">{t(tab.labelKey)}</span>
-                  </button>
-                ))}
+                {section.tabs.map(renderNavItem)}
               </React.Fragment>
             ))}
             </div>
+            <div className="settings-nav-footer">{footerTabs.map(renderNavItem)}</div>
           </nav>
         </div>
 
@@ -563,16 +688,17 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
               <div className="settings-header-title min-w-0"><h3 className="text-lg font-semibold text-mail-text truncate">
                 {hasConfigSubView && subView === 'config'
                   ? t('settingsPage.tabSettings', { tab: currentTab ? t(currentTab.labelKey) : '' })
-                  : (currentTab ? t(currentTab.labelKey) : '')}
+                  : (pageTab ? t(pageTab.labelKey) : '')}
               </h3>
               {currentTab?.descriptionKey && <p className="settings-page-description">{t(currentTab.descriptionKey)}</p>}
               </div>
               <div className="settings-mobile-navigation">
                 <label className="sr-only" htmlFor={`${titleId}-page`}>{t('settingsPage.settings')}</label>
-                <select id={`${titleId}-page`} value={activeTab} onChange={event => handleTabChange(event.target.value)}>
+                <select id={`${titleId}-page`} value={host?.id || activeTab} onChange={event => handleTabChange(event.target.value)}>
                   {sections.map(section => <optgroup key={section.labelKey} label={t(section.labelKey)}>
-                    {section.tabs.map(tab => <option key={tab.id} value={tab.id}>{t(tab.labelKey)}</option>)}
+                    {section.tabs.map(renderOption)}
                   </optgroup>)}
+                  {footerTabs.map(renderOption)}
                 </select>
               </div>
             </div>
@@ -631,104 +757,11 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
           )}
 
           {/* Content Area */}
-          <div key={`${activeTab}-${subView || 'main'}`} ref={contentRef} tabIndex={-1} data-testid="settings-content" data-page={activeTab} className={`settings-content flex-1 min-h-0 min-w-0 ${activeTab === 'accounts' || (hasAccountPills && subView !== 'config') ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-            {activeTab === 'cleanup' && (
-              subView === 'config'
-                ? <AISettings />
-                : <CleanupView active={!minimized} accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'time-capsule' && (
-              subView === 'config'
-                ? <TimeCapsuleSettings />
-                : <TimeCapsuleView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'tracking' && (
-              <TrackerBlockingView onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'appearance' && (
-              <AppearanceSettings initialSection={appearanceSection} onSectionChange={setAppearanceSection} />
-            )}
-
-            {activeTab === 'mail-preferences' && (
-              <GeneralSettings active={!minimized} initialSubTab={generalSubTab} onSubTabChange={setGeneralSubTab} accounts={accounts} />
-            )}
-
-            {activeTab === 'accounts' && (
-              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
-                initialSection={accountSection} onSectionChange={setAccountSection} />
-            )}
-
-            {activeTab === 'templates' && (
-              <TemplateSettings />
-            )}
-
-            {activeTab === 'ai-providers' && (
-              <AiProvidersSettings />
-            )}
-
-            {activeTab === 'auto-tags' && (
-              <AutoTagSettings />
-            )}
-
-            {activeTab === 'views' && (
-              <ViewsSettings onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'unsubscribe' && (
-              <UnsubscribeSettings />
-            )}
-
-            {activeTab === 'storage' && (
-              <StorageSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'data-usage' && (
-              <DataUsageSettings initialAccountId={initialAccountId} />
-            )}
-
-            {activeTab === 'portable' && (
-              <PortableSettings onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'backup' && (
-              <BackupSettings initialAccountId={initialAccountId} initialSubTab={backupSubTab} onSubTabChange={setBackupSubTab}
-                onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'migration' && (
-              <MigrationSettings onUpgrade={() => handleTabChange('billing')} />
-            )}
-
-            {activeTab === 'daemon' && (
-              <DaemonSettings />
-            )}
-
-            {activeTab === 'billing' && (
-              <BillingSettings onNavigate={handleTabChange} />
-            )}
-
-            {activeTab === 'language' && (
-              <LanguageSettings />
-            )}
-
-            {activeTab === 'security' && (
-              <SecuritySettings />
-            )}
-
-            {activeTab === 'encryption' && (
-              <EncryptionSettings />
-            )}
-
-            {activeTab === 'logs' && (
-              <LogsSettings />
-            )}
-
-            {activeTab === 'help' && (
-              <HelpSettings onClose={requestClose} onReportBug={onReportBug} />
-            )}
+          <div key={`${host?.id || activeTab}-${subView || 'main'}`} ref={contentRef} tabIndex={-1} data-testid="settings-content" data-page={activeTab} className={`settings-content flex-1 min-h-0 min-w-0 ${activeTab === 'accounts' || (hasAccountPills && subView !== 'config') ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+            {host ? (
+              <SettingsTabs tabs={host.pages.map(id => ({ id, label: t(tabsById[id].labelKey) }))} value={activeTab}
+                onChange={handleTabChange} label={t(host.labelKey)}>{pageContent}</SettingsTabs>
+            ) : pageContent}
           </div>
         </div>
         <UnsavedChangesDialog />

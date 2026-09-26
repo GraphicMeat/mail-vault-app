@@ -1087,6 +1087,7 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('settings-security', async () => {
+      await clickByText(L('settings.tab.privacySecurity'));
       if (!(await clickByText(L('settings.tab.security')))) throw new Error('security tab not found');
       await expectState((s) => s.settings && s.text.includes(L('settings.security.linkSafetyScanning')), 'security tab not on screen');
       await browser.pause(900);
@@ -1283,6 +1284,7 @@ describe('MailVault marketing screenshots', function () {
     await step('premium-tracker-blocking', async () => {
       await openSettings();
       await browser.pause(500);
+      await clickByText(L('settings.tab.privacySecurity'));
       await clickByText(L('settings.tab.tracking'));
       await browser.pause(400);
       // Wait for a control that exists only when the feature is unlocked. Waiting

@@ -11,11 +11,12 @@
 // calls during mount) falls back to a source scan of the file SettingsPage.jsx
 // renders for it, checking that file reaches for SettingsPageLayout/SettingsTabs.
 
+import React from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { allTabs, SettingsPage } from '../../SettingsPage';
+import { allTabs, settingsHosts, SettingsPage } from '../../SettingsPage';
 import { useMailStore } from '../../../stores/mailStore';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
@@ -33,6 +34,10 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 //   view with its own scrolling; their "Settings" sub-view renders
 //   AISettings / TimeCapsuleSettings, which are already `.settings-form`.
 const FULL_BLEED = new Set(['accounts', 'cleanup', 'time-capsule']);
+// A page folded under a host nav entry (Storage, Privacy & security,
+// Diagnostics) always sits in the host's tab row, so its own shell is the
+// tabpanel's first child, not the content's.
+const HOSTED = new Set(Object.values(settingsHosts).flatMap(host => host.pages));
 
 const SETTINGS_PAGE_SRC = readFileSync(resolve(process.cwd(), 'src/components/SettingsPage.jsx'), 'utf8');
 const SETTINGS_DIR = resolve(process.cwd(), 'src/components');
@@ -67,6 +72,7 @@ describe('every settings tab keeps the shared page shell', () => {
       expect(tabSourceUsesSharedLayout(id)).toBe(true);
       return;
     }
-    expect(content.firstElementChild?.matches('.settings-form, .settings-tabbed-page')).toBe(true);
+    const shell = HOSTED.has(id) ? content.querySelector(':scope > .settings-tabbed-page > [role="tabpanel"]') : content;
+    expect(shell?.firstElementChild?.matches('.settings-form, .settings-tabbed-page')).toBe(true);
   });
 });

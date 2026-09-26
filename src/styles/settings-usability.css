@@ -2,6 +2,7 @@
 /* Leave room for the search field's 2px outline and 2px outline offset. */
 .settings-sidebar .settings-navigation { display: flex; flex-direction: column; padding: 4px 0 0; overflow: hidden; }
 .settings-nav-pages { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 20px; }
+.settings-nav-footer { flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--mail-border); }
 .settings-search-result { align-items: flex-start; }
 .settings-search-result > svg { margin-top: 2px; }
 .settings-search-result-copy { display: grid; gap: 3px; min-width: 0; }

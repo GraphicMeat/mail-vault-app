@@ -183,6 +183,8 @@ export async function pressSequence(key1, key2) {
  * Navigate through the current Settings hierarchy using real controls.
  * Legacy callers of General mean Mail preferences; its three sections can be
  * requested directly. Appearance is an independent top-level destination.
+ * Pages folded under a host nav entry (and Language, now an Appearance
+ * section) open their host first, then their tab.
  */
 export async function clickSettingsNav(label) {
   const destination = label === 'General' ? 'Mail preferences' : label;
@@ -213,9 +215,12 @@ export async function clickSettingsNav(label) {
     }, wanted, kind), { timeout: 5000, interval: 100, timeoutMsg: `Settings did not navigate to ${wanted}` });
     return true;
   };
-  if (['Behavior', 'Notifications', 'Keyboard Shortcuts'].includes(destination)) {
-    if (!(await navigate('Mail preferences'))) return false;
-  }
+  const host = {
+    Behavior: 'Mail preferences', Notifications: 'Mail preferences', 'Keyboard Shortcuts': 'Mail preferences',
+    Security: 'Privacy & security', 'Tracker Blocking': 'Privacy & security', Encryption: 'Privacy & security',
+    'Data Usage': 'Storage', 'Background Daemon': 'Diagnostics', Logs: 'Diagnostics', Language: 'Appearance',
+  }[destination];
+  if (host && !(await navigate(host))) return false;
   return navigate(destination);
 }
 

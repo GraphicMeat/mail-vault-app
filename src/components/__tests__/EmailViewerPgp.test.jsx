@@ -58,7 +58,7 @@ describe('EmailViewer and OpenPGP', () => {
 
   it('shows the missing-key notice instead of the ciphertext', () => {
     renderViewer({ ...base, pgp: 'locked', text: '-----BEGIN PGP MESSAGE-----\nhQEMA\n-----END PGP MESSAGE-----' });
-    expect(screen.getByTestId('pgp-locked').textContent).toContain('Settings > Encryption');
+    expect(screen.getByTestId('pgp-locked').textContent).toContain('Settings > Privacy & security > Encryption');
     expect(screen.queryByText(/BEGIN PGP MESSAGE/)).toBe(null);
     expect(screen.queryByTestId('pgp-decrypted')).toBe(null);
   });

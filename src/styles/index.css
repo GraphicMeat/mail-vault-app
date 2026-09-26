@@ -1107,6 +1107,11 @@ input[type="range"]::-moz-range-thumb:hover {
 .settings-header h3 { font-size: 20px; letter-spacing: -.02em; }
 .settings-content { scrollbar-gutter: stable; container-type: inline-size; scroll-behavior: auto; }
 .settings-form { width: 100%; max-width: 920px; margin: 0 auto; padding: 28px; }
+/* A page folded under a host nav entry already sits in the host's padded tabpanel. */
+.settings-form .settings-form { max-width: none; padding: 0; }
+/* Logs fills the pane under the Diagnostics tab row, its log scrolling inside. */
+.settings-content[data-page="logs"] > .settings-tabbed-page { display: flex; flex-direction: column; height: 100%; }
+.settings-content[data-page="logs"] > .settings-tabbed-page > [role="tabpanel"] { flex: 1; min-height: 0; }
 .settings-section { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; padding: 20px; }
 .settings-section > h4 { font-size: 18px; }
 .settings-section :where(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { min-width: 0; }

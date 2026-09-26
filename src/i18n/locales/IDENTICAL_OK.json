@@ -111,6 +111,7 @@
   "settings.migration.min",
   "settings.migration.pause",
   "settings.migration.source",
+  "settings.navigation.general",
   "settings.notifications.badge",
   "settings.notifications.notifications",
   "settings.section.system",
