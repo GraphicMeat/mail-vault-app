@@ -264,6 +264,24 @@ async fn move_uids_uses_uid_move_when_the_server_has_it() {
     assert_eq!(server.count_commands("UID COPY"), 0);
 }
 
+/// A big UID MOVE on a throttled server can sit silent for longer than
+/// `CMD_STALL` and still be moving the mail. Cut off at 15s it reported a
+/// failure for a move that happened; mutations get `PATIENT_STALL` instead.
+#[async_std::test]
+async fn a_move_the_server_is_slow_to_confirm_is_waited_for() {
+    let server = MockImap::start(
+        inbox_and_archive(1).fault(Trigger::on("MOVE"), Action::Delay(CMD_STALL + Duration::from_secs(5))),
+    );
+    let mut sess = session(&server).await;
+
+    let moved = move_uids(&mut sess, "INBOX", "Archive", &[1], true, true)
+        .await
+        .expect("a live server that is slow to answer a MOVE is not a dead socket");
+
+    assert_eq!(moved.moved, 1);
+    assert_eq!(server.state().find("Archive").unwrap().messages.len(), 1);
+}
+
 #[async_std::test]
 async fn move_uids_falls_back_to_copy_delete_expunge_without_move() {
     let server = MockImap::start(inbox_and_archive(2).without_cap("MOVE"));

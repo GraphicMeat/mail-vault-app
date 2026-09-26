@@ -394,6 +394,33 @@ async fn a_server_that_never_greets_fails_the_connect_after_the_greeting_timeout
     assert!(err.contains("greeting"), "error should name the step: {err}");
 }
 
+/// A LOGIN the server never answers fails on `CMD_STALL` as a lost
+/// connection. Worded as "Login failed", the app told the user to check a
+/// password that was never rejected.
+#[async_std::test]
+async fn a_login_the_server_never_answers_is_not_reported_as_a_bad_password() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::on("LOGIN"), Action::Delay(Duration::from_secs(40))),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let err = async_std::future::timeout(CMD_STALL + Duration::from_secs(2), create_imap_session(&config, &pool))
+        .await
+        .expect("a silent LOGIN is given up on after CMD_STALL")
+        .err()
+        .expect("a server that never answers LOGIN cannot give a session");
+
+    assert!(err.starts_with("connection lost while signing in to "), "got: {err}");
+    assert!(pool::is_connection_lost(&err), "must stay a dead socket for the retry: {err}");
+    let lowered = err.to_ascii_lowercase();
+    for credential_needle in ["login failed", "auth failed", "authentication", "password", "credentials", "oauth"] {
+        assert!(!lowered.contains(credential_needle), "reads as a credential error ({credential_needle}): {err}");
+    }
+}
+
 /// Task A1: `run_read_timed` writes each stage into the `ReadTimings` it is
 /// given, so `imap_get_email_light`'s stall log has real numbers to show —
 /// which stage of the 09-26 Gmail body-fetch regression actually stalled.

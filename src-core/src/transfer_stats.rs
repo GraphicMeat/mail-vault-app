@@ -76,33 +76,42 @@ impl Counters {
 /// It sits under TLS and COMPRESS, so it cannot see where one IMAP response
 /// ends. It does not need to: the client only reads while it waits for a
 /// reply, and every command starts with a write, which re-arms the deadline.
-/// The one read that waits on purpose is IDLE's, run inside
-/// `expecting_silence`.
+/// A read that is allowed to wait longer (IDLE, a slow mutation) runs inside
+/// `with_stall`.
 #[derive(Debug)]
 pub struct CountingStream<S> {
     inner: S,
     counters: Arc<Counters>,
     stall: std::time::Duration,
-    /// When the current silence becomes a dead socket. `None` until the
-    /// first write: the greeting is read before anything is sent, and has
-    /// its own timeout.
-    deadline: Option<std::time::Instant>,
+    /// The last write, or the last byte read since: where the current silence
+    /// started. `None` until the first write, because the greeting is read
+    /// before anything is sent and has its own timeout.
+    active_at: Option<std::time::Instant>,
     timer: async_io::Timer,
+    /// What `timer` is set to, so a pending poll only re-registers it when
+    /// the deadline actually moved.
+    timer_at: Option<std::time::Instant>,
 }
 
 impl<S> CountingStream<S> {
     pub fn new(inner: S, counters: Arc<Counters>, stall: std::time::Duration) -> Self {
-        Self { inner, counters, stall, deadline: None, timer: async_io::Timer::never() }
+        Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None }
     }
 
     /// `Err` once the deadline has passed, arming the timer to wake this task
     /// at it otherwise.
     fn check_deadline(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<usize>> {
-        let Some(deadline) = self.deadline else { return Poll::Pending };
-        if IDLING.try_with(|_| ()).is_ok() {
-            return Poll::Pending;
+        let Some(active_at) = self.active_at else { return Poll::Pending };
+        let stall = match STALL.try_with(|s| *s) {
+            Ok(None) => return Poll::Pending,
+            Ok(Some(longer)) => longer,
+            Err(_) => self.stall,
+        };
+        let deadline = active_at + stall;
+        if self.timer_at != Some(deadline) {
+            self.timer.set_at(deadline);
+            self.timer_at = Some(deadline);
         }
-        self.timer.set_at(deadline);
         if std::time::Instant::now() < deadline && Pin::new(&mut self.timer).poll(cx).is_pending() {
             return Poll::Pending;
         }
@@ -112,21 +121,22 @@ impl<S> CountingStream<S> {
         // not-found, would-block) into something else.
         Poll::Ready(Err(std::io::Error::new(
             std::io::ErrorKind::TimedOut,
-            format!("connection lost: no reply from the server for {}s", self.stall.as_secs()),
+            format!("connection lost: no reply from the server for {}s", stall.as_secs()),
         )))
     }
 }
 
 tokio::task_local! {
-    /// Set while a read is silent by design (IDLE's wait).
-    static IDLING: ();
+    /// The command deadline for reads polled inside `with_stall`: `None` for
+    /// none at all, `Some(d)` for `d` instead of the stream's own.
+    static STALL: Option<std::time::Duration>;
 }
 
-/// Run `fut` with the command deadline off: for IDLE's wait, which a live
-/// server may leave silent for 29 minutes. Keep IDLE's `init` and `done`
-/// outside it, so a dead socket is still caught when IDLE starts or ends.
-pub async fn expecting_silence<F: Future>(fut: F) -> F::Output {
-    IDLING.scope((), fut).await
+/// Run `fut` with a different command deadline for every read it polls:
+/// `None` switches it off (IDLE's wait), `Some(d)` allows `d` of silence.
+/// See `imap::expecting_silence` and `imap::patient`.
+pub async fn with_stall<F: Future>(stall: Option<std::time::Duration>, fut: F) -> F::Output {
+    STALL.scope(stall, fut).await
 }
 
 impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
@@ -139,8 +149,8 @@ impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
         match polled {
             Poll::Ready(Ok(n)) if n > 0 => {
                 self.counters.down.fetch_add(n as u64, Ordering::Relaxed);
-                if self.deadline.is_some() {
-                    self.deadline = Some(std::time::Instant::now() + self.stall);
+                if self.active_at.is_some() {
+                    self.active_at = Some(std::time::Instant::now());
                 }
                 polled
             }
@@ -160,7 +170,7 @@ impl<S: async_std::io::Write + Unpin> async_std::io::Write for CountingStream<S>
         if let Poll::Ready(Ok(n)) = polled {
             self.counters.up.fetch_add(n as u64, Ordering::Relaxed);
             if n > 0 {
-                self.deadline = Some(std::time::Instant::now() + self.stall);
+                self.active_at = Some(std::time::Instant::now());
             }
         }
         polled
@@ -492,7 +502,7 @@ mod tests {
         async_std::task::block_on(async {
             let mut stream = send_command(addr).await;
             let mut buf = Vec::new();
-            expecting_silence(stream.read_to_end(&mut buf)).await.expect("IDLE is not a stall");
+            with_stall(None, stream.read_to_end(&mut buf)).await.expect("IDLE is not a stall");
             assert_eq!(buf.len(), 2);
         });
     }

@@ -9,7 +9,6 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 use crate::transfer_stats::CountingStream;
-pub use crate::transfer_stats::expecting_silence;
 
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
@@ -269,8 +268,30 @@ pub struct LightFullEmail {
 /// reset by every read that returns bytes, so a big body on a slow link still
 /// completes; a throttled Gmail answers each command in ~10s, so this stays
 /// well above that. `CountingStream` enforces it; IDLE's wait is exempt
-/// (`transfer_stats::expecting_silence`).
+/// (`expecting_silence`) and slow mutations and searches get longer (`patient`).
 pub const CMD_STALL: Duration = Duration::from_secs(15);
+
+/// The silence allowed inside `patient`: for one command a live server may
+/// legitimately work on without a word. A multi-thousand-UID MOVE on a
+/// throttled Gmail, a body-TEXT SEARCH, an APPEND the server files slowly.
+/// Cut off at `CMD_STALL`, those reported a failure for work the server did,
+/// and a retried APPEND or COPY filed the mail twice. Still a bound: a dead
+/// socket on one of these costs this, not the unbounded hang it did before.
+pub const PATIENT_STALL: Duration = Duration::from_secs(180);
+
+/// Run `fut` with the command deadline off: for IDLE's wait, which a live
+/// server may leave silent for 29 minutes. Keep IDLE's `init` and `done`
+/// outside it, so a dead socket is still caught when IDLE starts or ends.
+pub async fn expecting_silence<F: std::future::Future>(fut: F) -> F::Output {
+    crate::transfer_stats::with_stall(None, fut).await
+}
+
+/// Run `fut` allowing `PATIENT_STALL` of silence instead of `CMD_STALL`: for
+/// the single long commands above. Every mutation and server search in this
+/// file goes through it.
+pub async fn patient<F: std::future::Future>(fut: F) -> F::Output {
+    crate::transfer_stats::with_stall(Some(PATIENT_STALL), fut).await
+}
 
 /// Per-step bounds on a new connection. Before these only TCP had one, so a
 /// server that accepted the socket and then said nothing held the caller for
@@ -390,7 +411,7 @@ async fn starttls_upgrade(
     // Consume the greeting (`* OK ...`) — otherwise it would be mistaken for
     // the STARTTLS response.
     let mut greeting = String::new();
-    async_std::io::timeout(GREETING_TIMEOUT, reader.read_line(&mut greeting))
+    bounded_step(GREETING_TIMEOUT, reader.read_line(&mut greeting))
         .await
         .map_err(|e| format!("STARTTLS: failed to read greeting from {}: {}", config.host, e))?;
 
@@ -456,7 +477,7 @@ async fn authenticate_client(
         async_std::future::timeout(AUTH_TIMEOUT, auth)
             .await
             .map_err(|_| format!("XOAUTH2 auth for {} timed out after {}s", config.email, AUTH_TIMEOUT.as_secs()))?
-            .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))
+            .map_err(|(e, _)| sign_in_error(config, "XOAUTH2 auth failed", e))
     } else {
         let password = config
             .password
@@ -465,7 +486,21 @@ async fn authenticate_client(
         async_std::future::timeout(AUTH_TIMEOUT, client.login(&config.email, password))
             .await
             .map_err(|_| format!("Login for {} timed out after {}s", config.email, AUTH_TIMEOUT.as_secs()))?
-            .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))
+            .map_err(|(e, _)| sign_in_error(config, "Login failed", e))
+    }
+}
+
+/// `rejected for <email>: <e>`, unless the socket died first. The app reads
+/// "auth failed" / "Login failed" as a wrong password and asks the user to
+/// re-enter it; a sign-in the server never answered (`CMD_STALL`) is a
+/// network failure, and its text must stay a connection-lost one so the pool
+/// retries it.
+fn sign_in_error(config: &ImapConfig, rejected: &str, e: async_imap::error::Error) -> String {
+    let e = e.to_string();
+    if pool::is_connection_lost(&e) {
+        format!("connection lost while signing in to {}: {}", config.host, e)
+    } else {
+        format!("{} for {}: {}", rejected, config.email, e)
     }
 }
 
@@ -1471,8 +1506,7 @@ pub async fn set_flags(
 /// lost connection, and costs no extra round trip: the untagged lines are
 /// consumed on the way to the tag.
 async fn run_checked(session: &mut ImapSession, command: String, what: &str) -> Result<(), String> {
-    session
-        .run_command_and_check_ok(command)
+    patient(session.run_command_and_check_ok(command))
         .await
         .map_err(|e| format!("{} failed: {}", what, e))
 }
@@ -1527,6 +1561,10 @@ pub async fn run_collecting_copyuid(
     session: &mut ImapSession,
     command: String,
 ) -> Result<Option<Vec<u32>>, String> {
+    patient(collect_copyuid(session, command)).await
+}
+
+async fn collect_copyuid(session: &mut ImapSession, command: String) -> Result<Option<Vec<u32>>, String> {
     use imap_proto::{Response, ResponseCode, Status};
     let id = session
         .run_command(&command)
@@ -1929,8 +1967,8 @@ pub async fn create_mailbox(session: &mut ImapSession, path: &str) -> Result<(),
 /// why its result is dropped rather than checked.
 pub async fn rename_mailbox(session: &mut ImapSession, from: &str, to: &str) -> Result<(), String> {
     let _ = session.close().await;
-    session
-        .rename(from, to)
+    // Renaming a big folder moves every message in it: slow on Gmail.
+    patient(session.rename(from, to))
         .await
         .map_err(|e| format!("RENAME {} -> {} failed: {}", from, to, e))
 }
@@ -1942,8 +1980,7 @@ pub async fn delete_mailbox(session: &mut ImapSession, paths: &[String]) -> Resu
     let mut ordered: Vec<&String> = paths.iter().collect();
     ordered.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
     for p in &ordered {
-        session
-            .delete(p.as_str())
+        patient(session.delete(p.as_str()))
             .await
             .map_err(|e| format!("DELETE {} failed: {}", p, e))?;
     }
@@ -1991,8 +2028,7 @@ pub async fn append_email(
     let flag_list = if flags.is_empty() { None } else { Some(format!("({})", flags)) };
     let quoted_date = internal_date.map(|d| format!("\"{}\"", d));
 
-    session
-        .append(mailbox, flag_list.as_deref(), quoted_date.as_deref(), raw_email)
+    patient(session.append(mailbox, flag_list.as_deref(), quoted_date.as_deref(), raw_email))
         .await
         .map_err(|e| format!("IMAP APPEND to '{}' failed: {}", mailbox, e))?;
 
@@ -2039,7 +2075,7 @@ pub async fn bounded<T>(
 pub async fn uid_of_message_id(session: &mut ImapSession, message_id: &str) -> Result<Option<u32>, String> {
     let escaped = message_id.replace('\\', "\\\\").replace('"', "\\\"");
     let criteria = format!("HEADER Message-ID \"{}\"", escaped);
-    let set = session.uid_search(&criteria).await.map_err(|e| e.to_string())?;
+    let set = patient(session.uid_search(&criteria)).await.map_err(|e| e.to_string())?;
     Ok(set.iter().copied().max())
 }
 
@@ -2097,7 +2133,7 @@ pub async fn append_email_verified(
     );
     match tokio::time::timeout(
         std::time::Duration::from_secs(20),
-        session.run_command_and_check_ok(cmd_str),
+        patient(session.run_command_and_check_ok(cmd_str)),
     ).await {
         Ok(Ok(())) => {
             tracing::info!("[append_verified:append_ok] mailbox={}", mailbox);
@@ -2210,21 +2246,8 @@ pub async fn search_emails(
     search_emails_by(session, mailbox, &search).await
 }
 
-/// `search_emails` for every key `ServerSearch` carries.
-pub async fn search_emails_by(
-    session: &mut ImapSession,
-    mailbox: &str,
-    search: &ServerSearch<'_>,
-) -> Result<(Vec<EmailHeader>, u32), String> {
-    let _mbox = select_mailbox(session, mailbox).await?;
-
-    let criteria_parts = search.criteria();
-    if criteria_parts.is_empty() {
-        return Ok((Vec::new(), 0));
-    }
-
-    let search_str = criteria_parts.join(" ");
-
+/// `UID SEARCH <search_str>`, read through its tagged OK.
+async fn uid_search_to_tag(session: &mut ImapSession, search_str: &str) -> Result<Vec<u32>, String> {
     // async-imap's uid_search parser treats EOF before the tagged completion as
     // a successful empty result. Read the response through its tagged OK so a
     // dropped pooled socket reaches ImapPool's existing one-time read retry.
@@ -2263,6 +2286,27 @@ pub async fn search_emails_by(
             _ => {} // keepalives and other unsolicited responses can interleave
         }
     }
+    Ok(uids)
+}
+
+/// `search_emails` for every key `ServerSearch` carries.
+pub async fn search_emails_by(
+    session: &mut ImapSession,
+    mailbox: &str,
+    search: &ServerSearch<'_>,
+) -> Result<(Vec<EmailHeader>, u32), String> {
+    let _mbox = select_mailbox(session, mailbox).await?;
+
+    let criteria_parts = search.criteria();
+    if criteria_parts.is_empty() {
+        return Ok((Vec::new(), 0));
+    }
+
+    let search_str = criteria_parts.join(" ");
+
+    // A body-TEXT search on a big mailbox can keep a live server silent for
+    // longer than `CMD_STALL`.
+    let uids = patient(uid_search_to_tag(session, &search_str)).await?;
 
     let total_matches = uids.len() as u32;
 
@@ -2372,10 +2416,7 @@ async fn search_message_id_in(
         Err(e) => return Err(format!("SELECT {} failed: {}", mailbox, e)),
     }
 
-    match session
-        .uid_search(format!("HEADER \"Message-ID\" \"{}\"", term))
-        .await
-    {
+    match patient(session.uid_search(format!("HEADER \"Message-ID\" \"{}\"", term))).await {
         Ok(uids) => {
             let mut uids: Vec<u32> = uids.into_iter().collect();
             uids.sort_unstable();
