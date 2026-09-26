@@ -22,52 +22,15 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { openRowMenu as openMenu, rowMenuItems, clickRowAction, closeRowMenu } from './rowMenu.js';
 
 describe('Row menu delete scope', function () {
   this.timeout(120_000);
 
   // ── DOM helpers ───────────────────────────────────────────────────────────
 
-  const menuIsOpen = () => browser.execute(() => !!document.querySelector('[role="menu"]'));
-
-  const clickMenuTrigger = (index) => browser.execute((i) => {
-    const row = document.querySelectorAll('[data-testid="email-row"]')[i];
-    const btn = row?.querySelector('button[aria-label="Row actions"]');
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }, index);
-
-  /**
-   * Open the nth row's 3-dot menu, whatever state it is in.
-   *
-   * The trigger is `invisible` until the row is hovered — a real pointer would
-   * have to satisfy that, a `.click()` does not. And it TOGGLES: an action
-   * that closes the menu on its own (Archive closes only after its network
-   * write resolves) leaves a window in which one more click shuts the menu
-   * instead of opening it. So this asks for the end state, not the click.
-   */
-  const openRowMenu = async (index = 0) => {
-    await browser.waitUntil(async () => {
-      if (await menuIsOpen()) return true;
-      await clickMenuTrigger(index);
-      await browser.pause(200);
-      return menuIsOpen();
-    }, { timeout: 15_000, interval: 300, timeoutMsg: `Row ${index}'s action menu did not open` });
-    return true;
-  };
-
-  /** Every item in the open menu, by label. The panel is portalled to body. */
-  const menuItems = () => browser.execute(() =>
-    [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
-      .map(el => (el.textContent || '').trim()));
-
-  const clickMenuItem = (label) => browser.execute((needle) => {
-    for (const el of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-      if ((el.textContent || '').trim() === needle) { el.click(); return true; }
-    }
-    return false;
-  }, label);
+  /** Every label the open row menu offers. The panel is portalled to body. */
+  const menuItems = async () => (await rowMenuItems()).map(item => item.label);
 
   /** The state glyph's verdict for the nth row — 'archived*' once it is in
    *  the vault, 'server-only*' while it is not. */
@@ -100,6 +63,11 @@ describe('Row menu delete scope', function () {
     return false;
   }, label);
 
+  const openRowMenu = async (index = 0) => {
+    await openMenu({ index }, `Row ${index}'s action menu did not open`, 15_000);
+    return true;
+  };
+
   const PURGE_ITEM = /^Delete from (vault|backup|server and|server,)/;
 
   before(async function () {
@@ -122,7 +90,7 @@ describe('Row menu delete scope', function () {
   it('offers "Delete from server and vault" once the vault holds it too', async function () {
     // Archive from the menu that is already open — the same gesture a user
     // makes, and the only thing that changes the answer.
-    expect(await clickMenuItem('Archive')).toBe(true);
+    expect(await clickRowAction('archive')).toBe(true);
     await waitForRowState('archived');
 
     expect(await openRowMenu()).toBe(true);
@@ -137,7 +105,10 @@ describe('Row menu delete scope', function () {
   });
 
   it('confirms with the same words the item used, and cancels clean', async function () {
-    expect(await clickMenuItem('Delete from server and vault')).toBe(true);
+    // The purge item is the one that carries the scope in its name.
+    expect((await rowMenuItems()).find(item => item.action === 'deleteEverywhere')?.label)
+      .toBe('Delete from server and vault');
+    expect(await clickRowAction('deleteEverywhere')).toBe(true);
 
     await browser.waitUntil(async () => (await confirmDialog()) !== null,
       { timeout: 10_000, interval: 200, timeoutMsg: 'Delete confirmation never opened' });
@@ -165,7 +136,11 @@ describe('Row menu delete scope', function () {
 
   it('withdraws the purge again when the vault copy goes', async function () {
     expect(await openRowMenu()).toBe(true);
-    expect(await clickMenuItem('Unarchive')).toBe(true);
+    expect(await clickRowAction('unarchive')).toBe(true);
+    // Unarchive drops the vault copy, so it asks first, as the reader does.
+    await browser.waitUntil(async () => (await confirmDialog())?.title === 'Unarchive email?',
+      { timeout: 10_000, interval: 200, timeoutMsg: 'Unarchive never asked for confirmation' });
+    expect(await clickDialogButton('Unarchive')).toBe(true);
     await waitForRowState('server-only');
 
     expect(await openRowMenu()).toBe(true);
@@ -175,6 +150,6 @@ describe('Row menu delete scope', function () {
     expect(items.some(i => PURGE_ITEM.test(i))).toBe(false);
 
     // Leave the menu shut for whatever runs next.
-    await browser.execute(() => document.body.click());
+    await closeRowMenu();
   });
 });

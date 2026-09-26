@@ -24,63 +24,26 @@
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { openRowMenu, rowMenuIsOpen, clickRowAction } from './rowMenu.js';
 import { CROSS_FOLDER_SUBJECT } from './mockImap.js';
 import { imap } from './rawImap.js';
 
 const LUKE = 'luke@mock.test';
-const MOVE_ITEM = 'Move to folder';
 const TARGET = 'Archive';
 
 // ── DOM helpers ─────────────────────────────────────────────────────────────
 
-const menuIsOpen = () => browser.execute(() => !!document.querySelector('[role="menu"]'));
-
-const clickMenuItem = (label) => browser.execute((needle) => {
-  for (const el of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-    if ((el.textContent || '').trim() === needle) { el.click(); return true; }
-  }
-  return false;
-}, label);
-
 /**
- * Open the row menu of the first rendered row that matches: `{ subject }` for
- * a row carrying that text, or `{ withinOfBottom: px }` for the lowest row
- * whose bottom edge sits inside the window and within `px` of its bottom.
- * Plain data crosses into the page, never a function: the app's CSP has no
- * `unsafe-eval`, so a rebuilt callback is refused.
+ * Open the row menu of the first rendered row that matches: `{ subject,
+ * sender }` for a row carrying both, or `{ withinOfBottom: px }` for the lowest
+ * row whose bottom edge sits inside the window and within `px` of its bottom.
  */
-const openRowMenuWhere = async (match, why) => {
-  const clickTrigger = () => browser.execute((m) => {
-    const rows = [...document.querySelectorAll('[data-testid="email-row"]')].filter(r => r.offsetHeight > 0);
-    let row = null;
-    if (m.subject) {
-      // The subject alone also matches the "Re:" reply that sits in Sent —
-      // the newer message, so the first row. The hit wanted is the one from
-      // the other folder, and it is the only one whose row names the partner.
-      row = rows.find(r => {
-        const text = r.textContent || '';
-        return text.includes(m.subject) && !text.includes(`Re: ${m.subject}`) && text.includes(m.sender);
-      });
-    } else {
-      const inside = rows.filter(r => r.getBoundingClientRect().bottom <= window.innerHeight);
-      const last = inside[inside.length - 1];
-      if (last && last.getBoundingClientRect().bottom > window.innerHeight - m.withinOfBottom) row = last;
-    }
-    const btn = row?.querySelector('button[aria-label="Row actions"]');
-    if (!btn) return null;
-    const rect = row.getBoundingClientRect();
-    btn.click();
-    return { bottom: rect.bottom, text: (row.textContent || '').trim().slice(0, 60) };
-  }, match);
-  let row = null;
-  await browser.waitUntil(async () => {
-    if (await menuIsOpen()) return true;
-    row = await clickTrigger();
-    await browser.pause(250);
-    return menuIsOpen();
-  }, { timeout: 20_000, interval: 300, timeoutMsg: why });
-  return row;
-};
+const openRowMenuWhere = (m, why) => openRowMenu(m.subject
+  // The subject alone also matches the "Re:" reply that sits in Sent — the
+  // newer message, so the first row. The hit wanted is the one from the other
+  // folder, and it is the only one whose row names the partner.
+  ? { text: [m.subject, m.sender], not: `Re: ${m.subject}` }
+  : m, why, 20_000);
 
 const dropdownState = () => browser.execute(() => {
   const d = document.querySelector('[data-testid="move-to-folder-dropdown"]');
@@ -130,6 +93,8 @@ describe('Row menu — Move to folder', function () {
   });
 
   // ── 1. the menu, and the folder list beside it, stay inside the window ────
+  // The harness seeds the row surface as favorite-menu (wdio.conf.js), a list
+  // menu that hangs from the row's trigger: the geometry the report was about.
 
   it('opens the menu on the lowest visible row inside the window', async function () {
     // The lowest row whose bottom edge is inside the window. Its menu hangs
@@ -141,7 +106,7 @@ describe('Row menu — Move to folder', function () {
     await browser.pause(400); // the open animation
 
     const menu = await browser.execute(() => {
-      const m = document.querySelector('[role="menu"]');
+      const m = document.querySelector('[role="menu"][data-surface="row"]');
       const r = m.getBoundingClientRect();
       return { top: r.top, bottom: r.bottom, height: m.offsetHeight, innerHeight: window.innerHeight, shift: m.dataset.viewportShift || null };
     });
@@ -154,7 +119,7 @@ describe('Row menu — Move to folder', function () {
   });
 
   it('opens the folder list beside that menu inside the window too', async function () {
-    expect(await clickMenuItem(MOVE_ITEM)).toBe(true);
+    expect(await clickRowAction('move')).toBe(true);
     await waitFor(async () => (await dropdownState())?.height > 0, 'the folder list never opened');
     await browser.pause(400);
 
@@ -167,7 +132,7 @@ describe('Row menu — Move to folder', function () {
     expect(d.top).toBeGreaterThanOrEqual(0);
 
     await closeEverything();
-    await waitFor(async () => !(await menuIsOpen()), 'Escape did not close the menu');
+    await waitFor(async () => !(await rowMenuIsOpen()), 'Escape did not close the menu');
   });
 
   // ── 2. a search hit from another folder moves under its own folder ────────
@@ -225,7 +190,7 @@ describe('Row menu — Move to folder', function () {
         { subject: CROSS_FOLDER_SUBJECT, sender: 'Partner' },
         `no result row for "${CROSS_FOLDER_SUBJECT}" from Partner was rendered`,
       );
-      expect(await clickMenuItem(MOVE_ITEM)).toBe(true);
+      expect(await clickRowAction('move')).toBe(true);
       await waitFor(async () => (await dropdownState())?.height > 0, 'the folder list never opened');
       expect(await pickTarget(TARGET)).toBe(true);
       moved = true;

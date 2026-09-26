@@ -15,6 +15,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { openRowMenu as openMenu, clickRowAction } from './rowMenu.js';
 import { startMockImap, mailbox, mockAccount } from './mockImap.js';
 
 const OWNER = 'bson73@mock.test';
@@ -46,7 +47,6 @@ const BRANCH_FOLDERS = 4;
 const MOVED = 'Nested company 401';
 const STAYS = ['Nested kunden 301', 'Nested project 501', 'Nested meier 601'];
 const MOVE_TARGET = 'INBOX.Trash';
-const MOVE_ITEM = 'Move to folder';
 
 describe('Dovecot INBOX prefix', function () {
   this.timeout(180_000);
@@ -90,22 +90,10 @@ describe('Dovecot INBOX prefix', function () {
   // ── Driving the row menu's Move to folder ────────────────────────────────
   // Plain data crosses into the page, never a function: the app's CSP has no
   // `unsafe-eval`, so a rebuilt callback is refused.
-  const openRowMenu = (subject) => browser.execute((want) => {
-    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-      .filter(r => r.offsetHeight > 0)
-      .find(r => (r.textContent || '').includes(want));
-    const btn = row?.querySelector('button[aria-label="Row actions"]');
-    if (!btn) return false;
-    btn.click();
+  const openRowMenu = async (subject) => {
+    await openMenu({ text: subject }, `"${subject}"'s action menu did not open`);
     return true;
-  }, subject);
-
-  const clickMenuItem = (label) => browser.execute((needle) => {
-    for (const el of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-      if ((el.textContent || '').trim() === needle) { el.click(); return true; }
-    }
-    return false;
-  }, label);
+  };
 
   const dropdownHeight = () => browser.execute(() =>
     document.querySelector('[data-testid="move-to-folder-dropdown"]')?.offsetHeight || 0);
@@ -235,7 +223,7 @@ describe('Dovecot INBOX prefix', function () {
     await markScope();
 
     expect(await openRowMenu(MOVED)).toBe(true);
-    expect(await clickMenuItem(MOVE_ITEM)).toBe(true);
+    expect(await clickRowAction('move')).toBe(true);
     await browser.waitUntil(async () => (await dropdownHeight()) > 0,
       { timeout: 20_000, interval: 300, timeoutMsg: 'the folder list never opened' });
     expect(await pickTarget(MOVE_TARGET)).toBe(true);

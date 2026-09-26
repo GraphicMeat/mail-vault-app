@@ -21,6 +21,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { openRowMenu as openMenu, rowMenuItems, clickRowAction } from './rowMenu.js';
 import { CROSS_FOLDER_SUBJECT, CROSS_FOLDER_INBOX_BODY } from './mockImap.js';
 import {
   closeComposeHard,
@@ -95,17 +96,8 @@ async function clickTestid(testid, scopeIndex = null) {
   return ok;
 }
 
-const menuIsOpen = () => browser.execute(() => !!document.querySelector('[role="menu"]'));
-
-const menuLabels = () => browser.execute(() =>
-  [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(el => (el.textContent || '').trim()));
-
-const clickMenuItem = (label) => browser.execute((needle) => {
-  for (const el of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-    if ((el.textContent || '').trim() === needle) { el.click(); return true; }
-  }
-  return false;
-}, label);
+/** The labels the open row menu offers (icon-only wedges carry them in aria-label). */
+const menuLabels = async () => (await rowMenuItems()).map(item => item.label);
 
 /**
  * `browser.waitUntil` whose failure names what never happened AND what the
@@ -189,25 +181,11 @@ async function openThread(subject) {
   );
 }
 
-/** Open the 3-dot menu of the first rendered row carrying `subject`. */
+/** Open the actions menu of the first rendered row carrying `subject`. */
 async function openRowMenu(subject) {
-  await waitFor(
-    async () => {
-      if (await menuIsOpen()) return { open: true, rows: [] };
-      await browser.execute((subj) => {
-        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-          .filter(r => r.offsetHeight > 0)
-          .find(r => (r.textContent || '').includes(subj));
-        row?.querySelector('button[aria-label="Row actions"]')?.click();
-      }, subject);
-      await browser.pause(250);
-      return { open: await menuIsOpen(), rows: await visibleRows() };
-    },
-    (s) => s.open,
-    `the row menu never opened on the row carrying "${subject}"`,
-    20_000,
-    300,
-  );
+  const row = await openMenu({ text: subject },
+    `the row menu never opened on the row carrying "${subject}" — rows: ${JSON.stringify(await visibleRows())}`, 20_000);
+  return row;
 }
 
 /** The index of the folded thread message whose snippet already reads `snippet`. */
@@ -471,7 +449,7 @@ describe('Reply entry points — header, thread message, row menu', function () 
   it('the row menu replies with the body loaded', async function () {
     await openRowMenu(SUBJECT);
     expect(await menuLabels()).toContain('Reply');
-    expect(await clickMenuItem('Reply')).toBe(true);
+    expect(await clickRowAction('reply')).toBe(true);
 
     const compose = await prefilledCompose(
       'the row menu\'s Reply opened no compose window addressed to the sender',
@@ -503,7 +481,7 @@ describe('Reply entry points — header, thread message, row menu', function () 
   it('the row menu starts a new conversation with the sender', async function () {
     await openRowMenu(SUBJECT);
     expect(await menuLabels()).toContain(`New message to ${SENDER_NAME}`);
-    expect(await clickMenuItem(`New message to ${SENDER_NAME}`)).toBe(true);
+    expect(await clickRowAction('newMessage')).toBe(true);
 
     const compose = await prefilledCompose(
       'the row menu\'s "New message to" opened no compose window addressed to the sender',

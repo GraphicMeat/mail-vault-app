@@ -42,6 +42,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { MOCK_PASSWORD } from './mockImap.js';
+import { openRowMenu as openMenu, clickRowAction } from './rowMenu.js';
 import { waitForApp, waitForEmails } from './helpers.js';
 
 const YODA = 'yoda@mock.test';
@@ -192,34 +193,8 @@ describe('A finished delete and the message opened while it ran', function () {
     return last;
   }
 
-  const menuIsOpen = () => browser.execute(() => !!document.querySelector('[role="menu"]'));
-
-  /**
-   * Open the row's 3-dot menu, whatever state it is in.
-   *
-   * The trigger is `invisible` until hover — a real pointer satisfies that, a
-   * `.click()` does not — and it TOGGLES, so one more click on an already-open
-   * menu shuts it. Ask for the end state, not the click.
-   */
-  async function openRowMenu(needle) {
-    await browser.waitUntil(async () => {
-      if (await menuIsOpen()) return true;
-      await browser.execute((s) => {
-        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-          .find((r) => (r.textContent || '').includes(s));
-        row?.querySelector('button[aria-label="Row actions"]')?.click();
-      }, needle);
-      await browser.pause(200);
-      return menuIsOpen();
-    }, { timeout: 30_000, interval: 300, timeoutMsg: `"${needle}"'s action menu did not open` });
-  }
-
-  const clickMenuItem = (label) => browser.execute((needle) => {
-    for (const el of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-      if ((el.textContent || '').trim() === needle) { el.click(); return true; }
-    }
-    return false;
-  }, label);
+  /** Open the row's actions menu, whatever state it is in (tests/e2e/rowMenu.js). */
+  const openRowMenu = (needle) => openMenu({ text: needle }, `"${needle}"'s action menu did not open`);
 
   const clickDialogButton = (label) => browser.execute((needle) => {
     for (const btn of document.querySelectorAll('[role="alertdialog"] button')) {
@@ -259,7 +234,7 @@ describe('A finished delete and the message opened while it ran', function () {
     // 2. …and deletes it. The row menu is the same workflow the reading pane's
     //    own Delete reaches, and it is the one this harness can drive.
     await openRowMenu(DELETED);
-    expect(await clickMenuItem('Delete from server')).toBe(true);
+    expect(await clickRowAction('deleteServer')).toBe(true);
     await browser.waitUntil(async () => !!(await clickDialogButton('Delete from server')), {
       timeout: 30_000, interval: 300, timeoutMsg: 'Delete confirmation never offered its button',
     });

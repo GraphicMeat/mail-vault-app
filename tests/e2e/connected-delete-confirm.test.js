@@ -14,6 +14,7 @@
  * Driven through the row's own menu, the way a person deletes one message.
  */
 
+import { openRowMenu as openMenu, clickRowAction, rowMenuItems } from './rowMenu.js';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 
 const LUKE = 'luke@mock.test';
@@ -43,44 +44,8 @@ describe('Confirm before deleting', function () {
     return dialog ? (dialog.innerText || '').replace(/\s*\n\s*/g, ' | ').trim() : null;
   });
 
-  const menuIsOpen = () => browser.execute(() => !!document.querySelector('[role="menu"]'));
-
-  /**
-   * The row's overflow menu. Addressed by the quick-action trigger's own title
-   * ("Quick actions"), not by the older `aria-label="Row actions"` — that name
-   * is gone since the quick-action controls were reworked, and a dozen specs
-   * still reach for labels from before it.
-   */
-  async function openRowMenu(needle) {
-    await browser.waitUntil(async () => {
-      if (await menuIsOpen()) return true;
-      await browser.execute((want) => {
-        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-          .find((r) => (r.textContent || '').includes(want));
-        row?.querySelector('button[title="Quick actions"]')?.click();
-      }, needle);
-      await browser.pause(200);
-      return menuIsOpen();
-    }, { timeout: 30_000, interval: 300, timeoutMsg: `"${needle}"'s action menu did not open` });
-  }
-
-  /**
-   * A menu entry by its visible label. QuickActions carries no per-action
-   * testid (the one in RowQuickActions.test.jsx belongs to that spec's mock),
-   * and the labels are custody-dependent prose — "Delete from server" for a
-   * server copy, "Delete from server and vault" for an archived one — so each
-   * caller passes the label it expects that row to offer. A disabled entry
-   * answers false rather than silently doing nothing.
-   */
-  const clickMenuItem = (label) => browser.execute((want) => {
-    for (const item of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
-      if ((item.textContent || '').trim() !== want) continue;
-      if (item.disabled) return false;
-      item.click();
-      return true;
-    }
-    return false;
-  }, label);
+  /** Open the row's actions menu, whatever state it is in (tests/e2e/rowMenu.js). */
+  const openRowMenu = (needle) => openMenu({ text: needle }, `"${needle}"'s action menu did not open`);
 
   const clickDialogButton = (label) => browser.execute((needle) => {
     for (const btn of document.querySelectorAll('[role="alertdialog"] button')) {
@@ -141,7 +106,7 @@ describe('Confirm before deleting', function () {
   it('asks before deleting, by default', async function () {
     expect(await setConfirm(true)).toBe(true);
     await openRowMenu(cancelled);
-    expect(await clickMenuItem('Delete from server')).toBe(true);
+    expect(await clickRowAction('deleteServer')).toBe(true);
 
     await browser.waitUntil(async () => !!(await dialogOpen()), {
       timeout: 30_000, interval: 200, timeoutMsg: 'The delete confirmation never appeared',
@@ -159,7 +124,7 @@ describe('Confirm before deleting', function () {
   it('deletes on the click once the preference is off', async function () {
     expect(await setConfirm(false)).toBe(false);
     await openRowMenu(skipped);
-    expect(await clickMenuItem('Delete from server')).toBe(true);
+    expect(await clickRowAction('deleteServer')).toBe(true);
 
     // The row has to go, and no question may be asked on the way — polled
     // together, because "the dialog was gone when I looked" proves nothing if
@@ -184,7 +149,9 @@ describe('Confirm before deleting', function () {
     await openRowMenu(archived);
     // Named for the places the message is in ("Delete from server and vault"
     // for an archived one), so it is addressed by action, not by prose.
-    expect(await clickMenuItem('Delete from server and vault')).toBe(true);
+    expect((await rowMenuItems()).find(item => item.action === 'deleteEverywhere')?.label)
+      .toBe('Delete from server and vault');
+    expect(await clickRowAction('deleteEverywhere')).toBe(true);
 
     const text = await browser.waitUntil(async () => (await dialogOpen()) || false, {
       timeout: 30_000, interval: 200,
