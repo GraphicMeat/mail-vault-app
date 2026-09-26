@@ -468,6 +468,8 @@ async fn daemon_main() {
         snooze: snooze_worker::SnoozeState::default(),
         auto_tag_worker,
     });
+    // An IDLE arrival's body is stored through the daemon's own vault write.
+    state.idle.set_daemon(&state);
 
     // Custody, before the socket exists (Task 2.9b Step 1): a route that
     // reads an entry must never be served by a store that is not open yet.

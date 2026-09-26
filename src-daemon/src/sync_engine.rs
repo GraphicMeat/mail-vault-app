@@ -38,6 +38,13 @@ pub struct SyncResult {
     /// `success:false`, which the app renders as a *server* error — the wrong
     /// story, and the wrong remedy, when the Wi-Fi is simply off.
     pub offline: bool,
+    /// The uids `arrivals` counts, for the IDLE watcher to fetch bodies of.
+    #[serde(skip)]
+    pub arrival_uids: Vec<u32>,
+    /// The arrivals were already published (`note_change`) mid-sync — only a
+    /// `sync_account_announcing` sync does that.
+    #[serde(skip)]
+    pub announced: bool,
 }
 
 /// One "something changed on the server" event, as the app reads it.
@@ -389,6 +396,20 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
     ) -> SyncResult {
+        self.sync_account_with(account, mailbox, false).await
+    }
+
+    /// `sync_account` that publishes its arrivals (`note_change`) the moment
+    /// their headers are cached, before the flag step and the reconcile — on
+    /// a 4000-message INBOX whose counts disagree, the reconcile alone took
+    /// 51 s, and the new message waited behind it. The IDLE watcher's sync:
+    /// the app's own `sync.now` reports through its result, and publishing
+    /// there too would be a second banner for one message.
+    pub async fn sync_account_announcing(&self, account: &SyncAccount, mailbox: &str) -> SyncResult {
+        self.sync_account_with(account, mailbox, true).await
+    }
+
+    async fn sync_account_with(&self, account: &SyncAccount, mailbox: &str, announce: bool) -> SyncResult {
         let account_id = &account.id;
 
         // No connectivity: return without touching the network. This is the
@@ -403,6 +424,7 @@ impl SyncEngine {
                 success: false,
                 error: Some("No internet connection".to_string()),
                 offline: true,
+                arrival_uids: Vec::new(), announced: false,
             };
         }
 
@@ -424,6 +446,7 @@ impl SyncEngine {
                 mailbox: mailbox.to_string(),
                 new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
                 success: false, error: Some(reason), offline: false,
+                arrival_uids: Vec::new(), announced: false,
             };
         }
 
@@ -461,7 +484,7 @@ impl SyncEngine {
 
         info!("[sync] Starting sync for {} ({})", account.email, mailbox);
 
-        let mut result = self.do_sync(account, mailbox).await;
+        let mut result = self.do_sync(account, mailbox, announce).await;
 
         // Teach the gate what just happened. A success is proof of reach; a
         // connect-shaped failure only *asks* — `note_failure` probes and the
@@ -546,9 +569,10 @@ impl SyncEngine {
         &self,
         account: &SyncAccount,
         mailbox: &str,
+        announce: bool,
     ) -> SyncResult {
         let account_id = account.id.clone();
-        let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh)).await;
+        let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh, announce)).await;
         match outcome {
             Ok((delta, mailbox)) => SyncResult {
                 account_id,
@@ -560,12 +584,15 @@ impl SyncEngine {
                 success: true,
                 error: None,
                 offline: false,
+                arrival_uids: delta.arrival_uids,
+                announced: delta.announced,
             },
             Err(e) => SyncResult {
                 account_id,
                 mailbox: mailbox.to_string(),
                 new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
                 success: false, error: Some(e), offline: false,
+                arrival_uids: Vec::new(), announced: false,
             },
         }
     }
@@ -577,6 +604,7 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         fresh: bool,
+        announce: bool,
     ) -> Result<(SyncDelta, String), String> {
         let account_id = &account.id;
         let config = &account.imap_config;
@@ -595,7 +623,7 @@ impl SyncEngine {
         // the folder is not there.
         let requested = mailbox;
         let mut mailbox = self.alias_for(account_id, requested).await;
-        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
             if mailbox != requested {
@@ -612,7 +640,7 @@ impl SyncEngine {
                 // asking the server to resolve it: `resolve_mailbox` answers
                 // None for an exact match, so this is the only path that finds
                 // a plain folder by the requested name in the same tick.
-                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore).await;
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce).await;
             }
         }
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
@@ -621,7 +649,7 @@ impl SyncEngine {
                     "[sync] {} has no '{}' — syncing '{}' instead",
                     account.email, requested, actual
                 );
-                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore).await;
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce).await;
                 mailbox = actual;
             }
         }
@@ -653,6 +681,7 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         has_condstore: bool,
+        announce: bool,
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
 
@@ -701,7 +730,10 @@ impl SyncEngine {
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
             // A backfill, not a delivery: there is no earlier cache to call any
             // of these an arrival against.
-            return Ok(SyncDelta { new_emails, arrivals: 0, updated_flags: 0, total_emails: total, session_dirty: false });
+            return Ok(SyncDelta {
+                new_emails, arrivals: 0, updated_flags: 0, total_emails: total, session_dirty: false,
+                arrival_uids: Vec::new(), announced: false,
+            });
         }
 
         // ── Delta path ──
@@ -742,15 +774,28 @@ impl SyncEngine {
         // cache, and announcing what it already put on screen is a second
         // banner for one message. Read before the header write at the bottom,
         // and only when something was fetched, so a quiet sync pays nothing.
-        let arrivals = if new_headers.is_empty() {
-            0
+        let arrival_uids: Vec<u32> = if new_headers.is_empty() {
+            Vec::new()
         } else {
             let have = cache_io(&io, |io| Ok(io.cached_uids())).await?;
             new_headers
                 .iter()
                 .filter(|h| h.uid >= cached_uid_next && !have.contains(&h.uid))
-                .count()
+                .map(|h| h.uid)
+                .collect()
         };
+        let arrivals = arrival_uids.len();
+
+        // Publish arrivals now, not after the flag step and the reconcile
+        // below — see `sync_account_announcing`. The headers go in first, so
+        // the app's repaint finds the rows; the meta waits for the end as
+        // before, so a sync that fails later is retried from the same place.
+        let announced = announce && arrivals > 0;
+        if announced {
+            let headers = new_headers.clone();
+            cache_io(&io, move |io| io.write_headers(&headers)).await?;
+            self.note_change(account_id, mailbox, arrivals, 0);
+        }
 
         // 2. Flag changes — CONDSTORE tells us exactly which UIDs moved.
         let mut updated_flags = 0;
@@ -860,7 +905,7 @@ impl SyncEngine {
         let new_count = new_headers.len();
         cache_io(&io, move |io| {
             io.write_meta(total, uid_validity, server_uid_next, highest_modseq, reconciled_at, sync_total)?;
-            if new_headers.is_empty() {
+            if new_headers.is_empty() || announced {
                 return Ok(());
             }
             io.write_headers(&new_headers)
@@ -878,6 +923,8 @@ impl SyncEngine {
             updated_flags,
             total_emails: total,
             session_dirty,
+            arrival_uids,
+            announced,
         })
     }
 
@@ -1378,6 +1425,8 @@ struct SyncDelta {
     /// best-effort). The session may hold unread bytes, so it must be dropped
     /// rather than pooled.
     session_dirty: bool,
+    arrival_uids: Vec<u32>,
+    announced: bool,
 }
 
 /// A UIDNEXT jump larger than this is cheaper to resolve with a page fetch
@@ -1424,6 +1473,8 @@ mod tests {
             success: true,
             error: None,
             offline: false,
+            arrival_uids: vec![1],
+            announced: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"new_emails\":5"));

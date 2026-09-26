@@ -91,6 +91,97 @@ where
     }
 }
 
+/// Store a fetched message in the vault as a cache copy: `<uid>:2,.eml`, no
+/// `A` (only a backup vouching for it adds that), never over an existing
+/// file. `true`: a copy is there now, written or already present. A failure
+/// only warns — a cache miss must not fail what the user is looking at.
+async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>) -> bool {
+    let state2 = Arc::clone(state);
+    let cache_result = blocking(move || -> Result<bool, String> {
+        with_mailbox_write(&state2, &account_id, &mailbox, |root| {
+            vault_files::store(&state2.vault_registry, root, &account_id, &mailbox, uid, &raw, &[], false)
+        })
+    })
+    .await;
+    match cache_result {
+        // A write nudges the index through the registry's change hook;
+        // `false` = already cached, no nudge, matching maildir_store_raw.
+        Ok(Ok(_)) => true,
+        Ok(Err(err)) => {
+            warn!("Failed to auto-cache .eml for UID {}: {}", uid, err);
+            false
+        }
+        Err(join_err) => {
+            warn!("Failed to auto-cache .eml for UID {}: task join error: {}", uid, join_err);
+            false
+        }
+    }
+}
+
+/// Download the bodies of mail the IDLE watcher just announced and keep them
+/// the way an opened message is kept (`auto_cache`), so a new message reads
+/// offline and is searchable by its text within seconds. The app's own gate
+/// for caching bodies applies: none for a hidden account, none for a message
+/// dated before the local-copy window (`EmailPipelineManager._getUncachedUids`).
+pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sync_engine::SyncAccount, mailbox: &str, uids: &[u32]) {
+    if uids.is_empty() {
+        return;
+    }
+    let app_dir = state.app_dir.clone();
+    let account_id = account.id.clone();
+    let Ok(Some(months)) = blocking(move || local_copy_months(&app_dir, &account_id)).await else {
+        return;
+    };
+    let cutoff = (months > 0)
+        .then(|| chrono::Utc::now().checked_sub_months(chrono::Months::new(months)))
+        .flatten()
+        .map(|d| d.timestamp());
+    for &uid in uids {
+        let fetch = state.imap_pool.run_read(&account.imap_config, false, |mut session| {
+            let mb = mailbox.to_string();
+            async move {
+                let email = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await?;
+                Ok((email, session, Some(mb)))
+            }
+        });
+        let email = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
+            Ok(Ok(Some(email))) => email,
+            Ok(Ok(None)) => continue,
+            Ok(Err(e)) => {
+                warn!("[idle] {}: arrival body {} not cached: {}", account.email, uid, e);
+                continue;
+            }
+            Err(_) => {
+                warn!("[idle] {}: arrival body {} timed out", account.email, uid);
+                continue;
+            }
+        };
+        let dated = email.date.as_deref().or(email.internal_date.as_deref()).and_then(|d| {
+            mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|t| t.timestamp()))
+        });
+        if matches!((cutoff, dated), (Some(c), Some(d)) if d < c) {
+            continue;
+        }
+        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes).await;
+    }
+}
+
+/// The app's local-copy window for `account_id`, in months (0 = all mail),
+/// read from its persisted settings the way the transfer cap is
+/// (`sync_engine::read_transfer_limits`). `None`: a hidden account, which the
+/// app never caches bodies for. An unreadable file reads as the app's
+/// defaults: visible, three months.
+fn local_copy_months(app_dir: &std::path::Path, account_id: &str) -> Option<u32> {
+    let settings = std::fs::read_to_string(app_dir.join("frontend-settings.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+    let state = settings.as_ref().and_then(|s| s.get("mailvault-settings")?.get("state"));
+    if state.and_then(|s| s.get("hiddenAccounts")?.get(account_id)?.as_bool()) == Some(true) {
+        return None;
+    }
+    Some(state.and_then(|s| s.get("localCacheDurationMonths")?.as_u64()).unwrap_or(3) as u32)
+}
+
 /// Ported from `commands.rs` verbatim: a pooled socket the peer closed while
 /// it sat idle answers its first command with a connection-lost error, which
 /// reads to the user as the server refusing a message that's sitting right
@@ -378,28 +469,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // `e.uid` (the server's answer), not the request's `uid` —
                     // matches `maildir_store_raw`'s original call, which
                     // stored under the fetched email's own uid.
-                    let store_uid = e.uid;
                     let aid = account_id.clone().unwrap_or_else(|| account.email.clone());
+                    let store_uid = e.uid;
                     let mb = mb_clone.clone();
-                    let raw = e.raw_source_bytes.clone();
-                    let state2 = Arc::clone(state);
-                    let aid2 = aid.clone();
-                    let mb2 = mb.clone();
-                    let cache_result = blocking(move || -> Result<bool, String> {
-                        with_mailbox_write(&state2, &aid2, &mb2, |root| {
-                            vault_files::store(&state2.vault_registry, root, &aid2, &mb2, store_uid, &raw, &[], false)
-                        })
-                    })
-                    .await;
                     // `store` answered Ok: written now, or a file was already there.
-                    let cached = matches!(cache_result, Ok(Ok(_)));
-                    match cache_result {
-                        // A write nudges the index through the registry's change hook.
-                        Ok(Ok(true)) => {}
-                        Ok(Ok(false)) => {} // already cached — no nudge, matching maildir_store_raw
-                        Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", store_uid, err),
-                        Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", store_uid, join_err),
-                    }
+                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone()).await;
                     // OpenPGP: decrypted in memory whatever the cache did; the
                     // decrypted copy is kept only when the vault holds the message.
                     let raw = e.raw_source_bytes.clone();

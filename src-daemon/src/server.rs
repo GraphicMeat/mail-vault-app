@@ -718,7 +718,7 @@ impl DaemonState {
         // (or one shared dir) as `app_dir`, and one file under two roots wipes.
         let registry_dir = tempfile::tempdir().expect("registry tempdir").keep();
         let vault_registry = open_vault_registry(&registry_dir, &mail_dir, &search_index);
-        Arc::new(DaemonState {
+        let state = Arc::new(DaemonState {
             net,
             idle,
             token: "a".repeat(64),
@@ -754,7 +754,9 @@ impl DaemonState {
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             auto_tag_worker,
-        })
+        });
+        state.idle.set_daemon(&state);
+        state
     }
 }
 
