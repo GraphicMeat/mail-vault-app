@@ -124,6 +124,45 @@ function rfc822({ uid, to, from, subject, body, date }) {
   ].join('\n');
 }
 
+// OpenPGP (connected-pgp.test.js): one PGP/MIME message, encrypted by GnuPG to
+// a TEST-ONLY key. Both armored files are shared with the Rust tests.
+const PGP_FIXTURES = join(REPO_ROOT, 'src-core/tests/fixtures');
+export const PGP_TEST_KEY = readFileSync(join(PGP_FIXTURES, 'pgp-TEST-ONLY-key.asc'), 'utf-8');
+export const PGP_SUBJECT = 'Sealed OpenPGP plans';
+export const PGP_SECRET_TEXT = 'The vault combination is 7 3 9 1.';
+
+function pgpMessage({ uid, to }) {
+  const { internalDate, header } = stamp(uid);
+  const armored = readFileSync(join(PGP_FIXTURES, 'pgp-TEST-ONLY-message.asc'), 'utf-8').trim();
+  return {
+    uid,
+    flags: [],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: [
+      'From: Leia <leia@mock.test>',
+      `To: ${to}`,
+      `Subject: ${PGP_SUBJECT}`,
+      `Date: ${header}`,
+      `Message-ID: <mock-pgp-${uid}@mock.test>`,
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="mvpgp"',
+      '',
+      '--mvpgp',
+      'Content-Type: application/pgp-encrypted',
+      '',
+      'Version: 1',
+      '',
+      '--mvpgp',
+      'Content-Type: application/octet-stream; name="encrypted.asc"',
+      '',
+      armored,
+      '--mvpgp--',
+      '',
+    ].join('\r\n'),
+  };
+}
+
 /**
  * An HTML message quoting an earlier one — the shape MailVault's own replies
  * take (multipart/alternative, quote wrapped in <blockquote>). Every other mock
@@ -865,6 +904,7 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
       owner, attrs: ['\\HasNoChildren'], subjectPrefix: extraMailbox.subjectPrefix,
       uidStart: extraMailbox.uidStart || 1,
     }));
+    if (extraMailbox.pgpUid) append(mailboxes[mailboxes.length - 1], [pgpMessage({ uid: extraMailbox.pgpUid, to: owner })]);
   }
 
   // After extraMailbox on purpose. The LAST-in-the-array rule above is

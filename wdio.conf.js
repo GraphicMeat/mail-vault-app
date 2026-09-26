@@ -138,7 +138,10 @@ let MOCK_ACCOUNTS = [
     // 9302 is left unfaulted on purpose: same folder, same account, and it must
     // render — which is what makes 9301's failure a property of the message and
     // not of the folder.
-    extraMailbox: { name: 'Flaky', count: 2, subjectPrefix: 'Flaky message', uidStart: 9301 },
+    //
+    // 9303 is connected-pgp's OpenPGP-encrypted message, parked here because
+    // this folder is only ever read by subject: nothing counts its messages.
+    extraMailbox: { name: 'Flaky', count: 2, subjectPrefix: 'Flaky message', uidStart: 9301, pgpUid: 9303 },
     // bson73's shape (discussion #1): five levels, and the leaf at the bottom
     // of two different branches has the same name. Parked on luke because it is
     // the only account no skipFolders spec counts folders through.
@@ -520,6 +523,8 @@ export const config = {
           ...isolatedEnv,
           // Credentials come from a file, so the run never touches the real keychain
           MAILVAULT_TEST_CREDENTIALS: credentialsPath,
+          // OpenPGP keys from a file too (connected-pgp imports one).
+          MAILVAULT_TEST_PGP_KEYS: join(testDataDir, 'pgp-keys.json'),
           // Mock IMAP is plaintext; the app honors this for loopback only
           MAILVAULT_IMAP_PLAINTEXT: '1',
           // Same hatch for the mock SMTP listener, same loopback-only rule.
