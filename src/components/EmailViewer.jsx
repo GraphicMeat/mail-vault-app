@@ -44,6 +44,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
+import { PgpDecryptedBadge, PgpLockedNotice } from './email/PgpStatus';
 import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
 import { replySelection } from '../utils/replySelection';
@@ -755,10 +756,13 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
         <div className="p-3 flex-1 flex flex-col">
+          {!showRaw && <PgpDecryptedBadge email={selectedEmail} />}
           {showRaw && (rawSource || rawError) ? (
             <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
               {rawError || atob(rawSource)}
             </pre>
+          ) : selectedEmail.pgp === 'locked' ? (
+            <PgpLockedNotice />
           ) : selectedEmail.html ? (
             // Outer wrapper matches app theme so DR-inverted iframe content
             // blends seamlessly. In light mode, white wrapper + white iframe.

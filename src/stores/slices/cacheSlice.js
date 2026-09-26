@@ -57,6 +57,9 @@ export const createCacheSlice = (set, get) => ({
   // Add email to cache with size limit enforcement
   // Strips rawSource and attachment content to minimize memory footprint
   addToCache: (cacheKey, email, cacheLimitMB, { prefetch = false } = {}) => {
+    // Encrypted with no key yet: the next open must ask the daemon again, so
+    // a key imported since then decrypts it.
+    if (email?.pgp === 'locked') return;
     const { emailCache } = get();
 
     // Strip heavy fields before caching — rawSource is already on disk as .eml,

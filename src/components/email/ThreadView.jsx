@@ -8,6 +8,7 @@ import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
 import { resolveEmailLocation, selectionKey } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
+import { PgpDecryptedBadge, PgpLockedNotice } from './PgpStatus';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
@@ -227,8 +228,11 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     );
   }
 
+  if (loadedEmail.pgp === 'locked') return <div className="mt-2"><PgpLockedNotice /></div>;
+
   return (
     <>
+      <PgpDecryptedBadge email={loadedEmail} />
       {loadedEmail.html ? (
         <div
           className="rounded-lg overflow-hidden mt-2 max-w-full"

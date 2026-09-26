@@ -154,6 +154,17 @@ describe('mailStore email cache', () => {
     expect(store.emailCache.has('acc1-INBOX-1')).toBe(true);
   });
 
+  // OpenPGP: a message no imported key opens must be read again from the
+  // daemon on the next open, or importing the key would change nothing.
+  it('never caches an encrypted message that stayed locked', () => {
+    const store = useMailStore.getState();
+    store.addToCache('acc1-INBOX-1', { ...fakeEmail(1), pgp: 'locked' }, 128);
+    store.addToCache('acc1-INBOX-2', { ...fakeEmail(2), pgp: 'decrypted' }, 128);
+
+    expect(store.emailCache.has('acc1-INBOX-1')).toBe(false);
+    expect(store.emailCache.has('acc1-INBOX-2')).toBe(true);
+  });
+
   it('strips rawSource before caching', () => {
     const store = useMailStore.getState();
     store.addToCache('acc1-INBOX-1', fakeEmailWithHeavyFields(1), 128);

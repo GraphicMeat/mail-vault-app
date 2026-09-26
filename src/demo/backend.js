@@ -1087,6 +1087,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       }
       case 'install_pending_update': return unsupported(command);
       case 'fetch_remote_asset': return unsupported(command);
+      case 'pgp.list_keys': return { keys: [] };
+      case 'pgp.import_key': case 'pgp.remove_key': return unsupported(command);
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.

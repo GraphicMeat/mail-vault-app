@@ -29,6 +29,7 @@ import {
   LayoutList,
   Maximize2,
   Usb,
+  KeyRound,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -52,6 +53,7 @@ import { AiProvidersSettings } from './settings/AiProvidersSettings';
 import { AutoTagSettings } from './settings/AutoTagSettings';
 import { ViewsSettings } from './settings/ViewsSettings';
 import { PortableSettings } from './settings/PortableSettings';
+import { EncryptionSettings } from './settings/EncryptionSettings';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
@@ -79,6 +81,7 @@ const settingsTabs = [
   { id: 'storage', labelKey: 'settings.tab.storage', icon: HardDrive },
   { id: 'data-usage', labelKey: 'settings.tab.dataUsage', icon: Gauge },
   { id: 'security', labelKey: 'settings.tab.security', icon: Shield },
+  { id: 'encryption', labelKey: 'pgp.tab', icon: KeyRound },
   { id: 'billing', labelKey: 'settings.tab.billing', icon: CreditCard },
   { id: 'language', labelKey: 'settings.tab.language', icon: Languages },
 ];
@@ -96,7 +99,7 @@ const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
 const sections = [
   { labelKey: 'settings.navigation.mail', ids: ['appearance', 'mail-preferences', 'accounts', 'templates', 'views', 'ai-providers', 'auto-tags', 'language'] },
-  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'security', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
+  { labelKey: 'settings.navigation.vaultPrivacy', ids: ['storage', 'backup', 'portable', 'security', 'encryption', 'tracking', 'cleanup', 'time-capsule', 'data-usage'] },
   { labelKey: 'settings.navigation.supportSystem', ids: ['billing', 'migration', 'daemon', 'logs', 'help'] },
 ].map(section => ({ ...section, tabs: section.ids.map(id => tabsById[id]).filter(Boolean) }));
 
@@ -232,6 +235,11 @@ export const settingSearchGroups = [
   { id: 'security', settings: [
     ['settings.security.linkSafetyScanning', 'security link safety scanning phishing malicious url check'],
     ['settings.security.clickConfirmation', 'security click confirmation links warn before opening'],
+  ] },
+  { id: 'encryption', settings: [
+    ['pgp.keyLabel', 'openpgp pgp gpg gnupg encryption encrypted decrypt secret private key import armored'],
+    ['pgp.passphraseLabel', 'openpgp pgp key passphrase password keychain'],
+    ['pgp.removeKey', 'openpgp pgp remove delete key'],
   ] },
   { id: 'billing', settings: [
     ['settings.billing.manageSubscription', 'billing subscription manage cancel plan payment'],
@@ -695,6 +703,10 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
 
             {activeTab === 'security' && (
               <SecuritySettings />
+            )}
+
+            {activeTab === 'encryption' && (
+              <EncryptionSettings />
             )}
 
             {activeTab === 'logs' && (

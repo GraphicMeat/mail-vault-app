@@ -225,6 +225,20 @@ export class MessageGoneError extends Error {
   }
 }
 
+/** OpenPGP secret keys (`src-daemon/src/handlers/pgp.rs`). Each answers `{ keys: [{ fingerprint, userIds, created }] }`. */
+export async function pgpListKeys() {
+  return transportSend('pgp.list_keys', {});
+}
+
+/** `armored` is the key's text, read by the app: the daemon never opens a user-picked file. */
+export async function pgpImportKey(armored, passphrase = '') {
+  return transportSend('pgp.import_key', { armored, passphrase });
+}
+
+export async function pgpRemoveKey(fingerprint) {
+  return transportSend('pgp.remove_key', { fingerprint });
+}
+
 export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null, { background = false } = {}) {
   if (IS_TAURI) {
     const params = { account, uid, mailbox, background };
