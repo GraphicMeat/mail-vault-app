@@ -51,6 +51,7 @@
 - **Setting the read state yourself keeps the message where it is.** Marking the open message unread no longer has the reading timer mark it read again a moment later, the thread reader shows the new state straight away, and with the Unread filter on in the explorer the message you are reading, and the ones you read since turning the filter on, stay on screen.
 - **Opening a message on a throttled Gmail account no longer takes 20-40 seconds.** A pooled connection that was simply slow to answer was treated as dead and replaced with a fresh login every time; it is now given enough time to answer before MailVault gives up on it.
 - **A message the server no longer has is no longer fetched over and over.** Background loading kept retrying a deleted message forever, up to dozens of times a day on a busy account, each one paying the full cost of a slow fetch; the row is now dropped from the list instead.
+- **A message that timed out or hit a dropped connection while opening now retries once on its own.** Most of the time it simply opens on the second try instead of showing an error, while a message the server has confirmed is gone is never retried.
 
 ## [2.16.0] - 2026-09-25
 

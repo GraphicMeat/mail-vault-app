@@ -360,6 +360,20 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
   }
 }
 
+// Track A's two proven-transient body-fetch failures: the daemon's own
+// BODY_FETCH_TIMEOUT ("Timed out after 45s fetching message UID ...",
+// src-daemon/src/handlers/imap.rs) and a pooled session the server had
+// already dropped ("... failed: connection lost", src-core/src/imap/pool.rs
+// is_connection_lost). Both proved nothing about the message itself, so one
+// quiet retry is worth it before showing the user an error. A gone uid throws
+// MessageGoneError instead of either of these messages, so it never matches
+// here — retrying it would only re-ask a question the server already
+// answered (see AccountPipeline's own gone-uid fix, same root cause).
+function _isRetryableBodyFetchError(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return msg.includes('timed out') || msg.includes('timeout') || msg.includes('connection lost');
+}
+
 // ── selectEmail workflow ──
 
 export async function selectEmail(uid, source = 'server', mailboxOverride = null, locationOverride = null, clickedRow = null) {
@@ -577,7 +591,16 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       }
     } else if (account) {
       // 3b. IMAP
-      email = await api.fetchEmailLight(account, realUid, mailbox, accountId);
+      try {
+        email = await api.fetchEmailLight(account, realUid, mailbox, accountId);
+      } catch (fetchError) {
+        // One quiet retry, and only for the failure modes above — every other
+        // rejection (including a gone uid) falls straight through to the
+        // ordinary catch below. Skipped once the user has moved off this
+        // message: nothing here may still publish into the reader.
+        if (!_isRetryableBodyFetchError(fetchError) || !isCurrent()) throw fetchError;
+        email = await api.fetchEmailLight(account, realUid, mailbox, accountId);
+      }
       if (!isCurrent()) return;
       actualSource = 'server';
       get().addToCache(cacheKey, email, cacheLimitMB);
