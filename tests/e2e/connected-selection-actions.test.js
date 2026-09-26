@@ -173,7 +173,20 @@ describe('Selection Action Bar effects', function () {
   });
 
   it('marks several selected rows as read in one action', async function () {
-    const subjects = await pickSubjects(r => r.unread && !r.archived, 2);
+    let subjects = await pickSubjects(r => r.unread && !r.archived, 2);
+    // The mock server lives for the whole run and specs before this one read
+    // mail in this INBOX, so in a full suite fewer than two rows may still be
+    // unread. Make them unread here rather than inherit them.
+    if (subjects.length < 2) {
+      const extra = await pickSubjects(r => !r.unread && !r.archived, 2 - subjects.length);
+      for (const s of extra) expect(await toggleRow(s)).toBe(true);
+      expect(await clickSelectionAction('markUnread')).toBe(true);
+      for (const s of extra) {
+        await waitForRow(s, r => r.unread, `Row "${s}" never became unread to start from`);
+      }
+      await waitForNothingSelected();
+      subjects = await pickSubjects(r => r.unread && !r.archived, 2);
+    }
     expect(subjects.length).toBe(2);
 
     for (const s of subjects) expect(await toggleRow(s)).toBe(true);
