@@ -130,7 +130,12 @@ export const vaultStoreFlags = (flags = []) => [
 // Same flags as selectEmail's prune: `skipRefresh` because this started as one
 // row's action, not a mailbox reload, and `deletedByUs` left false — this app
 // issued no delete, so nothing may stamp custody with one.
-async function _pruneIfGone(error, uid, { accountId, mailbox, isUnified = false }) {
+//
+// Exported so AccountPipeline's background content-caching loop can share it:
+// a gone uid re-queued there for ever (120s backoff cap, no ceiling on
+// retries), 47 refetches logged in one report — the same fact, hit from the
+// background pass instead of a click.
+export async function _pruneIfGone(error, uid, { accountId, mailbox, isUnified = false }) {
   if (!error?.messageGone) return false;
   try {
     await applyServerRemoval(uid, {

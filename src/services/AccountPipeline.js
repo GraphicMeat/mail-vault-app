@@ -9,6 +9,7 @@ import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { setArchivedGroup } from '../stores/slices/messageListSlice';
+import { _pruneIfGone } from './workflows/messageMutations';
 
 export { hasValidCredentials };
 
@@ -355,6 +356,18 @@ export class AccountPipeline {
         this._retryDelay = 3000; // reset on success
         this.onProgress(this.state);
       } catch (error) {
+        // The server proved this uid is gone (MessageGoneError). Retrying only
+        // re-asks the same question the fetch just answered: UID 46856 was
+        // refetched 47 times this way, background lane, ~40s of Gmail each,
+        // because this loop never checked the flag selectEmail's own prune
+        // already keys off. Same helper, shared with the click and prefetch
+        // paths.
+        if (await _pruneIfGone(error, uid, { accountId: this.accountId, mailbox })) {
+          this._completed++;
+          this.onProgress(this.state);
+          continue;
+        }
+
         console.error(`[Pipeline:${this.account.email}] Failed UID ${uid}:`, error.message || error);
         // Re-refresh token on auth errors before retrying
         const msg = String(error.message || error).toLowerCase();

@@ -49,6 +49,14 @@ vi.mock('../authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
 }));
+// The real module pulls in mailStore, db, transport, graphConfig and more —
+// already exercised by selectEmail's own gone-row tests. Here only the
+// interaction matters: does the worker loop hand a gone uid to the shared
+// prune helper instead of retrying it.
+const mockPruneIfGone = vi.fn();
+vi.mock('../workflows/messageMutations', () => ({
+  _pruneIfGone: (...a) => mockPruneIfGone(...a),
+}));
 
 const { AccountPipeline } = await import('../AccountPipeline');
 const db = await import('../db');
@@ -299,6 +307,70 @@ describe('AccountPipeline attachment prefetch', () => {
     // A pipeline is reused across account switches; each switch sweeps again.
     await pipeline.startContentCaching([], 'INBOX');
     expect(api.prefetchAttachments).toHaveBeenCalledTimes(2);
+  });
+});
+
+// A5: the server proved a uid is gone (MessageGoneError, `messageGone: true`).
+// Before this fix the worker loop caught every error the same way and pushed
+// it onto _retryQueue, which _scheduleRetry backs off forever (capped at
+// 120s) — a deleted message was refetched 47 times in one day's log, each one
+// paying the full slow-Gmail body-fetch cost for an answer the server had
+// already given.
+describe('AccountPipeline background fetch — a uid the server no longer holds', () => {
+  const account = { id: 'acc-2', email: 'me@mock.test', password: 'pw' };
+
+  function goneError(uid, mailbox = 'INBOX') {
+    const err = new Error(`Message UID ${uid} is no longer in ${mailbox}`);
+    err.messageGone = true;
+    err.uid = uid;
+    err.mailbox = mailbox;
+    return err;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPruneIfGone.mockResolvedValue(true);
+  });
+
+  it('fetches a gone uid exactly once, never retries it, and still finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      api.fetchEmailLight.mockRejectedValue(goneError(46856));
+      const onComplete = vi.fn();
+      const pipeline = new AccountPipeline(account, { concurrency: 1, onComplete });
+
+      pipeline.startContentCaching([46856], 'INBOX');
+      // Past every step of the backoff ladder (3s, 6s, 12s, ... capped 120s) —
+      // if the fix regresses, this alone would be enough time for several
+      // retries.
+      await vi.advanceTimersByTimeAsync(130000);
+
+      expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+      expect(mockPruneIfGone).toHaveBeenCalledWith(
+        expect.objectContaining({ messageGone: true, uid: 46856 }),
+        46856,
+        { accountId: 'acc-2', mailbox: 'INBOX' },
+      );
+      expect(pipeline._retryQueue).toEqual([]);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still retries a uid whose fetch merely failed, unaffected by the gone check', async () => {
+    // Every other caller of _pruneIfGone gets this same answer for a failure
+    // that proves nothing about the server — false, not pruned.
+    mockPruneIfGone.mockResolvedValue(false);
+    api.fetchEmailLight.mockRejectedValue(new Error('Server refused UID FETCH: no response'));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+
+    pipeline.startContentCaching([7], 'INBOX');
+    await browserTicks(6);
+
+    expect(pipeline._retryQueue).toEqual([7]);
+    expect(mockPruneIfGone).toHaveBeenCalledWith(expect.any(Error), 7, { accountId: 'acc-2', mailbox: 'INBOX' });
+    pipeline.destroy();
   });
 });
 
