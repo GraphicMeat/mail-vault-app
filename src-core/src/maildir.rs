@@ -785,6 +785,11 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
         return Ok(0);
     }
     let removed = orphan_stats(mailbox_dir).count;
+    // Their decrypted OpenPGP copies go with them (plaintext must not outlive
+    // the message). A live message reusing the uid just decrypts again.
+    for uid in fs::read_dir(&dir).into_iter().flatten().flatten().filter_map(|e| vault_filename_uid(&e.file_name().to_string_lossy())) {
+        let _ = fs::remove_file(mailbox_dir.join(crate::pgp::DECRYPTED_DIR).join(format!("{uid}.eml")));
+    }
     fs::remove_dir_all(&dir).map_err(|e| format!("Failed to remove {:?}: {}", dir, e))?;
     info!("purge_orphans: removed {} files from {:?}", removed, dir);
     Ok(removed)

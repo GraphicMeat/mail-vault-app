@@ -297,6 +297,7 @@ impl VaultRegistry {
                             }
                         };
                         self.parses.fetch_add(1, Ordering::SeqCst);
+                        let raw = crate::pgp::readable(&cur, uid, raw);
                         let json = light_row_json(&raw, uid).unwrap_or_else(|| UNPARSEABLE.to_string());
                         parsed.push((uid, seq, json.clone()));
                         json

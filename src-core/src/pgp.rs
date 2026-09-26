@@ -464,6 +464,20 @@ mod tests {
     }
 
     #[test]
+    fn purging_orphans_takes_their_decrypted_copies_along() {
+        let (_tmp, cur) = mailbox();
+        let mbox = cur.parent().unwrap().to_path_buf();
+        let orphans = mbox.join(crate::maildir::ORPHAN_DIR);
+        std::fs::create_dir_all(&orphans).unwrap();
+        std::fs::write(orphans.join(format!("4{}S.eml", crate::maildir::INFO_PREFIX)), "x").unwrap();
+        write_copy(&cur, 4, b"plain").unwrap();
+        write_copy(&cur, 8, b"another message's").unwrap();
+        assert_eq!(crate::maildir::purge_orphans(&mbox).unwrap(), 1);
+        assert!(!copy_path(&cur, 4).exists());
+        assert!(copy_path(&cur, 8).exists());
+    }
+
+    #[test]
     fn a_leftover_temp_file_is_never_read_as_the_copy() {
         let (_tmp, cur) = mailbox();
         let raw = inline(&format!("{ARMOR_BEGIN}\r\nxx\r\n{ARMOR_END}"));

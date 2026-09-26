@@ -901,8 +901,11 @@ fn read_pgp_keys(interactive: bool) -> Result<Vec<mailvault_core::pgp::StoredKey
         },
         None => {
             let entry = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-            let Some(primary) = read_entry(&entry, PGP_KEYS_ENTRY, interactive).map_err(|e| format!("failed to read keychain: {e}"))? else {
-                return Ok(Vec::new());
+            // A plain read, not `read_entry`: this item stays out of the gate.
+            let primary = match with_interaction(interactive, || entry.get_password()) {
+                Ok(primary) => primary,
+                Err(keyring::Error::NoEntry) => return Ok(Vec::new()),
+                Err(e) => return Err(format!("failed to read keychain: {e}")),
             };
             mailvault_core::keychain::join_secret(PGP_KEYS_ENTRY, &primary, &mut |name| {
                 match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
@@ -954,9 +957,14 @@ fn pgp_keys_read(interactive: bool) -> BoxFuture<'static, Result<Vec<mailvault_c
     PGP_KEYS_READ.read(interactive, read_pgp_keys).boxed()
 }
 
-/// The imported OpenPGP keys, off the async workers and under a clock.
+/// The imported OpenPGP keys, off the async workers and under a clock, and
+/// never prompting. Outside the keychain gate on purpose: decryption is best
+/// effort, and neither the watcher nor `keychain.retry` re-reads this item,
+/// so a block here would hold sync and scheduled sends with nothing to clear it.
 pub async fn resolve_pgp_keys_guarded() -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
-    guarded(PGP_KEYS_ENTRY, pgp_keys_read(may_prompt()), AI_KEY_TIMEOUT).await
+    tokio::time::timeout(AI_KEY_TIMEOUT, pgp_keys_read(false)).await.unwrap_or_else(|_| {
+        Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
+    })
 }
 
 /// Read, change and write back the key list, one change at a time so two
