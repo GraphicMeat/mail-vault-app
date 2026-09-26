@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Combien de mémoire MailVault utilise-t-il sous Windows ? Nous l'avons mesurée - Blog MailVault</title>
+  <meta name="description" content="Nous avons fait tourner sous Windows 11 le même test de mémoire avec 10 000 messages que sur le Mac : environ 210 MB au démarrage, un pic bref proche de 365 MB pendant l'ouverture d'une grande boîte, et environ 23 MB pour l'assistant en arrière-plan. Chaque processus, sur un graphique.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/blog/mailvault-windows-memory-use.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/blog/mailvault-windows-memory-use.html">
+  <meta property="og:title" content="Combien de mémoire MailVault utilise-t-il sous Windows ? Nous l'avons mesurée">
+  <meta property="og:description" content="Nous avons fait tourner sous Windows 11 le même test de mémoire avec 10 000 messages que sur le Mac : environ 210 MB au démarrage, un pic bref proche de 365 MB pendant l'ouverture d'une grande boîte, et environ 23 MB pour l'assistant en arrière-plan. Chaque processus, sur un graphique.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:alt" content="MailVault : faites de la place aux nouveaux e-mails. Gardez les anciens.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Combien de mémoire MailVault utilise-t-il sous Windows ? Nous l'avons mesurée">
+  <meta name="twitter:description" content="Environ 210 MB au démarrage, 23 MB pour l'assistant en arrière-plan. Le même test de 10 000 messages que sur le Mac, maintenant sous Windows 11.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:image:alt" content="MailVault : faites de la place aux nouveaux e-mails. Gardez les anciens.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Aller au contenu</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/fr/" aria-label="Accueil MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">par Graphic Meat</a></div>
+      <nav class="mv-navlinks" aria-label="Navigation principale"><a href="/fr/features.html">Fonctionnalités</a><a href="/fr/pricing.html">Tarifs</a><a href="/fr/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Mettre une étoile à MailVault sur GitHub" title="Mettre une étoile à MailVault sur GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Envoyer un cœur à MailVault" title="Envoyer un cœur à MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="Choisir la langue"><span class="mv-language-name">Français</span><span class="mv-language-code" aria-hidden="true">FR</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/mailvault-windows-memory-use.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/mailvault-windows-memory-use.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/mailvault-windows-memory-use.html" lang="fr" hreflang="fr" translate="no" aria-current="page">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/mailvault-windows-memory-use.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/mailvault-windows-memory-use.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/mailvault-windows-memory-use.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/mailvault-windows-memory-use.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/mailvault-windows-memory-use.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/mailvault-windows-memory-use.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="Changer le thème de couleurs" title="Changer le thème de couleurs">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Ouvrir la démo MailVault dans une nouvelle fenêtre">Démo</a><a class="mv-button mv-nav-download" href="/fr/get-started.html?plan=free">Télécharger</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menu</span></summary><nav aria-label="Navigation mobile"><a href="/fr/features.html">Fonctionnalités</a><a href="/fr/pricing.html">Tarifs</a><a href="/fr/faq.html">FAQ</a><a href="/demo/?lang=fr" target="_blank" rel="noopener" aria-label="Ouvrir la démo MailVault dans une nouvelle fenêtre">Essayer la démo</a><a href="/fr/get-started.html?plan=free">Télécharger gratuitement</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Changer le thème de couleurs</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Retour au blog</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-09-26" class="text-sm text-primary-500 font-medium">26 septembre 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Combien de mémoire MailVault utilise-t-il sous Windows ? Nous l'avons mesurée</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>6 min de lecture</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>MailVault 2.16 est la première version qui fonctionne sous Windows. La première question que les gens posent sur toute nouvelle app de bureau, surtout une dont l'interface repose sur le web, c'est combien de mémoire elle utilise. Nous avons donc fait tourner sur un portable Windows 11, avec les mêmes boîtes de test, le test de mémoire déjà utilisé sur le Mac, et noté chaque chiffre.</p>
+          <p>La réponse courte : environ 210 MB à l'ouverture, environ 210 MB avec une boîte de réception de 10 000 messages chargée, un pic proche de 365 MB pendant quelques secondes le temps que cette grande boîte s'ouvre, et environ 23 MB pour l'assistant en arrière-plan qui s'occupe de la synchronisation.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le test</h3>
+          <p>Le test utilise deux comptes e-mail sur un serveur de messagerie de test local : l'un avec 58 messages dans sa boîte de réception, l'autre avec 10 000. Une exécution automatisée pilote la vraie app comme le ferait une personne. Elle ouvre MailVault, ouvre la petite boîte de réception, puis passe au grand compte et attend que les 10 000 en-têtes de messages soient tous dans la liste. Elle fait défiler toute la liste de haut en bas, puis laisse l'app tranquille pendant dix minutes. À chaque étape, elle enregistre la mémoire de chaque processus qui appartient à MailVault.</p>
+          <p>Le portable était un MSI équipé d'un Intel Core i7-13620H et de 16 GB de mémoire, sous Windows 11 23H2 branché sur secteur. Ce n'était pas une machine propre : d'autres apps étaient ouvertes, y compris une autre copie de MailVault, considérez donc ceci comme un ordinateur normal et occupé. Nous avons fait tout le test trois fois, à chaque fois avec un profil neuf et vide, et les chiffres ci-dessous sont la plage observée sur ces trois exécutions. La version testée était une build release optimisée de MailVault 2.16 avec les crochets de test activés, donc proche du téléchargement, mais pas identique octet pour octet.</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault sous Windows 11 affichant la petite boîte de réception de test avec 58 e-mails, deux comptes de test dans la barre latérale et un volet de lecture vide." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Le premier instant que nous mesurons : MailVault sous Windows 11 avec la petite boîte de réception de test ouverte, capturé pendant l'exécution du test elle-même.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce qui compte comme mémoire de MailVault</h3>
+          <p>MailVault n'est pas un seul processus sous Windows, et additionner uniquement celui qui s'appelle MailVault laisserait de côté la majeure partie de la mémoire. Il y a trois parties :</p>
+          <ul>
+            <li><strong>La fenêtre de l'app</strong> (<code>mailvault.exe</code>) : la fenêtre, les menus et le lien avec Windows.</li>
+            <li><strong>L'assistant en arrière-plan</strong> (<code>mailvault-daemon.exe</code>) : la synchronisation, l'enregistrement des messages dans votre coffre, l'index de recherche et les sauvegardes. Il continue de tourner quand la fenêtre est fermée, pour que les sauvegardes programmées aient quand même lieu.</li>
+            <li><strong>Microsoft Edge WebView2</strong> (plusieurs processus <code>msedgewebview2.exe</code>) : le moteur qui dessine l'interface. Il fait partie de Windows, donc MailVault n'embarque pas sa propre copie d'un navigateur, et il répartit son travail entre un moteur de rendu, un processus GPU, un processus navigateur et de petits assistants réseau et stockage.</li>
+          </ul>
+          <p>Nous les comptons tous, mais seulement ceux qui appartiennent au MailVault que nous avons lancé. Le chiffre que nous utilisons est celui qu'affiche le Gestionnaire des tâches dans sa colonne Mémoire : l'ensemble de travail privé, c'est-à-dire la mémoire qui appartient à ce seul processus et qui se trouve actuellement en RAM. Les pages partagées, comme le code du programme WebView2 qu'utilisent aussi Edge et d'autres apps, ne sont pas comptées.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Les résultats</h3>
+<pre><code>Windows 11 · Intel i7-13620H · 16 GB · 3 runs · all MailVault processes
+
+moment                           Task Manager    commit size
+launch, 58 messages              209 – 224 MB    297 – 298 MB
+10,000 messages loaded           197 – 218 MB    297 – 302 MB
+peak while opening 10,000        357 – 367 MB    545 – 560 MB
+after scrolling all 10,000       234 – 252 MB    355 – 356 MB
+after ten minutes idle           102 – 122 MB    308 – 318 MB
+
+background helper, 10,000 msgs    22 – 23 MB
+app window                        11 – 13 MB</code></pre>
+          <p>La deuxième colonne est la Taille validée : la mémoire privée que chaque processus a réservée, qu'elle soit en RAM à cet instant ou non. Nous l'avons ajoutée après la première exécution, elle ne couvre donc que deux exécutions sur trois. Elle compte pour la dernière ligne. Après quelques minutes sans activité, Windows retire de la mémoire aux processus qui ne s'en servent pas, et le chiffre du Gestionnaire des tâches tombe à environ 110 MB. Cette mémoire n'est pas libérée par MailVault, elle est mise de côté par Windows, et la Taille validée montre que l'app détient encore environ 310 MB qu'elle peut récupérer à votre retour. Si vous voulez un seul chiffre pour ce que coûte MailVault sous Windows, c'est le chiffre honnête : environ 300 MB avec une grande boîte.</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault sous Windows 11 avec le grand compte de test sélectionné. L'en-tête de la boîte de réception indique 10 000 e-mails, et la liste montre les messages de test les plus anciens en bas." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Les 10 000 en-têtes chargés et la liste défilée jusqu'à la fin, l'instant de la ligne « 10 000 messages chargés ». La boîte de réception indique 10 000 e-mails, et le compteur du coffre affiche 0 parce que rien n'avait été archivé dans ce test.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Où va la mémoire</h3>
+          <p>Avec 10 000 messages chargés, environ quatre cinquièmes de la mémoire appartiennent à WebView2, qui dessine l'interface. La part qui est vraiment le code propre de MailVault, la fenêtre de l'app et l'assistant en arrière-plan réunis, atteint environ 35 MB.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div aria-hidden="true" style="display:flex;gap:2px"><span style="display:block;height:28px;width:41.1%;background:#6366f1;border-radius:4px"></span><span style="display:block;height:28px;width:24.4%;background:#0d9488;border-radius:4px"></span><span style="display:block;height:28px;width:17.7%;background:#d97706;border-radius:4px"></span><span style="display:block;height:28px;width:11.0%;background:#64748b;border-radius:4px"></span><span style="display:block;height:28px;width:5.7%;background:#94a3b8;border-radius:4px"></span></div>
+<ul style="list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px;font-size:14px">
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f1;flex:none"></span><span>Moteur de rendu WebView2, qui dessine l'interface : <strong>86 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#0d9488;flex:none"></span><span>Processus GPU WebView2 : <strong>51 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#d97706;flex:none"></span><span>Processus navigateur, réseau et stockage de WebView2 : <strong>37 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#64748b;flex:none"></span><span>Assistant en arrière-plan : <strong>23 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#94a3b8;flex:none"></span><span>Fenêtre de l'app : <strong>12 MB</strong></span></li>
+</ul>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-3">Mémoire du Gestionnaire des tâches par partie avec 10 000 messages chargés, moyenne de trois exécutions, environ 209 MB au total.</figcaption>
+          </figure>
+          <p>L'assistant en arrière-plan est petit parce qu'il ne garde pas votre courrier en mémoire. Les messages et le cache d'en-têtes vivent dans des fichiers et une petite base de données sur le disque, et l'assistant les lit à la demande. Il est passé de 8 MB au démarrage à 23 MB après la synchronisation de 10 000 en-têtes, puis est revenu à 10 MB après dix minutes de calme.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ouvrir une grande boîte aux lettres</h3>
+          <p>Le seul moment où la mémoire fait un bond, c'est quand vous ouvrez un grand compte pour la première fois. MailVault charge d'un coup dans la liste chaque en-tête mis en cache de cette boîte, pour que le tri, les compteurs et les filtres portent sur la boîte entière et pas seulement sur la partie déjà défilée. Le moteur de rendu double brièvement, à peu près, pendant qu'il construit cette liste, puis en rend la majeure partie.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<svg viewBox="0 0 720 290" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2c" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="254.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">0</text>
+<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="199.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">100</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="144.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">200</text>
+<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="89.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">300</text>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="34.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">400</text>
+<text x="101.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">0 s</text>
+<text x="227.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">20 s</text>
+<text x="353.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">40 s</text>
+<text x="479.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">60 s</text>
+<text x="605.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">80 s</text>
+<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<polyline points="70.0,148.7 101.5,107.5 133.0,48.8 164.5,68.2 196.0,68.6 227.5,129.4 259.0,131.4 290.5,131.7 322.0,131.7 353.5,131.7 385.0,131.8 416.5,131.7 448.0,131.7 479.5,131.8 511.0,131.6 542.5,135.2 574.0,135.3 605.5,135.3 637.0,135.0 668.5,135.1 700.0,135.1" fill="none" stroke="#6366f1" stroke-opacity="1" stroke-width="2" stroke-linejoin="round"><title>1: 366 MB</title></polyline>
+<polyline points="70.0,124.4 101.5,91.8 133.0,51.7 164.5,48.4 196.0,118.5 227.5,119.8 259.0,119.8 290.5,119.8 322.0,123.1 353.5,122.9 385.0,122.8 416.5,122.8 448.0,122.9 479.5,122.9 511.0,123.2 542.5,126.9 574.0,139.5 605.5,140.2 637.0,140.1 668.5,139.7 700.0,139.9" fill="none" stroke="#6366f1" stroke-opacity="0.7" stroke-width="2" stroke-linejoin="round"><title>2: 367 MB</title></polyline>
+<polyline points="70.0,127.1 101.5,101.9 133.0,56.5 164.5,53.9 196.0,112.4 227.5,112.3 259.0,119.6 290.5,119.8 322.0,123.2 353.5,123.3 385.0,123.5 416.5,123.4 448.0,123.4 479.5,123.5 511.0,123.6 542.5,123.4 574.0,127.1 605.5,127.0 637.0,126.9 668.5,127.1 700.0,130.3" fill="none" stroke="#6366f1" stroke-opacity="0.45" stroke-width="2" stroke-linejoin="round"><title>3: 356 MB</title></polyline>
+</svg>
+            <figcaption id="f2c" class="text-sm text-slate-500 dark:text-slate-400 mt-2">Mémoire totale du Gestionnaire des tâches en MB pour tous les processus MailVault, toutes les 5 secondes après le clic sur le compte de 10 000 messages (ligne pointillée), une ligne par exécution. Les trois montent entre 356 et 367 MB en dix secondes et se stabilisent entre 200 et 250 MB en vingt secondes.</figcaption>
+          </figure>
+          <p>Nous avons mesuré le même pic sur le Mac et essayé de le supprimer en chargeant la boîte par plus petits morceaux. Cela n'a pas aidé : le pic est resté où il était. S'en débarrasser demande de changer la façon dont la liste conserve les messages, ce qui figure sur notre liste, mais pas dans cette version.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Windows et Mac côte à côte</h3>
+          <p>Nous avons fait le même test le 22 septembre sur un Mac mini Apple M4 avec 16 GB, quatre jours avant les exécutions sous Windows. Les totaux sont proches au démarrage et au pic. Windows affiche moins avec la grande boîte chargée, et beaucoup moins au repos, à cause de la réduction décrite plus haut.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">Au démarrage, 58 messages</th></tr>
+<tr><td style="padding:4px 0">Windows, mémoire du Gestionnaire des tâches<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:36.1%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">209–224 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, Taille validée<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.6%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–298 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, mémoire du Moniteur d'activité<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:30.0%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">180 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10 000 messages chargés</th></tr>
+<tr><td style="padding:4px 0">Windows, mémoire du Gestionnaire des tâches<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:34.6%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">197–218 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, Taille validée<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.9%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–302 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, mémoire du Moniteur d'activité<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:53.2%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">315–324 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">Pic pendant l'ouverture des 10 000</th></tr>
+<tr><td style="padding:4px 0">Windows, mémoire du Gestionnaire des tâches<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:60.3%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">357–367 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, Taille validée<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:92.1%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">545–560 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, mémoire du Moniteur d'activité<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:62.3%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">368–380 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">Après dix minutes d'inactivité</th></tr>
+<tr><td style="padding:4px 0">Windows, mémoire du Gestionnaire des tâches<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:18.7%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">102–122 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, Taille validée<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:52.2%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">308–318 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, mémoire du Moniteur d'activité<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:41.4%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">234–263 MB</span></span></td></tr>
+</table></div>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Mémoire totale de tous les processus MailVault. Chaque barre est étiquetée avec sa plage sur l'ensemble des exécutions, et sa longueur correspond au milieu de cette plage.</figcaption>
+          </figure>
+          <p>Lisez ceci comme deux mesures placées côte à côte, pas comme une course. Les deux systèmes comptent la mémoire différemment. Le chiffre du Moniteur d'activité sur le Mac inclut la mémoire que macOS a compressée, tandis que celui du Gestionnaire des tâches laisse de côté la mémoire que Windows a réduite, et la Taille validée compte de la mémoire qui a été réservée mais peut-être jamais touchée. Les machines diffèrent, et la build Mac avait quatre jours de plus. Ce que la comparaison montre, c'est que MailVault coûte à peu près le même ordre de grandeur de mémoire sur les deux systèmes, dans la basse centaine de mégaoctets, et que sur aucun des deux systèmes elle ne continue de croître au repos.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce que ce test ne montre pas</h3>
+          <ul>
+            <li><strong>Les vrais messages sont plus lourds.</strong> Les messages du test sont minuscules, si bien que le cache des messages ouverts ne s'est jamais rempli. Lire beaucoup de courrier peut ajouter jusqu'à 128 MB en plus, la limite du cache.</li>
+            <li><strong>Dix minutes, pas dix jours.</strong> Le test d'inactivité est assez long pour repérer une fuite rapide, pas une lente. Des essais plus longs suivront.</li>
+            <li><strong>Un seul portable et un seul Mac.</strong> Une autre puce graphique ou une autre version de Windows peut faire varier les chiffres de WebView2, qui forment l'essentiel du total.</li>
+          </ul>
+          <p>Vous pouvez refaire ce test vous-même. C'est le test de bout en bout <code>ram-footprint</code> dans le code source de MailVault, lancé avec <code>wdio.ram.conf.js</code>, qui écrit chaque relevé, processus par processus, dans un fichier JSON.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVault est maintenant sur Windows.</p>
+            <p class="text-sm mb-4">Lisez votre courrier, gardez-en une copie locale complète et recherchez-y hors ligne, avec à peu près la mémoire de quelques onglets de navigateur. Gratuit à utiliser, avec Premium pour les sauvegardes programmées et plus encore.</p>
+            <div class="flex flex-wrap gap-3"><a href="/fr/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">Télécharger MailVault</a><a href="/fr/features.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">Voir toutes les fonctionnalités</a></div>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">Mesuré le 26 septembre 2026 sous Windows et le 22 septembre 2026 sous macOS. À lire aussi : <a href="/fr/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">Rechercher dans 50 000 e-mails en quelques millisecondes</a>.</p>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Une création de Graphic Meat</p><h2 id="studio-title">Découvrez les personnes derrière MailVault.</h2><p>Nous sommes Graphic Meat, un studio de produits indépendant qui crée des logiciels utiles depuis 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Découvrir Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/fr/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Lisez vos e-mails. Gardez vos e-mails.</p></div><nav aria-label="Découvrir MailVault"><a href="/fr/use-cases.html">Cas d’usage</a><a href="/fr/blog.html">Blog</a><a href="/changelog.html">Nouveautés</a><a href="/fr/faq.html">FAQ</a><a href="/fr/docs.html">Aide</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code sur GitHub ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Créé par <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Confidentialité</a><a href="/terms.html">Conditions</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20260926-mobile"></script>
+</body>
+</html>

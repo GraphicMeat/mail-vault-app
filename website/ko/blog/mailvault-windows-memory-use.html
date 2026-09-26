@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault는 Windows에서 메모리를 얼마나 씁니까? 직접 측정해 보았습니다 - MailVault 블로그</title>
+  <meta name="description" content="Mac에서 실행한 것과 같은 메시지 10,000개짜리 메모리 테스트를 Windows 11에서도 실행했습니다. 실행 시 약 210 MB, 큰 메일함을 여는 동안 짧게 365 MB 가까이 치솟았고, 백그라운드 도우미는 약 23 MB였습니다. 프로세스별로 그래프로 나타냈습니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/mailvault-windows-memory-use.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/mailvault-windows-memory-use.html">
+  <meta property="og:title" content="MailVault는 Windows에서 메모리를 얼마나 씁니까? 직접 측정해 보았습니다">
+  <meta property="og:description" content="Mac에서 실행한 것과 같은 메시지 10,000개짜리 메모리 테스트를 Windows 11에서도 실행했습니다. 실행 시 약 210 MB, 큰 메일함을 여는 동안 짧게 365 MB 가까이 치솟았고, 백그라운드 도우미는 약 23 MB였습니다. 프로세스별로 그래프로 나타냈습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:alt" content="MailVault: 새 메일을 위한 공간을 만들고, 기존 메일은 보관하세요.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault는 Windows에서 메모리를 얼마나 씁니까? 직접 측정해 보았습니다">
+  <meta name="twitter:description" content="실행 시 약 210 MB, 백그라운드 도우미는 23 MB입니다. Mac에서 실행한 것과 같은 메시지 10,000개 테스트를 이번에는 Windows 11에서 진행했습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:image:alt" content="MailVault: 새 메일을 위한 공간을 만들고, 기존 메일은 보관하세요.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+      <nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="언어 선택"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/mailvault-windows-memory-use.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/mailvault-windows-memory-use.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/mailvault-windows-memory-use.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/mailvault-windows-memory-use.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/mailvault-windows-memory-use.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/mailvault-windows-memory-use.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/mailvault-windows-memory-use.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/mailvault-windows-memory-use.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/mailvault-windows-memory-use.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary><nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-09-26" class="text-sm text-primary-500 font-medium">2026년 9월 26일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault는 Windows에서 메모리를 얼마나 씁니까? 직접 측정해 보았습니다</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>6분 분량</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>MailVault 2.16은 Windows에서 실행되는 첫 버전입니다. 새 데스크톱 앱, 특히 웹 기반 인터페이스를 쓰는 앱에 대해 사람들이 가장 먼저 묻는 질문은 메모리를 얼마나 쓰느냐는 것입니다. 그래서 Mac에서 이미 쓰고 있는 것과 같은 테스트 메일함으로, 같은 메모리 테스트를 Windows 11 노트북에서 실행하고 모든 수치를 기록했습니다.</p>
+          <p>간단히 말하면, 실행 시 약 210 MB, 메시지 10,000개짜리 받은편지함을 불러온 상태에서도 약 210 MB, 그 큰 받은편지함을 여는 몇 초 동안 365 MB 가까이 치솟고, 동기화를 맡는 백그라운드 도우미는 약 23 MB입니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">테스트</h3>
+          <p>이 테스트는 로컬 테스트 메일 서버에 있는 이메일 계정 두 개를 씁니다. 받은편지함에 메시지 58개가 있는 계정과 10,000개가 있는 계정입니다. 자동화된 실행이 사람처럼 실제 앱을 조작합니다. MailVault를 열고 작은 받은편지함을 연 다음, 큰 계정으로 전환해 메시지 헤더 10,000개가 모두 목록에 뜰 때까지 기다립니다. 목록 전체를 맨 위에서 맨 아래까지 스크롤한 뒤, 앱을 10분 동안 그대로 둡니다. 각 단계마다 MailVault가 소유한 모든 프로세스의 메모리를 기록합니다.</p>
+          <p>노트북은 MSI 제품으로 Intel Core i7-13620H와 메모리 16 GB를 갖췄고, 전원에 연결한 채 Windows 11 23H2에서 실행했습니다. 깨끗한 환경이 아니라 MailVault 사본 하나를 포함해 다른 앱도 열려 있었으므로, 평범하게 바쁜 컴퓨터에서 나온 결과로 봐 주십시오. 전체 테스트를 매번 새 빈 프로필로 세 번 실행했고, 아래 수치는 그 세 번의 실행 범위입니다. 빌드는 MailVault 2.16의 최적화된 릴리스 빌드에 테스트용 후크를 켠 것으로, 배포판과 거의 같지만 바이트 단위까지 동일하지는 않습니다.</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="이메일 58개가 든 작은 테스트 받은편지함을 보여 주는 Windows 11의 MailVault입니다. 사이드바에 테스트 계정 두 개, 빈 읽기 창이 있습니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">가장 먼저 측정하는 순간입니다. 작은 테스트 받은편지함을 연 Windows 11의 MailVault를 테스트 실행 중에 그대로 캡처했습니다.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault의 메모리로 치는 것</h3>
+          <p>Windows에서 MailVault는 프로세스 하나가 아니므로, 이름이 MailVault인 프로세스만 더하면 메모리 대부분을 놓치게 됩니다. 다음 세 부분으로 이루어져 있습니다.</p>
+          <ul>
+            <li><strong>앱 창</strong>(<code>mailvault.exe</code>): 창, 메뉴, Windows와의 연동 부분입니다.</li>
+            <li><strong>백그라운드 도우미</strong>(<code>mailvault-daemon.exe</code>): 동기화, 메시지를 볼트에 저장하는 작업, 검색 인덱스, 백업을 담당합니다. 창을 닫아도 계속 실행되므로 예약된 백업도 그대로 실행됩니다.</li>
+            <li><strong>Microsoft Edge WebView2</strong>(여러 개의 <code>msedgewebview2.exe</code> 프로세스): 화면을 그리는 엔진입니다. Windows의 일부이므로 MailVault는 브라우저를 따로 담지 않으며, 작업을 렌더러, GPU 프로세스, 브라우저 프로세스, 작은 네트워크·저장소 도우미로 나눕니다.</li>
+          </ul>
+          <p>우리는 이 모든 프로세스를, 단 우리가 실행한 MailVault에 속한 것만 셉니다. 사용하는 수치는 작업 관리자의 메모리 열에 나오는 값, 곧 프라이빗 워킹 셋(그 프로세스만 소유하고 지금 실제로 RAM에 있는 메모리)입니다. Edge를 비롯한 다른 앱도 함께 쓰는 WebView2 프로그램 코드 같은 공유 페이지는 세지 않습니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">결과</h3>
+<pre><code>Windows 11 · Intel i7-13620H · 16 GB · 3 runs · all MailVault processes
+
+moment                           Task Manager    commit size
+launch, 58 messages              209 – 224 MB    297 – 298 MB
+10,000 messages loaded           197 – 218 MB    297 – 302 MB
+peak while opening 10,000        357 – 367 MB    545 – 560 MB
+after scrolling all 10,000       234 – 252 MB    355 – 356 MB
+after ten minutes idle           102 – 122 MB    308 – 318 MB
+
+background helper, 10,000 msgs    22 – 23 MB
+app window                        11 – 13 MB</code></pre>
+          <p>두 번째 열은 커밋 크기입니다. 각 프로세스가 예약해 둔 프라이빗 메모리로, 지금 RAM에 있는지 여부와는 무관합니다. 이 항목은 첫 실행 뒤에 추가했으므로 세 번이 아니라 두 번의 실행만 담고 있습니다. 이는 마지막 행에서 중요해집니다. 몇 분 동안 입력이 없으면 Windows는 쓰이지 않는 프로세스에서 메모리를 거둬 가고, 작업 관리자의 수치는 약 110 MB까지 떨어집니다. 이 메모리는 MailVault가 해제한 것이 아니라 Windows가 따로 챙겨 둔 것이며, 커밋 크기를 보면 앱이 돌아왔을 때 되찾을 수 있는 약 310 MB를 여전히 쥐고 있음을 알 수 있습니다. Windows에서 MailVault의 비용을 숫자 하나로 말한다면, 큰 메일함을 기준으로 대략 300 MB가 정직한 답입니다.</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="큰 테스트 계정을 선택한 Windows 11의 MailVault입니다. 받은편지함 헤더에는 이메일 10,000개라고 표시되고, 목록 맨 아래에는 가장 오래된 테스트 메시지가 보입니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">헤더 10,000개를 모두 불러오고 목록을 끝까지 스크롤한 순간, 곧 "10,000 messages loaded" 행에 해당하는 장면입니다. 받은편지함에는 이메일 10,000개라고 표시되고, 이 테스트에서는 아무것도 보관하지 않았으므로 볼트 카운터는 0으로 표시됩니다.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">메모리는 어디로 가는가</h3>
+          <p>메시지 10,000개를 불러온 상태에서 메모리의 약 5분의 4는 화면을 그리는 WebView2가 차지합니다. 진짜 MailVault 자체 코드에 해당하는 부분, 곧 앱 창과 백그라운드 도우미를 합치면 약 35 MB입니다.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div aria-hidden="true" style="display:flex;gap:2px"><span style="display:block;height:28px;width:41.1%;background:#6366f1;border-radius:4px"></span><span style="display:block;height:28px;width:24.4%;background:#0d9488;border-radius:4px"></span><span style="display:block;height:28px;width:17.7%;background:#d97706;border-radius:4px"></span><span style="display:block;height:28px;width:11.0%;background:#64748b;border-radius:4px"></span><span style="display:block;height:28px;width:5.7%;background:#94a3b8;border-radius:4px"></span></div>
+<ul style="list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px;font-size:14px">
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f1;flex:none"></span><span>화면을 그리는 WebView2 렌더러: <strong>86 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#0d9488;flex:none"></span><span>WebView2 GPU 프로세스: <strong>51 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#d97706;flex:none"></span><span>WebView2 브라우저·네트워크·저장소 프로세스: <strong>37 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#64748b;flex:none"></span><span>백그라운드 도우미: <strong>23 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#94a3b8;flex:none"></span><span>앱 창: <strong>12 MB</strong></span></li>
+</ul>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-3">메시지 10,000개를 불러온 상태에서 부분별 작업 관리자 메모리입니다. 세 번 실행한 평균이며, 합계는 약 209 MB입니다.</figcaption>
+          </figure>
+          <p>백그라운드 도우미가 작은 이유는 메일을 메모리에 두지 않기 때문입니다. 메시지와 헤더 캐시는 디스크의 파일과 작은 데이터베이스에 있으며, 도우미는 요청받을 때 이를 읽습니다. 실행 시 8 MB였다가 헤더 10,000개를 동기화한 뒤 23 MB로 늘었고, 조용한 10분이 지난 뒤에는 다시 10 MB로 돌아왔습니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">큰 메일함 열기</h3>
+          <p>메모리가 크게 치솟는 유일한 순간은 큰 계정을 처음 열 때입니다. MailVault는 그 메일함에 캐시된 모든 헤더를 한꺼번에 목록에 불러오므로, 정렬과 개수, 필터가 스크롤을 지나온 부분뿐 아니라 메일함 전체를 대상으로 동작합니다. 렌더러는 그 목록을 만드는 동안 잠깐 대략 두 배로 늘었다가 대부분을 다시 돌려줍니다.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<svg viewBox="0 0 720 290" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2c" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="254.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">0</text>
+<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="199.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">100</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="144.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">200</text>
+<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="89.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">300</text>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="34.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">400</text>
+<text x="101.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">0 s</text>
+<text x="227.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">20 s</text>
+<text x="353.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">40 s</text>
+<text x="479.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">60 s</text>
+<text x="605.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">80 s</text>
+<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<polyline points="70.0,148.7 101.5,107.5 133.0,48.8 164.5,68.2 196.0,68.6 227.5,129.4 259.0,131.4 290.5,131.7 322.0,131.7 353.5,131.7 385.0,131.8 416.5,131.7 448.0,131.7 479.5,131.8 511.0,131.6 542.5,135.2 574.0,135.3 605.5,135.3 637.0,135.0 668.5,135.1 700.0,135.1" fill="none" stroke="#6366f1" stroke-opacity="1" stroke-width="2" stroke-linejoin="round"><title>1: 366 MB</title></polyline>
+<polyline points="70.0,124.4 101.5,91.8 133.0,51.7 164.5,48.4 196.0,118.5 227.5,119.8 259.0,119.8 290.5,119.8 322.0,123.1 353.5,122.9 385.0,122.8 416.5,122.8 448.0,122.9 479.5,122.9 511.0,123.2 542.5,126.9 574.0,139.5 605.5,140.2 637.0,140.1 668.5,139.7 700.0,139.9" fill="none" stroke="#6366f1" stroke-opacity="0.7" stroke-width="2" stroke-linejoin="round"><title>2: 367 MB</title></polyline>
+<polyline points="70.0,127.1 101.5,101.9 133.0,56.5 164.5,53.9 196.0,112.4 227.5,112.3 259.0,119.6 290.5,119.8 322.0,123.2 353.5,123.3 385.0,123.5 416.5,123.4 448.0,123.4 479.5,123.5 511.0,123.6 542.5,123.4 574.0,127.1 605.5,127.0 637.0,126.9 668.5,127.1 700.0,130.3" fill="none" stroke="#6366f1" stroke-opacity="0.45" stroke-width="2" stroke-linejoin="round"><title>3: 356 MB</title></polyline>
+</svg>
+            <figcaption id="f2c" class="text-sm text-slate-500 dark:text-slate-400 mt-2">메시지 10,000개짜리 계정을 클릭한 뒤(점선) 5초마다 측정한 모든 MailVault 프로세스의 총 작업 관리자 메모리(MB)를 실행마다 한 줄로 나타냈습니다. 세 번 모두 10초 안에 356~367 MB까지 올라갔다가 20초 안에 200~250 MB로 안정됩니다.</figcaption>
+          </figure>
+          <p>같은 급증을 Mac에서도 측정했고, 메일함을 더 작은 단위로 나눠 불러오는 방식으로 없애 보려 했습니다. 효과가 없었습니다. 급증은 그대로였습니다. 이를 없애려면 목록이 메시지를 담는 방식 자체를 바꿔야 하는데, 이는 앞으로 할 일 목록에는 있지만 이번 릴리스에는 들어 있지 않습니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Windows와 Mac 나란히 비교</h3>
+          <p>Windows 실행보다 나흘 앞선 9월 22일에, 메모리 16 GB의 Apple M4 Mac mini에서 같은 테스트를 실행했습니다. 실행 시와 최고치는 두 시스템이 비슷합니다. Windows는 큰 메일함을 불러온 상태에서는 더 적게 나오고, 유휴 상태에서는 위에서 설명한 트리밍 때문에 훨씬 더 적게 나옵니다.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">실행 시, 메시지 58개</th></tr>
+<tr><td style="padding:4px 0">Windows, 작업 관리자 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:36.1%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">209–224 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, 커밋 크기<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.6%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–298 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, 활성 상태 보기 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:30.0%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">180 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">메시지 10,000개 불러온 상태</th></tr>
+<tr><td style="padding:4px 0">Windows, 작업 관리자 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:34.6%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">197–218 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, 커밋 크기<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.9%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–302 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, 활성 상태 보기 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:53.2%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">315–324 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10,000개를 여는 동안의 최고치</th></tr>
+<tr><td style="padding:4px 0">Windows, 작업 관리자 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:60.3%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">357–367 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, 커밋 크기<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:92.1%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">545–560 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, 활성 상태 보기 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:62.3%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">368–380 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10분간 유휴 상태 후</th></tr>
+<tr><td style="padding:4px 0">Windows, 작업 관리자 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:18.7%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">102–122 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows, 커밋 크기<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:52.2%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">308–318 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac, 활성 상태 보기 메모리<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:41.4%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">234–263 MB</span></span></td></tr>
+</table></div>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">모든 MailVault 프로세스의 총 메모리입니다. 각 막대에는 실행 전체의 범위가 표시되어 있으며, 막대의 길이는 그 범위의 중간값입니다.</figcaption>
+          </figure>
+          <p>이 비교는 경쟁이 아니라 나란히 놓은 두 측정값으로 읽어 주십시오. 두 시스템은 메모리를 세는 방식이 다릅니다. Mac의 활성 상태 보기 수치에는 macOS가 압축한 메모리가 포함되는 반면, 작업 관리자의 수치는 Windows가 덜어 낸 메모리를 빼고 보여 주며, 커밋 크기는 예약되었지만 한 번도 쓰이지 않았을 수도 있는 메모리까지 셉니다. 기기도 다르고, Mac 빌드는 나흘 더 오래된 것이었습니다. 이 비교가 보여 주는 것은 MailVault가 두 시스템 모두에서 수백 메가바이트 낮은 쪽의 비슷한 수준인 메모리를 쓴다는 것, 그리고 어느 시스템에서도 유휴 상태에서 메모리가 계속 늘지는 않는다는 것입니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">이 테스트가 보여 주지 않는 것</h3>
+          <ul>
+            <li><strong>실제 메시지는 더 큽니다.</strong> 테스트 메시지는 아주 작아서 열어 본 메시지의 캐시가 한 번도 가득 차지 않았습니다. 메일을 많이 읽으면 캐시 한도인 128 MB까지 추가로 늘어날 수 있습니다.</li>
+            <li><strong>열흘이 아니라 십 분입니다.</strong> 이 유휴 테스트는 빠른 누수를 잡아낼 만큼 길지만, 느린 누수까지는 잡아내지 못합니다. 더 긴 테스트는 다음 과제입니다.</li>
+            <li><strong>노트북 한 대와 Mac 한 대뿐입니다.</strong> 그래픽 칩이나 Windows 버전이 다르면 전체의 대부분을 차지하는 WebView2 수치가 달라질 수 있습니다.</li>
+          </ul>
+          <p>이 테스트는 직접 재현할 수 있습니다. MailVault 소스에 있는 <code>ram-footprint</code> 엔드투엔드 테스트로, <code>wdio.ram.conf.js</code>로 실행하며 모든 측정값을 프로세스별로 JSON 파일에 기록합니다.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVault가 이제 Windows에서도 실행됩니다.</p>
+            <p class="text-sm mb-4">메일을 읽고, 완전한 로컬 사본을 보관하고, 오프라인으로 검색할 수 있습니다. 사용하는 메모리는 브라우저 탭 몇 개 정도입니다. 무료로 쓸 수 있고, 예약 백업 등은 Premium에서 이용할 수 있습니다.</p>
+            <div class="flex flex-wrap gap-3"><a href="/ko/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">MailVault 다운로드</a><a href="/ko/features.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">모든 기능 보기</a></div>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">측정일은 Windows가 2026년 9월 26일, macOS가 2026년 9월 22일입니다. 관련 글: <a href="/ko/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">이메일 50,000통을 밀리초 만에 검색하기</a>.</p>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20260926-mobile"></script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVaultはWindowsでどれくらいメモリを使いますか？実際に測定しました - MailVaultブログ</title>
+  <meta name="description" content="Macで実行したのと同じ10,000 通のメモリテストをWindows 11でも実行しました。起動時は約210 MB、大きなメールボックスを開く間の短いピークは365 MB近く、バックグラウンドヘルパーは約23 MBでした。プロセスごとにグラフ化しています。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/blog/mailvault-windows-memory-use.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/blog/mailvault-windows-memory-use.html">
+  <meta property="og:title" content="MailVaultはWindowsでどれくらいメモリを使いますか？実際に測定しました">
+  <meta property="og:description" content="Macで実行したのと同じ10,000 通のメモリテストをWindows 11でも実行しました。起動時は約210 MB、大きなメールボックスを開く間の短いピークは365 MB近く、バックグラウンドヘルパーは約23 MBでした。プロセスごとにグラフ化しています。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:alt" content="MailVault：新しいメールのために場所を空け、古いメールを残す。">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVaultはWindowsでどれくらいメモリを使いますか？実際に測定しました">
+  <meta name="twitter:description" content="起動時は約210 MB、バックグラウンドヘルパーは23 MBです。Macで実行したのと同じ10,000 通のテストを、今回はWindows 11で行いました。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:image:alt" content="MailVault：新しいメールのために場所を空け、古いメールを残す。">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260926-mobile">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-windows-memory-use.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+      <nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="言語を選択"><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/mailvault-windows-memory-use.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/mailvault-windows-memory-use.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/mailvault-windows-memory-use.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/mailvault-windows-memory-use.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/mailvault-windows-memory-use.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/mailvault-windows-memory-use.html" lang="ja" hreflang="ja" translate="no" aria-current="page">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/mailvault-windows-memory-use.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/mailvault-windows-memory-use.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/mailvault-windows-memory-use.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary><nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-09-26" class="text-sm text-primary-500 font-medium">2026年9月26日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVaultはWindowsでどれくらいメモリを使いますか？実際に測定しました</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>6分で読めます</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>MailVault 2.16は、Windowsで動作する最初のバージョンです。新しいデスクトップアプリ、特にWebベースのインターフェースを持つアプリについて誰もがまず尋ねる質問は、どれくらいメモリを使うのかということです。そこで、Macですでに使っているのと同じテスト用メールボックスを使い、同じメモリテストをWindows 11のノートパソコンで実行して、すべての数値を記録しました。</p>
+          <p>手短に言うと、起動時は約210 MB、10,000 通の受信トレイを読み込んだ状態でも約210 MB、その大きな受信トレイを開く数秒間は365 MB近くまで上がり、同期を担うバックグラウンドヘルパーは約23 MBです。</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">テストの内容</h3>
+          <p>このテストでは、ローカルのテスト用メールサーバー上に2つのメールアカウントを用意します。受信トレイに58 通のものと、10,000 通のものです。自動実行が、人が操作するのと同じように実際のアプリを動かします。MailVaultを開き、小さいほうの受信トレイを開いてから、大きいほうのアカウントに切り替え、10,000 通すべてのメッセージヘッダーが一覧に表示されるまで待ちます。一覧全体を先頭から末尾までスクロールしたあと、アプリを10分間放置します。各段階で、MailVaultが所有するすべてのプロセスのメモリを記録します。</p>
+          <p>使用したノートパソコンはMSI製で、Intel Core i7-13620Hとメモリ16 GBを搭載し、Windows 11 23H2を電源に接続した状態で動かしました。まっさらな環境ではなく、MailVaultのもう1つのコピーを含む他のアプリも開いていたため、普段どおりの、忙しいコンピューターでの結果と考えてください。テスト全体を、毎回新しい空のプロファイルで3回実行し、以下の数値はその3回の実行の範囲です。ビルドはMailVault 2.16の最適化されたリリースビルドにテスト用のフックを有効にしたもので、配布版とほぼ同じですが、バイト単位で完全に同一ではありません。</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="58 通のメールが入った小さいテスト用受信トレイを表示しているWindows 11版MailVault。サイドバーに2つのテストアカウント、空の閲覧ペインがあります。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">最初に測定する瞬間：小さいテスト用受信トレイを開いた状態のWindows 11版MailVaultを、テスト実行中にそのまま撮影したものです。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVaultのメモリとして数えるもの</h3>
+          <p>Windows版のMailVaultは1つのプロセスではないため、「MailVault」という名前のプロセスだけを足し合わせると、メモリの大部分を見落としてしまいます。構成は次の3つの部分です。</p>
+          <ul>
+            <li><strong>アプリウィンドウ</strong>（<code>mailvault.exe</code>）：ウィンドウ、メニュー、Windowsとの連携部分です。</li>
+            <li><strong>バックグラウンドヘルパー</strong>（<code>mailvault-daemon.exe</code>）：同期、メッセージの保管庫への保存、検索インデックス、バックアップを担当します。ウィンドウを閉じても動作を続けるので、予約したバックアップもそのまま実行されます。</li>
+            <li><strong>Microsoft Edge WebView2</strong>（<code>msedgewebview2.exe</code>の複数のプロセス）：画面を描画するエンジンです。Windowsの一部なので、MailVaultは独自のブラウザを同梱していません。レンダラー、GPUプロセス、ブラウザプロセス、そして小さなネットワークとストレージのヘルパーに処理を分割しています。</li>
+          </ul>
+          <p>私たちは、これらすべてを数えます。ただし、起動したMailVaultに属するものだけです。使用する数値は、タスク マネージャーの「メモリ」列に表示される値、つまりプライベートワーキングセット（そのプロセスだけが持ち、いま実際にRAM上にあるメモリ）です。EdgeなどほかのアプリとWebView2が共有するプログラムコードのような、共有ページは数えません。</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">結果</h3>
+<pre><code>Windows 11 · Intel i7-13620H · 16 GB · 3 runs · all MailVault processes
+
+moment                           Task Manager    commit size
+launch, 58 messages              209 – 224 MB    297 – 298 MB
+10,000 messages loaded           197 – 218 MB    297 – 302 MB
+peak while opening 10,000        357 – 367 MB    545 – 560 MB
+after scrolling all 10,000       234 – 252 MB    355 – 356 MB
+after ten minutes idle           102 – 122 MB    308 – 318 MB
+
+background helper, 10,000 msgs    22 – 23 MB
+app window                        11 – 13 MB</code></pre>
+          <p>2列目はコミット サイズです。各プロセスが予約しているプライベートメモリで、いまRAM上にあるかどうかは問いません。これは最初の実行のあとに追加したため、3回ではなく2回分の実行をカバーしています。これが効いてくるのが最後の行です。数分間操作がないと、Windowsは使われていないプロセスからメモリを取り上げ、タスク マネージャーの数値は約110 MBまで下がります。このメモリはMailVaultが解放したのではなくWindowsが取り置いているだけで、コミット サイズを見ると、戻ってきたときに取り戻せる約310 MBをアプリがまだ保持していることが分かります。Windows上でのMailVaultのコストを1つの数値で言うなら、大きなメールボックスがある場合でおよそ300 MBというのが正直な数字です。</p>
+          <figure class="my-6">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="大きいテストアカウントを選択した状態のWindows 11版MailVault。受信トレイのヘッダーには10,000 通のメールと表示され、一覧の最下部には最も古いテストメッセージが表示されています。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">10,000件すべてのヘッダーを読み込み、一覧を末尾までスクロールした瞬間、つまり「10,000 messages loaded」の行に当たる場面です。受信トレイには10,000 通のメールと表示され、このテストでは何もアーカイブしていないため、保管庫のカウンターは0と表示されています。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">メモリの内訳</h3>
+          <p>10,000 通を読み込んだ状態では、メモリのおよそ5分の4は、画面を描画するWebView2が占めています。本当にMailVault自身のコードにあたる部分、つまりアプリウィンドウとバックグラウンドヘルパーを合わせると、約35 MBです。</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div aria-hidden="true" style="display:flex;gap:2px"><span style="display:block;height:28px;width:41.1%;background:#6366f1;border-radius:4px"></span><span style="display:block;height:28px;width:24.4%;background:#0d9488;border-radius:4px"></span><span style="display:block;height:28px;width:17.7%;background:#d97706;border-radius:4px"></span><span style="display:block;height:28px;width:11.0%;background:#64748b;border-radius:4px"></span><span style="display:block;height:28px;width:5.7%;background:#94a3b8;border-radius:4px"></span></div>
+<ul style="list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px;font-size:14px">
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f1;flex:none"></span><span>画面を描画するWebView2レンダラー：<strong>86 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#0d9488;flex:none"></span><span>WebView2のGPUプロセス：<strong>51 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#d97706;flex:none"></span><span>WebView2のブラウザ・ネットワーク・ストレージのプロセス：<strong>37 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#64748b;flex:none"></span><span>バックグラウンドヘルパー：<strong>23 MB</strong></span></li>
+<li style="display:flex;align-items:center;gap:8px;margin:0"><span aria-hidden="true" style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#94a3b8;flex:none"></span><span>アプリウィンドウ：<strong>12 MB</strong></span></li>
+</ul>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-3">10,000 通を読み込んだ状態での、部分ごとのタスク マネージャーのメモリ。3回の実行の平均で、合計は約209 MBです。</figcaption>
+          </figure>
+          <p>バックグラウンドヘルパーが小さいのは、メールをメモリ上に保持しないためです。メッセージとヘッダーキャッシュはディスク上のファイルと小さなデータベースに置かれており、ヘルパーは要求されたときにそれらを読み込みます。起動時の8 MBから、10,000件のヘッダーを同期したあとは23 MBまで増え、10分間静かにしていたあとは10 MBまで戻りました。</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">大きなメールボックスを開く</h3>
+          <p>メモリが跳ね上がる唯一の瞬間は、大きなアカウントを初めて開いたときです。MailVaultは、そのメールボックスのキャッシュ済みヘッダーをすべて一度に一覧へ読み込みます。そうすることで、並べ替えや件数、フィルターが、スクロールし終えた部分だけでなくメールボックス全体に対して機能します。レンダラーはその一覧を作る間だけ一時的におよそ2倍になり、そのあとほとんどのメモリを解放します。</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<svg viewBox="0 0 720 290" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2c" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="254.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">0</text>
+<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="199.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">100</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="144.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">200</text>
+<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="89.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">300</text>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<text x="62" y="34.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">400</text>
+<text x="101.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">0 s</text>
+<text x="227.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">20 s</text>
+<text x="353.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">40 s</text>
+<text x="479.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">60 s</text>
+<text x="605.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">80 s</text>
+<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<polyline points="70.0,148.7 101.5,107.5 133.0,48.8 164.5,68.2 196.0,68.6 227.5,129.4 259.0,131.4 290.5,131.7 322.0,131.7 353.5,131.7 385.0,131.8 416.5,131.7 448.0,131.7 479.5,131.8 511.0,131.6 542.5,135.2 574.0,135.3 605.5,135.3 637.0,135.0 668.5,135.1 700.0,135.1" fill="none" stroke="#6366f1" stroke-opacity="1" stroke-width="2" stroke-linejoin="round"><title>1: 366 MB</title></polyline>
+<polyline points="70.0,124.4 101.5,91.8 133.0,51.7 164.5,48.4 196.0,118.5 227.5,119.8 259.0,119.8 290.5,119.8 322.0,123.1 353.5,122.9 385.0,122.8 416.5,122.8 448.0,122.9 479.5,122.9 511.0,123.2 542.5,126.9 574.0,139.5 605.5,140.2 637.0,140.1 668.5,139.7 700.0,139.9" fill="none" stroke="#6366f1" stroke-opacity="0.7" stroke-width="2" stroke-linejoin="round"><title>2: 367 MB</title></polyline>
+<polyline points="70.0,127.1 101.5,101.9 133.0,56.5 164.5,53.9 196.0,112.4 227.5,112.3 259.0,119.6 290.5,119.8 322.0,123.2 353.5,123.3 385.0,123.5 416.5,123.4 448.0,123.4 479.5,123.5 511.0,123.6 542.5,123.4 574.0,127.1 605.5,127.0 637.0,126.9 668.5,127.1 700.0,130.3" fill="none" stroke="#6366f1" stroke-opacity="0.45" stroke-width="2" stroke-linejoin="round"><title>3: 356 MB</title></polyline>
+</svg>
+            <figcaption id="f2c" class="text-sm text-slate-500 dark:text-slate-400 mt-2">10,000 通のアカウントをクリックしてから（破線）5秒ごとの、すべてのMailVaultプロセスの合計タスク マネージャーメモリ（MB）を、実行ごとに1本の線で示しています。3回とも10秒以内に356〜367 MBまで上がり、20秒以内に200〜250 MBに落ち着きます。</figcaption>
+          </figure>
+          <p>同じピークをMacでも計測し、メールボックスを小さく分けて読み込むことでなくそうとしました。しかし効果はなく、ピークは変わりませんでした。これをなくすには一覧がメッセージを保持する方法そのものを変える必要があり、それは今後の課題ですが今回のリリースには含まれていません。</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">WindowsとMacを並べてみる</h3>
+          <p>Windowsでの実行より4日前の9月22日に、メモリ16 GBのApple M4 Mac miniで同じテストを実行しました。合計は起動時とピーク時では近い値になります。Windowsは、大きなメールボックスを読み込んだ状態ではやや少なく、アイドル時は上で説明したトリミングのためにかなり少なくなります。</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">起動時、58 通</th></tr>
+<tr><td style="padding:4px 0">Windows、タスク マネージャーのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:36.1%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">209–224 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows、コミット サイズ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.6%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–298 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac、アクティビティモニタのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:30.0%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">180 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10,000 通を読み込んだ状態</th></tr>
+<tr><td style="padding:4px 0">Windows、タスク マネージャーのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:34.6%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">197–218 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows、コミット サイズ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.9%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–302 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac、アクティビティモニタのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:53.2%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">315–324 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10,000 通を開く際のピーク</th></tr>
+<tr><td style="padding:4px 0">Windows、タスク マネージャーのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:60.3%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">357–367 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows、コミット サイズ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:92.1%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">545–560 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac、アクティビティモニタのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:62.3%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">368–380 MB</span></span></td></tr>
+<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">10分間アイドル状態のあと</th></tr>
+<tr><td style="padding:4px 0">Windows、タスク マネージャーのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:18.7%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">102–122 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Windows、コミット サイズ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:52.2%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">308–318 MB</span></span></td></tr>
+<tr><td style="padding:4px 0">Mac、アクティビティモニタのメモリ<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:41.4%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">234–263 MB</span></span></td></tr>
+</table></div>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">すべてのMailVaultプロセスの合計メモリです。各バーには実行全体での範囲を示すラベルが付いており、バーの長さはその範囲の中間値です。</figcaption>
+          </figure>
+          <p>これは競争ではなく、2つの測定値を並べたものとして読んでください。2つのシステムはメモリの数え方が異なります。Macのアクティビティモニタの数値には、macOSが圧縮したメモリが含まれる一方、タスク マネージャーの数値はWindowsがトリミングしたメモリを含みません。また、コミット サイズは予約されただけで一度も使われていないかもしれないメモリまで数えます。マシンも異なりますし、Mac側のビルドは4日古いものでした。この比較が示しているのは、MailVaultがどちらのシステムでも数百メガバイトの下のほうという同程度のメモリしかかからないこと、そしてどちらのシステムでもアイドル中にメモリが増え続けることはないということです。</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">このテストでわからないこと</h3>
+          <ul>
+            <li><strong>実際のメッセージはもっと大きくなります。</strong>テストメッセージは小さいため、開いたメッセージのキャッシュが埋まることはありませんでした。実際に多くのメールを読むと、キャッシュの上限である128 MBまで追加でかかることがあります。</li>
+            <li><strong>10日間ではなく10分間です。</strong>このアイドルテストは、速いメモリリークを検出できる長さであり、遅いものまでは検出できません。より長いテストは次の課題です。</li>
+            <li><strong>ノートパソコン1台とMac1台だけです。</strong>グラフィックチップやWindowsのバージョンが違えば、合計の大部分を占めるWebView2の数値は変わり得ます。</li>
+          </ul>
+          <p>このテストは自分でも再現できます。MailVaultのソースにある<code>ram-footprint</code>というエンドツーエンドテストで、<code>wdio.ram.conf.js</code>で実行し、すべての測定値をプロセスごとにJSONファイルへ書き出します。</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVaultはついにWindowsに対応しました。</p>
+            <p class="text-sm mb-4">メールを読み、その完全なローカルコピーを保存し、オフラインで検索できます。使用するメモリはブラウザのタブ数枚分ほどです。無料で使え、予約バックアップなどはPremiumで利用できます。</p>
+            <div class="flex flex-wrap gap-3"><a href="/ja/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">MailVaultをダウンロード</a><a href="/ja/features.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">すべての機能を見る</a></div>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">測定日はWindowsが2026年9月26日、macOSが2026年9月22日です。関連記事：<a href="/ja/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">50,000 通のメールをミリ秒で検索</a>。</p>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20260926-mobile"></script>
+</body>
+</html>
