@@ -303,6 +303,15 @@ describe('RowQuickActions', () => {
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1);
   });
 
+  it('offers no purge on a message only the server holds', () => {
+    // Nothing of our own to clear: the item would only repeat "Delete from
+    // server" under a name that claims the vault and backup too.
+    setActions(action('deleteServer'), action('deleteEverywhere'));
+    renderActions({ emails: [email({ uid: 16 })], onRequestDelete: vi.fn() });
+    expect(screen.getByTestId('quick-action-deleteServer')).toBeTruthy();
+    expect(screen.queryByTestId('quick-action-deleteEverywhere')).toBeNull();
+  });
+
   it('keeps same-UID server deletes scoped to each account and mailbox', async () => {
     const first = email({ uid: 20, _accountId: ACCOUNT_A.id, _mailbox: 'INBOX' });
     const second = email({ uid: 20, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });

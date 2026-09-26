@@ -201,7 +201,8 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     return {
       id: entry.id, action: entry.action, label: actionLabel(entry), Icon: ICONS[entry.action],
       disabled: !!disabledAction,
-      hidden: entry.action === 'deleteServer' && !hasServerBacked,
+      // No copy of our own, no purge: it would only repeat "Delete from server".
+      hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge,
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
       restoreFocus: !['move', 'snooze', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
