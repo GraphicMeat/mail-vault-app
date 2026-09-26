@@ -171,9 +171,7 @@ pub mod mac {
             .and_then(|json| serde_json::from_str::<NotificationTarget>(&json.to_string()).ok());
 
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.unminimize();
-            let _ = window.set_focus();
+            crate::show_main_window(&window);
         }
         // A banner that named nothing (focus-session summary, backup result)
         // still brings the window forward; it just opens no message.

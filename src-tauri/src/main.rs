@@ -3135,6 +3135,39 @@ fn daemon_channel_notify(method: String, params: serde_json::Value) {
     daemon_channel::notify(&method, params);
 }
 
+/// Whether the page inside the main window may render.
+///
+/// On Windows hiding (to the tray) or minimizing the main window only changes
+/// the HWND: the WebView2 controller is never told, so the page stays
+/// `visibilityState: "visible"`, `requestAnimationFrame` keeps running at the
+/// display rate and timers stay unthrottled for as long as nobody can see it
+/// (measured 2026-09-26: ~0.5 core renderer plus ~0.5 core GPU process, all
+/// day in the tray). `Webview::show`/`hide` are what call
+/// `ICoreWebView2Controller::put_IsVisible`. macOS needs nothing: WKWebView
+/// follows its window's occlusion by itself.
+#[cfg(windows)]
+fn set_main_webview_visible(window: &tauri::WebviewWindow, visible: bool) {
+    let webview = AsRef::<tauri::Webview>::as_ref(window);
+    let _ = if visible { webview.show() } else { webview.hide() };
+}
+
+/// Hides the main window to the tray. Every hide and show of the main window
+/// goes through this pair, so the window and its page never disagree.
+fn hide_main_window(window: &tauri::WebviewWindow) {
+    let _ = window.hide();
+    #[cfg(windows)]
+    set_main_webview_visible(window, false);
+}
+
+/// Brings the main window back from the tray, a minimize, or behind others.
+fn show_main_window(window: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    set_main_webview_visible(window, true);
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
 fn main() {
     // WebView2 keeps localStorage/IndexedDB under the host's LOCALAPPDATA; a
     // portable copy keeps them on the drive. Set before any webview exists.
@@ -3268,9 +3301,7 @@ fn main() {
         builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
-                let _ = window.unminimize();
-                let _ = window.show();
+                show_main_window(&window);
             }
         }))
     };
@@ -3414,9 +3445,7 @@ fn main() {
                         queue.push(url.to_string());
                     }
                     if let Some(window) = handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
+                        show_main_window(&window);
                     }
                     let _ = handle.emit("mailto-open", ());
                 });
@@ -3733,8 +3762,7 @@ fn main() {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                            show_main_window(&window);
                         }
                     }
                 })
@@ -3742,8 +3770,7 @@ fn main() {
                     match event.id().as_ref() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                                show_main_window(&window);
                             }
                         }
                         "tray_view_logs" => {
@@ -3803,11 +3830,22 @@ fn main() {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 window.state::<dropped_files::DroppedPaths>().remember(paths);
             }
+            // Minimize and restore (taskbar, Win+D, Win+M) arrive only as a
+            // resize: the page follows the window, see set_main_webview_visible.
+            #[cfg(windows)]
+            if let (tauri::WindowEvent::Resized(_), "main") = (event, window.label()) {
+                if let Some(main) = window.app_handle().get_webview_window("main") {
+                    let seen = main.is_visible().unwrap_or(true) && !main.is_minimized().unwrap_or(false);
+                    set_main_webview_visible(&main, seen);
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Only hide-to-tray for the main window; popup windows close normally
                 if window.label() == "main" {
                     info!("Main window close requested, hiding to tray");
-                    let _ = window.hide();
+                    if let Some(main) = window.app_handle().get_webview_window("main") {
+                        hide_main_window(&main);
+                    }
                     api.prevent_close();
                 }
             }
@@ -3828,9 +3866,7 @@ fn main() {
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
                     if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
+                        show_main_window(&window);
                     }
                 }
                 tauri::RunEvent::Exit => {
@@ -3869,9 +3905,7 @@ fn main() {
                         sigusr1_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         info!("SIGUSR2 received — bringing window to front");
                         if let Some(window) = app_handle.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
+                            show_main_window(&window);
                         }
                     }
                 }
