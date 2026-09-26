@@ -32,6 +32,15 @@ export function parseSenders(text) {
 export const serializeGroups = groups => groups.filter(group => group.length)
   .map(group => group.join(' && ')).join(' || ');
 
+/// The query words, saved. One phrase and nothing else carries no operator,
+/// and operator-free text is read the pre-groups way, spaces as ANDs, both
+/// here and by the daemon: "quarterly report" would come back as two words.
+/// A trailing `||` marks it as groups; the empty group after it is dropped.
+export function serializeQuery(groups) {
+  const text = serializeGroups(groups);
+  return !OPERATOR.test(text) && /\s/.test(text) ? `${text} ||` : text;
+}
+
 /// Typed text joins the last group; each `||` in it starts a new one, so
 /// `a && b || c` typed into an empty editor is two groups.
 export function addTyped(groups, text) {

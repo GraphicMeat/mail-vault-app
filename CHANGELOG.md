@@ -21,7 +21,6 @@
 
 ### Fixed
 - **A view saved from a search keeps the search's last day.** A search that ends on a date includes that whole day, but the view saved from it stopped at midnight and left that day's mail out.
-- **Settings > Portable lines up with the other Settings pages.** It filled the pane edge to edge; it now has the same width, margins and spacing as every other page.
 - **A message marked read by the reading timer now shows as read in the list.** If you moved to the next message, closed the reader or opened a thread while the timer's change was reaching the server, the message was read on the server but stayed bold in the list, in a search and in a saved view. Every row now follows. A message from another account or folder opened from a saved view is also opened, and marked, in its own account instead of the one you were in.
 - **A new-mail notification names the message that just arrived.** When a message came in with a date older than mail you already had, such as a forwarded or migrated copy or a sender whose clock is wrong, the notification showed the sender and subject of an older message instead.
 - **Changing From changes the signature too.** Since 2.16.0, picking another account in From left the signature of the account you started with in the message. The new account's signature now replaces it, and whatever you have written stays as it is.

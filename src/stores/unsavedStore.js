@@ -11,7 +11,17 @@ export const useUnsavedStore = create((set, get) => ({
   pending: null,
   busy: false,
 
-  setGuard: guard => set({ guard }),
+  /// A way out held for changes that are gone by now (a save that was already
+  /// on its way landed, the editor closed) has nothing left to ask: it goes.
+  setGuard: guard => {
+    const { pending, busy } = get();
+    if (pending && !busy && !guard?.changes.length) {
+      set({ guard, pending: null });
+      pending();
+      return;
+    }
+    set({ guard });
+  },
 
   /// Runs `action` now, or once the unsaved changes are saved or discarded.
   leave: action => {

@@ -58,6 +58,13 @@ describe('View query OR groups', function () {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   }, text);
 
+  /// A builder left with edits asks before another opens; these tests discard.
+  const newView = async () => {
+    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await browser.pause(300);
+    await browser.execute(() => document.querySelector('[data-testid="unsaved-discard"]')?.click());
+  };
+
   before(async function () {
     await waitForApp();
     await waitForEmails();
@@ -97,7 +104,7 @@ describe('View query OR groups', function () {
       const button = document.querySelector('[data-testid="views-new"]');
       return !!button && !button.disabled;
     }), { timeout: 15_000, timeoutMsg: 'the + for a new view never became usable' });
-    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await newView();
     await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
       { timeout: 10_000, timeoutMsg: 'the view builder never opened' });
 
@@ -170,7 +177,7 @@ describe('View query OR groups', function () {
       const button = document.querySelector('[data-testid="views-new"]');
       return !!button && !button.disabled;
     }), { timeout: 15_000, timeoutMsg: 'the + for a new view never became usable' });
-    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await newView();
     await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
       { timeout: 10_000, timeoutMsg: 'the view builder never opened' });
 
@@ -208,7 +215,7 @@ describe('View query OR groups', function () {
         .then((views) => done((views || []).filter((v) => !v.builtin)), () => done(null));
     });
     const before = (await listViews()).map((v) => v.id);
-    await browser.execute(() => document.querySelector('[data-testid="views-new"]').click());
+    await newView();
     await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
       { timeout: 10_000, timeoutMsg: 'the view builder never opened' });
     // The previous editor can still be unmounting: wait for a name field to set.
@@ -240,6 +247,8 @@ describe('View query OR groups', function () {
       const views = await listViews();
       return (views || []).find((v) => !before.includes(v.id)) || false;
     }, { timeout: 15_000, timeoutMsg: 'the view was never stored' });
-    expect(saved.def.query).toBe(a);
+    // One phrase alone is saved with a trailing `||`, or it would be read
+    // back as separate AND words.
+    expect(saved.def.query).toBe(`${a} ||`);
   });
 });

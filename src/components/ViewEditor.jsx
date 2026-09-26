@@ -20,7 +20,7 @@ import { ToggleSwitch } from './ui/ToggleSwitch';
 const VIEW_EMOJIS = ['📥', '📤', '⭐', '🔥', '📌', '📎', '💼', '🏠', '💰', '🧾', '✈️', '🛒', '📦', '🎓', '❤️', '👪',
   '🎉', '🔔', '⏰', '✅', '❗', '🚀', '💡', '🔒', '📰', '💬', '📅', '🏦', '🩺', '🎮', '🐶', '🌱'];
 import { ConfirmDialog } from './ConfirmDialog';
-import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeLast, removeWord, serializeGroups } from '../utils/queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeLast, removeWord, serializeGroups, serializeQuery } from '../utils/queryGroups';
 import { CALENDAR_RANGES } from '../utils/viewRange';
 // The drag ghost reuses the reorder list's preview style.
 import '../styles/account-settings-navigation.css';
@@ -315,7 +315,7 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
   const editedDef = () => ({
     ...def,
     accounts: chosenAccounts,
-    query: serializeGroups(addTyped(groups, queryInput)),
+    query: serializeQuery(addTyped(groups, queryInput)),
     sender: serializeGroups(addTyped(senderGroups, senderInput)) || null,
     unread: fromTri(flags.unread),
     starred: fromTri(flags.starred),

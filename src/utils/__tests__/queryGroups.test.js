@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups } from '../queryGroups';
+import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups, serializeQuery } from '../queryGroups';
 
 describe('view query groups', () => {
   it('reads the notation back as OR groups of AND words', () => {
@@ -64,5 +64,20 @@ describe('view query groups', () => {
     expect(parseSenders('')).toEqual([[]]);
     expect(parseSenders(null)).toEqual([[]]);
     expect(parseSenders('acme && billing || Ann Lee')).toEqual([['acme', 'billing'], ['Ann Lee']]);
+  });
+});
+
+describe('serializeQuery', () => {
+  it('keeps a lone phrase a phrase when it is read back', () => {
+    const saved = serializeQuery([['quarterly report']]);
+    expect(saved).toBe('quarterly report ||');
+    expect(parseGroups(saved)).toEqual([['quarterly report']]);
+  });
+
+  it('leaves everything else as serializeGroups writes it', () => {
+    expect(serializeQuery([['invoice']])).toBe('invoice');
+    expect(serializeQuery([['a b', 'c']])).toBe('a b && c');
+    expect(serializeQuery([['a'], ['b c']])).toBe('a || b c');
+    expect(serializeQuery([[]])).toBe('');
   });
 });

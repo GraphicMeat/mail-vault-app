@@ -591,8 +591,9 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
               </Button>}
               {onDetach && <Button variant="ghost" icon size="md" data-testid="settings-detach"
                 aria-label={t('settingsPage.detach')} title={t('settingsPage.detach')}
-                onClick={() => onDetach({ tab: activeTab, accountId: selectedFeatureAccountId,
-                  section: activeTab === 'appearance' ? appearanceSection : activeTab === 'mail-preferences' ? generalSubTab : activeTab === 'accounts' ? accountSection : null })}>
+                // The detached window starts fresh: edits here would not follow.
+                onClick={() => leave(() => onDetach({ tab: activeTab, accountId: selectedFeatureAccountId,
+                  section: activeTab === 'appearance' ? appearanceSection : activeTab === 'mail-preferences' ? generalSubTab : activeTab === 'accounts' ? accountSection : null }))}>
                 <Maximize2 size={18} aria-hidden="true" />
               </Button>}
               <Button variant="ghost" icon size="md"

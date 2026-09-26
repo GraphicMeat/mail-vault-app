@@ -951,6 +951,8 @@ mod tests {
             Some(vec![vec!["jasinskio".to_string(), "14a-37".to_string()], vec!["mindaugo 30".to_string()]])
         );
         assert_eq!(boolean_groups("|| &&"), Some(vec![]));
+        // The view editor saves a lone phrase with a trailing `||` so it stays one.
+        assert_eq!(boolean_groups("quarterly report ||"), Some(vec![vec!["quarterly report".to_string()]]));
     }
 
     #[test]

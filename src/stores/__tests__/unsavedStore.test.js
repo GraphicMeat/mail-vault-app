@@ -52,4 +52,13 @@ describe('unsavedStore', () => {
     expect(g.discard).toHaveBeenCalledOnce();
     expect(action).toHaveBeenCalledOnce();
   });
+
+  it('a held way out goes once its changes are gone (a save already on its way landed)', () => {
+    const action = vi.fn();
+    useUnsavedStore.getState().setGuard(guard());
+    useUnsavedStore.getState().leave(action);
+    useUnsavedStore.getState().setGuard(null);
+    expect(action).toHaveBeenCalledOnce();
+    expect(useUnsavedStore.getState().pending).toBeNull();
+  });
 });

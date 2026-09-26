@@ -54,3 +54,13 @@ it('with nothing unsaved, pages switch at once', () => {
   expect(page()).toBe('security');
   expect(screen.queryByTestId('unsaved-changes')).toBeNull();
 });
+
+it('detaching Settings with unsaved changes asks first', async () => {
+  const onDetach = vi.fn();
+  render(<SettingsPage initialTab="language" onClose={() => {}} onDetach={onDetach} />);
+  holdChanges();
+  fireEvent.click(screen.getByTestId('settings-detach'));
+  expect(onDetach).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByTestId('unsaved-discard'));
+  await vi.waitFor(() => expect(onDetach).toHaveBeenCalledOnce());
+});
