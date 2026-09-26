@@ -950,6 +950,19 @@ export function slowCommandWith(command, needle, ms) {
   };
 }
 
+/**
+ * The Subject marker of a delivery that first drops every connection parked in
+ * IDLE on its server, without a word: the network blip as the daemon's watcher
+ * sees it. The message then lands while nobody listens, so only a sync on
+ * reconnect can find it (`Action::DropIdlers`, src-mock-imap/src/scenario.rs).
+ */
+export const DROP_IDLERS_MARKER = 'Arrived while IDLE was down';
+
+/** The fault behind DROP_IDLERS_MARKER, matched on the APPENDed message. */
+export function dropIdlersOnAppendOf(needle = DROP_IDLERS_MARKER) {
+  return { trigger: { OnCommandWith: ['APPEND', needle.toUpperCase()] }, action: 'DropIdlers' };
+}
+
 /** Drop only the nth matching command, leaving its next attempt to succeed. */
 export function dropNthCommandWith(command, needle, n = 1) {
   return {

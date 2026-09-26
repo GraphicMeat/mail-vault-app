@@ -213,6 +213,11 @@ pub struct ServerState {
     /// `None` = the five system flags plus `\*` (the container is already
     /// `#[serde(default)]`, so an omitted field lands here).
     pub permanent_flags: Option<Vec<String>>,
+    /// Bumped to close every connection parked in IDLE, silently, with no
+    /// EXISTS for whatever changes next: a network blip as the client sees
+    /// it. `Action::DropIdlers` bumps it; a Rust test can bump it in the same
+    /// `mutate` that adds the message the dropped client must catch up on.
+    pub idle_drops: u64,
 }
 
 impl Default for ServerState {
@@ -231,6 +236,7 @@ impl Default for ServerState {
             ],
             expect_login: None,
             permanent_flags: None,
+            idle_drops: 0,
         }
     }
 }

@@ -77,6 +77,12 @@ pub enum Action {
     /// Close the socket without responding.
     DropConnection,
 
+    /// Close every OTHER connection parked in IDLE, with no EXISTS for this
+    /// command's change, then run the command as usual. On an APPEND matched
+    /// by a Subject needle it delivers one message while the watcher is gone:
+    /// only a sync on reconnect can find it (`ServerState::idle_drops`).
+    DropIdlers,
+
     /// Send only the first N bytes of the response, then keep the socket open.
     TruncateResponse(usize),
 

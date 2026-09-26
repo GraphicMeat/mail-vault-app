@@ -249,6 +249,11 @@ fn handle_conn(
         if actions.contains(&Action::DropConnection) {
             return Ok(());
         }
+        // Before the command runs, so the idler sees the drop first and never
+        // reports the change this command makes.
+        if actions.contains(&Action::DropIdlers) {
+            state.lock().unwrap().idle_drops += 1;
+        }
         for a in &actions {
             if let Action::Delay(d) = a {
                 std::thread::sleep(*d);
@@ -319,7 +324,11 @@ fn idle_loop(
     write_line(out, b"+ idling")?;
     let snapshot =
         |st: &ServerState| st.find(&name).map(|mb| (mb.messages.len(), mb.highest_modseq)).unwrap_or((0, 0));
-    let (mut count, mut modseq) = snapshot(&state.lock().unwrap());
+    let (mut count, mut modseq, drops) = {
+        let st = state.lock().unwrap();
+        let (c, m) = snapshot(&st);
+        (c, m, st.idle_drops)
+    };
     // Logged only now, with the baseline already taken: a test that waits for
     // this line and then mutates the mailbox is guaranteed to be seen.
     log.lock().unwrap().push(raw.to_string());
@@ -344,6 +353,11 @@ fn idle_loop(
             }
             Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
                 let st = state.lock().unwrap();
+                // Checked before the count, under the same lock the change
+                // was made under: a dropped idler reports nothing.
+                if st.idle_drops != drops {
+                    break Err(std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "idlers dropped by the scenario"));
+                }
                 let (c, m) = snapshot(&st);
                 if c != count {
                     write_line(out, format!("* {} EXISTS", c).as_bytes())?;

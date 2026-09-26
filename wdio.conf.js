@@ -9,6 +9,7 @@ import {
   slowCommand,
   slowCommandWith,
   dropNthCommandWith,
+  dropIdlersOnAppendOf,
   unreadableBody,
   bodyFetchDropsAlways,
   unreachableMessage,
@@ -259,6 +260,9 @@ let MOCK_ACCOUNTS = [
       // can back it up alone (skipFolders: 6) and get a run that saves 2 of 3 —
       // the shape that used to notify "Backup failed - Unknown error".
       ...unreachableMessage(9102),
+      // connected-instant-arrival: a delivery that first cuts the daemon's
+      // IDLE connection, so it lands while nobody is listening.
+      dropIdlersOnAppendOf(),
     ],
   },
 ];
