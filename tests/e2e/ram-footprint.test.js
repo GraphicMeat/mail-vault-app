@@ -10,13 +10,21 @@
 //
 // Two accounts, one small INBOX and one large, so the per-header cost is a
 // subtraction rather than a guess. Asserts nothing: it prints a table.
+//
+// On Windows the same run reads the private working set instead (winMemory.js),
+// and with RAM_SHOTS_DIR set it photographs the window at each checkpoint.
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { freemem, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { windowsSample, captureWindow } from './winMemory.js';
 
 const SMALL = Number(process.env.RAM_SMALL_INBOX || 50);
 const BIG = Number(process.env.RAM_BIG_INBOX || 10000);
-const OUT = process.env.RAM_REPORT || '/tmp/ram-footprint.json';
+const OUT = process.env.RAM_REPORT || join(tmpdir(), 'ram-footprint.json');
+const SHOTS = process.env.RAM_SHOTS_DIR;
+const IS_WIN = process.platform === 'win32';
 
 const WEBKIT = ['com.apple.WebKit.WebContent', 'com.apple.WebKit.Networking', 'com.apple.WebKit.GPU'];
 
@@ -52,6 +60,7 @@ const samples = [];
 
 /** One row per live process, plus the runner's load — a loaded mini is not a clean read. */
 function sample(label, extra = {}) {
+  if (IS_WIN) return record(label, windowsSample(process.cwd()), `free ${Math.round(freemem() / 1048576)} MB`, extra);
   const pids = [
     ...pgrep('mailvault', true).map((pid) => ({ pid, who: 'mailvault (app)' })),
     ...pgrep('mailvault-daemon', true).map((pid) => ({ pid, who: 'mailvault-daemon' })),
@@ -65,13 +74,27 @@ function sample(label, extra = {}) {
     const f = footprint(pid);
     if (f && f.mb !== null) procs.push({ pid, who, ...f });
   }
-  const total = Math.round(procs.reduce((n, p) => n + p.mb, 0) * 10) / 10;
   const load = execFileSync('uptime', { encoding: 'utf8' }).trim().split('load averages:')[1]?.trim();
+  return record(label, procs, load, extra);
+}
+
+function record(label, procs, load, extra) {
+  const total = Math.round(procs.reduce((n, p) => n + (p.mb || 0), 0) * 10) / 10;
   const row = { label, at: new Date().toISOString(), load, total, procs, ...extra };
   samples.push(row);
   console.log(`\n[ram] ${label} — total ${total} MB (load ${load})`);
-  for (const p of procs) console.log(`[ram]   ${String(p.mb).padStart(7)} MB  peak ${String(p.peakMB).padStart(7)} MB  ${p.who} [${p.pid}]`);
+  for (const p of procs) console.log(`[ram]   ${String(p.mb).padStart(7)} MB  peak ${String(p.peakMB ?? p.peakWsMB).padStart(7)} MB  ${p.who} [${p.pid}]`);
   return row;
+}
+
+/** Windows only: the app window at this checkpoint, native frame and all. */
+function shoot(name) {
+  if (!IS_WIN || !SHOTS) return;
+  const app = samples.at(-1)?.procs.find((p) => p.who === 'mailvault');
+  if (!app) return;
+  mkdirSync(SHOTS, { recursive: true });
+  try { console.log(`[ram] shot ${name}: ${captureWindow(app.pid, join(SHOTS, `${name}.png`))}`); }
+  catch (e) { console.warn(`[ram] shot ${name} failed: ${e.message}`); }
 }
 
 /** The store's own count — the list header lies while a drain is still running. */
@@ -128,8 +151,8 @@ async function drainWholeMailbox(timeoutMs) {
   }
 }
 
-// pgrep + /usr/bin/vmmap: the footprint it reports is a macOS measurement.
-(process.platform === 'darwin' ? describe : describe.skip)('memory footprint', () => {
+// pgrep + vmmap on macOS, the perf classes on Windows; nothing reads Linux.
+(process.platform === 'darwin' || IS_WIN ? describe : describe.skip)('memory footprint', () => {
   before(async () => {
     await waitForApp();
     await waitForEmails();
@@ -145,6 +168,7 @@ async function drainWholeMailbox(timeoutMs) {
 
     await switchToFolder('small@mock.test', 'INBOX');
     sample(`small INBOX drained (${SMALL} fixture)`, { state: await drainWholeMailbox(5 * 60_000) });
+    shoot('small-inbox');
 
     // Immediately either side of the switch, so the peak delta belongs to the
     // large account's cold read and not to anything that came after it. The
@@ -162,6 +186,7 @@ async function drainWholeMailbox(timeoutMs) {
 
     const bigState = await drainWholeMailbox(25 * 60_000);
     sample(`big INBOX drained (${BIG} fixture)`, { state: bigState });
+    shoot('big-inbox');
 
     // A second pass over a fully loaded list: this is what runs the body
     // prefetch and churns the virtualizer's rows.
@@ -189,5 +214,6 @@ async function drainWholeMailbox(timeoutMs) {
       await browser.pause(minutes * 60_000);
       sample(`idle +${minutes} min`, { state: await listState() });
     }
+    shoot('idle');
   });
 });
