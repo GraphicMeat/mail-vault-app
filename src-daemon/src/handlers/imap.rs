@@ -541,15 +541,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 "[test-connection] Testing {} → {}:{}",
                 account.email, account.host, account.effective_port()
             );
-            // Wrap the whole test in a 20s timeout — auth/TLS steps have no
-            // individual timeout of their own. Verbatim from commands.rs; the
-            // RPC layer's own ceiling is already ≥45s (imap_get_email_light's
-            // BODY_FETCH_TIMEOUT), so this stays well inside it.
-            let outcome = tokio::time::timeout(std::time::Duration::from_secs(20), imap::test_connection(&account, &state.imap_pool)).await;
-            match outcome {
-                Ok(Ok(())) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
-                Ok(Err(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-                Err(_) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Connection test timed out for {}", account.email)),
+            // `imap::test_connection` owns its own per-attempt budget, one
+            // retry on a stalled attempt, and a fire-and-forget LOGOUT — no
+            // timeout wrapper here: one would cut off the retry it just
+            // earned, and the RPC layer's own ceiling is already ≥45s
+            // (imap_get_email_light's BODY_FETCH_TIMEOUT), well above the
+            // ~40s worst case of two attempts.
+            match imap::test_connection(&account, &state.imap_pool).await {
+                Ok(()) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
 
@@ -1030,6 +1030,25 @@ mod tests {
         let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
+    }
+
+    /// The first connection stalls in the greeting past `GREETING_TIMEOUT`;
+    /// the retry is a fresh connection the fault does not touch. The handler
+    /// must not wrap this in its own timeout — that would cut the retry off
+    /// before it gets a chance to succeed.
+    #[tokio::test]
+    async fn test_connection_retries_once_after_a_stalled_first_attempt() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().fault(
+            mock_imap::Trigger::OnNthConnect(1),
+            mock_imap::Action::Delay(std::time::Duration::from_secs(16)),
+        ));
+        let s = st(true);
+
+        let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
+        let result = resp.result.expect("success after one retry");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(server.connection_count(), 2, "expected exactly one retry (two connections)");
     }
 
     #[tokio::test]

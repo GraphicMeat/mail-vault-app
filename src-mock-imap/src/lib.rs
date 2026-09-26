@@ -81,7 +81,7 @@ impl MockImap {
                         break;
                     }
                     let Ok(conn) = conn else { continue };
-                    connections.fetch_add(1, Ordering::SeqCst);
+                    let conn_no = connections.fetch_add(1, Ordering::SeqCst) + 1;
                     peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
                     let open = Open(live.clone());
                     let (state, log, faults, counts, greeting) = (
@@ -92,7 +92,7 @@ impl MockImap {
                         greeting.clone(),
                     );
                     std::thread::spawn(move || {
-                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open);
+                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open, conn_no);
                     });
                 }
             });
@@ -205,6 +205,7 @@ fn handle_conn(
     counts: Arc<Mutex<HashMap<String, usize>>>,
     greeting: String,
     open: Open,
+    conn_no: usize,
 ) -> std::io::Result<()> {
     let mut open = Some(open);
     conn.set_nodelay(true)?;
@@ -213,10 +214,14 @@ fn handle_conn(
     let mut sess = Session::default();
     let mut responses_sent = 0usize;
 
-    // OnConnect faults fire before the greeting.
+    // OnConnect/OnNthConnect faults fire before the greeting.
     let connect_actions: Vec<Action> = faults
         .iter()
-        .filter(|f| f.trigger == Trigger::OnConnect)
+        .filter(|f| match &f.trigger {
+            Trigger::OnConnect => true,
+            Trigger::OnNthConnect(n) => *n == conn_no,
+            _ => false,
+        })
         .map(|f| f.action.clone())
         .collect();
     for a in &connect_actions {
@@ -488,7 +493,7 @@ fn match_faults(
         .filter(|f| match &f.trigger {
             Trigger::OnCommand(c) => c == name,
             Trigger::OnNthCommand(c, k) => c == name && *k == n,
-            Trigger::OnConnect => false,
+            Trigger::OnConnect | Trigger::OnNthConnect(_) => false,
             Trigger::OnCommandWith(c, needle) => {
                 c == name && args.contains(needle.as_str())
             }

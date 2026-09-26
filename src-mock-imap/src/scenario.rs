@@ -14,8 +14,11 @@ pub enum Trigger {
     OnCommand(String),
     /// The nth occurrence (1-based) of a command.
     OnNthCommand(String, usize),
-    /// Fires once, right after the TCP connection is accepted.
+    /// Fires on every TCP connection, right after it is accepted.
     OnConnect,
+    /// Fires only on the nth (1-based) TCP connection accepted, right after
+    /// it is accepted — a first attempt that stalls and a retry that must not.
+    OnNthConnect(usize),
     /// Every occurrence of a command whose arguments contain `needle`
     /// (case-insensitive). The only way to fault one FETCH shape and not the
     /// others: a body read is `BODY.PEEK[]`, a header page is

@@ -512,6 +512,13 @@ fn sign_in_error(config: &ImapConfig, rejected: &str, e: async_imap::error::Erro
 /// Connect + authenticate, no capability caching or COMPRESS negotiation.
 async fn connect_and_auth(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
     let slot = pool.connection_slot(config).await?;
+    connect_and_auth_with_slot(config, slot).await
+}
+
+/// `connect_and_auth`, given a slot already taken. Split out for the
+/// connection test: its per-attempt budget must not include the slot wait
+/// (a busy 7-slot budget is not what should read as "timed out").
+async fn connect_and_auth_with_slot(config: &ImapConfig, slot: tokio::sync::OwnedSemaphorePermit) -> Result<ImapSession, String> {
     let addrs = resolve_addrs(config).await?;
     let (transport, greeting_consumed) = connect_transport(config, &addrs, slot).await?;
     authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await
@@ -2532,16 +2539,51 @@ pub async fn find_message_id(
     Ok(probe)
 }
 
-/// Test IMAP connection
+/// Per-attempt budget for the connection test: connect + TLS + greeting +
+/// AUTH (the CAPABILITY response AUTH returns is free) — no COMPRESS, no
+/// SELECT. A throttled Gmail account answers each command in ~10s, so this
+/// stays well above that for a live server and still bounds a dead one.
+const TEST_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// LOGOUT is fire-and-forget once AUTH has already succeeded: a slow or
+/// silent LOGOUT must not turn a working account into a reported failure.
+const TEST_LOGOUT_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// True for a connect/auth error produced by a timeout: `bounded_step`'s
+/// "timed out after Ns", `async_std::io::timeout`'s "future timed out", or
+/// this function's own per-attempt cutoff — never for a plain auth rejection,
+/// which is a wrong password, not a hang, and must not be retried.
+fn is_timeout_error(e: &str) -> bool {
+    e.contains("timed out")
+}
+
+/// One connect+auth attempt, bounded to `TEST_ATTEMPT_TIMEOUT`. The slot wait
+/// sits outside the timer (bounded by `connection_slot`'s own polling loop,
+/// not this one), so a busy account's connection budget reads as a slow
+/// attempt, not a network timeout.
+async fn test_connection_attempt(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
+    let slot = pool.connection_slot(config).await?;
+    match async_std::future::timeout(TEST_ATTEMPT_TIMEOUT, connect_and_auth_with_slot(config, slot)).await {
+        Ok(result) => result,
+        Err(_) => Err(format!("timed out after {}s", TEST_ATTEMPT_TIMEOUT.as_secs())),
+    }
+}
+
+/// Test an IMAP connection: connect, authenticate, log out. Retries once if
+/// the attempt itself stalled (a throttled server, a dropped SYN, a silent
+/// greeting) — never on an auth rejection, which a retry cannot fix.
 pub async fn test_connection(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
-    let mut session = connect_and_auth(config, pool).await
-        .map_err(|e| format!("Connection test failed: {}", e))?;
+    let mut session = match test_connection_attempt(config, pool).await {
+        Ok(session) => session,
+        Err(e) if is_timeout_error(&e) => match test_connection_attempt(config, pool).await {
+            Ok(session) => session,
+            Err(e2) if is_timeout_error(&e2) => return Err(format!("Connection test timed out for {}", config.email)),
+            Err(e2) => return Err(format!("Connection test failed: {}", e2)),
+        },
+        Err(e) => return Err(format!("Connection test failed: {}", e)),
+    };
 
-    session
-        .logout()
-        .await
-        .map_err(|e| format!("Logout failed: {}", e))?;
-
+    let _ = async_std::future::timeout(TEST_LOGOUT_TIMEOUT, session.logout()).await;
     Ok(())
 }
 

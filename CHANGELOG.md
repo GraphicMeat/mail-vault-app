@@ -55,6 +55,7 @@
 - **A connection that went silent no longer holds a message up for 45 seconds.** When a kept-open connection to the mail server had quietly died, opening a message waited for the full timeout before failing. MailVault now gives up on a connection after 15 seconds without a reply and fetches the message on a fresh one, and a server that stops answering while connecting (looking up its address, securing the connection, greeting or signing in) is given up on too instead of being waited on indefinitely.
 - **A message the server no longer has is no longer fetched over and over.** Background loading kept retrying a deleted message forever, up to dozens of times a day on a busy account, each one paying the full cost of a slow fetch; the row is now dropped from the list instead.
 - **A message that timed out or hit a dropped connection while opening now retries once on its own.** Most of the time it simply opens on the second try instead of showing an error, while a message the server has confirmed is gone is never retried.
+- **Adding a Google account no longer fails with "the server did not answer in time" on a slow connection.** Testing the connection now retries once if the first attempt stalls, and no longer waits on a slow sign-out after the test has already succeeded.
 
 ## [2.16.0] - 2026-09-25
 

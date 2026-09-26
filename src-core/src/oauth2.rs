@@ -2,6 +2,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
@@ -372,7 +373,12 @@ impl OAuth2Manager {
 
         info!("[OAuth2] Exchanging code for tokens ({})...", provider_name);
 
-        let client = reqwest::Client::new();
+        // Bounded so a slow token endpoint fails the account setup or
+        // refresh instead of hanging it (Track B: Google add-account timeout).
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
         let resp = client
             .post(config.token_endpoint)
             .form(&params)
@@ -443,7 +449,12 @@ impl OAuth2Manager {
             params.push(("client_secret".to_string(), secret));
         }
 
-        let client = reqwest::Client::new();
+        // Bounded so a slow token endpoint fails the account setup or
+        // refresh instead of hanging it (Track B: Google add-account timeout).
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
         let resp = client
             .post(config.token_endpoint)
             .form(&params)

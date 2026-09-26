@@ -76,6 +76,25 @@ async fn test_connection_succeeds_and_logs_out() {
     );
 }
 
+/// LOGOUT is fire-and-forget: AUTH already succeeded, so a server that goes
+/// silent on LOGOUT must not make the test report failure, or wait for it.
+#[async_std::test]
+async fn test_connection_ignores_a_slow_logout() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::on("LOGOUT"), Action::Delay(Duration::from_secs(30))),
+    );
+
+    let started = std::time::Instant::now();
+    test_connection(&config_for(&server), &pool()).await.expect("connection test");
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "a stalled LOGOUT must not be waited out, took {:?}",
+        started.elapsed()
+    );
+}
+
 /// A LIST on a socket that dies mid-response must be an error. It used to
 /// `filter_map(Result::ok)` the stream, so a broken pipe became `Ok(vec![])` —
 /// indistinguishable from a server that genuinely has no folders. The frontend
