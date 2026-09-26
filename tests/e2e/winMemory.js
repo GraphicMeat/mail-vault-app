@@ -44,12 +44,14 @@ export function roleOf(p) {
 }
 
 const PS_SNAPSHOT = `
+$ProgressPreference = 'SilentlyContinue'
 $ws = @{}
 Get-CimInstance Win32_PerfRawData_PerfProc_Process | ForEach-Object { $ws[[int]$_.IDProcess] = [int64]$_.WorkingSetPrivate }
 Get-CimInstance Win32_Process | ForEach-Object {
   [pscustomobject]@{ pid = [int]$_.ProcessId; ppid = [int]$_.ParentProcessId; name = $_.Name;
     path = $_.ExecutablePath; cmd = $_.CommandLine; privateWS = $ws[[int]$_.ProcessId];
-    ws = [int64]$_.WorkingSetSize; peakWS = [int64]$_.PeakWorkingSetSize * 1024 }
+    ws = [int64]$_.WorkingSetSize; peakWS = [int64]$_.PeakWorkingSetSize * 1024;
+    commit = [int64]$_.PrivatePageCount }
 } | ConvertTo-Json -Compress`;
 
 const encoded = (script) => Buffer.from(script, 'utf16le').toString('base64');
@@ -57,7 +59,9 @@ const toMB = (bytes) => (bytes == null ? null : Math.round(bytes / 1048576 * 10)
 
 /**
  * One reading of every process this checkout owns. `mb` is the private working
- * set; `wsMB`/`peakWsMB` are the TOTAL working set and its peak (shared pages
+ * set, which Windows trims from idle processes; `commitMB` is the private
+ * memory committed whether resident or not (Task Manager's "Commit size");
+ * `wsMB`/`peakWsMB` are the TOTAL working set and its peak (shared pages
  * included), so they are not comparable to `mb` or to a Mac peak.
  */
 export function windowsSample(repoRoot) {
@@ -65,11 +69,12 @@ export function windowsSample(repoRoot) {
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, windowsHide: true });
   return ownedTree(JSON.parse(out), repoRoot).map((p) => ({
     pid: p.pid, who: roleOf(p), path: p.path,
-    mb: toMB(p.privateWS), wsMB: toMB(p.ws), peakWsMB: toMB(p.peakWS),
+    mb: toMB(p.privateWS), commitMB: toMB(p.commit), wsMB: toMB(p.ws), peakWsMB: toMB(p.peakWS),
   }));
 }
 
 const PS_CAPTURE = `
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Drawing
 Add-Type -Namespace W -Name U -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(System.IntPtr v);
