@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { watchAccount, waitForSyncChanges } from '../services/syncService';
+import { onDaemonReconnected } from '../services/searchIndex';
 import { hasValidCredentials } from '../services/authUtils';
 import { isGraphAccount } from '../services/graphConfig';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
@@ -126,13 +127,16 @@ export function useEmailScheduler() {
   // logic.
   const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
     const s = useMailStore.getState();
+    // All Inboxes lists every account, so a change on ANY of them is on
+    // screen there, whichever account happens to be "active" underneath.
+    const unifiedOpen = s.unifiedInbox || s.activeMailbox === 'UNIFIED';
     const onScreen =
       (s.activeAccountId === accountId && (
         s.activeMailbox === mailbox
         || s.activeMailbox === 'UNIFIED'
         || !!s.mailboxScope?.paths?.includes(mailbox)
       ))
-      || (s.unifiedInbox && (s.unifiedFolder || 'INBOX') === mailbox);
+      || (unifiedOpen && (s.unifiedFolder || 'INBOX') === mailbox);
 
     if (newEmails > 0) {
       const account = s.accounts.find(a => a.id === accountId);
@@ -158,6 +162,11 @@ export function useEmailScheduler() {
   useEffect(() => {
     let stopped = false;
     let since = 0;
+    // A restarted daemon holds no watchers: the app is its only account list,
+    // and until the next scheduled refresh re-sent it, no account was idled.
+    let unlisten = null;
+    onDaemonReconnected(() => { if (!stopped) registerWatchers(); })
+      .then((u) => { if (stopped) u?.(); else unlisten = u; });
     (async () => {
       while (!stopped) {
         let reply;
@@ -171,6 +180,9 @@ export function useEmailScheduler() {
           continue;
         }
         if (stopped) return;
+        // A generation below our cursor is a restarted daemon (its counter
+        // starts again at 0): it has lost every watcher, so hand them back.
+        if (reply?.gen != null && reply.gen < since) registerWatchers();
         // Adopt the generation the daemon reports, even a lower one: its
         // counter restarts at 0 when the daemon does, and it answers a cursor
         // from the future at once with where it actually is.
@@ -206,7 +218,7 @@ export function useEmailScheduler() {
         }
       }
     })();
-    return () => { stopped = true; };
+    return () => { stopped = true; unlisten?.(); };
   }, []);
 
   // Update badge count

@@ -43,8 +43,9 @@ export async function _drainCache(accountId, mailbox, loadedUids) {
   try {
     const meta = await db.getEmailHeadersMeta(accountId, mailbox);
     const totalCached = meta?.totalCached || 0;
-    if (totalCached <= loadedUids.size) return null;
-
+    // No count gate: one wake can expunge a row and add another, leaving the
+    // cache exactly as big as the store with a new row the store lacks. Only
+    // the set difference below can tell.
     const listing = await db.listCachedUids(accountId, mailbox);
     if (!listing?.uids?.length) return null;
 

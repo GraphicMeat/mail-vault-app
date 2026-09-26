@@ -43,6 +43,12 @@ vi.mock('../../services/db', () => ({
 const mockNotify = vi.fn();
 vi.mock('../../stores/focusStore', () => ({ notify: (...a) => mockNotify(...a) }));
 
+// The Tauri event a (re)connected daemon channel raises.
+let daemonReconnected = null;
+vi.mock('../../services/searchIndex', () => ({
+  onDaemonReconnected: (cb) => { daemonReconnected = cb; return Promise.resolve(() => { daemonReconnected = null; }); },
+}));
+
 vi.mock('../../services/workflows/replayOps', () => ({
   replayOps: vi.fn().mockResolvedValue(undefined),
   wireReplayOnReconnect: vi.fn(),
@@ -149,6 +155,30 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     expect(methods('sync.events').map(c => c[1].since)).toEqual([0, 900, 3]);
+  });
+
+  // That lower generation is a daemon that restarted, and a restarted daemon
+  // holds no watchers: nothing idled until the next scheduled refresh.
+  it('hands the watchers back to a daemon whose generation went backwards', async () => {
+    mailStore.setState({ accounts: [IMAP_A] });
+    eventReplies = [reply({ gen: 900, changes: [] }), reply({ gen: 3, changes: [] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(methods('sync.watch')).toHaveLength(2);
+  });
+
+  it('hands the watchers back when the daemon channel reconnects', async () => {
+    mailStore.setState({ accounts: [IMAP_A] });
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+    expect(methods('sync.watch')).toHaveLength(1);
+
+    await act(async () => { daemonReconnected?.({}); });
+
+    expect(methods('sync.watch')).toHaveLength(2);
   });
 
   it('repaints the open folder and tells the user about the new mail', async () => {
@@ -368,6 +398,25 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
     expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
     expect(mockLoadEmails).not.toHaveBeenCalled();
+  });
+
+  // The account underneath All Inboxes is whichever was open last; a message
+  // for any OTHER account lands in the unified list too.
+  it('repaints All Inboxes for an arrival on an account that is not the active one', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A, IMAP_B],
+      activeAccountId: 'a1',
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: false,
+      unifiedFolder: 'INBOX',
+    });
+    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Bea' }, subject: 'Other account' }] });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
   });
 
   // The unified view is not always INBOX — a unified Sent must repaint Sent.

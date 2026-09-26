@@ -212,3 +212,22 @@ describe('a background account (the disk cache)', () => {
     expect(mockGetEmailHeaders).not.toHaveBeenCalled();
   });
 });
+
+describe('All Inboxes', () => {
+  // The scheduled refresh wrote every account's cache and never repainted the
+  // unified list: only a manual Refresh (refreshCurrentView) called
+  // loadUnifiedInbox, so new mail sat in the cache until the user clicked.
+  it('repaints the unified list after the scheduled refresh has synced', async () => {
+    state.activeMailbox = 'UNIFIED';
+    state.unifiedInbox = true;
+    state.unifiedFolder = 'INBOX';
+    state.loadUnifiedInbox = vi.fn().mockResolvedValue(undefined);
+    cachedByKey['acct-1|INBOX'] = cacheEntry([1], 1);
+    mockFetchEmails.mockResolvedValue({ emails: [header(2), header(1)], total: 2, hasMore: false });
+
+    await refreshAllAccounts();
+
+    expect(state.loadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
+    expect(state.loadEmails).not.toHaveBeenCalled();
+  });
+});

@@ -266,6 +266,14 @@ export async function refreshAllAccounts(options = {}) {
     }
   }
 
+  // All Inboxes is built from each account's cache, which the loop above only
+  // wrote: repaint it, or the new mail waits for a manual Refresh. Re-read the
+  // store, the user may have left the view while this ran.
+  const after = get();
+  if (after.unifiedInbox || after.activeMailbox === 'UNIFIED') {
+    await after.loadUnifiedInbox?.(null, after.unifiedFolder || 'INBOX');
+  }
+
   // Read the store LAST: the account on screen had its badge recounted by the
   // loadEmails() above, and that is the fresher number for it.
   const settings = useSettingsStore.getState();
