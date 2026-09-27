@@ -33,6 +33,7 @@ use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_a
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use mailvault_core::fetch_mode::{FetchMode, FetchPolicy};
 use mailvault_core::vault_files;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -95,7 +96,18 @@ where
 /// `A` (only a backup vouching for it adds that), never over an existing
 /// file. `true`: a copy is there now, written or already present. A failure
 /// only warns — a cache miss must not fail what the user is looking at.
-async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>) -> bool {
+///
+/// The account's download mode decides first (`download_policy`): On Demand
+/// writes nothing, Keep Recent and Index Only write a message dated inside
+/// the window (or undated), Hoarder writes everything, a hidden account
+/// nothing. `false` then: no copy was written by this call.
+async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>) -> bool {
+    let app_dir = state.app_dir.clone();
+    let policy_account = account_id.clone();
+    let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
+    if !policy.is_some_and(|p| p.keeps_body_dated(date_ms, now_ms())) {
+        return false;
+    }
     let state2 = Arc::clone(state);
     let cache_result = blocking(move || -> Result<bool, String> {
         with_mailbox_write(&state2, &account_id, &mailbox, |root| {
@@ -118,24 +130,37 @@ async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: Strin
     }
 }
 
+pub(crate) fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+/// A message's date in epoch ms from its `Date:` header, else its
+/// INTERNALDATE (RFC 3339 once `LightFullEmail` carries it). `None`: neither
+/// parses, which every mode but On Demand keeps.
+pub(crate) fn email_date_ms(date: Option<&str>, internal_date: Option<&str>) -> Option<i64> {
+    date.or(internal_date)
+        .and_then(|d| mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|t| t.timestamp())))
+        .and_then(|secs| secs.checked_mul(1000))
+}
+
 /// Download the bodies of mail the IDLE watcher just announced and keep them
 /// the way an opened message is kept (`auto_cache`), so a new message reads
-/// offline and is searchable by its text within seconds. The app's own gate
-/// for caching bodies applies: none for a hidden account, none for a message
-/// dated before the local-copy window (`EmailPipelineManager._getUncachedUids`).
+/// offline and is searchable by its text within seconds. The account's
+/// download mode applies: none for a hidden account or On Demand (no body is
+/// even fetched), none for a message dated outside a Keep Recent / Index Only
+/// window (`auto_cache` decides that once the date is known).
 pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sync_engine::SyncAccount, mailbox: &str, uids: &[u32]) {
     if uids.is_empty() {
         return;
     }
     let app_dir = state.app_dir.clone();
     let account_id = account.id.clone();
-    let Ok(Some(months)) = blocking(move || local_copy_months(&app_dir, &account_id)).await else {
+    let Ok(Some(policy)) = blocking(move || download_policy(&app_dir, &account_id)).await else {
         return;
     };
-    let cutoff = (months > 0)
-        .then(|| chrono::Utc::now().checked_sub_months(chrono::Months::new(months)))
-        .flatten()
-        .map(|d| d.timestamp());
+    if policy.mode == FetchMode::OnDemand {
+        return;
+    }
     for &uid in uids {
         let fetch = state.imap_pool.run_read(&account.imap_config, false, |mut session| {
             let mb = mailbox.to_string();
@@ -156,30 +181,39 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
                 continue;
             }
         };
-        let dated = email.date.as_deref().or(email.internal_date.as_deref()).and_then(|d| {
-            mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|t| t.timestamp()))
-        });
-        if matches!((cutoff, dated), (Some(c), Some(d)) if d < c) {
-            continue;
-        }
-        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes).await;
+        let dated = email_date_ms(email.date.as_deref(), email.internal_date.as_deref());
+        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes, dated).await;
     }
 }
 
-/// The app's local-copy window for `account_id`, in months (0 = all mail),
-/// read from its persisted settings the way the transfer cap is
-/// (`sync_engine::read_transfer_limits`). `None`: a hidden account, which the
-/// app never caches bodies for. An unreadable file reads as the app's
-/// defaults: visible, three months.
-fn local_copy_months(app_dir: &std::path::Path, account_id: &str) -> Option<u32> {
-    let settings = std::fs::read_to_string(app_dir.join("frontend-settings.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
-    let state = settings.as_ref().and_then(|s| s.get("mailvault-settings")?.get("state"));
-    if state.and_then(|s| s.get("hiddenAccounts")?.get(account_id)?.as_bool()) == Some(true) {
-        return None;
+/// The persisted `mailvault-settings.state` object of `frontend-settings.json`
+/// (the daemon has no settings push; it reads the file fresh). `Err` when the
+/// file is missing, unreadable, mid-write garbage, or holds no state object:
+/// a caller that DELETES on the answer (the eviction worker) must stop there,
+/// because `FetchPolicy::from_settings` over an empty state is an evicting
+/// Keep Recent, which would clear a Hoarder account's copies.
+pub(crate) fn read_settings_state(app_dir: &std::path::Path) -> Result<Value, String> {
+    let raw = std::fs::read_to_string(app_dir.join("frontend-settings.json"))
+        .map_err(|e| format!("settings unreadable: {e}"))?;
+    let mut settings: Value = serde_json::from_str(&raw).map_err(|e| format!("settings unparseable: {e}"))?;
+    match settings.get_mut("mailvault-settings").and_then(|s| s.get_mut("state")) {
+        Some(state) if state.is_object() => Ok(state.take()),
+        _ => Err("settings hold no mailvault-settings.state object".to_string()),
     }
-    Some(state.and_then(|s| s.get("localCacheDurationMonths")?.as_u64()).unwrap_or(3) as u32)
+}
+
+/// The download mode of `account_id` (Track H). `Ok(None)`: a hidden
+/// account, which gets no body kept at all. `Err`: see `read_settings_state`.
+pub(crate) fn fetch_policy(app_dir: &std::path::Path, account_id: &str) -> Result<Option<FetchPolicy>, String> {
+    Ok(FetchPolicy::from_settings(&read_settings_state(app_dir)?, account_id))
+}
+
+/// `fetch_policy` for the download gates: unreadable settings read as the
+/// app's defaults (visible, Keep Recent, three months), as the old
+/// `local_copy_months` did. A gate that writes can only keep too much, never
+/// lose mail, so it does not stop on an unreadable file the way eviction does.
+pub(crate) fn download_policy(app_dir: &std::path::Path, account_id: &str) -> Option<FetchPolicy> {
+    fetch_policy(app_dir, account_id).unwrap_or_else(|_| FetchPolicy::from_settings(&json!({}), account_id))
 }
 
 /// Ported from `commands.rs` verbatim: a pooled socket the peer closed while
@@ -487,7 +521,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let store_uid = e.uid;
                     let mb = mb_clone.clone();
                     // `store` answered Ok: written now, or a file was already there.
-                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone()).await;
+                    let dated = email_date_ms(e.date.as_deref(), e.internal_date.as_deref());
+                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated).await;
                     // OpenPGP: decrypted in memory whatever the cache did; the
                     // decrypted copy is kept only when the vault holds the message.
                     let raw = e.raw_source_bytes.clone();
@@ -936,6 +971,10 @@ mod tests {
         assert!(err.message.starts_with("E_UID_GONE:"), "{}", err.message);
     }
 
+    fn write_settings(dir: &std::path::Path, state: Value) {
+        std::fs::write(dir.join("frontend-settings.json"), json!({"mailvault-settings": {"state": state}}).to_string()).unwrap();
+    }
+
     #[tokio::test]
     async fn get_email_light_auto_caches_to_the_vault_and_nudges_the_index() {
         plaintext();
@@ -945,6 +984,9 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             (dir.clone(), DaemonState::for_test(dir.clone(), dir, true))
         };
+        // The synthetic message is dated 2026-01-01: a mode that keeps every
+        // body, so this test does not start failing as the calendar moves.
+        write_settings(&tmp, json!({"fetchMode": "hoarder"}));
 
         let resp = call(
             &s,
@@ -972,6 +1014,94 @@ mod tests {
         assert_eq!(result["cached"], json!(true));
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    fn light_state() -> (std::path::PathBuf, Arc<DaemonState>) {
+        let dir = std::env::temp_dir().join(format!("mv-imap-mode-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        (dir.clone(), DaemonState::for_test(dir.clone(), dir, true))
+    }
+
+    fn cached_files(dir: &std::path::Path) -> Vec<String> {
+        let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
+        let mut names: Vec<String> = std::fs::read_dir(&cur)
+            .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect())
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+
+    fn dated_message(uid: u32, date: &str) -> Message {
+        Message::new(uid, format!("From: a@example.com\r\nSubject: Msg {uid}\r\nDate: {date}\r\nMessage-ID: <m{uid}@example.com>\r\n\r\nBody {uid}\r\n"))
+    }
+
+    /// On Demand: the body is shown, never written to disk.
+    #[tokio::test]
+    async fn get_email_light_writes_nothing_for_an_on_demand_account() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let (dir, s) = light_state();
+        write_settings(&dir, json!({"fetchMode": "onDemand", "localCacheDurationMonths": 3}));
+
+        let resp = call(
+            &s,
+            "imap_get_email_light",
+            json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX", "accountId": "acc1"}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true), "the body is still shown");
+        assert_eq!(result["cached"], json!(false));
+        assert!(cached_files(&dir).is_empty(), "On Demand writes no cache copy");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Keep Recent: a message inside the window is kept, one older is shown
+    /// but not written.
+    #[tokio::test]
+    async fn get_email_light_keeps_only_bodies_inside_the_keep_recent_window() {
+        plaintext();
+        let recent = (chrono::Utc::now() - chrono::Duration::days(2)).to_rfc2822();
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(dated_message(1, &recent));
+        inbox.add(dated_message(2, "Thu, 01 Jan 2015 00:00:00 +0000"));
+        let server = MockImap::start(Scenario::new().mailbox(inbox));
+        let (dir, s) = light_state();
+        write_settings(&dir, json!({"fetchMode": "keepRecent", "localCacheDurationMonths": 3}));
+
+        for uid in [1, 2] {
+            let resp = call(
+                &s,
+                "imap_get_email_light",
+                json!({"account": account_json(&server), "uid": uid, "mailbox": "INBOX", "accountId": "acc1"}),
+            )
+            .await;
+            let result = resp.result.expect("success");
+            assert_eq!(result["success"], json!(true));
+            assert_eq!(result["cached"], json!(uid == 1), "uid {uid}");
+        }
+        let files = cached_files(&dir);
+        assert_eq!(files.len(), 1, "only the recent body is kept: {files:?}");
+        assert!(files[0].starts_with("1"), "{files:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn settings_that_cannot_be_read_are_an_error_never_defaults() {
+        let dir = std::env::temp_dir().join(format!("mv-imap-settings-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(fetch_policy(&dir, "acc1").is_err(), "missing file");
+        std::fs::write(dir.join("frontend-settings.json"), "{\"mailvault-settings\": {\"sta").unwrap();
+        assert!(fetch_policy(&dir, "acc1").is_err(), "a file caught mid-write");
+        std::fs::write(dir.join("frontend-settings.json"), json!({"other": 1}).to_string()).unwrap();
+        assert!(fetch_policy(&dir, "acc1").is_err(), "no mailvault-settings.state object");
+        write_settings(&dir, json!({"fetchMode": "hoarder", "hiddenAccounts": {"hidden": true}}));
+        assert_eq!(fetch_policy(&dir, "acc1").unwrap().map(|p| p.mode), Some(FetchMode::Hoarder));
+        assert_eq!(fetch_policy(&dir, "hidden").unwrap(), None, "a hidden account has no policy");
+        // The download gates alone fall back to the app's defaults.
+        std::fs::remove_file(dir.join("frontend-settings.json")).unwrap();
+        assert_eq!(download_policy(&dir, "acc1").map(|p| (p.mode, p.window_months)), Some((FetchMode::KeepRecent, 3)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

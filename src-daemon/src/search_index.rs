@@ -497,6 +497,32 @@ pub fn known_message_ids(
     Ok(out)
 }
 
+/// The uids of one folder whose index row holds the message's body text
+/// (`BODY_INDEXED`): what Index Only may evict, since search keeps finding
+/// them by their text once the file is gone. `Err` while the index is
+/// closed, switched off, or not indexing bodies at all: an Index Only
+/// account then evicts nothing.
+pub fn body_indexed_uids(st: &SearchIndexState, account_id: &str, mailbox: &str) -> Result<std::collections::HashSet<u32>, String> {
+    if *g(&st.enabled) != Some(true) {
+        return Err("the search index is off".into());
+    }
+    if g(&st.config).as_ref().map(|c| c.bodies) != Some(true) {
+        return Err("the search index does not index message bodies".into());
+    }
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+    let vault_dir = core::text::vault_dir_name(mailbox);
+    let mut stmt = conn
+        .prepare_cached("SELECT uid FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND body_state = ?3")
+        .map_err(|e| e.to_string())?;
+    let uids = stmt
+        .query_map((account_id, vault_dir.as_str(), reconcile::BODY_INDEXED), |r| r.get::<_, u32>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(uids)
+}
+
 /// Whether the index holds any row at all for an account. An account it knows
 /// nothing about is one whose folders have not been indexed yet, which is not
 /// the same answer as "these messages are gone".

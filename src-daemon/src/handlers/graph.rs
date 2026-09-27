@@ -140,6 +140,30 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // unreachable (same failure mode `vault::root(app_handle)` gave
             // the app-side version), it just never takes the RwLock that
             // would serialize this against a concurrent vault move.
+            // The account's download mode decides whether a copy is kept at
+            // all (On Demand: never; Keep Recent / Index Only: inside the
+            // window). Not kept: the parsed email still goes back, every
+            // caller reads only `email`, and `cached: false` says no file.
+            let date_ms = {
+                let date = mailparse::parse_headers(&raw_bytes)
+                    .ok()
+                    .and_then(|(headers, _)| mailparse::MailHeaderMap::get_first_value(headers.as_slice(), "Date"));
+                crate::handlers::imap::email_date_ms(date.as_deref(), None)
+            };
+            let policy_dir = state.app_dir.clone();
+            let policy_account = account_id.clone();
+            let keep = blocking(move || crate::handlers::imap::download_policy(&policy_dir, &policy_account))
+                .await
+                .ok()
+                .flatten()
+                .is_some_and(|p| p.keeps_body_dated(date_ms, crate::handlers::imap::now_ms()));
+            if !keep {
+                return Some(match vault_eml::parse_eml_bytes_light(&raw_bytes, uid, vec![]) {
+                    Ok(email) => RpcResponse::success(id, json!({"success": true, "email": email, "cached": false})),
+                    Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                });
+            }
+
             let root = match common::vault_root(state) {
                 Ok(r) => r,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
@@ -453,6 +477,28 @@ mod tests {
         let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
         assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_some(), "the raw .eml must land in the vault's cur dir");
         assert_eq!(result["cached"], json!(true));
+    }
+
+    /// On Demand keeps no body on disk (Track H): the parsed email still
+    /// comes back, but no vault file is written and `cached` says so.
+    #[tokio::test]
+    async fn cache_mime_writes_nothing_for_an_on_demand_account() {
+        let _g = mock_graph(vec![(200, "From: a@b.com\r\nSubject: hi\r\n\r\nBody".to_string())]);
+        let s = st();
+        let settings = json!({"mailvault-settings": {"state": {"fetchMode": "onDemand", "localCacheDurationMonths": 3}}});
+        std::fs::write(s.app_dir.join("frontend-settings.json"), settings.to_string()).unwrap();
+
+        let resp = call(
+            &s,
+            "graph_cache_mime",
+            json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["email"]["subject"], json!("hi"));
+        assert_eq!(result["cached"], json!(false));
+        let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
+        assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_none(), "On Demand writes no vault file");
     }
 
     /// The write goes through `vault_files::store`, so a verified mailbox

@@ -6,6 +6,7 @@
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;
+mod eviction_worker;
 mod backup_zip;
 mod channel;
 pub mod classification;
@@ -480,6 +481,7 @@ async fn daemon_main() {
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
         snooze: snooze_worker::SnoozeState::default(),
         auto_tag_worker,
+        eviction_worker: eviction_worker::EvictionWorkerState::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
     state.idle.set_daemon(&state);
@@ -555,6 +557,12 @@ async fn daemon_main() {
     // `set_auto_tag_notify` above and `handlers::handle_sync_now`) — never
     // polls the vault on its own.
     auto_tag_worker::start(Arc::clone(&state));
+
+    // Download modes' eviction worker (Track H): deletes working-cache
+    // copies a mode no longer keeps, only with fresh proof the server still
+    // has each message. First pass after launch settles, then daily, and at
+    // once on `storage.fetch_mode_changed`.
+    eviction_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));

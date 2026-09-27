@@ -189,6 +189,9 @@ pub struct DaemonState {
     /// `idle_watch`), shared with `idle` via `IdleWatchers::set_auto_tag_notify`
     /// so an IDLE wake-up sweeps auto-tag rules too.
     pub auto_tag_worker: crate::auto_tag_worker::AutoTagWorkerState,
+    /// The download-mode eviction worker's wake signal:
+    /// `storage.fetch_mode_changed` pokes it (Track H).
+    pub eviction_worker: crate::eviction_worker::EvictionWorkerState,
 }
 
 /// Opens the vault registry for the vault at `root` and points its change
@@ -613,6 +616,14 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
             RpcResponse::success(id, result)
         }
 
+        // ── Download modes (Track H) ────────────────────────────────
+        // The app saved a new download mode or window: the eviction worker
+        // re-derives what it may delete now instead of at its daily pass.
+        "storage.fetch_mode_changed" => {
+            state.eviction_worker.wake();
+            RpcResponse::success(id, serde_json::json!({"ok": true}))
+        }
+
         // ── Sync engine (Phase 3) ───────────────────────────────────
         "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
@@ -755,6 +766,7 @@ impl DaemonState {
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             auto_tag_worker,
+            eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
         });
         state.idle.set_daemon(&state);
         state
