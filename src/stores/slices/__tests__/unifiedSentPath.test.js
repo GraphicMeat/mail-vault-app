@@ -40,6 +40,17 @@ describe('_resolveUnifiedContext for a sent row without _mailbox', () => {
     ] };
     expect(_resolveUnifiedContext('a1:7', gmail).mailbox).toBe('[Gmail]/Sent Mail');
   });
+
+  it('finds Gmail\'s "Sent Mail" by name', () => {
+    const gmail = { ...state, mailboxes: [{ name: 'Sent Mail', path: '[Gmail]/Sent Mail' }] };
+    expect(_resolveUnifiedContext('a1:7', gmail).mailbox).toBe('[Gmail]/Sent Mail');
+  });
+
+  // Outbox matches by name too; the folder the server marks \Sent wins.
+  it('prefers the special-use Sent over an Outbox listed first', () => {
+    const outlook = { ...state, mailboxes: [{ name: 'Outbox', path: 'Outbox' }, { name: 'Sent Items', path: 'Sent Items', specialUse: '\\Sent' }] };
+    expect(_resolveUnifiedContext('a1:7', outlook).mailbox).toBe('Sent Items');
+  });
 });
 
 // Unified Drafts / Trash / Sent resolve each account's folder by role.

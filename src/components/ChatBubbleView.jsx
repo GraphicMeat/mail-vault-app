@@ -48,6 +48,7 @@ import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useExportStore } from '../stores/exportStore';
 import { describePurge } from '../utils/custodyCopy';
+import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhere } from '../services/workflows/messageMutations';
 import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workflows/threadReadTimer';
@@ -313,7 +314,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     && emailLocation?.mailbox === mailState.activeMailbox
     && archivedEmailIds.has(email.uid));
   const isLocalOnly = email.source === 'local-only' || email._origin === 'local-only';
-  const isSentEmail = emailLocation?.mailbox?.toLowerCase() === 'sent' || fromUser || email.flags?.includes('\\Sent');
+  const isSentEmail = isOutgoingMailboxName(emailLocation?.mailbox) || fromUser || email.flags?.includes('\\Sent');
   const isRead = !!email.flags?.includes('\\Seen');
   const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
   const isBackedUp = isEmailBackedUp(scopedEmail, backupScan) === true;

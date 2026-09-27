@@ -52,6 +52,7 @@ import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messa
 import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
+import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { AddressText } from './AddressText';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { ReadDelayProgress } from '../ReadDelayProgress';
@@ -401,7 +402,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   };
 
   const realAttachments = loadedEmail ? getRealAttachments(loadedEmail.attachments, loadedEmail.html) : [];
-  const isSentEmail = location?.mailbox?.toLowerCase() === 'sent' || email.flags?.includes('\\Sent');
+  const isSentEmail = isOutgoingMailboxName(location?.mailbox) || email.flags?.includes('\\Sent');
 
   // Quick Replies (Phase 5): only under the newest message, and only what is
   // already loaded — no fetch just to build this. Same cache the reply
@@ -494,7 +495,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
             isArchived={isArchived}
             isRead={!!email.flags?.includes('\\Seen')}
             isLocalOnly={email.source === 'local-only'}
-            isSentEmail={location?.mailbox?.toLowerCase() === 'sent' || email.flags?.includes('\\Sent')}
+            isSentEmail={isSentEmail}
             singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
             disabled={{ archive: saving, move: !location || email.source === 'local-only', toggleRead: !location || email.source === 'local-only', toggleFlag: !location || email.source === 'local-only' }}
             moveButtonRef={moveButtonRef}

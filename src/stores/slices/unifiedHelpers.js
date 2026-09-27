@@ -1,5 +1,6 @@
 import { t } from '../../i18n/index.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
+import { isOutgoingMailboxName } from '../../utils/sentFolder.js';
 // ── Shared helpers used across multiple mail store slices ──
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -67,7 +68,7 @@ export function _resolveUnifiedContext(key, state) {
     // Try to find the Sent folder's path from the account's mailboxes. The
     // declared role first: Gmail lists a label named "Sent" before its own.
     const sentFolder = state.mailboxes?.find(m => m.specialUse === '\\Sent' || m.special_use === '\\Sent')
-      || state.mailboxes?.find(m => m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items');
+      || state.mailboxes?.find(m => isOutgoingMailboxName(m.name));
     mailbox = sentFolder?.path || sentFolder?.name || 'Sent';
   }
   // Final safety: never return 'UNIFIED' as a real mailbox

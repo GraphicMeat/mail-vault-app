@@ -33,6 +33,7 @@ import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
 import { replySelection } from '../../utils/replySelection';
+import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
 
@@ -162,7 +163,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const emailKey = selectionKey(email, useMailStore.getState());
   const isArchived = !!email?.isArchived;
   const isLocalOnly = email?.source === 'local-only' || email?._origin === 'local-only';
-  const isSentEmail = emailLocation?.mailbox?.toLowerCase() === 'sent' || email?.flags?.includes('\\Sent');
+  const isSentEmail = isOutgoingMailboxName(emailLocation?.mailbox) || email?.flags?.includes('\\Sent');
   const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
   const backupEmail = emailLocation
     ? { ...email, _accountId: emailLocation.accountId, _mailbox: emailLocation.mailbox }

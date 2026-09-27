@@ -18,6 +18,7 @@ import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, tErr, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
+import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { SettingsPageLayout } from './ui/SettingsForm';
 
 const ROW_HEIGHT = 56;
@@ -419,7 +420,7 @@ function MailboxIcon({ name }) {
   const lower = (name || '').toLowerCase();
   const size = 16;
   if (lower === 'inbox') return <Inbox size={size} />;
-  if (lower === 'sent') return <Send size={size} />;
+  if (isOutgoingMailboxName(name)) return <Send size={size} />;
   if (lower.includes('trash') || lower.includes('deleted')) return <Trash2 size={size} />;
   if (lower.includes('archive')) return <Archive size={size} />;
   if (lower.includes('draft')) return <File size={size} />;

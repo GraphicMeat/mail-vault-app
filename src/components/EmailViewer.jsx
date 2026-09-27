@@ -60,6 +60,7 @@ import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { htmlToText } from './RichTextEditor';
 import { openCompose } from '../utils/composeOpener';
+import { isOutgoingMailboxName } from '../utils/sentFolder';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -361,7 +362,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // alert map are both shared across accounts and folders.
   const scopeKey = selectedEmail ? emailScopeKey(selectedEmail, useMailStore.getState()) : null;
   const selectedLocation = selectedEmail ? resolveEmailLocation(selectedEmail, useMailStore.getState()) : null;
-  const isSentEmail = !!selectedEmail && (selectedLocation?.mailbox?.toLowerCase() === 'sent' || selectedEmail.flags?.includes('\\Sent'));
+  const isSentEmail = !!selectedEmail && (isOutgoingMailboxName(selectedLocation?.mailbox) || selectedEmail.flags?.includes('\\Sent'));
   // The same handoff the row plays, at reading-pane scale: archive the message
   // you are reading and the band above it hands over while you watch, instead
   // of having quietly always said what it now says.
