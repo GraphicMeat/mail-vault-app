@@ -9,6 +9,7 @@
     "core:window:allow-destroy",
     "core:window:allow-unminimize",
     "core:window:allow-set-focus",
+    "core:webview:allow-set-webview-zoom",
     "dialog:default",
     "dialog:allow-save",
     "dialog:allow-open",

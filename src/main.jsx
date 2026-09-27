@@ -5,6 +5,7 @@ import { MotionConfig } from 'framer-motion';
 import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
+import { watchTextAppearance } from './utils/appFont';
 import './styles/index.css';
 
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
@@ -19,6 +20,10 @@ const SettingsWindow = React.lazy(() => import('./components/SettingsWindow').th
 // Listen to the webview's path-monitor events. Cheap, and the only signal that
 // arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
 if (!isComposeWindow && !isOriginalWindow && !isSettingsWindow) wireConnectivityEvents();
+
+// Font and text size, in every window: each hydrates the same settings file,
+// and the owner relays later changes (settings window, detached compose).
+watchTextAppearance(useSettingsStore);
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //

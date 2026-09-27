@@ -311,7 +311,8 @@ html {
 }
 
 body {
-  font-family: 'Instrument Sans', system-ui, sans-serif;
+  /* --app-font: Settings > Appearance > Text (utils/appFont.js). */
+  font-family: var(--app-font, 'Instrument Sans', system-ui, sans-serif);
   background-color: var(--mail-bg);
   color: var(--mail-text);
   -webkit-font-smoothing: antialiased;
@@ -394,7 +395,7 @@ body {
 
 /* Email content styling */
 .email-content {
-  font-family: 'Instrument Sans', system-ui, sans-serif;
+  font-family: var(--app-font, 'Instrument Sans', system-ui, sans-serif);
   line-height: 1.6;
 }
 
@@ -1176,6 +1177,8 @@ input[type="range"]::-moz-range-thumb:hover {
 .settings-visual-options > button { min-width: 0; padding: 4px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); text-align: left; color: var(--mail-text); }
 .settings-visual-options > button:hover { border-color: var(--mail-text-muted); background: var(--mail-surface-hover); }
 .settings-visual-options > button[aria-pressed="true"] { border-color: var(--mail-accent-text); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.font-options { display: grid; gap: 12px; min-width: 0; }
+.font-options-heading { margin-bottom: 6px; color: var(--mail-text-muted); font-size: 12px; font-weight: 500; }
 .settings-visual-option-label { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px; font-size: 13px; font-weight: 500; }
 .settings-visual-option-label > svg { flex-shrink: 0; }
 .settings-visual-option-label > svg:last-child:not(:first-child) { margin-left: auto; }

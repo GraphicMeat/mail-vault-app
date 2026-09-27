@@ -16,10 +16,11 @@ afterEach(cleanup);
 const tab = name => screen.getByRole('tab', { name: t(`settings.appearance.section.${name}`) });
 
 describe('appearance step', () => {
-  it('shows two color choices groups, with secondary preferences kept out of initial setup', () => {
+  it('shows the color and text choices groups, with secondary preferences kept out of initial setup', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     expect(screen.getAllByRole('tab')).toHaveLength(4);
-    expect(screen.getAllByTestId(/^appearance-control-/)).toHaveLength(2);
+    expect(screen.getAllByTestId(/^appearance-control-/).map(group => group.dataset.testid))
+      .toEqual(['appearance-control-theme', 'appearance-control-palette', 'appearance-control-font', 'appearance-control-text-size']);
     expect(screen.getByTestId('appearance-control-palette')).toBeTruthy();
     expect(screen.queryByTestId('appearance-control-after-delete')).toBeNull();
     expect(screen.queryByTestId('appearance-control-sidebar')).toBeNull();
@@ -65,6 +66,18 @@ describe('appearance step', () => {
     fireEvent.click(tab('layout'));
     fireEvent.click(screen.getByTestId('appearance-view-list'));
     expect(screen.getByTestId('preview-panes').dataset.layout).toBe('two-column');
+  });
+
+  it('picks the app font and text size on the colors tab, and the sample shows the font', () => {
+    useSettingsStore.setState({ appFont: 'instrument-sans', textScale: 1 });
+    render(<AppearanceStep onContinue={() => {}} />);
+    const font = screen.getByTestId('appearance-control-font');
+    expect(within(font).getByRole('group', { name: t('settings.text.codingFonts') })).toBeTruthy();
+    fireEvent.click(within(font).getByRole('button', { name: /Atkinson Hyperlegible Next/ }));
+    expect(useSettingsStore.getState().appFont).toBe('atkinson');
+    expect(screen.getByTestId('appearance-preview').style.fontFamily).toContain('Atkinson Hyperlegible Next');
+    fireEvent.click(within(screen.getByTestId('appearance-control-text-size')).getByRole('radio', { name: '110%' }));
+    expect(useSettingsStore.getState().textScale).toBe(1.1);
   });
 
   it('applies current recommended defaults, including Follow the pointer', () => {

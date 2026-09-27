@@ -415,11 +415,12 @@ function App() {
     });
     return () => { disposed = true; unlisten?.(); };
   }, []);
-  // A compose window of its own was handed the billing profile at detach;
-  // an upgrade made here afterwards has to reach it too.
+  // A compose window of its own was handed the billing profile, font and text
+  // size at detach; a change made here afterwards has to reach it too.
   useEffect(() => useSettingsStore.subscribe((state, prev) => {
-    if (state.billingProfile !== prev.billingProfile) {
-      composeWindowOwnerRef.current?.pushSettings({ billingProfile: state.billingProfile });
+    if (['billingProfile', 'appFont', 'textScale'].some(key => state[key] !== prev[key])) {
+      const { billingProfile, appFont, textScale } = state;
+      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale });
     }
   }), []);
 

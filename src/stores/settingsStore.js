@@ -4,6 +4,7 @@ import { safeStorage } from './safeStorage';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
+import { DEFAULT_APP_FONT, normalizeAppFont, normalizeTextScale } from '../utils/appFont';
 import {
   DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
   resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
@@ -462,6 +463,8 @@ export const useSettingsStore = create(
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
+      appFont: DEFAULT_APP_FONT, // an APP_FONTS id (utils/appFont.js) — the app's own UI font
+      textScale: 1, // one of TEXT_SCALES — native webview zoom of the whole UI
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       viewsSectionCollapsed: false, // Whether the sidebar's Views section is folded away
       sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
@@ -1111,6 +1114,8 @@ export const useSettingsStore = create(
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
+      setAppFont: (id) => set({ appFont: normalizeAppFont(id) }),
+      setTextScale: (value) => set({ textScale: normalizeTextScale(value) }),
       setQuickActionSurface: (surface, scope, config) => set(state => ({
         quickActions: setQuickActionSurface(state.quickActions, surface, scope, config),
       })),
@@ -1349,6 +1354,8 @@ export const useSettingsStore = create(
           signatureDisplay: 'smart',
           actionButtonDisplay: 'icon-label',
           emailViewerTheme: 'system',
+          appFont: DEFAULT_APP_FONT,
+          textScale: 1,
           sidebarCollapsed: false,
           viewsSectionCollapsed: false,
           sidebarStyle: 'list',

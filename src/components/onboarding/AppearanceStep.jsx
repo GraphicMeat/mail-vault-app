@@ -9,6 +9,7 @@ import { SettingsTabs } from '../ui/SettingsTabs';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { QuickActions } from '../QuickActions';
 import { ColorOptionPreview } from '../settings/PreferencePreview';
+import { FontOptions, TextSizeChoice } from '../settings/TextSettings';
 import { AppearancePreview } from './AppearancePreview';
 import { DEFAULT_QUICK_ACTIONS, isQuickActionStyleLinked, normalizeQuickActions, QUICK_ACTION_MODES, QUICK_ACTION_SURFACES } from '../../utils/quickActions';
 
@@ -106,6 +107,14 @@ export function AppearanceStep({ onContinue }) {
                 </Choice>)}
               </div>
             </fieldset>
+            <fieldset data-testid="appearance-control-font">
+              <legend>{t('settings.text.font')}</legend>
+              <FontOptions value={settings.appFont} onChange={settings.setAppFont} />
+            </fieldset>
+            <fieldset data-testid="appearance-control-text-size">
+              <legend>{t('settings.text.size')}</legend>
+              <TextSizeChoice label={t('settings.text.size')} value={settings.textScale} onChange={settings.setTextScale} />
+            </fieldset>
           </>}
           {section === 'quick-actions' && <>
             <fieldset data-testid="appearance-control-quick-surface">
@@ -188,7 +197,7 @@ export function AppearanceStep({ onContinue }) {
             : <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle}
             viewStyle={settings.viewStyle} emailListStyle={settings.emailListStyle} threadMode={settings.threadMode}
             theme={theme} palette={palette} emailViewerTheme={settings.emailViewerTheme}
-            highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} />}
+            highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} />}
         </div>
       </div>
     </SettingsTabs>

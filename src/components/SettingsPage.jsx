@@ -131,6 +131,10 @@ export const settingSearchGroups = [
     ['settings.colors.palette', 'palette color colour indigo graphite'],
     ['settings.appearance.emailViewerTheme', 'email message theme light dark background'],
   ] },
+  { id: 'appearance', section: 'text', sectionKey: 'settings.appearance.section.text', settings: [
+    ['settings.text.size', 'text size font size zoom bigger larger smaller scale accessibility'],
+    ['settings.text.font', 'font typeface family monospace coding developer dyslexia legibility'],
+  ] },
   { id: 'appearance', section: 'layout', sectionKey: 'settings.appearance.section.layout', settings: [
     ['workspace.mailExperience', 'mail view email chat'],
     ['workspace.readingPane', 'reading pane layout columns beside below'],

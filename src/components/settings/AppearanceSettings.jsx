@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ColorSchemeSettings } from './ColorSchemeSettings';
+import { TextSettings } from './TextSettings';
 import { WorkspaceSettings } from './WorkspaceSettings';
 import { SettingRow } from '../ui/SettingRow';
 import { DateTimePreview, ReadingPreview } from './PreferencePreview';
@@ -28,6 +29,7 @@ function useWindowIsNarrow() {
 
 const sections = [
   { id: 'colors', key: 'colors' },
+  { id: 'text', key: 'text' },
   { id: 'layout', key: 'layout' },
   { id: 'reading', key: 'reading' },
   { id: 'date-time', key: 'dateTime' },
@@ -60,6 +62,7 @@ export function AppearanceSettings({ initialSection = 'colors', onSectionChange 
     <div className="appearance-settings">
       {section !== 'language' && <p className="appearance-preview-intro">{t('settings.preview.intro')}</p>}
       {section === 'colors' && <ColorSchemeSettings />}
+      {section === 'text' && <TextSettings />}
       {section === 'layout' && <WorkspaceSettings windowIsNarrow={windowIsNarrow} />}
       {section === 'quick-actions' && <QuickActionsSettings />}
       {section === 'language' && <LanguageSettings />}

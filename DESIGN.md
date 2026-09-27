@@ -285,6 +285,9 @@ The marketing site (`index.html`, `website/`) uses **Inter**, not Instrument San
 ## Typography
 
 **Display / Body Font:** Instrument Sans (fallback `system-ui, sans-serif`), self-hosted as a variable face at weights 400–700 via `src/styles/fonts.css` — no third-party request on launch, and the app's own chrome renders correctly offline.
+
+Instrument Sans is the **default**, not the only face: Settings > Appearance > Text lets the user pick another bundled OFL font (Inter, Atkinson Hyperlegible Next, IBM Plex Sans, Source Sans 3, the system font, or a coding mono) and a whole-UI text size. Chrome reads the choice through `var(--app-font, …)` (`src/utils/appFont.js`), so new CSS must use `font-display`/the body font, never a hardcoded family.
+
 **Label/Mono Font:** JetBrains Mono (fallback `ui-monospace, SFMono-Regular, monospace`) for message IDs, raw headers, paths, and `.eml` internals. The TipTap editor's own code blocks use the `ui-monospace` stack directly.
 
 **Character:** Instrument Sans is a grotesque with slightly narrow, evenly-weighted letterforms — it holds up at 12px in a dense list, which is most of what this app asks of it. The pairing reads as engineering-adjacent rather than editorial: type is here to be scanned, and the mono is reserved for the moments where the app shows you the actual bytes it stored.

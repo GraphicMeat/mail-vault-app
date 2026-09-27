@@ -21,7 +21,7 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'emailListView', 'listTimelineVisible', 'explorerGrouping', 'explorerDateDepth',
   'insightsPreferences', 'threadReaderLayout', 'threadSortOrder', 'threadMode',
   'emailRowHighlight', 'dateFormat', 'customDateFormat', 'timeFormat', 'language',
-  'signatureDisplay', 'actionButtonDisplay', 'emailViewerTheme', 'sidebarStyle',
+  'signatureDisplay', 'actionButtonDisplay', 'emailViewerTheme', 'appFont', 'textScale', 'sidebarStyle',
   'sidebarLayout', 'sidebarDensity', 'sidebarBackupStatusLocation', 'searchHistoryLimit',
   'emailTemplates', 'quickActions', 'keyboardShortcuts', 'keyboardShortcutsEnabled',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',

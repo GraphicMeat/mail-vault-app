@@ -5,6 +5,7 @@ import { useT } from '../../i18n';
 import { getEmailColors } from '../../utils/mailChrome';
 import { listRowGround } from '../../utils/listRowGround';
 import { SampleConversation } from '../ui/SampleConversation';
+import { fontStack } from '../../utils/appFont';
 
 // An isolated illustration. Never mount live readers or seed the mail store.
 // The list's row gutter (RowGutter in EmailRow.jsx), same classes: an
@@ -36,7 +37,7 @@ function SampleToolbar({ display, dark }) {
   </div>;
 }
 
-export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label' }) {
+export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailListStyle, threadMode = 'grouped', theme = 'dark', palette = 'indigo', emailViewerTheme = 'system', highlight = 'hover', actionButtonDisplay = 'icon-label', appFont }) {
   const t = useT();
   const rows = previewRows();
   const replies = previewConversation();
@@ -48,7 +49,7 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
   const colors = getEmailColors(emailTheme, palette);
   const thread = { id: 'preview-thread', sender: 'Nell, Rowan', subject: t('settings.preview.subject'), time: replies.at(-1).time };
 
-  return <figure className="onboarding-mail-sample" data-testid="appearance-preview" data-theme={theme} data-palette={palette} aria-label={t('onboarding.previewCaption')}>
+  return <figure className="onboarding-mail-sample" data-testid="appearance-preview" data-theme={theme} data-palette={palette} style={appFont ? { fontFamily: fontStack(appFont) } : undefined} aria-label={t('onboarding.previewCaption')}>
     <div className="onboarding-sample-app">
       <div data-testid="preview-pane-sidebar" data-style={sidebarStyle} className={`onboarding-sample-sidebar ${sidebarStyle === 'tagcloud' ? 'onboarding-sample-bubbles' : ''}`}>
         <strong className="onboarding-sample-brand">MailVault</strong>

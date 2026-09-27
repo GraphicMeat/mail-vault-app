@@ -48,4 +48,18 @@ describe('settings defaults', () => {
     useSettingsStore.getState().setComposeOpenMode('bogus');
     expect(useSettingsStore.getState().composeOpenMode).toBe('app');
   });
+
+  it('text starts in Instrument Sans at 100%, keeps only known choices, and travels in a transfer', async () => {
+    const { useSettingsStore } = await loadOn('Win32');
+    const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');
+    const state = () => useSettingsStore.getState();
+    expect(state()).toMatchObject({ appFont: 'instrument-sans', textScale: 1 });
+    state().setAppFont('fira-code');
+    state().setTextScale('1.25');
+    expect(state()).toMatchObject({ appFont: 'fira-code', textScale: 1.25 });
+    state().setAppFont('comic-sans');
+    state().setTextScale(3);
+    expect(state()).toMatchObject({ appFont: 'instrument-sans', textScale: 1 });
+    expect(GLOBAL_SETTINGS_ALLOWLIST).toEqual(expect.arrayContaining(['appFont', 'textScale']));
+  });
 });
