@@ -24,3 +24,14 @@ export async function replyTarget(header, loaded, store, selectedHtml = '') {
   const target = res?.ok ? { ...header, ...res.email } : header;
   return selectedHtml ? { ...target, _selectedQuoteHtml: selectedHtml } : target;
 }
+
+/**
+ * App's compose state with a snippet stand-in (`_bodyLoading`) replaced by the
+ * real body, resolved like any reply target; anything else as it came. Every
+ * compose entry point reaches App's setComposeState, so this is the one place
+ * a keyboard forward, a fallback reply or another view's hand-off is covered.
+ */
+export async function composeStateWithBody(state, store) {
+  if (!state?.replyTo?._bodyLoading) return state;
+  return { ...state, replyTo: await replyTarget(state.replyTo, null, store) };
+}

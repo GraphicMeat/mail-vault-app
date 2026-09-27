@@ -16,7 +16,7 @@ import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity'
 // What lives here is the sequence: locate, read the vault, check custody
 // against the header, fall back to the server on the account's own transport,
 // re-check, hydrate.
-export async function resolveMessageBody(header, store) {
+export async function resolveMessageBody(header, store, { onVaultMiss } = {}) {
   const loc = resolveEmailLocation(header, store);
   if (!loc) return { ok: false, reason: t('svc.bodyResolver.locationUnknown') };
 
@@ -39,6 +39,10 @@ export async function resolveMessageBody(header, store) {
     const hydrated = await hydrateInlineImages(local, accountId, mailbox);
     return { ok: true, email: { ...hydrated, _accountId: accountId } };
   }
+
+  // The vault has no copy: the body comes from the server (the thread and chat
+  // views show the index snippet from here on, useChatBodyLoader).
+  try { onVaultMiss?.(); } catch { /* a view's hook never fails the read */ }
 
   const account = store.accounts.find(a => a.id === accountId) || null;
   if (!account) return { ok: false, reason: t('svc.bodyResolver.accountUnavailable') };

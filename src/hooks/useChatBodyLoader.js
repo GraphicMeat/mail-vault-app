@@ -88,7 +88,19 @@ export function useChatBodyLoader(topicEmails) {
 
     // A message with no body here yet (On Demand, or evicted) shows the search
     // index's snippet while it downloads: `snippet` on the still-loading entry.
-    // Never `email`, so a reply or forward still resolves the real body.
+    // Never `email`, so a reply or forward still resolves the real body. Only
+    // once the vault read has missed: a vault hit is quick, and flashing the
+    // "downloading" marker over it would say something untrue.
+    const snippetByKey = new Map();
+    const vaultMissed = new Set();
+    const showSnippet = (email) => {
+      const key = emailKey(email);
+      const snippet = snippetByKey.get(key);
+      const entry = bodiesMap.get(key);
+      if (cancelled || !snippet || !vaultMissed.has(key) || entry?.status !== 'loading' || entry.snippet) return;
+      bodiesMap.set(key, { ...entry, snippet });
+      notifyBubble(key);
+    };
     const byFolder = new Map();
     for (const email of pendingEmails) {
       const loc = resolveEmailLocation(email, store);
@@ -99,14 +111,11 @@ export function useChatBodyLoader(topicEmails) {
     }
     for (const { accountId, mailbox, emails } of byFolder.values()) {
       readIndexSnippets(accountId, mailbox, emails).then(snippets => {
-        if (cancelled) return;
         for (const email of emails) {
-          const key = emailKey(email);
-          const entry = bodiesMap.get(key);
           const snippet = snippets.get(email.uid);
-          if (!snippet || entry?.status !== 'loading' || entry.snippet) continue;
-          bodiesMap.set(key, { ...entry, snippet });
-          notifyBubble(key);
+          if (!snippet) continue;
+          snippetByKey.set(emailKey(email), snippet);
+          showSnippet(email);
         }
       });
     }
@@ -134,7 +143,9 @@ export function useChatBodyLoader(topicEmails) {
         // resolveMessageBody so the export resolves a body exactly the way the
         // reading pane does. What stays here is what is the hook's: capped
         // concurrency, retry, and the per-bubble notify.
-        const resolved = await resolveMessageBody(email, store);
+        const resolved = await resolveMessageBody(email, store, {
+          onVaultMiss: () => { vaultMissed.add(key); showSnippet(email); },
+        });
 
         if (cancelled) return;
 

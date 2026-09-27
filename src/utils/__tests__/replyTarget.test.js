@@ -93,3 +93,25 @@ describe('withoutSnippet', () => {
     expect(withoutSnippet(null)).toBe(null);
   });
 });
+
+// App's setComposeState runs every compose hand-off through this, so the `f`
+// shortcut, the reply fallbacks and other views never open on a snippet.
+describe('composeStateWithBody', () => {
+  it('replaces a snippet stand-in with the resolved body and attachments', async () => {
+    const { composeStateWithBody } = await import('../replyTarget');
+    const attachments = [{ filename: 'agenda.pdf', size: 10 }];
+    resolveMessageBody.mockReset().mockResolvedValue({ ok: true, email: { text: 'The whole message.', attachments } });
+    const snippet = { uid: 7, subject: 'Hi', text: 'The whole', _bodyLoading: true };
+    const state = await composeStateWithBody({ mode: 'forward', replyTo: snippet }, { accounts: [] });
+    expect(state).toEqual({ mode: 'forward', replyTo: { uid: 7, subject: 'Hi', text: 'The whole message.', attachments } });
+  });
+
+  it('hands any other state back as it came, with no fetch', async () => {
+    const { composeStateWithBody } = await import('../replyTarget');
+    resolveMessageBody.mockReset();
+    const loaded = { mode: 'reply', replyTo: { uid: 7, text: 'whole' } };
+    expect(await composeStateWithBody(loaded, {})).toBe(loaded);
+    expect(await composeStateWithBody({ initialData: {} }, {})).toEqual({ initialData: {} });
+    expect(resolveMessageBody).not.toHaveBeenCalled();
+  });
+});

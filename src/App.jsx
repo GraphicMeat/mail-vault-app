@@ -80,6 +80,7 @@ import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
+import { composeStateWithBody } from './utils/replyTarget';
 import { loadComposeSession, mergeComposeSession, saveComposeSession } from './services/composeSession';
 import { sameReply, applyReplyFill } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
@@ -496,6 +497,10 @@ function App() {
     if (val === null) {
       // Close the active (non-minimized) window
       setComposeWindows(prev => prev.filter(w => w.minimized || w.detached));
+    } else if (val.replyTo?._bodyLoading) {
+      // A reader's snippet stand-in is not the message: every entry point
+      // (shortcuts, other views, the row seam) gets the real body first.
+      void composeStateWithBody(val, useMailStore.getState()).then(openCompose);
     } else {
       openCompose(val);
     }
@@ -625,8 +630,12 @@ function App() {
       }
     },
     forward: () => {
-      const email = useMailStore.getState().selectedEmail;
-      if (email) setComposeState({ mode: 'forward', replyTo: email });
+      // The reader first, like reply: it resolves a snippet stand-in's body
+      // and shows the forward button busy meanwhile.
+      if (!openActiveReply('forward')) {
+        const email = useMailStore.getState().selectedEmail;
+        if (email) setComposeState({ mode: 'forward', replyTo: email });
+      }
     },
     // The open message's own row knows where it lives; the id alone does not
     // once the list spans mailboxes.

@@ -133,6 +133,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       || entry.action === 'move' && (!!disabled.move || entry.params?.mailbox && (!folder || (entry.params.accountId && entry.params.accountId !== accountId)))
       || ['toggleRead', 'markRead', 'markUnread'].includes(entry.action) && !!disabled.toggleRead
       || ['star', 'unstar'].includes(entry.action) && !!disabled.toggleFlag
+      || ['reply', 'replyAll', 'forward'].includes(entry.action) && !!disabled.compose
       || entry.action === 'tag' && !label
       || entry.action === 'replyTemplate' && (!template || isSentEmail)
     );

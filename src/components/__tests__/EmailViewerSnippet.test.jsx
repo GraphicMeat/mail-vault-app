@@ -112,4 +112,30 @@ describe('EmailViewer on the index snippet', () => {
     expect(resolveMessageBody).not.toHaveBeenCalled();
     expect(screen.queryByTestId('email-body-loading')).toBeNull();
   });
+
+  it('the forward shortcut (f) forwards the full body and attachments once resolved', async () => {
+    const { onComposeReply } = renderViewer(SNIPPET);
+    expect(openActiveReply('forward')).toBe(true);
+    await waitFor(() => expect(onComposeReply).toHaveBeenCalledTimes(1));
+    const [mode, replyTo] = onComposeReply.mock.calls[0];
+    expect(mode).toBe('forward');
+    expect(replyTo.text).toBe(FULL.text);
+    expect(replyTo.attachments).toEqual(FULL.attachments);
+  });
+
+  it('shows reply and forward busy while the body resolves, and a second press starts nothing', async () => {
+    let finish;
+    resolveMessageBody.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const { bar, onComposeReply } = renderViewer(SNIPPET);
+    fireEvent.click(bar.getAllByRole('button', { name: /^Reply$/ })[0]);
+    await waitFor(() => expect(bar.getByRole('button', { name: /^Forward$/ }).disabled).toBe(true));
+    expect(bar.getAllByRole('button', { name: /^Reply$/ })[0].disabled).toBe(true);
+    openActiveReply('forward');
+    expect(resolveMessageBody).toHaveBeenCalledTimes(1);
+
+    finish({ ok: true, email: FULL });
+    await waitFor(() => expect(onComposeReply).toHaveBeenCalledTimes(1));
+    expect(onComposeReply.mock.calls[0][0]).toBe('reply');
+    await waitFor(() => expect(bar.getByRole('button', { name: /^Forward$/ }).disabled).toBe(false));
+  });
 });

@@ -137,17 +137,31 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // While the index snippet stands in for the body (`_bodyLoading`), a reply
   // or forward resolves the real body first (replyTarget), the way the row
   // menu's reply does: the snippet is never quoted or forwarded.
+  // That can take as long as the download, so the reply and forward buttons
+  // show the action bar's busy (disabled) state meanwhile, and a second click
+  // or keypress starts nothing.
+  const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false);
   const composeFrom = async (mode, email) => {
     if (email._bodyLoading) {
-      onComposeReply?.(mode, await replyTarget(email, null, useMailStore.getState()));
+      if (composingRef.current) return;
+      composingRef.current = true;
+      setComposing(true);
+      try {
+        onComposeReply?.(mode, await replyTarget(email, null, useMailStore.getState()));
+      } finally {
+        composingRef.current = false;
+        setComposing(false);
+      }
       return;
     }
     onComposeReply?.(mode, mode === 'forward' ? email : { ...email, _selectedQuoteHtml: selectedReplyHtml() });
   };
+  // Keyboard reply, reply all and forward (App's shortcuts) take the same path.
   useEffect(() => {
     if (selectedThread || !selectedEmail) return undefined;
     const reply = (mode) => {
-      if (mode !== 'reply' && mode !== 'replyAll') return false;
+      if (mode !== 'reply' && mode !== 'replyAll' && mode !== 'forward') return false;
       void composeFrom(mode, selectedEmail);
       return true;
     };
@@ -739,7 +753,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             isLocalOnly={isLocalOnly}
             isSentEmail={isSentEmail}
             singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
-            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving }}
+            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving, compose: composing }}
             moveDropdownOpen={showMoveDropdown}
             moveButtonRef={moveButtonRef}
             onActionStart={(_event, trigger, entry) => {

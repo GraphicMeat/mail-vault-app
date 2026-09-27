@@ -785,13 +785,18 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     || sortedEmails.find(email => emailKey(email) === openKey);
   useEffect(() => {
     if (readOnly || !selectedEmail) return undefined;
-    const reply = async (mode) => {
+    // Synchronous answer: openActiveReply reads `false` as "not mine", and a
+    // Promise is never false, so an async handler claimed every mode (App's
+    // forward shortcut included) and then did nothing for the ones it skips.
+    const reply = (mode) => {
       if (mode !== 'reply' && mode !== 'replyAll') return false;
-      const store = useMailStore.getState();
-      const target = await replyTarget(selectedEmail, bodiesMapRef.current.get(emailKey(selectedEmail))?.email || null, store);
-      const context = await Promise.all(sortedEmails.map(message =>
-        replyTarget(message, bodiesMapRef.current.get(emailKey(message))?.email || null, store)));
-      onComposeReply?.(mode, { ...target, _threadContext: context });
+      void (async () => {
+        const store = useMailStore.getState();
+        const target = await replyTarget(selectedEmail, bodiesMapRef.current.get(emailKey(selectedEmail))?.email || null, store);
+        const context = await Promise.all(sortedEmails.map(message =>
+          replyTarget(message, bodiesMapRef.current.get(emailKey(message))?.email || null, store)));
+        onComposeReply?.(mode, { ...target, _threadContext: context });
+      })();
       return true;
     };
     registerActiveReply(reply);

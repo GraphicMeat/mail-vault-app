@@ -96,4 +96,21 @@ describe('useChatBodyLoader: index snippet while a body downloads', () => {
     expect(entry().snippet).toBeUndefined();
     expect(entry().email.html).toBe('<p>whole A</p>');
   });
+
+  it('a body the vault holds never flashes the snippet, even while the vault read is slow', async () => {
+    const vault = deferred();
+    mockGetLocalEmailLight.mockReturnValue(vault.promise);
+    const { result } = renderHook(() => useChatBodyLoader([ROW_A]));
+    const entry = () => result.current.bodiesMapRef.current.get(emailKey(ROW_A));
+
+    // The snippet is known, but the vault has not answered yet: nothing shows.
+    await waitFor(() => expect(mockGetEmailHeadersByUids).toHaveBeenCalled());
+    await new Promise(r => setTimeout(r, 0));
+    expect(entry().snippet).toBeUndefined();
+
+    vault.resolve({ ...ROW_A, html: '<p>from the vault</p>' });
+    await waitFor(() => expect(entry().status).toBe('loaded'));
+    expect(entry().snippet).toBeUndefined();
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+  });
 });

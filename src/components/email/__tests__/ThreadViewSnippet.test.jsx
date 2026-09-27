@@ -56,4 +56,13 @@ describe('ThreadView on the index snippet', () => {
     render(<ThreadView thread={thread} />);
     expect(screen.queryByTestId('thread-body-loading')).toBeNull();
   });
+
+  it('leaves forward to App: its keyboard handler answers false for a mode it does not handle', async () => {
+    const { openActiveReply } = await import('../../../utils/composeOpener');
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    bodies.set(emailKey(older), { status: 'loaded', email: { ...older, text: 'Lunch tomorrow?' } });
+    bodies.set(emailKey(newest), { status: 'loaded', email: { ...newest, text: 'Tuesday?' } });
+    render(<ThreadView thread={thread} />);
+    expect(openActiveReply('forward')).toBe(false);
+  });
 });
