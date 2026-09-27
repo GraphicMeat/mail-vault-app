@@ -122,6 +122,30 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     expect(submitButton.disabled).toBe(true);
   });
 
+  // Fix round 1 (task-B2-review.md, Important): Google's id_token claim is
+  // always the canonical, dot-free address — a user who typed dots into a
+  // real Gmail address must not be told it's the wrong account.
+  it('accepts a Gmail sign-in whose claim differs from the typed address only by dots', async () => {
+    const dottedTyped = 'us.er@gmail.com';
+    mockExchangeOAuth2Code.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: 1234567890,
+      email: 'user@gmail.com', // Google's canonical (dot-free) claim
+    });
+    mockAddAccount.mockResolvedValue({ id: 'acct-3', email: dottedTyped });
+
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Gmail'));
+    const emailInput = await screen.findByLabelText('Email Address *');
+    fireEvent.change(emailInput, { target: { name: 'email', value: dottedTyped } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+
+    await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
+    expect(mockAddAccount.mock.calls[0][0].email).toBe(dottedTyped);
+  });
+
   it('skips the claim check when the provider returns no email claim (Microsoft today)', async () => {
     mockExchangeOAuth2Code.mockResolvedValue({
       accessToken: 'access-token',

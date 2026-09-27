@@ -7,6 +7,7 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
+import { normalizeEmailIdentity } from '../utils/emailIdentity';
 import { t as tr, t, useT   } from '../i18n/index.js';
 
 // Common email provider configurations
@@ -434,7 +435,13 @@ export function AccountModal({ onClose, onSuccess }) {
       // concern). A mismatch means the user signed into a different mailbox
       // than the one they typed: stop before the account is ever saved,
       // and don't store these tokens under the typed (wrong) address.
-      if (tokenData.email && tokenData.email.trim().toLowerCase() !== userEnteredEmail.trim().toLowerCase()) {
+      //
+      // The claim is always Gmail's canonical (dot-free) address, but a
+      // real Gmail sign-in is compared against whatever the user actually
+      // typed — dots, a `+tag`, or googlemail.com vs gmail.com all point at
+      // the same inbox there, so a byte comparison would reject correct
+      // sign-ins (review: task-B2-review.md, "Important"). Fix round 1.
+      if (tokenData.email && normalizeEmailIdentity(tokenData.email) !== normalizeEmailIdentity(userEnteredEmail)) {
         setError(t('account.oauthEmailMismatch', { typed: userEnteredEmail, signedIn: tokenData.email }));
         return;
       }
