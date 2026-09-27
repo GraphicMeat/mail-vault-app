@@ -34,6 +34,10 @@ export function DownloadModeControl({ accountId = null, onUpgrade }) {
   const windowMonths = useSettingsStore(s => s.localCacheDurationMonths);
   const [upsell, setUpsell] = useState(false);
 
+  // A saved window of 0 (older builds' "All emails" under Keep Recent) never
+  // evicts; it gets its own choice so the group shows what is in effect.
+  const windowOptions = windowMonths === 0 ? [[0, 'settings.storage.keepAllMail'], ...WINDOWS] : WINDOWS;
+
   const value = accountId ? (override || 'default') : defaultMode;
   const mode = value === 'default' ? defaultMode : value;
 
@@ -68,12 +72,16 @@ export function DownloadModeControl({ accountId = null, onUpgrade }) {
           <div className="text-sm font-medium text-mail-text">{t('settings.storage.keepWindow')}</div>
           <SegmentedChoice label={t('settings.storage.keepWindow')} value={windowMonths}
             onChange={months => useSettingsStore.getState().setLocalCacheDurationMonths(months)}
-            options={WINDOWS.map(([months, key]) => ({ value: months, label: t(key) }))} />
+            options={windowOptions.map(([months, key]) => ({ value: months, label: t(key) }))} />
         </div>
       )}
 
       {mode === 'hoarder' && !premium && (
         <p data-testid="download-mode-no-premium" className="text-sm text-mail-text-muted">{t('settings.storage.hoarderWithoutPremium')}</p>
+      )}
+      {/* Said before the switch, not after: the setters refuse Hoarder without Premium. */}
+      {value === 'hoarder' && !premium && (
+        <p data-testid="download-mode-hoarder-one-way" className="text-sm text-mail-text">{t('settings.storage.hoarderOneWay')}</p>
       )}
 
       {upsell && !premium && (

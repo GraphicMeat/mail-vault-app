@@ -348,3 +348,18 @@ describe('FullViewEmailModal actions', () => {
     expect(screen.queryByTestId('reader-action-archive')).not.toBeNull();
   });
 });
+
+// Download modes (H5): the modal opens through selectEmail, which shows the
+// index snippet (`_bodyLoading`) while the body downloads. The modal marks it
+// and swaps in the body when it lands.
+describe('FullViewEmailModal on the index snippet', () => {
+  it('marks the snippet stand-in, then drops the marker when the body lands', async () => {
+    useMailStore.setState({ activeMailbox: 'Sent', mailboxScope: null });
+    renderModal(vi.fn());
+    act(() => useMailStore.setState({ selectedEmail: { ...initialEmail, text: 'didelis', _bodyLoading: true } }));
+    await waitFor(() => expect(screen.getByTestId('full-view-body-loading')).toBeTruthy());
+
+    act(() => useMailStore.setState({ selectedEmail: { ...initialEmail, text: 'didelis laiskas, visas' } }));
+    await waitFor(() => expect(screen.queryByTestId('full-view-body-loading')).toBeNull());
+  });
+});

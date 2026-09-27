@@ -90,6 +90,37 @@ describe('DownloadModeControl', () => {
   });
 });
 
+describe('DownloadModeControl edge cases (fix round 1)', () => {
+  it('shows a saved Keep Recent window of 0 as its own checked, focusable choice', () => {
+    useSettingsStore.setState({ fetchMode: 'keepRecent', localCacheDurationMonths: 0 });
+    render(<DownloadModeControl />);
+    const all = radio(t('settings.storage.keepAllMail'));
+    expect(all.getAttribute('aria-checked')).toBe('true');
+    expect(all.tabIndex).toBe(0);
+    fireEvent.click(radio(t('settings.storage.mo6')));
+    expect(useSettingsStore.getState().localCacheDurationMonths).toBe(6);
+  });
+
+  it('offers no "All mail" choice for an ordinary window', () => {
+    render(<DownloadModeControl />);
+    expect(screen.queryByRole('radio', { name: t('settings.storage.keepAllMail') })).toBeNull();
+  });
+
+  it('warns a free Hoarder that leaving is one way, and says nothing to Premium', () => {
+    useSettingsStore.setState({ fetchMode: 'hoarder' });
+    const { rerender } = render(<DownloadModeControl />);
+    expect(screen.getByTestId('download-mode-hoarder-one-way').textContent).toBe(t('settings.storage.hoarderOneWay'));
+
+    useSettingsStore.setState({ billingProfile: PREMIUM });
+    rerender(<DownloadModeControl />);
+    expect(screen.queryByTestId('download-mode-hoarder-one-way')).toBeNull();
+  });
+
+  it('Keep Recent copy says older copies may be removed, not that they are', () => {
+    expect(t('settings.storage.modeHintKeepRecent')).toMatch(/may be removed/);
+  });
+});
+
 describe('DownloadModeControl for one account', () => {
   it('starts on "Use default", persists an override, and goes back to the default', () => {
     render(<DownloadModeControl accountId="acct1" />);

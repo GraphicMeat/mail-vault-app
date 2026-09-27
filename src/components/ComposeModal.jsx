@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useId, lazy, Suspense, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId, useMemo, lazy, Suspense, memo } from 'react';
 import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -13,6 +13,7 @@ import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './Origi
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
+import { withoutSnippet } from '../utils/withoutSnippet';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
@@ -104,8 +105,12 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
   const t = useT();
+  // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
+  // as the message: without it the quote waits for the real body like a
+  // radial reply does (the late-fill effect below).
+  const replyTo = useMemo(() => withoutSnippet(replyToProp), [replyToProp]);
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
   // Reply/replyAll skip the hook's own mount-time autofocus: the editor that

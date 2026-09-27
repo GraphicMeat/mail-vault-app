@@ -72,6 +72,12 @@ function debouncedSave() {
   saveTimer = setTimeout(saveToDisk, 500);
 }
 
+// False in a window whose writes are disabled (detached compose/settings):
+// its changes reach the settings file only through the main window.
+export function safeStorageWritable() {
+  return writesEnabled;
+}
+
 // Detached compose receives a settings snapshot from its owner. It may read
 // defaults but must never serialize its partial webview cache over main state.
 export function setSafeStorageWriteEnabled(enabled) {

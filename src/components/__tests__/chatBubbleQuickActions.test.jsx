@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   messageListState: { archivedEmailIds: new Set() },
   applyFlagToKeys: vi.fn().mockResolvedValue(undefined),
   purgeEverywhere: vi.fn().mockResolvedValue({ deleted: 1, failed: 0 }),
+  bodies: new Map(),
 }));
 
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
@@ -25,7 +26,7 @@ vi.mock('framer-motion', () => ({
 }));
 vi.mock('../../hooks/useChatBodyLoader', async () => {
   const { emailKey } = await import('../../stores/slices/unifiedHelpers');
-  return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: new Map() }, registerListener: () => () => {} }) };
+  return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: mocks.bodies }, registerListener: () => () => {} }) };
 });
 vi.mock('../../hooks/useQuickActionConfiguration', () => ({
   useQuickActionConfiguration: () => ({ config: mocks.config, scope: null }),
@@ -120,6 +121,7 @@ beforeEach(async () => {
   mocks.messageListState.archivedEmailIds = new Set();
   mocks.config = { mode: 'inline', palette: 'neutral', entries: [] };
   mocks.folders = {};
+  mocks.bodies.clear();
   mocks.applyFlagToKeys.mockReset().mockResolvedValue(undefined);
   mocks.purgeEverywhere.mockReset().mockResolvedValue({ deleted: 1, failed: 0 });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
@@ -230,5 +232,18 @@ describe('chat bubble configurable actions', () => {
     fireEvent.mouseEnter(screen.getByRole('group').parentElement.parentElement);
     for (const name of ['deleteServer', 'move', 'markRead', 'star']) expect(screen.queryByTestId(`chat-action-${name}`)).toBeNull();
     expect(screen.queryByTestId('chat-action-unarchive')).not.toBeNull();
+  });
+});
+
+// Download modes (H5): a message with no body here yet shows the search
+// index's snippet (the loader's `snippet` on a still-loading entry), marked.
+describe('chat bubble on the index snippet', () => {
+  it('shows the snippet with the marker while the body downloads', async () => {
+    const { emailKey } = await import('../../stores/slices/unifiedHelpers');
+    const target = email({ uid: 74, text: undefined });
+    mocks.bodies.set(emailKey(target), { status: 'loading', email: null, snippet: 'Does Tuesday at noon' });
+    renderChat(target);
+    expect(screen.getByText('Does Tuesday at noon')).toBeTruthy();
+    expect(screen.getByTestId('chat-body-loading')).toBeTruthy();
   });
 });

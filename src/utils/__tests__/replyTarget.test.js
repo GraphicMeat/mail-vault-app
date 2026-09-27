@@ -50,3 +50,46 @@ describe('replyTarget', () => {
     expect(await replyTarget(header, null, store)).toBe(header);
   });
 });
+
+// Download modes (H5): a reader shows the index snippet, marked `_bodyLoading`,
+// while a body downloads. That text is not the message: a reply or forward
+// made then must never quote or send it.
+describe('replyTarget on a snippet stand-in', () => {
+  const header = { uid: 7, subject: 'Hi', from: { address: 'ann@example.com' }, _accountId: 'acct-1' };
+  const snippet = { ...header, text: 'First line of the', _bodyLoading: true };
+  const store = { activeAccountId: 'acct-1' };
+
+  beforeEach(() => { resolveMessageBody.mockReset(); });
+
+  it('resolves the real body, with its attachments, instead of quoting the snippet', async () => {
+    const attachments = [{ filename: 'report.pdf', size: 10 }];
+    resolveMessageBody.mockResolvedValue({ ok: true, email: { text: 'First line of the whole message.', attachments } });
+    const target = await replyTarget(snippet, null, store);
+    expect(resolveMessageBody).toHaveBeenCalledWith(header, store);
+    expect(target).toEqual({ ...header, text: 'First line of the whole message.', attachments });
+    expect(target._bodyLoading).toBeUndefined();
+  });
+
+  it('never falls back to the snippet when the body cannot be resolved', async () => {
+    resolveMessageBody.mockResolvedValue({ ok: false });
+    const target = await replyTarget(snippet, null, store);
+    expect(target).toEqual(header);
+  });
+
+  it('treats a snippet handed over as `loaded` as nothing loaded', async () => {
+    resolveMessageBody.mockResolvedValue({ ok: true, email: { html: '<p>whole</p>' } });
+    const target = await replyTarget(header, snippet, store);
+    expect(target.html).toBe('<p>whole</p>');
+    expect(target.text).toBeUndefined();
+  });
+});
+
+describe('withoutSnippet', () => {
+  it('drops the snippet text and marker, and leaves a real body alone', async () => {
+    const { withoutSnippet } = await import('../withoutSnippet');
+    const body = { uid: 1, text: 'whole' };
+    expect(withoutSnippet(body)).toBe(body);
+    expect(withoutSnippet({ uid: 1, text: 'part', _bodyLoading: true })).toEqual({ uid: 1 });
+    expect(withoutSnippet(null)).toBe(null);
+  });
+});

@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls = [];
+const storage = vi.hoisted(() => ({ writable: true }));
 vi.mock('../safeStorage', () => {
   const store = {};
   return {
@@ -14,6 +15,7 @@ vi.mock('../safeStorage', () => {
       removeItem: (key) => { delete store[key]; },
     },
     flushSafeStorage: vi.fn(async () => { calls.push('flush'); }),
+    safeStorageWritable: () => storage.writable,
   };
 });
 const daemonCall = vi.fn(async (method) => { calls.push(method); return { ok: true }; });
@@ -33,6 +35,7 @@ beforeEach(async () => {
   await settle();
   calls.length = 0;
   daemonCall.mockClear();
+  storage.writable = true;
 });
 
 describe('download mode migration (v12)', () => {
@@ -109,6 +112,14 @@ describe('changing the mode or window', () => {
     useSettingsStore.getState().setAccountFetchMode('acct1', 'indexOnly');
     await settle();
     expect(calls).toEqual(['flush', 'storage.fetch_mode_changed']);
+  });
+
+  it('a window that cannot write settings (detached Settings) leaves the wake to the main window', async () => {
+    storage.writable = false;
+    useSettingsStore.getState().setFetchMode('onDemand');
+    await settle();
+    expect(useSettingsStore.getState().fetchMode).toBe('onDemand');
+    expect(calls).toEqual([]);
   });
 
   it('does not wake the daemon for a value that did not change', async () => {

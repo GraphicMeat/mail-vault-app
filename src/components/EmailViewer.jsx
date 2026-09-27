@@ -59,6 +59,7 @@ import { describePurge } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
+import { replyTarget } from '../utils/replyTarget';
 import { htmlToText } from './RichTextEditor';
 import { openCompose } from '../utils/composeOpener';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
@@ -133,11 +134,21 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
       : replySelection(plainBodyRef.current);
   };
+  // While the index snippet stands in for the body (`_bodyLoading`), a reply
+  // or forward resolves the real body first (replyTarget), the way the row
+  // menu's reply does: the snippet is never quoted or forwarded.
+  const composeFrom = async (mode, email) => {
+    if (email._bodyLoading) {
+      onComposeReply?.(mode, await replyTarget(email, null, useMailStore.getState()));
+      return;
+    }
+    onComposeReply?.(mode, mode === 'forward' ? email : { ...email, _selectedQuoteHtml: selectedReplyHtml() });
+  };
   useEffect(() => {
     if (selectedThread || !selectedEmail) return undefined;
     const reply = (mode) => {
       if (mode !== 'reply' && mode !== 'replyAll') return false;
-      onComposeReply?.(mode, { ...selectedEmail, _selectedQuoteHtml: selectedReplyHtml() });
+      void composeFrom(mode, selectedEmail);
       return true;
     };
     registerActiveReply(reply);
@@ -671,7 +682,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         variant="single"
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
-        onReply={() => onComposeReply?.('reply', { ...selectedEmail, _selectedQuoteHtml: selectedReplyHtml() })}
+        onReply={() => composeFrom('reply', selectedEmail)}
         showRaw={showRaw}
         onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}
@@ -687,9 +698,9 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         <EmailActionBar
             email={selectedEmail}
             variant="single"
-            onReply={(email) => onComposeReply?.('reply', { ...email, _selectedQuoteHtml: selectedReplyHtml() })}
-            onReplyAll={(email) => onComposeReply?.('replyAll', { ...email, _selectedQuoteHtml: selectedReplyHtml() })}
-            onForward={(email) => onComposeReply?.('forward', email)}
+            onReply={(email) => composeFrom('reply', email)}
+            onReplyAll={(email) => composeFrom('replyAll', email)}
+            onForward={(email) => composeFrom('forward', email)}
             onArchive={(email, entry) => entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
               ? handleRemoveLocal(email) : handleSave(email)}
             onDelete={(email, entry) => email.source === 'local-only' || email._origin === 'local-only'
@@ -845,12 +856,13 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
 
         {/* Quick Replies (Phase 5) — chips under the newest message. Suppressed
             on your own sent mail: replying to yourself is not a quick reply. */}
-        {!showRaw && <QuickReplyChips email={selectedEmail} suppressed={isSentEmail} />}
+        {/* Neither runs on the snippet stand-in: it is not the message. */}
+        {!showRaw && !selectedEmail._bodyLoading && <QuickReplyChips email={selectedEmail} suppressed={isSentEmail} />}
 
         {/* AI Compose actions (Phase 6) — the viewer only gets Summarize
             thread; draft reply/shorten/tone/action items need an open draft,
             which only Compose has. */}
-        {!showRaw && (
+        {!showRaw && !selectedEmail._bodyLoading && (
           <div className="px-3 pb-3">
             <AiComposeActions
               actions={['summarize']}

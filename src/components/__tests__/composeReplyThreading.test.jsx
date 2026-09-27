@@ -287,3 +287,31 @@ describe('the quote fill-in effect (radial reply)', () => {
     expect(buildOutgoingMime.mock.calls.at(-1)[1].html).toContain('How much?');
   });
 });
+
+// Download modes (H5): a reader's snippet stand-in (`_bodyLoading`) reaching
+// Compose is not the message. It is never quoted; the quote waits for the real
+// body, the way a radial reply's does.
+describe('a reply opened on the index snippet', () => {
+  it('never quotes the snippet, and quotes the body once it arrives', async () => {
+    const snippet = { ...parent, text: 'How mu', _bodyLoading: true };
+    const props = { mode: 'reply', onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    const { rerender } = render(<ComposeModal {...props} replyTo={snippet} />);
+    await screen.findByTestId('compose-to');
+
+    rerender(<ComposeModal {...props} replyTo={{ ...parent, text: 'How much is the whole order?' }} />);
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+
+    const payload = buildOutgoingMime.mock.calls[0][1];
+    expect(payload.text).toContain('How much is the whole order?');
+    expect(payload.to).toBe('them@example.test');
+  });
+
+  it('sends no snippet quote when the body never arrives', async () => {
+    const snippet = { ...parent, text: 'Snippet only words', _bodyLoading: true };
+    render(<ComposeModal mode="reply" replyTo={snippet} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    expect(buildOutgoingMime.mock.calls[0][1].text).not.toContain('Snippet only words');
+  });
+});

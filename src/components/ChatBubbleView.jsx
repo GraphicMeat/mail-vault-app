@@ -831,6 +831,14 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 </>
               )}
             </div>
+          ) : isBodyLoading && bodyEntry?.snippet ? (
+            // The search index's snippet stands in while the body downloads.
+            <div className="px-4 py-3 flex flex-col gap-1">
+              <span data-testid="chat-body-loading" role="status" className={`text-xs ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
+                {t('viewer.showingPreviewWhileDownloading')}
+              </span>
+              <p className="text-sm whitespace-pre-wrap">{bodyEntry.snippet}</p>
+            </div>
           ) : isBodyLoading ? (
             <div className="px-4 py-3 flex items-center gap-2">
               <Loader size={14} className={`animate-spin flex-shrink-0 ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`} />

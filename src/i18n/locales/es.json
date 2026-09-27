@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "Solo índice",
   "settings.storage.modeHoarder": "Acumulador",
   "settings.storage.modeHintOnDemand": "No se descarga nada por adelantado. Un mensaje se descarga al abrirlo y no se guarda. La búsqueda de texto completo solo cubre el correo guardado en este equipo; el asunto y el remitente aún pueden encontrarse.",
-  "settings.storage.modeHintKeepRecent": "El correo del periodo elegido se descarga y se guarda en este equipo. Las copias más antiguas se eliminan aquí; el servidor conserva su copia. Buscar texto en el correo eliminado requiere indexar el cuerpo de los mensajes.",
+  "settings.storage.modeHintKeepRecent": "El correo del periodo elegido se descarga y se guarda en este equipo. Las copias más antiguas pueden eliminarse aquí; el servidor conserva su copia. Buscar texto en el correo eliminado requiere indexar el cuerpo de los mensajes.",
   "settings.storage.modeHintIndexOnly": "El correo del periodo elegido se descarga, se indexa para la búsqueda y luego se elimina de este equipo. Al abrir un mensaje se ve su vista previa al instante mientras se descarga completo. Buscar texto en el correo eliminado requiere indexar el cuerpo de los mensajes.",
   "settings.storage.modeHintHoarder": "Todas las carpetas y todo el historial se descargan en segundo plano y se guardan en este equipo.",
   "settings.storage.modeNeverRemoves": "Ningún modo elimina las copias de seguridad ni el correo archivado.",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "Acumulador forma parte de Premium. Descarga todas las carpetas y todo el historial en segundo plano.",
   "settings.storage.useDefaultMode": "Usar el predeterminado ({{mode}})",
   "settings.accounts.downloadModeHint": "Sustituye para esta cuenta el modo de descarga predeterminado de los ajustes de almacenamiento.",
-  "viewer.showingPreviewWhileDownloading": "Mostrando una vista previa mientras se descarga el mensaje completo…"
+  "viewer.showingPreviewWhileDownloading": "Mostrando una vista previa mientras se descarga el mensaje completo…",
+  "settings.storage.keepAllMail": "Todo el correo",
+  "settings.storage.hoarderOneWay": "Si eliges otro modo, no podrás volver a elegir Acumulador sin Premium."
 }

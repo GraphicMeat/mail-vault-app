@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "Só índice",
   "settings.storage.modeHoarder": "Acumulador",
   "settings.storage.modeHintOnDemand": "Nada é baixado com antecedência. Uma mensagem é baixada quando você a abre e não é guardada. A busca no texto completo cobre só os e-mails guardados neste computador; assunto e remetente ainda podem ser encontrados.",
-  "settings.storage.modeHintKeepRecent": "Os e-mails do período escolhido são baixados e guardados neste computador. Cópias mais antigas são removidas daqui; o servidor mantém a cópia dele. Buscar no texto de e-mails removidos exige indexar o corpo das mensagens.",
+  "settings.storage.modeHintKeepRecent": "Os e-mails do período escolhido são baixados e guardados neste computador. Cópias mais antigas podem ser removidas daqui; o servidor mantém a cópia dele. Buscar no texto de e-mails removidos exige indexar o corpo das mensagens.",
   "settings.storage.modeHintIndexOnly": "Os e-mails do período escolhido são baixados, indexados para a busca e depois removidos deste computador. Ao abrir uma mensagem, a prévia aparece na hora enquanto a mensagem completa é baixada. Buscar no texto de e-mails removidos exige indexar o corpo das mensagens.",
   "settings.storage.modeHintHoarder": "Todas as pastas e todo o histórico são baixados em segundo plano e guardados neste computador.",
   "settings.storage.modeNeverRemoves": "Nenhum modo remove backups ou e-mails arquivados.",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "Acumulador faz parte do Premium. Ele baixa todas as pastas e todo o histórico em segundo plano.",
   "settings.storage.useDefaultMode": "Usar o padrão ({{mode}})",
   "settings.accounts.downloadModeHint": "Substitui, nesta conta, o modo de download padrão das configurações de armazenamento.",
-  "viewer.showingPreviewWhileDownloading": "Mostrando uma prévia enquanto a mensagem completa é baixada…"
+  "viewer.showingPreviewWhileDownloading": "Mostrando uma prévia enquanto a mensagem completa é baixada…",
+  "settings.storage.keepAllMail": "Todos os e-mails",
+  "settings.storage.hoarderOneWay": "Se você escolher outro modo, não poderá escolher Acumulador de novo sem Premium."
 }

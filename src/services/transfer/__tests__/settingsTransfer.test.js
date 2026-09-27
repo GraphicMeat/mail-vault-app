@@ -13,6 +13,7 @@ vi.mock('../../../stores/settingsStore', () => ({
     getState: () => h.settings,
     setState: (patch) => { Object.assign(h.settings, patch); },
   },
+  hasPremiumAccess: (profile) => profile?.premiumAccess === true,
 }));
 vi.mock('../../../stores/themeStore', () => ({ useThemeStore: { getState: () => h.theme } }));
 vi.mock('../../../stores/safeStorage', () => ({ flushSafeStorage: (...a) => h.flush(...a) }));
@@ -135,5 +136,38 @@ describe('applySettings — imported aiSettings never bypasses the consent reset
     await applySettings(snap, {}, { applyGlobal: true });
     expect(h.settings.aiSettings.endpointUrl).toBe('https://old.example');
     expect(h.settings.aiSettings.endpointConsented).toBe(false);
+  });
+});
+
+describe('applySettings: an imported download mode obeys the Premium gate', () => {
+  const snap = (fetchMode, fetchModes) => ({
+    accountSettings: { fetchModes },
+    appSettings: { fetchMode },
+  });
+
+  it('drops an unknown mode and Hoarder without Premium, keeps the rest', async () => {
+    h.settings.fetchMode = 'keepRecent';
+    h.settings.fetchModes = {};
+    await applySettings(snap('everything', { X: 'hoarder', Y: 'onDemand', Z: 'bogus' }), { X: 'X2', Y: 'Y2', Z: 'Z2' }, { applyGlobal: true });
+    expect(h.settings.fetchMode).toBe('keepRecent');
+    expect(h.settings.fetchModes).toEqual({ Y2: 'onDemand' });
+
+    await applySettings(snap('hoarder', {}), {}, { applyGlobal: true });
+    expect(h.settings.fetchMode).toBe('keepRecent');
+  });
+
+  it('takes Hoarder with Premium, or where it is already chosen', async () => {
+    h.settings.fetchMode = 'hoarder';
+    h.settings.fetchModes = { X2: 'hoarder' };
+    await applySettings(snap('hoarder', { X: 'hoarder' }), { X: 'X2' }, { applyGlobal: true });
+    expect(h.settings.fetchMode).toBe('hoarder');
+    expect(h.settings.fetchModes).toEqual({ X2: 'hoarder' });
+
+    h.settings.fetchMode = 'keepRecent';
+    h.settings.fetchModes = {};
+    h.settings.billingProfile = { premiumAccess: true };
+    await applySettings(snap('hoarder', { X: 'hoarder' }), { X: 'X2' }, { applyGlobal: true });
+    expect(h.settings.fetchMode).toBe('hoarder');
+    expect(h.settings.fetchModes).toEqual({ X2: 'hoarder' });
   });
 });

@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "Index seul",
   "settings.storage.modeHoarder": "Collectionneur",
   "settings.storage.modeHintOnDemand": "Rien n'est téléchargé à l'avance. Un message est téléchargé à l'ouverture et n'est pas conservé. La recherche en texte intégral ne couvre que le courrier conservé sur cet ordinateur ; l'objet et l'expéditeur restent parfois trouvables.",
-  "settings.storage.modeHintKeepRecent": "Le courrier de la période choisie est téléchargé et conservé sur cet ordinateur. Les copies plus anciennes sont supprimées ici ; le serveur garde sa copie. La recherche en texte intégral du courrier supprimé exige l'indexation du corps des messages.",
+  "settings.storage.modeHintKeepRecent": "Le courrier de la période choisie est téléchargé et conservé sur cet ordinateur. Les copies plus anciennes peuvent être supprimées ici ; le serveur garde sa copie. La recherche en texte intégral du courrier supprimé exige l'indexation du corps des messages.",
   "settings.storage.modeHintIndexOnly": "Le courrier de la période choisie est téléchargé, indexé pour la recherche, puis supprimé de cet ordinateur. À l'ouverture, l'aperçu s'affiche aussitôt pendant le téléchargement du message complet. La recherche en texte intégral du courrier supprimé exige l'indexation du corps des messages.",
   "settings.storage.modeHintHoarder": "Tous les dossiers et tout l'historique sont téléchargés en arrière-plan et conservés sur cet ordinateur.",
   "settings.storage.modeNeverRemoves": "Aucun mode ne supprime les sauvegardes ni le courrier archivé.",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "Collectionneur fait partie de Premium. Il télécharge tous les dossiers et tout l'historique en arrière-plan.",
   "settings.storage.useDefaultMode": "Utiliser le mode par défaut ({{mode}})",
   "settings.accounts.downloadModeHint": "Remplace pour ce compte le mode de téléchargement par défaut des réglages de stockage.",
-  "viewer.showingPreviewWhileDownloading": "Aperçu affiché pendant le téléchargement du message complet…"
+  "viewer.showingPreviewWhileDownloading": "Aperçu affiché pendant le téléchargement du message complet…",
+  "settings.storage.keepAllMail": "Tout le courrier",
+  "settings.storage.hoarderOneWay": "Si vous choisissez un autre mode, vous ne pourrez plus choisir Collectionneur sans Premium."
 }

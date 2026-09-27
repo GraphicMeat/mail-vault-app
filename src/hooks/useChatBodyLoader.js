@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { resolveMessageBody } from '../services/export/bodyResolver';
+import { readIndexSnippets } from '../services/indexSnippet';
 import { resolveEmailLocation, emailKey, bodyMatchesHeader } from '../stores/slices/unifiedHelpers';
 
 const CONCURRENCY = 3;
@@ -84,6 +85,31 @@ export function useChatBodyLoader(topicEmails) {
       .reverse();
 
     if (pendingEmails.length === 0) return;
+
+    // A message with no body here yet (On Demand, or evicted) shows the search
+    // index's snippet while it downloads: `snippet` on the still-loading entry.
+    // Never `email`, so a reply or forward still resolves the real body.
+    const byFolder = new Map();
+    for (const email of pendingEmails) {
+      const loc = resolveEmailLocation(email, store);
+      if (!loc) continue;
+      const folderKey = JSON.stringify([loc.accountId, loc.mailbox]);
+      if (!byFolder.has(folderKey)) byFolder.set(folderKey, { ...loc, emails: [] });
+      byFolder.get(folderKey).emails.push(email);
+    }
+    for (const { accountId, mailbox, emails } of byFolder.values()) {
+      readIndexSnippets(accountId, mailbox, emails).then(snippets => {
+        if (cancelled) return;
+        for (const email of emails) {
+          const key = emailKey(email);
+          const entry = bodiesMap.get(key);
+          const snippet = snippets.get(email.uid);
+          if (!snippet || entry?.status !== 'loading' || entry.snippet) continue;
+          bodiesMap.set(key, { ...entry, snippet });
+          notifyBubble(key);
+        }
+      });
+    }
 
     let activeCount = 0;
     let queueIndex = 0;

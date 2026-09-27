@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "Solo indice",
   "settings.storage.modeHoarder": "Collezionista",
   "settings.storage.modeHintOnDemand": "Nulla viene scaricato in anticipo. Un messaggio viene scaricato quando lo apri e non viene conservato. La ricerca nel testo copre solo la posta conservata su questo computer; oggetto e mittente potrebbero comunque essere trovati.",
-  "settings.storage.modeHintKeepRecent": "La posta del periodo scelto viene scaricata e conservata su questo computer. Le copie più vecchie vengono rimosse qui; il server conserva la sua copia. La ricerca nel testo della posta rimossa richiede l'indicizzazione del corpo dei messaggi.",
+  "settings.storage.modeHintKeepRecent": "La posta del periodo scelto viene scaricata e conservata su questo computer. Le copie più vecchie possono essere rimosse qui; il server conserva la sua copia. La ricerca nel testo della posta rimossa richiede l'indicizzazione del corpo dei messaggi.",
   "settings.storage.modeHintIndexOnly": "La posta del periodo scelto viene scaricata, indicizzata per la ricerca e poi rimossa da questo computer. Aprendo un messaggio vedi subito l'anteprima mentre si scarica il messaggio completo. La ricerca nel testo della posta rimossa richiede l'indicizzazione del corpo dei messaggi.",
   "settings.storage.modeHintHoarder": "Tutte le cartelle e tutta la cronologia vengono scaricate in background e conservate su questo computer.",
   "settings.storage.modeNeverRemoves": "Nessuna modalità rimuove i backup o la posta archiviata.",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "Collezionista fa parte di Premium. Scarica tutte le cartelle e tutta la cronologia in background.",
   "settings.storage.useDefaultMode": "Usa predefinita ({{mode}})",
   "settings.accounts.downloadModeHint": "Sostituisce per questo account la modalità di download predefinita delle impostazioni di archiviazione.",
-  "viewer.showingPreviewWhileDownloading": "Anteprima in corso mentre si scarica il messaggio completo…"
+  "viewer.showingPreviewWhileDownloading": "Anteprima in corso mentre si scarica il messaggio completo…",
+  "settings.storage.keepAllMail": "Tutta la posta",
+  "settings.storage.hoarderOneWay": "Se scegli un'altra modalità, non potrai più scegliere Collezionista senza Premium."
 }

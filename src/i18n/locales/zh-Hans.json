@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "仅索引",
   "settings.storage.modeHoarder": "全部保存",
   "settings.storage.modeHintOnDemand": "不提前下载任何内容。邮件在打开时下载，且不会保存。全文搜索只覆盖保存在这台电脑上的邮件；仍可能按主题和发件人找到。",
-  "settings.storage.modeHintKeepRecent": "下载所选时间段内的邮件并保存在这台电脑上。更早的副本会从这里移除，服务器上的副本仍保留。要全文搜索已移除的邮件，需要为邮件正文建立索引。",
+  "settings.storage.modeHintKeepRecent": "下载所选时间段内的邮件并保存在这台电脑上。更早的副本可能会从这里移除，服务器上的副本仍保留。要全文搜索已移除的邮件，需要为邮件正文建立索引。",
   "settings.storage.modeHintIndexOnly": "下载所选时间段内的邮件，为搜索建立索引后从这台电脑移除。打开邮件时会立即显示预览，同时下载完整邮件。要全文搜索已移除的邮件，需要为邮件正文建立索引。",
   "settings.storage.modeHintHoarder": "在后台下载所有文件夹和全部历史邮件，并保存在这台电脑上。",
   "settings.storage.modeNeverRemoves": "任何模式都不会移除备份和已归档的邮件。",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "“全部保存”属于 Premium。它会在后台下载所有文件夹和全部历史邮件。",
   "settings.storage.useDefaultMode": "使用默认 ({{mode}})",
   "settings.accounts.downloadModeHint": "此账户将使用这里的设置，而不是存储设置中的默认下载模式。",
-  "viewer.showingPreviewWhileDownloading": "正在下载完整邮件，先显示预览…"
+  "viewer.showingPreviewWhileDownloading": "正在下载完整邮件，先显示预览…",
+  "settings.storage.keepAllMail": "全部邮件",
+  "settings.storage.hoarderOneWay": "如果选择其他模式，没有 Premium 就无法再选择“全部保存”。"
 }

@@ -354,6 +354,13 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             onClose={() => setShowMoveDropdown(false)} />}
         </div>
 
+        {/* The index's snippet stands in while the body downloads (selectEmail). */}
+        {email._bodyLoading && (
+          <p data-testid="full-view-body-loading" role="status" className="px-3 py-1.5 text-xs text-mail-text-muted border-b border-mail-border shrink-0">
+            {t('viewer.showingPreviewWhileDownloading')}
+          </p>
+        )}
+
         {/* Email Body - Full Height iframe */}
         <div className="flex-1 min-h-0 overflow-hidden relative" style={{ backgroundColor: emailColors.background }}>
           {!fetchedEmail && loadingEmail ? (

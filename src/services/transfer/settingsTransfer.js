@@ -1,6 +1,7 @@
 // ── transfer/settingsTransfer — which frontend settings travel in an account transfer file ──
 
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
+import { FETCH_MODES } from '../../utils/fetchPolicy';
 import { useThemeStore } from '../../stores/themeStore';
 import { flushSafeStorage } from '../../stores/safeStorage';
 
@@ -100,6 +101,14 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
     notificationSettings = { ...notificationSettings, ...globals };
   }
   patch.notificationSettings = notificationSettings;
+
+  // A download mode from the file obeys the same gate as the setters: only a
+  // known mode, and Hoarder only with Premium or where it is already chosen.
+  const premium = hasPremiumAccess(s.billingProfile);
+  const allowed = (mode, current) => FETCH_MODES.includes(mode) && (mode !== 'hoarder' || premium || current === 'hoarder');
+  if ('fetchMode' in patch && !allowed(patch.fetchMode, s.fetchMode)) delete patch.fetchMode;
+  patch.fetchModes = Object.fromEntries(Object.entries(patch.fetchModes || {})
+    .filter(([id, mode]) => allowed(mode, s.fetchModes?.[id])));
 
   const fileOrder = snapshot.accountOrder || [];
   const rank = id => (fileOrder.includes(id) ? fileOrder.indexOf(id) : fileOrder.length);

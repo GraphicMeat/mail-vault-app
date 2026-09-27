@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "Nur Index",
   "settings.storage.modeHoarder": "Sammler",
   "settings.storage.modeHintOnDemand": "Nichts wird vorab geladen. Eine Nachricht wird beim Öffnen geladen und nicht behalten. Die Volltextsuche umfasst nur E-Mails auf diesem Computer; Betreff und Absender sind eventuell trotzdem auffindbar.",
-  "settings.storage.modeHintKeepRecent": "E-Mails aus dem gewählten Zeitraum werden geladen und auf diesem Computer behalten. Ältere Kopien werden hier entfernt; der Server behält seine Kopie. Die Volltextsuche in entfernten E-Mails braucht indexierte Nachrichtentexte.",
+  "settings.storage.modeHintKeepRecent": "E-Mails aus dem gewählten Zeitraum werden geladen und auf diesem Computer behalten. Ältere Kopien können hier entfernt werden; der Server behält seine Kopie. Die Volltextsuche in entfernten E-Mails braucht indexierte Nachrichtentexte.",
   "settings.storage.modeHintIndexOnly": "E-Mails aus dem gewählten Zeitraum werden geladen, für die Suche indexiert und dann von diesem Computer entfernt. Beim Öffnen erscheint sofort die Vorschau, während die ganze Nachricht lädt. Die Volltextsuche in entfernten E-Mails braucht indexierte Nachrichtentexte.",
   "settings.storage.modeHintHoarder": "Alle Ordner und der gesamte Verlauf werden im Hintergrund geladen und auf diesem Computer behalten.",
   "settings.storage.modeNeverRemoves": "Backups und archivierte E-Mails werden von keinem Modus entfernt.",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "Sammler gehört zu Premium. Er lädt alle Ordner und den gesamten Verlauf im Hintergrund.",
   "settings.storage.useDefaultMode": "Standard verwenden ({{mode}})",
   "settings.accounts.downloadModeHint": "Ersetzt für dieses Konto den Standard-Download-Modus aus den Speichereinstellungen.",
-  "viewer.showingPreviewWhileDownloading": "Vorschau wird angezeigt, während die ganze Nachricht lädt …"
+  "viewer.showingPreviewWhileDownloading": "Vorschau wird angezeigt, während die ganze Nachricht lädt …",
+  "settings.storage.keepAllMail": "Alle E-Mails",
+  "settings.storage.hoarderOneWay": "Wenn Sie einen anderen Modus wählen, können Sie Sammler ohne Premium nicht wieder wählen."
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { safeStorage, flushSafeStorage } from './safeStorage';
+import { safeStorage, flushSafeStorage, safeStorageWritable } from './safeStorage';
 import { daemonCall } from '../services/daemonClient';
 import { FETCH_MODES } from '../utils/fetchPolicy';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
@@ -1509,6 +1509,9 @@ export const useSettingsStore = create(
 // workers). Never throws: a missing daemon picks the change up on its next pass.
 export async function notifyFetchModeChanged() {
   try {
+    // A detached window cannot write the file; the main window it relays the
+    // change to writes it and wakes the daemon itself.
+    if (!safeStorageWritable()) return;
     await flushSafeStorage().catch(e => console.warn('[settings] flush before fetch mode change failed:', e));
     await daemonCall('storage.fetch_mode_changed');
   } catch (e) {
@@ -1523,14 +1526,26 @@ const FETCH_MODE_KEYS = ['fetchMode', 'fetchModes', 'localCacheDurationMonths', 
 // window's relay (a plain setState), a transfer import. `fetchModePremium`
 // follows hasPremiumAccess on every billing change. Not during hydration: a
 // launch must not wake the workers ahead of their own schedule.
+// A Premium flip found while hydrating (the first launch after this update,
+// or a subscription that changed while the app was closed) is persisted then,
+// and told to the daemon once hydration ends, so Hoarder starts without
+// waiting for its next wake. An ordinary launch wakes nothing.
+let premiumFlippedWhileHydrating = false;
 useSettingsStore.subscribe((state, previous) => {
   const premium = hasPremiumAccess(state.billingProfile);
   if (premium !== state.fetchModePremium) {
+    if (!useSettingsStore.persist?.hasHydrated?.()) premiumFlippedWhileHydrating = true;
     useSettingsStore.setState({ fetchModePremium: premium }); // re-enters and notifies
     return;
   }
   if (!useSettingsStore.persist?.hasHydrated?.()) return;
   if (FETCH_MODE_KEYS.some(key => state[key] !== previous[key])) void notifyFetchModeChanged();
+});
+useSettingsStore.persist?.onFinishHydration?.(() => {
+  if (!premiumFlippedWhileHydrating) return;
+  premiumFlippedWhileHydrating = false;
+  // The live state: the listener's argument predates the flip.
+  if (useSettingsStore.getState().fetchModePremium) void notifyFetchModeChanged();
 });
 
 /**

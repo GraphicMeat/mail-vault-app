@@ -3050,7 +3050,7 @@
   "settings.storage.modeIndexOnly": "インデックスのみ",
   "settings.storage.modeHoarder": "すべて保存",
   "settings.storage.modeHintOnDemand": "事前には何もダウンロードしません。メッセージは開いたときにダウンロードされ、保存されません。全文検索はこのコンピュータに保存されたメールのみが対象です。件名と差出人では見つかる場合があります。",
-  "settings.storage.modeHintKeepRecent": "選んだ期間のメールをダウンロードしてこのコンピュータに保存します。それより古いコピーはここから削除されますが、サーバーのコピーは残ります。削除したメールの全文検索には本文のインデックス作成が必要です。",
+  "settings.storage.modeHintKeepRecent": "選んだ期間のメールをダウンロードしてこのコンピュータに保存します。それより古いコピーはここから削除される場合がありますが、サーバーのコピーは残ります。削除したメールの全文検索には本文のインデックス作成が必要です。",
   "settings.storage.modeHintIndexOnly": "選んだ期間のメールをダウンロードして検索用にインデックスを作成し、その後このコンピュータから削除します。開くとすぐにプレビューが表示され、その間にメッセージ全体をダウンロードします。削除したメールの全文検索には本文のインデックス作成が必要です。",
   "settings.storage.modeHintHoarder": "すべてのフォルダと全期間のメールをバックグラウンドでダウンロードし、このコンピュータに保存します。",
   "settings.storage.modeNeverRemoves": "どのモードでも、バックアップとアーカイブ済みのメールは削除されません。",
@@ -3060,5 +3060,7 @@
   "settings.storage.hoarderUpsell": "「すべて保存」は Premium の機能です。すべてのフォルダと全期間のメールをバックグラウンドでダウンロードします。",
   "settings.storage.useDefaultMode": "デフォルトを使用 ({{mode}})",
   "settings.accounts.downloadModeHint": "このアカウントでは、ストレージ設定のデフォルトのダウンロードモードの代わりにこれを使います。",
-  "viewer.showingPreviewWhileDownloading": "メッセージ全体をダウンロード中のため、プレビューを表示しています…"
+  "viewer.showingPreviewWhileDownloading": "メッセージ全体をダウンロード中のため、プレビューを表示しています…",
+  "settings.storage.keepAllMail": "すべてのメール",
+  "settings.storage.hoarderOneWay": "ほかのモードを選ぶと、Premium なしでは「すべて保存」を再び選べません。"
 }

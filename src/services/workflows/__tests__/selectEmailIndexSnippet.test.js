@@ -231,4 +231,23 @@ describe('selectEmail: vault miss opens on the index snippet', () => {
     expect(useMailStore.getState().selectedEmail.html).toBe('<p>the numbers</p>');
     expect(useMailStore.getState().selectedEmail._bodyError).toBeUndefined();
   });
+
+  it('the Insights reader (an explicit location) shows the snippet first too', async () => {
+    const body = deferred();
+    mockFetchEmailLight.mockReturnValueOnce(body.promise);
+    primeStore();
+    const header = { ...ROW_A, _accountId: 'acct1', _mailbox: 'INBOX', _insightsReadOnly: true };
+    const location = { accountId: 'acct1', mailbox: 'INBOX', uid: 500, header };
+
+    const opening = useMailStore.getState().selectEmail(500, 'server', null, location);
+    await vi.waitFor(() => expect(useMailStore.getState().selectedEmail?.text).toBe('snippet of 500'));
+    expect(useMailStore.getState().selectedEmail._bodyLoading).toBe(true);
+    expect(useMailStore.getState().selectedEmail._insightsReadOnly).toBe(true);
+    expect(useMailStore.getState().loadingEmail).toBe(false);
+
+    body.resolve({ uid: 500, messageId: ROW_A.messageId, html: '<p>the numbers</p>', flags: [] });
+    await opening;
+    expect(useMailStore.getState().selectedEmail.html).toBe('<p>the numbers</p>');
+    expect(useMailStore.getState().selectedEmail._bodyLoading).toBeUndefined();
+  });
 });

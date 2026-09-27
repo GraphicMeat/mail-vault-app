@@ -59,7 +59,7 @@ import { ReadDelayProgress } from '../ReadDelayProgress';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef, readOnly = false }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef, readOnly = false }) {
   const t = useT();
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
@@ -210,6 +210,19 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
     // so theme toggles don't need to tear down the load listener.
   }, [loadedEmail?.html, readOnly]);
+
+  // The search index's snippet stands in while the body downloads
+  // (useChatBodyLoader); replies still wait for the real body.
+  if (isLoading && snippet) {
+    return (
+      <div className="py-3 text-sm text-mail-text">
+        <p data-testid="thread-body-loading" role="status" className="mb-2 text-xs text-mail-text-muted">
+          {t('viewer.showingPreviewWhileDownloading')}
+        </p>
+        <p className="whitespace-pre-wrap">{snippet}</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -538,7 +551,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
                 {rawError || atob(rawSource)}
               </pre>
             ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} selectionRef={selectionRef} readOnly={readOnly} />
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} snippet={bodyEntry?.snippet || null} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} selectionRef={selectionRef} readOnly={readOnly} />
             )}
           </div>
 

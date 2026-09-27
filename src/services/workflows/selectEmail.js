@@ -12,6 +12,7 @@ import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cach
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval, keyAfterUndo } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
+import { readIndexSnippets } from '../indexSnippet';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
 import { stopThreadReadTimer, cancelThreadReadTimers } from './threadReadTimer';
@@ -256,6 +257,20 @@ function _rowOf(state, accountId, mailbox, uid, clickedRow = null) {
 // Insights provides a header outside the active list window. Keep the explicit
 // path separate from ordinary list resolution, and verify every body before it
 // reaches the reader. Nothing here changes the account, folder or mail arrays.
+// Show the search index's stored snippet, marked `_bodyLoading`, while a body
+// downloads. Never waited on, and only while this open is still in flight
+// with nothing shown, so the body (or its error) always wins and a late
+// snippet or a switched selection is dropped. `_bodyLoading` is what keeps it
+// out of replies, forwards and quick replies (replyTarget.withoutSnippet).
+function _snippetWhileLoading({ get, publish, selectedEmailId, accountId, mailbox, row, build }) {
+  readIndexSnippets(accountId, mailbox, [row]).then(snippets => {
+    const text = snippets.get(row.uid);
+    const s = get();
+    if (!text || s.selectedEmailId !== selectedEmailId || !s.loadingEmail || s.selectedEmail) return;
+    publish({ selectedEmail: build(text), loadingEmail: false });
+  });
+}
+
 async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
@@ -307,6 +322,8 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     let graphId = null;
     if (!email) {
       if (localOnly) throw new Error(t('insights.messageUnavailable'));
+      _snippetWhileLoading({ get, publish, selectedEmailId, accountId, mailbox, row: header,
+        build: text => stamp({ text, _bodyLoading: true }) });
       freshAccount = await ensureFreshToken(account);
       if (!isCurrent()) return false;
       if (isGraphAccount(freshAccount)) {
@@ -547,26 +564,11 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     if (!isCurrent()) return;
 
     const usableLocal = localEmail && (source === 'local-only' || localEmail.html !== undefined);
-    // Vault miss (On Demand, or evicted by Keep Recent / Index Only): show the
-    // search index's stored snippet at once, marked as still loading, while
-    // the body downloads. Never waited on: the row's own preview if it has
-    // one, else one header-cache read. Only while this open is still in
-    // flight with nothing shown, so the body (or its error) always wins.
+    // Vault miss (On Demand, or evicted by Keep Recent / Index Only): the
+    // index's snippet stands in while the body downloads.
     if (!usableLocal && source !== 'local-only' && headerRow) {
-      const showSnippet = (text) => {
-        const s = get();
-        if (!text || s.selectedEmailId !== selectedEmailId || !s.loadingEmail || s.selectedEmail) return;
-        publish({ selectedEmail: withAccount({ ...headerRow, text, _bodyLoading: true }), loadingEmail: false });
-      };
-      const own = headerRow.previewText || headerRow.snippet;
-      if (own) showSnippet(own);
-      else {
-        try {
-          db.getEmailHeadersByUids(accountId, mailbox, [realUid])
-            .then(rows => showSnippet(rows?.[0]?.previewText)) // asked for one uid
-            .catch(() => {});
-        } catch { /* no snippet: the spinner stays until the body lands */ }
-      }
+      _snippetWhileLoading({ get, publish, selectedEmailId, accountId, mailbox, row: headerRow,
+        build: text => withAccount({ ...headerRow, text, _bodyLoading: true }) });
     }
 
     if (usableLocal) {
