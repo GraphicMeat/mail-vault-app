@@ -25,9 +25,16 @@ const isDrafts = (box) => box?.specialUse === '\\Drafts'
   || PROTECTED_FOLDERS.has(leaf(box?.path))
   || PROTECTED_FOLDERS.has(box?.name);
 
-/** The one folder a rule may empty permanently; everything else moves to Trash. */
-export function isTrashFolder(box) {
-  return box?.specialUse === '\\Trash' || leaf(box?.path).toLowerCase() === 'trash';
+/**
+ * The one folder a rule may empty permanently; everything else moves to Trash.
+ * The name is a fallback for a server that declares no Trash. Where one is
+ * declared (`mailboxes`, the account's list), a folder merely called Trash,
+ * like Gmail's `[Imap]/Trash` label, is an ordinary folder.
+ */
+export function isTrashFolder(box, mailboxes = []) {
+  if (box?.specialUse === '\\Trash') return true;
+  if ((mailboxes || []).some(b => b?.specialUse === '\\Trash')) return false;
+  return leaf(box?.path).toLowerCase() === 'trash';
 }
 
 /**

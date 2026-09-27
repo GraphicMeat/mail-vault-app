@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { _resolveUnifiedContext } from '../unifiedHelpers.js';
+import { _resolveUnifiedContext, _resolveMailboxPath } from '../unifiedHelpers.js';
 
 // A Graph account's Sent has a localized NAME and an English PATH. The
 // mailbox that mutations act on is the path.
@@ -29,5 +29,37 @@ describe('_resolveUnifiedContext for a sent row without _mailbox', () => {
   it('returns the path, not the leaf name, for a Sent folder under INBOX', () => {
     const nested = { ...state, mailboxes: [{ name: 'Sent', path: 'INBOX.Sent', specialUse: '\\Sent' }] };
     expect(_resolveUnifiedContext('a1:7', nested).mailbox).toBe('INBOX.Sent');
+  });
+
+  // Gmail LISTs a user label "Sent" before [Gmail]/Sent Mail (byte order).
+  it('prefers the declared Sent over a folder merely named Sent listed first', () => {
+    const gmail = { ...state, mailboxes: [
+      { name: 'INBOX', path: 'INBOX', specialUse: '\\Inbox' },
+      { name: 'Sent', path: 'Sent' },
+      { name: 'Sent Mail', path: '[Gmail]/Sent Mail', specialUse: '\\Sent' },
+    ] };
+    expect(_resolveUnifiedContext('a1:7', gmail).mailbox).toBe('[Gmail]/Sent Mail');
+  });
+});
+
+// Unified Drafts / Trash / Sent resolve each account's folder by role.
+describe('_resolveMailboxPath prefers the declared role over a name match', () => {
+  // Gmail, byte order: user labels before [Gmail]/...
+  const gmail = [
+    { name: 'INBOX', path: 'INBOX', specialUse: '\\Inbox' },
+    { name: 'Drafts', path: 'Drafts' },
+    { name: 'Bin', path: '[Gmail]/Bin', specialUse: '\\Trash' },
+    { name: 'Drafts', path: '[Gmail]/Drafts', specialUse: '\\Drafts' },
+    { name: 'Trash', path: '[Imap]/Trash' },
+  ];
+
+  it('picks [Gmail]/Drafts, not the Drafts label listed before it', () => {
+    expect(_resolveMailboxPath(gmail, 'Drafts')).toBe('[Gmail]/Drafts');
+    expect(_resolveMailboxPath(gmail, 'Trash')).toBe('[Gmail]/Bin');
+  });
+
+  it('still falls back to the name when nothing declares the role', () => {
+    const plain = [{ name: 'INBOX', path: 'INBOX' }, { name: 'Drafts', path: 'INBOX.Drafts' }];
+    expect(_resolveMailboxPath(plain, 'Drafts')).toBe('INBOX.Drafts');
   });
 });

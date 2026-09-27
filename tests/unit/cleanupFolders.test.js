@@ -109,6 +109,20 @@ describe('isTrashFolder - the only folder a rule may delete permanently', () => 
     expect(isTrashFolder(box('INBOX.Trash'))).toBe(true);
   });
 
+  it('does not read the name when the server declares its own Trash', () => {
+    // Gmail: [Gmail]/Bin is the Trash; a user label [Imap]/Trash is a label,
+    // and an "all folders" rule must move its mail, not destroy it.
+    const gmail = [
+      box('INBOX'),
+      box('[Gmail]/Bin', { specialUse: '\\Trash' }),
+      box('[Imap]/Trash'),
+    ];
+    expect(isTrashFolder(box('[Imap]/Trash'), gmail)).toBe(false);
+    expect(isTrashFolder(gmail[1], gmail)).toBe(true);
+    // No declared Trash anywhere: the name is all there is.
+    expect(isTrashFolder(box('INBOX.Trash'), [box('INBOX'), box('INBOX.Trash')])).toBe(true);
+  });
+
   it('control: every other folder moves to Trash instead', () => {
     expect(isTrashFolder(box('INBOX'))).toBe(false);
     expect(isTrashFolder(box('INBOX.Sent', { specialUse: '\\Sent' }))).toBe(false);

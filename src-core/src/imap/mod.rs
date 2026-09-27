@@ -659,10 +659,12 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
     let mut all: Vec<MailboxInfo> = Vec::new();
     for name in &names {
         // The raw shape, so the next "folder missing" report settles itself.
+        // `{}` in brackets, not `{:?}`: Debug doubles every backslash, and the
+        // backslash count is the question this line answers.
         info!(
-            "[IMAP] LIST name={:?} delimiter={:?} attrs={:?}",
+            "[IMAP] LIST name=[{}] delimiter=[{}] attrs={:?}",
             name.name(),
-            name.delimiter(),
+            name.delimiter().unwrap_or("NIL"),
             name.attributes()
         );
         let path = unescape_quoted(name.name());

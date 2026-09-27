@@ -64,11 +64,10 @@ export function _resolveUnifiedContext(key, state) {
   // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, fall back to INBOX
   let mailbox = email._mailbox || 'INBOX';
   if (!email._mailbox && email._isSent) {
-    // Try to find the Sent folder's path from the account's mailboxes
-    const sentFolder = state.mailboxes?.find(m =>
-      m.specialUse === '\\Sent' || m.special_use === '\\Sent' ||
-      m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items'
-    );
+    // Try to find the Sent folder's path from the account's mailboxes. The
+    // declared role first: Gmail lists a label named "Sent" before its own.
+    const sentFolder = state.mailboxes?.find(m => m.specialUse === '\\Sent' || m.special_use === '\\Sent')
+      || state.mailboxes?.find(m => m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items');
     mailbox = sentFolder?.path || sentFolder?.name || 'Sent';
   }
   // Final safety: never return 'UNIFIED' as a real mailbox
@@ -371,19 +370,22 @@ export function _resolveMailboxPath(accountMailboxes, folderId) {
   const specialUse = SPECIAL_USE_MAP[folderId];
   if (!accountMailboxes || !accountMailboxes.length) return folderId;
 
-  const findBox = (boxes) => {
+  const findBox = (boxes, matches) => {
     for (const box of boxes) {
-      if (specialUse && (box.specialUse === specialUse || box.special_use === specialUse)) return box.path;
-      if (box.name?.toLowerCase() === folderId.toLowerCase()) return box.path;
-      if (box.path?.toLowerCase() === folderId.toLowerCase()) return box.path;
+      if (matches(box)) return box.path;
       if (box.children?.length) {
-        const found = findBox(box.children);
+        const found = findBox(box.children, matches);
         if (found) return found;
       }
     }
     return null;
   };
-  return findBox(accountMailboxes) || folderId;
+  // The declared role over the whole list first: Gmail LISTs a user label
+  // "Drafts" before [Gmail]/Drafts, and a per-folder role-or-name test took it.
+  const byRole = (box) => !!specialUse && (box.specialUse === specialUse || box.special_use === specialUse);
+  const byName = (box) => box.name?.toLowerCase() === folderId.toLowerCase()
+    || box.path?.toLowerCase() === folderId.toLowerCase();
+  return findBox(accountMailboxes, byRole) || findBox(accountMailboxes, byName) || folderId;
 }
 
 // ── Vault directory names ──────────────────────────────────────────────────

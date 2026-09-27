@@ -98,7 +98,7 @@ async function stampServerDeleted(accountId, mailbox, uid) {
  * Archive (when the rule says so), verify, then delete what was verified.
  * `stale` are the cached headers past the rule's threshold.
  */
-async function cleanFolder(rule, account, freshAccount, box, stale) {
+async function cleanFolder(rule, account, freshAccount, box, stale, mailboxes) {
   const folder = box.path;
   const uids = stale.map(e => e.uid);
   const counts = noWork();
@@ -163,7 +163,7 @@ async function cleanFolder(rule, account, freshAccount, box, stale) {
 
   // Only the Trash folder itself is emptied permanently; everything else moves
   // there, so a rule the user misjudged is still recoverable from the server.
-  const permanent = isTrashFolder(box);
+  const permanent = isTrashFolder(box, mailboxes);
   // ponytail: one UID MOVE per message; batch imap_move_emails per folder if a
   // 26k run proves too slow.
   for (const uid of uids) {
@@ -217,9 +217,8 @@ async function executeRule(rule, { dryRun = false } = {}) {
       // INBOX.Sent and the literal matched nothing at all. No cached list is
       // no answer - skip the account rather than guess at its folder names.
       const entry = await db.getCachedMailboxEntry(account.id);
-      const folders = resolveCleanupFolders(
-        rule.folder, entry?.lastKnownGoodMailboxes || entry?.mailboxes,
-      );
+      const mailboxes = entry?.lastKnownGoodMailboxes || entry?.mailboxes;
+      const folders = resolveCleanupFolders(rule.folder, mailboxes);
       if (folders.length === 0) {
         console.warn(`[CleanupEngine] ${account.email}: "${rule.folder}" names no folder in the cached mailbox list - nothing to clean`);
         continue;
@@ -245,7 +244,7 @@ async function executeRule(rule, { dryRun = false } = {}) {
         // Refresh token before IMAP operations - once per account, not per folder
         if (!freshAccount) freshAccount = await ensureFreshToken(account);
 
-        const counts = await cleanFolder(rule, account, freshAccount, box, staleEmails);
+        const counts = await cleanFolder(rule, account, freshAccount, box, staleEmails, mailboxes);
         totals.archived += counts.archived;
         totals.deleted += counts.deleted;
         totals.skipped += counts.skipped;
