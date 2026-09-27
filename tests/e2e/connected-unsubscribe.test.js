@@ -22,6 +22,7 @@ import { ImapFlow } from 'imapflow';
 import { MOCK_PASSWORD } from './mockImap.js';
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { modalOpen, fieldValue, closeComposeHard } from './composeHelpers.js';
+import { wakeRows } from './rowMenu.js';
 
 const YODA = 'yoda@mock.test';
 const LUKE = 'luke@mock.test';
@@ -151,6 +152,7 @@ describe('Unsubscribe', function () {
   it("offers Unsubscribe in the row's default quick actions", async function () {
     // The default row layout is the radial wheel: open it on the fixture's
     // row and read its entries, then close it again.
+    await wakeRows();
     const opened = await browser.execute((needle) => {
       const row = [...document.querySelectorAll('[data-testid="email-row"]')]
         .find((r) => r.offsetHeight > 0 && (r.innerText || '').includes(needle));

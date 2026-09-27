@@ -49,7 +49,7 @@ function sameResolvedAccount(locations) {
 
 function folderPath(folder) { return folder?.path || folder?.name || null; }
 
-export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity, openAt }) {
+export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity, openAt, onBusyChange }) {
   const t = useT();
   const { config } = useQuickActionConfiguration('row');
   const localLabels = useTagStore(state => state.tags) || EMPTY_ARRAY;
@@ -62,6 +62,15 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const [moveRect, setMoveRect] = useState(null);
   const [snoozeRect, setSnoozeRect] = useState(null);
   useEffect(() => { setMoveRect(null); setSnoozeRect(null); }, [identity]);
+  // The row mounts this only while it is live; the menu, or the picker a menu
+  // action opened, is what holds it live once the pointer has left the row.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const busy = menuOpen || !!moveRect || !!snoozeRect;
+  useEffect(() => {
+    if (!busy) return undefined;
+    onBusyChange?.(true);
+    return () => onBusyChange?.(false);
+  }, [busy]);
   const state = useMailStore.getState();
   const backupScan = useBackupScan();
   const keys = useMemo(() => emails.map(email => selectionKey(email, useMailStore.getState())), [emails, identity]);
@@ -253,7 +262,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
 
   return <>
     <span hidden data-row-actions ref={registerMarker} />
-    <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} />
+    <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}

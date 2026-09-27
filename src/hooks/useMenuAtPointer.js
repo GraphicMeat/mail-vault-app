@@ -26,12 +26,20 @@ import { useCallback, useRef, useState } from 'react';
 /// gets a matching contextmenu (dragged off, cancelled, whatever) is wiped by
 /// the very next pointerdown of any button, rather than lingering to swallow
 /// a later, unrelated Ctrl+click.
+///
+/// `live` says whether the row should mount its quick actions at all: only
+/// while it is hovered, focused, right-clicked or swiped. Mounting them on every row
+/// of a long list cost two dozen store subscriptions and a portal per row.
+/// Whoever opened a menu or picker from them holds the row live on its own
+/// (EmailList's `activeMenuRowId`), since the pointer leaves the row for it.
 export function useMenuAtPointer() {
   const [menuAt, setMenuAt] = useState(null);
+  const [live, setLive] = useState(false);
   const openedByPointerDownRef = useRef(false);
   const openMenuAtPointer = useCallback((event) => {
     openedByPointerDownRef.current = event.button === 2;
     if (event.button !== 2) return;
+    setLive(true);
     setMenuAt({ x: event.clientX, y: event.clientY });
   }, []);
   const openMenuFromContextMenu = useCallback((event) => {
@@ -45,10 +53,24 @@ export function useMenuAtPointer() {
     // itself instead of the screen origin.
     const atOrigin = event.clientX === 0 && event.clientY === 0;
     const rect = atOrigin ? event.currentTarget?.getBoundingClientRect() : null;
+    setLive(true);
     setMenuAt({
       x: rect ? rect.left + rect.width / 2 : event.clientX,
       y: rect ? rect.top + rect.height / 2 : event.clientY,
     });
   }, []);
-  return [menuAt, { onPointerDown: openMenuAtPointer, onContextMenu: openMenuFromContextMenu }];
+  return [menuAt, {
+    onPointerDown: openMenuAtPointer,
+    onContextMenu: openMenuFromContextMenu,
+    onPointerEnter: () => setLive(true),
+    onPointerLeave: () => setLive(false),
+    // A trackpad swipe runs through the row's quick actions (useRowSwipe), and
+    // after a scroll under a still pointer no hover may have reached the row.
+    onWheel: (event) => { if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) setLive(true); },
+    onFocus: () => setLive(true),
+    // Only focus that moved on to something outside the row lets go. Focus
+    // sent nowhere is the right-click's own mousedown dropping it from the
+    // wedge the wheel just focused; the pointer is still on the row.
+    onBlur: (event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setLive(false); },
+  }, live];
 }

@@ -31,6 +31,7 @@ import { ImapFlow } from 'imapflow';
 import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
 import { MOCK_PASSWORD } from './mockImap.js';
 import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
+import { wakeRows } from './rowMenu.js';
 
 describe('Custody claims', function () {
   this.timeout(240000);
@@ -164,6 +165,7 @@ describe('Custody claims', function () {
    * so it has a box and takes a synthetic click without a real hover.
    */
   async function archiveRowButton(subject) {
+    await wakeRows();
     const clicked = await browser.execute((needle) => {
       for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
         if (!(row.innerText || '').includes(needle)) continue;

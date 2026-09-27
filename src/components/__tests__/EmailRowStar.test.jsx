@@ -122,6 +122,8 @@ for (const [name, renderRow] of variants) {
       const props = rowProps();
       const e = email();
       render(renderRow(e, props));
+      // The row mounts its hover actions once it is hovered.
+      fireEvent.pointerEnter(screen.getByTestId('email-row'));
 
       fireEvent.click(screen.getByTestId('row-archive'));
       await vi.waitFor(() => expect(props.onStopSaving).toHaveBeenCalled());
@@ -152,6 +154,7 @@ for (const [name, renderRow] of variants) {
 
     it('ignores a left-button pointerdown', () => {
       render(renderRow(email()));
+      fireEvent.pointerEnter(screen.getByTestId('email-row'));
       fireEvent.pointerDown(screen.getByTestId('email-row'), { button: 0, clientX: 12, clientY: 34 });
       expect(screen.getByTestId('row-archive').dataset.openAt).toBe('');
     });
@@ -170,6 +173,7 @@ for (const [name, renderRow] of variants) {
     it('opens exactly once on a macOS Ctrl+click (pointerdown button 0 + ctrlKey, then contextmenu)', () => {
       render(renderRow(email()));
       const row = screen.getByTestId('email-row');
+      fireEvent.pointerEnter(row);
       fireEvent.pointerDown(row, { button: 0, ctrlKey: true, clientX: 12, clientY: 34 });
       expect(screen.getByTestId('row-archive').dataset.openAt).toBe('');
       const notCancelled = fireEvent.contextMenu(row, { clientX: 12, clientY: 34 });

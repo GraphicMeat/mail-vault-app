@@ -25,6 +25,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { wakeRows } from './rowMenu.js';
 import { appDataDir, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -80,16 +81,19 @@ const unarchivedRows = () => browser.execute(() => {
     .map((e) => ({ uid: e.uid, subject: e.subject }));
 });
 
-const clickRowArchive = (subject) => browser.execute((needle) => {
-  for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
-    if (!(row.innerText || '').includes(needle)) continue;
-    const btn = row.querySelector('[data-quick-action="archive"]');
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }
-  return false;
-}, subject);
+const clickRowArchive = async (subject) => {
+  await wakeRows();
+  return browser.execute((needle) => {
+    for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+      if (!(row.innerText || '').includes(needle)) continue;
+      const btn = row.querySelector('[data-quick-action="archive"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }
+    return false;
+  }, subject);
+};
 
 describe('Vault move — the daemon keeps custody, caches and the search index consistent', function () {
   this.timeout(240_000);

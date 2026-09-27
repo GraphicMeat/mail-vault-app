@@ -33,6 +33,9 @@ describe('Quick action layouts', function () {
   /** The surface as the main window renders it; never the Settings preview. */
   const surfaceState = (surface) => browser.execute((wanted) => {
     const outside = (el) => !el.closest('[data-testid="settings-page"]');
+    // A row mounts its quick actions once hovered: hover the first, and a
+    // caller's next poll finds them.
+    if (wanted === 'row') document.querySelector('[data-testid="email-row"]')?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     const selector = wanted === 'reader' ? '.email-action-bar .quick-actions[data-surface="reader"]'
       : wanted === 'selection' ? '[data-testid="selection-action-bar"] .quick-actions[data-surface="selection"]'
         : '.quick-actions[data-surface="row"]';

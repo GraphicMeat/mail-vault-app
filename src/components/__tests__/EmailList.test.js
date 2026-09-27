@@ -632,6 +632,24 @@ describe('EmailList virtualization', () => {
 // success. These test the pure formatter directly rather than driving it
 // through handleBulkConfirm, since the interesting behavior is the message
 // composition, not the store plumbing around it (already covered above).
+// A delete or unarchive confirmation hands focus back to the trigger that
+// opened it. That trigger sits in the row's hover bar, which a row only mounts
+// while it is live: by the time the dialog closes, it may be gone.
+describe('confirmationReturnTarget', () => {
+  it('returns the trigger while it is still in the page, else the row\'s first control', async () => {
+    const { confirmationReturnTarget } = await import('../EmailList.jsx');
+    document.body.innerHTML = '<div class="group"><input type="checkbox" id="box"><div><button id="trigger"></button></div></div>';
+    const trigger = document.getElementById('trigger');
+    const row = trigger.closest('.group');
+    expect(confirmationReturnTarget({ trigger, row })).toBe(trigger);
+    trigger.remove();
+    expect(confirmationReturnTarget({ trigger, row })).toBe(document.getElementById('box'));
+    row.remove();
+    expect(confirmationReturnTarget({ trigger, row })).toBeNull();
+    expect(confirmationReturnTarget(null)).toBeNull();
+  });
+});
+
 describe('formatPurgeEverywhereOutcome', () => {
   it('returns null for a clean run (nothing to warn about)', async () => {
     const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');

@@ -44,8 +44,23 @@ function ThreadDisclosure({ expanded, threadId, onToggleExpand }) {
   );
 }
 
+// Every distinct party in the thread, two named and the rest counted.
+function participantsLabel(emails, outgoing) {
+  const seen = new Set();
+  const names = [];
+  for (const email of emails || []) {
+    const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
+    if (!seen.has(addr)) {
+      seen.add(addr);
+      names.push(getRowPartyName(email, { outgoing }));
+    }
+  }
+  return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
+}
+
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+  const t = useT();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
 
@@ -68,31 +83,22 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   const landed = useCustodyLanding(scopeKey, custodyTone);
   // A thread in an outgoing folder names who it went TO, not you, on every row.
   const outgoing = isOutgoingRow(thread?.lastEmail, useMailStore.getState());
-
-  if (!thread?.lastEmail) return null;
-  const latestEmail = thread.lastEmail;
-  const hasUnread = thread.unreadCount > 0;
   // Everything this row acts on — its checkbox, its menu, its archive button —
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
-  const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
+  const members = useMemo(() => threadRowMembers(thread?.emails), [thread?.emails]);
+  const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  // Quick actions mount on the live row only; an open menu holds it live.
+  const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
 
   // Build participant display: every distinct sender in the thread, the user
   // included — a conversation you replied to shows your name too. In an
   // outgoing folder that list is you, repeated, so it names the recipients.
-  const participantNames = useMemo(() => {
-    const seen = new Set();
-    const names = [];
-    for (const email of thread.emails) {
-      const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
-      if (!seen.has(addr)) {
-        seen.add(addr);
-        names.push(getRowPartyName(email, { outgoing }));
-      }
-    }
-    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails, outgoing]);
+  const participantNames = useMemo(() => participantsLabel(thread?.emails, outgoing), [thread?.emails, outgoing]);
+
+  if (!thread?.lastEmail) return null;
+  const latestEmail = thread.lastEmail;
+  const hasUnread = thread.unreadCount > 0;
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
@@ -168,16 +174,18 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       </div>
       </WithSnippet>
 
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+      {(live || menuOpen) && <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
-          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} openAt={menuAt} />
-      </div>
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} openAt={menuAt} onBusyChange={holdMenu} />
+      </div>}
     </div>
   );
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+  const t = useT();
+
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
   // message's custody, so that is what hands over.
@@ -197,28 +205,18 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   const landed = useCustodyLanding(scopeKey, custodyTone);
   // A thread in an outgoing folder names who it went TO, not you, on every row.
   const outgoing = isOutgoingRow(thread?.lastEmail, useMailStore.getState());
+  // Everything this row acts on — its checkbox, its menu, its archive button —
+  // is the part of the thread that lives in the folder on screen, never the
+  // Sent copies an INBOX list merges in for context. See threadRowMembers.
+  const members = useMemo(() => threadRowMembers(thread?.emails), [thread?.emails]);
+  const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  // Quick actions mount on the live row only; an open menu holds it live.
+  const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
+  const participantNames = useMemo(() => participantsLabel(thread?.emails, outgoing), [thread?.emails, outgoing]);
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
   const hasUnread = thread.unreadCount > 0;
-  // Everything this row acts on — its checkbox, its menu, its archive button —
-  // is the part of the thread that lives in the folder on screen, never the
-  // Sent copies an INBOX list merges in for context. See threadRowMembers.
-  const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
-
-  const participantNames = useMemo(() => {
-    const seen = new Set();
-    const names = [];
-    for (const email of thread.emails) {
-      const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
-      if (!seen.has(addr)) {
-        seen.add(addr);
-        names.push(getRowPartyName(email, { outgoing }));
-      }
-    }
-    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails, outgoing]);
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
@@ -285,10 +283,10 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       </div>
 
       {/* Hover actions */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+      {(live || menuOpen) && <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
-          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} />
-      </div>
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} onBusyChange={holdMenu} />
+      </div>}
     </div>
   );
 });

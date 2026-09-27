@@ -58,6 +58,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow, listRowHeight } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { RowQuickActions } from './RowQuickActions';
+import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
 import { SwipeBackdrop } from './SwipeBackdrop';
 import { useRowSwipe } from '../hooks/useRowSwipe';
 import { TagChips } from './TagChips';
@@ -158,6 +159,28 @@ export function MailboxCustodyStatus({ vaultShare, vaultShareLabel, searchActive
       </span>
     </>}
   </div>;
+}
+
+// Where a delete or unarchive confirmation hands focus back: the row trigger
+// that opened it or, once that row stopped being live and its hover bar (the
+// trigger with it) unmounted, the row's own first control.
+export function confirmationReturnTarget(saved) {
+  const { trigger, row } = saved || {};
+  if (trigger?.isConnected) return trigger;
+  return row?.isConnected ? row.querySelector('input, button, [tabindex="0"]') : null;
+}
+
+// A sender-view message row mounts its quick actions the way EmailRow does:
+// only while hovered or focused, or while a menu opened from them is up.
+function LiveRowShell({ renderActions, children }) {
+  const [, { onPointerEnter, onPointerLeave, onFocus, onBlur }, live] = useMenuAtPointer();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="relative group w-full h-full" onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onFocus={onFocus} onBlur={onBlur}>
+      {children}
+      {(live || busy) && renderActions(setBusy)}
+    </div>
+  );
 }
 
 function EmailListComponent({ stacked = false }) {
@@ -329,7 +352,10 @@ function EmailListComponent({ stacked = false }) {
   const [expandedTopics, setExpandedTopics] = useState(new Set());
   const [expandedEmail, setExpandedEmail] = useState(null);
   const [focusedRow, setFocusedRow] = useState(null);
-  // Lifted row menu state — only one menu can be active at a time
+  // Lifted row menu state — only one menu can be active at a time. A row
+  // mounts its quick actions only while hovered or focused; the row whose
+  // menu (or the folder/snooze picker it opened) is up stays mounted through
+  // this, after the pointer has left it.
   const [activeMenuRowId, setActiveMenuRowId] = useState(null);
   // Pending delete confirmation lifted out of rows so the modal escapes the
   // virtualizer's transform stacking context.
@@ -345,9 +371,12 @@ function EmailListComponent({ stacked = false }) {
   // whole render window re-renders on any list state change. These four are the
   // ones each row used to receive as a freshly-minted closure or object.
   const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
-  const closeRowMenu = useCallback(() => setActiveMenuRowId(null), []);
+  // A row closing its own menu must not release another row's.
+  const closeRowMenu = useCallback((id) => setActiveMenuRowId(current => (id === undefined || current === id ? null : current)), []);
   const handleRowActionStart = useCallback((_event, trigger, entry) => {
-    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) confirmationReturnRef.current = trigger;
+    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) {
+      confirmationReturnRef.current = { trigger, row: trigger?.closest?.('.group') };
+    }
   }, []);
   // `options` carries `confirmOptional`, which is what lets the
   // skip-confirmation setting reach this delete — see DeleteConfirmModal.
@@ -1427,7 +1456,18 @@ function EmailListComponent({ stacked = false }) {
                     )}
 
                     {item.type === 'sender-email' && (
-                      <div className="relative group w-full h-full">
+                      <LiveRowShell renderActions={holdMenu => (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+                        <RowQuickActions emails={[item.email]} actions={rowActions} onRequestDelete={requestRowDelete} onActionStart={handleRowActionStart}
+                          onClose={closeRowMenu} identity={emailScopeKey(item.email, useMailStore.getState()) || selKey(item.email)}
+                          onArchive={async event => {
+                            event.stopPropagation();
+                            const id = selKey(item.email);
+                            startSaving(id);
+                            try { await saveEmailsLocally([item.email]); } finally { stopSaving(id); }
+                          }} disabled={savingRowIds.has(selKey(item.email))} display="icon-only" onBusyChange={holdMenu} />
+                      </div>
+                      )}>
                       <div role="button" tabIndex={0}
                         data-testid="sender-email-row"
                         onKeyDown={event => {
@@ -1500,17 +1540,7 @@ function EmailListComponent({ stacked = false }) {
                           <ConnectedStateIcon email={item.email} size={13} />
                         </div>
                       </div>
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
-                        <RowQuickActions emails={[item.email]} actions={rowActions} onRequestDelete={requestRowDelete} onActionStart={handleRowActionStart}
-                          onClose={closeRowMenu} identity={emailScopeKey(item.email, useMailStore.getState()) || selKey(item.email)}
-                          onArchive={async event => {
-                            event.stopPropagation();
-                            const id = selKey(item.email);
-                            startSaving(id);
-                            try { await saveEmailsLocally([item.email]); } finally { stopSaving(id); }
-                          }} disabled={savingRowIds.has(selKey(item.email))} display="icon-only" />
-                      </div>
-                      </div>
+                      </LiveRowShell>
                     )}
 
                     {item.type === 'email-body' && (
@@ -1682,7 +1712,7 @@ function EmailListComponent({ stacked = false }) {
       />
       <DeleteConfirmModal pending={pendingDelete} onClose={() => {
         setPendingDelete(null);
-        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+        requestAnimationFrame(() => confirmationReturnTarget(confirmationReturnRef.current)?.focus?.());
       }} />
     </div>
   );

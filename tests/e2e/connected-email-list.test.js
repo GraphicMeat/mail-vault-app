@@ -8,6 +8,7 @@
 
 import { waitForApp, waitForEmails } from './helpers.js';
 import { clickSelectionAction, selectionActionReady, selectionBarGone } from './selectionBar.js';
+import { wakeRows } from './rowMenu.js';
 
 describe('Email List Selection & Action Bar', function () {
   this.timeout(60_000);
@@ -25,6 +26,7 @@ describe('Email List Selection & Action Bar', function () {
  * EmailRow renders it only while `!email.isArchived`.
  */
   async function selectUnarchivedRow() {
+    await wakeRows();
     return browser.execute(() => {
       for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
         if (!row.querySelector('[data-quick-action="archive"]')) continue;

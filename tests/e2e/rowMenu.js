@@ -20,11 +20,27 @@
  * in that panel or inline on the row whose trigger opened it. That works
  * whichever layout the row is configured with.
  *
+ * A row mounts its quick actions only while it is hovered or focused (one
+ * menu per list, not one per row), so nothing above exists on a row the
+ * pointer never touched. A synthetic `pointerover` is that hover: React
+ * derives the row's onPointerEnter from it. The actions render a tick later.
+ *
  * Plain data crosses into the page, never a function: the app's CSP has no
  * `unsafe-eval`, so a rebuilt callback is refused.
  */
 
 const MENU = '[role="menu"][data-surface="row"]';
+
+/** Hover every row on screen and wait until each has mounted its quick actions. */
+export async function wakeRows() {
+  await browser.execute(() => {
+    for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+      row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    }
+  });
+  await browser.waitUntil(() => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
+    .every((row) => row.querySelector('[data-row-actions]'))), { timeout: 5_000, interval: 50 }).catch(() => {});
+}
 
 export const rowMenuIsOpen = () =>
   browser.execute((sel) => !!document.querySelector(sel), MENU);
@@ -37,7 +53,7 @@ export const rowMenuIsOpen = () =>
  *                        (a string or an array) and none in `not`
  *   { withinOfBottom }   the lowest row whose bottom edge is inside the window
  *                        and within that many px of its bottom
- * Returns null when no row matched or it has no trigger.
+ * Returns null when no row matched or it has no trigger (yet).
  */
 export const clickRowMenuTrigger = (match) => browser.execute((m) => {
   const rows = [...document.querySelectorAll('[data-testid="email-row"]')].filter(r => r.offsetHeight > 0);
@@ -55,6 +71,9 @@ export const clickRowMenuTrigger = (match) => browser.execute((m) => {
       return want.every(s => text.includes(s)) && !not.some(s => text.includes(s));
     });
   }
+  // Hovers the row; on a row that was not live yet the trigger shows up on
+  // the caller's next try.
+  row?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
   const btn = row?.querySelector('.quick-actions[data-surface="row"] .quick-actions-trigger');
   if (!btn) return null;
   const rect = row.getBoundingClientRect();

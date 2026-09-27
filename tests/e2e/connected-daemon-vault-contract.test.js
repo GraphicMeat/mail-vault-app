@@ -30,6 +30,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { wakeRows } from './rowMenu.js';
 import { appDataDir } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -74,16 +75,19 @@ describe('Vault — daemon/Tauri contract', function () {
   });
 
   /** The row's own hover Archive button — the saveEmailLocally path, not bulk. */
-  const clickRowArchive = (subject) => browser.execute((needle) => {
-    for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
-      if (!(row.innerText || '').includes(needle)) continue;
-      const btn = row.querySelector('[data-quick-action="archive"]');
-      if (!btn) return false;
-      btn.click();
-      return true;
-    }
-    return false;
-  }, subject);
+  const clickRowArchive = async (subject) => {
+    await wakeRows();
+    return browser.execute((needle) => {
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (!(row.innerText || '').includes(needle)) continue;
+        const btn = row.querySelector('[data-quick-action="archive"]');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      }
+      return false;
+    }, subject);
+  };
 
   const storeError = () => browser.execute(() => window.__MAIL_STORE__?.getState()?.error || null);
 

@@ -28,8 +28,10 @@ vi.mock('../../hooks/useQuickActionConfiguration', () => ({
 }));
 
 vi.mock('../QuickActions', () => ({
-  QuickActions: ({ descriptors = [] }) => React.createElement('div', null,
-    descriptors.filter(descriptor => !descriptor.hidden).map(descriptor => React.createElement('button', {
+  QuickActions: ({ descriptors = [], onOpenChange }) => React.createElement('div', null,
+    React.createElement('button', { key: '__open', 'data-testid': 'menu-open', onClick: () => onOpenChange?.(true) }),
+    React.createElement('button', { key: '__close', 'data-testid': 'menu-close', onClick: () => onOpenChange?.(false) }),
+    ...descriptors.filter(descriptor => !descriptor.hidden).map(descriptor => React.createElement('button', {
       key: descriptor.id,
       type: 'button',
       'data-testid': `quick-action-${descriptor.id}`,
@@ -39,7 +41,9 @@ vi.mock('../QuickActions', () => ({
     }, descriptor.label))),
 }));
 
-vi.mock('../MoveToFolderDropdown', () => ({ MoveToFolderDropdown: () => null }));
+vi.mock('../MoveToFolderDropdown', () => ({
+  MoveToFolderDropdown: ({ onClose }) => React.createElement('button', { 'data-testid': 'move-dropdown', onClick: onClose }),
+}));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: () => false }));
 vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => key => key, getLocale: () => 'en' }));
 vi.mock('../../utils/composeOpener', () => ({ openCompose: (...args) => mocks.openCompose(...args) }));
@@ -351,6 +355,30 @@ describe('RowQuickActions', () => {
       { uid: 21, location: { accountId: ACCOUNT_A.id, mailbox: 'INBOX' } },
       { uid: 21, location: { accountId: ACCOUNT_B.id, mailbox: 'Sent' } },
     ]);
+  });
+});
+
+// The row mounts RowQuickActions only while it is live, and a pointer that
+// leaves it would unmount an open menu or the folder picker a menu action
+// opened. So the row hears when either is up and holds itself live meanwhile.
+describe('RowQuickActions busy', () => {
+  it('reports busy while its menu or a follow-up picker is open, and idle once both are gone', () => {
+    setActions(action('move'));
+    const onBusyChange = vi.fn();
+    renderActions({ onBusyChange });
+    expect(onBusyChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('menu-open'));
+    expect(onBusyChange).toHaveBeenLastCalledWith(true);
+    // Picking Move closes the menu before the picker opens: still busy.
+    fireEvent.click(screen.getByTestId('quick-action-move'));
+    fireEvent.click(screen.getByTestId('menu-close'));
+    expect(screen.getByTestId('move-dropdown')).toBeTruthy();
+    expect(onBusyChange).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('move-dropdown'));
+    expect(onBusyChange).toHaveBeenLastCalledWith(false);
+    expect(onBusyChange).toHaveBeenCalledTimes(2);
   });
 });
 

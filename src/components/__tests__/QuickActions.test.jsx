@@ -130,6 +130,23 @@ describe("QuickActions", () => {
     expect(screen.getByRole("menu")).toBeTruthy();
   });
 
+  // A row mounts its quick actions only once it is live, so a right-click on a
+  // row nobody hovered (touch, the keyboard Menu key) mounts this component
+  // with `openAt` already set, inside the pointer event itself.
+  it("opens at the pointer when mounted by the right-click itself", () => {
+    function Row() {
+      const [at, setAt] = React.useState(null);
+      return (
+        <div data-testid="row" onPointerDown={(event) => setAt({ x: event.clientX, y: event.clientY })}>
+          {at && <QuickActions config={config("radial")} descriptors={descriptors} identity="row-1" openAt={at} />}
+        </div>
+      );
+    }
+    render(<Row />);
+    fireEvent.pointerDown(screen.getByTestId("row"), { button: 2, clientX: 200, clientY: 220 });
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
   it("uses a safe favorite fallback when the saved favorite is unavailable", () => {
     render(
       <QuickActions
