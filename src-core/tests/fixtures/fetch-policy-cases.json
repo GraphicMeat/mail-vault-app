@@ -162,6 +162,28 @@
       "dateMs": 1420070400000,
       "nowMs": 1768435200000,
       "expected": true
+    },
+    {
+      "name": "keep_recent_window_too_large_to_represent_never_evicts_even_a_very_old_body",
+      "policy": { "mode": "keepRecent", "windowMonths": 4294967295, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "keep_recent_end_of_month_boundary_exactly_at_cutoff_is_kept",
+      "_comment": "now = 2026-03-31T12:00:00Z, window 1 month -> cutoff clamps to 2026's last day of February (28, not a leap year): 2026-02-28T12:00:00Z.",
+      "policy": { "mode": "keepRecent", "windowMonths": 1, "hoarderPremium": false },
+      "dateMs": 1772280000000,
+      "nowMs": 1774958400000,
+      "expected": true
+    },
+    {
+      "name": "keep_recent_end_of_month_boundary_one_ms_before_cutoff_is_dropped",
+      "policy": { "mode": "keepRecent", "windowMonths": 1, "hoarderPremium": false },
+      "dateMs": 1772279999999,
+      "nowMs": 1774958400000,
+      "expected": false
     }
   ]
 }

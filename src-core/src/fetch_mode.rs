@@ -4,7 +4,7 @@
 //! disk, and which cached copies a mode is allowed to delete. No I/O here —
 //! the daemon eviction worker (H3) reads a mailbox's cache files and the
 //! search index, builds a `FetchPolicy`, and calls into this module to
-//! decide what to touch. See `docs/superpowers/plans/2026-09-26-feedback-batch-sdd/track-H-spec.md`.
+//! decide what to touch.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -26,7 +26,9 @@ const DEFAULT_WINDOW_MONTHS: u32 = 3;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FetchPolicy {
     pub mode: FetchMode,
-    /// 0 = no cutoff (never evict on age).
+    /// 0 = no cutoff (never evict on age). A value large enough to overflow
+    /// the calendar (see `cutoff_ms`) is likewise treated as no cutoff,
+    /// never as an error.
     pub window_months: u32,
     /// Mirrors the frontend's persisted `fetchModePremium` (kept in sync
     /// with `hasPremiumAccess(billingProfile)`). The daemon has no
@@ -46,9 +48,11 @@ impl FetchPolicy {
     /// parses as a `FetchMode`, else `state.fetchMode` if that parses, else a
     /// legacy fallback: `localCacheDurationMonths == 0` means `Hoarder`,
     /// anything else means `KeepRecent`. `window_months` is
-    /// `localCacheDurationMonths` verbatim when it is a valid non-negative
-    /// integer, else the default of 3. Any other malformed value (wrong
-    /// type, unrecognized string) is treated the same as "missing".
+    /// `localCacheDurationMonths` verbatim when it fits in a `u32`
+    /// (`u32::try_from`), else the default of 3 — a value that doesn't fit
+    /// falls back to the default rather than silently wrapping. Any other
+    /// malformed value (wrong type, unrecognized string) is treated the same
+    /// as "missing".
     pub fn from_settings(state: &serde_json::Value, account_id: &str) -> Option<FetchPolicy> {
         let hidden = state
             .get("hiddenAccounts")
@@ -62,7 +66,7 @@ impl FetchPolicy {
         let window_months = state
             .get("localCacheDurationMonths")
             .and_then(|v| v.as_u64())
-            .map(|v| v as u32);
+            .and_then(|v| u32::try_from(v).ok());
 
         let mode = state
             .get("fetchModes")
@@ -92,14 +96,24 @@ impl FetchPolicy {
 
     /// Whether a body dated `date_ms` may be written to (or kept in) the
     /// vault. `OnDemand` never keeps a body on disk; `Hoarder` always does;
-    /// `KeepRecent`/`IndexOnly` keep it while it is inside `window_months`
-    /// (a window of 0 means "never evict on age", so always `true`).
+    /// `KeepRecent`/`IndexOnly` keep it while it is inside `window_months`.
+    /// A window of 0, or a window too large for `cutoff_ms` to represent as
+    /// a calendar date, both mean "no cutoff": always `true`.
     pub fn keeps_body(&self, date_ms: i64, now_ms: i64) -> bool {
         match self.mode {
             FetchMode::OnDemand => false,
             FetchMode::Hoarder => true,
             FetchMode::KeepRecent | FetchMode::IndexOnly => {
-                self.window_months == 0 || date_ms >= cutoff_ms(now_ms, self.window_months)
+                if self.window_months == 0 {
+                    return true;
+                }
+                match cutoff_ms(now_ms, self.window_months) {
+                    Some(cutoff) => date_ms >= cutoff,
+                    // Window months too large to land on a representable
+                    // calendar date (e.g. anywhere near u32::MAX months):
+                    // never delete on an ambiguous value, so keep.
+                    None => true,
+                }
             }
         }
     }
@@ -113,60 +127,61 @@ impl FetchPolicy {
     }
 }
 
-/// `now_ms` minus `months` calendar months, in UTC, with the day-of-month
-/// clamped to the target month's last day when it doesn't exist there (e.g.
-/// Jan 31 minus 1 month lands on Dec 31, not "rolls into" January). This
-/// matches the frontend's `Date.setMonth` cutoff
-/// (`src/services/EmailPipelineManager.js` `_getUncachedUids`) for every
-/// day-of-month <= 28; it only diverges from `setMonth`'s own overflow
-/// rollover behavior for the last few days of longer months, which is an
-/// existing frontend quirk this function does not reproduce on purpose.
-fn cutoff_ms(now_ms: i64, months: u32) -> i64 {
-    use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
+/// `now_ms` minus `months` calendar months, in UTC. Uses `chrono`'s
+/// `checked_sub_months`, which clamps the day-of-month to the target
+/// month's last day when it doesn't exist there (e.g. Jan 31 minus 1 month
+/// lands on Dec 31) and preserves the time-of-day.
+///
+/// Returns `None` when `now_ms` itself isn't a representable instant, or
+/// when subtracting `months` would land outside chrono's representable
+/// date range (roughly the tens of thousands of years either side of now,
+/// or `months` alone exceeding `i32::MAX`) — callers treat `None` as "no
+/// cutoff" rather than an error.
+///
+/// This is UTC calendar-month arithmetic, not a port of the frontend's
+/// `Date.setMonth` cutoff (`src/services/EmailPipelineManager.js`
+/// `_getUncachedUids`), which runs in the local timezone and rolls overflow
+/// into the following month instead of clamping to the last day of the
+/// target month. A JS port of this function must do UTC arithmetic with an
+/// explicit end-of-month clamp (not reuse `setMonth`) to agree with this
+/// one.
+fn cutoff_ms(now_ms: i64, months: u32) -> Option<i64> {
+    use chrono::{DateTime, Months, Utc};
 
-    let now = DateTime::<Utc>::from_timestamp_millis(now_ms).unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-    let total_months = now.year() * 12 + now.month0() as i32 - months as i32;
-    let year = total_months.div_euclid(12);
-    let month = (total_months.rem_euclid(12) as u32) + 1;
-
-    let last_day_of_target_month = {
-        let first_of_next = if month == 12 {
-            NaiveDate::from_ymd_opt(year + 1, 1, 1)
-        } else {
-            NaiveDate::from_ymd_opt(year, month + 1, 1)
-        }
-        .expect("month+1 is always a valid calendar month");
-        first_of_next.pred_opt().expect("the day before day 1 always exists").day()
-    };
-    let day = now.day().min(last_day_of_target_month);
-
-    let date = NaiveDate::from_ymd_opt(year, month, day).expect("day was clamped to a valid day of this month");
-    let time = date
-        .and_hms_milli_opt(now.hour(), now.minute(), now.second(), now.timestamp_subsec_millis())
-        .expect("time-of-day copied from a valid DateTime is always valid");
-    DateTime::<Utc>::from_naive_utc_and_offset(time, Utc).timestamp_millis()
+    let now = DateTime::<Utc>::from_timestamp_millis(now_ms)?;
+    now.checked_sub_months(Months::new(months)).map(|d| d.timestamp_millis())
 }
 
 /// A cached (Maildir) copy of a message, as far as eviction cares.
+#[derive(Clone, Debug)]
 pub struct CacheFile {
     pub uid: u32,
-    /// Maildir flag characters (e.g. `"AS"`, `"T"`, `"AD"`).
-    pub flags: String,
-    pub date_ms: i64,
+    /// Whether this copy carries the `A` (archived) maildir flag —
+    /// backup/manual archive/restore/drafts (`vault_flags::store_flags`).
+    /// The caller parses this out of the maildir filename's flags, not a
+    /// raw flag string, so a future flag encoding change can't silently
+    /// make archived copies look evictable.
+    pub archived: bool,
+    /// The message's date, when known. `None` (date unparseable/missing)
+    /// means "unknown age": never evicted by an age rule (`KeepRecent`),
+    /// though `OnDemand`/`IndexOnly` still apply their own non-age rules to
+    /// it.
+    pub date_ms: Option<i64>,
 }
 
 /// Uids whose non-archived cache copy `policy` allows deleting right now.
 ///
-/// Never evicted: a file carrying the `A` flag (backup/manual
-/// archive/restore/drafts — see `vault_flags::store_flags`), a uid not
-/// present in `on_server` (no fresh proof the server still has it), `Hoarder`
-/// mode, or `KeepRecent` with `window_months == 0` ("never evict" is treated
-/// as never evict, not evict-everything-not-yet-reached).
+/// Never evicted: an `archived` file (backup/manual archive/restore/drafts),
+/// a uid not present in `on_server` (no fresh proof the server still has
+/// it), `Hoarder` mode, or `KeepRecent` with `window_months == 0` ("never
+/// evict" is treated as never evict, not evict-everything-not-yet-reached).
 ///
-/// Otherwise, per mode: `OnDemand` evicts every remaining file; `KeepRecent`
-/// evicts files whose body is older than the window; `IndexOnly` evicts
-/// every remaining file whose uid is in `indexed` (the search index already
-/// holds it, so the body is no longer needed).
+/// Otherwise, per mode: `OnDemand` evicts every remaining file. `KeepRecent`
+/// evicts files whose body is older than the window, never a file with an
+/// unknown (`None`) date. `IndexOnly` ignores the window for eviction
+/// entirely — it evicts any remaining file whose uid is in `indexed` (the
+/// search index already holds it, so the body is no longer needed),
+/// regardless of age.
 pub fn eviction_candidates(
     files: &[CacheFile],
     policy: &FetchPolicy,
@@ -183,11 +198,14 @@ pub fn eviction_candidates(
 
     files
         .iter()
-        .filter(|f| !f.flags.contains('A'))
+        .filter(|f| !f.archived)
         .filter(|f| on_server.contains(&f.uid))
         .filter(|f| match policy.mode {
             FetchMode::OnDemand => true,
-            FetchMode::KeepRecent => !policy.keeps_body(f.date_ms, now_ms),
+            FetchMode::KeepRecent => match f.date_ms {
+                Some(d) => !policy.keeps_body(d, now_ms),
+                None => false, // unknown age: never evict on an ambiguous value
+            },
             FetchMode::IndexOnly => indexed.contains(&f.uid),
             FetchMode::Hoarder => false, // unreachable: short-circuited above
         })
@@ -287,19 +305,29 @@ mod tests {
         assert!(!keep_recent_premium.runs_hoarder_worker());
     }
 
-    fn file(uid: u32, flags: &str, date_ms: i64) -> CacheFile {
-        CacheFile { uid, flags: flags.to_string(), date_ms }
+    fn file(uid: u32, archived: bool, date_ms: i64) -> CacheFile {
+        CacheFile { uid, archived, date_ms: Some(date_ms) }
     }
+
+    fn undated_file(uid: u32, archived: bool) -> CacheFile {
+        CacheFile { uid, archived, date_ms: None }
+    }
+
+    // A realistic "now" and a clearly-stale date: without the filter each
+    // test is checking, every mode (including KeepRecent) would evict this
+    // file, so these tests actually exercise the filter.
+    const NOW_MS: i64 = 1_768_435_200_000; // 2026-01-15T00:00:00Z
+    const STALE_DATE_MS: i64 = 1_420_070_400_000; // 2015-01-01T00:00:00Z
 
     #[test]
     fn an_archived_file_is_never_a_candidate_in_any_mode() {
-        let files = vec![file(1, "A", 0)];
+        let files = vec![file(1, true, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1].into_iter().collect();
         let indexed: HashSet<u32> = [1].into_iter().collect();
         for mode in [FetchMode::OnDemand, FetchMode::KeepRecent, FetchMode::IndexOnly, FetchMode::Hoarder] {
             let policy = FetchPolicy { mode, window_months: 3, hoarder_premium: false };
             assert!(
-                eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed).is_empty(),
+                eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty(),
                 "mode {:?} evicted an archived file",
                 mode
             );
@@ -308,22 +336,25 @@ mod tests {
 
     #[test]
     fn a_draft_carries_the_archived_flag_and_is_never_a_candidate() {
-        let files = vec![file(1, "AD", 0)];
+        // Drafts always carry `A` (`vault_flags::DRAFT_FLAGS`), so the
+        // caller reports them as `archived: true` like any other archived
+        // copy; there is no separate "is a draft" check.
+        let files = vec![file(1, true, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1].into_iter().collect();
         let indexed: HashSet<u32> = HashSet::new();
         let policy = FetchPolicy { mode: FetchMode::OnDemand, window_months: 0, hoarder_premium: false };
-        assert!(eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed).is_empty());
+        assert!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty());
     }
 
     #[test]
     fn a_file_missing_from_a_fresh_server_listing_is_never_a_candidate() {
-        let files = vec![file(1, "S", 0)];
+        let files = vec![file(1, false, STALE_DATE_MS)];
         let on_server: HashSet<u32> = HashSet::new(); // server listing doesn't have uid 1
         let indexed: HashSet<u32> = [1].into_iter().collect();
         for mode in [FetchMode::OnDemand, FetchMode::KeepRecent, FetchMode::IndexOnly] {
             let policy = FetchPolicy { mode, window_months: 3, hoarder_premium: false };
             assert!(
-                eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed).is_empty(),
+                eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty(),
                 "mode {:?} evicted a file absent from on_server",
                 mode
             );
@@ -332,51 +363,70 @@ mod tests {
 
     #[test]
     fn hoarder_never_evicts_anything() {
-        let files = vec![file(1, "S", 0), file(2, "T", 0)];
+        let files = vec![file(1, false, STALE_DATE_MS), file(2, false, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1, 2].into_iter().collect();
         let indexed: HashSet<u32> = [1, 2].into_iter().collect();
         let policy = FetchPolicy { mode: FetchMode::Hoarder, window_months: 3, hoarder_premium: true };
-        assert!(eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed).is_empty());
+        assert!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty());
     }
 
     #[test]
     fn keep_recent_with_window_zero_never_evicts() {
-        let files = vec![file(1, "S", 0)];
+        let files = vec![file(1, false, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1].into_iter().collect();
         let indexed: HashSet<u32> = HashSet::new();
         let policy = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 0, hoarder_premium: false };
-        assert!(eviction_candidates(&files, &policy, 10_000_000_000, &on_server, &indexed).is_empty());
+        assert!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty());
+    }
+
+    #[test]
+    fn keep_recent_with_a_window_too_large_to_represent_never_evicts() {
+        let files = vec![file(1, false, STALE_DATE_MS)];
+        let on_server: HashSet<u32> = [1].into_iter().collect();
+        let indexed: HashSet<u32> = HashSet::new();
+        let policy = FetchPolicy { mode: FetchMode::KeepRecent, window_months: u32::MAX, hoarder_premium: false };
+        assert!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty());
+    }
+
+    #[test]
+    fn keep_recent_never_evicts_an_undated_file() {
+        let files = vec![undated_file(1, false)];
+        let on_server: HashSet<u32> = [1].into_iter().collect();
+        let indexed: HashSet<u32> = HashSet::new();
+        let policy = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
+        assert!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed).is_empty());
     }
 
     #[test]
     fn keep_recent_evicts_only_files_older_than_the_window() {
-        let now_ms = 1_768_435_200_000; // 2026-01-15T00:00:00Z
-        let fresh = file(1, "S", 1_768_348_800_000); // 2026-01-14, inside a 3-month window
-        let stale = file(2, "S", 1_420_070_400_000); // 2015-01-01, well outside
+        let fresh = file(1, false, 1_768_348_800_000); // 2026-01-14, inside a 3-month window
+        let stale = file(2, false, STALE_DATE_MS); // 2015-01-01, well outside
         let files = vec![fresh, stale];
         let on_server: HashSet<u32> = [1, 2].into_iter().collect();
         let indexed: HashSet<u32> = HashSet::new();
         let policy = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
-        assert_eq!(eviction_candidates(&files, &policy, now_ms, &on_server, &indexed), vec![2]);
+        assert_eq!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed), vec![2]);
     }
 
     #[test]
     fn on_demand_evicts_every_non_archived_on_server_file_including_trashed() {
-        let files = vec![file(1, "S", 0), file(2, "T", 0)];
+        // "T" (trashed) is not "A" (archived): a trashed-but-not-archived
+        // copy is a candidate like any other non-archived copy.
+        let files = vec![file(1, false, STALE_DATE_MS), file(2, false, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1, 2].into_iter().collect();
         let indexed: HashSet<u32> = HashSet::new();
         let policy = FetchPolicy { mode: FetchMode::OnDemand, window_months: 0, hoarder_premium: false };
-        let mut evicted = eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed);
+        let mut evicted = eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed);
         evicted.sort();
         assert_eq!(evicted, vec![1, 2]);
     }
 
     #[test]
     fn index_only_evicts_only_files_the_index_already_holds() {
-        let files = vec![file(1, "S", 0), file(2, "S", 0)];
+        let files = vec![file(1, false, STALE_DATE_MS), file(2, false, STALE_DATE_MS)];
         let on_server: HashSet<u32> = [1, 2].into_iter().collect();
         let indexed: HashSet<u32> = [1].into_iter().collect(); // 2 not indexed yet
         let policy = FetchPolicy { mode: FetchMode::IndexOnly, window_months: 3, hoarder_premium: false };
-        assert_eq!(eviction_candidates(&files, &policy, 10_000_000, &on_server, &indexed), vec![1]);
+        assert_eq!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed), vec![1]);
     }
 }
