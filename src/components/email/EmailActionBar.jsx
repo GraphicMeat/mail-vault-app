@@ -18,6 +18,7 @@ import { canSnooze } from '../../services/workflows/snooze';
 import { useQuickActionConfiguration } from '../../hooks/useQuickActionConfiguration';
 import { useT } from '../../i18n/index.js';
 import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
+import { actionVisibility } from '../../utils/actionVisibility';
 
 const ICONS = {
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
@@ -52,6 +53,10 @@ export const EmailActionBar = memo(function EmailActionBar({
   const location = resolveEmailLocation(email, state);
   const read = isRead ?? !!email?.flags?.includes('\\Seen');
   const flagged = !!email?.flags?.includes('\\Flagged');
+  // Single email, so this is just its own read/flagged/archived state — the
+  // shared rule (shown iff any target unread/read/flagged/etc) collapses to
+  // that for a target of one.
+  const visibility = actionVisibility([{ flags: [...(read ? ['\\Seen'] : []), ...(flagged ? ['\\Flagged'] : [])], isArchived }]);
   const readOnly = !!email?._insightsReadOnly || !!email?._insightsNoServerActions;
   const accountId = location?.accountId;
   const junk = accountId && foldersFor(accountId, state).find(folder => String(folder.specialUse || '').toLowerCase() === '\\junk');
@@ -105,14 +110,15 @@ export const EmailActionBar = memo(function EmailActionBar({
       || ['reply', 'replyAll'].includes(entry.action) && (isSentEmail || !callbacks[entry.action])
       || entry.action === 'forward' && !onForward
       || entry.action === 'replyAll' && singleRecipient
-      || ['archive', 'unarchive'].includes(entry.action) && (!onArchive || !location || (hasExplicitArchiveModes && ((entry.action === 'archive' && isArchived) || (entry.action === 'unarchive' && !isArchived))) || (isLocalOnly && !isArchived))
+      || ['archive', 'unarchive'].includes(entry.action) && (!onArchive || !location || (hasExplicitArchiveModes && !visibility[entry.action]) || (isLocalOnly && !isArchived))
       || entry.action === 'deleteServer' && isLocalOnly
       || ['delete', 'deleteServer'].includes(entry.action) && (!onDelete || !location)
       || entry.action === 'deleteEverywhere' && (!onDeleteEverywhere || !location)
       || entry.action === 'move' && (!onMove || isLocalOnly || !location)
       || entry.action === 'spam' && (!onSpam && (!junk || !location) || isLocalOnly)
-      || ['toggleRead', 'markRead', 'markUnread'].includes(entry.action) && (!onToggleRead || isLocalOnly || (entry.action === 'markRead' && read) || (entry.action === 'markUnread' && !read))
-      || ['star', 'unstar'].includes(entry.action) && (!onToggleFlag || isLocalOnly || (hasExplicitStarModes && ((entry.action === 'star' && flagged) || (entry.action === 'unstar' && !flagged))))
+      || entry.action === 'toggleRead' && (!onToggleRead || isLocalOnly)
+      || ['markRead', 'markUnread'].includes(entry.action) && (!onToggleRead || isLocalOnly || !visibility[entry.action])
+      || ['star', 'unstar'].includes(entry.action) && (!onToggleFlag || isLocalOnly || (hasExplicitStarModes && !visibility[entry.action]))
       || entry.action === 'tag' && (!onApplyLocalLabel && !applyTag || !location)
       || entry.action === 'export' && !onExport
       || entry.action === 'open' && !onOpenInWindow

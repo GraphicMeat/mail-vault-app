@@ -20,6 +20,7 @@ import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SnoozePicker } from './SnoozePicker';
 import { canSnooze } from '../services/workflows/snooze';
 import { registerRowActions } from '../utils/rowActionRegistry';
+import { actionVisibility } from '../utils/actionVisibility';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
@@ -85,12 +86,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const listIndex = emails.reduce((best, email, index) => email.listUnsubscribe
     && (best < 0 || new Date(email.date) > new Date(emails[best].date)) ? index : best, -1);
   const unsubscribe = listIndex < 0 ? null : unsubscribeTarget(emails[listIndex], locs[listIndex]?.accountId);
-  const hasUnread = emails.some(email => !email.flags?.includes('\\Seen'));
-  const hasRead = emails.some(email => email.flags?.includes('\\Seen'));
-  const hasUnflagged = emails.some(email => !email.flags?.includes('\\Flagged'));
-  const hasFlagged = emails.some(email => email.flags?.includes('\\Flagged'));
-  const hasUnarchived = emails.some(email => !email.isArchived);
-  const hasArchived = emails.some(email => email.isArchived);
+  // Whether each of these applies to the target: mark read while any target
+  // is unread, mark unread while any is read (both for a mixed target), same
+  // for star/unstar and archive/unarchive.
+  const visibility = actionVisibility(emails);
+  const { markRead: hasUnread, markUnread: hasRead, star: hasUnflagged, unstar: hasFlagged, archive: hasUnarchived, unarchive: hasArchived } = visibility;
   const serverTargets = emails.map((email, index) => ({ email, location: locs[index] }))
     .filter(target => target.email.source !== 'local-only');
   const serverEmails = serverTargets.map(target => target.email);
@@ -197,16 +197,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     const destination = savedTargetAccount && savedMailboxes(state, savedTargetAccount)
       .some(folder => folderPath(folder) === entry.params?.mailbox);
     const targetMatches = entry.params?.accountId ? locs.every(location => location?.accountId === entry.params.accountId) : oneAccount;
-    const disabledAction = entry.action === 'archive' && (!hasUnarchived || disabled)
-      || entry.action === 'unarchive' && (!hasArchived || !locationsResolved || !onRequestDelete)
+    const disabledAction = entry.action === 'archive' && disabled
+      || entry.action === 'unarchive' && (!locationsResolved || !onRequestDelete)
       || entry.action === 'delete' && (!onRequestDelete || hasServerBacked && !canServerAction || !hasServerBacked && !emails.every(isLocalOnly))
       || entry.action === 'deleteServer' && (!hasServerBacked || !canServerAction || !onRequestDelete)
       || entry.action === 'deleteEverywhere' && (!purge || !locationsResolved || !onRequestDelete)
       || entry.action === 'toggleRead' && !locationsResolved
-      || entry.action === 'markRead' && !hasUnread
-      || entry.action === 'markUnread' && !hasRead
-      || entry.action === 'star' && !hasUnflagged
-      || entry.action === 'unstar' && !hasFlagged
       || entry.action === 'tag' && (!label || !locationsResolved)
       || entry.action === 'move' && (!canServerAction || (entry.params?.mailbox ? !targetMatches || !destination : !oneAccount))
       || entry.action === 'spam' && (!junkPath || !oneAccount || !canServerAction)
@@ -217,8 +213,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       id: entry.id, action: entry.action, label: actionLabel(entry), Icon: ICONS[entry.action],
       disabled: !!disabledAction,
       // No copy of our own, no purge: it would only repeat "Delete from server".
+      // markRead/markUnread, star/unstar and archive/unarchive hide the side
+      // that does not apply to the target instead of showing it disabled.
       hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge
-        || entry.action === 'unsubscribe' && !unsubscribe,
+        || entry.action === 'unsubscribe' && !unsubscribe
+        || ['markRead', 'markUnread', 'star', 'unstar', 'archive', 'unarchive'].includes(entry.action) && !visibility[entry.action],
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
       restoreFocus: !['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),

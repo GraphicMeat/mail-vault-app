@@ -382,6 +382,39 @@ describe('RowQuickActions busy', () => {
   });
 });
 
+// A right-click inside a multi-selection acts on the whole selection, so the
+// row menu can be handed several emails at once — "mixed" is a real case
+// here, not just a selection-bar concern.
+describe('RowQuickActions — read/star/archive visibility', () => {
+  it('hides mark read on an all-read target, and mark unread on an all-unread one', () => {
+    setActions(action('markRead'), action('markUnread'));
+    renderActions({ emails: [email({ flags: ['\\Seen'] })] });
+    expect(screen.queryByTestId('quick-action-markRead')).toBeNull();
+    expect(screen.getByTestId('quick-action-markUnread')).toBeTruthy();
+  });
+
+  it('shows both mark read and mark unread for a mixed selection', () => {
+    setActions(action('markRead'), action('markUnread'));
+    renderActions({ emails: [email({ flags: ['\\Seen'] }), email({ uid: 99 })] });
+    expect(screen.getByTestId('quick-action-markRead')).toBeTruthy();
+    expect(screen.getByTestId('quick-action-markUnread')).toBeTruthy();
+  });
+
+  it('hides star once every target is already flagged, and unstar once none are', () => {
+    setActions(action('star'), action('unstar'));
+    renderActions({ emails: [email({ flags: ['\\Flagged'] })] });
+    expect(screen.queryByTestId('quick-action-star')).toBeNull();
+    expect(screen.getByTestId('quick-action-unstar')).toBeTruthy();
+  });
+
+  it('hides archive on an already-archived target, and unarchive on one that is not', () => {
+    setActions(action('archive'), action('unarchive'));
+    renderActions({ emails: [email({ isArchived: true })], onRequestDelete: vi.fn() });
+    expect(screen.queryByTestId('quick-action-archive')).toBeNull();
+    expect(screen.getByTestId('quick-action-unarchive')).toBeTruthy();
+  });
+});
+
 describe('RowQuickActions unsubscribe', () => {
   it('shows only on a row carrying List-Unsubscribe and asks through the shared dialog', async () => {
     const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');

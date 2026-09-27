@@ -384,6 +384,32 @@ it('keeps Insights detail read-only while retaining reply and source actions', (
   expect(visible).toContain('Reply'); expect(visible).toContain('Forward'); expect(visible).toContain('Source');
 });
 
+// An explicit markRead/markUnread pair (unlike the default single toggleRead)
+// hides the side that does not apply instead of relabeling one button.
+describe('EmailActionBar — explicit mark read/unread pair', () => {
+  const configOverride = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: [
+    { id: 'markRead', action: 'markRead' }, { id: 'markUnread', action: 'markUnread' },
+  ] };
+  const renderPair = isRead => {
+    const onToggleRead = vi.fn();
+    render(<EmailActionBar email={EMAIL} variant="single" isRead={isRead} isLocalOnly={false}
+      configOverride={configOverride} onToggleRead={onToggleRead} />);
+    return { onToggleRead };
+  };
+
+  it('hides Mark read for an already-read email', () => {
+    renderPair(true);
+    expect(screen.queryByRole('button', { name: 'Mark read' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mark unread' })).toBeTruthy();
+  });
+
+  it('hides Mark unread for an unread email', () => {
+    renderPair(false);
+    expect(screen.queryByRole('button', { name: 'Mark unread' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mark read' })).toBeTruthy();
+  });
+});
+
 describe('reader unsubscribe', () => {
   const config = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: [{ id: 'unsubscribe', action: 'unsubscribe' }] };
   const renderWith = email => render(<EmailActionBar email={email} configOverride={config} {...allHandlers()} />);
