@@ -80,6 +80,15 @@ fn without_preview_text(data: String) -> String {
     serde_json::to_string(&entry).unwrap_or(data)
 }
 
+/// Whether a `save_email_cache` payload takes any uid off the list.
+fn removes_uids(data: &str) -> bool {
+    data.contains("\"removedUids\"")
+        && serde_json::from_str::<Value>(data)
+            .ok()
+            .and_then(|v| v.get("removedUids")?.as_array().map(|a| !a.is_empty()))
+            .unwrap_or(false)
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
@@ -93,7 +102,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let data = without_preview_text(data);
                     with_vault_write(&state, |_root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))
-                    }).map(|_| Value::Null)
+                    })?;
+                    // The search index keeps an evicted message's row while
+                    // this list holds its uid: reconcile the folder once it does not.
+                    if removes_uids(&data) {
+                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                    }
+                    Ok(Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -348,6 +363,26 @@ mod tests {
         assert!(loaded.is_string(), "load_email_cache must stay a JSON string, not a parsed Value");
         let parsed: Value = serde_json::from_str(loaded.as_str().unwrap()).unwrap();
         assert_eq!(parsed["totalEmails"], json!(1));
+    }
+
+    /// Track H2: the index keeps a row whose file is gone while the header
+    /// cache lists its uid. A save that takes uids off the list is when that
+    /// stops being true, so the folder is reconciled then, whichever of the
+    /// file and the header went first.
+    #[tokio::test]
+    async fn saving_headers_that_remove_uids_nudges_the_search_index_for_that_folder() {
+        let (_t, s) = st(true);
+        let (tx, rx) = std::sync::mpsc::channel();
+        *s.search_index.signals.lock().unwrap() = Some(tx);
+        let data = json!({"emails": [{"uid": 1}, {"uid": 2}]}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "Projects/2026", "data": data})).await;
+        assert!(rx.try_recv().is_err(), "a save that removes nothing does not nudge");
+        let data = json!({"emails": [], "removedUids": [2]}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "Projects/2026", "data": data})).await;
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            mailvault_core::search_index::plan::Signal::Nudge { account_id: "a".into(), vault_dir: "Projects_2026".into() }
+        );
     }
 
     #[tokio::test]
