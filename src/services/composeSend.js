@@ -309,6 +309,11 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       internal_date: indexBase.date, internalDate: indexBase.date, messageId: indexBase.message_id,
       inReplyTo: indexBase.in_reply_to, hasAttachments: indexBase.has_attachments,
       read: true, flags: ['\\Seen'], _accountId: freshAccount.id, _optimistic: true, _localStaged: true,
+      // Where the staged copy lives. Unstamped, the INBOX merge guessed the
+      // ACTIVE account's Sent path, which is the wrong folder for a reply sent
+      // from another account in All inboxes. (`_fromSentFolder` is the merge's
+      // to stamp: this same row is also a plain row of an open Sent folder.)
+      _accountEmail: freshAccount.email, _mailbox: localMailbox,
     };
     useMailStore.setState(state => {
       const dedupById = list => optimistic.messageId ? (list || []).filter(item => item.messageId !== optimistic.messageId) : (list || []);

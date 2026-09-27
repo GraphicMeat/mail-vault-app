@@ -113,4 +113,20 @@ describe('refreshSelectedThread', () => {
 
     expect(update.selectedThread.emails).toHaveLength(2);
   });
+
+  // All inboxes: every row carries its own account and folder, and the Sent
+  // reply that lands belongs to the account the thread is in, not to the active
+  // one. The same uid in another account's INBOX is a third, unrelated message.
+  it('adds a Sent reply in All inboxes, keyed by its own account and folder', () => {
+    const inboxParent = { ...parent, _accountId: 'luke', _mailbox: 'INBOX' };
+    const sentReply = reply({ uid: 10, _accountId: 'luke', _mailbox: 'Sent', _optimistic: false });
+    const stranger = { ...parent, uid: 10, messageId: '<yoda@example.test>', subject: 'Unrelated', _accountId: 'yoda', _mailbox: 'INBOX' };
+    const open = threadOf([inboxParent]);
+    const threads = buildThreads([inboxParent, sentReply, stranger]);
+
+    const update = refreshSelectedThread(state(open, { activeAccountId: 'yoda', activeMailbox: 'UNIFIED' }), threads);
+
+    expect(update.selectedThread.emails.map(e => `${e._accountId}:${e._mailbox}:${e.uid}`))
+      .toEqual(['luke:INBOX:10', 'luke:Sent:10']);
+  });
 });

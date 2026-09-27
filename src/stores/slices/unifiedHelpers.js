@@ -1,6 +1,5 @@
 import { t } from '../../i18n/index.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
-import { isOutgoingMailboxName } from '../../utils/sentFolder.js';
 // ── Shared helpers used across multiple mail store slices ──
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -62,18 +61,25 @@ export function _resolveUnifiedContext(key, state) {
   if (!email?._accountId) return null;
   const account = state.accounts.find(a => a.id === email._accountId);
   if (!account) return null;
-  // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, fall back to INBOX
+  // The row's own folder; every unified and merged Sent row is stamped with it.
   let mailbox = email._mailbox || 'INBOX';
-  if (!email._mailbox && email._isSent) {
-    // Try to find the Sent folder's path from the account's mailboxes. The
-    // declared role first: Gmail lists a label named "Sent" before its own.
-    const sentFolder = state.mailboxes?.find(m => m.specialUse === '\\Sent' || m.special_use === '\\Sent')
-      || state.mailboxes?.find(m => isOutgoingMailboxName(m.name));
-    mailbox = sentFolder?.path || sentFolder?.name || 'Sent';
-  }
   // Final safety: never return 'UNIFIED' as a real mailbox
   if (mailbox === 'UNIFIED') mailbox = 'INBOX';
   return { account, accountId: email._accountId, mailbox, uid: email.uid };
+}
+
+/**
+ * Every address that counts as "you" in the view on screen: the active
+ * account's login and send-as address, or, in All inboxes, those of every
+ * visible account, since the list holds all of their mail and a reply sent
+ * from any of them is yours.
+ */
+export function ownAddresses(state, sendAsAddresses = {}, hiddenAccounts = {}) {
+  const spans = state?.activeMailbox === 'UNIFIED';
+  return (state?.accounts || [])
+    .filter(a => (spans ? !hiddenAccounts?.[a.id] : a.id === state.activeAccountId))
+    .flatMap(a => [a.email, sendAsAddresses?.[a.id]])
+    .filter(Boolean);
 }
 
 /**

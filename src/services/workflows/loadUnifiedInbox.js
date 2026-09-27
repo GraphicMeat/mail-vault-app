@@ -236,6 +236,18 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   });
   get().updateSortedEmails();
 
+  // Each visible account's Sent, threaded into its INBOX conversations the way
+  // one account's INBOX does. From the cache: the pipelines fetch from the
+  // servers, and this runs on every refresh. Not for the unified Sent and
+  // Drafts views, which are the outgoing mail themselves.
+  if (targetFolder === 'INBOX') {
+    for (const account of accounts) {
+      if (hiddenAccounts[account.id]) continue;
+      Promise.resolve(get().loadSentHeaders(account.id, { cacheOnly: true }))
+        .catch(e => console.warn('[loadUnifiedInbox] Sent headers failed:', account.id, e?.message));
+    }
+  }
+
   if (total > CHUNK_SIZE) {
     let offset = CHUNK_SIZE;
     while (offset < total) {

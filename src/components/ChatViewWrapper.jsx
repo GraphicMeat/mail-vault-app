@@ -9,6 +9,7 @@ import { ChatSenderList } from './ChatSenderList';
 import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
 import { useSettingsStore } from '../stores/settingsStore';
+import { ownAddresses } from '../stores/slices/unifiedHelpers';
 import { useT, t  } from '../i18n/index.js';
 import { ReadDelayProgress } from './ReadDelayProgress';
 
@@ -26,14 +27,17 @@ function ChatViewWrapperComponent({ onComposeReply }) {
   // { accountId: { correspondentEmail: string, threadId: string } }
   const [accountNavState, setAccountNavState] = useState({});
 
-  // Every address this account sends under — the login plus any send-as
-  // override. Without the override the user's own sent mail reads as a
-  // stranger's and gets grouped under the wrong correspondent.
-  const sendAs = useSettingsStore(s => s.sendAsAddresses?.[activeAccountId] || '');
-  const userEmail = useMemo(() => {
-    const activeAccount = accounts.find(a => a.id === activeAccountId);
-    return [activeAccount?.email, sendAs].filter(Boolean);
-  }, [accounts, activeAccountId, sendAs]);
+  // Every address that is "you" — the login plus any send-as override, of the
+  // active account or, in All inboxes, of every visible account. Without them
+  // your own sent mail reads as a stranger's and gets grouped under the wrong
+  // correspondent.
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  const userEmail = useMemo(
+    () => ownAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts),
+    [accounts, activeAccountId, activeMailbox, sendAsAddresses, hiddenAccounts],
+  );
 
   // Get current account's navigation state (identifiers only)
   const currentNavState = accountNavState[activeAccountId] || {};

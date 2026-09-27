@@ -111,6 +111,19 @@ vi.mock('../../services/cacheManager', () => ({
 
 const { useMailStore } = await import('../mailStore');
 const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
+const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
+
+/**
+ * loadUnifiedInbox asks every account for its Sent headers once the list has
+ * painted. The specs below that are not about that get a stub, or the real
+ * loader would read (and later write) Sent state underneath the next test.
+ */
+function stubSentLoads() {
+  const real = useMailStore.getState().loadSentHeaders;
+  const stub = vi.fn();
+  useMailStore.setState({ loadSentHeaders: stub });
+  return { stub, restore: () => useMailStore.setState({ loadSentHeaders: real }) };
+}
 
 // Helper: create a fake email with a predictable size
 function fakeEmail(uid, sizeKB = 10) {
@@ -565,6 +578,174 @@ describe('getChatEmails provenance stamping', () => {
   });
 });
 
+// All inboxes threads INBOX with Sent the way one account's INBOX does, for
+// every visible account at once. The merge used to keep the active account's
+// Sent rows only, so a reply sent from any other account never joined its
+// conversation in the unified list.
+describe('getChatEmails in All inboxes', () => {
+  const inboxRow = (acct, uid, day) => ({ uid, messageId: `<in-${acct}-${uid}@x>`, date: `2026-01-0${day}T00:00:00Z`, _accountId: acct, _mailbox: 'INBOX' });
+  const sentRow = (acct, uid, day, mailbox) => ({ uid, messageId: `<sent-${acct}-${uid}@x>`, date: `2026-01-0${day}T00:00:00Z`, _accountId: acct, ...(mailbox ? { _mailbox: mailbox } : {}) });
+
+  const seed = (over) => {
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'UNIFIED',
+      unifiedFolder: 'INBOX',
+      mailboxes: [{ path: 'INBOX', name: 'INBOX' }, { path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }, { id: 'acct-2', email: 'yoda@mock.test' }, { id: 'acct-3', email: 'vader@mock.test' }],
+      archivedEmailIds: new Set(),
+      viewMode: 'all',
+      ...over,
+    });
+  };
+
+  afterEach(() => { mockSettingsState.hiddenAccounts = {}; });
+
+  it('merges every account\'s Sent rows, each keeping its own folder', () => {
+    const lukeSent = sentRow('acct-1', 5, 3, 'Sent');
+    const yodaSent = sentRow('acct-2', 5, 4, 'INBOX.Sent');
+    seed({ sortedEmails: [inboxRow('acct-1', 5, 1), inboxRow('acct-2', 5, 2)], sentEmails: [yodaSent, lukeSent] });
+
+    const merged = useMailStore.getState().getChatEmails();
+
+    expect(merged.map(e => `${e._accountId}:${e._mailbox}:${e.uid}`).sort()).toEqual([
+      'acct-1:INBOX:5', 'acct-1:Sent:5', 'acct-2:INBOX.Sent:5', 'acct-2:INBOX:5',
+    ]);
+    expect(yodaSent._fromSentFolder).toBe(true);
+    // Never the ACTIVE account's Sent path stamped over another account's row.
+    expect(yodaSent._mailbox).toBe('INBOX.Sent');
+  });
+
+  it('never stamps the active account\'s Sent path onto another account\'s row', () => {
+    const yodaSent = sentRow('acct-2', 6, 4);
+    seed({ sortedEmails: [inboxRow('acct-2', 6, 2)], sentEmails: [yodaSent] });
+
+    useMailStore.getState().getChatEmails();
+
+    expect(yodaSent._mailbox).toBeUndefined();
+  });
+
+  it('leaves out a hidden account\'s Sent rows', () => {
+    mockSettingsState.hiddenAccounts = { 'acct-3': true };
+    seed({ sortedEmails: [inboxRow('acct-1', 7, 1)], sentEmails: [sentRow('acct-3', 7, 4, 'Sent')] });
+
+    const merged = useMailStore.getState().getChatEmails();
+
+    expect(merged.map(e => e._accountId)).toEqual(['acct-1']);
+  });
+
+  it('still keeps another account\'s Sent rows out of one account\'s INBOX', () => {
+    seed({
+      activeMailbox: 'INBOX',
+      sortedEmails: [{ uid: 8, messageId: '<in-8@x>', date: '2026-01-01T00:00:00Z' }],
+      sentEmails: [sentRow('acct-2', 8, 4, 'INBOX.Sent'), sentRow('acct-1', 9, 3)],
+    });
+
+    const merged = useMailStore.getState().getChatEmails();
+
+    expect(merged.map(e => `${e._accountId || e._srcAccountId}:${e._mailbox}:${e.uid}`).sort()).toEqual([
+      'acct-1:INBOX:8', 'acct-1:Sent:9',
+    ]);
+  });
+});
+
+// The loader behind the merge, asked about an account that is not the active
+// one. It used to bail on `activeAccountId !== accountId` and rebuild
+// `sentEmails` from ONE account, so the unified list only ever held the active
+// account's Sent — and a reply sent from any other account showed for a moment
+// (the staged copy) and vanished when the APPEND reconciled it.
+describe('loadSentHeaders for an account that is not the active one', () => {
+  const YODA_BOXES = [{ name: 'INBOX', path: 'INBOX' }, { name: 'Sent', path: 'INBOX.Sent', specialUse: '\\Sent' }];
+  const yodaHeader = { uid: 31, messageId: '<yoda-31@x>', subject: 'Re: plans', date: '2026-02-01T00:00:00Z' };
+  const lukeRow = { uid: 4, messageId: '<luke-4@x>', date: '2026-01-01T00:00:00Z', _accountId: 'acct-1', _mailbox: 'Sent', _fromSentFolder: true };
+
+  const seed = (over) => {
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'UNIFIED',
+      unifiedFolder: 'INBOX',
+      connectionStatus: 'disconnected',
+      mailboxes: [{ path: 'INBOX', name: 'INBOX' }, { path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }, { id: 'acct-2', email: 'yoda@mock.test' }],
+      archivedEmailIds: new Set(),
+      sortedEmails: [],
+      sentEmails: [lukeRow],
+      viewMode: 'all',
+      ...over,
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAccountCacheMailboxes.mockImplementation((id) => (id === 'acct-2' ? YODA_BOXES : null));
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [yodaHeader], totalEmails: 1 });
+  });
+
+  afterEach(() => {
+    mockGetAccountCacheMailboxes.mockImplementation(() => null);
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockGetCachedMailboxes.mockResolvedValue([]);
+  });
+
+  it('reads that account\'s own Sent folder and keeps the other accounts\' rows', async () => {
+    seed();
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+
+    expect(mockGetEmailHeadersPartial).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', 200);
+    const sent = useMailStore.getState().sentEmails;
+    expect(sent).toContain(lukeRow);
+    expect(sent.find(e => e.uid === 31)).toMatchObject({
+      _accountId: 'acct-2', _accountEmail: 'yoda@mock.test', _mailbox: 'INBOX.Sent', _fromSentFolder: true,
+    });
+  });
+
+  it('finds the folder list on disk when none is cached in memory', async () => {
+    mockGetAccountCacheMailboxes.mockImplementation(() => null);
+    mockGetCachedMailboxes.mockResolvedValue(YODA_BOXES);
+    seed();
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+
+    expect(mockGetEmailHeadersPartial).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', 200);
+  });
+
+  it('keeps that account\'s staged reply until its server copy arrives', async () => {
+    const staged = { uid: 1_900_000_000, messageId: '<staged@x>', date: '2026-03-01T00:00:00Z', _accountId: 'acct-2', _mailbox: 'INBOX.Sent', _fromSentFolder: true, _optimistic: true };
+    seed({ sentEmails: [staged, lukeRow] });
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+    expect(useMailStore.getState().sentEmails).toContain(staged);
+    expect(useMailStore.getState().getChatEmails()).toContain(staged);
+
+    // The APPEND landed: the server's copy under the same Message-ID replaces it.
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 32, messageId: '<staged@x>' }], totalEmails: 1 });
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+    const sent = useMailStore.getState().sentEmails.filter(e => e._accountId === 'acct-2');
+    expect(sent.map(e => e.uid)).toEqual([32]);
+  });
+
+  it('does nothing for another account while one account\'s view is open', async () => {
+    seed({ activeMailbox: 'INBOX' });
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+
+    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith('acct-2', expect.anything(), expect.anything());
+    expect(useMailStore.getState().sentEmails).toEqual([lukeRow]);
+  });
+
+  it('does not clear the other accounts\' rows when this one has no Sent folder', async () => {
+    mockGetAccountCacheMailboxes.mockImplementation(() => [{ name: 'INBOX', path: 'INBOX' }]);
+    seed();
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+
+    expect(useMailStore.getState().sentEmails).toEqual([lukeRow]);
+  });
+});
+
 describe('updateSortedEmails memoization', () => {
   // The guard summarised every collection by its size, so two different
   // one-element Sets were indistinguishable. During a folder switch the sets
@@ -712,9 +893,13 @@ describe('updateSortedEmails memoization', () => {
 // merge means silently omitting it would let the old value survive.
 describe('unified inbox — server uid completeness never carries a stale true', () => {
   const ACCOUNT = { id: 'acct-1', email: 'a@example.com' };
+  let sentLoads;
+
+  afterEach(() => sentLoads.restore());
 
   beforeEach(() => {
     vi.clearAllMocks();
+    sentLoads = stubSentLoads();
     mockGetRestoreDescriptor.mockReturnValue(null);
     mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
     mockGetCachedMailboxes.mockResolvedValue([]);
@@ -791,8 +976,13 @@ describe('unified inbox — one row per message across its three sources', () =>
     { uid: 3, subject: 'Oldest', date: '2026-08-25T09:00:00Z' },
   ];
 
+  let sentLoads;
+
+  afterEach(() => sentLoads.restore());
+
   beforeEach(() => {
     vi.clearAllMocks();
+    sentLoads = stubSentLoads();
     mockGetCachedMailboxes.mockResolvedValue([]);
     mockGetSavedEmailIds.mockResolvedValue(new Set());
     mockGetArchivedEmailIds.mockResolvedValue(new Set());
@@ -854,6 +1044,60 @@ describe('unified inbox — one row per message across its three sources', () =>
 
     const keys = keysOf(useMailStore.getState().sortedEmails);
     expect(keys).toHaveLength(3);
+  });
+});
+
+// All inboxes threads each account's Sent into its INBOX conversations, so the
+// load that builds the list asks every visible account for its Sent headers —
+// from the cache: the pipelines fetch from the servers, and this runs on every
+// refresh.
+describe('unified inbox — every visible account\'s Sent joins the INBOX list', () => {
+  const ACCOUNTS = [
+    { id: 'acct-1', email: 'luke@mock.test' },
+    { id: 'acct-2', email: 'yoda@mock.test' },
+    { id: 'acct-3', email: 'vader@mock.test' },
+  ];
+  let sentLoads;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sentLoads = stubSentLoads();
+    mockGetRestoreDescriptor.mockReturnValue(null);
+    mockGetCachedMailboxes.mockResolvedValue([]);
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+    mockGetArchivedEmailIds.mockResolvedValue(new Set());
+    mockReadLocalEmailIndex.mockResolvedValue(null);
+    mockGetLocalEmails.mockResolvedValue([]);
+    useMailStore.setState({
+      accounts: ACCOUNTS, activeAccountId: 'acct-1', unifiedInbox: true, viewMode: 'all',
+      emails: [], localEmails: [], sortedEmails: [], _sortedEmailsFingerprint: '',
+    });
+  });
+
+  afterEach(() => {
+    sentLoads.restore();
+    mockSettingsState.hiddenAccounts = {};
+  });
+
+  it('loads each visible account\'s Sent for the INBOX view', async () => {
+    mockSettingsState.hiddenAccounts = { 'acct-3': true };
+    useMailStore.setState({ unifiedFolder: 'INBOX' });
+
+    await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
+
+    expect(sentLoads.stub.mock.calls).toEqual([
+      ['acct-1', { cacheOnly: true }],
+      ['acct-2', { cacheOnly: true }],
+    ]);
+  });
+
+  it('loads no Sent for the unified Sent view', async () => {
+    useMailStore.setState({ unifiedFolder: 'Sent' });
+
+    await useMailStore.getState().loadUnifiedInbox(null, 'Sent');
+
+    expect(sentLoads.stub).not.toHaveBeenCalled();
   });
 });
 
@@ -1001,6 +1245,37 @@ describe('refreshBackedUpUids', () => {
     await useMailStore.getState().refreshBackedUpUids();
 
     expect(useMailStore.getState().backedUpKeys).toBeNull();
+  });
+
+  // The unified INBOX threads each account's Sent copies in, so each
+  // account's Sent mirror is scanned too, at that account's own path.
+  it('unified inbox: scans each account\'s own Sent beside its INBOX', async () => {
+    mockGetAccountCacheMailboxes.mockImplementation((id) => (id === 'acct-2'
+      ? [{ name: 'INBOX', path: 'INBOX' }, { name: 'Sent', path: 'INBOX.Sent', specialUse: '\\Sent' }]
+      : null));
+    mockBackupScanUids.mockResolvedValue([3]);
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      accounts: [
+        { id: 'acct-1', email: 'luke@mock.test' },
+        { id: 'acct-2', email: 'leia@mock.test' },
+      ],
+    });
+
+    try {
+      await useMailStore.getState().refreshBackedUpUids();
+    } finally {
+      mockGetAccountCacheMailboxes.mockImplementation(() => null);
+    }
+
+    expect(mockBackupScanUids.mock.calls).toEqual([
+      ['luke@mock.test', 'INBOX'],
+      ['leia@mock.test', 'INBOX'],
+      ['leia@mock.test', 'INBOX.Sent'],
+    ]);
+    expect(useMailStore.getState().backedUpKeys.has('acct-2:INBOX.Sent:3')).toBe(true);
   });
 
   it('no resolvable target means "unknown", not a lingering stale answer', async () => {

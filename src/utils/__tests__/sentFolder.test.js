@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findSentMailboxPath, waitForSentMailboxPath, isOutgoingMailboxName, isOutgoingRow } from '../sentFolder';
+import { findSentMailboxPath, waitForSentMailboxPath, isOutgoingMailboxName, isOutgoingRow, mergesSentIntoThreads, sentMailboxPathFor } from '../sentFolder';
 
 /** Minimal zustand-shaped store: getState + subscribe. */
 function fakeStore(initial) {
@@ -85,5 +85,61 @@ describe('isOutgoingRow', () => {
     expect(isOutgoingRow({}, state('INBOX'))).toBe(false);
     expect(isOutgoingRow({}, undefined)).toBe(false);
     expect(isOutgoingRow(null, state('Sent'))).toBe(false);
+  });
+});
+
+// Which lists thread your Sent mail in with what you received. All inboxes is
+// the INBOX of every account, so it does; its Sent and Drafts folders are the
+// outgoing mail itself, and merging Sent into them would double every message.
+describe('mergesSentIntoThreads', () => {
+  it('merges in an account\'s INBOX', () => {
+    expect(mergesSentIntoThreads({ activeMailbox: 'INBOX' })).toBe(true);
+  });
+
+  it('merges in All inboxes showing INBOX', () => {
+    expect(mergesSentIntoThreads({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' })).toBe(true);
+    // The unified view starts on INBOX before the folder is written.
+    expect(mergesSentIntoThreads({ activeMailbox: 'UNIFIED', unifiedFolder: null })).toBe(true);
+  });
+
+  it('does not merge in the unified Sent or Drafts view', () => {
+    expect(mergesSentIntoThreads({ activeMailbox: 'UNIFIED', unifiedFolder: 'Sent' })).toBe(false);
+    expect(mergesSentIntoThreads({ activeMailbox: 'UNIFIED', unifiedFolder: 'Drafts' })).toBe(false);
+  });
+
+  it('does not merge in any other folder', () => {
+    expect(mergesSentIntoThreads({ activeMailbox: 'Sent' })).toBe(false);
+    expect(mergesSentIntoThreads({ activeMailbox: 'Archive', unifiedFolder: 'INBOX' })).toBe(false);
+    expect(mergesSentIntoThreads(null)).toBe(false);
+  });
+});
+
+// One `getSentMailboxPath()` answered for the active account only, and every
+// other account's Sent was read at THAT path: a Gmail account beside a Dovecot
+// one looked for `[Gmail]/Sent Mail` on a server that calls it `INBOX.Sent`.
+describe('sentMailboxPathFor', () => {
+  const gmail = [{ name: 'INBOX', path: 'INBOX' }, { name: 'Sent Mail', path: '[Gmail]/Sent Mail', specialUse: '\\Sent' }];
+  const dovecot = [{ name: 'INBOX', path: 'INBOX', children: [{ name: 'Sent', path: 'INBOX.Sent', specialUse: '\\Sent' }] }];
+  const state = {
+    activeAccountId: 'a',
+    mailboxes: gmail,
+    accounts: [{ id: 'a' }, { id: 'b' }, { id: 'c', sentFolderOverride: 'INBOX.Outgoing' }],
+  };
+
+  it('answers the active account from the live folder list', () => {
+    expect(sentMailboxPathFor(state, 'a', dovecot)).toBe('[Gmail]/Sent Mail');
+  });
+
+  it('answers another account from ITS cached folder list, not the active one\'s', () => {
+    expect(sentMailboxPathFor(state, 'b', dovecot)).toBe('INBOX.Sent');
+  });
+
+  it('honours that account\'s own override', () => {
+    const boxes = [...dovecot, { name: 'Outgoing', path: 'INBOX.Outgoing' }];
+    expect(sentMailboxPathFor(state, 'c', boxes)).toBe('INBOX.Outgoing');
+  });
+
+  it('knows nothing for an account with no cached folder list', () => {
+    expect(sentMailboxPathFor(state, 'b', null)).toBeNull();
   });
 });

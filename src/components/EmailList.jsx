@@ -5,7 +5,8 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, ownAddresses } from '../stores/slices/unifiedHelpers';
+import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
@@ -229,6 +230,20 @@ function EmailListComponent({ stacked = false }) {
   const getSentMailboxPath = useMessageListStore(s => s.getSentMailboxPath);
   const refreshBackedUpUids = useMessageListStore(s => s.refreshBackedUpUids);
   const activeAccountEmail = useAccountStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
+  // Whether this list threads Sent in: an account's INBOX, or All inboxes
+  // showing INBOX (every account's INBOX at once).
+  const mergesSent = useAccountStore(mergesSentIntoThreads);
+  const accounts = useAccountStore(s => s.accounts);
+  const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  // "You", for sender grouping. All inboxes holds every visible account's mail,
+  // so a reply from any of them is yours, not a correspondent's.
+  const userAddress = useMemo(
+    () => (activeMailbox === 'UNIFIED'
+      ? ownAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts)
+      : activeAccountEmail),
+    [activeMailbox, accounts, activeAccountId, sendAsAddresses, hiddenAccounts, activeAccountEmail],
+  );
 
   // Shared row props — subscribed once in parent, passed to all rows via props
   const saveEmailLocally = useAccountStore(s => s.saveEmailLocally);
@@ -600,12 +615,12 @@ function EmailListComponent({ stacked = false }) {
   }, []);
   useEffect(() => { setExpandedThreads(new Set()); }, [activeMailbox, activeAccountId, viewMode, threadMode]);
 
-  // Fingerprint for thread computation — only merge INBOX + Sent for INBOX view
+  // Fingerprint for thread computation — only merge INBOX + Sent for INBOX views
   const mergedEmails = useMemo(
     // Explorer search narrows the groups, while its reader retains all loaded
     // conversation members. A search hit alone is not a complete thread pool.
-    () => searchActive && !isExplorer ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
-    [isExplorer, searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
+    () => searchActive && !isExplorer ? null : (mergesSent ? getChatEmails() : sortedEmails),
+    [isExplorer, searchActive, getChatEmails, sortedEmails, sentEmails, mergesSent]
   );
   // The `_accountId` stamps belong in the key. `threadedDisplay` matches cached
   // threads to rows by `accountId:uid`, and entering unified inbox swaps the
@@ -660,12 +675,12 @@ function EmailListComponent({ stacked = false }) {
       return;
     }
 
-    // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
-    const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
+    // Only merge INBOX + Sent when viewing an INBOX; other folders use their own emails
+    const usesMerged = userAddress?.length > 0 && mergesSent;
     const emails = usesMerged
       ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId, e => selectionKey(e, useMailStore.getState()), unreadKeep)
       : displayEmails;
-    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
+    const fp = `sender-${activeAccountId}-${activeMailbox}-${mergesSent}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${userAddress}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
@@ -677,13 +692,13 @@ function EmailListComponent({ stacked = false }) {
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return;
-      const groups = groupBySender(emails, activeAccountEmail);
+      const groups = groupBySender(emails, userAddress);
       senderGroupCacheRef.current = { fingerprint: fp, groups };
       setSenderGroups(groups);
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, unreadKeep, selectedEmailId]);
+  }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, userAddress, mergesSent, activeMailbox, alertCount, unreadOnly, unreadKeep, selectedEmailId]);
 
   // ── Cached display-row builder ──
   // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
@@ -1483,7 +1498,7 @@ function EmailListComponent({ stacked = false }) {
                           // guess about which folder a Sent row came from, and a
                           // stamped `_mailbox` is the answer.
                           const mailbox = item.email._mailbox
-                            || (item.email._fromSentFolder ? getSentMailboxPath() : null);
+                            || (item.email._fromSentFolder ? getSentMailboxPath(item.email._accountId || item.email._srcAccountId) : null);
                           selectEmailRow(rowKey(item.email, spansMailboxes(useMailStore.getState())), item.email, mailbox);
                           if (layoutMode !== 'three-column') {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));

@@ -3,6 +3,7 @@
 // This slice contains state, simple inline actions, and passthrough wrappers.
 
 import { buildThreads } from '../../utils/emailParser';
+import { mergesSentIntoThreads } from '../../utils/sentFolder';
 import { selectionKey, refreshSelectedThread } from './unifiedHelpers';
 import {
   selectEmail as _selectEmail,
@@ -148,17 +149,18 @@ export const createSelectionSlice = (set, get) => ({
   },
 
   getSelectionSummary: () => {
-    const { selectedEmailIds, sortedEmails, activeMailbox } = get();
+    const { selectedEmailIds, sortedEmails } = get();
     if (selectedEmailIds.size === 0) return { threads: 0, emails: 0 };
 
     // Thread over the same messages the list threaded over. An INBOX list
     // threads INBOX + Sent together (EmailList's `mergedEmails`, via
     // getChatEmails) so a conversation reads whole; re-threading INBOX alone
     // here split it again wherever a sent reply was the only link, and two
-    // checked rows reported "(4 conversations)". Not getThreads(): its memo
+    // checked rows reported "(4 conversations)". All inboxes showing INBOX
+    // threads the same way. Not getThreads(): its memo
     // key carries neither account nor mailbox, and a count is not worth
     // trusting to that.
-    const threads = buildThreads(activeMailbox === 'INBOX' ? get().getChatEmails() : sortedEmails);
+    const threads = buildThreads(mergesSentIntoThreads(get()) ? get().getChatEmails() : sortedEmails);
     // `sortedEmails` is the paginated render window; the selection is not
     // bound to it — the bulk modal resolves a date range against the whole
     // sidecar cache (BulkOperationsModal's `cachedRows`), so it can select

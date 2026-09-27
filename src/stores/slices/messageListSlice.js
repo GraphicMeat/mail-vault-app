@@ -14,7 +14,7 @@ import {
   loadSentHeaders as _loadSentHeaders,
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
-import { findSentMailboxPath } from '../../utils/sentFolder';
+import { sentMailboxPathFor } from '../../utils/sentFolder';
 import { _resolveMailboxPath } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
@@ -452,11 +452,14 @@ export const createMessageListSlice = (set, get) => ({
       // with. A unified Sent view is 'Sent' to the picker and '[Gmail]/Sent
       // Mail' to one of the accounts in it; scanning the picker's name would
       // read a folder no row claims to be in.
-      ? (accounts || []).map(a => ({
-          id: a.id,
-          email: a.email,
-          mailbox: _resolveMailboxPath(getAccountCacheMailboxes(a.id) || [], unifiedFolder || 'INBOX'),
-        }))
+      ? (accounts || []).flatMap(a => {
+          const mailbox = _resolveMailboxPath(getAccountCacheMailboxes(a.id) || [], unifiedFolder || 'INBOX');
+          // All inboxes threads each account's Sent copies into its INBOX
+          // rows, so that account's Sent mirror is read too — at ITS path.
+          const sentPath = mailbox === 'INBOX' ? get().getSentMailboxPath(a.id) : null;
+          return [mailbox, ...(sentPath && sentPath !== mailbox ? [sentPath] : [])]
+            .map(box => ({ id: a.id, email: a.email, mailbox: box }));
+        })
       : (() => {
           const a = (accounts || []).find(x => x.id === activeAccountId);
           if (!a || !activeMailbox) return [];
@@ -513,7 +516,7 @@ export const createMessageListSlice = (set, get) => ({
   loadEmails: () => _loadEmails(),
   _loadEmailsViaGraph: (account, activeAccountId, activeMailbox, generation) => _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation),
   loadMoreEmails: () => _loadMoreEmails(),
-  loadSentHeaders: (accountId) => _loadSentHeaders(accountId),
+  loadSentHeaders: (accountId, opts) => _loadSentHeaders(accountId, opts),
 
   // ── Pure synchronous derivations (stay inline) ──
 
@@ -534,18 +537,20 @@ export const createMessageListSlice = (set, get) => ({
     return get().sortedEmails;
   },
 
-  getSentMailboxPath: () => {
-    const { mailboxes, accounts, activeAccountId } = get();
-    const active = (accounts || []).find(a => a.id === activeAccountId);
-    return findSentMailboxPath(mailboxes, active?.sentFolderOverride || null);
+  // The active account's Sent path, or, given an id, that account's: from its
+  // own cached folder list, never the active account's.
+  getSentMailboxPath: (accountId = null) => {
+    const state = get();
+    const id = accountId || state.activeAccountId;
+    return sentMailboxPathFor(state, id, id === state.activeAccountId ? null : getAccountCacheMailboxes(id));
   },
 
   // Get merged INBOX + Sent emails for chat view (memoized via module-level cache)
   getChatEmails: () => {
     const { sortedEmails, sentEmails, archivedEmailIds, viewMode } = get();
 
-    const { activeAccountId, activeMailbox } = get();
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
+    const { activeAccountId, activeMailbox, unifiedFolder } = get();
+    const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
     // Stamp the folder each message came from. This list mixes two mailboxes,
@@ -578,13 +583,19 @@ export const createMessageListSlice = (set, get) => ({
       merged.push(email);
     }
 
+    // All inboxes holds every visible account's INBOX, so every visible
+    // account's Sent joins it; one account's view takes that account's only,
+    // or another account's replies would thread into its conversations.
+    const spans = activeMailbox === 'UNIFIED';
+    const { hiddenAccounts } = useSettingsStore.getState();
     for (const email of sentEmails) {
-      // Only merge sent emails from the active account to prevent cross-account thread contamination
-      if (activeAccountId && email._accountId && email._accountId !== activeAccountId) continue;
+      const foreign = activeAccountId && email._accountId && email._accountId !== activeAccountId;
+      if (spans ? hiddenAccounts?.[email._accountId] : foreign) continue;
       if (email.messageId && seen.has(email.messageId)) continue;
       if (email.messageId) seen.add(email.messageId);
       email._fromSentFolder = true;
-      if (!email._mailbox && sentPath) email._mailbox = sentPath;
+      // The active account's path fits the active account's rows only.
+      if (!email._mailbox && sentPath && !foreign) email._mailbox = sentPath;
       merged.push(email);
     }
 

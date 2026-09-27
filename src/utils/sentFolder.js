@@ -63,6 +63,32 @@ export function findSentMailboxPath(mailboxes, override = null) {
 }
 
 /**
+ * Any account's Sent path, not just the active one's.
+ *
+ * The active account answers from the live folder list in the store, exactly as
+ * `getSentMailboxPath()` always has. Every other account answers from ITS OWN
+ * folder list (`cachedMailboxes`), because Sent paths differ by server: a Gmail
+ * account's `[Gmail]/Sent Mail` is not a Dovecot account's `INBOX.Sent`.
+ */
+export function sentMailboxPathFor(state, accountId, cachedMailboxes) {
+  const account = (state?.accounts || []).find(a => a.id === accountId);
+  const boxes = accountId === state?.activeAccountId ? state.mailboxes : cachedMailboxes;
+  return findSentMailboxPath(boxes, account?.sentFolderOverride || null);
+}
+
+/**
+ * Does the list on screen thread your Sent mail in with what you received?
+ *
+ * An account's INBOX does, and so does All inboxes showing INBOX: it is every
+ * account's INBOX at once. The unified Sent and Drafts views do not: they ARE
+ * the outgoing mail, and merging Sent into them would show it twice.
+ */
+export function mergesSentIntoThreads(state) {
+  if (state?.activeMailbox === 'INBOX') return true;
+  return state?.activeMailbox === 'UNIFIED' && (state.unifiedFolder || 'INBOX') === 'INBOX';
+}
+
+/**
  * Resolve the Sent path once the real folder list is known.
  *
  * On a cold profile `mailboxes` starts as the INBOX placeholder and the server

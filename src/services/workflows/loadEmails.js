@@ -6,12 +6,12 @@ import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
-import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
+import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
-import { waitForSentMailboxPath } from '../../utils/sentFolder';
+import { waitForSentMailboxPath, sentMailboxPathFor, mergesSentIntoThreads } from '../../utils/sentFolder';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { _drainCache } from './loadMoreEmails';
 import {
@@ -967,51 +967,130 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 // Merge fresh server headers with any optimistic sent entries that have not
 // yet been reconciled by the server copy (IMAP APPEND runs in the background,
 // so the server may not return the newly-sent message immediately).
-function _mergeOptimisticSent(fresh, existing, accountId) {
+//
+// Every row is stamped with where it lives. The list merges Sent into INBOX,
+// and in All inboxes it holds every account's Sent at once, so a row whose
+// folder had to be guessed from the active account was read at the wrong path.
+// Other accounts' rows stay only where the list spans accounts: in one
+// account's view `sentEmails` is that account's alone, as it always was.
+function _mergeOptimisticSent(fresh, existing, accountId, accountEmail, sentPath, keepOthers) {
   const freshMessageIds = new Set(
     fresh.map(e => e.messageId).filter(Boolean)
   );
+  const others = keepOthers ? (existing || []).filter(e => e._accountId !== accountId) : [];
   const pendingOptimistic = (existing || []).filter(
     e => e._optimistic && e._accountId === accountId && !freshMessageIds.has(e.messageId)
   );
-  return [...pendingOptimistic, ...fresh.map(e => ({ ...e, _accountId: accountId }))];
+  return [
+    ...others,
+    ...pendingOptimistic,
+    ...fresh.map(e => ({
+      ...e, _accountId: accountId, _accountEmail: accountEmail, _mailbox: sentPath, _fromSentFolder: true,
+    })),
+  ];
 }
 
-export async function loadSentHeaders(accountId) {
+// Cache-only reads already running, per account. All inboxes asks every account
+// on every load and refresh; asks that arrive while a read is running share it,
+// and it reads once more when it is done, since the cache may have been written
+// under it (the pipeline publishes right after saving fresh headers).
+const _sentCacheReads = new Map();
+
+/**
+ * Put an account's Sent headers in `sentEmails`, where the INBOX list threads
+ * them in.
+ *
+ * The active account, always. Any other account only while All inboxes shows
+ * INBOX: that list holds every visible account's conversations, and a reply
+ * you sent from any of them belongs in its thread.
+ *
+ * `cacheOnly` reads what the pipelines already saved and never touches the
+ * server. All inboxes uses it on every (re)load: it runs on each refresh tick,
+ * and a server listing per account per tick is exactly the traffic that gets
+ * an account throttled.
+ */
+export function loadSentHeaders(accountId, { cacheOnly = false } = {}) {
+  if (!cacheOnly) return _loadSentHeaders(accountId, false);
+  const running = _sentCacheReads.get(accountId);
+  if (running) {
+    running.again = true;
+    return running.promise;
+  }
+  const entry = { again: false, promise: null };
+  entry.promise = (async () => {
+    do {
+      entry.again = false;
+      await _loadSentHeaders(accountId, true);
+    } while (entry.again);
+  })().finally(() => _sentCacheReads.delete(accountId));
+  _sentCacheReads.set(accountId, entry);
+  return entry.promise;
+}
+
+async function _loadSentHeaders(accountId, cacheOnly) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+  const isActive = () => get().activeAccountId === accountId;
+  const spansAccounts = () => get().activeMailbox === 'UNIFIED';
+  // Every write below re-asks this: the view can move during any await.
+  const wanted = () => isActive() || (spansAccounts() && mergesSentIntoThreads(get()));
+  if (!wanted()) return;
 
-  // On a cold profile this runs while `mailboxes` is still the INBOX
-  // placeholder. Bailing here left Sent unmerged for the whole session, so
-  // wait for the real folder list instead of reading the path once.
-  let sentPath = get().getSentMailboxPath();
-  if (!sentPath) {
-    sentPath = await waitForSentMailboxPath(useMailStore);
-    if (get().activeAccountId !== accountId) return;
+  let sentPath;
+  let folderList = null;
+  if (isActive()) {
+    // On a cold profile this runs while `mailboxes` is still the INBOX
+    // placeholder. Bailing here left Sent unmerged for the whole session, so
+    // wait for the real folder list instead of reading the path once. A
+    // cache-only read does not wait: it runs again on the next load.
+    sentPath = get().getSentMailboxPath();
+    if (!sentPath && !cacheOnly) {
+      sentPath = await waitForSentMailboxPath(useMailStore);
+      if (!wanted()) return;
+    }
+  } else {
+    // Another account's own folder list: the one cached in memory, else the
+    // one saved on disk. Never the active account's.
+    sentPath = get().getSentMailboxPath(accountId);
+    if (!sentPath) {
+      folderList = await db.getCachedMailboxes(accountId).catch(() => null);
+      if (!wanted()) return;
+      sentPath = sentMailboxPathFor(get(), accountId, folderList);
+    }
+    folderList = folderList || getAccountCacheMailboxes(accountId) || [];
   }
-  console.log('[loadSentHeaders:start]', { accountId, sentPath });
+  console.log('[loadSentHeaders:start]', { accountId, sentPath, cacheOnly });
   if (!sentPath) {
-    console.warn('[loadSentHeaders:no_sent_path] accountId=%s — getSentMailboxPath returned null', accountId);
-    useMailStore.setState({ sentEmails: [] });
+    console.warn('[loadSentHeaders:no_sent_path] accountId=%s — no Sent folder resolved', accountId);
+    // This account's rows go; another account's stay where the list spans them.
+    if (!cacheOnly) {
+      useMailStore.setState(s => ({
+        sentEmails: spansAccounts() ? (s.sentEmails || []).filter(e => e._accountId !== accountId) : [],
+      }));
+    }
     return;
   }
 
+  const merge = (fresh) => {
+    const accountEmail = (get().accounts || []).find(a => a.id === accountId)?.email;
+    useMailStore.setState(s => ({
+      sentEmails: _mergeOptimisticSent(fresh, s.sentEmails, accountId, accountEmail, sentPath, spansAccounts()),
+    }));
+    invalidateChatAndThreadCaches();
+  };
+
   const cached = await db.getEmailHeadersPartial(accountId, sentPath, 200);
-  if (get().activeAccountId !== accountId) return;
+  if (!wanted()) return;
   console.log('[loadSentHeaders:cache]', {
     accountId,
     sentPath,
     cachedCount: cached?.emails?.length || 0,
     firstCachedMessageIds: (cached?.emails || []).slice(0, 3).map(e => e.messageId),
   });
-  if (cached?.emails?.length > 0) {
-    useMailStore.setState(s => ({
-      sentEmails: _mergeOptimisticSent(cached.emails, s.sentEmails, accountId),
-    }));
-    invalidateChatAndThreadCaches();
-  }
+  if (cached?.emails?.length > 0) merge(cached.emails);
+  if (cacheOnly) return;
 
-  const { accounts, connectionStatus, mailboxes } = get();
+  const { accounts, connectionStatus } = get();
   const account = accounts.find(a => a.id === accountId);
   if (!account || connectionStatus !== 'connected') {
     console.warn('[loadSentHeaders:skip_server_fetch]', { accountId, hasAccount: !!account, connectionStatus });
@@ -1020,14 +1099,14 @@ export async function loadSentHeaders(accountId) {
 
   try {
     if (isGraphAccount(account)) {
-      const sentFolder = mailboxes.find(m => m.path === sentPath);
+      const sentFolder = (isActive() ? get().mailboxes : folderList).find(m => m.path === sentPath);
       if (sentFolder?._graphFolderId) {
         const freshAccount = await ensureFreshToken(account);
         console.log('[loadSentHeaders:graph_fetch_start]', { accountId, folderId: sentFolder._graphFolderId });
         const result = await _listGraphMessages(
           accountId, sentPath, freshAccount.oauth2AccessToken, sentFolder._graphFolderId
         );
-        if (get().activeAccountId !== accountId) return;
+        if (!wanted()) return;
         const sentHeaders = result.headers || [];
         console.log('[loadSentHeaders:graph_fetch_ok]', {
           accountId,
@@ -1041,11 +1120,8 @@ export async function loadSentHeaders(accountId) {
           // capped the Sent list at 200 and made the delta gate see a phantom
           // count mismatch on every sync. null = leave the cached total alone.
           await db.saveEmailHeaders(accountId, sentPath, sentHeaders, result.nextLink ? null : sentHeaders.length);
-          if (get().activeAccountId !== accountId) return;
-          useMailStore.setState(s => ({
-            sentEmails: _mergeOptimisticSent(sentHeaders, s.sentEmails, accountId),
-          }));
-          invalidateChatAndThreadCaches();
+          if (!wanted()) return;
+          merge(sentHeaders);
         }
       } else {
         console.warn('[loadSentHeaders:graph_no_folder_id]', { accountId, sentPath });
@@ -1053,7 +1129,7 @@ export async function loadSentHeaders(accountId) {
     } else {
       console.log('[loadSentHeaders:imap_fetch_start]', { accountId, sentPath });
       const result = await api.fetchEmails(account, sentPath, 1, 200);
-      if (get().activeAccountId !== accountId) return;
+      if (!wanted()) return;
       console.log('[loadSentHeaders:imap_fetch_ok]', {
         accountId,
         sentPath,
@@ -1065,12 +1141,9 @@ export async function loadSentHeaders(accountId) {
       });
       if (result?.emails?.length > 0) {
         await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
-        if (get().activeAccountId !== accountId) return;
+        if (!wanted()) return;
         const existingOptimistic = (get().sentEmails || []).filter(e => e._optimistic && e._accountId === accountId);
-        useMailStore.setState(s => ({
-          sentEmails: _mergeOptimisticSent(result.emails, s.sentEmails, accountId),
-        }));
-        invalidateChatAndThreadCaches();
+        merge(result.emails);
         const merged = get().sentEmails || [];
         const optimisticSurvivors = merged.filter(e => e._optimistic && e._accountId === accountId);
         console.log('[loadSentHeaders:merge_done]', {

@@ -276,6 +276,37 @@ describe('the Sent copy the send leaves behind', () => {
   });
 });
 
+// All inboxes: a reply leaves from the account the conversation is in, which is
+// often not the active one. Its staged copy has to say where it lives — the
+// merge used to stamp the ACTIVE account's Sent path on any row without one —
+// and the refresh after the APPEND has to ask THAT account for its Sent.
+describe('a reply sent from an account that is not the active one', () => {
+  const other = { id: 'acct-b', email: 'yoda@example.test', name: 'Yoda' };
+  const otherSnapshot = { ...snapshot, _accountId: 'acct-b', _fromAddress: 'yoda@example.test', _draftUid: null, _draftMailbox: null };
+
+  it('stages a copy stamped with its own account and Sent folder', async () => {
+    sendEmail.mockResolvedValue({ messageId: '250 OK' });
+
+    await createComposeSend({ snapshot: otherSnapshot, mode: 'reply', replyTo: { uid: 7 }, account: other })();
+
+    expect(mailStore.useMailStore.getState().sentEmails[0]).toMatchObject({
+      _accountId: 'acct-b', _accountEmail: 'yoda@example.test', _mailbox: 'Sent', _optimistic: true,
+    });
+  });
+
+  it('reloads that account\'s Sent once the APPEND lands', async () => {
+    sendEmail.mockResolvedValue({ messageId: '250 OK' });
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockClear();
+
+    await createComposeSend({ snapshot: otherSnapshot, mode: 'reply', replyTo: { uid: 7 }, account: other })();
+    const { handler } = listeners.find(l => l.name === 'send-server-append-complete');
+    await handler({ payload: { accountId: 'yoda@example.test', mailbox: 'Sent', ok: true, messageIdHeader: 'one@example.test' } });
+
+    expect(state.loadSentHeaders).toHaveBeenCalledWith('acct-b');
+  });
+});
+
 describe('scheduleCompose', () => {
   /// The Premium gate every Schedule goes through, in-window or detached: a
   /// panel left open past a lapsed subscription still cannot queue or edit.

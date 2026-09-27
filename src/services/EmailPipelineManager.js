@@ -5,7 +5,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import * as db from './db';
 import { graphFoldersToMailboxes, isGraphAccount } from './graphConfig';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
-import { waitForSentMailboxPath } from '../utils/sentFolder';
+import { waitForSentMailboxPath, findSentMailboxPath, mergesSentIntoThreads } from '../utils/sentFolder';
 
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
@@ -161,8 +161,9 @@ class EmailPipelineManager {
 
         // Load headers (INBOX + Sent)
         await pipeline.loadHeaders('INBOX');
+        let sentFound = false;
         if (!pipeline._destroyed) {
-          await this._loadSentHeaders(account, pipeline);
+          sentFound = await this._loadSentHeaders(account, pipeline);
         }
 
         // Pre-fetch mailbox list for instant account switching
@@ -189,6 +190,9 @@ class EmailPipelineManager {
               }
             }
             await db.saveMailboxes(account.id, mailboxes);
+            // A first launch knows no folder list for this account until the
+            // one just saved, so its Sent path could not be found above.
+            if (!sentFound && !pipeline._destroyed) await this._loadSentHeaders(account, pipeline);
           } catch (e) {
             // Non-fatal: cached mailboxes from last connection will be used
           }
@@ -354,31 +358,49 @@ class EmailPipelineManager {
 
   /**
    * Load Sent folder headers for chat view (INBOX + Sent merge).
-   * Caches to disk and populates store for the active account.
+   * Caches to disk and populates the store for the active account, and for
+   * every account while All inboxes shows INBOX. False when no Sent folder
+   * could be found for the account.
    */
   async _loadSentHeaders(account, pipeline) {
-    // The pipeline starts ~200ms after the list paints, which on a cold
-    // profile is before the server folder list lands — read once and the Sent
-    // path is still unknown. Wait for it rather than skipping the folder.
-    let sentPath = useMailStore.getState().getSentMailboxPath();
+    // Each account's OWN Sent path. Every account used to be read at the
+    // active account's, which only worked while their servers agreed on it.
+    const isActive = account.id === useMailStore.getState().activeAccountId;
+    let sentPath = useMailStore.getState().getSentMailboxPath(account.id);
     if (!sentPath && !pipeline._destroyed) {
-      sentPath = await waitForSentMailboxPath(useMailStore);
+      // The pipeline starts ~200ms after the list paints, which on a cold
+      // profile is before the server folder list lands — read once and the
+      // Sent path is still unknown. Wait for it rather than skipping the
+      // folder; another account's comes from its folder list saved on disk.
+      sentPath = isActive
+        ? await waitForSentMailboxPath(useMailStore)
+        : findSentMailboxPath(await db.getCachedMailboxes(account.id).catch(() => null), account.sentFolderOverride || null);
     }
-    if (!sentPath || pipeline._destroyed) return;
+    if (!sentPath || pipeline._destroyed) return false;
 
     try {
       // Always refresh Sent headers from IMAP (Sent folder grows as user sends)
-      if (pipeline._destroyed) return;
       console.log(`[PipelineManager] Loading Sent headers for ${account.email} (${sentPath})`);
       await pipeline.loadHeaders(sentPath);
-      if (pipeline._destroyed) return;
-
-      // Populate store if this is the active account
-      if (account.id === this._activeAccountId) {
-        useMailStore.getState().loadSentHeaders(account.id);
-      }
+      if (pipeline._destroyed) return true;
+      this._publishSent(account);
     } catch (e) {
       console.warn(`[PipelineManager] Sent headers load failed (${account.email}):`, e.message);
+    }
+    return true;
+  }
+
+  /**
+   * Hand an account's freshly saved Sent headers to the store, when the list
+   * on screen threads them: the active account's always, any other account's
+   * while All inboxes shows INBOX (read from the cache the pipeline just wrote).
+   */
+  _publishSent(account) {
+    const state = useMailStore.getState();
+    if (account.id === this._activeAccountId) {
+      state.loadSentHeaders(account.id);
+    } else if (state.activeMailbox === 'UNIFIED' && mergesSentIntoThreads(state)) {
+      state.loadSentHeaders(account.id, { cacheOnly: true });
     }
   }
 
@@ -390,8 +412,8 @@ class EmailPipelineManager {
   async _onHeadersRefreshed(account, pipeline, mailbox, emails) {
     if (pipeline._destroyed || this._destroyed) return;
 
-    if (mailbox === useMailStore.getState().getSentMailboxPath() && account.id === this._activeAccountId) {
-      useMailStore.getState().loadSentHeaders(account.id);
+    if (mailbox === useMailStore.getState().getSentMailboxPath(account.id)) {
+      this._publishSent(account);
     } else if (
       mailbox === 'INBOX' &&
       this._contentCascadeDone.has(account.id) &&

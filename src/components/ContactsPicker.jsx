@@ -14,6 +14,18 @@ import {
 } from '../utils/contactsIndex';
 import { useT } from '../i18n/index.js';
 
+// All inboxes puts every account's rows in these lists, so each row is credited
+// to its own account; an unstamped row belongs to the active one.
+function byRowAccount(rows, activeAccountId) {
+  const groups = new Map();
+  for (const row of rows || []) {
+    const accountId = row._accountId || activeAccountId;
+    if (!groups.has(accountId)) groups.set(accountId, []);
+    groups.get(accountId).push(row);
+  }
+  return [...groups].map(([accountId, list]) => ({ accountId, emails: list }));
+}
+
 function useContactsIndex() {
   const emails = useMailStore(s => s.emails);
   const sentEmails = useMailStore(s => s.sentEmails);
@@ -30,8 +42,8 @@ function useContactsIndex() {
   return useMemo(() => {
     const sources = [
       ...getHydratedAccountSources(),
-      { accountId: activeAccountId, emails: emails || [] },
-      { accountId: activeAccountId, emails: sentEmails || [] },
+      ...byRowAccount(emails, activeAccountId),
+      ...byRowAccount(sentEmails, activeAccountId),
     ];
     return buildContactsIndex(sources, accounts || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps

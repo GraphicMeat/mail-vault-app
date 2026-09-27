@@ -19,6 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const startContentCaching = vi.fn(() => Promise.resolve());
 const resume = vi.fn();
+const loadHeaders = vi.fn(() => Promise.resolve());
 
 vi.mock('../AccountPipeline', () => ({
   AccountPipeline: class {
@@ -27,13 +28,16 @@ vi.mock('../AccountPipeline', () => ({
       this._activeSlots = 0;
       this.startContentCaching = startContentCaching;
       this.resume = resume;
+      this.loadHeaders = loadHeaders;
     }
     destroy() { this._destroyed = true; }
     waitForComplete() { return Promise.resolve(); }
   },
 }));
 
-vi.mock('../authUtils', () => ({ hasValidCredentials: () => true }));
+vi.mock('../authUtils', () => ({ hasValidCredentials: () => true, ensureFreshToken: (a) => Promise.resolve(a) }));
+
+vi.mock('../api', () => ({ fetchMailboxes: vi.fn().mockResolvedValue([]) }));
 
 const store = vi.hoisted(() => ({ state: {} }));
 vi.mock('../../stores/mailStore', () => ({
@@ -50,6 +54,7 @@ vi.mock('../db', () => ({
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
+  getCachedMailboxes: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../graphConfig', () => ({
@@ -57,10 +62,14 @@ vi.mock('../graphConfig', () => ({
   graphFoldersToMailboxes: () => [],
 }));
 
-vi.mock('../../utils/sentFolder', () => ({ waitForSentMailboxPath: vi.fn().mockResolvedValue('Sent') }));
+vi.mock('../../utils/sentFolder', async (importOriginal) => ({
+  ...(await importOriginal()),
+  waitForSentMailboxPath: vi.fn().mockResolvedValue('Sent'),
+}));
 
 const { pipelineManager } = await import('../EmailPipelineManager');
 const db = await import('../db');
+const api = await import('../api');
 
 const LUKE = { id: 'luke', email: 'luke@x' };
 const YODA = { id: 'yoda', email: 'yoda@x' };
@@ -189,5 +198,107 @@ describe('the content cascade on an unknown vault read', () => {
     await pipelineManager._onHeadersRefreshed(YODA, idlePipeline(), 'INBOX', [{ uid: 5, date: '2026-09-01T10:00:00Z' }]);
 
     expect(startContentCaching).not.toHaveBeenCalled();
+  });
+});
+
+// Every account's Sent was read at the ACTIVE account's path, and only the
+// active account's reached the store — so All inboxes threaded no one's
+// replies but the active account's, and a Dovecot account beside a Gmail one
+// was asked for `[Gmail]/Sent Mail`.
+describe('Sent headers for an account that is not the active one', () => {
+  const loadSentHeaders = vi.fn();
+  // The real method: beforeEach stubs the instance's own.
+  const loadSent = (account, pipeline) =>
+    Object.getPrototypeOf(pipelineManager)._loadSentHeaders.call(pipelineManager, account, pipeline);
+  const livePipeline = () => ({ _destroyed: false, loadHeaders: vi.fn(() => Promise.resolve()) });
+
+  const state = (over = {}) => ({
+    accounts: [LUKE, YODA],
+    activeAccountId: 'luke',
+    activeMailbox: 'INBOX',
+    unifiedFolder: 'INBOX',
+    emails: [],
+    savedEmailIds: new Set(),
+    loadSentHeaders,
+    // The store's per-account resolver: luke's live list, yoda's cached one.
+    getSentMailboxPath: (id) => ((id || 'luke') === 'luke' ? '[Gmail]/Sent Mail' : 'INBOX.Sent'),
+    ...over,
+  });
+
+  beforeEach(() => { pipelineManager._activeAccountId = 'luke'; });
+
+  it('fetches that account\'s own Sent folder', async () => {
+    store.state = state();
+    const pipeline = livePipeline();
+
+    await loadSent(YODA, pipeline);
+
+    expect(pipeline.loadHeaders).toHaveBeenCalledWith('INBOX.Sent');
+    expect(pipeline.loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail');
+  });
+
+  it('falls back to the folder list saved on disk when nothing is cached in memory', async () => {
+    store.state = state({ getSentMailboxPath: (id) => ((id || 'luke') === 'luke' ? 'Sent' : null) });
+    db.getCachedMailboxes.mockResolvedValueOnce([{ name: 'Sent Items', path: 'Sent Items', specialUse: '\\Sent' }]);
+    const pipeline = livePipeline();
+
+    await loadSent(YODA, pipeline);
+
+    expect(db.getCachedMailboxes).toHaveBeenCalledWith('yoda');
+    expect(pipeline.loadHeaders).toHaveBeenCalledWith('Sent Items');
+  });
+
+  it('puts them in the store while All inboxes is showing INBOX', async () => {
+    store.state = state({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' });
+
+    await loadSent(YODA, livePipeline());
+
+    // The pipeline has just fetched; the store only has to read what it saved.
+    expect(loadSentHeaders).toHaveBeenCalledWith('yoda', { cacheOnly: true });
+  });
+
+  it('leaves the store alone in one account\'s view and in the unified Sent view', async () => {
+    store.state = state();
+    await loadSent(YODA, livePipeline());
+    store.state = state({ activeMailbox: 'UNIFIED', unifiedFolder: 'Sent' });
+    await loadSent(YODA, livePipeline());
+
+    expect(loadSentHeaders).not.toHaveBeenCalled();
+  });
+
+  it('still refreshes the active account\'s Sent in the store', async () => {
+    store.state = state();
+
+    await loadSent(LUKE, livePipeline());
+
+    expect(loadSentHeaders).toHaveBeenCalledWith('luke');
+  });
+
+  // First launch: a background account has no folder list in memory or on
+  // disk until the pipeline saves one, a step AFTER its Sent load. Reading at
+  // its own path found nothing there, so its Sent waited for the next launch.
+  it('retries a background account\'s Sent once its folder list is saved', async () => {
+    store.state = state({ getSentMailboxPath: (id) => ((id || 'luke') === 'luke' ? '[Gmail]/Sent Mail' : null) });
+    const yodaBoxes = [{ name: 'INBOX', path: 'INBOX' }, { name: 'Sent', path: 'INBOX.Sent', specialUse: '\\Sent' }];
+    db.getCachedMailboxes.mockResolvedValueOnce(null).mockResolvedValueOnce(yodaBoxes);
+    api.fetchMailboxes.mockResolvedValueOnce(yodaBoxes);
+    // The real fan-out, not the stubs the top-level beforeEach installs.
+    delete pipelineManager._loadSentHeaders;
+    pipelineManager._destroyed = false;
+    pipelineManager._backgroundHeadersRunning = false;
+
+    await Object.getPrototypeOf(pipelineManager)._startBackgroundHeadersOnly.call(pipelineManager);
+
+    expect(db.saveMailboxes).toHaveBeenCalledWith('yoda', yodaBoxes);
+    expect(loadHeaders).toHaveBeenCalledWith('INBOX.Sent');
+    expect(loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail');
+  });
+
+  it('re-reads the store when that account\'s Sent sync lands in All inboxes', async () => {
+    store.state = state({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' });
+
+    await pipelineManager._onHeadersRefreshed(YODA, livePipeline(), 'INBOX.Sent', []);
+
+    expect(loadSentHeaders).toHaveBeenCalledWith('yoda', { cacheOnly: true });
   });
 });
