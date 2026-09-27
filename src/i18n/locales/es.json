@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Escribe mensajes nuevos sobre tu correo o siempre en una ventana propia.",
   "settings.behavior.composeOpen.app": "En la app",
   "settings.behavior.composeOpen.window": "En una ventana nueva",
+  "settings.behavior.composeOpen.resetLayout": "Restablecer el diseño de Redactar",
   "settings.behavior.confirmBeforeDelete": "Confirmar antes de eliminar",
   "settings.behavior.confirmDeleteAsk": "Preguntar siempre",
   "settings.behavior.confirmDeleteAskHint": "Cada eliminación pide confirmación primero.",

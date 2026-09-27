@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Escreva novas mensagens sobre o seu e-mail ou sempre em uma janela própria.",
   "settings.behavior.composeOpen.app": "No app",
   "settings.behavior.composeOpen.window": "Em uma nova janela",
+  "settings.behavior.composeOpen.resetLayout": "Redefinir o layout de Escrever",
   "settings.behavior.confirmBeforeDelete": "Confirmar antes de excluir",
   "settings.behavior.confirmDeleteAsk": "Perguntar sempre",
   "settings.behavior.confirmDeleteAskHint": "Cada exclusão pede confirmação antes.",

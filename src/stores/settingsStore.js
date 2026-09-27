@@ -372,6 +372,9 @@ export const useSettingsStore = create(
       // Remember whether replies show their reading context. Restored drafts
       // carry their own value so their state is never changed by a later toggle.
       composeContextVisible: true,
+      // Width of that reading context as a ratio of the compose layout, set by
+      // the last drag, arrow key or split button. null = the 400px default.
+      composeContextSplit: null,
       // Where a new compose opens: 'app' (over the main window) or 'window'.
       composeOpenMode: 'app',
 
@@ -889,6 +892,7 @@ export const useSettingsStore = create(
         set({ lastComposeIdentity: { accountId, address: (address || '').trim() } });
       },
       setComposeContextVisible: (visible) => set({ composeContextVisible: Boolean(visible) }),
+      setComposeContextSplit: (ratio) => set({ composeContextSplit: Number.isFinite(ratio) ? Math.min(0.9, Math.max(0.1, ratio)) : null }),
       setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 
       // Account color management

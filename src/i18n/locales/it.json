@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Scrivi i nuovi messaggi sopra la posta o sempre in una finestra dedicata.",
   "settings.behavior.composeOpen.app": "Nell’app",
   "settings.behavior.composeOpen.window": "In una nuova finestra",
+  "settings.behavior.composeOpen.resetLayout": "Ripristina il layout di Scrivi",
   "settings.behavior.confirmBeforeDelete": "Conferma prima di eliminare",
   "settings.behavior.confirmDeleteAsk": "Chiedi ogni volta",
   "settings.behavior.confirmDeleteAskHint": "Ogni eliminazione chiede prima conferma.",

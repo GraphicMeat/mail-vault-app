@@ -1,6 +1,7 @@
 import React from 'react';
 import { PenSquare } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { Button } from '../ui/Button';
 import { useT } from '../../i18n/index.js';
 
 const MODES = ['app', 'window'];
@@ -14,6 +15,8 @@ export function ComposeOpenMode({ standalone = false }) {
   const Heading = standalone ? 'h2' : 'h4';
   const mode = useSettingsStore(s => s.composeOpenMode) || 'app';
   const setMode = useSettingsStore(s => s.setComposeOpenMode);
+  const contextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
+  const setContextSplit = useSettingsStore(s => s.setComposeContextSplit);
 
   return (
     <div className="settings-section" data-testid="compose-open-mode">
@@ -39,6 +42,13 @@ export function ComposeOpenMode({ standalone = false }) {
           </button>
         ))}
       </div>
+      {/* Back to the default reply layout; not part of the onboarding tour. */}
+      {!standalone && (
+        <Button variant="secondary" size="sm" className="mt-4" data-testid="compose-layout-reset"
+          disabled={contextSplit == null} onClick={() => setContextSplit(null)}>
+          {t('settings.behavior.composeOpen.resetLayout')}
+        </Button>
+      )}
     </div>
   );
 }

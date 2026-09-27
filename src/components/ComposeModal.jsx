@@ -149,6 +149,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const composeContextVisible = useSettingsStore(s => s.composeContextVisible ?? true);
   const setComposeContextVisible = useSettingsStore(s => s.setComposeContextVisible);
+  const composeContextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
+  const setComposeContextSplit = useSettingsStore(s => s.setComposeContextSplit);
   const accounts = getOrderedAccounts(rawAccounts);
   // Replies and forwards leave from the mailbox the message is in (falling back
   // to the one being read); a restored draft keeps its saved identity; a fresh
@@ -194,8 +196,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [quotedHtml, setQuotedHtml] = useState('');
   const [contextHtml, setContextHtml] = useState('');
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
-  const [contextWidth, setContextWidth] = useState(400);
-  const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || null);
+  // Context width as a ratio of the layout; null = 400px. A draft's own wins.
+  const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || composeContextSplit);
   const [originalDetached, setOriginalDetached] = useState(false);
   const originalWindowRef = useRef(null);
   const originalCloseStopRef = useRef(null);
@@ -412,7 +414,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         setQuotedHtml(initialData._quotedHtml || '');
         setContextHtml(initialData._contextHtml || initialData._quotedHtml || '');
         setShowContext(initialData._showContext ?? composeContextVisible);
-        setContextSplit(initialData._contextSplit || null);
+        setContextSplit(initialData._contextSplit || composeContextSplit);
       } else {
         initForm({ ...formData, body: signatureHtml });
       }
@@ -1085,8 +1087,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
   const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
   const layoutWidth = Number.isFinite(contentWidth) ? contentWidth : 896;
-  const maxContextWidth = Math.min(760, Math.max(200, layoutWidth - 290));
-  const effectiveContextWidth = Math.min(maxContextWidth, Math.max(200, contextSplit ? layoutWidth * contextSplit : contextWidth));
+  // Neither side of the split may go below 10% of the layout.
+  const clampSplit = ratio => Math.min(0.9, Math.max(0.1, ratio));
+  const effectiveContextWidth = Math.round(layoutWidth * clampSplit(contextSplit || 400 / layoutWidth));
+  // Every new reply opens at the last split chosen. A detached window relays
+  // the setter to main, which shows its own error when that fails.
+  const chooseContextSplit = (ratio) => {
+    setContextSplit(ratio);
+    Promise.resolve(setComposeContextSplit?.(ratio)).catch(() => {});
+  };
   const composeWindowStyle = {
     ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
     ...(detaching ? { pointerEvents: 'none' } : {}),
@@ -1682,9 +1691,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               tabIndex={0}
               aria-orientation="vertical"
               aria-label={t('compose.resizeOriginalPanel')}
-              aria-valuemin={200}
-              aria-valuemax={maxContextWidth}
-              aria-valuenow={Math.round(effectiveContextWidth)}
+              aria-valuemin={Math.round(layoutWidth * 0.1)}
+              aria-valuemax={Math.round(layoutWidth * 0.9)}
+              aria-valuenow={effectiveContextWidth}
               onPointerDown={event => {
                 contextDragRef.current = { id: event.pointerId, x: event.clientX, width: effectiveContextWidth };
                 event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -1692,16 +1701,20 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               onPointerMove={event => {
                 const drag = contextDragRef.current;
                 if (!drag || drag.id !== event.pointerId) return;
-                setContextSplit(null);
-                setContextWidth(Math.max(200, Math.min(maxContextWidth, drag.width + drag.x - event.clientX)));
+                drag.split = clampSplit((drag.width + drag.x - event.clientX) / layoutWidth);
+                setContextSplit(drag.split);
               }}
-              onPointerUp={() => { contextDragRef.current = null; }}
+              // Remembered once, where the drag ends, not on every move.
+              onPointerUp={() => {
+                const split = contextDragRef.current?.split;
+                contextDragRef.current = null;
+                if (split) chooseContextSplit(split);
+              }}
               onPointerCancel={() => { contextDragRef.current = null; }}
               onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
                 event.preventDefault();
-                setContextSplit(null);
-                setContextWidth(Math.max(200, Math.min(maxContextWidth, effectiveContextWidth + (event.key === 'ArrowLeft' ? -20 : 20))));
+                chooseContextSplit(clampSplit((effectiveContextWidth + (event.key === 'ArrowLeft' ? -20 : 20)) / layoutWidth));
               }}
               className={`w-1.5 shrink-0 cursor-col-resize touch-none bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
             />
@@ -1747,7 +1760,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       aria-pressed={contextSplit === ratio}
                       aria-label={t('compose.splitRatio', { ratio: label })}
                       title={t('compose.splitRatio', { ratio: label })}
-                      onClick={() => setContextSplit(ratio)}
+                      onClick={() => chooseContextSplit(ratio)}
                       className={`rounded px-2 py-1 text-xs transition-colors ${contextSplit === ratio ? 'bg-mail-accent/15 text-mail-accent-text' : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
                     >{label}</button>
                   ))}

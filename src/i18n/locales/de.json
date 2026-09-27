@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Neue Nachrichten über deiner Mail schreiben oder immer in einem eigenen Fenster.",
   "settings.behavior.composeOpen.app": "In der App",
   "settings.behavior.composeOpen.window": "In einem neuen Fenster",
+  "settings.behavior.composeOpen.resetLayout": "Verfassen-Layout zurücksetzen",
   "settings.behavior.confirmBeforeDelete": "Vor dem Löschen bestätigen",
   "settings.behavior.confirmDeleteAsk": "Jedes Mal fragen",
   "settings.behavior.confirmDeleteAskHint": "Jedes Löschen fragt zuerst nach einer Bestätigung.",

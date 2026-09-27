@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "新規メッセージをメールの上に開くか、常に専用ウインドウで開くかを選びます。",
   "settings.behavior.composeOpen.app": "アプリ内",
   "settings.behavior.composeOpen.window": "新しいウインドウ",
+  "settings.behavior.composeOpen.resetLayout": "作成画面のレイアウトをリセット",
   "settings.behavior.confirmBeforeDelete": "削除前に確認する",
   "settings.behavior.confirmDeleteAsk": "毎回確認する",
   "settings.behavior.confirmDeleteAskHint": "削除のたびに確認を求めます。",

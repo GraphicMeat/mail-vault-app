@@ -98,6 +98,7 @@ const settings = {
   getSignature: () => '', getDisplayName: () => 'Me', getOrderedAccounts: (accounts) => accounts,
   sendAsAddresses: {}, sendDelay: 0, emailTemplates: [], spellcheckEnabled: true,
   addEmailTemplate: vi.fn(), lastComposeIdentity: null, setLastComposeIdentity: vi.fn(),
+  setComposeContextSplit: vi.fn(),
 };
 vi.mock('../../stores/mailStore', () => {
   const hook = vi.fn((selector) => selector(mail));
@@ -156,6 +157,8 @@ beforeEach(() => {
   settings.lastComposeIdentity = null;
   settings.composeContextVisible = true;
   settings.composeOpenMode = undefined;
+  settings.composeContextSplit = null;
+  settings.setComposeContextSplit.mockClear();
   buildOutgoingMime.mockClear();
   saveLocalDraft.mockReset();
   saveLocalDraft.mockResolvedValue(undefined);
@@ -336,6 +339,81 @@ describe('the quoted original in a reply', () => {
     } finally {
       width.mockRestore();
     }
+  });
+
+  describe('the remembered split', () => {
+    let width;
+    beforeEach(() => {
+      width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function () {
+        return this.dataset.testid === 'compose-content' ? 1000 : 0;
+      });
+    });
+    afterEach(() => width.mockRestore());
+
+    // jsdom may lack PointerEvent, and a plain Event drops clientX.
+    const pointer = (el, type, clientX) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      fireEvent(el, event);
+    };
+    const contextWidth = () => screen.getByTestId('compose-context').style.width;
+    // Re-read every time: the motion mock is a new component type per render.
+    const resize = () => screen.getByTestId('compose-resize');
+
+    it('persists the split as a ratio from the buttons, the keys and the end of a drag', async () => {
+      openReply(original);
+      await screen.findByTestId('compose-resize');
+
+      fireEvent.click(screen.getByTestId('compose-split-half'));
+      expect(settings.setComposeContextSplit).toHaveBeenLastCalledWith(0.5);
+
+      fireEvent.keyDown(resize(), { key: 'ArrowRight' });
+      expect(contextWidth()).toBe('520px');
+      expect(settings.setComposeContextSplit).toHaveBeenLastCalledWith(0.52);
+
+      settings.setComposeContextSplit.mockClear();
+      pointer(resize(), 'pointerdown', 500);
+      pointer(resize(), 'pointermove', 400);
+      expect(contextWidth()).toBe('620px');
+      expect(settings.setComposeContextSplit).not.toHaveBeenCalled();
+      pointer(resize(), 'pointerup', 400);
+      expect(settings.setComposeContextSplit).toHaveBeenCalledOnce();
+      expect(settings.setComposeContextSplit).toHaveBeenLastCalledWith(0.62);
+    });
+
+    it('never lets either side go below 10% of the layout', async () => {
+      openReply(original);
+      await screen.findByTestId('compose-resize');
+      expect(resize().getAttribute('aria-valuemin')).toBe('100');
+      expect(resize().getAttribute('aria-valuemax')).toBe('900');
+
+      pointer(resize(), 'pointerdown', 500);
+      pointer(resize(), 'pointermove', -5000);
+      expect(contextWidth()).toBe('900px');
+      expect(resize().getAttribute('aria-valuenow')).toBe('900');
+      pointer(resize(), 'pointermove', 5000);
+      expect(contextWidth()).toBe('100px');
+      expect(resize().getAttribute('aria-valuenow')).toBe('100');
+      pointer(resize(), 'pointerup', 5000);
+      expect(settings.setComposeContextSplit).toHaveBeenLastCalledWith(0.1);
+    });
+
+    it('opens every new reply at the remembered split', async () => {
+      settings.composeContextSplit = 0.3;
+      openReply(original);
+      await screen.findByTestId('compose-context');
+      expect(contextWidth()).toBe('300px');
+    });
+
+    it('keeps the split a handed-off draft carries', async () => {
+      settings.composeContextSplit = 0.3;
+      render(<ComposeModal mode="reply" initialData={{
+        to: 'them@example.test', subject: 'Re: Quote request', body: '<p>Draft</p>',
+        _contextHtml: '<p>Original</p>', _showContext: true, _contextSplit: 0.6, _baseline: null,
+      }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      await screen.findByTestId('compose-context-panel');
+      expect(contextWidth()).toBe('600px');
+    });
   });
 
   it('groups the original window action with the original panel controls', async () => {

@@ -388,6 +388,10 @@ function App() {
           store.setComposeContextVisible(value);
           return { composeContextVisible: useSettingsStore.getState().composeContextVisible };
         },
+        composeContextSplit: value => {
+          useSettingsStore.getState().setComposeContextSplit(value);
+          return { composeContextSplit: useSettingsStore.getState().composeContextSplit };
+        },
         addEmailTemplate: value => {
           const store = useSettingsStore.getState();
           store.addEmailTemplate(value.name, value.body);

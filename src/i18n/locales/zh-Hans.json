@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "在邮件上方撰写新邮件，或始终在单独窗口中撰写。",
   "settings.behavior.composeOpen.app": "在应用内",
   "settings.behavior.composeOpen.window": "在新窗口中",
+  "settings.behavior.composeOpen.resetLayout": "重置撰写布局",
   "settings.behavior.confirmBeforeDelete": "删除前确认",
   "settings.behavior.confirmDeleteAsk": "每次都询问",
   "settings.behavior.confirmDeleteAskHint": "每次删除都会先请求确认。",

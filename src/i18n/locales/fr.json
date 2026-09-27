@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Rédigez les nouveaux messages par-dessus votre courrier, ou toujours dans une fenêtre dédiée.",
   "settings.behavior.composeOpen.app": "Dans l’app",
   "settings.behavior.composeOpen.window": "Dans une nouvelle fenêtre",
+  "settings.behavior.composeOpen.resetLayout": "Réinitialiser la disposition de Rédiger",
   "settings.behavior.confirmBeforeDelete": "Confirmer avant de supprimer",
   "settings.behavior.confirmDeleteAsk": "Demander à chaque fois",
   "settings.behavior.confirmDeleteAskHint": "Chaque suppression demande d'abord confirmation.",

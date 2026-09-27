@@ -1751,6 +1751,7 @@
   "settings.behavior.composeOpen.description": "Write new messages over your mail, or always in a window of their own.",
   "settings.behavior.composeOpen.app": "In the app",
   "settings.behavior.composeOpen.window": "In a new window",
+  "settings.behavior.composeOpen.resetLayout": "Reset compose layout",
   "settings.behavior.confirmBeforeDelete": "Confirm before deleting",
   "settings.behavior.confirmDeleteAsk": "Ask every time",
   "settings.behavior.confirmDeleteAskHint": "Every delete asks for confirmation first.",
