@@ -37,7 +37,6 @@ export default {
       fontFamily: {
         // One string, not an array: --app-font is a whole stack (utils/appFont.js).
         'display': "var(--app-font, 'Instrument Sans', system-ui, sans-serif)",
-        'sans': "var(--app-font, 'Instrument Sans', system-ui, sans-serif)",
         'mono': ['JetBrains Mono', 'monospace']
       },
       animation: {

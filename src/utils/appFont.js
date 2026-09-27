@@ -28,7 +28,7 @@ export function fontStack(id) {
   return `'${font.family}', ${font.mono ? 'ui-monospace, monospace' : 'system-ui, sans-serif'}`;
 }
 
-// body, .email-content and Tailwind's font-display/font-sans read this.
+// body, .email-content and Tailwind's font-display read this.
 export function applyAppFont(id) {
   document.documentElement.style.setProperty('--app-font', fontStack(id));
 }
