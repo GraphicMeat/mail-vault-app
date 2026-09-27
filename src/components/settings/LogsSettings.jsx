@@ -11,14 +11,30 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { SettingsPageLayout } from '../ui/SettingsForm';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { daemonCall } from '../../services/daemonClient';
+
+const VERBOSITY_LEVELS = ['standard', 'verbose'];
 
 export function LogsSettings() {
   const t = useT();
   const [logs, setLogs] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsCopied, setLogsCopied] = useState(false);
+  const logVerbosity = useSettingsStore(s => s.logVerbosity) || 'standard';
+  const setLogVerbosity = useSettingsStore(s => s.setLogVerbosity);
 
   const invoke = window.__TAURI__?.core?.invoke;
+
+  // Persists locally (relayed to the main window when this runs detached,
+  // same as every other settings toggle) and applies to the running daemon
+  // right away, without a restart.
+  const changeVerbosity = (verbosity) => {
+    setLogVerbosity(verbosity);
+    daemonCall('logs.set_verbosity', { verbosity }).catch(error => {
+      console.error('Failed to set log verbosity:', error);
+    });
+  };
 
   const loadLogs = async () => {
     if (!invoke) return;
@@ -43,6 +59,28 @@ export function LogsSettings() {
 
   return (
     <SettingsPageLayout className="h-full flex flex-col">
+      <div className="settings-section mb-4" data-testid="log-verbosity">
+        <h4 className="font-semibold text-mail-text mb-1">{t('settings.logs.verbosityTitle')}</h4>
+        <p className="text-sm text-mail-text-muted mb-3">{t('settings.logs.verbosityDescription')}</p>
+        <div role="radiogroup" aria-label={t('settings.logs.verbosityTitle')} className="flex gap-2 flex-wrap">
+          {VERBOSITY_LEVELS.map(level => (
+            <button
+              key={level}
+              type="button"
+              role="radio"
+              aria-checked={logVerbosity === level}
+              data-testid={`log-verbosity-${level}`}
+              onClick={() => changeVerbosity(level)}
+              className={`px-4 py-2 rounded-lg border text-sm transition-colors ${logVerbosity === level
+                ? 'border-mail-accent bg-mail-accent/10 text-mail-text font-medium'
+                : 'border-mail-border text-mail-text hover:bg-mail-surface-hover'}`}
+            >
+              {t(`settings.logs.verbosity.${level}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="settings-section flex-1 flex flex-col min-h-0">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h4 className="font-semibold text-mail-text flex items-center gap-2">

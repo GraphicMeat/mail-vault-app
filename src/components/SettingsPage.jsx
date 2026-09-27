@@ -309,6 +309,7 @@ export const settingSearchGroups = [
     ['settings.dataUsage.account.pauseSyncDailyLimit', 'data usage pause sync stop limit reached'],
   ] },
   { id: 'logs', settings: [
+    ['settings.logs.verbosityTitle', 'log detail level standard verbose verbosity'],
     ['settings.logs.clearLog2', 'clear delete diagnostic logs'],
   ] },
   // Backup's own sub-tabs: section names the one that holds the setting.

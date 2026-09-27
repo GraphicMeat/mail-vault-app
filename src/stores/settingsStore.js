@@ -625,6 +625,12 @@ export const useSettingsStore = create(
       // always-on: helper registered for background availability, persists after app close
       daemonMode: 'on-demand',
 
+      // Log detail: 'standard' (default, addresses/subjects redacted) or
+      // 'verbose' (raw values, for support sessions). Read by the shell at
+      // start and on every write_settings_json; LogsSettings also pushes it
+      // to the running daemon via the logs.set_verbosity RPC.
+      logVerbosity: 'standard',
+
       // Time Capsule snapshot configuration
       snapshotAutoEnabled: true,     // Whether automatic snapshots are created after backups
       snapshotCadence: 'after_every_backup', // 'after_every_backup' | 'daily' | 'weekly'
@@ -740,6 +746,7 @@ export const useSettingsStore = create(
 
       // Daemon actions
       setDaemonMode: (mode) => set({ daemonMode: mode }),
+      setLogVerbosity: (verbosity) => set({ logVerbosity: verbosity === 'verbose' ? 'verbose' : 'standard' }),
 
       // Global backup actions
       setBackupGlobalEnabled: (val) => set({ backupGlobalEnabled: val }),
