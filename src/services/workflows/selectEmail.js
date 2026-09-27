@@ -377,7 +377,7 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
 // answered (see AccountPipeline's own gone-uid fix, same root cause).
 function _isRetryableBodyFetchError(error) {
   const msg = String(error?.message || error || '').toLowerCase();
-  return msg.includes('timed out') || msg.includes('timeout') || msg.includes('connection lost');
+  return msg.includes('timed out') || msg.includes('timeout') || msg.includes('connection lost') || msg.includes('e_conn_lost');
 }
 
 // ── selectEmail workflow ──

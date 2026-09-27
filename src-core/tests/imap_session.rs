@@ -95,6 +95,38 @@ async fn test_connection_ignores_a_slow_logout() {
     );
 }
 
+/// I1 (final review, 2026-09-26): a throttled Gmail stalls the LOGIN write
+/// itself. `CMD_STALL` (15s) cuts that off before `TEST_ATTEMPT_TIMEOUT`
+/// (20s) ever gets a chance to fire, and `sign_in_error` words the result as
+/// "connection lost", not "timed out" — so the retry must recognise a lost
+/// connection too, not just literal timeout text.
+#[async_std::test]
+async fn test_connection_retries_a_login_that_stalls_past_cmd_stall() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::nth("LOGIN", 1), Action::Delay(Duration::from_secs(16))),
+    );
+    test_connection(&config_for(&server), &pool()).await.expect("the retry must succeed on a fresh connection");
+    assert_eq!(server.connection_count(), 2, "one stalled attempt, one retry");
+}
+
+/// The same retry path must never fire for a wrong password: `sign_in_error`
+/// only reads as connection-lost when the socket actually died, so a real
+/// `NO` from the server must fail on the first attempt.
+#[async_std::test]
+async fn test_connection_does_not_retry_a_wrong_password() {
+    let mut scenario = Scenario::new().mailbox(synthetic_mailbox("INBOX", 1));
+    scenario.state.expect_login = Some(("someone@else.com".into(), "nope".into()));
+    let server = MockImap::start(scenario);
+
+    let err = test_connection(&config_for(&server), &pool())
+        .await
+        .expect_err("a rejected login must fail the test");
+    assert!(err.contains("Login failed"), "got: {err}");
+    assert_eq!(server.connection_count(), 1, "a wrong password must not be retried");
+}
+
 /// A LIST on a socket that dies mid-response must be an error. It used to
 /// `filter_map(Result::ok)` the stream, so a broken pipe became `Ok(vec![])` —
 /// indistinguishable from a server that genuinely has no folders. The frontend

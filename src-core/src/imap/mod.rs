@@ -2551,10 +2551,14 @@ const TEST_LOGOUT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// True for a connect/auth error produced by a timeout: `bounded_step`'s
 /// "timed out after Ns", `async_std::io::timeout`'s "future timed out", or
-/// this function's own per-attempt cutoff — never for a plain auth rejection,
-/// which is a wrong password, not a hang, and must not be retried.
+/// this function's own per-attempt cutoff — or for a lost connection, which
+/// `sign_in_error` reports when `CMD_STALL` cuts off a silent LOGIN/AUTH
+/// before either timeout ever fires. Never true for a plain auth rejection,
+/// which is a wrong password, not a hang, and must not be retried:
+/// `sign_in_error` only produces connection-lost text when the socket
+/// actually died.
 fn is_timeout_error(e: &str) -> bool {
-    e.contains("timed out")
+    e.contains("timed out") || pool::is_connection_lost(e)
 }
 
 /// One connect+auth attempt, bounded to `TEST_ATTEMPT_TIMEOUT`. The slot wait

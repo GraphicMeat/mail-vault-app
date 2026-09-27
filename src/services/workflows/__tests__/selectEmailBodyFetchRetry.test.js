@@ -122,9 +122,10 @@ function timeoutError(uid, mailbox = 'INBOX') {
   return new Error(`Timed out after 45s fetching message UID ${uid} from ${mailbox}`);
 }
 
-/** A pooled session the server had already dropped (pool.rs's own wording). */
+/** What the daemon actually sends for a dropped pooled session — `imap.rs`'s
+ * `conn_lost_message` rewrite, not `pool.rs`'s raw wording. */
 function connectionLostError() {
-  return new Error('SELECT INBOX failed: connection lost');
+  return new Error('E_CONN_LOST: The connection to imap.example.test dropped while loading message 500');
 }
 
 /** What api.fetchEmailLight throws when the server proved the uid is gone. */
