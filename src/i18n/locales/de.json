@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Absender-Authentifizierung fehlgeschlagen ({{failures}}) — diese E-Mail könnte gefälscht sein",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Der Absendername „{{fromName}}“ ahmt eine Domain nach, die vom echten Absender abweicht ({{fromDomain}})",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Absender verifiziert (SPF, DKIM bestanden)",
+  "util.trackerDetect.blockedExplain": "Tracking-Pixel entfernt. Es hätte dem Absender verraten, wann und wo Sie diese E-Mail geöffnet haben.",
+  "util.trackerDetect.blockedLabel": "Tracker blockiert",
   "util.trackerDetect.imageHiddenCssSoNever": "Bild per CSS versteckt, damit du es nie laden siehst",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "Bild in einem zusammengeklappten Container versteckt",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Unsichtbares {{w}}×{{h}}-Bild — eine Lesebestätigung, kein Bild",

@@ -499,6 +499,12 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // Same gap: the SPF/DKIM shield (SenderVerificationBadge) reads these.
       authenticationResults: e.authenticationResults ?? row?.authenticationResults,
       returnPath: e.returnPath ?? row?.returnPath,
+      // The subject line's shields read the verdicts the list painted on the
+      // row; a body read carries none of its own.
+      _senderAlert: e._senderAlert ?? row?._senderAlert,
+      _replyToMismatch: e._replyToMismatch ?? row?._replyToMismatch,
+      _linkAlert: e._linkAlert ?? row?._linkAlert,
+      _trackerInfo: e._trackerInfo ?? row?._trackerInfo,
     };
   };
 

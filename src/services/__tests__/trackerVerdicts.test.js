@@ -7,6 +7,7 @@ vi.mock('../db', () => ({ getLocalEmailLight: vi.fn() }));
 import * as db from '../db';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useSearchStore } from '../../stores/searchStore';
 import { recordTrackerVerdict, backfillTrackerVerdicts, _resetTrackerBackfill } from '../trackerVerdicts';
 
 const BEACON = '<p>hi</p><img src="https://u1.ct.sendgrid.net/wf/open?upn=abc" width="1" height="1">';
@@ -37,6 +38,19 @@ describe('tracker verdicts', () => {
     expect(sortedEmails[0]._trackerInfo).toEqual({ count: 2, vendors: ['SendGrid'] });
     expect(sortedEmails[1]._trackerInfo).toBeUndefined();
     expect(useSettingsStore.getState().trackerAlerts['acct-1-INBOX-41']).toEqual({ count: 2, vendors: ['SendGrid'] });
+  });
+
+  // A search hit is in none of the mail store's lists, so the verdict the
+  // reader learned from opening it never reached the result row.
+  it('records a verdict onto a search result row too', () => {
+    seedRows([]);
+    useSearchStore.setState({ searchResults: [header(43, { _mailbox: 'Archive' }), header(44)] });
+    recordTrackerVerdict('acct-1-Archive-43', [{ vendor: 'SendGrid' }]);
+
+    const [hit, other] = useSearchStore.getState().searchResults;
+    expect(hit._trackerInfo).toEqual({ count: 1, vendors: ['SendGrid'] });
+    expect(other._trackerInfo).toBeUndefined();
+    useSearchStore.setState({ searchResults: [] });
   });
 
   it('backfills unopened rows from the vault without touching the network', async () => {

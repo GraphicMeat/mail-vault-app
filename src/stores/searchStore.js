@@ -10,6 +10,7 @@ import { useFieldStore } from './fieldStore';
 import { daemonCall } from '../services/daemonClient';
 import { normalizeMessageId } from '../utils/emailParser';
 import { isBackedUp } from '../components/email/MessageStateIcon';
+import { annotateRowAlerts } from './slices/rowAlerts';
 
 /// A `tag:` term that names no tag. It can match nothing, which is the point.
 const MISSING_TAG = '\u0000none';
@@ -119,11 +120,13 @@ function finalize(allResults, scan = {}) {
     ? vouched(e)
     : e._mailbox === preferMailbox && existing._mailbox !== preferMailbox));
 
-  return perMessage.sort((a, b) => {
+  perMessage.sort((a, b) => {
     const dateA = new Date(a.date || a.internalDate || 0);
     const dateB = new Date(b.date || b.internalDate || 0);
     return dateB - dateA;
   });
+  // The same shields the folder list paints, or a hit wears none of them.
+  return annotateRowAlerts(perMessage, useMailStore.getState(), useSettingsStore.getState());
 }
 
 let generation = 0;
@@ -287,6 +290,19 @@ export const useSearchStore = create((set, get) => ({
       try { unlisten?.(); } catch { /* The terminal event already ended this run. */ }
     }
   },
+
+  /// A verdict learned after the search ran (the reader scanned a hit's body)
+  /// has to reach its row: `searchResults` is in no list the mail store maps.
+  patchResults: (mapRow) => set(state => {
+    if (!state.searchResults.length) return state;
+    let changed = false;
+    const searchResults = state.searchResults.map(row => {
+      const next = mapRow(row);
+      if (next !== row) changed = true;
+      return next;
+    });
+    return changed ? { searchResults } : state;
+  }),
 
   // A flag change anywhere has to reach the rows a search is showing.
   // `searchResults` is the ONE list the mutation paths never map — a hit is in

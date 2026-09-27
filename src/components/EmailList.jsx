@@ -64,6 +64,7 @@ import { useRowSwipe } from '../hooks/useRowSwipe';
 import { TagChips } from './TagChips';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
+import { cleanPreviewText } from '../utils/previewText';
 
 // Labels describe what the list shows; users choose a mode directly.
 const THREAD_MODE_LABEL = {
@@ -1530,8 +1531,8 @@ function EmailListComponent({ stacked = false }) {
                             )}
                           </div>
                           {/* The same text a list row's preview line shows (RowSnippet). */}
-                          {(item.email.previewText || item.email.snippet) && (
-                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.previewText || item.email.snippet}</div>
+                          {cleanPreviewText(item.email.previewText || item.email.snippet) && (
+                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{cleanPreviewText(item.email.previewText || item.email.snippet)}</div>
                           )}
                           <TagChips email={item.email} />
                         </div>

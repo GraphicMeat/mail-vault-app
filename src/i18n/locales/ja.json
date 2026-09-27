@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "送信者の認証に失敗しました（{{failures}}）— このメールは偽装の可能性があります",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "送信者名「{{fromName}}」は実際の送信者（{{fromDomain}}）とは異なるドメインを装っています",
   "util.senderCheck.senderVerifiedSpfDkimPass": "送信者を確認済み（SPF・DKIM 合格）",
+  "util.trackerDetect.blockedExplain": "トラッキングピクセルを削除しました。このメールをいつどこで開いたかが送信者に伝わるところでした。",
+  "util.trackerDetect.blockedLabel": "トラッカーをブロック",
   "util.trackerDetect.imageHiddenCssSoNever": "CSS で隠された画像 — 読み込みが見えないようになっています",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "折りたたまれたコンテナ内に隠された画像",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "{{w}}×{{h}} の見えない画像 — 絵ではなく開封確認です",

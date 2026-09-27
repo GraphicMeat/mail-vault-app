@@ -185,3 +185,29 @@ describe('selectEmail keeps the row\'s sender-auth headers on the opened message
     expect(useMailStore.getState().selectedEmail.authenticationResults).toBe('own; spf=fail');
   });
 });
+
+// A search hit is in no list the store holds: the row the user clicked is the
+// only header there is. The viewer's shields read these fields off the opened
+// message, so they have to come across from that row like the auth headers do.
+describe('selectEmail keeps a clicked search hit\'s header fields on the opened message', () => {
+  it('auth headers and the safety verdicts the row wears', async () => {
+    const hit = {
+      ...ROW, uid: 77, _accountId: A.id, _mailbox: 'Archive',
+      listUnsubscribe: '<mailto:leave@example.test>',
+      _senderAlert: 'red', _replyToMismatch: { replyToDomain: 'elsewhere.test' },
+      _linkAlert: 'yellow', _trackerInfo: { count: 1, vendors: ['Mailchimp'] },
+    };
+    mockGetLocalEmailLight.mockResolvedValue({ ...MSG, uid: 77, html: '<p>body</p>' });
+    primeStore({ emails: [] });
+
+    await useMailStore.getState().selectEmail(77, 'local', 'Archive', null, hit);
+
+    const opened = useMailStore.getState().selectedEmail;
+    expect(opened.authenticationResults).toBe(AUTH);
+    expect(opened.listUnsubscribe).toBe('<mailto:leave@example.test>');
+    expect(opened._senderAlert).toBe('red');
+    expect(opened._replyToMismatch).toEqual({ replyToDomain: 'elsewhere.test' });
+    expect(opened._linkAlert).toBe('yellow');
+    expect(opened._trackerInfo).toEqual({ count: 1, vendors: ['Mailchimp'] });
+  });
+});

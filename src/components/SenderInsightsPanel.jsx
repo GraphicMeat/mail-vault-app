@@ -12,8 +12,8 @@ function StatRow({ label, value }) {
   );
 }
 
-export function SenderInsightsPanel({ senderEmail }) {
-  const insights = useSenderInsights(senderEmail);
+export function SenderInsightsPanel({ senderEmail, email = null }) {
+  const insights = useSenderInsights(senderEmail, email);
 
   if (!insights) return null;
 

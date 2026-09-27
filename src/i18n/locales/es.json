@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Falló la autenticación del remitente ({{failures}}): este correo puede ser falsificado",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "El nombre del remitente «{{fromName}}» imita un dominio distinto del remitente real ({{fromDomain}})",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Remitente verificado (SPF y DKIM correctos)",
+  "util.trackerDetect.blockedExplain": "Píxel de seguimiento eliminado. Habría indicado al remitente cuándo y dónde abriste este correo.",
+  "util.trackerDetect.blockedLabel": "Rastreador bloqueado",
   "util.trackerDetect.imageHiddenCssSoNever": "Imagen oculta con CSS para que nunca la veas cargar",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "Imagen oculta dentro de un contenedor contraído",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Imagen invisible de {{w}}×{{h}}: un acuse de lectura, no una imagen",

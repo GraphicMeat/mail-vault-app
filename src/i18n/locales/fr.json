@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Échec de l'authentification de l'expéditeur ({{failures}}) — cet e-mail est peut-être usurpé",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Le nom d'expéditeur « {{fromName}} » imite un domaine différent de l'expéditeur réel ({{fromDomain}})",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Expéditeur vérifié (SPF, DKIM valides)",
+  "util.trackerDetect.blockedExplain": "Pixel de suivi supprimé. Il aurait indiqué à l’expéditeur quand et où vous avez ouvert cet e-mail.",
+  "util.trackerDetect.blockedLabel": "Traceur bloqué",
   "util.trackerDetect.imageHiddenCssSoNever": "Image masquée en CSS pour que vous ne la voyiez jamais charger",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "Image masquée dans un conteneur replié",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Image invisible {{w}}×{{h}} — un accusé de lecture, pas une image",

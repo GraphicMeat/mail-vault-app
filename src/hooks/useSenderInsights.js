@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { getAccountCacheEmails } from '../stores/mailStore';
+import { useSearchStore } from '../stores/searchStore';
+import { emailKey } from '../stores/slices/unifiedHelpers';
 
 /**
  * Extract a normalized email address from various "from"/"to" field formats.
@@ -30,12 +32,20 @@ function formatFrequency(total, firstDate, lastDate) {
  * @param {string} senderEmail - The email address to analyze
  * @returns {Object|null} Sender insights or null if no data
  */
-export function useSenderInsights(senderEmail) {
+export function useSenderInsights(senderEmail, openEmail = null) {
   return useMemo(() => {
     if (!senderEmail) return null;
 
     const target = senderEmail.toLowerCase().trim().replace(/^<|>$/g, '');
-    const accountData = getAccountCacheEmails();
+    // The open folder's list, plus the search results a hit was opened from
+    // (a hit from another folder is in no list the mail store holds), plus the
+    // open message itself: the panel counts at least what is on screen.
+    const { searchActive, searchResults } = useSearchStore.getState();
+    const seen = new Set();
+    const once = email => { const key = emailKey(email); if (seen.has(key)) return false; seen.add(key); return true; };
+    const accountData = getAccountCacheEmails().map(account => ({ ...account, emails: account.emails.filter(once) }));
+    const extra = [...(searchActive ? searchResults : []), ...(openEmail ? [openEmail] : [])].filter(once);
+    if (extra.length) accountData.push({ accountEmail: openEmail?._accountId || accountData[0]?.accountEmail, emails: extra, sentEmails: [] });
 
     let totalReceived = 0;
     let totalSent = 0;
@@ -100,7 +110,7 @@ export function useSenderInsights(senderEmail) {
       lastDate,
       frequency: formatFrequency(total, firstDate, lastDate),
       topSubjects,
-      accountsUsed: [...accountsUsed],
+      accountsUsed: [...accountsUsed].filter(Boolean),
     };
-  }, [senderEmail]);
+  }, [senderEmail, openEmail]);
 }

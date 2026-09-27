@@ -100,6 +100,27 @@ describe('scanTrackers — removal', () => {
     expect(cleanedBodyHtml).toContain('<p>Body</p>');
   });
 
+  // The marker is shown, the way a suspicious link is outlined: a removal the
+  // reader cannot see is a removal they cannot trust. Its hover text says what
+  // was blocked and why, and still never names the beacon's host.
+  it('shows a highlighted marker that explains what was blocked', () => {
+    const html = `<p>Body</p><img src="https://example.list-manage.com/track/open.php?u=1" width="1" height="1">`;
+    const doc = new DOMParser().parseFromString(scanTrackers(html, null).cleanedBodyHtml, 'text/html');
+    const marker = doc.querySelector('[data-mv-tracker-blocked]');
+    expect(marker.hasAttribute('hidden')).toBe(false);
+    expect(marker.textContent).toMatch(/tracker blocked/i);
+    expect(marker.getAttribute('title')).toMatch(/Mailchimp/);
+    expect(marker.getAttribute('title')).toMatch(/open-tracking beacon/);
+    expect(marker.getAttribute('title')).toMatch(/opened/i);
+    expect(marker.getAttribute('style')).toMatch(/outline/);
+
+    const unknown = new DOMParser().parseFromString(
+      scanTrackers(`<img src="https://b.unknown.test/p.gif" width="1" height="1">`, null).cleanedBodyHtml, 'text/html');
+    const plain = unknown.querySelector('[data-mv-tracker-blocked]');
+    expect(plain.getAttribute('title')).toMatch(/invisible/i);
+    expect(unknown.body.innerHTML).not.toContain('unknown.test');
+  });
+
   it('keeps the real images in a body that also carries a beacon', () => {
     const html = `${REAL_IMAGE}<img src="https://u1.wl.sendgrid.net/wf/open?upn=x" width="1" height="1">`;
     const { cleanedBodyHtml, count } = scanTrackers(html, null);

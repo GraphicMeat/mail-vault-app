@@ -1,6 +1,7 @@
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useSearchStore } from '../stores/searchStore';
 import { emailScopeKey, bodyMatchesHeader, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
 
@@ -30,12 +31,13 @@ function applyVerdicts(verdicts) {
   const keys = Object.keys(verdicts);
   if (keys.length === 0) return;
 
+  const patchWith = state => e => {
+    if (e._trackerInfo) return e;
+    const info = verdicts[emailScopeKey(e, state)];
+    return info ? { ...e, _trackerInfo: info } : e;
+  };
   useMailStore.setState(state => {
-    const patch = e => {
-      if (e._trackerInfo) return e;
-      const info = verdicts[emailScopeKey(e, state)];
-      return info ? { ...e, _trackerInfo: info } : e;
-    };
+    const patch = patchWith(state);
     const selectedKey = state.selectedEmail && emailScopeKey(state.selectedEmail, state);
     return {
       emails: state.emails.map(patch),
@@ -45,6 +47,9 @@ function applyVerdicts(verdicts) {
         : {}),
     };
   });
+
+  // A search hit is in none of the lists above.
+  useSearchStore.getState().patchResults?.(patchWith(useMailStore.getState()));
 
   const { setTrackerAlert } = useSettingsStore.getState();
   for (const key of keys) setTrackerAlert(key, verdicts[key]);

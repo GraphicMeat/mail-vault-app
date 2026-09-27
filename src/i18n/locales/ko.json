@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "발신자 인증에 실패했습니다({{failures}}) — 이 메일은 위조되었을 수 있습니다",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "발신자 이름 \"{{fromName}}\"이 실제 발신자({{fromDomain}})와 다른 도메인을 사칭합니다",
   "util.senderCheck.senderVerifiedSpfDkimPass": "발신자 확인됨 (SPF, DKIM 통과)",
+  "util.trackerDetect.blockedExplain": "추적 픽셀을 제거했습니다. 이 이메일을 언제 어디서 열었는지 발신자에게 알려졌을 것입니다.",
+  "util.trackerDetect.blockedLabel": "추적기 차단됨",
   "util.trackerDetect.imageHiddenCssSoNever": "CSS로 숨긴 이미지 — 로딩이 보이지 않게 되어 있습니다",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "접힌 컨테이너 안에 숨겨진 이미지",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "{{w}}×{{h}} 크기의 보이지 않는 이미지 — 그림이 아니라 열람 확인용입니다",

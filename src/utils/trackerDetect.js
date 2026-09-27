@@ -81,6 +81,10 @@ function shapeReason(img) {
   return null;
 }
 
+const MARKER_STYLE = 'display:inline-block;margin:2px 0;padding:0 6px;border-radius:4px;'
+  + 'font:11px/18px -apple-system,system-ui,sans-serif;color:#b45309;background:rgba(245,158,11,.12);'
+  + 'outline:2px solid rgba(245,158,11,.3);outline-offset:1px;cursor:help;white-space:nowrap;';
+
 /**
  * Scan an email body for tracking pixels.
  *
@@ -140,13 +144,18 @@ export function scanTrackers(bodyHtml, key) {
       reason,
     });
 
-    // Leave a marker where the beacon was: it proves removal happened, and
-    // it keeps `hidden` so nothing shifts in the rendered mail. The label is
-    // the vendor name or nothing — never the beacon's own host, so that "the
-    // tracker's address is gone from the document" stays literally true.
+    // Leave a marker where the beacon was, highlighted the way a suspicious
+    // link is outlined: a removal the reader cannot see is one they cannot
+    // trust. Hovering it says what was blocked and why. The label is the
+    // vendor name or nothing, never the beacon's own host, so that "the
+    // tracker's address is gone from the document" stays literally true (the
+    // reasons name a vendor or a shape, never a host). Inline style: the
+    // frame's CSP restricts scripts only, and the popup window gets no <head>.
     const marker = doc.createElement('span');
     marker.setAttribute('data-mv-tracker-blocked', vendor || 'tracker');
-    marker.setAttribute('hidden', '');
+    marker.setAttribute('title', `${tr('util.trackerDetect.blockedExplain')}\n${reason}`);
+    marker.setAttribute('style', MARKER_STYLE);
+    marker.textContent = `\u{1F6E1} ${tr('util.trackerDetect.blockedLabel')}`;
     img.replaceWith(marker);
   }
 

@@ -511,7 +511,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
       {/* Sender Insights (thread email) */}
       <AnimatePresence>
         {showInsights && email?.from?.address && (
-          <SenderInsightsPanel senderEmail={email.from.address} />
+          <SenderInsightsPanel senderEmail={email.from.address} email={email} />
         )}
       </AnimatePresence>
 

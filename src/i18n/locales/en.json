@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Sender authentication failed ({{failures}}) — this email may be spoofed",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Sender name \"{{fromName}}\" impersonates domain that differs from actual sender ({{fromDomain}})",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Sender verified (SPF, DKIM pass)",
+  "util.trackerDetect.blockedExplain": "Tracking pixel removed. It would have told the sender when and where you opened this email.",
+  "util.trackerDetect.blockedLabel": "Tracker blocked",
   "util.trackerDetect.imageHiddenCssSoNever": "Image hidden with CSS so you never see it load",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "Image hidden inside a collapsed container",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Invisible {{w}}×{{h}} image — a read receipt, not a picture",

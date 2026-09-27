@@ -5,7 +5,7 @@
 import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
-import { detectReplyToMismatch } from '../../utils/replyToCheck';
+import { annotateRowAlerts } from './rowAlerts';
 import { NO_SERVER_UIDS } from './serverUids';
 import { custodySource } from './custody';
 import {
@@ -15,7 +15,7 @@ import {
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { findSentMailboxPath } from '../../utils/sentFolder';
-import { emailScopeKey, _resolveMailboxPath } from './unifiedHelpers';
+import { _resolveMailboxPath } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
 import { useTagStore, requestRowTags } from '../tagStore';
@@ -407,71 +407,7 @@ export const createMessageListSlice = (set, get) => ({
       unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow,
     });
 
-    // Apply persisted link safety alerts from settingsStore. Keyed by
-    // `accountId-mailbox-uid`: a bare UID is unique inside one mailbox only, so
-    // keying by it painted account A's red flag on every account's UID 41.
-    const { linkAlerts, linkSafetyEnabled } = useSettingsStore.getState();
-    if (linkAlerts && Object.keys(linkAlerts).length > 0) {
-      const state = get();
-      for (const e of result) {
-        if (e._linkAlert) continue;
-        const key = emailScopeKey(e, state);
-        if (!key) continue;
-        const level = linkAlerts[key];
-        if (level) e._linkAlert = level;
-      }
-    }
-
-    // Same treatment for tracker verdicts: the scan needs the body, which only
-    // exists once a message has been opened, so the row reads the persisted
-    // summary rather than re-deriving anything.
-    const { trackerAlerts } = useSettingsStore.getState();
-    if (trackerAlerts && Object.keys(trackerAlerts).length > 0) {
-      const state = get();
-      for (const e of result) {
-        if (e._trackerInfo) continue;
-        const key = emailScopeKey(e, state);
-        if (!key) continue;
-        const info = trackerAlerts[key];
-        if (info) e._trackerInfo = info;
-      }
-    }
-
-    // Detect sender impersonation + reply-to domain mismatch
-    if (linkSafetyEnabled) {
-      for (const e of result) {
-        const addr = (e.from?.address || '').toLowerCase();
-        const addrDomain = addr.split('@')[1] || '';
-
-        // Sender impersonation (display name looks like email/domain)
-        if (e._senderAlert === undefined && addr) {
-          const name = (e.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
-          if (name) {
-            const nameLower = name.toLowerCase();
-            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && nameLower !== addr) {
-              const nameDomain = nameLower.split('@')[1] || '';
-              if (nameDomain !== addrDomain && !addrDomain.endsWith('.' + nameDomain) && !nameDomain.endsWith('.' + addrDomain)) {
-                e._senderAlert = 'red';
-              }
-            }
-            else if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(nameLower)) {
-              if (nameLower !== addrDomain && !addrDomain.endsWith('.' + nameLower) && !nameLower.endsWith('.' + addrDomain)) {
-                e._senderAlert = 'yellow';
-              }
-            }
-          }
-        }
-
-        // Reply-To domain mismatch: common phishing signal — legit bulk
-        // senders usually route replies to the same domain (or a subdomain)
-        // they send from. Detection lives in utils/replyToCheck.js so it's
-        // unit-testable and can be shared by other consumers later.
-        if (e._replyToMismatch === undefined) {
-          const mismatch = detectReplyToMismatch(e);
-          if (mismatch) e._replyToMismatch = mismatch;
-        }
-      }
-    }
+    annotateRowAlerts(result, get(), useSettingsStore.getState());
 
     // ── the sidebar's unread badge ──
     //

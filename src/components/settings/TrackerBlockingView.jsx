@@ -17,7 +17,7 @@ const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
      width="1" height="1" border="0"
      style="display:none;height:1px;width:1px" alt="">`;
 
-const CLEANED_SAMPLE = `<span data-mv-tracker-blocked="Mailchimp" hidden></span>`;
+const CLEANED_SAMPLE = `<span data-mv-tracker-blocked="Mailchimp" title="…">🛡 Tracker blocked</span>`;
 
 /** Where the bundled endpoint list comes from — the two upstreams named in
  *  utils/trackerList.js, in the order that file merges them. */

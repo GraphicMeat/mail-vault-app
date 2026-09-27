@@ -2560,6 +2560,7 @@ mod tests {
             }],
             has_attachments: true,
             is_archived: false,
+            meta: Default::default(),
         };
         let req: MailSearchStart = serde_json::from_value(json!({
             "searchId":"filters", "location":"local", "query":"revenue", "sender":"ALICE",

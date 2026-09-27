@@ -73,55 +73,57 @@ async function startSearch(query, filterOverrides = {}) {
   return harness.started.at(-1);
 }
 
-describe('daemon-backed search lifecycle', () => {
-  beforeEach(() => {
-    useSearchStore.getState().clearSearch();
-    harness.mailState = {
-      activeAccountId: 'acct-1',
-      activeMailbox: 'INBOX',
-      unifiedInbox: false,
-      unifiedFolder: 'INBOX',
-      accounts: [account],
-      mailboxes: [mailbox('INBOX')],
-      emails: [],
-      savedEmailIds: new Set(),
-      backedUpKeys: new Set(),
-      backedUpScopes: new Set(),
-      backupConfigured: false,
-      requestSettingsTab: vi.fn(),
-    };
-    harness.settingsState = {
-      billingProfile: { hasSubscription: true, premiumAccess: true },
-      searchMailboxConcurrency: 3,
-      addSearchToHistory: vi.fn(),
-    };
-    harness.started = [];
-    harness.startMailSearch.mockReset().mockImplementation(async (request, onProgress, onReconnect) => {
-      const run = { request, onProgress, onReconnect, unlisten: vi.fn() };
-      harness.started.push(run);
-      return { unlisten: run.unlisten };
-    });
-    harness.cancelMailSearch.mockReset().mockResolvedValue(undefined);
-    harness.daemonCall.mockReset().mockResolvedValue({ tags: [] });
-    harness.buildSearchTargets.mockReset().mockImplementation(async () => [{
-      accountId: 'acct-1', account, localMailboxes: null, knownMailboxes: ['INBOX'], serverMailboxes: ['INBOX'],
-    }]);
-    useSearchStore.setState({
-      searchQuery: '',
-      searchFilters: { ...DEFAULT_FILTERS },
-      searchActive: false,
-      searchResults: [],
-      isSearching: false,
-      searchProgress: null,
-      searchIndexCoverage: null,
-      searchFallback: null,
-      searchError: null,
-      activeSearchId: null,
-      searchGeneration: 0,
-      lastSequence: 0,
-      searchSnapshot: null,
-    });
+function resetHarness() {
+  useSearchStore.getState().clearSearch();
+  harness.mailState = {
+    activeAccountId: 'acct-1',
+    activeMailbox: 'INBOX',
+    unifiedInbox: false,
+    unifiedFolder: 'INBOX',
+    accounts: [account],
+    mailboxes: [mailbox('INBOX')],
+    emails: [],
+    savedEmailIds: new Set(),
+    backedUpKeys: new Set(),
+    backedUpScopes: new Set(),
+    backupConfigured: false,
+    requestSettingsTab: vi.fn(),
+  };
+  harness.settingsState = {
+    billingProfile: { hasSubscription: true, premiumAccess: true },
+    searchMailboxConcurrency: 3,
+    addSearchToHistory: vi.fn(),
+  };
+  harness.started = [];
+  harness.startMailSearch.mockReset().mockImplementation(async (request, onProgress, onReconnect) => {
+    const run = { request, onProgress, onReconnect, unlisten: vi.fn() };
+    harness.started.push(run);
+    return { unlisten: run.unlisten };
   });
+  harness.cancelMailSearch.mockReset().mockResolvedValue(undefined);
+  harness.daemonCall.mockReset().mockResolvedValue({ tags: [] });
+  harness.buildSearchTargets.mockReset().mockImplementation(async () => [{
+    accountId: 'acct-1', account, localMailboxes: null, knownMailboxes: ['INBOX'], serverMailboxes: ['INBOX'],
+  }]);
+  useSearchStore.setState({
+    searchQuery: '',
+    searchFilters: { ...DEFAULT_FILTERS },
+    searchActive: false,
+    searchResults: [],
+    isSearching: false,
+    searchProgress: null,
+    searchIndexCoverage: null,
+    searchFallback: null,
+    searchError: null,
+    activeSearchId: null,
+    searchGeneration: 0,
+    lastSequence: 0,
+    searchSnapshot: null,
+  });
+}
+
+describe('daemon-backed search lifecycle', () => {
+  beforeEach(resetHarness);
 
   it('sends normalized query filters, explicit targets, and effective concurrency', async () => {
     harness.settingsState.searchMailboxConcurrency = 5;
@@ -533,5 +535,48 @@ describe('narrowing a search by a custom field', () => {
     await progress(run, 1, { rows: [row(1)], terminal: 'complete' });
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(useSearchStore.getState().searchResults).toEqual([]);
+  });
+});
+
+// A search hit is a row the list derivation never saw, so the warnings that
+// derivation paints (impersonating name, Reply-To elsewhere, a link or tracker
+// verdict remembered from an earlier read) never reached it: the same message
+// wore its shields in the folder and none in the results.
+describe('search rows carry the list\'s safety verdicts', () => {
+  beforeEach(resetHarness);
+  it('paints impersonation, Reply-To, link and tracker verdicts on a hit', () => {
+    harness.settingsState = {
+      ...harness.settingsState,
+      linkSafetyEnabled: true,
+      linkAlerts: { 'acct-1-Archive-7': 'red' },
+      trackerAlerts: { 'acct-1-Archive-7': { count: 1, vendors: ['Mailchimp'] } },
+    };
+    useSearchStore.getState().showRows([
+      result(7, 'Invoice', {
+        _accountId: 'acct-1', _mailbox: 'Archive', messageId: '<7@x.test>',
+        from: { name: 'billing@paypal.com', address: 'scam@evil.test' },
+        replyTo: [{ address: 'collect@elsewhere.test' }],
+      }),
+    ]);
+    const [hit] = useSearchStore.getState().searchResults;
+    expect(hit._senderAlert).toBe('red');
+    expect(hit._replyToMismatch).toBeTruthy();
+    expect(hit._linkAlert).toBe('red');
+    expect(hit._trackerInfo).toEqual({ count: 1, vendors: ['Mailchimp'] });
+  });
+
+  it('paints a streamed hit too', async () => {
+    harness.settingsState = { ...harness.settingsState, linkSafetyEnabled: true, linkAlerts: {}, trackerAlerts: {} };
+    const run = await startSearch('invoice');
+    progress(run, 1, {
+      rows: [result(8, 'Invoice', { _accountId: 'acct-1', _mailbox: 'INBOX', from: { name: 'paypal.com', address: 'x@evil.test' } })],
+    });
+    expect(useSearchStore.getState().searchResults[0]._senderAlert).toBe('yellow');
+  });
+
+  it('patches an open hit with a verdict learned after the search ran', () => {
+    useSearchStore.getState().showRows([result(9, 'Deal', { _accountId: 'acct-1', _mailbox: 'INBOX' })]);
+    useSearchStore.getState().patchResults(row => (row.uid === 9 ? { ...row, _linkAlert: 'yellow' } : row));
+    expect(useSearchStore.getState().searchResults[0]._linkAlert).toBe('yellow');
   });
 });

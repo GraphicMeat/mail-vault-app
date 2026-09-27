@@ -2762,6 +2762,8 @@
   "util.senderCheck.senderAuthenticationFailedEmailMay": "发件人认证失败（{{failures}}）——这封邮件可能被伪造",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "发件人名称“{{fromName}}”冒充了与实际发件人（{{fromDomain}}）不同的域名",
   "util.senderCheck.senderVerifiedSpfDkimPass": "发件人已验证（SPF、DKIM 通过）",
+  "util.trackerDetect.blockedExplain": "已移除跟踪像素。它会告诉发件人你何时何地打开了这封邮件。",
+  "util.trackerDetect.blockedLabel": "已拦截跟踪器",
   "util.trackerDetect.imageHiddenCssSoNever": "用 CSS 隐藏的图片，让你看不到它加载",
   "util.trackerDetect.imageHiddenInsideCollapsedContainer": "藏在折叠容器中的图片",
   "util.trackerDetect.invisibleImageReadReceiptPicture": "{{w}}×{{h}} 的不可见图片——这是已读回执，不是图片",

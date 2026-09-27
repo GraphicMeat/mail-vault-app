@@ -41,6 +41,45 @@ pub struct LightEmail {
     pub has_attachments: bool,
     #[serde(rename = "isArchived")]
     pub is_archived: bool,
+    #[serde(flatten)]
+    pub meta: HeaderMeta,
+}
+
+/// The headers the header sync row carries beyond the envelope: what the
+/// sender-auth shield, the BIMI logo and Unsubscribe read. A search hit or a
+/// vault read has no sync row behind it, so the message carries its own.
+/// Same JSON names as `imap::EmailHeader`; absent when the message has none.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct HeaderMeta {
+    #[serde(rename = "authenticationResults", default, skip_serializing_if = "Option::is_none")]
+    pub authentication_results: Option<String>,
+    #[serde(rename = "returnPath", default, skip_serializing_if = "Option::is_none")]
+    pub return_path: Option<String>,
+    #[serde(rename = "listId", default, skip_serializing_if = "Option::is_none")]
+    pub list_id: Option<String>,
+    #[serde(rename = "listUnsubscribe", default, skip_serializing_if = "Option::is_none")]
+    pub list_unsubscribe: Option<String>,
+    #[serde(rename = "listUnsubscribePost", default, skip_serializing_if = "Option::is_none")]
+    pub list_unsubscribe_post: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precedence: Option<String>,
+}
+
+impl HeaderMeta {
+    pub fn from_headers(headers: &[mailparse::MailHeader]) -> Self {
+        let get = |name: &str| headers.iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value().trim().to_string())
+            .filter(|v| !v.is_empty());
+        HeaderMeta {
+            authentication_results: get("Authentication-Results"),
+            return_path: get("Return-Path"),
+            list_id: get("List-Id"),
+            list_unsubscribe: get("List-Unsubscribe"),
+            list_unsubscribe_post: get("List-Unsubscribe-Post"),
+            precedence: get("Precedence"),
+        }
+    }
 }
 
 /// The flags a vault file name carries, as the Maildir words AND as the IMAP
@@ -261,6 +300,7 @@ pub fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result
         attachments,
         has_attachments,
         is_archived,
+        meta: HeaderMeta::from_headers(headers),
     })
 }
 
@@ -496,6 +536,42 @@ mod tests {
         let flat = preview_snippet(Some(&format!("a\r\nb{long}")));
         assert_eq!(flat, format!("a b{}", "x".repeat(146)));
         assert_eq!(preview_snippet(None), "");
+    }
+
+    // A search hit and a vault read have no header sync row behind them, so
+    // the message itself has to carry what the shield, BIMI and Unsubscribe
+    // read. Same names the header sync row uses.
+    #[test]
+    fn a_light_parse_carries_the_sender_auth_and_list_headers() {
+        let raw = b"From: Brand <news@brand.test>\r\n\
+Authentication-Results: mx.test; dkim=pass; dmarc=pass header.from=brand.test\r\n\
+Return-Path: <bounce@brand.test>\r\n\
+List-Id: Brand News <news.brand.test>\r\n\
+List-Unsubscribe: <mailto:leave@brand.test>\r\n\
+List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\
+Precedence: bulk\r\n\
+Subject: Hi\r\n\r\nbody";
+        let email = serde_json::to_value(parse_eml_bytes_light(raw, 3, Vec::new()).unwrap()).unwrap();
+        assert_eq!(email["authenticationResults"], "mx.test; dkim=pass; dmarc=pass header.from=brand.test");
+        assert_eq!(email["returnPath"], "<bounce@brand.test>");
+        assert_eq!(email["listId"], "Brand News <news.brand.test>");
+        assert_eq!(email["listUnsubscribe"], "<mailto:leave@brand.test>");
+        assert_eq!(email["listUnsubscribePost"], "List-Unsubscribe=One-Click");
+        assert_eq!(email["precedence"], "bulk");
+        let row: serde_json::Value = serde_json::from_str(&light_row_json(raw, 3).unwrap()).unwrap();
+        assert_eq!(row["authenticationResults"], email["authenticationResults"], "the index row carries it too");
+
+        let bare = serde_json::to_value(parse_eml_bytes_light(PLAIN_EMAIL, 1, Vec::new()).unwrap()).unwrap();
+        for k in ["authenticationResults", "returnPath", "listId", "listUnsubscribe", "listUnsubscribePost", "precedence"] {
+            assert!(bare.get(k).is_none(), "{k} absent when the message has none");
+        }
+        // A row stored before these fields existed still reads back.
+        let old: LightEmail = serde_json::from_value(serde_json::json!({
+            "uid": 1, "messageId": null, "subject": "s", "from": {"name": null, "address": "a@x.test"},
+            "to": [], "cc": [], "bcc": [], "replyTo": [], "date": null, "flags": [], "text": null, "html": null,
+            "attachments": [], "hasAttachments": false, "isArchived": false,
+        })).unwrap();
+        assert!(old.meta.authentication_results.is_none());
     }
 
     #[test]

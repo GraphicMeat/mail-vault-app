@@ -26,6 +26,7 @@ import { ThreadView } from './email/ThreadView';
 import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
+import { useSearchStore } from '../stores/searchStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
@@ -417,6 +418,9 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
         sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
       }));
+      // A search hit is in none of the mail store's lists.
+      const mail = useMailStore.getState();
+      useSearchStore.getState().patchResults?.(e => scopeKey && !e._linkAlert && emailScopeKey(e, mail) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e);
       useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
     }
   }, [scanAlertLevel, scopeKey]);
@@ -750,7 +754,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       {/* Sender Insights */}
       <AnimatePresence>
         {showInsights && selectedEmail?.from?.address && (
-          <SenderInsightsPanel senderEmail={selectedEmail.from.address} />
+          <SenderInsightsPanel senderEmail={selectedEmail.from.address} email={selectedEmail} />
         )}
       </AnimatePresence>
 

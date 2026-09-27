@@ -1,5 +1,7 @@
 import React from 'react';
 import { displayText } from '../utils/bidiText';
+import { cleanPreviewText } from '../utils/previewText';
+import { BimiLogo } from './email/BimiLogo';
 import { getAccountColor, useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
 import { getRowPartyName } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
@@ -101,7 +103,7 @@ export function listRowHeight(compact, previewLines = 0) {
  */
 export function RowSnippet({ email }) {
   const lines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
-  const text = email?.previewText || email?.snippet;
+  const text = cleanPreviewText(email?.previewText || email?.snippet);
   if (!lines || !text) return null;
   return (
     <div data-testid="row-snippet" dir="auto" className="row-snippet" style={{ WebkitLineClamp: lines, maxHeight: lines * SNIPPET_LINE_PX }}>
@@ -253,6 +255,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <span data-testid="row-sender" className="truncate min-w-0" dir="auto">
           {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
         </span>
+        <BimiLogo email={email} size={14} />
         <StarToggle email={email} actions={actions} size={14} />
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
@@ -364,6 +367,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
           </span>
+          <BimiLogo email={email} size={13} />
           <StarToggle email={email} actions={actions} size={13} />
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
