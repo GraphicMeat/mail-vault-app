@@ -105,6 +105,29 @@
   color: var(--mail-text-muted);
 }
 
+/* The row gutter (RowGutter in EmailRow.jsx): checkbox, custody chip and the
+   thread disclosure in one column whose width never depends on the row, so
+   sender, subject and preview start at one x down the list. A single-line row
+   keeps the chip beside the checkbox; a row of two or more lines stacks it
+   under the checkbox and pins both to the first text line. */
+.row-gutter { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+.row-gutter-cell { display: flex; align-items: center; gap: 12px; }
+.row-gutter-check { display: flex; align-items: center; justify-content: center; }
+.row-gutter-slot { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 20px; }
+.row-gutter-stacked { align-items: flex-start; padding-top: var(--row-gutter-top, 0px); }
+.row-gutter-stacked .row-gutter-cell { flex-direction: column; gap: 4px; }
+.row-gutter-stacked .row-gutter-check,
+.row-gutter-stacked > .row-gutter-slot { height: var(--row-first-line, 20px); }
+
+/* A row of several lines hangs from its top edge, with its first line where
+   a single-line row centres it: a row whose preview is shorter than the
+   setting, or absent, keeps its sender and subject level with its
+   neighbours'. The row height is still listRowHeight(). */
+.virtual-row.row-top { align-items: flex-start; padding-top: var(--row-top, 18px); }
+/* The two-line layout: its text block carries py-1.5 of its own, and its
+   first line is the 17px sender line. */
+.row-compact { --row-top: 2px; --row-gutter-top: 6px; --row-first-line: 17px; }
+
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:
    text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are
@@ -1173,7 +1196,9 @@ input[type="range"]::-moz-range-thumb:hover {
 .preview-email-header > span { color: var(--mail-text-muted); }
 .preview-email-body { padding: 12px; }
 .preview-email-body p { margin-top: 5px; }
-.preview-message-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.preview-message-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; --row-first-line: 18px; }
+.preview-message-rows:not(.preview-single-line) .preview-message-row { align-items: flex-start; }
+.preview-checkbox { display: block; width: 16px; height: 16px; border-width: 1.5px; cursor: default; }
 .preview-message-row + .preview-message-row { border-top: 1px solid var(--mail-border); }
 .preview-message-copy { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .preview-message-copy > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1185,7 +1210,7 @@ input[type="range"]::-moz-range-thumb:hover {
 .preview-single-line .preview-message-copy > span { flex: 1; }
 .preview-mail-layout { display: flex; min-height: 132px; }
 .preview-mail-list { width: 46%; min-width: 0; flex-shrink: 0; border-right: 1px solid var(--mail-border); }
-.preview-mail-list .preview-time, .preview-mail-list .preview-message-row > svg { display: none; }
+.preview-mail-list .preview-time, .preview-mail-list .row-gutter { display: none; }
 .preview-mail-list .preview-message-row { padding: 6px 10px; }
 .preview-mail-list .preview-message-row:first-child { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .preview-mail-list .preview-message-row:first-child .preview-message-copy > span { color: var(--mail-accent-text); }

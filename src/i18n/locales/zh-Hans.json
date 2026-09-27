@@ -914,7 +914,7 @@
   "listPreview.off": "关闭",
   "listPreview.offHint": "每行只显示发件人和主题。",
   "listPreview.one": "1 行",
-  "listPreview.sample": "Nell，你好，周六的照片已经好了。我挑了我们最喜欢的十二张，其余的放在共享文件夹里。",
+  "listPreview.sample": "Nell，你好，周六的照片已经好了。我挑了我们最喜欢的十二张，其余的按拍摄时间排好，放在共享文件夹里。河边拍的那几张颜色比我预想的更暖，所以我没有再调整，保持了原样。如果你想为工作室的墙洗几张照片，请在周四之前告诉我需要的尺寸，我会连同相框一起订购。周末有空的话，我们也可以一起再挑一遍。原始文件我也一起上传了，需要的话可以直接下载。",
   "listPreview.three": "3 行",
   "listPreview.title": "预览行数",
   "listPreview.two": "2 行",

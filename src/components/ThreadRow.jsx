@@ -9,7 +9,7 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { TrackerAlertIcon, getThreadTrackerInfo } from './TrackerAlertIcon';
-import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
 import { RowQuickActions } from './RowQuickActions';
 import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
 import { TagChips } from './TagChips';
@@ -17,18 +17,17 @@ import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
-import { RowSnippet, WithSnippet } from './EmailRow';
+import { RowGutter, RowSnippet, WithSnippet } from './EmailRow';
 import {
   Paperclip,
   ChevronRight,
 } from 'lucide-react';
 import { t as tr, useT  } from '../i18n/index.js';
 
-// The unfold control (expandable thread mode). Nothing when the mode is off,
-// so grouped and flat rows keep the exact shape they had.
-function ThreadDisclosure({ expandable, expanded, threadId, onToggleExpand }) {
+// The unfold control (expandable thread mode). It sits in the row gutter's
+// disclosure slot, which only an unfolding list reserves.
+function ThreadDisclosure({ expanded, threadId, onToggleExpand }) {
   const t = useT();
-  if (!expandable) return null;
   const label = expanded ? t('thread.hideReplies') : t('thread.showReplies');
   return (
     <button
@@ -37,7 +36,7 @@ function ThreadDisclosure({ expandable, expanded, threadId, onToggleExpand }) {
       aria-expanded={!!expanded}
       aria-label={label}
       title={label}
-      className="w-5 h-5 -ml-1 flex items-center justify-center rounded flex-shrink-0 text-mail-text-muted hover:text-mail-text hover:bg-mail-border"
+      className="w-5 h-5 flex items-center justify-center rounded flex-shrink-0 text-mail-text-muted hover:text-mail-text hover:bg-mail-border"
       onClick={(e) => { e.stopPropagation(); onToggleExpand(threadId); }}
     >
       <ChevronRight size={14} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
@@ -47,7 +46,8 @@ function ThreadDisclosure({ expandable, expanded, threadId, onToggleExpand }) {
 
 // Thread row for default layout — shows collapsed thread with participant names and count
 export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
-  const t = useT();
+  // Preview lines make this a row of several lines: its gutter stacks.
+  const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
 
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
@@ -111,21 +111,16 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       data-thread-count={thread.messageCount}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
       onContextMenu={openMenuAtPointer}
     >
-      <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
-      </div>
-
-      <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
-
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        <ConnectedStateIcon email={latestEmail} size={14} />
-      </div>
+      <RowGutter stacked={stacked} threadSlot={expandable} checked={anyChecked}
+        onToggle={() => onSetSelection(members, !anyChecked)}
+        disclosure={<ThreadDisclosure expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />}
+        state={<ConnectedStateIcon email={latestEmail} size={14} />} />
 
       <WithSnippet email={latestEmail}>
       {/*
@@ -183,8 +178,6 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 
 // Compact thread row for compact layout
 export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
-  const t = useT();
-
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
   // message's custody, so that is what hands over.
@@ -244,21 +237,17 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       data-thread-count={thread.messageCount}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row row-compact row-top group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
       onContextMenu={openMenuAtPointer}
     >
-      <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
-      </div>
-
-      <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
-
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        <ConnectedStateIcon email={latestEmail} size={13} />
-      </div>
+      {/* Two lines, always: the chip sits under the checkbox. */}
+      <RowGutter stacked threadSlot={expandable} checked={anyChecked}
+        onToggle={() => onSetSelection(members, !anyChecked)}
+        disclosure={<ThreadDisclosure expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />}
+        state={<ConnectedStateIcon email={latestEmail} size={13} />} />
 
       <div className="flex-1 min-w-0 py-1.5">
         {/* Line 1: participants, count, alerts ... date */}

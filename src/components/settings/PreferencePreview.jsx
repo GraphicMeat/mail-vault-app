@@ -52,11 +52,19 @@ export function EmailThemePreview() {
   </PreviewFrame>;
 }
 
+// The list's row gutter in miniature (RowGutter in EmailRow.jsx): the same
+// classes, so the sample stacks and aligns exactly as the real rows do.
 function SampleRows({ singleLine = false, previewLines = 0 }) {
   const t = useT();
+  const stacked = !singleLine || previewLines > 0;
   return <div className={`preview-message-rows ${singleLine ? 'preview-single-line' : ''}`}>
     {['Nell Okafor', 'Priya Raines'].map((sender, index) => <div className="preview-message-row" key={sender}>
-      <Cloud aria-hidden="true" size={13} className="text-mail-server" />
+      <span className={`row-gutter${stacked ? ' row-gutter-stacked' : ''}`} aria-hidden="true">
+        <span className="row-gutter-cell">
+          <span className="row-gutter-check"><span className="custom-checkbox preview-checkbox" /></span>
+          <span className="row-gutter-slot"><Cloud size={13} className="text-mail-server" /></span>
+        </span>
+      </span>
       <span className="preview-message-copy"><strong>{sender}</strong><span>{t(index ? 'preview.row4.subject' : 'settings.preview.subject')}</span>
         {previewLines > 0 && <span className="preview-message-snippet" style={{ WebkitLineClamp: previewLines }}>{t('listPreview.sample')}</span>}
       </span>

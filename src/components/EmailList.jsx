@@ -1637,6 +1637,9 @@ function EmailListComponent({ stacked = false }) {
                     onStartSaving={startSaving}
                     onStopSaving={stopSaving}
                     derivedFrom={displayEmails}
+                    // The thread rows' disclosure column, reserved on every
+                    // row of an unfolding list so the text lines up.
+                    threadSlot={threadMode === 'expandable' && !searchActive}
                   />
                 </div>
               );

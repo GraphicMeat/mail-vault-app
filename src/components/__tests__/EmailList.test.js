@@ -285,6 +285,40 @@ describe('EmailList virtualization', () => {
     expect(lastVirtualizerConfig.count).toBe(500);
   });
 
+  // "When on, search does not display the line preview": a search result is
+  // drawn by the list's own rows, so it honours Preview lines exactly as a
+  // folder row does once the daemon hands it the preview text.
+  it('shows a search result with the preview lines the list is set to', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const search = useSearchStore.getState();
+    const settings = useSettingsStore.getState();
+    const previousMail = { ...mail };
+    const previousSearch = { ...search };
+    const previousSettings = { ...settings };
+    const hit = {
+      ...makeEmails(1)[0], _accountId: 'acc1', _mailbox: 'INBOX', source: 'local',
+      previewText: 'Hi Ann, the invoice for September is attached.',
+    };
+    try {
+      Object.assign(mail, { activeMailbox: 'INBOX', unifiedInbox: false, sortedEmails: [], sentEmails: [] });
+      Object.assign(search, { searchActive: true, searchResults: [hit] });
+      Object.assign(settings, { threadMode: 'flat', listPreviewLines: 3 });
+      const { container } = render(React.createElement(EmailList));
+      const snippet = container.querySelector('[data-testid="email-row"] [data-testid="row-snippet"]');
+      expect(snippet?.textContent).toBe(hit.previewText);
+      expect(snippet.style.webkitLineClamp || snippet.style.WebkitLineClamp).toBe('3');
+    } finally {
+      cleanup();
+      Object.assign(mail, previousMail);
+      Object.assign(search, previousSearch);
+      Object.assign(settings, previousSettings, { listPreviewLines: undefined });
+    }
+  });
+
   it('passes a clicked search result row into message selection', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     const { useSearchStore } = await import('../../stores/searchStore');
@@ -1093,6 +1127,27 @@ describe('thread modes', () => {
     await settle();
     expect(lastVirtualizerConfig.count).toBe(1);
     expect(container.querySelector('[data-testid="thread-member-row"]')).toBeNull();
+  });
+
+  // The chevron lives in the row's leading gutter, and every row of an
+  // unfolding list reserves its column: a message row beside a thread row, or
+  // a reply under it, starts its text at the same x as the thread row does.
+  it('expandable: every row reserves the disclosure column in its gutter', async () => {
+    const { container } = await mount('expandable');
+    fireEvent.click(screen.getByTestId('thread-expand'));
+    await settle();
+    const rows = [...container.querySelectorAll('[data-testid="email-row"]')];
+    expect(rows.length).toBe(4);
+    for (const row of rows) {
+      expect(row.querySelector('[data-testid="row-gutter"] [data-testid="row-disclosure-slot"]')).not.toBeNull();
+    }
+    expect(rows[0].querySelector('[data-testid="row-disclosure-slot"] [data-testid="thread-expand"]')).not.toBeNull();
+  });
+
+  it('grouped: no row reserves a disclosure column', async () => {
+    const { container } = await mount('grouped');
+    expect(container.querySelector('[data-testid="email-row"] [data-testid="row-gutter"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-disclosure-slot"]')).toBeNull();
   });
 
   // A reply you wrote lives in Sent; the INBOX list merges it into the thread

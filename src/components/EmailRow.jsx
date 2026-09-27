@@ -128,6 +128,32 @@ export function WithSnippet({ email, children }) {
   );
 }
 
+/**
+ * The row's leading column: the checkbox, the custody chip and, in a list that
+ * unfolds threads, the disclosure. Its width is the list's, never the row's:
+ * the chip keeps its 20px slot when it draws nothing, and every row of an
+ * unfolding list keeps the disclosure's slot, chevron or not. Anything with a
+ * per-row width here would start the text at a different x on every row.
+ *
+ * `stacked` is a row of two or more lines (the two-line layout, or preview
+ * lines on): the chip moves under the checkbox, so the gutter is one icon
+ * wide and the text gets the room back.
+ */
+export function RowGutter({ stacked, threadSlot, disclosure = null, checked, onToggle, state }) {
+  const t = useT();
+  return (
+    <div data-testid="row-gutter" className={`row-gutter${stacked ? ' row-gutter-stacked' : ''}`}>
+      {threadSlot && <div data-testid="row-disclosure-slot" className="row-gutter-slot">{disclosure}</div>}
+      <div className="row-gutter-cell">
+        <div className="row-gutter-check" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+          <input type="checkbox" checked={checked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
+        </div>
+        <div data-testid="row-state-slot" className="row-gutter-slot">{state}</div>
+      </div>
+    </div>
+  );
+}
+
 // A snoozed message (it sits in Snoozed) shows when it comes back instead of
 // when it arrived.
 function RowDate({ email }) {
@@ -150,8 +176,10 @@ function openRow(email, onSelect) {
   onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
 }
 
-export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving }) {
+export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false }) {
   const t = useT();
+  // Preview lines make this a row of several lines: its gutter stacks.
+  const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
@@ -195,24 +223,15 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       data-uid={email.uid}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
       onContextMenu={openMenuAtPointer}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={() => {}}
-          aria-label={t('workspace.selectMessage')} className="custom-checkbox"
-        />
-      </div>
-
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        <ConnectedStateIcon email={email} size={14} />
-      </div>
+      <RowGutter stacked={stacked} threadSlot={threadSlot} checked={isChecked}
+        onToggle={() => onToggleSelection(email.uid, email._accountId, email._mailbox)}
+        state={<ConnectedStateIcon email={email} size={14} />} />
 
       <WithSnippet email={email}>
       {/*
@@ -274,7 +293,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false }) {
   const t = useT();
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
@@ -315,20 +334,16 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       data-uid={email.uid}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row row-compact row-top group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
       onContextMenu={openMenuAtPointer}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
-        <input type="checkbox" checked={isChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
-      </div>
-
-      {/* Source icon */}
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        <ConnectedStateIcon email={email} size={13} />
-      </div>
+      {/* Two lines, always: the chip sits under the checkbox. */}
+      <RowGutter stacked threadSlot={threadSlot} checked={isChecked}
+        onToggle={() => onToggleSelection(email.uid, email._accountId, email._mailbox)}
+        state={<ConnectedStateIcon email={email} size={13} />} />
 
       {/* Two-line content */}
       <div className="flex-1 min-w-0 py-1.5">
