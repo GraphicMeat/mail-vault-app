@@ -64,10 +64,10 @@ describe('English acquisition journey', () => {
     expect(gm.mock.calls.filter(([name]) => name === 'setup_view')).toEqual([['setup_view', {page_version:'homepage-en-20260922',plan:'yearly'}]]);
   });
   it('keeps usable release links when GitHub is unavailable', async () => {
-    const {doc} = page('get-started.html');
+    const {doc} = page('thank-you.html', '?platform=mac');
     await tick();
     expect(doc.querySelector('[data-download="mac"]').href).toBe('https://github.com/GraphicMeat/mail-vault-app/releases/latest');
-    expect(doc.querySelector('[data-download-status]').textContent).toContain('could not load');
+    expect(doc.querySelector('[data-download-status]').textContent).toContain('could not start');
   });
   it.each([
     ['macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'mac'],
@@ -80,35 +80,59 @@ describe('English acquisition journey', () => {
     for (const action of ['mac','windows','linux','fallback']) expect(doc.querySelector('.hm-hero-actions [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
     expect(doc.querySelector('a[href="/get-started.html?plan=free#platforms"]')).not.toBeNull();
   });
-  it('puts the visitor’s own platform first on the download page, Windows included', async () => {
-    const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
-    const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:['MailVault.dmg','MailVault_2.16.0_x64-setup.exe'].map(name=>({name,browser_download_url:base+name}))})});
-    const {doc}=page('get-started.html','',fetch,{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
-    await tick();
+  it('puts the visitor’s own platform first on the download page, Windows included', () => {
+    const {doc,fetch}=page('get-started.html','',undefined,{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
     expect(doc.querySelector('.mv-download-options > article').dataset.platform).toBe('windows');
     expect(doc.querySelector('[data-hero-platform="windows"]').hidden).toBe(false);
-    for (const link of doc.querySelectorAll('[data-download="windows"]')) expect(link.href).toBe(base+'MailVault_2.16.0_x64-setup.exe');
+    for (const link of doc.querySelectorAll('[data-download="windows"]')) expect(link.getAttribute('href')).toBe('/thank-you.html?platform=windows&start=1');
+    // Nothing on this page downloads a file itself any more, so it does not ask GitHub.
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes('/releases/'))).toEqual([]);
     expect(doc.body.textContent).not.toContain('Windows is planned');
   });
-  it('resolves the macOS homepage action with the shared release resolver', async () => {
-    const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.11.3/';
-    const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.11.3',assets:['MailVault.dmg','MailVault_amd64.deb','MailVault_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});
-    const {doc}=page('index.html','',fetch,{userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)'});
-    await tick();
-    expect(doc.querySelector('[data-hero-platform="mac"]').href).toBe(base+'MailVault.dmg');
+  it.each([
+    ['index.html', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'mac'],
+    ['index.html', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'windows'],
+    ['index.html', 'Mozilla/5.0 (X11; Linux x86_64)', 'amd64'],
+    ['index.html', 'Mozilla/5.0 (X11; Linux aarch64)', 'arm64'],
+    ['features.html', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'mac'],
+  ])('%s: the bar’s Download and the hero both lead a %s visitor to the %s thank-you page', (file, userAgent, platform) => {
+    for (const prefix of ['', '/de']) {
+      const {doc}=page(file,'',undefined,{userAgent,path:prefix.slice(1)+(prefix?'/':'')+file});
+      const want=prefix+'/thank-you.html?platform='+platform+'&start=1';
+      const bar=[...doc.querySelectorAll('.mv-navtools > a.mv-button:not(.mv-secondary), .mv-mobile-menu nav a[data-download]')];
+      expect(bar).toHaveLength(2);
+      for (const link of bar) expect(link.getAttribute('href')).toBe(want);
+      for (const link of doc.querySelectorAll('[data-hero-platform]:not([hidden]):not([data-hero-platform="fallback"])[data-download]')) expect(link.getAttribute('href')).toBe(want);
+    }
   });
-  it('sends Windows visitors to the SmartScreen page and Linux visitors straight to the .deb', async () => {
+  it('leaves the bar’s Download on the setup page when the platform is unknown', () => {
+    const {doc}=page('index.html','',undefined,{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)'});
+    expect(doc.querySelector('.mv-navtools > a.mv-button:not(.mv-secondary)').getAttribute('href')).toBe('/get-started.html?plan=free');
+  });
+  it('starts the installer on the thank-you page and shows only that platform’s steps', async () => {
     const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
-    const release=()=>vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:['MailVault_2.16.0_x64-setup.exe','MailVault_2.16.0_amd64.deb','MailVault_2.16.0_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});
-    const win=page('index.html','',release(),{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
+    const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.16.0',assets:['MailVault-v2.16.0.dmg','MailVault_2.16.0_x64-setup.exe','MailVault_2.16.0_amd64.deb','MailVault_2.16.0_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});
+    for (const [platform, file, steps] of [['mac','MailVault-v2.16.0.dmg','mac'],['windows','MailVault_2.16.0_x64-setup.exe','windows'],['arm64','MailVault_2.16.0_arm64.deb','linux']]) {
+      const markup=readFileSync(resolve(root,'thank-you.html'),'utf8');
+      const {w,doc}=page('thank-you.html','?platform='+platform+'&start=1',fetch,{markup});
+      const button=doc.querySelector('[data-auto-download]');
+      const clicked=[];
+      button.addEventListener('click',e=>{ e.preventDefault(); clicked.push(button.href); });
+      await tick(); await tick();
+      expect(clicked).toEqual([base+file]);
+      // A reload keeps the steps but does not download again.
+      expect(w.location.search).toBe('?platform='+platform);
+      expect([...doc.querySelectorAll('[data-install]')].filter(el=>!el.hidden).map(el=>el.dataset.install)).toEqual([steps]);
+    }
+  });
+  it('shows every platform’s steps and downloads nothing for an unknown platform', async () => {
+    const markup=readFileSync(resolve(root,'thank-you.html'),'utf8');
+    const {doc,fetch}=page('thank-you.html','?platform=%3Cimg%20src%3Dx%3E&start=1',undefined,{markup});
     await tick();
-    for (const link of win.doc.querySelectorAll('[data-hero-platform="windows"]')) expect(link.getAttribute('href')).toBe('/windows-download.html?start=1');
-    const linux=page('index.html','',release(),{userAgent:'Mozilla/5.0 (X11; Linux x86_64)'});
-    await tick();
-    for (const link of linux.doc.querySelectorAll('[data-hero-platform="linux"]')) expect(link.href).toBe(base+'MailVault_2.16.0_amd64.deb');
-    const arm=page('index.html','',release(),{userAgent:'Mozilla/5.0 (X11; Linux aarch64)'});
-    await tick();
-    for (const link of arm.doc.querySelectorAll('[data-hero-platform="linux"]')) expect(link.href).toBe(base+'MailVault_2.16.0_arm64.deb');
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes('/releases/'))).toEqual([]);
+    expect(doc.querySelector('[data-auto-download]').href).toBe('https://github.com/GraphicMeat/mail-vault-app/releases/latest');
+    expect([...doc.querySelectorAll('[data-install]')].filter(el=>!el.hidden)).toHaveLength(3);
+    expect(doc.querySelectorAll('img[src="x"]')).toHaveLength(0);
   });
   it('starts the Windows installer only when the page is reached from a download button', async () => {
     const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.16.0/';
@@ -163,11 +187,11 @@ describe('English acquisition journey', () => {
     expect([...doc.querySelectorAll('[data-vote]')].every(b=>b.getAttribute('aria-pressed')==='true')).toBe(true);
     expect(doc.querySelector('[data-vote-count]').textContent).toBe('43');
   });
-  it('keeps the macOS homepage fallback safe without release data or a tracker', async () => {
+  it('keeps the macOS homepage action safe without release data or a tracker', async () => {
     const {doc}=page('index.html','',vi.fn().mockRejectedValue(new Error('offline')),{userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)'});
     await tick();
     const link=doc.querySelector('[data-hero-platform="mac"]');
-    expect(link.href).toMatch(/releases\/latest$/);
+    expect(link.getAttribute('href')).toBe('/thank-you.html?platform=mac&start=1');
     link.addEventListener('click',e=>e.preventDefault());
     expect(() => link.click()).not.toThrow();
   });
@@ -212,16 +236,26 @@ describe('English acquisition journey', () => {
   });
   it('tags the tracker on every tracked page', () => {
     const tagged = (html) => /<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="redesign-2026-09">\s*<\/script>/.test(html);
-    for (const file of ['index.html','pricing.html','get-started.html','changelog.html','features/tags.html','blog.html','faq.html']) {
+    for (const file of ['index.html','pricing.html','get-started.html','thank-you.html','changelog.html','features/tags.html','blog.html','faq.html']) {
       expect(tagged(readFileSync(resolve(root, file), 'utf8')), file).toBe(true);
     }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
+  });
+  it('counts a download once, where the file starts, not on the button that leads there', () => {
+    const gm=vi.fn();
+    const {w,doc}=page('index.html','',undefined,{gm,userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)'});
+    for (const link of [doc.querySelector('.hm-hero-actions [data-hero-platform="mac"]'), doc.querySelector('.mv-navtools > a.mv-button:not(.mv-secondary)')]) {
+      link.addEventListener('click',e=>e.preventDefault());
+      link.click();
+    }
+    expect(w.navigator.sendBeacon).not.toHaveBeenCalled();
+    expect(gm.mock.calls.filter(([name]) => name === 'download_action')).toHaveLength(0);
   });
   it('resolves desktop assets and counts only actual download actions', async () => {
     const base='https://github.com/GraphicMeat/mail-vault-app/releases/download/v2.11.3/';
     const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({tag_name:'v2.11.3',assets:['MailVault.dmg','MailVault_amd64.deb','MailVault_arm64.deb'].map(name=>({name,browser_download_url:base+name}))})});
     const gm=vi.fn();
-    const {w,doc}=page('get-started.html','?plan=yearly',fetch,{gm});
+    const {w,doc}=page('thank-you.html','?platform=mac',fetch,{gm});
     await tick();
     expect(doc.querySelector('[data-download="mac"]').href).toBe(base+'MailVault.dmg');
     expect(w.navigator.sendBeacon).not.toHaveBeenCalled();
@@ -234,7 +268,7 @@ describe('English acquisition journey', () => {
   });
   it('rejects an unexpected release download destination', async()=>{
     const gm=vi.fn();
-    const {doc}=page('get-started.html','',vi.fn().mockResolvedValue({ok:true,json:async()=>({assets:[{name:'app.dmg',browser_download_url:'https://untrusted.example/app.dmg'}]})}),{gm});
+    const {doc}=page('thank-you.html','?platform=mac',vi.fn().mockResolvedValue({ok:true,json:async()=>({assets:[{name:'app.dmg',browser_download_url:'https://untrusted.example/app.dmg'}]})}),{gm});
     await tick();
     const link=doc.querySelector('[data-download="mac"]');
     expect(link.href).toMatch(/releases\/latest$/);
@@ -267,7 +301,7 @@ describe('English acquisition journey', () => {
   it('keeps every local link, anchor, stylesheet, script, and screenshot resolvable',()=>{
     // Subdirectory pages too: a root-relative href like "favicon.ico" only resolves at the root.
     const sub = ['features','faq','blog','guides','compare'].flatMap(d => readdirSync(resolve(root,d)).filter(f => f.endsWith('.html')).map(f => d+'/'+f));
-    for(const file of ['index.html','pricing.html','get-started.html',...sub]) {
+    for(const file of ['index.html','pricing.html','get-started.html','thank-you.html',...sub]) {
       const {doc}=page(file);
       const ids=Array.from(doc.querySelectorAll('[id]'),e=>e.id);
       expect(new Set(ids).size).toBe(ids.length);

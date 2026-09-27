@@ -64,9 +64,9 @@
     if (e.key === 'Escape') menus.forEach(menu => { if (menu.open) { menu.open = false; menu.querySelector('summary').focus(); } });
   });
 
+  const locale = location.pathname.match(/^\/(?:de|fr|es|it|ja|ko|zh|pt-br)(?=\/|$)/)?.[0] || '';
   function setBilling(period) {
     document.querySelectorAll('[data-billing-panel]').forEach(el => { el.hidden = el.dataset.billingPanel !== period; });
-    const locale = location.pathname.match(/^\/(?:de|fr|es|it|ja|ko|zh|pt-br)(?=\/|$)/)?.[0] || '';
     document.querySelectorAll('[data-premium-cta]').forEach(el => { el.href = locale + '/get-started.html?plan=' + period; });
   }
   document.querySelectorAll('input[name="billing"]').forEach(input => input.addEventListener('change', () => { if (input.checked) setBilling(input.value); }));
@@ -89,6 +89,30 @@
   if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
     document.querySelectorAll('[data-hero-platform="fallback"]').forEach(el => { el.hidden = true; });
     document.querySelectorAll('[data-hero-platform="' + heroPlatform + '"]').forEach(el => { el.hidden = false; });
+  }
+  // One .deb button for Linux: pick the ARM build when the browser says so.
+  const arm = /aarch64|arm64|armv8/i.test(navigator.userAgent);
+  if (arm) document.querySelectorAll('[data-linux-deb]').forEach(link => {
+    link.dataset.download = 'arm64';
+    link.dataset.acquisitionDownload = 'arm64';
+  });
+  const installers = ['mac', 'windows', 'amd64', 'arm64'];
+  const autoDownload = document.querySelector('[data-auto-download]');
+  if (autoDownload) {
+    // The thank-you page takes its installer from the button that sent the visitor here.
+    const platform = query.get('platform');
+    if (installers.includes(platform)) autoDownload.dataset.download = autoDownload.dataset.acquisitionDownload = platform;
+    const steps = { mac: 'mac', windows: 'windows', amd64: 'linux', arm64: 'linux' }[autoDownload.dataset.download];
+    if (steps) document.querySelectorAll('[data-install]').forEach(el => { el.hidden = el.dataset.install !== steps; });
+  } else {
+    // Every installer button, the bar's Download included, goes through the
+    // thank-you page: it starts the file and shows the install steps.
+    const own = mac ? 'mac' : windows ? 'windows' : linux ? (arm ? 'arm64' : 'amd64') : '';
+    if (own) document.querySelectorAll('.mv-nav-download:not(.mv-secondary), .mv-mobile-menu nav a[href*="/get-started.html"]').forEach(link => { link.dataset.download = own; });
+    document.querySelectorAll(installers.map(p => '[data-download="' + p + '"]').join()).forEach(link => {
+      link.href = locale + '/thank-you.html?platform=' + link.dataset.download + '&start=1';
+      link.setAttribute('data-download-page', '');
+    });
   }
 
   // Same anonymous aggregate event as the existing site; no app telemetry or IDs.
@@ -115,12 +139,12 @@
     if (document.readyState === 'complete') setupView();
     else document.addEventListener('DOMContentLoaded', setupView, { once:true });
   }
-  document.querySelectorAll('[data-download]').forEach(link => link.addEventListener('click', () => metric('download_click')));
+  document.querySelectorAll('[data-download]:not([data-download-page])').forEach(link => link.addEventListener('click', () => metric('download_click')));
   document.querySelectorAll('[data-acquisition-event]').forEach(link => link.addEventListener('click', () => acquisitionEvent(link.dataset.acquisitionEvent, {
     ...(link.dataset.acquisitionPlacement ? { placement: link.dataset.acquisitionPlacement } : {}),
     ...(link.dataset.acquisitionDestination ? { destination: link.dataset.acquisitionDestination } : {}),
   })));
-  document.querySelectorAll('[data-acquisition-download]').forEach(link => link.addEventListener('click', () => acquisitionEvent('download_action', {
+  document.querySelectorAll('[data-acquisition-download]:not([data-download-page])').forEach(link => link.addEventListener('click', () => acquisitionEvent('download_action', {
     platform: link.dataset.acquisitionDownload,
     destination: link.dataset.acquisitionResult || (link.dataset.acquisitionDownload === 'snap' ? 'store' : 'fallback'),
   })));
@@ -138,13 +162,10 @@
     acquisitionEvent('cta_click', { target, placement });
   });
 
-  // One .deb button for Linux: pick the ARM build when the browser says so.
-  if (/aarch64|arm64|armv8/i.test(navigator.userAgent)) document.querySelectorAll('[data-linux-deb]').forEach(link => {
-    link.dataset.download = 'arm64';
-    link.dataset.acquisitionDownload = 'arm64';
-  });
   const downloadStatus = document.querySelector('[data-download-status]');
-  const downloadControls = document.querySelectorAll('[data-download="mac"], [data-download="windows"], [data-download="amd64"], [data-download="arm64"]');
+  // A [data-download-page] button leads to a page that starts the download itself.
+  const direct = platform => '[data-download="' + platform + '"]:not([data-download-page])';
+  const downloadControls = document.querySelectorAll(installers.map(direct).join());
   let releaseLinks;
   if (downloadControls.length) {
     releaseLinks = fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest', { signal: AbortSignal.timeout(10000) })
@@ -158,14 +179,13 @@
           arm64: release.assets.find(a => /arm64.*\.deb$/.test(a.name)),
         };
         // Only the platforms this page offers count towards "all links ready".
-        const wanted = Object.keys(matches).filter(platform => document.querySelector('[data-download="' + platform + '"]'));
+        const wanted = Object.keys(matches).filter(platform => document.querySelector(direct(platform)));
         let resolved = 0;
         Object.entries(matches).forEach(([platform, asset]) => {
           if (!asset || !wanted.includes(platform)) return;
           const url = new URL(asset.browser_download_url);
           if (url.origin !== 'https://github.com' || !url.pathname.startsWith('/GraphicMeat/mail-vault-app/releases/download/')) return;
-          // A [data-download-page] button leads to a page that starts the download itself.
-          document.querySelectorAll('[data-download="' + platform + '"]:not([data-download-page])').forEach(link => { link.href = url.href; link.dataset.acquisitionResult = 'file'; });
+          document.querySelectorAll(direct(platform)).forEach(link => { link.href = url.href; link.dataset.acquisitionResult = 'file'; });
           resolved++;
         });
         if (downloadStatus) downloadStatus.textContent = resolved === wanted.length
@@ -176,14 +196,14 @@
     // A click that beats the release lookup waits briefly for the direct file
     // instead of dropping the visitor on the release page.
     downloadControls.forEach(link => link.addEventListener('click', e => {
-      if (link.dataset.acquisitionResult === 'file' || link.hasAttribute('data-download-page') || link.target === '_blank') return;
+      if (link.dataset.acquisitionResult === 'file' || link.target === '_blank') return;
       e.preventDefault();
       Promise.race([releaseLinks, new Promise(resolve => setTimeout(resolve, 4000))]).then(() => location.assign(link.href));
     }));
-    // The Windows download page starts its installer when reached from a download button.
-    const autoDownload = document.querySelector('[data-auto-download]');
+    // The thank-you and Windows pages start the installer when reached from a download button.
     if (autoDownload && query.has('start')) {
-      try { history.replaceState(null, '', location.pathname + location.hash); } catch { /* a reload may download again */ }
+      query.delete('start');
+      try { history.replaceState(null, '', location.pathname + (String(query) ? '?' + query : '') + location.hash); } catch { /* a reload may download again */ }
       // Clicking the button itself records the download like a visitor's click would.
       releaseLinks.then(() => { if (autoDownload.dataset.acquisitionResult === 'file') autoDownload.click(); });
     }

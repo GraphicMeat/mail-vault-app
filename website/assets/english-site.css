@@ -117,6 +117,9 @@
 .mv-page-hero { padding-block:64px 42px; max-width:1040px; text-align:center; }
 .mv-page-hero h1 { font-size:clamp(2.4rem,4vw,3.6rem); }
 .mv-page-hero .mv-lead { margin-inline:auto; }
+.mv-page-hero .mv-actions { justify-content:center; }
+.mv-hero-art { display:block; width:100%; max-width:720px; height:auto; margin:0 auto 28px; border-radius:16px; }
+.mv-hero-art-after { margin:36px auto 0; }
 .mv-pricing-section { padding-bottom:68px; }
 .mv-premium-story { display:grid; grid-template-columns:.8fr 1.2fr; gap:60px; align-items:center; }
 .mv-premium-story p:not(.mv-eyebrow) { color:var(--mv-muted); font-size:.96rem; }
@@ -126,7 +129,8 @@
 .mv-install { display:grid; grid-template-columns:1.7fr .7fr; gap:48px; padding-block:16px 64px; }
 .mv-install h2 { font-size:1.65rem; }
 .mv-download-options { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:24px; }
-.mv-download-options article { padding-block:22px; border-top:1px solid var(--mv-line); }
+.mv-download-options article { padding-block:22px; border-top:1px solid var(--mv-line); display:grid; grid-row:span 4; grid-template-rows:subgrid; row-gap:0; }
+.mv-download-options .mv-button { justify-self:start; }
 .mv-download-options p { color:var(--mv-muted); font-size:.87rem; }
 .mv-download-options .mv-small { margin-top:12px; }
 .mv-linux-links { display:flex; flex-direction:column; gap:8px; margin-top:14px !important; }
@@ -367,7 +371,6 @@ main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline
 .mv-windows-steps { grid-template-columns:1fr; gap:22px; margin:0; }
 .mv-windows-steps p,.mv-windows-grid .mv-install-help p { font-size:.92rem; }
 .mv-windows code { font-size:.88em; padding:1px 6px; border-radius:5px; background:var(--mv-surface); border:1px solid var(--mv-line); }
-.mv-windows .mv-page-hero .mv-actions { justify-content:center; }
 .mv-windows .mv-actions { align-items:center; }
 @media(max-width:760px) { .mv-windows-grid { grid-template-columns:1fr; gap:28px; } }
 /* The smallest phones keep the logo and drop the wordmark so the counts still fit. */
