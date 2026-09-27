@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId, lazy, Suspense, memo } from 'react';
 import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
-import { ThreadView } from './email/ThreadView';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
@@ -93,6 +92,9 @@ function AttachmentPreview({ attachment, onRemove }) {
 // The message a reply answers shows beside it as the reading pane would show
 // it (ThreadView, read-only). The detached compose window and the pop-out get
 // the original as HTML over IPC and show that one body (OriginalFrame).
+// Loaded only where it renders, never in the detached window; memo'd, so a
+// keystroke in the reply does not redraw the thread (its props are stable).
+const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ default: memo(m.ThreadView) })));
 
 // The HTML5 drag handlers below are the browser-preview path. In the app,
 // wry answers AppKit before WebKit sees a file drag, and the drop arrives as
@@ -1787,7 +1789,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   // ThreadView scrolls itself: its list is the virtualizer's scroll element.
                   <div data-testid="compose-context-panel" className="flex-1 min-h-0 flex flex-col overflow-hidden">
                     <div data-testid="compose-quoted" className="flex-1 min-h-0 flex flex-col">
-                      <ThreadView thread={originalThread.thread} openEmailKey={originalThread.openKey} readOnly emailThemeDark={originalDark} />
+                      <Suspense fallback={null}>
+                        <OriginalThreadView thread={originalThread.thread} openEmailKey={originalThread.openKey} readOnly emailThemeDark={originalDark} />
+                      </Suspense>
                     </div>
                   </div>
                 ) : (

@@ -15,13 +15,15 @@ export function useDefaultEmailDark() {
   return (emailViewerTheme && emailViewerTheme !== 'system' ? emailViewerTheme : appTheme) === 'dark';
 }
 
-// Names what a press switches to, like the reader's own theme action.
+// A toggle button: one stable name ("Dark") with its pressed state, so a
+// screen reader hears "Dark, pressed" rather than "Light, pressed". The
+// tooltip says what a click switches to, like the reader's own theme action.
 export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original-theme' }) {
   const t = useT();
-  const label = dark ? t('emailActionBar.light') : t('emailActionBar.dark');
   const Icon = dark ? Sun : Moon;
   return (
-    <button type="button" data-testid={testid} aria-pressed={dark} aria-label={label} title={label} onClick={onToggle}
+    <button type="button" data-testid={testid} aria-pressed={dark} aria-label={t('emailActionBar.dark')}
+      title={dark ? t('emailActionBar.light') : t('emailActionBar.dark')} onClick={onToggle}
       className="rounded p-1.5 text-mail-text-muted transition-colors hover:bg-mail-surface-hover hover:text-mail-text">
       <Icon size={14} />
     </button>

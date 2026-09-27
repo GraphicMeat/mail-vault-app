@@ -369,6 +369,21 @@ export const quotedText = () => browser.execute(() => {
     || null;
 });
 
+/**
+ * The in-app pane's own header for the quoted original: the thread's subject
+ * (its h1) and the open message's sender line, as text. The pane is a
+ * read-only thread, so these carry what the old quote's "From:/Subject:" block
+ * did. Nulls until the pane has rendered.
+ */
+export const quotedHeader = () => browser.execute(() => {
+  const box = document.querySelector('[data-testid="compose-quoted"]');
+  const senders = [...(box?.querySelectorAll('[data-testid="sender-header"]') || [])];
+  return {
+    subject: box?.querySelector('h1')?.textContent.trim() ?? null,
+    sender: senders.map(el => el.textContent).join('\n') || null,
+  };
+});
+
 /** Click a button inside the modal (or inside `scope`) by its exact trimmed text. */
 export async function clickButtonText(text, scope = MODAL) {
   const ok = await browser.execute((sel, wanted) => {

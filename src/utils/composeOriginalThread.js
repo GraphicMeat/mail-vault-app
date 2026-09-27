@@ -2,8 +2,10 @@
 //
 // The same thread the list shows for the replied message, so an INBOX (or All
 // inboxes) conversation carries the Sent replies the list merges in. Cheapest
-// source first: the reader's open thread, then the list's memoized threads,
-// then the folder window. A message the list does not hold (a search hit, a
+// source first: the reader's open thread, then the list's own pool (INBOX+Sent
+// where the list merges them, else the folder window), threaded here once per
+// compose open. Not getThreads(): its memo key carries neither account nor
+// mailbox. A message the list does not hold (a search hit, a
 // restored draft after a folder switch) stands alone, or with the thread its
 // reply was started from.
 
@@ -31,8 +33,7 @@ export function resolveOriginalThread(replyTo, state) {
   if (open) return open;
   const pool = mergesSentIntoThreads(state) && state.getChatEmails ? state.getChatEmails() : state?.sortedEmails;
   if (pool?.some(same)) {
-    const threads = mergesSentIntoThreads(state) && state.getThreads ? state.getThreads() : buildThreads(pool);
-    for (const thread of threads.values()) {
+    for (const thread of buildThreads(pool).values()) {
       const hit = found(thread);
       if (hit) return hit;
     }

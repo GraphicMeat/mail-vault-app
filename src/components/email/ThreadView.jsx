@@ -167,10 +167,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       const link = e.target.closest('a');
       if (!link || !link.href) return;
       // An address in the body composes here instead of waking the OS mail
-      // client, which is not the vault this message lives in.
+      // client, which is not the vault this message lives in. In a read-only
+      // copy (the compose pane) it does nothing: composing is an action, and a
+      // second compose from inside this one is not what a click there means.
       if (link.href.startsWith('mailto:')) {
         e.preventDefault();
         e.stopPropagation();
+        if (readOnly) return;
         // `loadedEmail` is the fetched body alone; the row is what carries the account.
         openMailtoCompose(link.href, email?._accountId || loadedEmail?._accountId);
         return;
@@ -206,7 +209,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     };
     // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
     // so theme toggles don't need to tear down the load listener.
-  }, [loadedEmail?.html]);
+  }, [loadedEmail?.html, readOnly]);
 
   if (isLoading) {
     return (
@@ -226,7 +229,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       </div>
     ) : (
       <div className="py-3 text-sm text-mail-text-muted italic">
-        <AddressText text={email.text || email.textBody || email.snippet || email.subject || 'No content available'} accountId={email?._accountId} />
+        <AddressText text={email.text || email.textBody || email.snippet || email.subject || 'No content available'} accountId={email?._accountId} readOnly={readOnly} />
       </div>
     );
   }
@@ -259,12 +262,12 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
             color: emailColors.text,
           }}
         >
-          <AddressText text={bodyWithoutSig || 'No content'} accountId={email?._accountId} />
+          <AddressText text={bodyWithoutSig || 'No content'} accountId={email?._accountId} readOnly={readOnly} />
           {signature && signatureDisplay !== 'always-hide' && (
             showSigInline
               ? (
                 <div className="mt-2 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
-                  <AddressText text={signature} accountId={email?._accountId} />
+                  <AddressText text={signature} accountId={email?._accountId} readOnly={readOnly} />
                 </div>
               )
               : (
@@ -277,7 +280,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
                   </button>
                   {sigExpanded && (
                     <div className="mt-1 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
-                      <AddressText text={signature} accountId={email?._accountId} />
+                      <AddressText text={signature} accountId={email?._accountId} readOnly={readOnly} />
                     </div>
                   )}
                 </>
@@ -293,7 +296,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
               </button>
               {quotesExpanded && (
                 <div className="mt-1 text-mail-text-muted border-l-2 border-mail-border pl-3">
-                  <AddressText text={quotedContent} accountId={email?._accountId} />
+                  <AddressText text={quotedContent} accountId={email?._accountId} readOnly={readOnly} />
                 </div>
               )}
             </>
@@ -447,6 +450,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           expanded={expanded}
           onToggle={onToggle}
           onReply={readOnly ? undefined : () => compose('reply')}
+          readOnly={readOnly}
           showRaw={showRaw}
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}

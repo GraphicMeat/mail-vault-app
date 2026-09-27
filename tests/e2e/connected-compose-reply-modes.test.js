@@ -37,6 +37,7 @@ import {
   testidPresent,
   testidText,
   quotedText,
+  quotedHeader,
   clickButtonTitle,
   bubbles,
   clickBubble,
@@ -153,12 +154,14 @@ describe('Connected Compose Reply Modes', function () {
       interval: 200,
       timeoutMsg: 'The reading context never showed the original body',
     });
-    const quoted = await quotedText();
-    expect(quoted).toContain('Original Message');
-    expect(quoted).toContain('Ann Sender');
-    expect(quoted).toContain(SUBJECT);
+    // The pane reads the original as the reader does: its own header names
+    // the sender and subject (the old quote block's "Original Message" header
+    // is the outgoing quote's, not the pane's), and the body is the message's.
+    const header = await quotedHeader();
+    expect(header.sender).toContain('Ann Sender');
+    expect(header.subject).toContain(SUBJECT);
     // The original body itself, not just its headers.
-    expect(quoted).toContain('Original html body');
+    expect(await quotedText()).toContain('Original html body');
 
     expect(await clickTestid('compose-context-toggle')).toBe(true);
     await browser.waitUntil(async () => !(await testidPresent('compose-quoted')), {
@@ -396,7 +399,11 @@ describe('Connected Compose Reply Modes', function () {
       interval: 200,
       timeoutMsg: 'The quoted original never showed its body, so "nothing ran" proves nothing',
     });
-    expect(await quotedText()).toContain(`From: ${BROKEN_IMG}Ann Sender <${SENDER}>`);
+    // The sender line holds the markup as characters: had it been parsed,
+    // the <img> would be an element and its text would not be there.
+    const header = await quotedHeader();
+    expect(header.sender).toContain(`${BROKEN_IMG}Ann Sender`);
+    expect(header.sender).toContain(SENDER);
   });
 
   it('quotes a plain-text original as the characters it holds', async function () {

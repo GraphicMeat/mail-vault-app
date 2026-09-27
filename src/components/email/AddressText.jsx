@@ -15,7 +15,9 @@ import { linkifyText } from '../../utils/linkify';
  * out of someone else's email, and React's own escaping is the reason none of
  * it can become markup.
  */
-export const AddressText = memo(function AddressText({ text, accountId }) {
+// `readOnly` (the compose pane's copy): an email address shows as a link but
+// composes nothing; a web address still opens, which is reading.
+export const AddressText = memo(function AddressText({ text, accountId, readOnly = false }) {
   const segments = useMemo(() => linkifyText(text), [text]);
 
   // Nothing to link — hand back the string itself so the common case adds no
@@ -37,7 +39,7 @@ export const AddressText = memo(function AddressText({ text, accountId }) {
         // The chat bubble and the thread row both have their own click.
         e.stopPropagation();
         if (seg.href.startsWith('mailto:')) {
-          openMailtoCompose(seg.href, accountId);
+          if (!readOnly) openMailtoCompose(seg.href, accountId);
           return;
         }
         // The text is the address itself, so there is no mismatch for link

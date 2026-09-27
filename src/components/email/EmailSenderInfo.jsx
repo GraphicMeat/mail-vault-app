@@ -40,6 +40,8 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   showInsights,
   onToggleInsights,
   archivedEmailIds,
+  // A reader with no actions (the compose pane's original): no Unsubscribe.
+  readOnly = false,
 }) {
   const t = useT();
   const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -145,8 +147,9 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
 
             {/* Unsubscribe, like Gmail's: always here when the message
                 offers one, whatever the action bar is configured to show.
-                The shared flow asks before it acts. */}
-            {email?.listUnsubscribe && (
+                The shared flow asks before it acts. Not in a read-only
+                copy, which only shows. */}
+            {email?.listUnsubscribe && !readOnly && (
               <button
                 type="button"
                 data-testid="sender-unsubscribe"

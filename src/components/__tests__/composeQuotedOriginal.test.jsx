@@ -126,7 +126,6 @@ vi.mock('../../stores/settingsStore', () => {
 });
 
 const { ComposeModal } = await import('../ComposeModal');
-const { buildThreads } = await import('../../utils/emailParser');
 const { emailKey } = await import('../../stores/slices/unifiedHelpers');
 
 // Marks the app document when it runs. Through `document`, not `window`: vitest
@@ -175,7 +174,6 @@ beforeEach(() => {
   settings.emailViewerTheme = 'light';
   settings.setComposeContextSplit.mockClear();
   delete mail.getChatEmails;
-  delete mail.getThreads;
   delete mail.sortedEmails;
   delete mail.selectedThread;
   delete mail.unifiedFolder;
@@ -346,7 +344,8 @@ describe('the quoted original in a reply', () => {
     const toggle = await screen.findByTestId('compose-context-toggle');
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(await screen.findByTestId('compose-context-panel')).not.toBeNull();
-    expect((await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]')).not.toBeNull();
+    // Lazy-loaded: the thread lands a tick after the panel.
+    expect((await screen.findByTestId('original-thread')).closest('[data-testid="compose-quoted"]')).not.toBeNull();
 
     fireEvent.click(toggle);
     expect((await screen.findByTestId('compose-context-toggle')).getAttribute('aria-pressed')).toBe('false');
@@ -527,7 +526,7 @@ describe('the quoted original in a reply', () => {
         { ...original, uid: 11, subject: 'Follow up', html: '<p>Second message</p>' },
       ],
     });
-    const pane = (await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]');
+    const pane = await screen.findByTestId('original-thread');
     expect(pane.getAttribute('data-subjects')).toBe('Quote request|Follow up');
     expect(pane.getAttribute('data-read-only')).toBe('true');
   });
@@ -595,7 +594,12 @@ describe('the original beside a reply', () => {
     date: '2026-09-08T09:00:00Z',
     flags: ['\\Seen'],
   };
-  const pane = async () => (await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]');
+  // Lazy-loaded, so found, not queried; always inside the pane.
+  const pane = async () => {
+    const thread = await screen.findByTestId('original-thread');
+    expect(thread.closest('[data-testid="compose-quoted"]')).not.toBeNull();
+    return thread;
+  };
 
   it('shows the split choices as icons, still named for assistive tech', async () => {
     openReply(original);
@@ -616,7 +620,6 @@ describe('the original beside a reply', () => {
     // The Sent reply lives only in the list's INBOX+Sent pool, and the replied
     // message carries no thread of its own: only the list can supply it.
     mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
-    mail.getThreads = () => buildThreads(mail.getChatEmails());
     openReply({ ...original, _accountId: 'acct-1', _mailbox: 'INBOX' });
 
     const thread = await pane();
@@ -627,7 +630,6 @@ describe('the original beside a reply', () => {
 
   it('reads a message the list does not hold as that one message', async () => {
     mail.getChatEmails = () => [reply];
-    mail.getThreads = () => buildThreads(mail.getChatEmails());
     openReply(original);
 
     const thread = await pane();
@@ -642,7 +644,6 @@ describe('the original beside a reply', () => {
     mail.activeMailbox = 'UNIFIED';
     mail.unifiedFolder = 'INBOX';
     mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
-    mail.getThreads = () => buildThreads(mail.getChatEmails());
     openReply({ ...original, _accountId: 'acct-1', messageId: ' parent@example.test ' });
 
     const thread = await pane();
@@ -654,7 +655,6 @@ describe('the original beside a reply', () => {
     // Replying to my own Sent message from its body: uid 10 there is not
     // INBOX uid 10, whatever folder is open.
     mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
-    mail.getThreads = () => buildThreads(mail.getChatEmails());
     const mine = { ...original, _accountId: 'acct-1', messageId: '<mine@example.test>', subject: 'My own', from: { address: 'me@example.test' }, to: [{ address: 'x@example.test' }] };
     openReply(mine);
 
@@ -683,6 +683,8 @@ describe('the original beside a reply', () => {
     const pressed = screen.getByTestId('compose-original-theme');
     expect(pressed.getAttribute('aria-pressed')).toBe('true');
     expect(pressed.getAttribute('title')).toBe('Light');
+    // A toggle keeps one name; its state is aria-pressed ("Dark, pressed").
+    expect(pressed.getAttribute('aria-label')).toBe('Dark');
     // The setting the reader reads is untouched.
     expect(settings.emailViewerTheme).toBe('light');
   });

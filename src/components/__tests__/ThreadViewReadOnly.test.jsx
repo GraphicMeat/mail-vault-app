@@ -32,11 +32,14 @@ vi.mock('../../utils/replyTarget', () => ({ replyTarget: async (header) => heade
 vi.mock('../../services/workflows/threadReadTimer', () => timers);
 vi.mock('../../utils/composeOpener', () => opener);
 vi.mock('../../services/workflows/messageMutations', () => mutations);
+vi.mock('../../utils/mailto', async (importOriginal) => ({ ...(await importOriginal()), openMailtoCompose: vi.fn(() => true) }));
 
 const { ThreadView } = await import('../email/ThreadView');
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const { useMailStore } = await import('../../stores/mailStore');
 const { useSelectionStore } = await import('../../stores/selectionStore');
+const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
+const { openMailtoCompose } = await import('../../utils/mailto');
 
 const emails = [
   { uid: 7, _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Older', address: 'old@example.com' }, to: [], subject: 'Earlier', flags: [] },
@@ -48,21 +51,26 @@ const frameTheme = () => new DOMParser()
   .parseFromString(document.querySelector('iframe').getAttribute('srcdoc'), 'text/html')
   .documentElement.getAttribute('data-mv-theme');
 
-let spies = [];
+// Every write lands on subscribers, whether it came from setState or from a
+// store action's own `set` (which a setState spy never sees).
+let writes = [];
+let unsubscribes = [];
 beforeEach(() => {
   useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first', emailViewerTheme: 'light' });
   bodies.set('|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Older body</p>', text: 'Older body' } });
   bodies.set('|Sent|7', { status: 'loaded', email: { uid: 7, html: '<p>Newest body</p>', text: 'Newest body' } });
-  spies = [
-    vi.spyOn(useMailStore, 'setState'),
-    vi.spyOn(useSelectionStore, 'setState'),
-    vi.spyOn(useSettingsStore, 'setState'),
+  writes = [];
+  unsubscribes = [
+    useMailStore.subscribe(() => writes.push('mail')),
+    useSelectionStore.subscribe(() => writes.push('selection')),
+    useSettingsStore.subscribe(() => writes.push('settings')),
+    useUnsubscribeStore.subscribe(() => writes.push('unsubscribe')),
   ];
 });
 afterEach(() => {
   cleanup();
   bodies.clear();
-  spies.forEach(spy => spy.mockRestore());
+  unsubscribes.forEach(stop => stop());
   vi.clearAllMocks();
 });
 
@@ -101,7 +109,7 @@ describe('ThreadView readOnly', () => {
     expect(opener.registerActiveReply).not.toHaveBeenCalled();
     expect(mutations.applyFlagToKeys).not.toHaveBeenCalled();
     expect(mutations.purgeEverywhere).not.toHaveBeenCalled();
-    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
   });
 
   it('still folds and unfolds', () => {
@@ -141,5 +149,58 @@ describe('ThreadView readOnly', () => {
 
     expect(screen.queryByRole('status', { name: /Loading message/ })).toBeNull();
     expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain('Handed body');
+  });
+
+  it('offers no Unsubscribe, which the reader offers for the same message', () => {
+    const listed = { ...thread, emails: emails.map(e => ({ ...e, listUnsubscribe: '<mailto:leave@example.com>' })) };
+    const view = render(<ThreadView thread={listed} readOnly />);
+    expect(screen.queryByTestId('sender-unsubscribe')).toBeNull();
+    view.unmount();
+
+    render(<ThreadView thread={listed} />);
+    expect(screen.getAllByTestId('sender-unsubscribe').length).toBeGreaterThan(0);
+  });
+
+  it('an address in a plain-text body composes nothing', () => {
+    bodies.set('|Sent|7', { status: 'loaded', email: { uid: 7, html: '', text: 'Write to ann@example.com please' } });
+    const view = render(<ThreadView thread={thread} readOnly />);
+    fireEvent.click(screen.getByRole('link', { name: 'ann@example.com' }));
+    expect(openMailtoCompose).not.toHaveBeenCalled();
+    view.unmount();
+
+    // Control: the reader's copy does compose.
+    render(<ThreadView thread={thread} />);
+    fireEvent.click(screen.getByRole('link', { name: 'ann@example.com' }));
+    expect(openMailtoCompose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mailto: link in an HTML body composes nothing', () => {
+    const clickMailto = () => {
+      const frame = document.querySelector('iframe');
+      frame.dispatchEvent(new Event('load'));
+      const doc = frame.contentDocument;
+      const link = doc.createElement('a');
+      link.href = 'mailto:ann@example.com';
+      link.textContent = 'ann';
+      doc.body.appendChild(link);
+      link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    };
+    const view = render(<ThreadView thread={thread} readOnly />);
+    clickMailto();
+    expect(openMailtoCompose).not.toHaveBeenCalled();
+    view.unmount();
+
+    // Control: the same click in the reader composes, so the harness reaches the handler.
+    render(<ThreadView thread={thread} />);
+    clickMailto();
+    expect(openMailtoCompose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a header-only message shows the body the loader brings', () => {
+    const header = { uid: 9, _mailbox: 'INBOX', date: '2026-09-03', from: { name: 'Them', address: 'them@example.com' }, to: [], subject: 'Header only' };
+    bodies.clear();
+    bodies.set('|INBOX|9', { status: 'loaded', email: { uid: 9, html: '<p>Loaded body</p>', text: 'Loaded body' } });
+    render(<ThreadView thread={{ threadId: 'h', subject: 'Header only', emails: [header], messageCount: 1 }} readOnly />);
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain('Loaded body');
   });
 });

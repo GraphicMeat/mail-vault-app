@@ -107,8 +107,9 @@ vi.mock('../../stores/settingsStore', () => {
 
 // The original's pane is a read-only ThreadView with its own specs
 // (ThreadViewReadOnly, composeQuotedOriginal); this suite's stores are too thin
-// to host its body loader.
-vi.mock('../email/ThreadView', () => ({ ThreadView: () => null }));
+// to host its body loader. The stub records what the pane was handed.
+const { threadViewProps } = vi.hoisted(() => ({ threadViewProps: [] }));
+vi.mock('../email/ThreadView', () => ({ ThreadView: (props) => { threadViewProps.push(props); return null; } }));
 
 const { ComposeModal } = await import('../ComposeModal');
 
@@ -255,5 +256,34 @@ describe('the quote fill-in effect (radial reply)', () => {
 
     await waitFor(() => expect(quotedIframeHtml()).toContain('How much?'));
     expect(editor.value).toBe('Thanks, will check.');
+  });
+
+  // In the app window the pane is the read-only thread, resolved once from the
+  // header: ThreadView's loader fetches the body (no `_bodyLoaded` on a header),
+  // and the patched `replyTo` neither re-resolves it nor touches the typed reply.
+  // The outgoing quote still fills in from the patched body.
+  it('in the app window reads a header-only original through the thread loader, resolved once', async () => {
+    threadViewProps.length = 0;
+    const headerOnly = { ...parent, text: undefined };
+    const props = { mode: 'reply', replyTo: headerOnly, onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    const { rerender } = render(<ComposeModal {...props} />);
+    const editor = await screen.findByTestId('editor-stub');
+    fireEvent.change(editor, { target: { value: 'Thanks, will check.' } });
+
+    await waitFor(() => expect(threadViewProps.length).toBeGreaterThan(0));
+    const first = threadViewProps.at(-1);
+    expect(first.readOnly).toBe(true);
+    expect(first.thread.emails).toHaveLength(1);
+    expect(first.thread.emails[0].messageId).toBe(parent.messageId);
+    expect(first.thread.emails[0]._bodyLoaded).toBeUndefined();
+
+    rerender(<ComposeModal {...props} replyTo={{ ...parent, text: 'How much?' }} />);
+    await waitFor(() => expect(screen.getByTestId('compose-quoted')).not.toBeNull());
+    expect(threadViewProps.at(-1).thread).toBe(first.thread);
+    expect(editor.value).toBe('Thanks, will check.');
+
+    screen.getByTestId('compose-send').click();
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
+    expect(buildOutgoingMime.mock.calls.at(-1)[1].html).toContain('How much?');
   });
 });
