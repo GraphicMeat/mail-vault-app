@@ -1308,6 +1308,9 @@ impl CacheCtx {
             "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
             "syncTotalEmails": sync_total, "syncUidNext": uid_next,
             "syncHighestModseq": highest_modseq,
+            // A fresh count already reflects the app's removals: its tally
+            // (read by the search index's listing, never by this gate) restarts.
+            mailvault_core::custody::cache::APP_REMOVED_SINCE_SYNC: sync_total.map(|_| 0),
         });
         self.require_db(|conn| {
             mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
@@ -1513,6 +1516,44 @@ mod tests {
             contacts: ContactsState::new(dir.to_path_buf()),
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
         }
+    }
+
+    /// H3b round 3: the app's own removals never move the expunge gate's
+    /// baseline. A move made offline is journaled and pruned from the list at
+    /// once, but the server still holds it until the replay; if another client
+    /// expunges as many messages meanwhile, EXISTS drops while the list's
+    /// arithmetic would have balanced had the baseline followed the app. The
+    /// app's tally is kept apart, and the daemon's next count resets it.
+    #[test]
+    fn app_removals_leave_the_expunge_gate_baseline_and_a_sync_resets_their_tally() {
+        let dir = scratch_dir("app-removed");
+        let c = ctx(&dir, false);
+        c.write_meta(5, Some(7), Some(6), None, None, Some(5)).unwrap();
+        c.write_headers(&[test_header(1), test_header(2), test_header(3), test_header(4), test_header(5)]).unwrap();
+        let app_removed = || -> Option<u64> {
+            c.with_db(|conn| mailvault_core::custody::cache::load_meta(conn, "acc1", "INBOX"))
+                .unwrap()
+                .flatten()
+                .and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok()?.get("appRemovedSinceSync")?.as_u64())
+        };
+
+        // The offline move of 1 and 2: pruned from the list, still on the server.
+        c.with_db(|conn| mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", r#"{"removedUids":[1,2]}"#))
+            .unwrap();
+        let (meta, rows) = c.meta_and_count();
+        let meta = meta.unwrap();
+        assert_eq!(meta.sync_total_emails, Some(5), "the gate's baseline is the daemon's alone");
+        assert_eq!(rows, 3);
+        assert_eq!(app_removed(), Some(2));
+        // Another client expunges two others before the replay: EXISTS is 3.
+        let (server_total, new_headers) = (3u32, 0u32);
+        let expected_total = meta.sync_total_emails.or(meta.total_emails).unwrap() + new_headers;
+        assert!(server_total != expected_total || rows as u32 > server_total, "the expunge gate still fires");
+
+        c.write_meta(3, Some(7), Some(6), None, None, Some(3)).unwrap();
+        assert_eq!(app_removed(), Some(0), "the daemon's fresh count restarts the app's tally");
+        c.write_meta(3, Some(7), Some(6), None, None, None).unwrap();
+        assert_eq!(c.meta_and_count().0.unwrap().sync_total_emails, Some(3), "a withheld count keeps the baseline");
     }
 
     #[test]

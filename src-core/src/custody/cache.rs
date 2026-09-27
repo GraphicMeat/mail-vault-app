@@ -40,10 +40,24 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
         }
     }
     let removed = object.get("removedUids").and_then(Value::as_array).filter(|uids| !uids.is_empty());
-    let rows_before = match removed {
-        Some(_) => Some(count(&tx, account, mailbox)?),
-        None => None,
+    // The app's own delete, move or Empty Trash takes rows off the list; the
+    // daemon's `syncTotalEmails` (its expunge gate's baseline, written by the
+    // daemon alone) stays as it is. The rows this write takes on balance (a
+    // re-key removes some uids and adds others) are tallied apart, counting
+    // only uids below the daemon's `syncUidNext` (an arrival the app fetched
+    // past it was never in the baseline). Only where the daemon keeps a count;
+    // the daemon's own write resets the tally (`write_meta`).
+    let baseline_below = map.get("syncUidNext").and_then(Value::as_u64).unwrap_or(u64::from(u32::MAX) + 1) as i64;
+    let tally = removed.is_some() && map.get("syncTotalEmails").and_then(Value::as_u64).is_some();
+    let counted = |tx: &rusqlite::Transaction| -> Result<i64, String> {
+        tx.query_row(
+            "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid < ?3",
+            params![account, mailbox, baseline_below],
+            |r| r.get(0),
+        )
+        .map_err(err)
     };
+    let rows_before = if tally { Some(counted(&tx)?) } else { None };
     if let Some(rows) = object.get("emails").and_then(Value::as_array) {
         let mut stmt = tx.prepare_cached(
             "INSERT OR REPLACE INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)"
@@ -57,20 +71,11 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
         let mut stmt = tx.prepare_cached("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3").map_err(err)?;
         for uid in uids.iter().filter_map(Value::as_u64) { stmt.execute(params![account, mailbox, uid as i64]).map_err(err)?; }
     }
-    // The app's own delete, move or Empty Trash takes rows off the list but
-    // never writes `syncTotalEmails`, the server count the daemon recorded.
-    // Left as it was, the list would read as partial (`folder_listing`) and
-    // the search index would keep the deleted mail findable until the next
-    // sync. Lowered by the rows this write took away on balance (a re-key
-    // removes some uids and adds others), only where the daemon keeps one
-    // and this payload does not bring its own.
     if let Some(before) = rows_before {
-        let net_removed = before.saturating_sub(count(&tx, account, mailbox)?) as u64;
-        let brings_own = object.get("syncTotalEmails").is_some_and(|v| !v.is_null());
-        if net_removed > 0 && !brings_own {
-            if let Some(total) = map.get("syncTotalEmails").and_then(Value::as_u64) {
-                map.insert("syncTotalEmails".into(), json!(total.saturating_sub(net_removed)));
-            }
+        let net_removed = before.saturating_sub(counted(&tx)?) as u64;
+        if net_removed > 0 {
+            let so_far = map.get(APP_REMOVED_SINCE_SYNC).and_then(Value::as_u64).unwrap_or(0);
+            map.insert(APP_REMOVED_SINCE_SYNC.into(), json!(so_far + net_removed));
         }
     }
     tx.execute(
@@ -79,6 +84,12 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
     ).map_err(err)?;
     tx.commit().map_err(err)
 }
+
+/// Header-cache meta key: rows the app's own writes took off a mailbox's list
+/// since the daemon last recorded `syncTotalEmails`. The listing is complete
+/// against `syncTotalEmails - appRemovedSinceSync` (`folder_listing`). The
+/// daemon's sync gate never reads it; its `write_meta` resets it to 0.
+pub const APP_REMOVED_SINCE_SYNC: &str = "appRemovedSinceSync";
 
 /// How `load_headers` orders the rows it hands back.
 ///
@@ -379,10 +390,12 @@ impl FolderListing {
     }
 }
 
-/// Judge every mailbox behind `vault_dir` (rows or meta) by its row count and
-/// `syncTotalEmails`, the server's count only the daemon's sync writes (and
-/// `clear_headers` deletes with the rows). No recorded count (a Graph folder,
-/// a cache the app wrote): the rows are the listing, as before.
+/// Judge every mailbox behind `vault_dir` (rows or meta) by its row count
+/// against `syncTotalEmails` (the server's count only the daemon's sync
+/// writes, and `clear_headers` deletes with the rows) less
+/// `APP_REMOVED_SINCE_SYNC` (what the app's own deletes and moves took off
+/// since). No recorded count (a Graph folder, a cache the app wrote): the
+/// rows are the listing, as before.
 fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<FolderListing, String> {
     use rusqlite::OptionalExtension;
     let mut stmt = conn
@@ -399,9 +412,12 @@ fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<F
     let mut counted_empty = false;
     for mailbox in mailboxes.into_iter().filter(|m| crate::search_index::text::vault_dir_name(m) == vault_dir) {
         let rows = count(conn, account, &mailbox)? as u64;
+        // The daemon's count less what the app has taken off since it.
         let server: Option<i64> = conn
             .query_row(
-                "SELECT CASE WHEN json_valid(meta_json) THEN json_extract(meta_json, '$.syncTotalEmails') END
+                "SELECT CASE WHEN json_valid(meta_json) AND json_extract(meta_json, '$.syncTotalEmails') IS NOT NULL
+                             THEN max(0, json_extract(meta_json, '$.syncTotalEmails')
+                                         - coalesce(json_extract(meta_json, '$.appRemovedSinceSync'), 0)) END
                  FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
                 params![account, mailbox],
                 |r| r.get::<_, Option<i64>>(0),
@@ -886,41 +902,55 @@ mod tests {
         assert_eq!(listed_message_ids_shared(&shared, "a", "Trash", &[1]).unwrap(), HashMap::new());
     }
 
-    fn sync_total(c: &Connection, mailbox: &str) -> Option<u64> {
-        load_meta(c, "a", mailbox).unwrap().and_then(|m| serde_json::from_str::<Value>(&m).ok()?.get("syncTotalEmails")?.as_u64())
+    fn meta_u64(c: &Connection, mailbox: &str, key: &str) -> Option<u64> {
+        load_meta(c, "a", mailbox).unwrap().and_then(|m| serde_json::from_str::<Value>(&m).ok()?.get(key)?.as_u64())
     }
 
-    /// H3b round 2 (N1): the app's delete, move or Empty Trash sends only
-    /// `removedUids`. The recorded server count drops by the rows the write
-    /// took away on balance, so the list stays complete and the index's
-    /// nudge removes the deleted mail. A re-key (remove two, add two) leaves
-    /// it; a mailbox with no recorded count (Graph) is left without one.
+    /// H3b round 3 (N1, option c): the app's delete, move or Empty Trash sends
+    /// only `removedUids`. `syncTotalEmails` is the daemon's expunge-gate
+    /// baseline and only the daemon writes it, so the app's removals are
+    /// counted apart (`appRemovedSinceSync`, the rows taken on balance, below
+    /// the daemon's `syncUidNext`) and the listing is judged against the
+    /// difference: the deleted mail reads as gone at once, Empty Trash is a
+    /// verified empty listing, a re-key nets zero, an arrival the daemon never
+    /// counted is not counted either, and Graph gets no key.
     #[test]
-    fn an_app_removal_lowers_the_recorded_server_count_by_the_rows_it_took() {
+    fn an_app_removal_is_counted_apart_from_the_daemons_server_count() {
         let (_t, c) = store();
         let rows = |uids: &[u32]| json!(uids.iter().map(|u| json!({"uid": u, "messageId": format!("<{u}@x.test>")})).collect::<Vec<_>>());
-        save_headers(&c, "a", "INBOX", &json!({"syncTotalEmails": 3, "emails": rows(&[1, 2, 3])}).to_string()).unwrap();
+        let app_removed = |c: &Connection| meta_u64(c, "INBOX", APP_REMOVED_SINCE_SYNC);
+        save_headers(&c, "a", "INBOX", &json!({"syncTotalEmails": 3, "syncUidNext": 10, "emails": rows(&[1, 2, 3])}).to_string()).unwrap();
 
         save_headers(&c, "a", "INBOX", &json!({"removedUids": [2, 99]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "INBOX"), Some(2), "one row went; 99 was never listed");
+        assert_eq!(meta_u64(&c, "INBOX", "syncTotalEmails"), Some(3), "the daemon's baseline is never moved by the app");
+        assert_eq!(app_removed(&c), Some(1), "one row went; 99 was never listed");
         assert_eq!(listed_message_ids(&c, "a", "INBOX", &[1, 2, 3]).unwrap().len(), 2, "complete: 2 reads as gone");
 
         save_headers(&c, "a", "INBOX", &json!({"emails": rows(&[7, 8]), "removedUids": [1, 3]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "INBOX"), Some(2), "a re-key removes as many as it adds");
+        assert_eq!(app_removed(&c), Some(1), "a re-key removes as many as it adds");
+
+        save_headers(&c, "a", "INBOX", &json!({"emails": rows(&[12])}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"removedUids": [12]}).to_string()).unwrap();
+        assert_eq!(app_removed(&c), Some(1), "an arrival at or above syncUidNext was never in the baseline");
 
         save_headers(&c, "a", "INBOX", &json!({"removedUids": [7, 8]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "INBOX"), Some(0), "Empty Trash lands on a verified empty listing");
-        assert_eq!(listed_message_ids(&c, "a", "INBOX", &[7, 8]).unwrap(), HashMap::new());
-        save_headers(&c, "a", "INBOX", &json!({"removedUids": [7]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "INBOX"), Some(0), "never below zero");
+        assert_eq!(app_removed(&c), Some(3));
+        assert_eq!(listed_message_ids(&c, "a", "INBOX", &[7, 8]).unwrap(), HashMap::new(), "Empty Trash: verified empty");
+        assert_eq!(meta_u64(&c, "INBOX", "syncTotalEmails"), Some(3));
+
+        // The daemon's sync writes a fresh count and resets the app's tally with it.
+        save_headers(&c, "a", "INBOX", &json!({"syncTotalEmails": 0, APP_REMOVED_SINCE_SYNC: 0}).to_string()).unwrap();
+        assert_eq!(app_removed(&c), Some(0));
+        assert_eq!(listed_message_ids(&c, "a", "INBOX", &[7]).unwrap(), HashMap::new());
 
         save_headers(&c, "a", "Graph", &json!({"totalEmails": 2, "emails": rows(&[1, 2])}).to_string()).unwrap();
         save_headers(&c, "a", "Graph", &json!({"removedUids": [1]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "Graph"), None, "no recorded count: none invented");
+        assert_eq!(meta_u64(&c, "Graph", APP_REMOVED_SINCE_SYNC), None, "no daemon count: nothing to offset");
 
-        save_headers(&c, "a", "Own", &json!({"syncTotalEmails": 2, "emails": rows(&[1, 2])}).to_string()).unwrap();
-        save_headers(&c, "a", "Own", &json!({"syncTotalEmails": 2, "removedUids": [1]}).to_string()).unwrap();
-        assert_eq!(sync_total(&c, "Own"), Some(2), "a payload that brings its own count keeps it");
+        // Without a recorded syncUidNext every row counts.
+        save_headers(&c, "a", "Sent", &json!({"syncTotalEmails": 2, "emails": rows(&[1, 2])}).to_string()).unwrap();
+        save_headers(&c, "a", "Sent", &json!({"removedUids": [2]}).to_string()).unwrap();
+        assert_eq!(meta_u64(&c, "Sent", APP_REMOVED_SINCE_SYNC), Some(1));
     }
 
     /// The daemon's lookup takes the custody lock per chunk, so a big evicted
