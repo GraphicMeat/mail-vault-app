@@ -104,13 +104,17 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     tokio::spawn(async move {
         let result = state.sync_engine.run_ticket(ticket, &account, &mailbox_clone).await;
 
+        // Hoarder: real arrivals only. `new_emails` also counts backfill
+        // pages, and every wake costs a STATUS sweep plus a listing of each
+        // folder that moved.
+        if result.success && result.arrivals > 0 {
+            state.hoarder_worker.wake();
+        }
         if result.success && result.new_emails > 0 {
             // Auto Tags' standing worker: the same "new mail arrived" signal
             // classification enqueues on below, but unconditional — auto-tag
             // rules are not gated by the classification feature's own toggle.
             state.auto_tag_worker.wake();
-            // Hoarder: new mail may sit in a folder no one has opened.
-            state.hoarder_worker.wake();
 
             // Auto-trigger heuristic classification after successful sync (if enabled)
             if auto_classify {

@@ -1283,6 +1283,35 @@ pub async fn search_all_uid_flags_in_generation(
     Ok((mbox.uid_validity, result))
 }
 
+/// `search_all_uid_flags_in_generation` for the uids from `from` up
+/// (`UID FETCH from:*`), for a caller that already holds every uid below
+/// `from` (the Hoarder worker). `n:*` answers the highest message when `n` is
+/// past it (RFC 3501 §6.4.8), so the list is filtered to `uid >= from`.
+///
+/// No EXISTS check: a range has no count to hold it to, so a connection
+/// dropped mid-reply yields a SHORT list with no error. A caller may only
+/// ever add work from this list, never delete or prune on it.
+pub async fn uid_flags_from_in_generation(
+    session: &mut ImapSession,
+    mailbox: &str,
+    from: u32,
+) -> Result<(Option<u32>, Vec<(u32, Vec<String>)>), String> {
+    let mbox = select_mailbox(session, mailbox).await?;
+    let fetch_stream = session
+        .uid_fetch(format!("{from}:*"), "(UID FLAGS)")
+        .await
+        .map_err(|e| format!("UID FETCH {from}:* failed for {mailbox}: {e}"))?;
+    let mut result = Vec::new();
+    for item in fetch_stream.collect::<Vec<_>>().await {
+        let fetch = item.map_err(|e| format!("UID FETCH {from}:* failed for {mailbox}: {e}"))?;
+        if let Some(uid) = fetch.uid.filter(|&uid| uid >= from) {
+            result.push((uid, extract_flags(&fetch)));
+        }
+    }
+    result.sort_unstable_by_key(|(uid, _)| *uid);
+    Ok((mbox.uid_validity, result))
+}
+
 /// Fetch headers for specific UIDs — used for delta-sync to fetch only new
 /// emails.
 pub async fn fetch_headers_by_uids(
