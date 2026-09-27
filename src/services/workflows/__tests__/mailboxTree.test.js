@@ -142,6 +142,22 @@ const DOVECOT = [
   box('INBOX.Sent', '.', { specialUse: '\\Sent' }),
 ];
 
+// A Gmail account (2.16.0 report): system folders under a \Noselect [Gmail]
+// with declared roles, user labels [Imap]/Archive and [Imap]/Trash with no
+// [Imap] parent LISTed, and a Drafts label. [Imap]/Trash carries a role read
+// off its name, as a server without SPECIAL-USE (or an older cache) gives it.
+const GMAIL = [
+  box('INBOX', '/', { specialUse: '\\Inbox' }),
+  box('[Gmail]', '/', { noselect: true }),
+  box('[Gmail]/Bin', '/', { specialUse: '\\Trash' }),
+  box('[Gmail]/Sent Mail', '/', { specialUse: '\\Sent' }),
+  box('[Gmail]/Drafts', '/', { specialUse: '\\Drafts' }),
+  box('00_WORK', '/'),
+  box('Drafts', '/'),
+  box('[Imap]/Archive', '/'),
+  box('[Imap]/Trash', '/', { specialUse: '\\Trash', specialUseGuessed: true }),
+];
+
 const paths = nodes => (nodes || []).map(n => n.path);
 const at = (nodes, path) => {
   for (const n of nodes || []) {
@@ -219,6 +235,65 @@ describe('buildMailboxTree', () => {
     expect(at(tree, '[Gmail]/Sent Mail').depth).toBe(0);
     // \All is not one of the five hoisted, so it stays where the server put it.
     expect(at(tree, '[Gmail]/All Mail').depth).toBe(1);
+  });
+
+  it('keeps a role guessed from the name inside its parent', () => {
+    // Gmail label [Imap]/Trash: the server declares no role for it, the name
+    // merely contains "trash". Hoisting it tore it out of [Imap].
+    const tree = buildMailboxTree(GMAIL);
+    expect(paths(at(tree, '[Imap]').children)).toEqual(['[Imap]/Archive', '[Imap]/Trash']);
+    expect(at(tree, '[Imap]/Trash').depth).toBe(1);
+  });
+
+  it('hoists the roles Gmail declares', () => {
+    const tree = buildMailboxTree(GMAIL);
+    expect(at(tree, '[Gmail]/Bin').depth).toBe(0);
+    expect(at(tree, '[Gmail]/Sent Mail').depth).toBe(0);
+  });
+
+  it('keeps both folders when a hoisted one lands on a folder of the same name', () => {
+    // [Gmail]/Drafts hoists to "Drafts", where the user's own Drafts label
+    // already sits. Whichever LISTs first, neither may disappear.
+    for (const flat of [GMAIL, [...GMAIL].reverse()]) {
+      const tree = buildMailboxTree(flat);
+      expect(at(tree, 'Drafts').depth).toBe(0);
+      expect(at(tree, '[Gmail]/Drafts')).toBeTruthy();
+      expect(at(tree, '[Gmail]/Drafts').depth).toBe(1);
+      expect(countMailboxes(tree)).toBe(GMAIL.length + 1); // + the synthesized [Imap]
+    }
+  });
+
+  it('keeps both when two declared roles hoist onto the same name', () => {
+    const flat = [
+      box('INBOX', '/'),
+      box('A/Trash', '/', { specialUse: '\\Trash' }),
+      box('B/Trash', '/', { specialUse: '\\Trash' }),
+    ];
+    const tree = buildMailboxTree(flat);
+    expect(at(tree, 'A/Trash')).toBeTruthy();
+    expect(at(tree, 'B/Trash')).toBeTruthy();
+  });
+
+  it('does not hoist onto a name another folder needs as its parent', () => {
+    // A hoisted Drafts filling the stand-in for Drafts/Old would show the
+    // user's label as a child of Gmail's Drafts.
+    const flat = [
+      box('INBOX', '/'),
+      box('[Gmail]/Drafts', '/', { specialUse: '\\Drafts' }),
+      box('Drafts/Old', '/'),
+    ];
+    const tree = buildMailboxTree(flat);
+    expect(at(tree, 'Drafts').synthetic).toBe(true);
+    expect(paths(at(tree, 'Drafts').children)).toEqual(['Drafts/Old']);
+    expect(at(tree, '[Gmail]/Drafts').depth).toBe(1);
+  });
+
+  it('does not draw a \\Noselect container left with nothing under it', () => {
+    // Every [Gmail] child hoisted: what stays is a row that opens nothing.
+    const flat = GMAIL.filter(m => m.path !== 'Drafts');
+    const tree = buildMailboxTree(flat);
+    expect(at(tree, '[Gmail]')).toBe(null);
+    expect(at(tree, '[Gmail]/Drafts').depth).toBe(0);
   });
 
   it('leaves a flat list flat', () => {
@@ -357,6 +432,8 @@ describe('buildMailboxTree and mailboxDescendants agree on what a branch is', ()
       box('Work', '/'),
     ],
     flat: [box('INBOX', '/'), box('Archive', '/'), box('Sent', '/')],
+    gmail: GMAIL,
+    'gmail, every container child hoisted': GMAIL.filter(m => m.path !== 'Drafts'),
     'no delimiter': [box('INBOX', null), box('Some.Name', null)],
   };
 

@@ -75,6 +75,11 @@ export async function retryOnce(fetchFn, { delayMs = 1500, isAborted = () => fal
 // is not an improvement on the flat list.
 const HOISTED = new Set(['\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive']);
 
+// Only a role the server declared moves a folder. One read off the name
+// (`specialUseGuessed`, set by list_mailboxes) is a user folder that happens to
+// be called Trash: Gmail's `[Imap]/Trash` label belongs under `[Imap]`.
+const hoists = (m) => HOISTED.has(m.specialUse) && !m.specialUseGuessed;
+
 // Placement keys are joined on NUL so a folder named with the delimiter cannot
 // forge one.
 const SEP = '\u0000';
@@ -121,11 +126,23 @@ export function buildMailboxTree(mailboxes) {
   const roots = [];
   const byKey = new Map();
 
-  const placementOf = (m) => {
+  // Where a row may be drawn, best first: hoisted, then where the server filed
+  // it (prefix lifted), then its raw path, which no other mailbox shares.
+  const placementsOf = (m) => {
     const parts = splitPath(m);
-    if (HOISTED.has(m.specialUse)) return [parts[parts.length - 1]];
-    if (prefixed && parts.length > 1) return parts.slice(1);
-    return parts;
+    const out = hoists(m) ? [{ place: [parts[parts.length - 1]], hoisted: true }] : [];
+    if (prefixed && parts.length > 1) out.push({ place: parts.slice(1) });
+    out.push({ place: parts });
+    return out;
+  };
+
+  // A hoist takes a free name only. Taking an occupied one threw the second
+  // mailbox away (Gmail's [Gmail]/Drafts onto a user's Drafts label), and
+  // taking a stand-in parent would file another folder's children under it.
+  // Hoisted folders go last so that holds whichever order the server LISTs in.
+  const free = ({ place, hoisted }) => {
+    const existing = byKey.get(place.join(SEP));
+    return !existing || (existing.synthetic && !hoisted);
   };
 
   const put = (key, node, parentKey) => {
@@ -134,8 +151,10 @@ export function buildMailboxTree(mailboxes) {
     else byKey.get(parentKey).children.push(node);
   };
 
-  for (const m of flat) {
-    const place = placementOf(m);
+  for (const m of [...flat.filter(m => !hoists(m)), ...flat.filter(hoists)]) {
+    const choice = placementsOf(m).find(free);
+    if (!choice) continue; // the same path LISTed twice
+    const { place } = choice;
     const parts = splitPath(m);
     const delim = m.delimiter || '.';
 
@@ -160,21 +179,27 @@ export function buildMailboxTree(mailboxes) {
     const existing = byKey.get(key);
     if (existing) {
       // The server got round to listing a folder already drawn as a stand-in.
-      if (existing.synthetic) {
-        Object.assign(existing, m, {
-          depth: existing.depth,
-          children: existing.children,
-          synthetic: false,
-        });
-      }
+      Object.assign(existing, m, {
+        depth: existing.depth,
+        children: existing.children,
+        synthetic: false,
+      });
       continue;
     }
     put(key, { ...m, depth: place.length - 1, children: [] },
       place.length > 1 ? place.slice(0, place.length - 1).join(SEP) : null);
   }
 
-  sortLevel(roots);
-  return roots;
+  // A \Noselect container with nothing left under it (every [Gmail] child
+  // hoisted) opens nothing and lists nothing: drawn, it reads as an empty
+  // folder. The sidebar and the move picker both draw this tree.
+  const prune = (nodes) => nodes.filter((n) => {
+    n.children = prune(n.children);
+    return !(n.noselect && !n.children.length);
+  });
+  const shown = prune(roots);
+  sortLevel(shown);
+  return shown;
 }
 
 /** A folder filter naming a branch — `sub:Kunden` — rather than one folder. */
