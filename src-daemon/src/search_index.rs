@@ -1370,10 +1370,26 @@ pub(crate) fn sweep(
                     completed = false;
                     break;
                 }
-                if listed_rows_pending {
+                // A folder filled once is not read again while another one's
+                // partial cache keeps the mark set.
+                if listed_rows_pending && !lock(&st.db).as_ref().is_some_and(|c| db::listed_rows_filled(c, &account, &dir)) {
                     match add_listed_rows(st, maildir, &account, &dir, &keep_going) {
-                        Ok(0) => {}
-                        Ok(added) => info!("search index {account}/{dir}: {added} header-only rows for mail with no file"),
+                        Ok(added) => {
+                            if added > 0 {
+                                info!("search index {account}/{dir}: {added} header-only rows for mail with no file");
+                            }
+                            // Recorded only into the index this pass filled: a
+                            // vault switch or a stop since then records nothing.
+                            let guard = lock(&st.db);
+                            let recorded = match guard.as_ref() {
+                                Some(conn) if keep_going() => db::mark_listed_rows_filled(conn, &account, &dir),
+                                _ => Err("search index closed or superseded".into()),
+                            };
+                            if let Err(e) = recorded {
+                                listed_rows_failed = true;
+                                debug!("search index {account}/{dir}: header-only rows not recorded as filled: {e}");
+                            }
+                        }
                         Err(e) => {
                             listed_rows_failed = true;
                             debug!("search index {account}/{dir}: header-only rows wait for a later pass: {e}");
@@ -1434,7 +1450,7 @@ pub(crate) fn sweep(
         // Every folder was visited and got its header-only rows: done for this
         // index. Otherwise the mark stays and the next pass fills the rest.
         if listed_rows_pending && !listed_rows_failed {
-            if let Err(e) = db::meta_set(conn, db::LISTED_ROWS_PENDING, "0") {
+            if let Err(e) = db::finish_listed_rows(conn) {
                 warn!("search index: could not record the header-only rows as done: {e}");
             }
         }
@@ -1866,27 +1882,30 @@ mod tests {
         assert!(!is_tagged(root, &tag, "2@x.test"));
     }
 
-    /// H3b fix 2: Empty Trash (or deleting the last message) leaves no header
-    /// row; once the daemon records the server's count as 0, the folder's
-    /// fileless rows are removed instead of staying search hits.
+    /// H3b fix 2 + round 2 (N1): the app's delete and Empty Trash send only
+    /// `removedUids` (no daemon sync follows). The recorded server count drops
+    /// with the rows, so the list stays complete: one deleted message leaves
+    /// search at once, and an emptied Trash is a verified empty listing.
     #[test]
     fn a_folder_the_server_counts_empty_drops_its_fileless_rows() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        seed(root, "acct", "Trash", 2);
+        seed(root, "acct", "Trash", 3);
         let (st, custody) = with_custody(root);
         let folder = || Some(vec![("acct".to_string(), "Trash".to_string())]);
-        save_listing(&custody, "acct", "Trash", serde_json::json!({"syncTotalEmails": 2, "emails": header_rows(&[1, 2])}));
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1, 2, 3])}));
         sweep_now(&st, root, folder());
         let cur = root.join("Maildir/acct/Trash/cur");
-        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
         std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
-        save_listing(&custody, "acct", "Trash", serde_json::json!({"removedUids": [1, 2]}));
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"removedUids": [2]}));
         sweep_now(&st, root, folder());
-        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2], "no row and no count of 0 yet: unknown");
-        save_listing(&custody, "acct", "Trash", serde_json::json!({"syncTotalEmails": 0}));
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 3], "an in-app delete leaves search on its own nudge");
+
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        std::fs::remove_file(cur.join(format!("3{INFO_PREFIX}S.eml"))).unwrap();
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"removedUids": [1, 3]}));
         sweep_now(&st, root, folder());
-        assert!(indexed_uids(&st, "acct").is_empty(), "verified empty: nothing left to find");
+        assert!(indexed_uids(&st, "acct").is_empty(), "Empty Trash: verified empty, nothing left to find");
     }
 
     /// H3b fix 1 for the fresh-index fill: it waits while a folder's cache is
@@ -1910,6 +1929,47 @@ mod tests {
         sweep_now(&st, root, None);
         assert_eq!(indexed_uids(&st, "acct"), vec![1, 1, 2, 3]);
         assert_eq!(pending().as_deref(), Some("0"), "every folder filled; the never-synced one had nothing to add");
+    }
+
+    /// H3b round 2 (N2): while one folder's cache stays partial the fresh-index
+    /// mark stays, but a folder already filled is not read again on every
+    /// pass. Once the last folder fills, the mark and the per-folder records go.
+    #[test]
+    fn a_filled_folder_is_not_refilled_while_another_folder_waits() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 2);
+        seed(root, "acct", "Other", 1);
+        let (st, custody) = with_custody(root);
+        let pending = || db::meta_get(lock(&st.db).as_ref().unwrap(), db::LISTED_ROWS_PENDING);
+        let in_dir = |dir: &str| -> Vec<u32> {
+            let g = lock(&st.db);
+            let mut stmt = g.as_ref().unwrap().prepare("SELECT uid FROM messages WHERE vault_dir = ?1 ORDER BY uid").unwrap();
+            stmt.query_map([dir], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+        };
+        let records = || -> i64 {
+            lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM meta WHERE key LIKE 'listed_rows_pending_%'", [], |r| r.get(0)).unwrap()
+        };
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1, 2, 3])}));
+        save_listing(&custody, "acct", "Other", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1])}));
+        sweep_now(&st, root, None);
+        assert_eq!(in_dir("Projects_2026"), vec![1, 2, 3], "complete: filled");
+        assert_eq!(in_dir("Other"), vec![1], "partial: waits");
+        assert_eq!(pending().as_deref(), Some("1"));
+        assert!(db::listed_rows_filled(lock(&st.db).as_ref().unwrap(), "acct", "Projects_2026"));
+
+        // Were the filled folder read again, its header-only row would come back.
+        lock(&st.db).as_ref().unwrap().execute("DELETE FROM messages WHERE vault_dir = 'Projects_2026' AND uid = 3", []).unwrap();
+        sweep_now(&st, root, None);
+        assert_eq!(in_dir("Projects_2026"), vec![1, 2], "filled once, not again");
+        assert_eq!(pending().as_deref(), Some("1"));
+
+        save_listing(&custody, "acct", "Other", serde_json::json!({"emails": header_rows(&[2, 3])}));
+        sweep_now(&st, root, None);
+        assert_eq!(in_dir("Other"), vec![1, 2, 3]);
+        assert_eq!(pending().as_deref(), Some("0"), "every folder filled");
+        assert_eq!(records(), 0, "the per-folder records go with the mark");
     }
 
     /// Removing an account deletes `Maildir/<account>/`: its rows go through

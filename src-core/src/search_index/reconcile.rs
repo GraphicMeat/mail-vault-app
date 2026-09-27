@@ -878,8 +878,8 @@ fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
 /// server lists it, like any evicted row, and re-read into the same row if a
 /// file comes back. A uid already in the index or on disk is left alone.
 /// Returns how many rows it added. `keep_going` is checked before each batch
-/// and again under the lock, like reconcile's `commit_allowed`. Only a closed
-/// (or swapped) index is an error.
+/// and again under the lock, like reconcile's `commit_allowed`. A closed (or
+/// swapped) index, or a stop part way, is an error.
 pub fn add_listed_rows(
     db: &SharedConn,
     maildir_root: &Path,
@@ -933,13 +933,16 @@ pub fn add_listed_rows(
         })
         .collect();
     let mut added = 0;
+    // Stopped part way is an error, never a filled folder: the caller records
+    // a folder as filled on `Ok` only.
+    let stopped = || "header-only rows interrupted".to_string();
     for batch in rows.chunks(BATCH) {
         if !keep_going() {
-            break;
+            return Err(stopped());
         }
         let mut guard = lock(db);
         if !keep_going() {
-            break;
+            return Err(stopped());
         }
         let conn = same_conn(&mut guard, &db_path)?;
         let tx = conn.transaction().map_err(db_err)?;

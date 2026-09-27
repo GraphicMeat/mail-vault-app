@@ -277,6 +277,31 @@ pub const FIRST_PASS_DONE: &str = "first_pass_done";
 /// to `"0"`; an index that predates it never has it.
 pub const LISTED_ROWS_PENDING: &str = "listed_rows_pending";
 
+/// The meta key recording that one folder got its header-only rows while
+/// `LISTED_ROWS_PENDING` is set, so a pass kept open by another folder whose
+/// header cache is still partial never reads this one's cache again.
+fn listed_rows_filled_key(account_id: &str, vault_dir: &str) -> String {
+    format!("{LISTED_ROWS_PENDING}:{account_id}\n{vault_dir}")
+}
+
+pub fn listed_rows_filled(conn: &Connection, account_id: &str, vault_dir: &str) -> bool {
+    meta_get(conn, &listed_rows_filled_key(account_id, vault_dir)).is_some()
+}
+
+pub fn mark_listed_rows_filled(conn: &Connection, account_id: &str, vault_dir: &str) -> Result<(), String> {
+    meta_set(conn, &listed_rows_filled_key(account_id, vault_dir), "1")
+}
+
+/// Every folder is filled: the mark goes to `"0"` and the per-folder records
+/// with it, in one transaction.
+pub fn finish_listed_rows(conn: &Connection) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1", [format!("{LISTED_ROWS_PENDING}:")])
+        .map_err(|e| e.to_string())?;
+    meta_set(&tx, LISTED_ROWS_PENDING, "0")?;
+    tx.commit().map_err(|e| e.to_string())
+}
+
 pub fn first_pass_done(conn: &Connection) -> bool {
     first_pass_done_checked(conn).unwrap_or(false)
 }
