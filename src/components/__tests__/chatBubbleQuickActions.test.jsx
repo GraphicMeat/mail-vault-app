@@ -8,7 +8,7 @@ import { create } from 'zustand';
 const mocks = vi.hoisted(() => ({
   config: { mode: 'inline', palette: 'neutral', entries: [] },
   folders: {},
-  settings: { signatureDisplay: 'smart', linkSafetyEnabled: false, linkSafetyClickConfirm: false, actionButtonDisplay: 'icon-label', localMailLabels: [], emailTemplates: [], applyLocalMailLabel: vi.fn() },
+  settings: { markAsReadMode: 'manual', signatureDisplay: 'smart', linkSafetyEnabled: false, linkSafetyClickConfirm: false, actionButtonDisplay: 'icon-label', localMailLabels: [], emailTemplates: [], applyLocalMailLabel: vi.fn() },
   accountState: { activeAccountId: 'acct-a', activeMailbox: 'UNIFIED' },
   messageListState: { archivedEmailIds: new Set() },
   applyFlagToKeys: vi.fn().mockResolvedValue(undefined),

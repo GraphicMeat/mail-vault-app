@@ -14,6 +14,7 @@ import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
+import { stopThreadReadTimer, cancelThreadReadTimers } from './threadReadTimer';
 
 // Module-level mark-as-read timer, and the message it is counting down for
 // (`accountId-mailbox-uid`, the flag core's target key).
@@ -32,8 +33,10 @@ function _clearPendingMarkRead() {
 // The user set this message's read state by hand while its countdown ran. The
 // countdown is "mark it read unless you say otherwise", and they just did:
 // marking it unread and watching it turn read three seconds later undid them.
+// The thread reader's countdowns carry the same key, so they stop the same way.
 export function cancelPendingMarkRead(targetKeys) {
   if (_markAsReadTarget && targetKeys.has(_markAsReadTarget)) _clearPendingMarkRead();
+  for (const key of targetKeys) stopThreadReadTimer(key);
 }
 
 let _insightsSelectionGeneration = 0;
@@ -41,6 +44,7 @@ export function getSelectionGeneration() { return _insightsSelectionGeneration; 
 export function cancelSelection() {
   _insightsSelectionGeneration += 1;
   _clearPendingMarkRead();
+  cancelThreadReadTimers();
 }
 export const cancelInsightsSelection = cancelSelection;
 

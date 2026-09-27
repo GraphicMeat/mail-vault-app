@@ -50,6 +50,7 @@ import { useExportStore } from '../stores/exportStore';
 import { describePurge } from '../utils/custodyCopy';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhere } from '../services/workflows/messageMutations';
+import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workflows/threadReadTimer';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const t = useT();
@@ -67,6 +68,14 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
   }, [threadsMap, threadId]);
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(topic.emails);
+
+  // A conversation shows every message open at once, so each unread one in it
+  // is read on the countdown an expanded thread message gets. Leaving the
+  // conversation stops them.
+  useEffect(() => {
+    for (const email of topic.emails) void startThreadReadTimer(threadId, email);
+    return () => cancelThreadReadTimers();
+  }, [threadId, topic]);
 
   // Build a flattened display list with date separators interleaved
   const displayItems = useMemo(() => {

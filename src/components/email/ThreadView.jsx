@@ -49,6 +49,7 @@ import { boundedThreadText } from '../../utils/quickReplies';
 import { describePurge } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
+import { startThreadReadTimer, stopThreadReadTimer } from '../../services/workflows/threadReadTimer';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { AddressText } from './AddressText';
@@ -312,7 +313,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false }) {
+function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false, threadId }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
@@ -346,6 +347,16 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   useEffect(() => {
     return registerListener(key, () => forceUpdate(n => n + 1));
   }, [key, registerListener]);
+
+  // An expanded unread message is read on its own countdown, and folding it
+  // stops the countdown (so does the virtualizer dropping the row; drawing it
+  // again starts a new one). The flags are left out on purpose: a message
+  // marked unread by hand while it is open must stay unread, not start over.
+  useEffect(() => {
+    if (!expanded) return undefined;
+    void startThreadReadTimer(threadId, email);
+    return () => stopThreadReadTimer(scopeKey);
+  }, [expanded, scopeKey, threadId]);
 
   const bodyEntry = bodiesMapRef.current.get(key);
   const loadedEmail = bodyEntry?.status === 'loaded' ? bodyEntry.email : null;
@@ -688,6 +699,18 @@ export function ThreadView({ thread, onComposeReply }) {
     ));
   }, [thread.emails]);
 
+  // The message shown open is the newest one the thread was opened on. Mail
+  // that arrives while it is up joins folded, because an open unread message
+  // marks itself read and nobody opened this one. An arrival that is already
+  // read (the reply you just sent) still takes over, as does the newest once
+  // the opened one has left the thread.
+  const [openedOn, setOpenedOn] = useState({ threadId: thread.threadId, newestKey, key: newestKey });
+  if (openedOn.threadId !== thread.threadId || openedOn.newestKey !== newestKey) {
+    const arrivedRead = thread.emails.find(email => emailKey(email) === newestKey)?.flags?.includes('\\Seen');
+    setOpenedOn({ threadId: thread.threadId, newestKey, key: openedOn.threadId !== thread.threadId || arrivedRead ? newestKey : openedOn.key });
+  }
+  const openKey = thread.emails.some(email => emailKey(email) === openedOn.key) ? openedOn.key : newestKey;
+
   const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
 
   // Smart mode: track seen signatures per sender to show only first occurrence
@@ -717,7 +740,7 @@ export function ThreadView({ thread, onComposeReply }) {
   }, [sortedEmails, signatureDisplay]);
 
   const selectedEmail = sortedEmails.find(email => emailKey(email) === selectedMessage)
-    || sortedEmails.find(email => emailKey(email) === newestKey);
+    || sortedEmails.find(email => emailKey(email) === openKey);
   useEffect(() => {
     if (!selectedEmail) return undefined;
     const reply = async (mode) => {
@@ -902,8 +925,9 @@ export function ThreadView({ thread, onComposeReply }) {
                     <span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span>
                   </button>
                 ) : <ThreadEmailItem
-                  expanded={expandedMessages[emailKey(email)] ?? isNewest}
-                  onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: !(previous[emailKey(email)] ?? isNewest) }))}
+                  expanded={expandedMessages[emailKey(email)] ?? emailKey(email) === openKey}
+                  onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: !(previous[emailKey(email)] ?? emailKey(email) === openKey) }))}
+                  threadId={threadId}
                   compact={readerLayout === 'compact'}
                   isNewest={isNewest}
                   email={email}
@@ -931,7 +955,7 @@ export function ThreadView({ thread, onComposeReply }) {
       {readerLayout === 'split' && selectedEmail && (
         <div className="min-w-0 min-h-0 overflow-auto border-mail-border thread-reader-detail">
           <ThreadEmailItem key={emailKey(selectedEmail)} email={selectedEmail} threadEmails={sortedEmails} expanded={expandedMessages[emailKey(selectedEmail)] ?? true}
-            isNewest={emailKey(selectedEmail) === newestKey}
+            isNewest={emailKey(selectedEmail) === newestKey} threadId={threadId}
             onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(selectedEmail)]: !(previous[emailKey(selectedEmail)] ?? true) }))}
             bodiesMapRef={bodiesMapRef} registerListener={registerListener} archivedEmailIds={archivedEmailIds}
             signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}

@@ -302,6 +302,19 @@ describe('thread reader: mark-as-read countdown per expanded message', () => {
     expect(marked()).not.toContain('acct1/INBOX/3');
   });
 
+  it('12b. a reply that arrives already read (your own) still opens in place of the newest', async () => {
+    const emails = [row(1, 1, ['\\Seen']), row(2, 2, ['\\Seen'])];
+    prime(emails);
+    openThread('t1', emails);
+    render(createElement(Reader));
+
+    const reply = row(3, 3, ['\\Seen'], { _mailbox: 'Sent', from: { name: 'Me', address: 'me@mock.test' } });
+    act(() => {
+      useMailStore.setState(s => ({ selectedThread: threadOf('t1', [...s.selectedThread.emails, reply]) }));
+    });
+    expect(expandedFlags()).toEqual(['false', 'false', 'true']);
+  });
+
   it('13. a unified thread spanning two accounts marks each message in its own account and folder', async () => {
     const a = row(5, 1, [], { _accountId: 'acct1', _mailbox: 'INBOX' });
     const b = row(5, 2, [], { _accountId: 'acct2', _mailbox: 'INBOX', messageId: 'b5@mock' });
