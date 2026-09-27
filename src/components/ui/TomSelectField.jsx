@@ -8,6 +8,17 @@ export function TomSelectField({ label, value, options, placeholder, onChange, c
   const instance = useRef(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // One selection reaches us twice in the same tick: Tom Select's onChange
+  // setting and the change event it fires on the select below (React's
+  // onChange). Report a value only when it differs from the last one we
+  // reported or were given, so every consumer sees one change per selection.
+  const lastValue = useRef(String(value ?? ''));
+  const emit = next => {
+    const normalized = String(next ?? '');
+    if (normalized === lastValue.current) return;
+    lastValue.current = normalized;
+    onChangeRef.current?.(next);
+  };
 
   useEffect(() => {
     if (!element.current) return undefined;
@@ -16,7 +27,7 @@ export function TomSelectField({ label, value, options, placeholder, onChange, c
       maxItems: 1,
       allowEmptyOption: true,
       placeholder,
-      onChange: next => onChangeRef.current?.(next),
+      onChange: next => emit(next),
     });
     instance.current = select;
     select.control_input.setAttribute('aria-label', label);
@@ -24,6 +35,7 @@ export function TomSelectField({ label, value, options, placeholder, onChange, c
   }, []);
 
   useEffect(() => {
+    lastValue.current = String(value ?? '');
     const select = instance.current;
     if (!select) return;
     select.clearOptions();
@@ -41,8 +53,9 @@ export function TomSelectField({ label, value, options, placeholder, onChange, c
     instance.current.control_input.placeholder = placeholder || '';
   }, [label, placeholder]);
 
-  return <select ref={element} aria-label={label} value={value || ''} onChange={event => onChange?.(event.target.value)}>
-    <option value="">{placeholder}</option>
+  const hasEmptyOption = options.some(option => String(option.value) === '');
+  return <select ref={element} aria-label={label} value={value || ''} onChange={event => emit(event.target.value)}>
+    {!hasEmptyOption && <option value="">{placeholder}</option>}
     {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
   </select>;
 }

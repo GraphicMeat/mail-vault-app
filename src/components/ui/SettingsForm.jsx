@@ -47,9 +47,10 @@ export function SettingsField({ label, hint, children, className = '' }) {
 }
 
 export function SegmentedControl({ label, value, options, onChange }) {
-  return <div className="settings-segmented" role="group" aria-label={label}>
+  // `segmented-choice`: the settings tab look shared with SegmentedChoice (index.css).
+  return <div className="settings-segmented segmented-choice" role="group" aria-label={label}>
     {options.map(option => <button key={option.value} type="button"
-      aria-pressed={value === option.value} className={value === option.value ? 'is-selected' : ''}
+      aria-pressed={value === option.value}
       onClick={() => onChange(option.value)}>{option.label}</button>)}
   </div>;
 }

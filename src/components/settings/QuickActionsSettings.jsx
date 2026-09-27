@@ -419,11 +419,8 @@ export function QuickActionsSettings() {
                 value={config.favoriteId || ""}
                 placeholder={t("quickActions.param.autoFavorite")}
                 options={favoriteOptions}
-                onChange={(favoriteId) => {
-                  if ((favoriteId || null) !== (config.favoriteId || null)) {
-                    persist({ ...config, favoriteId: favoriteId || null });
-                  }
-                }}
+                onChange={(favoriteId) =>
+                  persist({ ...config, favoriteId: favoriteId || null })}
               />
             </label>
           )}

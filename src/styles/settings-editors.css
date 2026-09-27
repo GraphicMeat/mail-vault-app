@@ -9,10 +9,6 @@
 .settings-editor-field-control { min-width: 0; }
 .settings-editor-field-control input:not([type=checkbox]):not([type=range]):not(.ts-control input), .settings-editor-field-control textarea, .settings-editor-field-control select { width: 100%; min-height: 36px; padding: 7px 10px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; }
 .settings-editor-field-control textarea { min-height: 74px; resize: vertical; }
-.settings-segmented { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; background: var(--mail-bg); border: 1px solid var(--mail-border); border-radius: 8px; }
-.settings-segmented button { min-height: 30px; padding: 5px 10px; color: var(--mail-text-muted); font-size: 12px; border-radius: 6px; }
-.settings-segmented button:hover { color: var(--mail-text); background: var(--mail-surface-hover); }
-.settings-segmented button.is-selected { color: var(--mail-text); background: var(--mail-surface-hover); font-weight: 650; }
 .settings-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; }
 .settings-editor-details { border-top: 1px solid var(--mail-border); margin-top: 10px; padding-top: 12px; }
 .settings-editor-details summary { cursor: pointer; color: var(--mail-text); font-size: 13px; font-weight: 600; }

@@ -1145,8 +1145,9 @@ input[type="range"]::-moz-range-thumb:hover {
   position: sticky; top: 0; z-index: 1; display: flex; gap: 20px; overflow-x: auto;
   padding: 0 28px; background: var(--mail-bg); border-bottom: 1px solid var(--mail-border);
 }
-/* A settings choice group (SegmentedChoice) wears the tab row's look, so every
-   one-of-a-few choice in Settings and onboarding reads like the tabs above it. */
+/* A settings choice group (SegmentedChoice, SegmentedControl) wears the tab
+   row's look, so every one-of-a-few choice in Settings and onboarding reads
+   like the tabs above it. */
 .segmented-choice {
   display: inline-flex; flex-wrap: wrap; column-gap: 20px; max-width: 100%;
   border-bottom: 1px solid var(--mail-border);
@@ -1159,10 +1160,14 @@ input[type="range"]::-moz-range-thumb:hover {
 .settings-tabs > button:hover,
 .segmented-choice > button:hover:not(:disabled) { color: var(--mail-text); }
 .settings-tabs > button[aria-selected="true"],
-.segmented-choice > button[aria-checked="true"] { color: var(--mail-accent-text); border-color: var(--mail-accent); }
+.segmented-choice > button[aria-checked="true"],
+.segmented-choice > button[aria-pressed="true"] { color: var(--mail-accent-text); border-color: var(--mail-accent); }
 .settings-tabs > button:focus-visible,
 .segmented-choice > button:focus-visible { outline-offset: -3px; border-radius: 4px; }
 .segmented-choice > button:disabled { opacity: .48; cursor: not-allowed; }
+/* In a narrow field the group wraps onto more rows and a long label wraps
+   inside its own button, instead of running past the field. */
+.segmented-choice > button { max-width: 100%; text-align: start; }
 .settings-mobile-navigation { display: none; }
 .settings-account-filter { display: flex; align-items: center; gap: 8px; padding: 12px 28px; border-bottom: 1px solid var(--mail-border); flex-shrink: 0; overflow-x: auto; }
 /* Everyday preferences use one quiet label/control rhythm, without nested cards. */
