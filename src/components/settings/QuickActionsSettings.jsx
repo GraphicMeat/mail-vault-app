@@ -242,6 +242,7 @@ export function QuickActionsSettings() {
       mode: defaults.mode,
       palette: defaults.palette,
       radialPagination: defaults.radialPagination,
+      radialLayout: defaults.radialLayout,
     });
   };
   const setMode = (mode) => persistStyle({ mode });
@@ -401,7 +402,8 @@ export function QuickActionsSettings() {
               ]}
             />
           </div>
-          {config.mode === "favorite-menu" && (
+          {(config.mode === "favorite-menu" ||
+            config.mode === "radial" && config.radialLayout === "categories") && (
             <label>
               {t("quickActions.favorite")}
               <select
@@ -423,6 +425,20 @@ export function QuickActionsSettings() {
             </label>
           )}
           {config.mode === "radial" && (
+            <div className="quick-actions-choice-field">
+              <span>{t("quickActions.radialLayout")}</span>
+              <SegmentedChoice
+                label={t("quickActions.radialLayout")}
+                value={config.radialLayout === "categories" ? "categories" : "flat"}
+                onChange={(value) => persistStyle({ radialLayout: value })}
+                options={[
+                  { value: "flat", label: t("quickActions.radialLayout.flat") },
+                  { value: "categories", label: t("quickActions.radialLayout.categories") },
+                ]}
+              />
+            </div>
+          )}
+          {config.mode === "radial" && config.radialLayout !== "categories" && (
             <div className="quick-actions-choice-field">
               <span>{t("quickActions.radialPagination")}</span>
               <SegmentedChoice

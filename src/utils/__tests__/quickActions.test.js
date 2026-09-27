@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_QUICK_ACTIONS,
+  QUICK_ACTION_TYPES,
+  RADIAL_CATEGORIES,
   currentQuickActionScope,
+  groupRadialEntries,
   normalizeQuickActions,
   quickActionScopeKey,
   resolveQuickActionSelectionTarget,
@@ -173,5 +176,77 @@ describe('snooze quick action', () => {
     expect(DEFAULT_QUICK_ACTIONS.defaults.selection.entries.slice(0, 3).map(entry => entry.action))
       .toEqual(['markRead', 'markUnread', 'archive']);
     expect(DEFAULT_QUICK_ACTIONS.defaults.reader.entries.some(entry => entry.action === 'snooze')).toBe(false);
+  });
+});
+
+const entries = (...actions) => actions.map(action => ({ id: action, action }));
+const shape = groups => groups.map(group => group.type === 'category'
+  ? [group.id, group.entries.map(item => item.id)]
+  : group.entry.id);
+
+describe('radial categories', () => {
+  it('keeps a valid radial layout per surface and defaults anything else to flat', () => {
+    const result = normalizeQuickActions({ defaults: {
+      row: { mode: 'radial', radialLayout: 'categories' },
+      selection: { radialLayout: 'rings' },
+    } });
+    expect(result.defaults.row.radialLayout).toBe('categories');
+    expect(result.defaults.selection.radialLayout).toBe('flat');
+    expect(result.defaults.reader.radialLayout).toBe('flat');
+    for (const surface of ['row', 'selection', 'reader']) {
+      expect(DEFAULT_QUICK_ACTIONS.defaults[surface].radialLayout).toBe('flat');
+    }
+  });
+
+  it('carries the radial layout across linked surfaces like the other style fields', () => {
+    const linked = setQuickActionStyleLink(normalizeQuickActions({}), null, true, 'row');
+    const updated = setQuickActionStyle(linked, 'row', null, { radialLayout: 'categories' });
+    expect(updated.defaults.selection.radialLayout).toBe('categories');
+    expect(updated.defaults.reader.radialLayout).toBe('categories');
+    const separate = setQuickActionStyle(normalizeQuickActions({}), 'reader', null, { radialLayout: 'categories' });
+    expect(separate.defaults.reader.radialLayout).toBe('categories');
+    expect(separate.defaults.row.radialLayout).toBe('flat');
+  });
+
+  it('files every quick action type in exactly one category', () => {
+    const filed = Object.values(RADIAL_CATEGORIES).flat();
+    expect([...filed].sort()).toEqual([...QUICK_ACTION_TYPES].sort());
+    expect(Object.keys(RADIAL_CATEGORIES)).toEqual(['send', 'mark', 'organize', 'delete', 'more']);
+  });
+
+  it('sorts entries into categories in category order, keeping the configured order inside each', () => {
+    const groups = groupRadialEntries(entries('forward', 'spam', 'reply', 'star', 'delete', 'markRead', 'move', 'snooze'));
+    expect(shape(groups)).toEqual([
+      ['send', ['forward', 'reply']],
+      ['mark', ['star', 'markRead']],
+      ['organize', ['move', 'snooze']],
+      ['delete', ['spam', 'delete']],
+    ]);
+  });
+
+  it('puts the favorite first as a direct wedge and out of its category', () => {
+    const groups = groupRadialEntries(entries('reply', 'forward', 'archive', 'move', 'snooze'), {}, 'archive');
+    expect(shape(groups)).toEqual(['archive', ['send', ['reply', 'forward']], ['organize', ['move', 'snooze']]]);
+  });
+
+  it('turns a one-action category into a direct wedge in that category slot and hides empty ones', () => {
+    const groups = groupRadialEntries(entries('export', 'reply', 'forward', 'deleteServer'), {}, null);
+    expect(shape(groups)).toEqual([['send', ['reply', 'forward']], 'deleteServer', 'export']);
+  });
+
+  it('drops the actions the target state hides, then collapses or hides what is left', () => {
+    const visibility = { markRead: false, markUnread: true, star: false, unstar: false, archive: false };
+    const groups = groupRadialEntries(entries('archive', 'markRead', 'markUnread', 'star', 'unstar', 'reply', 'forward'), visibility, 'archive');
+    // The hidden favorite is not replaced; mark keeps only markUnread.
+    expect(shape(groups)).toEqual([['send', ['reply', 'forward']], 'markUnread']);
+  });
+
+  it('keeps several entries of one action (folders, tags) inside the same category', () => {
+    const list = [
+      { id: 'move:Work', action: 'move', params: { mailbox: 'Work' } },
+      { id: 'tag:t1', action: 'tag', params: { tagId: 't1' } },
+      { id: 'move:Home', action: 'move', params: { mailbox: 'Home' } },
+    ];
+    expect(shape(groupRadialEntries(list))).toEqual([['organize', ['move:Work', 'tag:t1', 'move:Home']]]);
   });
 });

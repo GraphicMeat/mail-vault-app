@@ -404,3 +404,153 @@ describe("QuickActions", () => {
     rect.mockRestore();
   });
 });
+
+describe("QuickActions radial categories", () => {
+  let exportRenders = 0;
+  // Counts how often the export wedge (a direct wedge the center never shows
+  // unless it is hovered) renders: a hover elsewhere must not repaint it.
+  const CountingIcon = () => {
+    exportRenders += 1;
+    return <span aria-hidden="true">•</span>;
+  };
+  const make = (id, label, extra = {}) => ({ id, action: id, label, Icon: icon, onActivate: vi.fn(), ...extra });
+  const actions = () => [
+    make("archive", "Archive"),
+    make("reply", "Reply"),
+    make("forward", "Forward"),
+    make("star", "Star"),
+    make("markRead", "Mark read"),
+    make("deleteServer", "Delete from server"),
+    make("spam", "Move to Junk"),
+    make("export", "Export", { Icon: CountingIcon }),
+  ];
+  const categoryConfig = (list, overrides = {}) => ({
+    mode: "radial",
+    palette: "neutral",
+    radialLayout: "categories",
+    favoriteId: "archive",
+    entries: list.map(({ id, action }) => ({ id, action })),
+    ...overrides,
+  });
+  const openWheel = (list, overrides) => {
+    render(<QuickActions config={categoryConfig(list, overrides)} descriptors={list} />);
+    fireEvent.click(screen.getByRole("button", { name: "Quick actions" }));
+    return screen.getByRole("menu");
+  };
+  const category = (id) => document.querySelector(`[data-radial-category="${id}"]`);
+  const arcActions = () =>
+    [...document.querySelectorAll("[data-radial-arc] [data-quick-action]")]
+      .map((button) => button.getAttribute("aria-label"));
+  const innerRing = (menu) =>
+    [...menu.children].filter((element) => element.tagName === "BUTTON")
+      .map((button) => button.dataset.radialCategory
+        ? `category:${button.dataset.radialCategory}`
+        : button.dataset.quickAction);
+  const centerLabel = () => document.querySelector(".quick-actions-radial-center > span:not([aria-hidden])").textContent;
+  const trigger = () => document.querySelector(".quick-actions-trigger");
+
+  afterEach(() => {
+    exportRenders = 0;
+  });
+
+  it("keeps the flat wheel exactly as before when the layout is flat", () => {
+    const list = actions();
+    const menu = openWheel(list, { radialLayout: "flat" });
+    expect(innerRing(menu)).toEqual(list.map((item) => item.id));
+    expect(document.querySelector("[data-radial-category]")).toBeNull();
+    expect(menu.getAttribute("data-radial-layout")).not.toBe("categories");
+  });
+
+  it("draws the favorite and one wedge per non-empty category, single ones as direct wedges", () => {
+    const menu = openWheel(actions());
+    // Organize held only the favorite (archive), so it is gone; More held
+    // only export, so export is a direct wedge in More's slot.
+    expect(innerRing(menu)).toEqual(["archive", "category:send", "category:mark", "category:delete", "export"]);
+    expect(category("send").getAttribute("aria-label")).toBe("Send");
+    expect(category("send").hasAttribute("data-quick-action")).toBe(false);
+    expect(arcActions()).toEqual([]);
+  });
+
+  it("does not fan a category out just because the opening focus landed on it", () => {
+    const menu = openWheel(actions(), { favoriteId: "missing" });
+    expect(innerRing(menu)[0]).toBe("category:send");
+    expect(document.activeElement).toBe(category("send"));
+    expect(arcActions()).toEqual([]);
+  });
+
+  it("fans a category out on hover, swaps on another, keeps it while in the arc, closes on leave", () => {
+    const menu = openWheel(actions());
+    fireEvent.mouseEnter(category("send"));
+    expect(arcActions()).toEqual(["Reply", "Forward"]);
+    expect(category("send").hasAttribute("data-open")).toBe(true);
+    expect(centerLabel()).toBe("Send");
+
+    fireEvent.mouseEnter(category("mark"));
+    expect(arcActions()).toEqual(["Star", "Mark read"]);
+    expect(category("send").hasAttribute("data-open")).toBe(false);
+    expect(category("mark").hasAttribute("data-open")).toBe(true);
+
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Star" }));
+    expect(arcActions()).toEqual(["Star", "Mark read"]);
+    expect(centerLabel()).toBe("Star");
+
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(arcActions()).toEqual([]);
+
+    fireEvent.click(category("delete"));
+    expect(arcActions()).toEqual(["Delete from server", "Move to Junk"]);
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.mouseLeave(menu);
+    expect(arcActions()).toEqual([]);
+  });
+
+  it("runs an arc action and closes the menu", () => {
+    const list = actions();
+    openWheel(list);
+    fireEvent.mouseEnter(category("send"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Forward" }));
+    expect(list[2].onActivate).toHaveBeenCalledOnce();
+    expect(list[1].onActivate).not.toHaveBeenCalled();
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("walks the inner ring with arrows, enters an arc with Right or Enter and leaves it with Left or Escape", () => {
+    const menu = openWheel(actions());
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Archive" }));
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(category("send"));
+    // Arrows stay on the inner ring, even with an arc open beside it.
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(category("mark"));
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(category("send"));
+
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Reply" }));
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Forward" }));
+    fireEvent.keyDown(menu, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(category("send"));
+
+    fireEvent.keyDown(menu, { key: "Enter" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Reply" }));
+    fireEvent.keyDown(document.activeElement, { key: "Escape" });
+    expect(document.activeElement).toBe(category("send"));
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document.activeElement, { key: "Escape" });
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("repaints only the arc and the center when a category is hovered", () => {
+    openWheel(actions());
+    const before = exportRenders;
+    expect(before).toBeGreaterThan(0);
+    fireEvent.mouseEnter(category("send"));
+    fireEvent.mouseEnter(category("mark"));
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Star" }));
+    fireEvent.mouseEnter(category("delete"));
+    expect(exportRenders).toBe(before);
+  });
+});

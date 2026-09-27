@@ -12,6 +12,37 @@ export const QUICK_ACTION_TYPES = [
   'unsubscribe',
 ];
 
+export const RADIAL_LAYOUTS = ['flat', 'categories'];
+// The wheel's categories, in wheel order. Every action type sits in exactly
+// one; a radial surface with `radialLayout: 'categories'` shows one wedge per
+// category and fans its actions out beside it.
+export const RADIAL_CATEGORIES = {
+  send: ['reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'],
+  mark: ['toggleRead', 'markRead', 'markUnread', 'star', 'unstar'],
+  organize: ['archive', 'unarchive', 'move', 'tag', 'snooze'],
+  delete: ['delete', 'deleteServer', 'deleteEverywhere', 'spam', 'unsubscribe'],
+  more: ['open', 'source', 'theme', 'export'],
+};
+const CATEGORY_OF = new Map(Object.entries(RADIAL_CATEGORIES)
+  .flatMap(([category, actions]) => actions.map(action => [action, category])));
+
+// The inner ring of a categorized wheel: the favorite first as a direct wedge,
+// then one wedge per category in RADIAL_CATEGORIES order, each holding its
+// entries in their configured order. `visibility[action] === false` drops an
+// entry (actionVisibility's shape); a category left empty is gone and one left
+// with a single entry becomes that entry's direct wedge.
+export function groupRadialEntries(entries, visibility = {}, favoriteId = null) {
+  const shown = (entries || []).filter(item => visibility?.[item.action] !== false);
+  const favorite = favoriteId ? shown.find(item => item.id === favoriteId) : null;
+  const groups = favorite ? [{ type: 'action', entry: favorite }] : [];
+  for (const id of Object.keys(RADIAL_CATEGORIES)) {
+    const members = shown.filter(item => item !== favorite && (CATEGORY_OF.get(item.action) || 'more') === id);
+    if (members.length === 1) groups.push({ type: 'action', entry: members[0] });
+    else if (members.length) groups.push({ type: 'category', id, entries: members });
+  }
+  return groups;
+}
+
 const entry = (action, extra = {}) => ({ id: action, action, ...extra });
 export const DEFAULT_QUICK_ACTIONS = {
   defaults: {
@@ -23,20 +54,20 @@ export const DEFAULT_QUICK_ACTIONS = {
         entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'), entry('snooze'),
         entry('unsubscribe'),
       ],
-      favoriteId: 'archive', palette: 'semantic', radialPagination: false,
+      favoriteId: 'archive', palette: 'semantic', radialPagination: false, radialLayout: 'flat',
     },
     selection: {
       mode: 'inline',
       entries: ['markRead', 'markUnread', 'archive', 'unarchive', 'move', 'deleteServer', 'deleteEverywhere', 'export', 'snooze']
         .map(action => entry(action)),
-      favoriteId: 'archive', palette: 'semantic', radialPagination: false,
+      favoriteId: 'archive', palette: 'semantic', radialPagination: false, radialLayout: 'flat',
       selectionDisplay: 'icon-label', selectionActionLimit: 3,
     },
     reader: {
       mode: 'inline',
       entries: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'move', 'toggleRead', 'star', 'export', 'open', 'source', 'theme']
         .map(action => entry(action)),
-      favoriteId: 'reply', palette: 'semantic', radialPagination: false,
+      favoriteId: 'reply', palette: 'semantic', radialPagination: false, radialLayout: 'flat',
     },
   },
   overrides: {},
@@ -110,6 +141,7 @@ function normalizeSurface(value, fallback) {
     // omit a palette inherit the surface default, which is now colored.
     palette: QUICK_ACTION_PALETTES.includes(value.palette) ? value.palette : fallback.palette,
     radialPagination: typeof value.radialPagination === 'boolean' ? value.radialPagination : !!fallback.radialPagination,
+    radialLayout: RADIAL_LAYOUTS.includes(value.radialLayout) ? value.radialLayout : fallback.radialLayout || 'flat',
     ...(fallback.selectionDisplay ? {
       selectionDisplay: ['icon-label', 'icon-only'].includes(value.selectionDisplay) ? value.selectionDisplay : fallback.selectionDisplay,
       selectionActionLimit: Number.isInteger(value.selectionActionLimit)
@@ -195,7 +227,7 @@ export function setQuickActionSurface(value, surface, scope, config) {
   return normalizeQuickActions({ ...normalized, overrides });
 }
 
-const STYLE_FIELDS = ['mode', 'palette', 'radialPagination'];
+const STYLE_FIELDS = ['mode', 'palette', 'radialPagination', 'radialLayout'];
 const copyStyle = (config, source) => ({
   ...config,
   ...Object.fromEntries(STYLE_FIELDS.map(field => [field, source[field]])),

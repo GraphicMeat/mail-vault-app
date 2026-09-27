@@ -78,6 +78,7 @@ export function AppearanceStep({ onContinue }) {
         mode: defaults.mode,
         palette: defaults.palette,
         radialPagination: defaults.radialPagination,
+        radialLayout: defaults.radialLayout,
       });
     });
   };

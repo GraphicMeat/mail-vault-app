@@ -121,7 +121,10 @@
   padding: 0;
   border: 0;
   color: var(--quick-action-color, var(--mail-text-muted));
-  background: radial-gradient(circle at center, var(--mail-surface) 0 67%, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 72%, var(--mail-surface)) 68% 71%, var(--mail-surface) 72%);
+  /* The colored rim sits on the wedge's outer edge. The stops are in % of the
+     farthest-corner radius (70.7% of the box), so a ring that ends inside the
+     box moves them in (see the categorized wheel below). */
+  background: radial-gradient(circle at center, var(--mail-surface) 0 var(--radial-rim-from, 67%), color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 72%, var(--mail-surface)) var(--radial-rim-start, 68%) var(--radial-rim-end, 71%), var(--mail-surface) var(--radial-rim-to, 72%));
   cursor: pointer;
 }
 
@@ -146,6 +149,61 @@
 .quick-action-radial-item:disabled {
   opacity: .42;
   cursor: not-allowed;
+}
+
+/* A categorized wheel: the inner ring ends at 36% of the box and a hovered
+   category fans its actions out in the band beyond it, so the panel itself is
+   see-through and only the inner disc is filled. */
+.quick-actions-radial[data-radial-layout="categories"] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.quick-actions-radial[data-radial-layout="categories"]::before {
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  background: var(--mail-bg);
+  content: "";
+}
+
+.quick-actions-radial[data-radial-layout="categories"] > .quick-action-radial-item {
+  --radial-rim-from: 47%;
+  --radial-rim-start: 48%;
+  --radial-rim-end: 50.5%;
+  --radial-rim-to: 51.5%;
+}
+
+/* The category whose arc is open stays lit while the pointer is in its arc
+   (RadialArc sets the attribute). */
+.quick-action-radial-item[data-open] {
+  z-index: 2;
+  color: var(--mail-text);
+  background: color-mix(in srgb, var(--mail-accent) 26%, var(--mail-surface));
+}
+
+/* Covers the whole wheel for its buttons' clip-paths, but lets the pointer
+   through everywhere they do not paint. */
+.quick-action-radial-arc {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.quick-action-radial-arc > .quick-action-radial-item {
+  pointer-events: auto;
+  animation: quick-action-arc-in 90ms ease-out;
+}
+
+@keyframes quick-action-arc-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-action-radial-arc > .quick-action-radial-item {
+    animation: none;
+  }
 }
 
 .quick-actions-radial-center {

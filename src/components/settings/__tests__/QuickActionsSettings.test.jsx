@@ -128,6 +128,31 @@ describe('QuickActionsSettings', () => {
     expect(screen.getByText('Default action color')).toBeTruthy();
   });
 
+  it('saves the wheel layout per surface and hides wheel paging for categories', () => {
+    state.quickActions = {
+      defaults: {
+        row: { mode: 'radial', entries: [{ id: 'archive', action: 'archive' }, { id: 'reply', action: 'reply' }], favoriteId: 'archive', palette: 'neutral' },
+        reader: { mode: 'radial', entries: [{ id: 'reply', action: 'reply' }], favoriteId: 'reply', palette: 'neutral', radialLayout: 'flat' },
+      },
+      overrides: {},
+    };
+    const view = render(<QuickActionsSettings />);
+    const layout = screen.getByRole('radiogroup', { name: 'Wheel layout' });
+    expect(within(layout).getByRole('radio', { name: 'One ring' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radiogroup', { name: 'Page actions in the wheel' })).toBeTruthy();
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Categories' }));
+    const [surface, , updates] = state.setQuickActionStyle.mock.calls.at(-1);
+    expect(surface).toBe('row');
+    expect(updates).toEqual({ radialLayout: 'categories' });
+    expect(state.quickActions.defaults.row.radialLayout).toBe('categories');
+    expect(state.quickActions.defaults.reader.radialLayout).toBe('flat');
+
+    view.rerender(<QuickActionsSettings />);
+    expect(within(screen.getByRole('radiogroup', { name: 'Wheel layout' })).getByRole('radio', { name: 'Categories' })
+      .getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('radiogroup', { name: 'Page actions in the wheel' })).toBeNull();
+  });
+
   it('resets only the active surface', () => {
     state.quickActions = {
       defaults: {

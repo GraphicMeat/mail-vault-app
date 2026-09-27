@@ -4,30 +4,93 @@ import React, {
   useId,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderInput,
+  MailCheck,
+  MoreHorizontal,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { Popover } from "./ui/Popover";
 import { useQuickActionConfiguration } from "../hooks/useQuickActionConfiguration";
 import { useT } from "../i18n/index.js";
 import { quickActionColorFor } from "../utils/quickActionColors";
+import { groupRadialEntries } from "../utils/quickActions";
 import "../styles/quick-actions.css";
 
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const UNSAFE_FAVORITE = new Set([...DESTRUCTIVE, "unarchive"]);
 const PAGE_SIZE = 8;
-// A wedge's clip-path depends only on its position and the wheel's size, both
-// bounded (at most PAGE_SIZE per page): cache it at module level so hovering
-// never re-walks the trig and rebuilds the polygon string.
+const CATEGORY_ICONS = {
+  send: Send,
+  mark: MailCheck,
+  organize: FolderInput,
+  delete: Trash2,
+  more: MoreHorizontal,
+};
+// Radii, in % of the wheel box. A categorized wheel keeps its inner ring
+// inside INNER_RING and fans a category's actions out in the ARC_RING band.
+const INNER_RING = { outer: 36, inner: 21, content: 28.5 };
+const ARC_RING = { outer: 50, inner: 38, content: 44 };
+const ARC_SLOT = 34;
+const WHEEL_SIZE = 304;
+const CATEGORY_WHEEL_SIZE = 360;
+// A wedge's clip-path depends only on its position, count and ring, all
+// bounded: cache it at module level so hovering never re-walks the trig and
+// rebuilds the polygon string.
 const wedgeClipCache = new Map();
-export function wedgeClip(index, count) {
-  const key = `${count}:${index}`;
+export function wedgeClip(index, count, ring = null) {
+  const key = `${count}:${index}:${ring ? ring.outer : ""}`;
   const cached = wedgeClipCache.get(key);
   if (cached) return cached;
   const gap = Math.min(1.3, 10 / Math.max(count, 1));
-  const start = -90 + index * 360 / count + gap;
-  const end = -90 + (index + 1) * 360 / count - gap;
+  const clip = ringClip(
+    -90 + index * 360 / count + gap,
+    -90 + (index + 1) * 360 / count - gap,
+    ring ? ring.outer : 50,
+    ring ? ring.inner : 24,
+  );
+  wedgeClipCache.set(key, clip);
+  return clip;
+}
+
+// The angles of one action in a category's arc: slots of ARC_SLOT degrees
+// (fewer degrees when many would wrap past the full circle), centered on the
+// category's own wedge.
+function arcAngles(innerIndex, innerCount, index, count) {
+  const slot = Math.min(ARC_SLOT, 360 / count);
+  const gap = Math.min(1.3, 10 / Math.max(count, 1));
+  const mid = -90 + (innerIndex + .5) * 360 / innerCount;
+  const start = mid - slot * count / 2 + index * slot;
+  return { start: start + gap, end: start + slot - gap, mid: start + slot / 2 };
+}
+
+const arcClipCache = new Map();
+function arcClip(innerIndex, innerCount, index, count) {
+  const key = `${innerCount}:${innerIndex}:${count}:${index}`;
+  const cached = arcClipCache.get(key);
+  if (cached) return cached;
+  const { start, end } = arcAngles(innerIndex, innerCount, index, count);
+  const clip = ringClip(start, end, ARC_RING.outer, ARC_RING.inner);
+  arcClipCache.set(key, clip);
+  return clip;
+}
+
+function polarPosition(angle, radius) {
+  const radians = angle * Math.PI / 180;
+  return {
+    left: `${50 + Math.cos(radians) * radius}%`,
+    top: `${50 + Math.sin(radians) * radius}%`,
+  };
+}
+
+function ringClip(start, end, outerRadius, innerRadius) {
   const point = (angle, radius) =>
     `${50 + Math.cos(angle * Math.PI / 180) * radius}% ${
       50 + Math.sin(angle * Math.PI / 180) * radius
@@ -39,20 +102,76 @@ export function wedgeClip(index, count) {
       (_, index) => point(from + (to - from) * index / (segments - 1), radius),
     );
   };
-  const outer = arc(start, end, 50);
-  const inner = arc(end, start, 24);
-  const clip = `polygon(${[...outer, ...inner].join(", ")})`;
-  wedgeClipCache.set(key, clip);
-  return clip;
+  const outer = arc(start, end, outerRadius);
+  const inner = arc(end, start, innerRadius);
+  return `polygon(${[...outer, ...inner].join(", ")})`;
 }
 
-export function radialContentPosition(index, count) {
-  const angle = (-90 + (index + .5) * 360 / count) * Math.PI / 180;
-  const radius = 37;
-  return {
-    left: `${50 + Math.cos(angle) * radius}%`,
-    top: `${50 + Math.sin(angle) * radius}%`,
-  };
+export function radialContentPosition(index, count, radius = 37) {
+  return polarPosition(-90 + (index + .5) * 360 / count, radius);
+}
+
+// A categorized wheel's outer arc: the one piece of state that changes when
+// the pointer or focus moves between categories lives here, so swapping arcs
+// re-renders only this component, never the inner ring. The wheel reaches its
+// setter through `arcRef`, like RadialCenter's hover setter. `open(id, true)`
+// also moves focus to the arc's first action (keyboard entry).
+function RadialArc({ arcRef, inner, renderItem }) {
+  const [openId, setOpenId] = useState(null);
+  const [, requestFocus] = useReducer((count) => count + 1, 0);
+  const focusFirstRef = useRef(false);
+  const rootRef = useRef(null);
+  useEffect(() => {
+    arcRef.current = (id, focusFirst = false) => {
+      focusFirstRef.current = focusFirst;
+      setOpenId(id);
+      if (focusFirst) requestFocus();
+    };
+    return () => {
+      arcRef.current = null;
+    };
+  }, [arcRef]);
+  const index = openId === null
+    ? -1
+    : inner.findIndex((wedge) => wedge.category === openId);
+  const open = index >= 0 ? inner[index] : null;
+  // The open category's wedge is marked straight on the DOM: those buttons
+  // belong to the wheel, and re-rendering it to flip one attribute is what
+  // this component exists to avoid. React never renders these two attributes
+  // on a category wedge, so nothing overwrites them.
+  useLayoutEffect(() => {
+    const wheel = rootRef.current?.parentElement;
+    wheel?.querySelectorAll("[data-radial-category]").forEach((button) => {
+      const isOpen = !!open && button.dataset.radialCategory === open.category;
+      button.setAttribute("aria-expanded", String(isOpen));
+      if (isOpen) button.setAttribute("data-open", "");
+      else button.removeAttribute("data-open");
+    });
+    if (focusFirstRef.current) {
+      focusFirstRef.current = false;
+      rootRef.current?.querySelector("button:not(:disabled)")?.focus();
+    }
+  });
+  return (
+    <div
+      ref={rootRef}
+      className="quick-action-radial-arc"
+      data-radial-arc={open ? open.category : undefined}
+      role={open ? "group" : undefined}
+      aria-label={open ? open.label : undefined}
+    >
+      {open?.items.map((item, itemIndex) =>
+        renderItem(
+          item,
+          arcClip(index, inner.length, itemIndex, open.items.length),
+          polarPosition(
+            arcAngles(index, inner.length, itemIndex, open.items.length).mid,
+            ARC_RING.content,
+          ),
+        )
+      )}
+    </div>
+  );
 }
 
 // Owns the one bit of "which wedge is active" state on its own, so a hover or
@@ -143,6 +262,11 @@ function QuickActionsConfigured({
   // re-renders the wheel itself (16 wedges rebuilding clip-paths on hover was
   // the actual lag).
   const radialHoverRef = useRef(null);
+  // A categorized wheel's arc setter (RadialArc), and a flag that keeps the
+  // focus the menu gives its first wedge on opening from fanning that wedge's
+  // category out: an arc opens on a real hover, focus move or click.
+  const radialArcRef = useRef(null);
+  const openingFocusRef = useRef(false);
   // Opened from a right-click rather than the trigger: every action is on
   // offer, whatever the inline or favorite slots already show.
   const [atPointer, setAtPointer] = useState(false);
@@ -189,7 +313,9 @@ function QuickActionsConfigured({
     : mode === "inline"
     ? configured.slice(maxInline)
     : configured;
-  const paged = radial && config?.radialPagination;
+  const categories = radial && config?.radialLayout === "categories";
+  const radialSize = categories ? CATEGORY_WHEEL_SIZE : WHEEL_SIZE;
+  const paged = radial && !categories && config?.radialPagination;
   const pageCount = paged
     ? Math.max(1, Math.ceil(remaining.length / PAGE_SIZE))
     : 1;
@@ -198,6 +324,36 @@ function QuickActionsConfigured({
     ? remaining.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
     : remaining;
   const menuEntries = radial ? visibleRadial : remaining;
+  // The categorized inner ring: direct wedges hold an item, category wedges
+  // the items their arc fans out. Visibility already applied (hidden
+  // descriptors never reach `remaining`), and only a favorite the person set
+  // gets a direct wedge, never the safe fallback.
+  let inner = null;
+  let centerEntries = menuEntries;
+  if (categories) {
+    const byId = new Map(remaining.map((item) => [item.entry.id, item]));
+    inner = groupRadialEntries(
+      remaining.map((item) => item.entry),
+      {},
+      requestedFavorite?.entry.id,
+    ).map((group) =>
+      group.type === "action" ? { item: byId.get(group.entry.id) } : {
+        category: group.id,
+        label: t(`quickActions.category.${group.id}`),
+        Icon: CATEGORY_ICONS[group.id],
+        items: group.entries.map((entry) => byId.get(entry.id)),
+      }
+    );
+    centerEntries = inner.flatMap((wedge) =>
+      wedge.item ? [wedge.item] : [
+        {
+          entry: { id: `category:${wedge.category}` },
+          descriptor: { label: wedge.label, Icon: wedge.Icon },
+        },
+        ...wedge.items,
+      ]
+    );
+  }
   const triggerText = triggerLabel ||
     (surface === "reader" ? t("email.sender.more") : t("quickActions.title"));
   const shouldShowMenu = mode === "menu" || mode === "radial" ||
@@ -274,14 +430,30 @@ function QuickActionsConfigured({
     setAnchor(null);
     setAtPointer(false);
     radialHoverRef.current?.(null);
+    radialArcRef.current?.(null);
     onOpenChange?.(false);
     // A menu opened at the pointer has no trigger to go back to: focusing the
     // row's hidden one would pin the row's hover bar open.
     if (restoreFocus && !atPointer) requestAnimationFrame(() => triggerRef.current?.focus());
   }, [onOpenChange, atPointer]);
+  // Popover's Escape (a document capture listener, so ahead of onMenuKeyDown)
+  // and its outside click both land here. Escape from inside an open arc
+  // steps back to the arc's category; everything else closes the menu.
+  const dismiss = useCallback(() => {
+    const arc = document.activeElement?.closest?.("[data-radial-arc]");
+    if (arc && panelRef.current?.contains(arc)) {
+      panelRef.current.querySelector(
+        `[data-radial-category="${arc.dataset.radialArc}"]`,
+      )?.focus();
+      return;
+    }
+    close();
+  }, [close]);
   useEffect(() => {
     if (opened) {
+      openingFocusRef.current = true;
       panelRef.current?.querySelector("button:not(:disabled)")?.focus();
+      openingFocusRef.current = false;
     }
   }, [opened, page]);
   useEffect(() => {
@@ -313,7 +485,7 @@ function QuickActionsConfigured({
     onOpenChange?.(true);
     setRadialPage(0);
     setAtPointer(true);
-    const size = radial ? 304 : 0;
+    const size = radial ? radialSize : 0;
     setAnchor({
       top: radial
         ? Math.max(8, Math.min(window.innerHeight - size - 8, openAt.y - size / 2))
@@ -328,15 +500,15 @@ function QuickActionsConfigured({
     setAtPointer(false);
     onOpenChange?.(true);
     const rect = event.currentTarget.getBoundingClientRect();
-    const radialSize = radial ? 304 : 0;
+    const size = radial ? radialSize : 0;
     setRadialPage(0);
     setAnchor({
       top: radial
         ? Math.max(
           8,
           Math.min(
-            window.innerHeight - radialSize - 8,
-            rect.top + rect.height / 2 - radialSize / 2,
+            window.innerHeight - size - 8,
+            rect.top + rect.height / 2 - size / 2,
           ),
         )
         : rect.bottom + 6,
@@ -344,8 +516,8 @@ function QuickActionsConfigured({
         ? Math.max(
           8,
           Math.min(
-            window.innerWidth - radialSize - 8,
-            rect.left + rect.width / 2 - radialSize / 2,
+            window.innerWidth - size - 8,
+            rect.left + rect.width / 2 - size / 2,
           ),
         )
         : Math.max(8, Math.min(window.innerWidth - 232, rect.right - 232)),
@@ -376,10 +548,35 @@ function QuickActionsConfigured({
       close(true);
       return;
     }
-    const buttons = [
-      ...event.currentTarget.querySelectorAll("button:not(:disabled)"),
-    ];
-    const index = buttons.indexOf(document.activeElement);
+    const focused = document.activeElement;
+    // A categorized wheel: arrows walk the inner ring, or the open arc when
+    // focus is in it; Right, Enter or Space on a category fans it out and
+    // enters it; Left goes back to the category (Escape too, see `dismiss`).
+    const arc = categories ? focused?.closest?.("[data-radial-arc]") : null;
+    const category = categories && !arc
+      ? focused?.dataset?.radialCategory
+      : null;
+    if (arc && event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.querySelector(
+        `[data-radial-category="${arc.dataset.radialArc}"]`,
+      )?.focus();
+      return;
+    }
+    if (category && ["ArrowRight", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      radialArcRef.current?.(category, true);
+      return;
+    }
+    const root = event.currentTarget;
+    const buttons = categories
+      ? [...(arc || root).querySelectorAll("button:not(:disabled)")].filter(
+        (button) => arc || button.parentElement === root,
+      )
+      : [...root.querySelectorAll("button:not(:disabled)")];
+    const index = buttons.indexOf(focused);
     const next = event.key === "ArrowDown" || event.key === "ArrowRight"
       ? (index + 1 + buttons.length) % buttons.length
       : event.key === "ArrowUp" || event.key === "ArrowLeft"
@@ -430,10 +627,16 @@ function QuickActionsConfigured({
       </button>
     );
   };
-  const radialButton = (item, index, count) => {
+  // `inArc`: one of an open category's actions. Any other wedge folds an
+  // open arc away when the pointer or focus reaches it.
+  const radialButton = (item, clipPath, position, inArc = false) => {
     const { descriptor, entry: saved } = item;
     const Icon = descriptor.Icon;
     const color = quickActionColorFor(item.entry, config.palette);
+    const enter = () => {
+      radialHoverRef.current?.(saved.id);
+      if (!inArc) radialArcRef.current?.(null);
+    };
     return (
       <button
         key={saved.id}
@@ -446,16 +649,51 @@ function QuickActionsConfigured({
         aria-expanded={descriptor.expanded}
         disabled={!!descriptor.disabled}
         style={{
-          clipPath: wedgeClip(index, count),
+          clipPath,
           ...(color ? { "--quick-action-color": color } : {}),
         }}
-        onMouseEnter={() => radialHoverRef.current?.(saved.id)}
-        onFocus={() => radialHoverRef.current?.(saved.id)}
+        onMouseEnter={enter}
+        onFocus={enter}
         onClick={(event) => activate(item, event)}
       >
         <span
           className="quick-action-radial-content"
-          style={radialContentPosition(index, count)}
+          style={position}
+        >
+          {Icon && <Icon size={19} aria-hidden="true" />}
+        </span>
+      </button>
+    );
+  };
+  const categoryButton = (wedge, index, count) => {
+    const Icon = wedge.Icon;
+    const fanOut = () => radialArcRef.current?.(wedge.category);
+    return (
+      <button
+        key={`category:${wedge.category}`}
+        type="button"
+        role="menuitem"
+        aria-haspopup="true"
+        className="quick-action-radial-item quick-action-radial-category"
+        data-radial-category={wedge.category}
+        aria-label={wedge.label}
+        style={{ clipPath: wedgeClip(index, count, INNER_RING) }}
+        onMouseEnter={() => {
+          radialHoverRef.current?.(`category:${wedge.category}`);
+          fanOut();
+        }}
+        onFocus={() => {
+          radialHoverRef.current?.(`category:${wedge.category}`);
+          if (!openingFocusRef.current) fanOut();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          fanOut();
+        }}
+      >
+        <span
+          className="quick-action-radial-content"
+          style={radialContentPosition(index, count, INNER_RING.content)}
         >
           {Icon && <Icon size={19} aria-hidden="true" />}
         </span>
@@ -467,8 +705,8 @@ function QuickActionsConfigured({
     ? {
       top: anchor?.top || 0,
       left: anchor?.left || 0,
-      width: 304,
-      height: 304,
+      width: radialSize,
+      height: radialSize,
     }
     : {
       top: anchor?.top || 0,
@@ -483,12 +721,34 @@ function QuickActionsConfigured({
   };
   const wheel = (
     <>
-      {menuEntries.map((item, index) =>
-        radialButton(item, index, menuEntries.length)
+      {categories
+        ? inner.map((wedge, index) =>
+          wedge.item
+            ? radialButton(
+              wedge.item,
+              wedgeClip(index, inner.length, INNER_RING),
+              radialContentPosition(index, inner.length, INNER_RING.content),
+            )
+            : categoryButton(wedge, index, inner.length)
+        )
+        : menuEntries.map((item, index) =>
+          radialButton(
+            item,
+            wedgeClip(index, menuEntries.length),
+            radialContentPosition(index, menuEntries.length),
+          )
+        )}
+      {categories && (
+        <RadialArc
+          arcRef={radialArcRef}
+          inner={inner}
+          renderItem={(item, clipPath, position) =>
+            radialButton(item, clipPath, position, true)}
+        />
       )}
       <RadialCenter
         hoverRef={radialHoverRef}
-        menuEntries={menuEntries}
+        menuEntries={centerEntries}
         page={page}
         pageCount={pageCount}
         onPrevPage={() => changePage(page - 1)}
@@ -498,6 +758,8 @@ function QuickActionsConfigured({
       />
     </>
   );
+  // Leaving a categorized wheel folds its arc away.
+  const foldArc = categories ? () => radialArcRef.current?.(null) : undefined;
   if (preview && radial) {
     return (
       <div
@@ -505,7 +767,9 @@ function QuickActionsConfigured({
         className="quick-actions-radial quick-actions-radial-preview"
         role="menu"
         aria-label={triggerText}
+        data-radial-layout={categories ? "categories" : undefined}
         onKeyDown={onMenuKeyDown}
+        onMouseLeave={foldArc}
       >
         {wheel}
       </div>
@@ -549,12 +813,14 @@ function QuickActionsConfigured({
         ref={panelRef}
         id={id}
         open={opened}
-        onClose={close}
+        onClose={dismiss}
         handlesTab
         role="menu"
         aria-label={triggerText}
         onKeyDown={onMenuKeyDown}
+        onMouseLeave={foldArc}
         data-surface={surface}
+        data-radial-layout={categories ? "categories" : undefined}
         className={radial ? "quick-actions-radial" : "quick-actions-menu"}
         style={panelStyle}
       >
