@@ -3,6 +3,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useMenuAtPointer } from '../useMenuAtPointer';
+import { QuickActions } from '../../components/QuickActions';
 
 function Row() {
   const [menuAt, handlers] = useMenuAtPointer();
@@ -130,5 +131,50 @@ describe('useMenuAtPointer', () => {
     });
     expect(event.defaultPrevented).toBe(true);
     expect(screen.getByTestId('menu').dataset).toMatchObject({ x: '12', y: '34' });
+  });
+});
+
+// A row mounts its quick actions only while live (hovered, focused,
+// right-clicked), so the real QuickActions here unmounts on leave and mounts
+// again on the next hover.
+const noop = () => {};
+const descriptors = ['archive', 'reply'].map((id) => ({ id, action: id, label: id, Icon: () => null, onActivate: noop }));
+const radialConfig = { mode: 'radial', entries: descriptors.map(({ id, action }) => ({ id, action })), palette: 'neutral' };
+function LiveRow({ onOpenChange }) {
+  const [menuAt, handlers, live] = useMenuAtPointer();
+  return (
+    <div data-testid="live-row" {...handlers}>
+      {live && <QuickActions config={radialConfig} descriptors={descriptors} identity="row-1" openAt={menuAt} onOpenChange={onOpenChange} />}
+    </div>
+  );
+}
+const expanded = () => document.querySelector('.quick-actions-trigger')?.getAttribute('aria-expanded');
+
+describe('useMenuAtPointer with a row that mounts its actions only while live', () => {
+  it('a row hovered again after its wheel closed does not reopen it at the old point', () => {
+    const onOpenChange = vi.fn();
+    render(<LiveRow onOpenChange={onOpenChange} />);
+    const row = screen.getByTestId('live-row');
+    fireEvent.pointerEnter(row);
+    fireEvent.pointerDown(row, { button: 2, clientX: 200, clientY: 220 });
+    expect(expanded()).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(expanded()).toBe('false');
+    fireEvent.pointerLeave(row);
+    fireEvent.pointerEnter(row);
+    expect(expanded()).toBe('false');
+    expect(onOpenChange.mock.calls.filter(([open]) => open)).toHaveLength(1);
+  });
+
+  // The right button's mousedown would move focus to the body, off the wedge
+  // the wheel focused on pointerdown: a keyboard user then had to Tab back in.
+  it('a right-click leaves focus on the wheel: its mousedown never moves focus', () => {
+    render(<LiveRow onOpenChange={noop} />);
+    const row = screen.getByTestId('live-row');
+    fireEvent.pointerEnter(row);
+    fireEvent.pointerDown(row, { button: 2, clientX: 200, clientY: 220 });
+    expect(fireEvent.mouseDown(row, { button: 2 })).toBe(false);
+    expect(document.activeElement?.closest('[role="menu"]')).toBeTruthy();
+    expect(fireEvent.mouseDown(row, { button: 0 })).toBe(true);
   });
 });

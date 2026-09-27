@@ -39,7 +39,8 @@ export async function wakeRows() {
     }
   });
   await browser.waitUntil(() => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
-    .every((row) => row.querySelector('[data-row-actions]'))), { timeout: 5_000, interval: 50 }).catch(() => {});
+    .every((row) => row.querySelector('[data-row-actions]'))),
+  { timeout: 5_000, interval: 50, timeoutMsg: 'a hovered row never mounted its quick actions' });
 }
 
 export const rowMenuIsOpen = () =>

@@ -59,18 +59,21 @@ export function useMenuAtPointer() {
       y: rect ? rect.top + rect.height / 2 : event.clientY,
     });
   }, []);
+  // Letting go also forgets the point: the row's quick actions mount afresh
+  // on the next hover, and a stale point would open the wheel there again.
+  const release = () => { setLive(false); setMenuAt(null); };
   return [menuAt, {
     onPointerDown: openMenuAtPointer,
+    // The right button's mousedown would move focus to the body, off the wedge
+    // the wheel focused on pointerdown.
+    onMouseDown: (event) => { if (event.button === 2) event.preventDefault(); },
     onContextMenu: openMenuFromContextMenu,
     onPointerEnter: () => setLive(true),
-    onPointerLeave: () => setLive(false),
+    onPointerLeave: release,
     // A trackpad swipe runs through the row's quick actions (useRowSwipe), and
     // after a scroll under a still pointer no hover may have reached the row.
     onWheel: (event) => { if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) setLive(true); },
     onFocus: () => setLive(true),
-    // Only focus that moved on to something outside the row lets go. Focus
-    // sent nowhere is the right-click's own mousedown dropping it from the
-    // wedge the wheel just focused; the pointer is still on the row.
-    onBlur: (event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setLive(false); },
+    onBlur: (event) => { if (!event.currentTarget.contains(event.relatedTarget)) release(); },
   }, live];
 }

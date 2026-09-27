@@ -144,7 +144,8 @@ describe("QuickActions", () => {
     }
     render(<Row />);
     fireEvent.pointerDown(screen.getByTestId("row"), { button: 2, clientX: 200, clientY: 220 });
-    expect(screen.getByRole("menu")).toBeTruthy();
+    // Open, not an exiting panel (AnimatePresence keeps role=menu through exit).
+    expect(document.querySelector(".quick-actions-trigger").getAttribute("aria-expanded")).toBe("true");
   });
 
   it("uses a safe favorite fallback when the saved favorite is unavailable", () => {

@@ -112,18 +112,17 @@ for (const [name, renderRow, uidsOf] of variants) {
     });
 
     // A real right-click opens the wheel on pointerdown and focuses its first
-    // wedge; the mousedown's own default action then drops focus to the body.
-    // That blur went nowhere, and must not unmount the wheel it came from
-    // (seen on Windows WebView2, before the list's hold had rendered).
-    it('keeps them through a blur that sends focus nowhere', () => {
+    // wedge. Its mousedown must not then drop focus to the body: on Windows
+    // WebView2 that blur unmounted the wheel before the list's hold rendered.
+    // With it suppressed, any blur that leaves the row lets go.
+    it("a right-click's mousedown keeps focus; a blur out of the row lets go", () => {
       render(<List count={20} renderRow={renderRow} />);
       const row = screen.getAllByTestId('email-row')[2];
       fireEvent.pointerEnter(row);
       fireEvent.pointerDown(row, { button: 2, clientX: 12, clientY: 34 });
-      fireEvent.focusOut(screen.getByTestId('busy'), { relatedTarget: null });
+      expect(fireEvent.mouseDown(row, { button: 2 })).toBe(false);
       expect(screen.getAllByTestId('row-actions').map(n => n.dataset.uids)).toEqual([uidsOf(2)]);
-      // Focus moving on to another element outside the row still lets go.
-      fireEvent.focusOut(screen.getByTestId('busy'), { relatedTarget: document.body });
+      fireEvent.focusOut(screen.getByTestId('busy'), { relatedTarget: null });
       expect(screen.queryAllByTestId('row-actions')).toHaveLength(0);
     });
 

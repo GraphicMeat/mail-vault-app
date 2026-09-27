@@ -292,7 +292,12 @@ function QuickActionsConfigured({
       root?.querySelector(".quick-action-radial-item:not(:disabled)")?.focus();
     });
   }, [page, preview]);
+  // A new identity (another message) closes the menu. Not on mount: a row
+  // mounts this inside the right-click that opens it (`openAt` below).
+  const identityRef = useRef(identity);
   useEffect(() => {
+    if (identityRef.current === identity) return;
+    identityRef.current = identity;
     setAnchor(null);
     setAtPointer(false);
     setRadialPage(0);
