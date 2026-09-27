@@ -495,6 +495,11 @@ pub fn read_message_id(path: &Path) -> Option<String> {
     message_id_of(&header_value(&read_header_text(path)?, "message-id:")?)
 }
 
+/// `read_message_id` of a message already in memory (a server fetch).
+pub fn message_id_in(raw: &[u8]) -> Option<String> {
+    message_id_of(&header_value(&String::from_utf8_lossy(header_section(raw)), "message-id:")?)
+}
+
 /// `read_message_id` plus the `Date:` header as epoch milliseconds, from one
 /// bounded read. What the eviction worker needs of a cache copy: the id that
 /// ties it to the server's message, and the age a window judges. Either is

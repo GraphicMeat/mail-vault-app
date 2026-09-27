@@ -52,7 +52,7 @@ macro_rules! req {
 /// `commands.rs`'s `imap_get_email_light`, same value, same reasoning: only
 /// the TCP connect has its own timeout, so a server that accepts the FETCH
 /// and goes quiet must not spin the caller forever.
-const BODY_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+pub(crate) const BODY_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
 /// Same helper as `commands.rs`'s `with_background`, against the daemon's
 /// pool instead of a `tauri::State`. On success the session goes back to the
@@ -103,7 +103,7 @@ where
 /// ahead (backfill, IDLE arrivals) only inside a Keep Recent / Index Only
 /// window, always under Hoarder. A hidden account: nothing. `false` then:
 /// no copy was written by this call.
-async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> bool {
+pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> bool {
     let app_dir = state.app_dir.clone();
     let policy_account = account_id.clone();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
@@ -536,6 +536,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // `store` answered Ok: written now, or a file was already there.
                     let dated = email_date_ms(e.date.as_deref(), e.internal_date.as_deref());
                     let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated, opened).await;
+                    // Not kept on disk (On Demand): the attachment and inline
+                    // image reads that follow this open are served from
+                    // memory (`raw_message`). A backfill body is not an open.
+                    if !cached && opened {
+                        state.raw_messages.remember(&aid, &mb, store_uid, e.raw_source_bytes.clone());
+                    }
                     // OpenPGP: decrypted in memory whatever the cache did; the
                     // decrypted copy is kept only when the vault holds the message.
                     let raw = e.raw_source_bytes.clone();

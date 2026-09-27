@@ -32,6 +32,7 @@ mod learning;
 mod mbox;
 mod migration;
 mod netgate;
+mod raw_message;
 pub mod llm;
 mod restore;
 mod scheduled_send_worker;
@@ -482,6 +483,7 @@ async fn daemon_main() {
         snooze: snooze_worker::SnoozeState::default(),
         auto_tag_worker,
         eviction_worker: eviction_worker::EvictionWorkerState::default(),
+        raw_messages: raw_message::RawMessages::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
     state.idle.set_daemon(&state);

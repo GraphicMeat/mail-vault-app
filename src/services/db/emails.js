@@ -584,7 +584,8 @@ export async function exportEmail(localId) {
   if (!parsed || !invoke) return null;
 
   try {
-    // Get light email for subject, and raw source separately
+    // Light email for the subject (vault only: null when the vault has no
+    // copy), raw source for the bytes (the daemon falls back to the server).
     const [email, rawBase64] = await Promise.all([
       invoke('maildir_read_light', {
         accountId: parsed.accountId,
@@ -597,10 +598,10 @@ export async function exportEmail(localId) {
         uid: parseInt(parsed.uid, 10),
       }),
     ]);
-    if (!email || !rawBase64) return null;
+    if (!rawBase64) return null;
 
     return {
-      filename: `${(email.subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
+      filename: `${(email?.subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
       content: atob(rawBase64),
       rawBase64,
       mimeType: 'message/rfc822'

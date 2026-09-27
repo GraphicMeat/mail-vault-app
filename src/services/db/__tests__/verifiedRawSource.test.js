@@ -16,7 +16,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   readDir: vi.fn(), exists: vi.fn(), BaseDirectory: {},
 }));
 
-const { getVerifiedRawSource } = await import('../emails.js');
+const { getVerifiedRawSource, exportEmail } = await import('../emails.js');
 
 const b64 = (s) => Buffer.from(s, 'binary').toString('base64');
 
@@ -79,5 +79,40 @@ describe('getVerifiedRawSource', () => {
 
     expect(out).toBeTruthy();
     expect(error).toBeNull();
+  });
+});
+
+// `.eml` export of a message the vault has no copy of (On Demand, evicted):
+// the daemon's raw source comes from the server, but the light read is
+// vault-only and answers null. The export must not hang on it.
+describe('exportEmail', () => {
+  beforeEach(() => mockInvoke.mockReset());
+
+  const LOCAL_ID = '0123456789abcdef0123456789abcdef0123-INBOX-4';
+
+  it('exports the raw source when the vault holds no light row', async () => {
+    const raw = rawWith(ROW_ID);
+    mockInvoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_raw_source' ? raw : null));
+
+    const out = await exportEmail(LOCAL_ID);
+
+    expect(out?.rawBase64).toBe(raw);
+    expect(out?.filename).toMatch(/\.eml$/);
+  });
+
+  it('names the file after the subject when the vault has the message', async () => {
+    const raw = rawWith(ROW_ID);
+    mockInvoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_raw_source' ? raw : { subject: 'Hello there' }));
+
+    expect((await exportEmail(LOCAL_ID))?.filename).toBe('Hello_there.eml');
+  });
+
+  it('is null when there are no bytes anywhere', async () => {
+    mockInvoke.mockImplementation(async (cmd) => {
+      if (cmd === 'maildir_read_raw_source') throw new Error('Email UID 4 not found');
+      return null;
+    });
+
+    expect(await exportEmail(LOCAL_ID)).toBeNull();
   });
 });

@@ -115,12 +115,15 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
                     messages_of(state, &def, &accounts, &keys)?
                 }
             };
-            let root = crate::handlers::common::vault_root(state)?;
+            // An unreachable vault fails the export whole, as before; a
+            // message it has no copy of comes from the server (`raw_message`).
+            crate::handlers::common::vault_root(state)?;
+            // `run` is on a blocking thread (`route`), so it may wait here.
+            let handle = tokio::runtime::Handle::current();
             json_of(mailvault_core::vault_files::export_many_attachments(
-                &state.vault_registry,
-                &root,
                 &messages,
                 std::path::Path::new(dest_dir),
+                &mut |account_id, mailbox, uid| handle.block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true)),
             )?)
         }
         "views.counts" => {

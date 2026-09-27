@@ -192,6 +192,9 @@ pub struct DaemonState {
     /// The download-mode eviction worker's wake signal:
     /// `storage.fetch_mode_changed` pokes it (Track H).
     pub eviction_worker: crate::eviction_worker::EvictionWorkerState,
+    /// Server fallback for a message the vault has no copy of, and the
+    /// in-memory copies On Demand keeps (`raw_message`, Track H3c).
+    pub(crate) raw_messages: crate::raw_message::RawMessages,
 }
 
 /// Opens the vault registry for the vault at `root` and points its change
@@ -767,6 +770,7 @@ impl DaemonState {
             snooze: crate::snooze_worker::SnoozeState::default(),
             auto_tag_worker,
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
+            raw_messages: Default::default(),
         });
         state.idle.set_daemon(&state);
         state

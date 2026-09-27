@@ -24,6 +24,20 @@ macro_rules! req {
     };
 }
 
+/// The message's bytes (`raw_message`: the vault, else memory or the server)
+/// handed to `f` off the runtime: parsing a large message blocks.
+async fn with_message<T: Send + 'static>(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    readable: bool,
+    f: impl FnOnce(Vec<u8>) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let raw = crate::raw_message::raw_message(state, account_id, mailbox, uid, readable).await?;
+    blocking(move || f(raw)).await.and_then(|r| r)
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "maildir_read" => {
@@ -82,19 +96,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // View Source and the .eml export: the original bytes, never the
+        // decrypted copy.
         "maildir_read_raw_source" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
-            let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    vault_files::read_raw_source(&state.vault_registry, &root, &account_id, &mailbox, uid).map(Value::String)
+                with_message(state, &account_id, &mailbox, uid, false, |raw| {
+                    use base64::Engine;
+                    Ok(Value::String(base64::engine::general_purpose::STANDARD.encode(raw)))
                 })
-                .await
-                .and_then(|r| r),
+                .await,
             )
         }
         "maildir_read_attachment" => {
@@ -102,15 +116,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
-            let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    vault_files::read_attachment(&state.vault_registry, &root, &account_id, &mailbox, uid, index).map(Value::String)
-                })
-                .await
-                .and_then(|r| r),
+                with_message(state, &account_id, &mailbox, uid, true, move |raw| vault_files::attachment_of(&raw, index).map(Value::String)).await,
             )
         }
         // One call per message for its inline images (`hydrateInlineImages`):
@@ -120,16 +128,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let indices = req!(vec_arg::<usize>(&id, params, "attachmentIndices"));
-            let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    let parts = vault_files::read_attachments(&state.vault_registry, &root, &account_id, &mailbox, uid, &indices)?;
-                    serde_json::to_value(parts).map_err(|e| e.to_string())
+                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                    serde_json::to_value(vault_files::attachments_of(&raw, &indices)?).map_err(|e| e.to_string())
                 })
-                .await
-                .and_then(|r| r),
+                .await,
             )
         }
         "maildir_exists" => {
@@ -254,16 +258,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
-            let state = Arc::clone(state);
+            let state2 = Arc::clone(state);
+            let (a, m) = (account_id.clone(), mailbox.clone());
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    let path = vault_files::cached_attachment_path(&state.vault_registry, &root, &account_id, &mailbox, uid, index)?;
+                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                    let root = vault_root(&state2)?;
+                    let path = vault_files::cached_attachment_path(&root, &raw, &a, &m, uid, index)?;
                     serde_json::to_value(path).map_err(|e| e.to_string())
                 })
-                .await
-                .and_then(|r| r),
+                .await,
             )
         }
         // Reads the .eml and writes N files OUTSIDE the vault (a folder the
@@ -277,18 +281,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let uid = req!(u32_arg(&id, params, "uid"));
             let indices = req!(vec_arg::<usize>(&id, params, "indices"));
             let dest_dir = req!(str_arg(&id, params, "destDir"));
-            let state = Arc::clone(state);
+            // Checked before the message is read: nothing to export must not
+            // cost a download.
+            if indices.is_empty() {
+                return Some(done(id, Err("No attachments to export".to_string())));
+            }
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    let out = vault_files::export_attachments(
-                        &state.vault_registry, &root, &account_id, &mailbox, uid, &indices, std::path::Path::new(&dest_dir),
-                    )?;
+                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                    let out = vault_files::export_attachments(&raw, uid, &indices, std::path::Path::new(&dest_dir))?;
                     serde_json::to_value(out).map_err(|e| e.to_string())
                 })
-                .await
-                .and_then(|r| r),
+                .await,
             )
         }
         // Writes one file under <root>/attachment_cache: with_vault_write,
@@ -299,18 +303,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
-            let state = Arc::clone(state);
+            let state2 = Arc::clone(state);
+            let (a, m) = (account_id.clone(), mailbox.clone());
+            // The message is read first, outside the gate: resolving it can
+            // verify the mailbox, and the lock order puts the registry's
+            // mailbox lock before the gate.
             done(
                 id,
-                blocking(move || -> Result<Value, String> {
-                    // The message is read first, outside the gate: resolving it
-                    // can verify the mailbox, and the lock order puts the
-                    // registry's mailbox lock before the gate.
-                    let raw = vault_files::read_body_eml(&state.vault_registry, &vault_root(&state)?, &account_id, &mailbox, uid)?;
-                    with_vault_write(&state, |root| vault_files::cache_attachment(root, &raw, &account_id, &mailbox, uid, index)).map(Value::String)
+                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                    with_vault_write(&state2, |root| vault_files::cache_attachment(root, &raw, &a, &m, uid, index)).map(Value::String)
                 })
-                .await
-                .and_then(|r| r),
+                .await,
             )
         }
         // Task 2.8: the six simple vault writers. Single-file writes

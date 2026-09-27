@@ -284,6 +284,83 @@ pub fn eviction_plan(
     eviction_candidates(&files, policy, now_ms, &proven, indexed)
 }
 
+/// Whether `raw` (a message fetched from the server, or held in memory) is
+/// the message the header cache lists under its uid, whose Message-ID is
+/// `listed`. Compared with every space and bracket removed, the rule the app's
+/// raw-source check uses (`readRawMessageId`): IMAP ENVELOPE and a header parse
+/// fold the same id differently. A missing id on either side proves nothing
+/// and is let through, the contract of the app's `bodyMatchesHeader`. Only
+/// the header block is read: a quoted reply carries its parent's id below it.
+pub fn same_message(listed: Option<&str>, raw: &[u8]) -> bool {
+    let canon = |id: &str| id.chars().filter(|c| !c.is_whitespace() && *c != '<' && *c != '>').collect::<String>();
+    let listed = listed.map(canon).filter(|id| !id.is_empty());
+    let own = crate::maildir::message_id_in(raw).map(|id| canon(&id)).filter(|id| !id.is_empty());
+    match (listed, own) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    }
+}
+
+/// One message's bytes in `RawLru`.
+#[derive(Debug)]
+struct RawEntry {
+    account: String,
+    mailbox: String,
+    uid: u32,
+    raw: Vec<u8>,
+}
+
+/// On Demand keeps no body on disk, so a message it fetched lives here, in
+/// memory, for the attachment, inline-image and source reads that follow the
+/// open. Capped by count and by bytes; the least recently used goes first. A
+/// message larger than the whole byte cap is never kept.
+// ponytail: a linear scan over at most `max_count` entries; a map plus a
+// list if the cap ever grows past a few dozen.
+#[derive(Debug)]
+pub struct RawLru {
+    /// Oldest first.
+    entries: std::collections::VecDeque<RawEntry>,
+    max_count: usize,
+    max_bytes: usize,
+    bytes: usize,
+}
+
+impl RawLru {
+    pub fn new(max_count: usize, max_bytes: usize) -> Self {
+        RawLru { entries: Default::default(), max_count, max_bytes, bytes: 0 }
+    }
+
+    fn take(&mut self, account: &str, mailbox: &str, uid: u32) -> Option<RawEntry> {
+        let at = self.entries.iter().position(|e| e.uid == uid && e.account == account && e.mailbox == mailbox)?;
+        let entry = self.entries.remove(at)?;
+        self.bytes -= entry.raw.len();
+        Some(entry)
+    }
+
+    /// The message's bytes, now the most recently used.
+    pub fn get(&mut self, account: &str, mailbox: &str, uid: u32) -> Option<Vec<u8>> {
+        let entry = self.take(account, mailbox, uid)?;
+        let raw = entry.raw.clone();
+        self.bytes += entry.raw.len();
+        self.entries.push_back(entry);
+        Some(raw)
+    }
+
+    /// Keep `raw` as the most recently used, replacing what the key held.
+    pub fn put(&mut self, account: &str, mailbox: &str, uid: u32, raw: Vec<u8>) {
+        self.take(account, mailbox, uid);
+        if raw.len() > self.max_bytes || self.max_count == 0 {
+            return;
+        }
+        while self.entries.len() >= self.max_count || self.bytes + raw.len() > self.max_bytes {
+            let Some(old) = self.entries.pop_front() else { break };
+            self.bytes -= old.raw.len();
+        }
+        self.bytes += raw.len();
+        self.entries.push_back(RawEntry { account: account.to_string(), mailbox: mailbox.to_string(), uid, raw });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -591,5 +668,76 @@ mod tests {
         let keep_recent = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
         assert!(!keep_recent.caches_fetched(false, Some(STALE_DATE_MS), NOW_MS));
         assert!(keep_recent.caches_fetched(false, Some(NOW_MS), NOW_MS));
+    }
+
+    // ── H3c: raw bytes of a message the vault does not hold ──
+
+    fn lru_keys(lru: &RawLru) -> Vec<u32> {
+        lru.entries.iter().map(|e| e.uid).collect()
+    }
+
+    #[test]
+    fn the_raw_lru_keeps_at_most_its_count_and_drops_the_oldest() {
+        let mut lru = RawLru::new(2, 1_000);
+        for uid in 1..=3 {
+            lru.put("a", "INBOX", uid, vec![0; 10]);
+        }
+        assert_eq!(lru.get("a", "INBOX", 1), None, "the oldest went first");
+        assert_eq!(lru.get("a", "INBOX", 3), Some(vec![0; 10]));
+        assert_eq!(lru.entries.len(), 2);
+    }
+
+    #[test]
+    fn the_raw_lru_drops_the_oldest_past_its_byte_cap_and_never_keeps_an_oversize_message() {
+        let mut lru = RawLru::new(10, 100);
+        lru.put("a", "INBOX", 1, vec![1; 60]);
+        lru.put("a", "INBOX", 2, vec![2; 60]);
+        assert_eq!(lru_keys(&lru), vec![2], "120 bytes is over the cap: uid 1 goes");
+        lru.put("a", "INBOX", 3, vec![3; 101]);
+        assert_eq!(lru.get("a", "INBOX", 3), None, "larger than the whole cap: not kept");
+        assert_eq!(lru_keys(&lru), vec![2], "and it evicts nothing on the way");
+        assert_eq!(lru.bytes, 60);
+    }
+
+    #[test]
+    fn a_raw_lru_hit_is_the_most_recent_and_a_put_replaces_the_same_key() {
+        let mut lru = RawLru::new(2, 1_000);
+        lru.put("a", "INBOX", 1, vec![1]);
+        lru.put("a", "INBOX", 2, vec![2]);
+        assert!(lru.get("a", "INBOX", 1).is_some());
+        lru.put("a", "INBOX", 3, vec![3]);
+        assert_eq!(lru_keys(&lru), vec![1, 3], "uid 1 was read last, so uid 2 went");
+        lru.put("a", "INBOX", 3, vec![9, 9]);
+        assert_eq!(lru.get("a", "INBOX", 3), Some(vec![9, 9]));
+        assert_eq!((lru.entries.len(), lru.bytes), (2, 3));
+        // Same uid, another mailbox or account: another message.
+        assert_eq!(lru.get("a", "Sent", 3), None);
+        assert_eq!(lru.get("b", "INBOX", 3), None);
+    }
+
+    fn with_id(header: &str) -> Vec<u8> {
+        format!("From: a@example.com\r\n{header}Subject: s\r\n\r\nMessage-ID: <quoted@elsewhere>\r\n").into_bytes()
+    }
+
+    #[test]
+    fn same_message_ignores_brackets_and_folding() {
+        let raw = with_id("Message-ID:\r\n <abc@example.com>\r\n");
+        assert!(same_message(Some("<abc@example.com>"), &raw));
+        assert!(same_message(Some("abc@example.com"), &raw));
+        assert!(same_message(Some(" <abc@example.com >"), &raw));
+    }
+
+    #[test]
+    fn same_message_refuses_another_id_and_reads_only_the_header() {
+        assert!(!same_message(Some("<other@example.com>"), &with_id("Message-ID: <abc@example.com>\r\n")));
+        // The body quotes a Message-ID: it is not this message's.
+        assert!(!same_message(Some("<quoted@elsewhere>"), &with_id("Message-ID: <abc@example.com>\r\n")));
+    }
+
+    #[test]
+    fn same_message_lets_a_missing_id_on_either_side_through() {
+        assert!(same_message(None, &with_id("Message-ID: <abc@example.com>\r\n")));
+        assert!(same_message(Some(""), &with_id("Message-ID: <abc@example.com>\r\n")));
+        assert!(same_message(Some("<abc@example.com>"), &with_id("")));
     }
 }

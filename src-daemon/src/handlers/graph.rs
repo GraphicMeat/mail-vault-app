@@ -161,6 +161,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .flatten()
                 .is_some_and(|p| p.caches_fetched(opened, date_ms, crate::handlers::imap::now_ms()));
             if !keep {
+                // The reads that follow an open (attachments, inline images,
+                // source) come from memory: the daemon has no Graph token to
+                // fetch this message again (`raw_message`).
+                if opened {
+                    state.raw_messages.remember(&account_id, &mailbox, uid, raw_bytes.clone());
+                }
                 return Some(match vault_eml::parse_eml_bytes_light(&raw_bytes, uid, vec![]) {
                     Ok(email) => RpcResponse::success(id, json!({"success": true, "email": email, "cached": false})),
                     Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),

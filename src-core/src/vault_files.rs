@@ -266,6 +266,15 @@ pub fn read_body_eml(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox
     Ok(crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw))
 }
 
+/// `read_body_eml` (`readable`) or `read_eml` with a verified miss kept
+/// apart: `Ok(None)` is "the vault does not hold this uid", the one answer
+/// the daemon's server fallback (`raw_message`) may act on. `Err`: the
+/// mailbox could not be verified, or the file would not read.
+pub fn read_message(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Vec<u8>>, String> {
+    let Some((_, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
+    Ok(Some(if readable { crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw) } else { raw }))
+}
+
 pub fn read(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<ParsedEmail>, String> {
     let Some((name, raw)) = read_resolved(reg, root, account_id, mailbox, uid)? else { return Ok(None) };
     let raw = crate::pgp::readable(&cur_path(root, account_id, mailbox), uid, raw);
@@ -322,9 +331,13 @@ fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uids: &[u32]
 }
 
 pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, attachment_index: usize) -> Result<String, String> {
+    attachment_of(&read_body_eml(reg, root, account_id, mailbox, uid)?, attachment_index)
+}
+
+/// One attachment part of the message `raw` (its readable bytes), base64.
+pub fn attachment_of(raw: &[u8], attachment_index: usize) -> Result<String, String> {
     use base64::Engine;
-    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
-    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
 
     let mut attach_parts: Vec<&mailparse::ParsedMail> = Vec::new();
     collect_attachment_parts(&parsed, &mut attach_parts);
@@ -341,9 +354,13 @@ pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailb
 /// that one part could not be read (out of range, undecodable body); a
 /// message that cannot be found, read or parsed is an `Err` for the call.
 pub fn read_attachments(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, indices: &[usize]) -> Result<Vec<Option<String>>, String> {
+    attachments_of(&read_body_eml(reg, root, account_id, mailbox, uid)?, indices)
+}
+
+/// `read_attachments` of a message already read: `raw` is its readable bytes.
+pub fn attachments_of(raw: &[u8], indices: &[usize]) -> Result<Vec<Option<String>>, String> {
     use base64::Engine;
-    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
-    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let parsed = mailparse::parse_mail(raw).map_err(|e| format!("Failed to parse email: {}", e))?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
     Ok(indices.iter()
@@ -1034,11 +1051,11 @@ pub fn cache_attachment(root: &Path, raw: &[u8], account_id: &str, mailbox: &str
     Ok(path.to_string_lossy().to_string())
 }
 
-/// The cached path of one attachment part, if the file exists.
-pub fn cached_attachment_path(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<String>, String> {
+/// The cached path of one attachment part, if the file exists. `raw` is the
+/// message's readable bytes, read by the caller (vault, or the server).
+pub fn cached_attachment_path(root: &Path, raw: &[u8], account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<String>, String> {
     let cache_dir = root.join("attachment_cache");
-    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
-    Ok(cached_attachment_in(&cache_dir, &raw, account_id, mailbox, uid, index)?
+    Ok(cached_attachment_in(&cache_dir, raw, account_id, mailbox, uid, index)?
         .map(|p| p.to_string_lossy().to_string()))
 }
 
@@ -1090,23 +1107,10 @@ fn next_free(path: &Path) -> PathBuf {
 /// `dest_dir` is where the app wants the folder; an existing folder of that
 /// name is never written into, a `(n)` sibling is created instead, so two
 /// exports of two messages never merge.
+///
+/// `raw` is the message's readable bytes, read by the caller (the vault, or
+/// the server when the vault has no copy).
 pub fn export_attachments(
-    reg: &VaultRegistry,
-    root: &Path,
-    account_id: &str,
-    mailbox: &str,
-    uid: u32,
-    indices: &[usize],
-    dest_dir: &Path,
-) -> Result<ExportedAttachments, String> {
-    if indices.is_empty() {
-        return Err("No attachments to export".to_string());
-    }
-    let raw = read_body_eml(reg, root, account_id, mailbox, uid)?;
-    export_attachments_in(&raw, uid, indices, dest_dir)
-}
-
-fn export_attachments_in(
     raw: &[u8],
     uid: u32,
     indices: &[usize],
@@ -1151,17 +1155,20 @@ pub struct BulkExport {
 /// in one new folder. "Real" is the viewer's rule (`is_real_attachment`): the
 /// signature logos and tracking pixels it hides are not downloaded either.
 /// One unreadable message is counted and skipped, never the whole export.
+///
+/// `read` answers a message's readable bytes: the daemon passes its
+/// `raw_message`, which reads the vault first and the server when the vault
+/// has no copy.
 pub fn export_many_attachments(
-    reg: &VaultRegistry,
-    root: &Path,
     messages: &[(String, String, u32)],
     dest_dir: &Path,
+    read: &mut dyn FnMut(&str, &str, u32) -> Result<Vec<u8>, String>,
 ) -> Result<BulkExport, String> {
     let dir = next_free(dest_dir);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
     let (mut files, mut skipped) = (0, 0);
     for (account_id, mailbox, uid) in messages {
-        match read_body_eml(reg, root, account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
+        match read(account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
             Ok(written) => files += written,
             Err(e) => {
                 warn!("Bulk export skipped uid {} in {}: {}", uid, mailbox, e);
@@ -1838,7 +1845,7 @@ R0lGODlhAQABAAAAACw=\r\n\
 
         // Index 0 is the photo; 1 and 2 are the inline logo and the tracking
         // pixel the viewer filters out and therefore never asks for.
-        let r = export_attachments_in(&eml_at(&cur, 9), 9, &[0], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 9), 9, &[0], &dest).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string()]);
         assert_eq!(Path::new(&r.dir), dest);
@@ -1858,7 +1865,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let dest = out.path().join("Invoices - Attachments");
         let messages = [9, 7, 8].map(|uid| ("acct".to_string(), "INBOX".to_string(), uid));
 
-        let r = export_many_attachments(&reg, root.path(), &messages, &dest).unwrap();
+        let r = export_many_attachments(&messages, &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid)).unwrap();
 
         // The photo and the PDF; not the inline logo, not the pixel, and uid 8
         // is not in the vault at all.
@@ -1874,7 +1881,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root.path());
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Empty");
-        let r = export_many_attachments(&reg, root.path(), &[("acct".into(), "INBOX".into(), 1)], &dest).unwrap();
+        let r = export_many_attachments(&[("acct".into(), "INBOX".into(), 1)], &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid)).unwrap();
         assert_eq!((r.files, r.skipped), (0, 1));
         assert!(!dest.exists());
     }
@@ -1885,8 +1892,8 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let first = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
-        let second = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let first = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let second = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
 
         assert_eq!(Path::new(&first.dir), dest);
         assert_eq!(leaf(Path::new(&second.dir)), "Attachments (1)");
@@ -1903,7 +1910,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Photo");
 
-        let r = export_attachments_in(&eml_at(&cur, 9), 9, &[0, 1], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 9), 9, &[0, 1], &dest).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string(), "photo (1).png".to_string()]);
     }
@@ -1916,7 +1923,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let r = export_attachments_in(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
 
         assert_eq!(r.files, vec!["escape.pdf".to_string()]);
         assert!(dest.join("escape.pdf").exists());
@@ -1927,7 +1934,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn export_refuses_an_index_the_message_does_not_have() {
         let (_d, cur, _c) = maildir_with(&[(7, &multipart_with_attachment())]);
         let out = tempfile::tempdir().unwrap();
-        let err = export_attachments_in(&eml_at(&cur, 7), 7, &[5], &out.path().join("A")).unwrap_err();
+        let err = export_attachments(&eml_at(&cur, 7), 7, &[5], &out.path().join("A")).unwrap_err();
         assert!(err.contains("out of range"), "{err}");
     }
 
