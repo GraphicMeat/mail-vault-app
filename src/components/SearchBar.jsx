@@ -81,6 +81,9 @@ export function SearchBar({ autoFocus = false }) {
   const [showFilters, setShowFilters] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
+  // The store's query only changes on submit, a recent pick, a clear, or
+  // another view (Settings > Unsubscribe's sender link): show what it holds.
+  useEffect(() => { setLocalQuery(searchQuery); }, [searchQuery]);
   // Where the operator help opens: under its button, right-aligned to it.
   const [helpAnchor, setHelpAnchor] = useState(null);
   const [hintVisible, setHintVisible] = useState(false);

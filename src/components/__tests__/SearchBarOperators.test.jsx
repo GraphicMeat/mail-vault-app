@@ -176,3 +176,18 @@ describe('recent searches with operators', () => {
     expect(harness.runs.at(-1).request).toMatchObject({ query: '', sender: 'x', hasAttachments: true });
   });
 });
+
+describe('a query set from outside the box', () => {
+  // Settings > Unsubscribe opens a sender's mail by writing `from:` into the
+  // store while this box may already be on screen; it must show that query.
+  it('shows a query another view put in the store, and a cleared one', () => {
+    render(<SearchBar />);
+    fireEvent.change(input(), { target: { value: 'old words' } });
+
+    act(() => { useSearchStore.getState().setSearchQuery('from:news@list.test'); });
+    expect(input().value).toBe('from:news@list.test');
+
+    act(() => { useSearchStore.getState().clearSearch(); });
+    expect(input().value).toBe('');
+  });
+});

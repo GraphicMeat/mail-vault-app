@@ -234,6 +234,16 @@ describe('Settings > Unsubscribe', () => {
     ]);
   });
 
+  it('a folder that fails to open still leaves the sender searched', async () => {
+    answerAll();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mailState.activateAccount = async () => { steps.push(['activateAccount']); throw new Error('offline'); };
+    render(<UnsubscribeSettings onMinimize={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show mail from News acc-a' }));
+    await waitFor(() => expect(steps.at(-1)).toEqual(['performSearch']));
+    expect(steps).toContainEqual(['setSearchQuery', 'from:news@acc-a.test']);
+  });
+
   it('a sender with no folder opens the inbox, and one already on screen is not reopened', async () => {
     mocks.daemonCall.mockImplementation(async (method, { accountId }) =>
       method === 'unsubscribe.senders' && accountId === 'acc-b' ? [{ ...sender('acc-b'), mailbox: null }] : []);

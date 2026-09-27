@@ -112,7 +112,9 @@ export function UnsubscribeSettings({ onMinimize }) {
     const search = useSearchStore.getState();
     // A folder or date filter left from an earlier search must not narrow this one.
     search.clearSearch();
-    await openNotificationTarget({ accountId: sender.accountId, mailbox: sender.mailbox || 'INBOX' }, useMailStore.getState);
+    // An account that cannot reach its server still has its vault to search.
+    await openNotificationTarget({ accountId: sender.accountId, mailbox: sender.mailbox || 'INBOX' }, useMailStore.getState)
+      .catch(e => console.warn('[unsubscribe] open sender folder failed:', e));
     search.setSearchQuery(`from:${sender.address}`);
     await search.performSearch();
   };
@@ -155,7 +157,7 @@ export function UnsubscribeSettings({ onMinimize }) {
             </td>
             <td className={`${CELL} tabular-nums`}>{formatCount(sender.count)}</td>
             <td className={`${CELL} text-xs text-mail-text-muted`}>{sender.lastAt ? formatDateTime(sender.lastAt) : ''}</td>
-            <td className={CELL}><span className="text-xs rounded-full px-2 py-0.5 bg-mail-accent/10 text-mail-accent-text">{methodLabel(sender.method)}</span></td>
+            <td className={CELL}><span className="text-xs whitespace-nowrap rounded-full px-2 py-0.5 bg-mail-accent/10 text-mail-accent-text">{methodLabel(sender.method)}</span></td>
             <td className={`${CELL} text-right`}>
               <Button variant="secondary" size="sm" data-testid="unsubscribe-sender"
                 onClick={() => useUnsubscribeStore.getState().request(unsubscribeTarget(sender, sender.accountId))}>
