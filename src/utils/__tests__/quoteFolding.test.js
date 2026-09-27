@@ -44,4 +44,9 @@ describe('splitQuotedContent', () => {
       expect(splitQuotedContent(text)).toEqual({ newContent: text, quotedContent: '' });
     }
   });
+
+  it('keeps a reply whose only own text is a signature whole', () => {
+    const text = '-- \nPerson B\n\nOn Fri, Sep 26, 2026 at 19:40, Person A <a@example.com> wrote:\n> Quoted line';
+    expect(splitQuotedContent(text)).toEqual({ newContent: text, quotedContent: '' });
+  });
 });

@@ -239,4 +239,25 @@ describe('getQuoteFoldingScript: one toggle, never a whole message', () => {
     expect(shownText()).toContain('First quote.');
     expect(shownText()).toContain('Second quote.');
   });
+
+  // Gmail reply-all with an empty body and an auto signature: folding the
+  // quote and then the signature left nothing but toggles.
+  it('a reply that is only a signature keeps its quote open', () => {
+    render(GMAIL_ALL_QUOTE.replace('<div dir="ltr"><br></div>',
+      '<div dir="ltr"><br clear="all"><div><br></div><span class="gmail_signature_prefix">-- </span><br><div dir="ltr" class="gmail_signature"><div>Person B</div></div></div>'));
+
+    expect(toggles()).toHaveLength(0);
+    expect(shownText()).toContain('Quoted paragraph.');
+  });
+
+  // Replies MailVault sent before the header moved out: one toggle over the
+  // whole blockquote, header included.
+  it('an old-format own reply with text folds its blockquote, header and all', () => {
+    render(`<p>Reply text.</p><hr><blockquote>${OWN_HEADER(0)}<p>Question text.</p></blockquote>`);
+
+    expect(shownToggles()).toHaveLength(1);
+    expect(shownText()).toContain('Reply text.');
+    expect(shownText()).not.toContain('Question text.');
+    expect(shownText()).not.toContain('Original Message');
+  });
 });

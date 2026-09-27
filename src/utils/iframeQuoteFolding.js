@@ -1,4 +1,10 @@
 import { t } from '../i18n/index.js';
+
+// Where a mail keeps its signature. Shared by both scripts: the signature
+// script folds these, so the quote script must not count them as the reply.
+const SIGNATURE_SELECTORS = ['.gmail_signature', '.yahoo_signature',
+  'div[class*="signature"]', 'div[id*="signature"]'];
+
 /**
  * Returns a <script> block to inject into email iframe srcDoc.
  * Finds quoted content elements and makes them collapsible.
@@ -13,6 +19,8 @@ export function getQuoteFoldingScript(nonce = '') {
   // the moment the toggle is clicked. JSON.stringify quotes and escapes it.
   const SHOW = JSON.stringify(t('util.iframeQuoteFolding.showQuotedText'));
   const HIDE = JSON.stringify(t('util.iframeQuoteFolding.hideQuotedText'));
+  // Gmail's "-- " line sits outside .gmail_signature; it is signature too.
+  const SIGNATURE = JSON.stringify(['.gmail_signature_prefix', ...SIGNATURE_SELECTORS].join(', '));
   return `
 <script${nonce ? ` nonce="${nonce}"` : ''}>
 (function() {
@@ -81,9 +89,10 @@ export function getQuoteFoldingScript(nonce = '') {
   //    The line naming who wrote it (Gmail's gmail_attr, Thunderbird's
   //    moz-cite-prefix, localized, so found by class) is never folded.
   var ATTRIBUTION = '.gmail_attr, .moz-cite-prefix';
-  var quotes = [].slice.call(document.querySelectorAll('blockquote, .gmail_quote, #appendonsend, .yahoo_quoted'));
+  var QUOTES = 'blockquote, .gmail_quote, #appendonsend, .yahoo_quoted';
+  var quotes = [].slice.call(document.querySelectorAll(QUOTES));
   quotes.forEach(function(el) {
-    if (quotes.some(function(other) { return other !== el && other.contains(el); })) return;
+    if (el.parentElement && el.parentElement.closest(QUOTES)) return;
     // Gmail's wrapper holds the attribution AND the quote: fold what follows it.
     var attribution = [].filter.call(el.children, function(c) { return c.matches(ATTRIBUTION); })[0];
     var nodes = attribution ? after(attribution) : [el];
@@ -138,7 +147,8 @@ export function getQuoteFoldingScript(nonce = '') {
   var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   var own = false;
   for (var text = walker.nextNode(); text && !own; text = walker.nextNode()) {
-    if (text.parentNode.closest('script, style, ' + ATTRIBUTION)) continue;
+    // A signature is not the reply: the signature script folds it next.
+    if (text.parentNode.closest('script, style, ' + ATTRIBUTION + ', ' + ${SIGNATURE})) continue;
     if (marker && marker.contains(text)) continue;
     own = hasText(text) && !inRegion(text);
   }
@@ -195,8 +205,7 @@ export function getSignatureFoldingScript(mode, nonce = '') {
 <script${nonce ? ` nonce="${nonce}"` : ''}>
 (function() {
   var mode = '${safeMode}';
-  var sigSelectors = ['.gmail_signature', '.yahoo_signature',
-    'div[class*="signature"]', 'div[id*="signature"]'];
+  var sigSelectors = ${JSON.stringify(SIGNATURE_SELECTORS)};
   var found = [];
   for (var i = 0; i < sigSelectors.length; i++) {
     var els = document.querySelectorAll(sigSelectors[i]);

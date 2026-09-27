@@ -1,3 +1,5 @@
+import { splitSignature } from './signatureFolding';
+
 /**
  * Splits plain text email body into { newContent, quotedContent }.
  * Returns the original text as newContent if no quotes are detected.
@@ -13,9 +15,10 @@ const QUOTE_START_PATTERNS = [
   /^_{4,}/m,
 ];
 
-// A reply that is all quote would fold to nothing but a toggle: show it whole.
+// A reply that is all quote, or only a signature (folded next by the
+// callers), would fold to nothing but toggles: show it whole.
 function keepWhole(text, newContent, quotedContent) {
-  return newContent.trim() ? { newContent, quotedContent } : { newContent: text, quotedContent: '' };
+  return splitSignature(newContent).body.trim() ? { newContent, quotedContent } : { newContent: text, quotedContent: '' };
 }
 
 export function splitQuotedContent(text) {
