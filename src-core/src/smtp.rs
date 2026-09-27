@@ -576,8 +576,7 @@ pub async fn send_built(
     let transport = build_transport(account, io_timeout)?;
 
     info!(
-        "[smtp] Sending to {} via {}:{} (tls={}, oauth2={})",
-        email.to,
+        "[smtp] Sending via {}:{} (tls={}, oauth2={})",
         smtp_host,
         smtp_port,
         account.smtp_secure.unwrap_or(false),
@@ -596,7 +595,7 @@ pub async fn send_built(
         .collect::<Vec<_>>()
         .join("");
 
-    info!("Email sent via SMTP to {}: {}", email.to, message_id);
+    info!("Email sent via SMTP: {}", message_id);
     Ok(SendResult { message_id, raw_rfc2822 })
 }
 

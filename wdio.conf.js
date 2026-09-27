@@ -304,6 +304,9 @@ function seedOnboardingComplete(home) {
         // favorite-menu layout renders, so the harness keeps both.
         threadMode: 'grouped',
         quickActions: { defaults: { row: { mode: 'favorite-menu' } } },
+        // Specs read daemon.log for DEBUG lines and raw addresses and
+        // Message-IDs, which Standard logs drop or mask.
+        logVerbosity: 'verbose',
       },
     },
   }));

@@ -476,7 +476,7 @@ async fn authenticate_client(
             .access_token
             .as_deref()
             .ok_or_else(|| "OAuth2 access token missing".to_string())?;
-        info!("[IMAP] Using XOAUTH2 for {} (token length: {})", config.email, token.len());
+        info!("[IMAP] Using XOAUTH2 for {}", config.email);
         let xoauth2 = build_xoauth2(&config.email, token);
         let auth = client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()));
         async_std::future::timeout(AUTH_TIMEOUT, auth)

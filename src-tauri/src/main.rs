@@ -77,7 +77,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, Level};
+use mailvault_core::log_redact;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::prelude::*;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 mod autostart;
@@ -149,50 +152,29 @@ fn setup_logging(log_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGua
 
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    // Standard (INFO, addresses masked) unless the persisted settings ask for
+    // Verbose; `write_settings_json` applies a change. The salt is shared with
+    // the daemon, which reads the same file.
+    let data_dir = mailvault_core::paths::app_data_dir().unwrap_or_else(|_| log_dir.clone());
+    let settings = fs::read_to_string(data_dir.join("frontend-settings.json")).unwrap_or_default();
+    log_redact::set_verbose(log_redact::verbose_from_settings(&settings));
+    let salt = log_redact::load_or_create_salt(&data_dir);
+    let tee = non_blocking.and(std::io::stdout);
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
-        .with_writer(non_blocking.and(std::io::stdout))
+        .with_writer(move || log_redact::RedactingWriter { inner: MakeWriter::make_writer(&tee), salt })
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(true)
         .with_file(true)
         .with_line_number(true)
+        .finish()
+        .with(tracing_subscriber::filter::filter_fn(|m| *m.level() <= log_redact::max_level()))
         .init();
 
     info!("Logging initialized. Log directory: {:?}", log_dir);
 
     guard
-}
-
-fn cleanup_old_logs(log_dir: &PathBuf) {
-    let max_age_days = 7;
-    let max_size_bytes: u64 = 5 * 1024 * 1024; // 5 MB
-
-    if let Ok(entries) = fs::read_dir(log_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "log") {
-                // Check file age
-                if let Ok(metadata) = fs::metadata(&path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(age) = std::time::SystemTime::now().duration_since(modified) {
-                            if age.as_secs() > max_age_days * 24 * 60 * 60 {
-                                info!("Removing old log file: {:?}", path);
-                                let _ = fs::remove_file(&path);
-                                continue;
-                            }
-                        }
-                    }
-
-                    // Check file size
-                    if metadata.len() > max_size_bytes {
-                        info!("Removing oversized log file: {:?} ({}MB)", path, metadata.len() / 1024 / 1024);
-                        let _ = fs::remove_file(&path);
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[tauri::command]
@@ -433,7 +415,10 @@ fn write_settings_json(data: String) -> Result<(), String> {
     }
     let settings_path = data_dir.join("frontend-settings.json");
     fs::write(&settings_path, &data)
-        .map_err(|e| format!("Failed to write settings: {}", e))
+        .map_err(|e| format!("Failed to write settings: {}", e))?;
+    // The shell's own log level follows `logVerbosity` (the daemon is told by RPC).
+    log_redact::set_verbose(log_redact::verbose_from_settings(&data));
+    Ok(())
 }
 
 // Use a more specific service name with bundle ID for persistence across builds
@@ -692,7 +677,6 @@ fn store_password(account_id: String, password: String) -> Result<(), String> {
     info!("=== STORE PASSWORD START ===");
     info!("store_password called for account: {}", account_id);
     info!("Service name: {}", KEYRING_SERVICE);
-    info!("Password length: {} chars", password.len());
 
     let entry = Entry::new(KEYRING_SERVICE, &account_id);
     info!("Entry::new result: {:?}", entry.is_ok());
@@ -734,41 +718,29 @@ async fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result
         .map_err(|e| e.to_string())?
 }
 
+/// The tail of the newest shell log, then of the newest daemon log, which on
+/// macOS lives in the app data dir rather than `log_dir`.
 fn read_latest_log(log_dir: &Path, lines_to_read: usize) -> Result<String, String> {
     info!("read_logs called, reading last {} lines", lines_to_read);
-
-    // Find the most recent log file (files starting with "mailvault")
-    let mut log_files: Vec<_> = fs::read_dir(log_dir)
-        .map_err(|e| format!("Failed to read log directory: {}", e))?
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let name = e.path()
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            name.starts_with("mailvault") && !name.ends_with(".tmp")
-        })
-        .collect();
-
-    info!("Found {} log file(s) in {:?}", log_files.len(), log_dir);
-
-    log_files.sort_by(|a, b| {
-        b.metadata()
-            .and_then(|m| m.modified())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-            .cmp(
-                &a.metadata()
-                    .and_then(|m| m.modified())
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
-            )
-    });
-
-    if let Some(latest_log) = log_files.first() {
-        mailvault_core::fsx::tail_lines(&latest_log.path(), lines_to_read)
-            .map_err(|e| format!("Failed to read log file: {}", e))
-    } else {
-        Ok("No log files found".to_string())
+    if !log_dir.is_dir() {
+        return Err(format!("Failed to read log directory: {:?}", log_dir));
     }
+    let daemon_dir = mailvault_core::paths::app_data_dir().map(|d| d.join("logs")).unwrap_or_else(|_| log_dir.to_path_buf());
+    let mut out = String::new();
+    for (dir, prefix) in [(log_dir, "mailvault"), (daemon_dir.as_path(), "daemon.log")] {
+        if let Some(path) = log_redact::latest_log(dir, prefix) {
+            let tail = mailvault_core::fsx::tail_lines(&path, lines_to_read)
+                .map_err(|e| format!("Failed to read log file: {}", e))?;
+            if prefix == "daemon.log" {
+                out.push_str("\n===== daemon.log =====\n");
+            }
+            out.push_str(&tail);
+        }
+    }
+    if out.is_empty() {
+        return Ok("No log files found".to_string());
+    }
+    Ok(out)
 }
 
 #[tauri::command]
@@ -3493,8 +3465,14 @@ fn main() {
             // Store the guard to keep logging alive
             std::mem::forget(_guard);
 
-            // Clean up old logs
-            cleanup_old_logs(&log_dir);
+            // Clean up old logs: the daemon's live in the app data dir, which
+            // on macOS is not the shell's log dir. An always-on daemon may not
+            // restart for weeks, so its own startup cleanup is not enough.
+            let now = std::time::SystemTime::now();
+            log_redact::cleanup_old_logs(&log_dir, now);
+            if let Ok(data_dir) = mailvault_core::paths::app_data_dir() {
+                log_redact::cleanup_old_logs(&data_dir.join("logs"), now);
+            }
 
             if let Err(e) = allow_app_data_dir(app.handle()) {
                 warn!("{e}");

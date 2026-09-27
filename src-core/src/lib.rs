@@ -11,6 +11,7 @@ pub mod autostart;
 pub mod windows_mailto;
 pub mod backup;
 pub mod fsx;
+pub mod log_redact;
 pub mod header_cache;
 pub mod maildir;
 pub mod search_index;

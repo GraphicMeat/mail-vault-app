@@ -1,12 +1,12 @@
-//! Daemon lifecycle methods: ping, heartbeat, status, shutdown.
+//! Daemon lifecycle methods: ping, heartbeat, status, shutdown, log verbosity.
 
-use crate::ipc::RpcResponse;
+use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// `None` = not a daemon-lifecycle method; the caller tries the next router.
-pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, _params: &Value, id: Value) -> Option<RpcResponse> {
+pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "ping" => RpcResponse::success(id, json!({"pong": true})),
         "daemon.heartbeat" => RpcResponse::success(id, json!({
@@ -32,6 +32,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, _params: &Valu
             });
             RpcResponse::success(id, json!({"ok": true}))
         }
+        // The app's `logVerbosity` setting, applied without a restart.
+        "logs.set_verbosity" => match params.get("verbosity").and_then(Value::as_str) {
+            Some(v @ ("standard" | "verbose")) => {
+                mailvault_core::log_redact::set_verbose(v == "verbose");
+                RpcResponse::success(id, json!({"ok": true}))
+            }
+            _ => RpcResponse::error(id, ipc::INVALID_PARAMS, "verbosity must be \"standard\" or \"verbose\""),
+        },
         _ => return None,
     })
 }
@@ -67,6 +75,23 @@ mod tests {
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
         let r = super::route(&state, "daemon.status", &json!({}), json!(1)).await.unwrap().result.unwrap();
         assert_eq!(r["buildId"], json!(mailvault_core::BUILD_ID));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn set_verbosity_switches_the_log_level() {
+        let dir = scratch("verbosity");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let set = |v: serde_json::Value| {
+            let state = state.clone();
+            async move { super::route(&state, "logs.set_verbosity", &v, json!(1)).await.unwrap() }
+        };
+        assert_eq!(set(json!({"verbosity": "verbose"})).await.result, Some(json!({"ok": true})));
+        assert!(mailvault_core::log_redact::is_verbose());
+        assert!(set(json!({"verbosity": "loud"})).await.result.is_none());
+        assert!(mailvault_core::log_redact::is_verbose(), "a bad value changes nothing");
+        assert_eq!(set(json!({"verbosity": "standard"})).await.result, Some(json!({"ok": true})));
+        assert!(!mailvault_core::log_redact::is_verbose());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

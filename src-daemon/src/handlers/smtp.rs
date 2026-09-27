@@ -165,7 +165,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let sent_mailbox = params.get("sentMailbox").and_then(Value::as_str).map(str::to_owned);
 
             let account_id_for_log = account.email.clone();
-            info!("[send:smtp_start] account={} recipient={}", account_id_for_log, email.to);
+            info!("[send:smtp_start] account={}", account_id_for_log);
 
             let result = match smtp::send_email(&account, &email).await {
                 Ok(r) => r,
@@ -185,7 +185,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 let end = text.find("\r\n\r\n").or_else(|| text.find("\n\n")).unwrap_or(text.len());
                 text[..end.min(800)].to_string()
             };
-            info!("[send:raw_headers]\n{}", header_preview);
+            // To/Cc and Subject: Verbose logs only.
+            tracing::debug!("[send:raw_headers]\n{}", header_preview);
 
             let message_id_for_response = result.message_id.clone();
 

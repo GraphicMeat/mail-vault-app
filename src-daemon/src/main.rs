@@ -54,7 +54,10 @@ embed_plist::embed_info_plist!("../Info.plist");
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn, error, Level};
+use mailvault_core::log_redact;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::prelude::*;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 /// The app data dir, resolved by the same `mailvault_core::paths` the app
@@ -162,15 +165,24 @@ fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGu
     let file_appender = RollingFileAppender::new(Rotation::DAILY, &log_dir, "daemon.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    // Standard (INFO, addresses masked) unless the app's settings ask for
+    // Verbose; `logs.set_verbosity` switches it while running.
+    let settings = std::fs::read_to_string(data_dir.join("frontend-settings.json")).unwrap_or_default();
+    log_redact::set_verbose(log_redact::verbose_from_settings(&settings));
+    let salt = log_redact::load_or_create_salt(data_dir);
+    let tee = non_blocking.and(std::io::stderr);
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
-        .with_writer(non_blocking.and(std::io::stderr))
+        .with_writer(move || log_redact::RedactingWriter { inner: MakeWriter::make_writer(&tee), salt })
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(true)
+        .finish()
+        .with(tracing_subscriber::filter::filter_fn(|m| *m.level() <= log_redact::max_level()))
         .init();
 
     info!("Daemon logging initialized at {:?}", log_dir);
+    log_redact::cleanup_old_logs(&log_dir, std::time::SystemTime::now());
     guard
 }
 
