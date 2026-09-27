@@ -141,7 +141,14 @@ export function AppearanceStep({ onContinue }) {
                 onChange={value => settings.setQuickActionStyleLink(null, value === 'linked', quickSurface)}
                 options={[{ value: 'separate', label: t('quickActions.styleSeparate') }, { value: 'linked', label: t('quickActions.styleLinked') }]} />
             </fieldset>
-            {quickConfig.mode === 'radial' && <fieldset data-testid="appearance-control-quick-pagination">
+            {quickConfig.mode === 'radial' && <fieldset data-testid="appearance-control-quick-radial-layout">
+              <legend>{t('quickActions.radialLayout')}</legend>
+              <SegmentedChoice label={t('quickActions.radialLayout')} value={quickConfig.radialLayout === 'categories' ? 'categories' : 'flat'}
+                onChange={radialLayout => settings.setQuickActionStyle(quickSurface, null, { radialLayout })}
+                options={[{ value: 'flat', label: t('quickActions.radialLayout.flat') }, { value: 'categories', label: t('quickActions.radialLayout.categories') }]} />
+            </fieldset>}
+            {/* Paging does nothing for a categorized wheel: at most six wedges. */}
+            {quickConfig.mode === 'radial' && quickConfig.radialLayout !== 'categories' && <fieldset data-testid="appearance-control-quick-pagination">
               <legend>{t('quickActions.radialPagination')}</legend>
               <SegmentedChoice label={t('quickActions.radialPagination')} value={quickConfig.radialPagination ? 'pages' : 'all'}
                 onChange={value => settings.setQuickActionStyle(quickSurface, null, { radialPagination: value === 'pages' })}

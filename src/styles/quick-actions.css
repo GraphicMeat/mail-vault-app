@@ -231,6 +231,19 @@
   pointer-events: none;
 }
 
+.quick-actions-radial-center-group {
+  max-width: 92px;
+  margin-bottom: -4px;
+  overflow: hidden;
+  color: var(--mail-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .quick-actions-radial-center > span {
   max-width: 92px;
   overflow-wrap: anywhere;

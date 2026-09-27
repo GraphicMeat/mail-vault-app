@@ -124,6 +124,20 @@ describe('appearance step', () => {
     expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
   });
 
+  it('offers the wheel layout for a radial surface and hides wheel paging for categories', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Radial' }));
+    expect(screen.getByTestId('appearance-control-quick-pagination')).toBeTruthy();
+    const layout = screen.getByTestId('appearance-control-quick-radial-layout');
+    expect(within(layout).getByRole('radio', { name: 'One ring' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Categories' }));
+    expect(useSettingsStore.getState().quickActions.defaults.row.radialLayout).toBe('categories');
+    expect(screen.queryByTestId('appearance-control-quick-pagination')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Menu' }));
+    expect(screen.queryByTestId('appearance-control-quick-radial-layout')).toBeNull();
+  });
+
   it('makes Next the default and walks every tab before Continue', () => {
     const onContinue = vi.fn();
     useSettingsStore.setState({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });

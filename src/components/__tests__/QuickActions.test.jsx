@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -449,8 +450,16 @@ describe("QuickActions radial categories", () => {
   const centerLabel = () => document.querySelector(".quick-actions-radial-center > span:not([aria-hidden])").textContent;
   const trigger = () => document.querySelector(".quick-actions-trigger");
 
+  // Moving from one category to another while an arc is open waits this
+  // long (hover intent); the tests step past it with fake timers.
+  const pastSwapDelay = () => act(() => {
+    vi.advanceTimersByTime(150);
+  });
+  const fakeTimers = () => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
   afterEach(() => {
     exportRenders = 0;
+    vi.useRealTimers();
   });
 
   it("keeps the flat wheel exactly as before when the layout is flat", () => {
@@ -459,6 +468,8 @@ describe("QuickActions radial categories", () => {
     expect(innerRing(menu)).toEqual(list.map((item) => item.id));
     expect(document.querySelector("[data-radial-category]")).toBeNull();
     expect(menu.getAttribute("data-radial-layout")).not.toBe("categories");
+    fireEvent.click(menu, { clientX: 2, clientY: 2 });
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
   });
 
   it("draws the favorite and one wedge per non-empty category, single ones as direct wedges", () => {
@@ -478,7 +489,8 @@ describe("QuickActions radial categories", () => {
     expect(arcActions()).toEqual([]);
   });
 
-  it("fans a category out on hover, swaps on another, keeps it while in the arc, closes on leave", () => {
+  it("fans a category out on hover, swaps on another after a short hover, keeps it while in the arc, closes on leave", () => {
+    fakeTimers();
     const menu = openWheel(actions());
     fireEvent.mouseEnter(category("send"));
     expect(arcActions()).toEqual(["Reply", "Forward"]);
@@ -486,6 +498,8 @@ describe("QuickActions radial categories", () => {
     expect(centerLabel()).toBe("Send");
 
     fireEvent.mouseEnter(category("mark"));
+    expect(arcActions()).toEqual(["Reply", "Forward"]);
+    pastSwapDelay();
     expect(arcActions()).toEqual(["Star", "Mark read"]);
     expect(category("send").hasAttribute("data-open")).toBe(false);
     expect(category("mark").hasAttribute("data-open")).toBe(true);
@@ -495,6 +509,7 @@ describe("QuickActions radial categories", () => {
     expect(centerLabel()).toBe("Star");
 
     fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Archive" }));
+    pastSwapDelay();
     expect(arcActions()).toEqual([]);
 
     fireEvent.click(category("delete"));
@@ -503,6 +518,53 @@ describe("QuickActions radial categories", () => {
 
     fireEvent.mouseLeave(menu);
     expect(arcActions()).toEqual([]);
+  });
+
+  it("keeps the open arc when the pointer crosses a neighbour category on its way into the arc", () => {
+    fakeTimers();
+    openWheel(actions());
+    fireEvent.mouseEnter(category("send"));
+    // A straight line from Send to its far arc item runs over Mark.
+    fireEvent.mouseEnter(category("mark"));
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Forward" }));
+    pastSwapDelay();
+    expect(arcActions()).toEqual(["Reply", "Forward"]);
+    expect(category("send").hasAttribute("data-open")).toBe(true);
+    expect(category("mark").hasAttribute("data-open")).toBe(false);
+    // Same for a direct wedge crossed on the way.
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Archive" }));
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Reply" }));
+    pastSwapDelay();
+    expect(arcActions()).toEqual(["Reply", "Forward"]);
+  });
+
+  it("stacks the category name above the hovered arc action in the center", () => {
+    openWheel(actions());
+    const group = () => document.querySelector(".quick-actions-radial-center-group");
+    fireEvent.mouseEnter(category("send"));
+    expect(centerLabel()).toBe("Send");
+    expect(group()).toBeNull();
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Forward" }));
+    expect(group().textContent).toBe("Send");
+    expect(centerLabel()).toBe("Forward");
+    fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(group()).toBeNull();
+    expect(centerLabel()).toBe("Archive");
+  });
+
+  it("closes on a click in the empty band around the ring, not on one inside the disc", () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 360, height: 360, top: 0, left: 0, right: 360, bottom: 360, x: 0, y: 0, toJSON() {},
+    });
+    try {
+      const menu = openWheel(actions());
+      fireEvent.click(menu, { clientX: 180, clientY: 180 });
+      expect(trigger().getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(menu, { clientX: 180, clientY: 6 });
+      expect(trigger().getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it("runs an arc action and closes the menu", () => {
@@ -544,13 +606,17 @@ describe("QuickActions radial categories", () => {
   });
 
   it("repaints only the arc and the center when a category is hovered", () => {
+    fakeTimers();
     openWheel(actions());
     const before = exportRenders;
     expect(before).toBeGreaterThan(0);
     fireEvent.mouseEnter(category("send"));
     fireEvent.mouseEnter(category("mark"));
+    pastSwapDelay();
     fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Star" }));
     fireEvent.mouseEnter(category("delete"));
+    pastSwapDelay();
+    expect(arcActions()).toEqual(["Delete from server", "Move to Junk"]);
     expect(exportRenders).toBe(before);
   });
 });

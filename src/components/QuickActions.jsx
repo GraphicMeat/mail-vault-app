@@ -39,6 +39,11 @@ const CATEGORY_ICONS = {
 const INNER_RING = { outer: 36, inner: 21, content: 28.5 };
 const ARC_RING = { outer: 50, inner: 38, content: 44 };
 const ARC_SLOT = 34;
+// Hover intent: with an arc open, a move onto another category (or a direct
+// wedge) waits this long before swapping, and reaching the open arc cancels
+// it. A straight path from a category to its far arc items crosses its
+// neighbours' wedges.
+const ARC_SWAP_DELAY = 100;
 const WHEEL_SIZE = 304;
 const CATEGORY_WHEEL_SIZE = 360;
 // A wedge's clip-path depends only on its position, count and ring, all
@@ -113,21 +118,42 @@ export function radialContentPosition(index, count, radius = 37) {
 
 // A categorized wheel's outer arc: the one piece of state that changes when
 // the pointer or focus moves between categories lives here, so swapping arcs
-// re-renders only this component, never the inner ring. The wheel reaches its
-// setter through `arcRef`, like RadialCenter's hover setter. `open(id, true)`
-// also moves focus to the arc's first action (keyboard entry).
+// re-renders only this component, never the inner ring. The wheel reaches it
+// through `arcRef`, like RadialCenter's hover setter:
+// - `open(id, { focus, intent })` shows `id`'s arc (null folds it). `focus`
+//   also moves focus to its first action (keyboard entry); `intent` is a
+//   pointer move, which waits ARC_SWAP_DELAY before replacing an open arc.
+// - `hold()` cancels a waiting swap: the pointer reached the open arc.
 function RadialArc({ arcRef, inner, renderItem }) {
   const [openId, setOpenId] = useState(null);
   const [, requestFocus] = useReducer((count) => count + 1, 0);
+  const openIdRef = useRef(null);
   const focusFirstRef = useRef(false);
+  const swapTimerRef = useRef(null);
   const rootRef = useRef(null);
   useEffect(() => {
-    arcRef.current = (id, focusFirst = false) => {
-      focusFirstRef.current = focusFirst;
-      setOpenId(id);
-      if (focusFirst) requestFocus();
+    const hold = () => {
+      clearTimeout(swapTimerRef.current);
+      swapTimerRef.current = null;
+    };
+    arcRef.current = {
+      open(id, { focus = false, intent = false } = {}) {
+        hold();
+        const apply = () => {
+          swapTimerRef.current = null;
+          openIdRef.current = id;
+          focusFirstRef.current = focus;
+          setOpenId(id);
+          if (focus) requestFocus();
+        };
+        if (intent && openIdRef.current !== null && openIdRef.current !== id) {
+          swapTimerRef.current = setTimeout(apply, ARC_SWAP_DELAY);
+        } else apply();
+      },
+      hold,
     };
     return () => {
+      hold();
       arcRef.current = null;
     };
   }, [arcRef]);
@@ -198,6 +224,9 @@ const RadialCenter = React.memo(function RadialCenter({
   const active = menuEntries.find((item) => item.entry.id === activeId) ||
     menuEntries[0];
   const ActiveIcon = active?.descriptor.Icon;
+  // An arc action names its category above itself, small, as in the
+  // reference wheel.
+  const group = active?.group;
   return (
     <div
       className={`quick-actions-radial-center ${
@@ -206,6 +235,7 @@ const RadialCenter = React.memo(function RadialCenter({
       aria-live="polite"
     >
       {ActiveIcon && <ActiveIcon size={25} aria-hidden="true" />}
+      {group && <small className="quick-actions-radial-center-group">{group}</small>}
       <span>{active?.descriptor.label}</span>
       {pageCount > 1 && (
         <div className="quick-action-radial-pages">
@@ -326,11 +356,14 @@ function QuickActionsConfigured({
   const menuEntries = radial ? visibleRadial : remaining;
   // The categorized inner ring: direct wedges hold an item, category wedges
   // the items their arc fans out. Visibility already applied (hidden
-  // descriptors never reach `remaining`), and only a favorite the person set
-  // gets a direct wedge, never the safe fallback.
-  let inner = null;
+  // descriptors never reach `remaining`). The saved favorite gets a direct
+  // wedge first, by design: normalizeSurface always fills `favoriteId` with a
+  // safe action when none was picked, so there is no "no favorite" case short
+  // of the favorite being hidden for this message. Built only while the wheel
+  // shows (a closed row menu renders on every live row).
+  let inner = [];
   let centerEntries = menuEntries;
-  if (categories) {
+  if (categories && (opened || preview)) {
     const byId = new Map(remaining.map((item) => [item.entry.id, item]));
     inner = groupRadialEntries(
       remaining.map((item) => item.entry),
@@ -350,7 +383,7 @@ function QuickActionsConfigured({
           entry: { id: `category:${wedge.category}` },
           descriptor: { label: wedge.label, Icon: wedge.Icon },
         },
-        ...wedge.items,
+        ...wedge.items.map((item) => ({ ...item, group: wedge.label })),
       ]
     );
   }
@@ -430,7 +463,7 @@ function QuickActionsConfigured({
     setAnchor(null);
     setAtPointer(false);
     radialHoverRef.current?.(null);
-    radialArcRef.current?.(null);
+    radialArcRef.current?.open(null);
     onOpenChange?.(false);
     // A menu opened at the pointer has no trigger to go back to: focusing the
     // row's hidden one would pin the row's hover bar open.
@@ -567,7 +600,7 @@ function QuickActionsConfigured({
     if (category && ["ArrowRight", "Enter", " "].includes(event.key)) {
       event.preventDefault();
       event.stopPropagation();
-      radialArcRef.current?.(category, true);
+      radialArcRef.current?.open(category, { focus: true });
       return;
     }
     const root = event.currentTarget;
@@ -627,15 +660,22 @@ function QuickActionsConfigured({
       </button>
     );
   };
-  // `inArc`: one of an open category's actions. Any other wedge folds an
-  // open arc away when the pointer or focus reaches it.
+  // `inArc`: one of an open category's actions; reaching it keeps its arc.
+  // Any other wedge folds an open arc away: at once on focus, after the
+  // hover-intent wait on a pointer move.
   const radialButton = (item, clipPath, position, inArc = false) => {
     const { descriptor, entry: saved } = item;
     const Icon = descriptor.Icon;
     const color = quickActionColorFor(item.entry, config.palette);
+    const arc = () => radialArcRef.current;
     const enter = () => {
       radialHoverRef.current?.(saved.id);
-      if (!inArc) radialArcRef.current?.(null);
+      if (inArc) arc()?.hold();
+      else arc()?.open(null, { intent: true });
+    };
+    const focus = () => {
+      radialHoverRef.current?.(saved.id);
+      if (!inArc) arc()?.open(null);
     };
     return (
       <button
@@ -653,7 +693,7 @@ function QuickActionsConfigured({
           ...(color ? { "--quick-action-color": color } : {}),
         }}
         onMouseEnter={enter}
-        onFocus={enter}
+        onFocus={focus}
         onClick={(event) => activate(item, event)}
       >
         <span
@@ -667,7 +707,8 @@ function QuickActionsConfigured({
   };
   const categoryButton = (wedge, index, count) => {
     const Icon = wedge.Icon;
-    const fanOut = () => radialArcRef.current?.(wedge.category);
+    const fanOut = (intent = false) =>
+      radialArcRef.current?.open(wedge.category, { intent });
     return (
       <button
         key={`category:${wedge.category}`}
@@ -680,7 +721,7 @@ function QuickActionsConfigured({
         style={{ clipPath: wedgeClip(index, count, INNER_RING) }}
         onMouseEnter={() => {
           radialHoverRef.current?.(`category:${wedge.category}`);
-          fanOut();
+          fanOut(true);
         }}
         onFocus={() => {
           radialHoverRef.current?.(`category:${wedge.category}`);
@@ -759,7 +800,21 @@ function QuickActionsConfigured({
     </>
   );
   // Leaving a categorized wheel folds its arc away.
-  const foldArc = categories ? () => radialArcRef.current?.(null) : undefined;
+  const foldArc = categories ? () => radialArcRef.current?.open(null) : undefined;
+  // The see-through band between the inner ring and the wheel's edge is still
+  // the panel, so a click there would land nowhere: close the menu, as a
+  // click outside would. A click inside the inner disc (the center, a gap
+  // between wedges) stays a miss.
+  const panelClick = (event) => {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const distance = Math.hypot(
+      event.clientX - (rect.left + rect.width / 2),
+      event.clientY - (rect.top + rect.height / 2),
+    );
+    if (distance > rect.width * INNER_RING.outer / 100) close();
+  };
   if (preview && radial) {
     return (
       <div
@@ -819,6 +874,7 @@ function QuickActionsConfigured({
         aria-label={triggerText}
         onKeyDown={onMenuKeyDown}
         onMouseLeave={foldArc}
+        {...(categories ? { onClick: panelClick } : {})}
         data-surface={surface}
         data-radial-layout={categories ? "categories" : undefined}
         className={radial ? "quick-actions-radial" : "quick-actions-menu"}
