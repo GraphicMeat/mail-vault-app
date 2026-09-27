@@ -129,6 +129,20 @@ impl FetchPolicy {
         }
     }
 
+    /// Whether a body just fetched is written to the vault. A message the
+    /// user OPENED (or exported) is kept in every mode except On Demand,
+    /// whatever its date: a window decides what is downloaded ahead and what
+    /// the eviction worker later removes, never whether the message on
+    /// screen reads offline and has its attachments. A body fetched ahead
+    /// (backfill, IDLE arrivals) follows `keeps_body_dated`.
+    pub fn caches_fetched(&self, opened: bool, date_ms: Option<i64>, now_ms: i64) -> bool {
+        if opened {
+            self.mode != FetchMode::OnDemand
+        } else {
+            self.keeps_body_dated(date_ms, now_ms)
+        }
+    }
+
     /// Whether the daemon's proactive all-folders Hoarder worker should run
     /// for this account. Premium gates only this worker (ruling 09-27): a
     /// missing or lapsed Premium never deletes anything, it just leaves a
@@ -562,5 +576,20 @@ mod tests {
         let keep_recent = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
         assert!(!keep_recent.keeps_body_dated(Some(STALE_DATE_MS), NOW_MS));
         assert!(keep_recent.keeps_body_dated(Some(NOW_MS), NOW_MS));
+    }
+
+    #[test]
+    fn an_opened_message_is_cached_in_every_mode_but_on_demand_whatever_its_date() {
+        for (mode, opened_cached) in
+            [(FetchMode::OnDemand, false), (FetchMode::KeepRecent, true), (FetchMode::IndexOnly, true), (FetchMode::Hoarder, true)]
+        {
+            let policy = FetchPolicy { mode, window_months: 3, hoarder_premium: false };
+            assert_eq!(policy.caches_fetched(true, Some(STALE_DATE_MS), NOW_MS), opened_cached, "{mode:?} opened");
+            assert_eq!(policy.caches_fetched(true, None, NOW_MS), opened_cached, "{mode:?} opened, undated");
+        }
+        // Fetched ahead: the window decides.
+        let keep_recent = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
+        assert!(!keep_recent.caches_fetched(false, Some(STALE_DATE_MS), NOW_MS));
+        assert!(keep_recent.caches_fetched(false, Some(NOW_MS), NOW_MS));
     }
 }

@@ -605,9 +605,32 @@ fn remove_cache_copy(path: &Path, name: &str) -> std::io::Result<bool> {
     }
     fs::remove_file(path)?;
     if let (Some(cur), Some(uid)) = (path.parent(), vault_filename_uid(name)) {
-        crate::pgp::remove_copy(cur, uid);
+        // The sidecar serves whatever file of this uid is left (an `A`
+        // duplicate reads through it), so it goes only with the last one.
+        // Checked only when a sidecar exists: a whole-vault walk never
+        // rescans `cur/` per file for the common, unencrypted case.
+        if crate::pgp::copy_path(cur, uid).exists() && find_by_uid(cur, uid).is_none() {
+            crate::pgp::remove_copy(cur, uid);
+        }
     }
     Ok(true)
+}
+
+/// The `attachment_cache` files extracted from one message (`path`, uid
+/// `uid`), named exactly as `cache_attachment` / the prefetch name them: one
+/// per attachment part, by index. Read before the message is deleted; an
+/// unreadable or unparseable message names none.
+fn attachment_cache_files(cache_dir: &Path, cur: &Path, account_id: &str, mailbox: &str, uid: u32, path: &Path) -> Vec<PathBuf> {
+    let Ok(raw) = fs::read(path) else { return Vec::new() };
+    let raw = crate::pgp::readable(cur, uid, raw);
+    let Ok(parsed) = mailparse::parse_mail(&raw) else { return Vec::new() };
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    parts
+        .iter()
+        .enumerate()
+        .map(|(index, part)| attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part)))
+        .collect()
 }
 
 /// One mailbox's cache copies of `uids`, as the eviction worker judges them:
@@ -643,12 +666,16 @@ pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet
 
 /// Delete the working-cache copies of `uids` in one mailbox: the eviction
 /// worker's delete, through `clear_cache`'s own per-file delete
-/// (`remove_cache_copy`), so the `.decrypted` sidecar goes with its original
-/// and a copy whose current name carries `A` or `D` stays even when its uid
-/// is passed by mistake. Reads `cur/` only: `orphaned/` is never touched.
-/// Returns the uids removed; the registry drops them, which nudges the search
-/// index for the folder. `Err` (nothing removed) when `cur/` cannot be
-/// listed. The caller holds the mailbox's write lock.
+/// (`remove_cache_copy`), so a copy whose current name carries `A` or `D`
+/// stays even when its uid is passed by mistake, and the `.decrypted` sidecar
+/// goes with the uid's last file. The message's extracted attachments in
+/// `<root>/attachment_cache` go too, once no file of the uid is left. Reads
+/// `cur/` only: `orphaned/` is never touched. Returns the uids whose cache
+/// copy was removed. The registry drops a uid with no file left (which
+/// nudges the search index for the folder); a uid with an archived duplicate
+/// left, or a failed removal, relists the mailbox instead. `Err` (nothing
+/// removed) when `cur/` cannot be listed. The caller holds the mailbox's
+/// write lock.
 pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<u32>, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
     let entries = match fs::read_dir(&cur_dir) {
@@ -656,7 +683,15 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("Failed to list {:?}: {}", cur_dir, e)),
     };
-    let mut gone: Vec<u32> = Vec::new();
+    // This mailbox's extracted attachments, listed once: a message is parsed
+    // for its part names only when something of its uid is cached.
+    let cache_dir = root.join("attachment_cache");
+    let mailbox_prefix = format!("{}_{}_", fs_safe(account_id), fs_safe(mailbox));
+    let cached: Vec<String> = fs::read_dir(&cache_dir)
+        .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with(&mailbox_prefix)).collect())
+        .unwrap_or_default();
+
+    let mut removed: Vec<(u32, Vec<PathBuf>)> = Vec::new();
     let mut failed = false;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -664,8 +699,14 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         if !uids.contains(&uid) {
             continue;
         }
+        let uid_prefix = format!("{mailbox_prefix}{uid}_");
+        let attachments = if cached.iter().any(|n| n.starts_with(&uid_prefix)) {
+            attachment_cache_files(&cache_dir, &cur_dir, account_id, mailbox, uid, &entry.path())
+        } else {
+            Vec::new()
+        };
         match remove_cache_copy(&entry.path(), &name) {
-            Ok(true) => gone.push(uid),
+            Ok(true) => removed.push((uid, attachments)),
             Ok(false) => {}
             Err(e) => {
                 failed = true;
@@ -673,13 +714,29 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
             }
         }
     }
+    let mut evicted: Vec<u32> = Vec::new();
+    let mut gone: Vec<u32> = Vec::new();
+    let mut duplicate_left = false;
+    for (uid, attachments) in removed {
+        evicted.push(uid);
+        if find_by_uid(&cur_dir, uid).is_some() {
+            duplicate_left = true;
+            continue;
+        }
+        for file in attachments {
+            let _ = fs::remove_file(file);
+        }
+        gone.push(uid);
+    }
+    evicted.sort_unstable();
+    evicted.dedup();
     gone.sort_unstable();
     gone.dedup();
     reg.remove(account_id, mailbox, &gone);
-    if failed {
+    if failed || duplicate_left {
         reg.invalidate(account_id, mailbox);
     }
-    Ok(gone)
+    Ok(evicted)
 }
 
 /// One-time migration of pre-.eml JSON sidecars (`<uid>.json` with a
@@ -2019,6 +2076,59 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert!(cur.join(format!("4{INFO_PREFIX}D.eml")).exists(), "a D copy is never evicted");
         let orphan = cur.parent().unwrap().join(maildir::ORPHAN_DIR).join(format!("1{INFO_PREFIX}S.eml"));
         assert!(orphan.exists(), "orphaned/ is never touched, even under an evicted uid");
+    }
+
+    /// The sidecar serves the uid's remaining archived duplicate: it stays
+    /// until the uid's last file goes.
+    #[test]
+    fn evict_files_keeps_the_decrypted_sidecar_while_an_archived_duplicate_remains() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), b"Message-ID: <five@x>\r\n\r\nc").unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}AS.eml")), b"Message-ID: <five@x>\r\n\r\na").unwrap();
+        crate::pgp::write_copy(&cur, 5, b"decrypted").unwrap();
+
+        let uids: HashSet<u32> = [5].into_iter().collect();
+        assert_eq!(evict_files(&reg, root, "acct", "INBOX", &uids).unwrap(), vec![5]);
+        assert!(!cur.join(format!("5{INFO_PREFIX}S.eml")).exists(), "the cache copy goes");
+        assert!(cur.join(format!("5{INFO_PREFIX}AS.eml")).exists(), "the archived duplicate stays");
+        assert!(crate::pgp::copy_path(&cur, 5).exists(), "and so does the sidecar it reads through");
+    }
+
+    /// An evicted message's extracted attachments leave `attachment_cache`
+    /// with it; another message's, and one kept by an archived copy, stay.
+    #[test]
+    fn evict_files_removes_the_evicted_messages_extracted_attachments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let with_attachment = |id: &str| {
+            format!(
+                "Message-ID: <{id}@x>\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"a.txt\"\r\n\r\nattached\r\n--b--\r\n"
+            )
+        };
+        // uid 1: cache copy (evicted); uid 2: archived (kept); uid 10: cache
+        // copy not asked for (kept) - its name shares the "..._1" prefix.
+        for (uid, flags) in [(1, "S"), (2, "AS"), (10, "S")] {
+            let raw = with_attachment(&format!("m{uid}"));
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}{flags}.eml")), &raw).unwrap();
+        }
+        let cached: Vec<PathBuf> = [1u32, 2, 10]
+            .iter()
+            .map(|uid| PathBuf::from(cache_attachment(root, with_attachment(&format!("m{uid}")).as_bytes(), "acct", "INBOX", *uid, 0).unwrap()))
+            .collect();
+        assert!(cached.iter().all(|p| p.exists()));
+
+        let uids: HashSet<u32> = [1, 2].into_iter().collect();
+        assert_eq!(evict_files(&reg, root, "acct", "INBOX", &uids).unwrap(), vec![1]);
+        assert!(!cached[0].exists(), "the evicted message's extracted attachment goes");
+        assert!(cached[1].exists(), "an archived message's stays");
+        assert!(cached[2].exists(), "another message's stays");
     }
 
     #[test]

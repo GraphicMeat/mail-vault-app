@@ -55,10 +55,10 @@ export async function resolveMessageBody(header, store) {
       if (graphId) {
         const message = await api.graphGetMessage(fresh.oauth2AccessToken, graphId);
         remote = graphMessageToEmail(message, header.uid);
-        api.graphCacheMime(fresh.oauth2AccessToken, graphId, accountId, mailbox, header.uid).catch(() => {});
+        api.graphCacheMime(fresh.oauth2AccessToken, graphId, accountId, mailbox, header.uid, 'export').catch(() => {});
       }
     } else {
-      remote = await api.fetchEmailLight(fresh, header.uid, mailbox, accountId);
+      remote = await api.fetchEmailLight(fresh, header.uid, mailbox, accountId, { intent: 'export' });
     }
   } catch (err) {
     return { ok: false, reason: t('svc.bodyResolver.fetchFailed', { err: err.message || err }) };

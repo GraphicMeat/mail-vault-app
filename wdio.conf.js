@@ -536,6 +536,9 @@ export const config = {
           MAILVAULT_TEST_PGP_KEYS: join(testDataDir, 'pgp-keys.json'),
           // Mock IMAP is plaintext; the app honors this for loopback only
           MAILVAULT_IMAP_PLAINTEXT: '1',
+          // The download-mode eviction worker stays off: its first pass would
+          // delete seeded cache copies and add a UID FETCH mid-suite.
+          MAILVAULT_DISABLE_EVICTION: '1',
           // Same hatch for the mock SMTP listener, same loopback-only rule.
           // Without it lettre insists on STARTTLS and no send can ever succeed.
           MAILVAULT_SMTP_PLAINTEXT: '1',

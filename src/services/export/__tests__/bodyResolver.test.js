@@ -55,6 +55,8 @@ describe('resolveMessageBody', () => {
     const out = await resolveMessageBody(header, store);
     expect(fetchEmailLight).toHaveBeenCalled();
     expect(out.email.html).toBe('<p>server</p>');
+    // Track H: an export fetch is cached like an open, not like a backfill.
+    expect(fetchEmailLight.mock.calls[0][4]).toEqual({ intent: 'export' });
   });
 
   it('refuses a server answer that contradicts the header', async () => {

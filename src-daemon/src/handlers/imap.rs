@@ -97,15 +97,17 @@ where
 /// file. `true`: a copy is there now, written or already present. A failure
 /// only warns — a cache miss must not fail what the user is looking at.
 ///
-/// The account's download mode decides first (`download_policy`): On Demand
-/// writes nothing, Keep Recent and Index Only write a message dated inside
-/// the window (or undated), Hoarder writes everything, a hidden account
-/// nothing. `false` then: no copy was written by this call.
-async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>) -> bool {
+/// The account's download mode decides first (`download_policy`,
+/// `FetchPolicy::caches_fetched`): a message the user opened (or exported,
+/// `opened: true`) is written in every mode but On Demand; a body fetched
+/// ahead (backfill, IDLE arrivals) only inside a Keep Recent / Index Only
+/// window, always under Hoarder. A hidden account: nothing. `false` then:
+/// no copy was written by this call.
+async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> bool {
     let app_dir = state.app_dir.clone();
     let policy_account = account_id.clone();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
-    if !policy.is_some_and(|p| p.keeps_body_dated(date_ms, now_ms())) {
+    if !policy.is_some_and(|p| p.caches_fetched(opened, date_ms, now_ms())) {
         return false;
     }
     let state2 = Arc::clone(state);
@@ -182,7 +184,7 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
             }
         };
         let dated = email_date_ms(email.date.as_deref(), email.internal_date.as_deref());
-        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes, dated).await;
+        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes, dated, false).await;
     }
 }
 
@@ -208,12 +210,22 @@ pub(crate) fn fetch_policy(app_dir: &std::path::Path, account_id: &str) -> Resul
     Ok(FetchPolicy::from_settings(&read_settings_state(app_dir)?, account_id))
 }
 
-/// `fetch_policy` for the download gates: unreadable settings read as the
-/// app's defaults (visible, Keep Recent, three months), as the old
-/// `local_copy_months` did. A gate that writes can only keep too much, never
-/// lose mail, so it does not stop on an unreadable file the way eviction does.
+/// `fetch_policy` for the download gates. Unreadable settings (missing,
+/// caught mid-write) keep every body: a gate that cannot tell the mode must
+/// not drop a Hoarder account's mail, and a body written in error is only a
+/// cache copy the eviction worker removes on a pass that can read the mode.
+/// The Premium flag stays off, so no proactive worker starts on a guess.
 pub(crate) fn download_policy(app_dir: &std::path::Path, account_id: &str) -> Option<FetchPolicy> {
-    fetch_policy(app_dir, account_id).unwrap_or_else(|_| FetchPolicy::from_settings(&json!({}), account_id))
+    fetch_policy(app_dir, account_id).unwrap_or(Some(FetchPolicy { mode: FetchMode::Hoarder, window_months: 0, hoarder_premium: false }))
+}
+
+/// Why a body is being fetched, from the `intent` param of
+/// `imap_get_email_light` / `graph_cache_mime`: `backfill` (the app's
+/// download-ahead pipeline) follows the download window; `open` (the
+/// default, any other value included) and `export` are a message the user
+/// asked for, cached in every mode but On Demand.
+pub(crate) fn opened_intent(params: &Value) -> bool {
+    params.get("intent").and_then(Value::as_str) != Some("backfill")
 }
 
 /// Ported from `commands.rs` verbatim: a pooled socket the peer closed while
@@ -447,6 +459,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // queueing the click the user actually made behind up to five
             // whole message bodies.
             let use_background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
+            let opened = opened_intent(params);
             let mb_clone = mailbox.clone();
             let started = std::time::Instant::now();
             // Written through by `checkout` (permit/connect/reuse) and by
@@ -522,7 +535,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let mb = mb_clone.clone();
                     // `store` answered Ok: written now, or a file was already there.
                     let dated = email_date_ms(e.date.as_deref(), e.internal_date.as_deref());
-                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated).await;
+                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated, opened).await;
                     // OpenPGP: decrypted in memory whatever the cache did; the
                     // decrypted copy is kept only when the vault holds the message.
                     let raw = e.raw_source_bytes.clone();
@@ -1056,33 +1069,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Keep Recent: a message inside the window is kept, one older is shown
-    /// but not written.
+    /// Keep Recent: a message the user opens is cached whatever its date
+    /// (it reads offline and has its attachments); the backfill pipeline's
+    /// fetch keeps only bodies inside the window.
     #[tokio::test]
-    async fn get_email_light_keeps_only_bodies_inside_the_keep_recent_window() {
+    async fn get_email_light_caches_an_opened_message_and_backfills_only_inside_the_window() {
         plaintext();
         let recent = (chrono::Utc::now() - chrono::Duration::days(2)).to_rfc2822();
         let mut inbox = Mailbox::new("INBOX");
         inbox.add(dated_message(1, &recent));
         inbox.add(dated_message(2, "Thu, 01 Jan 2015 00:00:00 +0000"));
+        inbox.add(dated_message(3, "Thu, 01 Jan 2015 00:00:00 +0000"));
         let server = MockImap::start(Scenario::new().mailbox(inbox));
         let (dir, s) = light_state();
         write_settings(&dir, json!({"fetchMode": "keepRecent", "localCacheDurationMonths": 3}));
 
-        for uid in [1, 2] {
-            let resp = call(
-                &s,
-                "imap_get_email_light",
-                json!({"account": account_json(&server), "uid": uid, "mailbox": "INBOX", "accountId": "acc1"}),
-            )
-            .await;
+        // (uid, intent, cached): an open (no intent, or "export") caches the
+        // old message; the backfill pipeline caches only the recent one.
+        for (uid, intent, cached) in [(2, None, true), (1, Some("backfill"), true), (3, Some("backfill"), false), (3, Some("export"), true)] {
+            let mut params = json!({"account": account_json(&server), "uid": uid, "mailbox": "INBOX", "accountId": "acc1"});
+            if let Some(intent) = intent {
+                params["intent"] = json!(intent);
+            }
+            let resp = call(&s, "imap_get_email_light", params).await;
             let result = resp.result.expect("success");
             assert_eq!(result["success"], json!(true));
-            assert_eq!(result["cached"], json!(uid == 1), "uid {uid}");
+            assert_eq!(result["cached"], json!(cached), "uid {uid} intent {intent:?}");
         }
         let files = cached_files(&dir);
-        assert_eq!(files.len(), 1, "only the recent body is kept: {files:?}");
-        assert!(files[0].starts_with("1"), "{files:?}");
+        assert_eq!(files.len(), 3, "{files:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1098,9 +1113,13 @@ mod tests {
         write_settings(&dir, json!({"fetchMode": "hoarder", "hiddenAccounts": {"hidden": true}}));
         assert_eq!(fetch_policy(&dir, "acc1").unwrap().map(|p| p.mode), Some(FetchMode::Hoarder));
         assert_eq!(fetch_policy(&dir, "hidden").unwrap(), None, "a hidden account has no policy");
-        // The download gates alone fall back to the app's defaults.
+        // The download gates alone fall back, and to keeping every body: a
+        // gate that cannot read the mode must not drop a Hoarder account's
+        // mail. No Premium worker starts on the guess.
         std::fs::remove_file(dir.join("frontend-settings.json")).unwrap();
-        assert_eq!(download_policy(&dir, "acc1").map(|p| (p.mode, p.window_months)), Some((FetchMode::KeepRecent, 3)));
+        let fallback = download_policy(&dir, "acc1").expect("the gates still write");
+        assert!(fallback.caches_fetched(false, Some(1_420_070_400_000), now_ms()), "an old body fetched ahead is kept");
+        assert!(!fallback.runs_hoarder_worker());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

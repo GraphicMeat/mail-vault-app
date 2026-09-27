@@ -250,6 +250,9 @@ export const config = {
           HOME: dataDir,
           MAILVAULT_TEST_CREDENTIALS: credentialsPath,
           MAILVAULT_IMAP_PLAINTEXT: '1',
+          // The download-mode eviction worker stays off: its first pass would
+          // delete seeded cache copies and add a UID FETCH mid-suite.
+          MAILVAULT_DISABLE_EVICTION: '1',
         },
       });
       let started = false;

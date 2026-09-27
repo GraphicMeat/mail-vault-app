@@ -328,14 +328,17 @@ export class AccountPipeline {
             this.onProgress(this.state);
             continue;
           }
+          // 'backfill': the download mode's window decides what stays on disk.
           email = await api.graphCacheMime(
-            this.account.oauth2AccessToken, graphId, this.accountId, mailbox, uid
+            this.account.oauth2AccessToken, graphId, this.accountId, mailbox, uid, 'backfill'
           );
         } else {
           // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only.
           // Background lane: the pipeline runs for the whole mailbox and must never
           // sit on the permits a click on a single message needs.
-          email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId, { background: true });
+          // 'backfill': the download mode's window decides what stays on disk
+          // (an opened message is cached in every mode but On Demand).
+          email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId, { background: true, intent: 'backfill' });
         }
 
         // No webview body cache fill: the fetch stored the .eml, and opening

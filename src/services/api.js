@@ -239,10 +239,15 @@ export async function pgpRemoveKey(fingerprint) {
   return transportSend('pgp.remove_key', { fingerprint });
 }
 
-export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null, { background = false } = {}) {
+// `intent` tells the daemon why the body is fetched, which decides whether it
+// is kept on disk under the account's download mode: 'open' (default; a
+// message the user opened, kept in every mode but On Demand), 'backfill' (the
+// download-ahead pipeline, kept only inside the window) or 'export' (as open).
+export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null, { background = false, intent } = {}) {
   if (IS_TAURI) {
     const params = { account, uid, mailbox, background };
     if (accountId) params.accountId = accountId;
+    if (intent) params.intent = intent;
     const data = await tauriInvoke('imap_get_email_light', params);
     if (data?.gone) throw new MessageGoneError(data.uid ?? uid, data.mailbox ?? mailbox);
     // The daemon auto-caches the body it just fetched; `cached` says the vault
@@ -508,8 +513,9 @@ export async function graphGetMessage(accessToken, messageId) {
   return await tauriInvoke('graph_get_message', { accessToken, messageId });
 }
 
-export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid) {
-  const data = await tauriInvoke('graph_cache_mime', { accessToken, messageId, accountId, mailbox, uid });
+// `intent` as in fetchEmailLight: 'open' (default), 'backfill' or 'export'.
+export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid, intent = 'open') {
+  const data = await tauriInvoke('graph_cache_mime', { accessToken, messageId, accountId, mailbox, uid, intent });
   return data.email;
 }
 

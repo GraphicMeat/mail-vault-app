@@ -65,7 +65,21 @@ impl EvictionWorkerState {
 }
 
 pub(crate) fn start(state: Arc<DaemonState>) {
+    if disabled_by(std::env::var(DISABLE_ENV).ok().as_deref()) {
+        info!("[evict] worker not started: {DISABLE_ENV}=1");
+        return;
+    }
     tokio::spawn(async move { run(state).await });
+}
+
+/// Set by the e2e harness (`wdio.conf.js`) for its long-lived daemons: a
+/// seeded vault's cache copies must not vanish mid-suite, and the pass's
+/// extra `UID FETCH 1:*` must not show up in specs that count commands.
+/// Honoured in every build: it can only switch deletion off.
+const DISABLE_ENV: &str = "MAILVAULT_DISABLE_EVICTION";
+
+fn disabled_by(value: Option<&str>) -> bool {
+    value == Some("1")
 }
 
 async fn run(state: Arc<DaemonState>) {
@@ -78,8 +92,9 @@ async fn run(state: Arc<DaemonState>) {
             _ = tokio::time::sleep(wait) => {}
         }
         wait = PASS_EVERY;
-        // A daily background job must not be what raises the keychain
-        // prompt, and offline every listing would fail anyway.
+        // Offline every listing would fail anyway; a blocked keychain would
+        // fail every credential read. The credential reads themselves never
+        // prompt (`resolve_account_credentials_quiet`).
         if !state.net.is_online() || credentials::GATE.is_blocked() {
             info!("[evict] pass skipped: offline or keychain locked");
             continue;
@@ -125,7 +140,9 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
                 continue;
             }
         }
-        let config = match credentials::resolve_account_credentials_guarded(&account_id).await {
+        // Interaction off: a daily background pass must never be what
+        // raises the keychain prompt. A locked keychain skips the account.
+        let config = match credentials::resolve_account_credentials_quiet(&account_id).await {
             Ok(c) => c,
             Err(e) => {
                 warn!("[evict] {account_id}: nothing evicted, credentials unavailable: {e}");
@@ -523,5 +540,13 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(1), s.eviction_worker.notify.notified())
             .await
             .expect("the RPC leaves a wake permit for the worker");
+    }
+
+    #[test]
+    fn only_the_value_1_switches_the_worker_off() {
+        assert!(disabled_by(Some("1")));
+        assert!(!disabled_by(None));
+        assert!(!disabled_by(Some("0")));
+        assert!(!disabled_by(Some("")));
     }
 }

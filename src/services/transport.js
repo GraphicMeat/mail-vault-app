@@ -158,6 +158,9 @@ export const DAEMON_OWNED = new Set([
   'fetch_remote_asset',
   // OpenPGP keys live in the keychain; the daemon lists, imports and removes them.
   'pgp.list_keys', 'pgp.import_key', 'pgp.remove_key',
+  // Track H: the app saved a new download mode or window; the daemon's
+  // eviction (and, with Premium, Hoarder) worker re-derives its work now.
+  'storage.fetch_mode_changed',
   // Task 4.4: backup ZIP export/import. accounts.json stays app-only
   // (decision 2): the daemon route only reads it and returns new-account
   // descriptors for `db/accounts.js` to merge itself.

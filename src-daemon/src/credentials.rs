@@ -285,6 +285,16 @@ pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<Ima
     account_from_blob(&blob, account_id)
 }
 
+/// `resolve_account_credentials_guarded` for background work that must never
+/// be what raises the keychain prompt (the eviction worker's daily pass):
+/// the read runs with interaction off, so a locked keychain answers an error
+/// (and blocks the gate, as any quiet probe does) instead of a dialog. It
+/// joins a read already out, interactive or not.
+pub async fn resolve_account_credentials_quiet(account_id: &str) -> Result<ImapConfig, String> {
+    let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
+    account_from_blob(&blob, account_id)
+}
+
 /// macOS's password prompt shows once per blocked episode: only a read that
 /// finds the gate clear (the one that discovers the problem) may raise it,
 /// plus `keychain.retry`, which the user asked for. Every other read while

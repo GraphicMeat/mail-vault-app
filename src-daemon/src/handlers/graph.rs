@@ -141,9 +141,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // the app-side version), it just never takes the RwLock that
             // would serialize this against a concurrent vault move.
             // The account's download mode decides whether a copy is kept at
-            // all (On Demand: never; Keep Recent / Index Only: inside the
-            // window). Not kept: the parsed email still goes back, every
+            // all (`FetchPolicy::caches_fetched`): On Demand never; an open
+            // or export always otherwise; the backfill pipeline's fetch
+            // (`intent: "backfill"`) only inside the Keep Recent / Index Only
+            // window. Not kept: the parsed email still goes back, every
             // caller reads only `email`, and `cached: false` says no file.
+            let opened = crate::handlers::imap::opened_intent(params);
             let date_ms = {
                 let date = mailparse::parse_headers(&raw_bytes)
                     .ok()
@@ -156,7 +159,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .await
                 .ok()
                 .flatten()
-                .is_some_and(|p| p.keeps_body_dated(date_ms, crate::handlers::imap::now_ms()));
+                .is_some_and(|p| p.caches_fetched(opened, date_ms, crate::handlers::imap::now_ms()));
             if !keep {
                 return Some(match vault_eml::parse_eml_bytes_light(&raw_bytes, uid, vec![]) {
                     Ok(email) => RpcResponse::success(id, json!({"success": true, "email": email, "cached": false})),
@@ -499,6 +502,28 @@ mod tests {
         assert_eq!(result["cached"], json!(false));
         let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
         assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_none(), "On Demand writes no vault file");
+    }
+
+    /// Keep Recent: the backfill pipeline's fetch of an old message writes
+    /// nothing; the same message opened is cached.
+    #[tokio::test]
+    async fn cache_mime_backfill_follows_the_window_and_an_open_does_not() {
+        let old = "From: a@b.com\r\nSubject: hi\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\nBody";
+        let _g = mock_graph(vec![(200, old.to_string()), (200, old.to_string())]);
+        let s = st();
+        let settings = json!({"mailvault-settings": {"state": {"fetchMode": "keepRecent", "localCacheDurationMonths": 3}}});
+        std::fs::write(s.app_dir.join("frontend-settings.json"), settings.to_string()).unwrap();
+        let cur_dir = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
+
+        let params = json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7, "intent": "backfill"});
+        let backfill = call(&s, "graph_cache_mime", params).await.result.expect("success");
+        assert_eq!(backfill["cached"], json!(false));
+        assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_none());
+
+        let params = json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7});
+        let opened = call(&s, "graph_cache_mime", params).await.result.expect("success");
+        assert_eq!(opened["cached"], json!(true));
+        assert!(vault_eml::find_file_by_uid(&cur_dir, 7).is_some());
     }
 
     /// The write goes through `vault_files::store`, so a verified mailbox

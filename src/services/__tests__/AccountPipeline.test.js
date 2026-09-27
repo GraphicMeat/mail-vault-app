@@ -398,6 +398,18 @@ describe('AccountPipeline background body fetch', () => {
     pipeline.destroy();
     mail.state.emails = [];
   });
+
+  // Track H: the download-ahead fetch says so, so the daemon keeps its body
+  // only inside the download window. An opened message says 'open'.
+  it("fetches ahead as 'backfill' on the background lane", async () => {
+    api.fetchEmailLight.mockResolvedValue({ uid: 1 });
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1], 'INBOX');
+    await browserTicks(6);
+
+    expect(api.fetchEmailLight).toHaveBeenCalledWith(account, 1, 'INBOX', 'acc-2', { background: true, intent: 'backfill' });
+    pipeline.destroy();
+  });
 });
 
 describe('AccountPipeline Graph header load', () => {
