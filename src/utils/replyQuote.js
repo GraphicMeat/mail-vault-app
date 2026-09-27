@@ -36,3 +36,12 @@ export function buildQuoteBlocks(replyTo, label) {
     contextHtml: contextMessages.map(message => originalHtml(message, label)).join('<hr>'),
   };
 }
+
+// The reply as sent (and as a draft saves it). The header buildQuoteBlocks
+// writes goes above the blockquote, not inside it: a reader that folds the
+// quote, ours included, still shows who wrote it.
+export function replyWireHtml(bodyHtml, quotedHtml) {
+  if (!quotedHtml) return bodyHtml;
+  const headerEnd = quotedHtml.startsWith('<p><strong>') ? quotedHtml.indexOf('</p>') + 4 : 0;
+  return `${bodyHtml}<hr>${quotedHtml.slice(0, headerEnd)}<blockquote>${quotedHtml.slice(headerEnd)}</blockquote>`;
+}

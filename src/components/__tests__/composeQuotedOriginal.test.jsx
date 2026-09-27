@@ -515,7 +515,9 @@ describe('the quoted original in a reply', () => {
   it('sends an HTML original on the wire as it arrived', async () => {
     const sent = await sendReplyTo(original);
 
-    expect(sent.html.startsWith('<hr><blockquote><p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;<br>Date: ')).toBe(true);
-    expect(sent.html.endsWith(`<br>Subject: Quote request<br>To: me@example.test</p>${original.html}</blockquote>`)).toBe(true);
+    // The attribution sits above the blockquote, so a reader that folds the
+    // quote still shows who wrote it.
+    expect(sent.html.startsWith('<hr><p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;<br>Date: ')).toBe(true);
+    expect(sent.html.endsWith(`<br>Subject: Quote request<br>To: me@example.test</p><blockquote>${original.html}</blockquote>`)).toBe(true);
   });
 });

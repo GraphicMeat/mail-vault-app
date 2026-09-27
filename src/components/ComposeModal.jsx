@@ -29,7 +29,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
-import { buildQuoteBlocks } from '../utils/replyQuote';
+import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
@@ -901,9 +901,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
       // Inline pictures keep their data: URIs here — a draft is read back by
       // this app, and cid: parts would only pay off on the wire.
-      const html = quotedHtml
-        ? formData.body + '<hr><blockquote>' + quotedHtml + '</blockquote>'
-        : formData.body;
+      const html = replyWireHtml(formData.body, quotedHtml);
       const text = htmlToText(formData.body);
       const payload = {
         to: formData.to,

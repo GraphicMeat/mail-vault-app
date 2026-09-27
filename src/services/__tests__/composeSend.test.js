@@ -124,6 +124,15 @@ describe('buildOutgoingPayload', () => {
     expect(built.outgoingPayload.html).toContain('<blockquote><p>Prior message</p></blockquote>');
     expect(built.outgoingPayload.text).toContain('Original Message');
   });
+
+  it('puts the quote header above the blockquote, not inside it', async () => {
+    const header = '<p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;</p>';
+    const built = await buildOutgoingPayload({
+      snapshot: { ...snapshot, _quotedHtml: `${header}<p>Prior message</p>` }, account, settings: {},
+    });
+
+    expect(built.outgoingPayload.html.endsWith(`<hr>${header}<blockquote><p>Prior message</p></blockquote>`)).toBe(true);
+  });
 });
 
 describe('createComposeSend', () => {

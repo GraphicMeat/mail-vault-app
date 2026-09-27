@@ -83,7 +83,8 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   ];
   const quotedHtml = snapshot._quotedHtml || '';
   const composed = inlineComposeSpacing(inline.html);
-  const fullHtml = quotedHtml ? `${composed}<hr><blockquote>${quotedHtml}</blockquote>` : composed;
+  const { replyWireHtml } = await import('../utils/replyQuote');
+  const fullHtml = replyWireHtml(composed, quotedHtml);
   const fullText = quotedHtml
     ? `${htmlToText(snapshot.body)}\n\n-------- Original Message --------\n${htmlToText(quotedHtml)}`
     : htmlToText(snapshot.body);
