@@ -231,3 +231,37 @@ describe('All Inboxes', () => {
     expect(state.loadEmails).not.toHaveBeenCalled();
   });
 });
+
+// Retry on the connection notice in All Inboxes: that one account asks its
+// server again, the merged list is repainted, and the account's status says
+// how it went, so the notice stays gone or comes back.
+describe('retrying one account from All Inboxes', () => {
+  beforeEach(() => {
+    state.accounts = [{ id: 'acct-1', email: 'me@example.com' }, { id: 'acct-2', email: 'work@example.com' }];
+    Object.assign(state, {
+      activeAccountId: 'acct-2', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX',
+      connectionStatus: 'error', connectionError: 'Connection failed', connectionErrorType: 'serverError',
+      loadUnifiedInbox: vi.fn().mockResolvedValue(undefined),
+    });
+  });
+
+  it('refreshes only that account, repaints All Inboxes and marks it connected', async () => {
+    mockFetchEmails.mockResolvedValue({ emails: [header(1)], total: 1, hasMore: false });
+
+    await refreshAllAccounts({ accountId: 'acct-2' });
+
+    expect(mockFetchEmails).toHaveBeenCalledOnce();
+    expect(mockFetchEmails.mock.calls[0][0].id).toBe('acct-2');
+    expect(mockFetchEmails.mock.calls[0][1]).toBe('INBOX');
+    expect(state.loadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
+    expect(state).toMatchObject({ connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+  });
+
+  it('leaves the error standing when the server still fails', async () => {
+    mockFetchEmails.mockRejectedValue(new Error('IMAP greeting failed'));
+
+    await refreshAllAccounts({ accountId: 'acct-2' });
+
+    expect(state).toMatchObject({ connectionStatus: 'error', connectionError: 'Connection failed', connectionErrorType: 'serverError' });
+  });
+});

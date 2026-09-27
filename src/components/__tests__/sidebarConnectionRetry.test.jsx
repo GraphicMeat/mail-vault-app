@@ -24,12 +24,15 @@ vi.mock('../../services/db', async importOriginal => ({
   readLocalEmailIndex: async () => [],
 }));
 
-const realActivate = useMailStore.getState().activateAccount;
+const { activateAccount: realActivate, refreshAllAccounts: realRefreshAll } = useMailStore.getState();
 let settle;
-const activateAccount = vi.fn(() => new Promise((resolve, reject) => { settle = { resolve, reject }; }));
+const pending = () => new Promise((resolve, reject) => { settle = { resolve, reject }; });
+const activateAccount = vi.fn(pending);
+const refreshAllAccounts = vi.fn(pending);
 
 beforeEach(() => {
   activateAccount.mockClear();
+  refreshAllAccounts.mockClear();
   useSettingsStore.setState({
     sidebarCollapsed: false, sidebarStyle: 'list', sidebarLayout: 'stacked', hiddenAccounts: {}, accountOrder: [],
     backupGlobalEnabled: false, billingProfile: null, transferHoverEnabled: false,
@@ -39,29 +42,31 @@ beforeEach(() => {
     activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false,
     mailboxes: [{ name: 'INBOX', path: 'INBOX' }], emails: [], localEmails: [],
     connectionStatus: 'error', connectionErrorType: 'serverError', connectionError: 'Connection failed',
-    suspectEmptyServerData: null, activateAccount,
+    suspectEmptyServerData: null, activateAccount, refreshAllAccounts,
   });
 });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  useMailStore.setState({ activateAccount: realActivate });
+  useMailStore.setState({ activateAccount: realActivate, refreshAllAccounts: realRefreshAll });
 });
 
 const details = () => screen.queryByRole('button', { name: t('sidebar.details') });
+
+const unified = { unifiedInbox: true, activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' };
 
 function clickRetry() {
   vi.useFakeTimers();
   render(<Sidebar />);
   act(() => vi.advanceTimersByTime(3000));
   fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
-  expect(activateAccount).toHaveBeenCalledOnce();
+  expect(activateAccount.mock.calls.length + refreshAllAccounts.mock.calls.length).toBe(1);
 }
 
 describe('connection notice Retry', () => {
   it.each([
     ['an account folder', {}],
-    ['All Inboxes', { unifiedInbox: true, activeMailbox: 'UNIFIED' }],
+    ['All Inboxes', unified],
   ])('hides the notice while Retry runs in %s and brings it straight back on failure', async (_view, state) => {
     useMailStore.setState(state);
     clickRetry();
@@ -76,6 +81,20 @@ describe('connection notice Retry', () => {
     clickRetry();
     expect(activateAccount).toHaveBeenCalledWith('studio', 'INBOX', { _backgroundRefresh: true });
     await act(async () => settle.resolve());
+  });
+
+  // activateAccount(id, 'UNIFIED') synced a folder named UNIFIED and never
+  // cleared the status; All Inboxes refreshes that one account instead.
+  it('reconnects that account in All Inboxes without leaving the view', async () => {
+    useMailStore.setState(unified);
+    clickRetry();
+    expect(activateAccount).not.toHaveBeenCalled();
+    expect(refreshAllAccounts).toHaveBeenCalledWith({ accountId: 'studio' });
+    await act(async () => {
+      useMailStore.setState({ connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+      settle.resolve();
+    });
+    expect(details()).toBeNull();
   });
 
   it('brings the notice back when the retry throws', async () => {

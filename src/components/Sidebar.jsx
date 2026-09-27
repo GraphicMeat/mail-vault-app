@@ -539,6 +539,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
+  const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
   const [showScheduled, setShowScheduled] = useState(false);
   // The Scheduled folder leads to a Settings tab (Background helper from its
   // "keep running" card, Billing from its upgrade prompt); the folder closes
@@ -698,8 +699,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // retry takes the background-refresh path, which awaits it and keeps the
   // rows on screen. The ref turns away a second click on the card while it
   // animates out.
-  // All Inboxes keeps the call it always made: the background path would
-  // sync a folder named 'UNIFIED' into the list on screen.
+  // All Inboxes has no folder of its own to reload ('UNIFIED' is not one): it
+  // refreshes that account alone and repaints the merged list.
   const [retryingFor, setRetryingFor] = useState(null);
   const retryingRef = useRef(false);
   const retryConnection = useCallback(async (accountId, mailbox) => {
@@ -707,14 +708,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     retryingRef.current = true;
     setRetryingFor(accountId);
     try {
-      await activateAccount(accountId, mailbox, mailbox === 'UNIFIED' ? undefined : { _backgroundRefresh: true });
+      await (mailbox === 'UNIFIED'
+        ? refreshAllAccounts({ accountId })
+        : activateAccount(accountId, mailbox, { _backgroundRefresh: true }));
     } catch (err) {
       console.warn('[Sidebar] connection retry failed:', err);
     } finally {
       retryingRef.current = false;
       setRetryingFor(null);
     }
-  }, [activateAccount]);
+  }, [activateAccount, refreshAllAccounts]);
   const showError = !keychainBlocked && !portableLocked && errorReadyFor !== null && errorReadyFor === activeAccountId
     && retryingFor !== activeAccountId;
 

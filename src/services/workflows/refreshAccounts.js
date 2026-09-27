@@ -132,14 +132,18 @@ export async function refreshAllAccounts(options = {}) {
   const countedUnread = {};
   let previousEmailCount = get().emails.length;
   const perAccountResults = [];
+  // `accountId`: Retry on one account's connection notice refreshes it alone.
+  const failed = new Set();
 
   for (let account of accounts) {
+    if (options.accountId && account.id !== options.accountId) continue;
     if (useSettingsStore.getState().isAccountHidden(account.id)) {
       console.log(`[mailStore] Skipping hidden account ${account.email}`);
       continue;
     }
     if (!hasValidCredentials(account)) {
       console.warn(`[mailStore] Skipping account ${account.email} - no credentials`);
+      failed.add(account.id);
       continue;
     }
     account = await ensureFreshToken(account);
@@ -210,6 +214,7 @@ export async function refreshAllAccounts(options = {}) {
           }
         } catch (e) {
           console.warn(`[mailStore] Could not load Graph headers for ${account.email}:`, e);
+          failed.add(account.id);
         }
       } else {
         try {
@@ -259,11 +264,19 @@ export async function refreshAllAccounts(options = {}) {
           }
         } catch (e) {
           console.warn(`[mailStore] Could not load headers for ${account.email}:`, e);
+          failed.add(account.id);
         }
       }
     } catch (error) {
       console.error(`[mailStore] Failed to refresh account ${account.email}:`, error);
+      failed.add(account.id);
     }
+  }
+
+  // A retried account that reached its server is connected again: nothing in
+  // All Inboxes clears the status otherwise. A failure leaves `error` as it is.
+  if (options.accountId && options.accountId === get().activeAccountId && !failed.has(options.accountId)) {
+    useMailStore.setState({ connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
   }
 
   // All Inboxes is built from each account's cache, which the loop above only
