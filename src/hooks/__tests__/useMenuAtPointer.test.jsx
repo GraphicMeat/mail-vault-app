@@ -13,7 +13,10 @@ function Row() {
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('useMenuAtPointer', () => {
   it('opens on a right-button pointerdown, at that point, with no wait for contextmenu', () => {
@@ -89,5 +92,43 @@ describe('useMenuAtPointer', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(screen.getByTestId('menu').dataset).toMatchObject({ x: '120', y: '210' });
     rect.mockRestore();
+  });
+
+  // Windows fires `contextmenu` on mouse-up: a right-click held a long time
+  // must not have any fixed-duration expiry clear the "pointerdown already
+  // opened this" flag before its own contextmenu arrives, or that contextmenu
+  // opens (or moves) the wheel a second time at the release point.
+  it('a right-click held past 1000ms still opens exactly once, at the pointerdown point', () => {
+    vi.useFakeTimers();
+    render(<Row />);
+    fireEvent.pointerDown(screen.getByTestId('row'), { button: 2, clientX: 40, clientY: 60 });
+    act(() => { vi.advanceTimersByTime(1000); });
+    let event;
+    act(() => {
+      event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 });
+      screen.getByTestId('row').dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    expect(screen.getAllByTestId('menu')).toHaveLength(1);
+    expect(screen.getByTestId('menu').dataset).toMatchObject({ x: '40', y: '60' });
+  });
+
+  // A right-press that never gets a matching contextmenu (dragged off,
+  // cancelled, whatever) must not leave the flag wedged on: the next
+  // pointerdown, whatever its button, resets it, so a later Ctrl+click is
+  // never swallowed by a stale earlier right-press.
+  it('a right-press with no contextmenu does not swallow a later Ctrl+click', () => {
+    vi.useFakeTimers();
+    render(<Row />);
+    fireEvent.pointerDown(screen.getByTestId('row'), { button: 2, clientX: 40, clientY: 60 });
+    act(() => { vi.advanceTimersByTime(1000); });
+    fireEvent.pointerDown(screen.getByTestId('row'), { button: 0, ctrlKey: true, clientX: 12, clientY: 34 });
+    let event;
+    act(() => {
+      event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 34 });
+      screen.getByTestId('row').dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    expect(screen.getByTestId('menu').dataset).toMatchObject({ x: '12', y: '34' });
   });
 });

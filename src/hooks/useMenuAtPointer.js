@@ -16,28 +16,28 @@ import { useCallback, useRef, useState } from 'react';
 /// right-click's `contextmenu` (which follows its own button-2 pointerdown)
 /// must still only swallow the OS menu, not reopen or move the wheel that
 /// pointerdown already placed. `openedByPointerDownRef` is that "already
-/// handled this gesture" flag; it is short-lived (cleared on the very next
-/// contextmenu, or by the fallback timer if one oddly never arrives) so a
-/// gesture that opens without ever getting a matching contextmenu can't wedge
-/// the flag on and silently swallow the next, unrelated Ctrl+click.
+/// handled this gesture" flag.
+///
+/// It is set by pointerdown alone, with no timer: Windows fires `contextmenu`
+/// on mouse-UP, so a right-press held past any fixed timeout would clear the
+/// flag before its own contextmenu arrives, opening the wheel a second time
+/// at the release point. Every pointerdown instead resets the flag outright —
+/// true for button 2, false for anything else — so a right-press that never
+/// gets a matching contextmenu (dragged off, cancelled, whatever) is wiped by
+/// the very next pointerdown of any button, rather than lingering to swallow
+/// a later, unrelated Ctrl+click.
 export function useMenuAtPointer() {
   const [menuAt, setMenuAt] = useState(null);
   const openedByPointerDownRef = useRef(false);
-  const clearFlagTimerRef = useRef(null);
   const openMenuAtPointer = useCallback((event) => {
+    openedByPointerDownRef.current = event.button === 2;
     if (event.button !== 2) return;
-    openedByPointerDownRef.current = true;
-    clearTimeout(clearFlagTimerRef.current);
-    clearFlagTimerRef.current = setTimeout(() => {
-      openedByPointerDownRef.current = false;
-    }, 500);
     setMenuAt({ x: event.clientX, y: event.clientY });
   }, []);
   const openMenuFromContextMenu = useCallback((event) => {
     event.preventDefault();
     if (openedByPointerDownRef.current) {
       openedByPointerDownRef.current = false;
-      clearTimeout(clearFlagTimerRef.current);
       return;
     }
     // No button-2 pointerdown opened this gesture. A keyboard-triggered
