@@ -25,6 +25,10 @@ const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
 const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
+// The server holds the restored message under its new uid only: the retired
+// one answers "gone", as uid_still_present proves it in the app.
+const gone = () => Object.assign(new Error('gone'), { messageGone: true });
+const mockFetchEmailLight = vi.fn();
 // The sidebar badge, as the settings store keeps it: absolute per account.
 const unreadPerAccount = {};
 const mockSetUnreadForAccount = vi.fn((id, n) => { unreadPerAccount[id] = n; });
@@ -53,7 +57,7 @@ vi.mock('../../db', () => ({
 
 vi.mock('../../api', () => ({
   vaultApplyFlags: vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 }),
-  fetchEmailLight: vi.fn().mockResolvedValue(null),
+  fetchEmailLight: (...a) => mockFetchEmailLight(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
   graphSetFlagged: vi.fn().mockResolvedValue(undefined),
@@ -80,7 +84,7 @@ vi.mock('../../authUtils', () => ({
   resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
 }));
 
-vi.mock('../../attachmentUtils', () => ({ hasRealAttachments: () => false }));
+vi.mock('../../attachmentUtils', () => ({ hasRealAttachments: () => false, hydrateInlineImages: async (e) => e }));
 
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (a) => a?.oauth2Transport === 'graph',
@@ -172,6 +176,8 @@ beforeEach(() => {
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, subject: 'm7' });
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
   mockVaultRebindUids.mockResolvedValue({ rebound: [] });
+  mockFetchEmailLight.mockImplementation(async (_a, uid) => (uid === 7 ? Promise.reject(gone())
+    : { uid, subject: `m${uid}`, html: '<p>body</p>', text: 'body', flags: [] }));
   for (const id of Object.keys(unreadPerAccount)) delete unreadPerAccount[id];
 });
 
@@ -551,6 +557,70 @@ describe('undo puts the row back first, then the server follows', () => {
 
     expect(useMailStore.getState()._flagSeq).toBeGreaterThan(seq);
     expect(useMailStore.getState().getChatEmails().map(e => e.uid)).toEqual([6, 41, 8]);
+  });
+
+  // The natural next action after Undo is to click the row that came back.
+  // Its MOVE is still on the wire, so the row still carries the retired uid:
+  // fetched as it stands, the server says "gone" and the row is pruned.
+  it('a row opened while the move is on the wire opens under its new uid, and stays', async () => {
+    primeStore({ emails: [row(7), row(8)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    const move = deferred();
+    mockMoveEmails.mockReturnValueOnce(move.promise);
+
+    const undone = useMailStore.getState().runUndo();
+    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    const opening = useMailStore.getState().selectEmail(7);
+    move.resolve({ success: true, moved: 1, newUids: [41] });
+    await undone;
+    await opening;
+
+    expect(mockFetchEmailLight).not.toHaveBeenCalledWith(ACCOUNT, 7, 'INBOX', 'a1');
+    expect(mockFetchEmailLight).toHaveBeenCalledWith(ACCOUNT, 41, 'INBOX', 'a1');
+    expect(useMailStore.getState().selectedEmailId).toBe(41);
+    expect(useMailStore.getState().selectedEmail?.uid).toBe(41);
+    expect(uids()).toEqual([8, 41]);
+    expect(useMailStore.getState().totalEmails).toBe(2);
+  });
+
+  it('a mark-read and a move issued while the move is on the wire reach the new uid', async () => {
+    primeStore({ emails: [row(7), row(8)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    const move = deferred();
+    mockMoveEmails.mockReturnValueOnce(move.promise);
+
+    const undone = useMailStore.getState().runUndo();
+    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    const marked = useMailStore.getState().markEmailReadStatus(7, true);
+    move.resolve({ success: true, moved: 1, newUids: [41] });
+    await undone;
+    await marked;
+
+    expect(mockUpdateEmailFlags).toHaveBeenLastCalledWith(ACCOUNT, 41, ['\\Seen'], 'add', 'INBOX');
+    expect(useMailStore.getState().emails.find(e => e.uid === 41)?.flags).toContain('\\Seen');
+
+    await useMailStore.getState().moveEmails([7], 'Archive');
+    expect(mockMoveEmails).toHaveBeenLastCalledWith(ACCOUNT, [41], 'INBOX', 'Archive');
+  });
+
+  // Without COPYUID the copies are found by Message-ID, and a message the
+  // search cannot find stayed in Trash: it must not be stamped "back on the
+  // server", nor left on screen as though it were.
+  it('stamps and keeps on screen only the messages the lookup found in Trash', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
+    mockFindMessageId.mockImplementation(async (_a, mid) => (mid === 'm7@mock'
+      ? { found: [{ mailbox: 'Trash', uid: 88 }], searched: 1, failed: 0, complete: true }
+      : { found: [], searched: 1, failed: 0, complete: true }));
+    primeStore({ emails: [row(7), row(8), row(9)], selected: [7, 8] });
+    await useMailStore.getState().deleteSelectedFromServer();
+    mockGetLocalIndexEntry.mockClear();
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [88], 'Trash', 'INBOX');
+    expect(mockGetLocalIndexEntry).toHaveBeenCalledWith('a1', 'INBOX', 7);
+    expect(mockGetLocalIndexEntry).not.toHaveBeenCalledWith('a1', 'INBOX', 8);
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).not.toContain(8);
   });
 
   it('takes the row back out when the move fails', async () => {

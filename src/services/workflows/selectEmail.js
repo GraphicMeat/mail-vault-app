@@ -9,7 +9,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
 import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
-import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
+import { applySeenLocally, _setSeenOnServer, applyServerRemoval, keyAfterUndo } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
 import { t } from '../../i18n/index.js';
@@ -178,11 +178,14 @@ export async function _prefetchAdjacentEmails(currentUid) {
     // guessing a folder, because here the guess costs a cache row.
     const prefetchMailbox = isUnified ? nextEmail._mailbox : activeMailbox;
     if (!prefetchMailbox) continue;
-    const cacheKey = `${prefetchAccountId}-${prefetchMailbox}-${nextEmail.uid}`;
+    // Same wait as the click: a row an undo put back is fetched by its new uid.
+    let uid = keyAfterUndo(get, nextEmail.uid, prefetchAccountId, prefetchMailbox);
+    if (uid instanceof Promise) uid = await uid;
+    const cacheKey = `${prefetchAccountId}-${prefetchMailbox}-${uid}`;
     if (emailCache.has(cacheKey)) continue;
 
     try {
-      const localEmail = await _readVerifiedLocal(prefetchAccountId, prefetchMailbox, nextEmail.uid, nextEmail);
+      const localEmail = await _readVerifiedLocal(prefetchAccountId, prefetchMailbox, uid, nextEmail);
       if (localEmail && localEmail.html !== undefined) {
         get().addToCache(cacheKey, localEmail, cacheLimitMB, { prefetch: true });
         continue;
@@ -194,14 +197,14 @@ export async function _prefetchAdjacentEmails(currentUid) {
       if (isGraphAccount(account)) {
         // No relist here: a prefetch is speculative, and a miss just means the
         // body loads on click instead.
-        const graphId = nextEmail._graphId || getGraphMessageId(prefetchAccountId, prefetchMailbox, nextEmail.uid);
+        const graphId = nextEmail._graphId || getGraphMessageId(prefetchAccountId, prefetchMailbox, uid);
         if (!graphId) continue;
         const freshAccount = await ensureFreshToken(account);
         const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
-        const email = graphMessageToEmail(graphMsg, nextEmail.uid);
+        const email = graphMessageToEmail(graphMsg, uid);
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       } else {
-        const email = await api.fetchEmailLight(account, nextEmail.uid, prefetchMailbox, prefetchAccountId, { background: true });
+        const email = await api.fetchEmailLight(account, uid, prefetchMailbox, prefetchAccountId, { background: true });
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       }
     } catch (e) {
@@ -213,7 +216,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
       // other failure is speculative work that failed and stops the run.
       if (e?.messageGone) {
         try {
-          await applyServerRemoval(nextEmail.uid, {
+          await applyServerRemoval(uid, {
             accountId: prefetchAccountId, mailbox: prefetchMailbox,
             isUnified, skipRefresh: true, clearSelection: false,
           });
@@ -410,7 +413,15 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // mailbox): the row lookup, the cache key, the fetch, the flag write. Same
   // rule and same name as deleteEmailFromServer. Only the refusal above wants
   // the key itself, and it has already run.
-  const realUid = unified?.uid ?? own?.uid ?? uid;
+  let realUid = unified?.uid ?? own?.uid ?? uid;
+  // A row an undo just put back still carries the uid the delete retired
+  // until its MOVE answers; fetched now, the server proves it "gone" and the
+  // row is pruned. Wait for the undo and open the uid it came back under.
+  realUid = keyAfterUndo(get, realUid, accountId, mailbox);
+  if (realUid instanceof Promise) {
+    realUid = await realUid;
+    if (!isCurrent()) return;
+  }
   // A draft the user wrote here reopens in compose, not the viewer — before
   // the token refresh below, because continuing a local draft needs no server
   // at all. The index read that proves provenance is gated on the flag the

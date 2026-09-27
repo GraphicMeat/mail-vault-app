@@ -156,6 +156,8 @@ export async function saveEmailLocally(uid) {
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
   const account = unified?.account || state.accounts.find(a => a.id === accountId);
   if (!account) return;
+  uid = keyAfterUndo(get, uid, accountId, mailbox);
+  if (uid instanceof Promise) uid = await uid;
 
   const cacheKey = `${accountId}-${mailbox}-${uid}`;
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
@@ -246,7 +248,9 @@ export async function saveEmailsLocally(rows) {
     if (!loc) continue;
     const key = `${loc.accountId}|${loc.mailbox}`;
     if (!groups.has(key)) groups.set(key, { ...loc, uids: [] });
-    groups.get(key).uids.push(row.uid);
+    let uid = keyAfterUndo(get, row.uid, loc.accountId, loc.mailbox);
+    if (uid instanceof Promise) uid = await uid;
+    groups.get(key).uids.push(uid);
   }
   if (groups.size === 0) return;
 
@@ -800,6 +804,29 @@ function _restoredKey(key, newUids, accountId, mailbox, retired = null) {
   return p.accountId ? _selKey({ _accountId: p.accountId, _mailbox: p.mailbox, uid: nu }) : nu;
 }
 
+/**
+ * The uid (or selection key) to address a message by NOW. An undo puts rows
+ * back under the uid the delete retired and only learns the new one when its
+ * MOVE answers; a click, a prefetch, a flag or a move aimed at such a row in
+ * that window addresses a uid the server no longer holds — the fetch proves it
+ * "gone" and prunes the row, the write is silently lost. Every path that sends
+ * a uid to the server asks here first.
+ *
+ * `accountId`/`mailbox` place a bare uid; a full key names its own. With no
+ * undo on the wire this answers synchronously (no await, no microtask);
+ * otherwise it answers with a promise that settles when the undo does.
+ */
+export function keyAfterUndo(get, key, accountId, mailbox) {
+  if (_restoreInFlight) return _restoreInFlight.then(() => keyAfterUndo(get, key, accountId, mailbox));
+  return _restoredUids.size ? _restoredKey(key, _restoredUids, accountId, mailbox, get().deleteTombstones) : key;
+}
+
+// keyAfterUndo over a list, for the paths that take selection keys.
+async function _keysAfterUndo(get, keys) {
+  if (_restoreInFlight) await _restoreInFlight;
+  return keys.map(k => keyAfterUndo(get, k, get().activeAccountId, get().activeMailbox));
+}
+
 
 // ── deleteEmailFromServer workflow ──
 
@@ -1084,14 +1111,22 @@ async function _restoreFromTrash(outcomes) {
       // Without UIDPLUS the server named no destination uid, so find the copy
       // by Message-ID in the folder it was moved to — never a guessed uid,
       // which would move somebody else's message back.
-      const known = g.trashUids.filter(u => u != null);
-      const byCopyUid = known.length === g.uids.length;
-      const trashUids = byCopyUid ? known : await _resolveDestinationUids(account, g.trash, g.messageIds);
+      // One lookup per message, so what comes back is known per message: the
+      // custody stamp and the rows left on screen follow the ones found.
+      const byCopyUid = g.trashUids.every(u => u != null);
+      const trashUids = [];
+      const found = [];
+      for (const [i, o] of g.outcomes.entries()) {
+        const hits = g.trashUids[i] != null ? [g.trashUids[i]] : await _resolveDestinationUids(account, g.trash, [o.messageId]);
+        if (!hits.length) continue;
+        trashUids.push(...hits);
+        found.push(o);
+      }
       // Bare: runUndo already says "Undo failed: {{err}}" around whatever this
       // throws, and saying it twice reads as a bug.
       if (!trashUids.length) throw new Error(g.trash);
       const res = await api.moveEmails(account, trashUids, g.trash, g.mailbox);
-      for (const o of g.outcomes) moved.add(_targetId(o));
+      for (const o of found) moved.add(_targetId(o));
       // Old uid -> new uid. COPYUID lists the destination uids in the order of
       // the source set, which servers send ascending, and the trash uids came
       // from COPYUIDs of their own. A Message-ID search gives no such pairing.
@@ -1103,12 +1138,15 @@ async function _restoreFromTrash(outcomes) {
         reload = true;
         // The vault copy was stamped "we deleted the server copy" a moment
         // ago; it is back, so custody must stop claiming it is the only copy.
-        for (const uid of g.uids) await stampVaultEntry(g.accountId, g.mailbox, uid, { serverDeleted: false });
+        for (const o of found) await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
         continue;
       }
       const byTrash = g.uids.map((uid, i) => [g.trashUids[i], uid]).sort((a, b) => a[0] - b[0]);
       await _rekeyRestored(useMailStore, g, byTrash.map(([, uid], i) => [uid, newUids[i]]));
     }
+    // A message the lookup could not find in Trash stayed there.
+    const stranded = back.filter(r => !moved.has(_targetId(r)));
+    if (stranded.length) _hideDeleted(useMailStore, stranded);
   } catch (error) {
     // Only what did not move comes back out; what did is on the server again.
     const failed = back.filter(r => !moved.has(_targetId(r)));
@@ -1742,6 +1780,9 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
+  if (_restoreInFlight || _restoredUids.size) {
+    targets = await Promise.all(targets.map(async t => ({ ...t, uid: await keyAfterUndo(get, t.uid, t.accountId, t.mailbox) })));
+  }
   const state = get();
   const isUnified = spansMailboxes(state);
   if (!targets.length) return;
@@ -1867,7 +1908,9 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
  */
 export async function applyFlagToKeys(keys, flag, on, opts) {
   const { useMailStore } = await import('../../stores/mailStore');
-  const state = useMailStore.getState();
+  const get = () => useMailStore.getState();
+  if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
+  const state = get();
 
   const emailMap = new Map();
   for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), ...(await _searchRows())]) {
@@ -2306,6 +2349,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
+  if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
   const state = get();
   const isUnified = spansMailboxes(state);
   if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
@@ -2594,6 +2638,7 @@ export async function moveEmails(keys, targetMailbox) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
+  if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
   const state = get();
   const isUnified = spansMailboxes(state);
   const { activeAccountId, activeMailbox } = state;
