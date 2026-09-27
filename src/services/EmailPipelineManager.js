@@ -6,6 +6,7 @@ import * as db from './db';
 import { graphFoldersToMailboxes, isGraphAccount } from './graphConfig';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { waitForSentMailboxPath, findSentMailboxPath, mergesSentIntoThreads } from '../utils/sentFolder';
+import { fetchPolicy, keepsBody } from '../utils/fetchPolicy';
 
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
@@ -103,8 +104,8 @@ class EmailPipelineManager {
     this._startBackgroundHeadersOnly();
 
     // Filter UIDs that need caching
-    const { localCacheDurationMonths } = useSettingsStore.getState();
-    const uidsToFetch = this._getUncachedUids(ownRows, savedEmailIds, localCacheDurationMonths);
+    const policy = fetchPolicy(useSettingsStore.getState(), accountId);
+    const uidsToFetch = this._getUncachedUids(ownRows, savedEmailIds, policy);
 
     // An empty list still runs the after-bodies step (attachment prefetch)
     // and completes at once, which cascades to the background accounts.
@@ -226,7 +227,7 @@ class EmailPipelineManager {
       const pipeline = this.pipelines.get(account.id);
       if (!pipeline || pipeline._destroyed) continue;
 
-      const { localCacheDurationMonths } = useSettingsStore.getState();
+      const policy = fetchPolicy(useSettingsStore.getState(), account.id);
       // Use in-memory headers from header loading phase (avoids re-reading from disk)
       const emails = pipeline._lastLoadedEmails;
       if (emails && emails.length > 0) {
@@ -235,7 +236,7 @@ class EmailPipelineManager {
         // cached body. Skip this account unmarked; the next cascade retries.
         // `continue`, never `return`: _backgroundContentRunning must reset.
         if (!vault) continue;
-        const uids = this._getUncachedUids(emails, vault.saved, localCacheDurationMonths);
+        const uids = this._getUncachedUids(emails, vault.saved, policy);
         // Start caching first, THEN await completion — avoids race where
         // synchronous onComplete fires before waitForComplete sets up its promise.
         // Empty list: nothing to fetch, but the attachment prefetch still runs.
@@ -421,31 +422,26 @@ class EmailPipelineManager {
       this._contentCascadeDone.has(account.id) &&
       (pipeline._phase === 'idle' || pipeline._phase === 'done')
     ) {
-      const { localCacheDurationMonths } = useSettingsStore.getState();
+      const policy = fetchPolicy(useSettingsStore.getState(), account.id);
       const vault = await db.getVaultUidSets(account.id, 'INBOX');
       // Unknown: fetch nothing rather than re-fetch every cached body.
       if (!vault || pipeline._destroyed || this._destroyed) return;
-      const uids = this._getUncachedUids(emails, vault.saved, localCacheDurationMonths);
+      const uids = this._getUncachedUids(emails, vault.saved, policy);
       if (uids.length > 0) pipeline.startContentCaching(uids, 'INBOX');
     }
   }
 
   /**
-   * Filter emails to only UIDs not yet cached in Maildir.
+   * Filter emails to the UIDs whose body the account's download mode keeps
+   * (`fetchPolicy`, the daemon's own rule) and that are not yet in Maildir.
+   * On Demand and a hidden account (`policy` null) download nothing ahead.
    * Uses the pre-loaded savedEmailIds Set for O(1) lookups instead of per-UID IPC calls.
    */
-  _getUncachedUids(emails, savedEmailIds, localCacheDurationMonths) {
-    const cutoffDate = localCacheDurationMonths > 0
-      ? new Date(new Date().setMonth(new Date().getMonth() - localCacheDurationMonths))
-      : null;
-
+  _getUncachedUids(emails, savedEmailIds, policy, nowMs = Date.now()) {
+    if (!policy || policy.mode === 'onDemand') return [];
     return emails
-      .filter(email => {
-        if (savedEmailIds.has(email.uid)) return false;
-        if (!cutoffDate) return true;
-        const emailDate = new Date(email.date || email.internalDate);
-        return emailDate >= cutoffDate;
-      })
+      .filter(email => !savedEmailIds.has(email.uid)
+        && keepsBody(policy, new Date(email.date || email.internalDate).getTime(), nowMs))
       .map(email => email.uid);
   }
 }
