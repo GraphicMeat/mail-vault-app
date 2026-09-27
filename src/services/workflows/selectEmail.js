@@ -563,7 +563,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       else {
         try {
           db.getEmailHeadersByUids(accountId, mailbox, [realUid])
-            .then(rows => showSnippet(rows?.find(r => r?.uid === realUid)?.previewText))
+            .then(rows => showSnippet(rows?.[0]?.previewText)) // asked for one uid
             .catch(() => {});
         } catch { /* no snippet: the spinner stays until the body lands */ }
       }

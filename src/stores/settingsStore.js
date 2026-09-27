@@ -1512,7 +1512,8 @@ export async function notifyFetchModeChanged() {
     await flushSafeStorage().catch(e => console.warn('[settings] flush before fetch mode change failed:', e));
     await daemonCall('storage.fetch_mode_changed');
   } catch (e) {
-    console.warn('[settings] could not tell the daemon about the download mode:', e?.message || e);
+    // No Tauri (browser dev, tests): there is no daemon to tell.
+    if (e?.code !== 'NO_TAURI') console.warn('[settings] could not tell the daemon about the download mode:', e?.message || e);
   }
 }
 
