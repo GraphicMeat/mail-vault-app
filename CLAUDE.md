@@ -55,7 +55,7 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 ## Platform File Access Rules
 
 - Sandboxed macOS builds cannot rely on raw file paths for user-selected external locations. Access is lost after restart unless persisted as a security-scoped bookmark.
-- Any feature that persists access to user-chosen files or folders must go through native Rust access management (`external_location.rs` for backup, or equivalent for future features).
+- Any feature that persists access to user-chosen files or folders must go through native Rust access management: `external_location.rs` slots, used today by the vault, the backup location and every export destination (attachment and view downloads, via `export_folder.rs`). A new export gets its folder the same way: bookmark in a slot, shell resolves and holds access for the job, daemon writes, shell releases.
 - Long-lived file access is a Rust/platform-integration concern. Frontend code must not bypass native authorization or treat a raw path string as proof of access.
 - Linux Snap confinement may block writes to paths outside the snap's permitted directories. Always validate actual write access rather than assuming a path is writable.
 
