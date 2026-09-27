@@ -146,7 +146,7 @@ describe('BugReportDialog', () => {
     expect(setLastBugReportAt).not.toHaveBeenCalled();
   });
 
-  it('disables GitHub, email and the idea row with a countdown once a report was just filed, but leaves FAQ and Discussions open', () => {
+  it('disables GitHub and email with a countdown once a report was just filed, but leaves FAQ, Discussions and the idea row open', () => {
     settingsState.lastBugReportAt = Date.now() - 175_000; // 125s of the 300s left
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
 
@@ -155,14 +155,37 @@ describe('BugReportDialog', () => {
     const ideaButton = screen.getByTestId('bug-option-idea').querySelector('button');
     expect(githubButton.disabled).toBe(true);
     expect(emailButton.disabled).toBe(true);
-    expect(ideaButton.disabled).toBe(true);
     expect(screen.getByTestId('bug-option-github').textContent).toContain('Available again in 2:05');
     expect(screen.getByTestId('bug-option-email').textContent).toContain('Available again in 2:05');
-    expect(screen.getByTestId('bug-option-idea').textContent).toContain('Available again in 2:05');
+
+    // A feature idea is not a bug report: it is never gated by the cooldown.
+    expect(ideaButton.disabled).toBe(false);
+    expect(screen.getByTestId('bug-option-idea').textContent).not.toContain('Available again in');
+    expect(screen.getByTestId('bug-option-idea').textContent).toContain('The thing you wish MailVault did');
 
     click('bug-option-faq');
     expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
     expect(screen.getByTestId('bug-option-discussions').querySelector('button').disabled).toBe(false);
+  });
+
+  it('lets a suggestion through GitHub while the cooldown is armed', () => {
+    settingsState.lastBugReportAt = Date.now() - 10_000; // just filed, 290s left
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    click('bug-option-idea');
+    expect(openInBrowser).toHaveBeenCalledWith(
+      'https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=ideas'
+    );
+    expect(setLastBugReportAt).not.toHaveBeenCalled();
+  });
+
+  it('clamps the countdown to 5:00 even if the clock moved backwards after the stamp', () => {
+    // lastBugReportAt in the future models a system clock moved back after the
+    // stamp: Date.now() - lastBugReportAt is negative, so the naive
+    // COOLDOWN_MS - elapsed subtraction would overshoot past 300s.
+    settingsState.lastBugReportAt = Date.now() + 3_600_000;
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    expect(screen.getByTestId('bug-option-github').textContent).toContain('Available again in 5:00');
+    expect(screen.getByTestId('bug-option-github').querySelector('button').disabled).toBe(true);
   });
 
   it('ignores clicks on the disabled GitHub button while the cooldown is armed', () => {
