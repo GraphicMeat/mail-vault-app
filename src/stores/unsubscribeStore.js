@@ -22,14 +22,13 @@ export function unsubscribeTarget(source, accountId) {
 /**
  * One unsubscribe flow for every surface: `request` opens the confirm dialog
  * (UnsubscribeHost), `confirm` asks the daemon (`unsubscribe` RPC), which
- * POSTs one-click itself or answers the fallback opened here. `version`
- * bumps after each attempt so Settings > Unsubscribe reloads its history.
+ * POSTs one-click itself or answers the fallback opened here. After each
+ * attempt Settings > Unsubscribe asks again for that account's lists.
  */
 export const useUnsubscribeStore = create((set, get) => ({
   pending: null,
   busy: false,
   result: null,
-  version: 0,
 
   request: target => { if (target) set({ pending: target, result: null }); },
   cancel: () => { if (!get().busy) set({ pending: null }); },
@@ -50,7 +49,49 @@ export const useUnsubscribeStore = create((set, get) => ({
       console.warn('[unsubscribe] failed:', error?.message || error);
       set({ result: { type: 'error', kind: 'failed', sender } });
     } finally {
-      set(state => ({ busy: false, pending: null, version: state.version + 1 }));
+      set({ busy: false, pending: null });
+      // Its history (and maybe its senders) changed; the other accounts did not.
+      useUnsubscribeSendersStore.getState().refresh(target.accountId);
     }
   },
+}));
+
+// The newest request per account. A reply to an older one, or one landing
+// after `clear`, is dropped rather than painted over newer state.
+const inFlight = new Map();
+let requests = 0;
+
+function fetchAccount(set, accountId) {
+  const mine = ++requests;
+  inFlight.set(accountId, mine);
+  // Rows already on screen stay there while the account is asked again.
+  set(state => ({ byAccount: { ...state.byAccount,
+    [accountId]: { senders: [], history: [], ...state.byAccount[accountId], status: 'loading', error: '' } } }));
+  Promise.all([daemonCall('unsubscribe.senders', { accountId }), daemonCall('unsubscribe.history', { accountId })])
+    .then(([senders, history]) => ({
+      status: 'ready', error: '', senders: Array.isArray(senders) ? senders : [], history: Array.isArray(history) ? history : [],
+    }), error => ({ status: 'error', error: String(error?.message || error), senders: [], history: [] }))
+    .then(entry => {
+      if (inFlight.get(accountId) !== mine) return;
+      inFlight.delete(accountId);
+      set(state => ({ byAccount: { ...state.byAccount, [accountId]: entry } }));
+    });
+}
+
+/**
+ * Settings > Unsubscribe's data, one `unsubscribe.senders` +
+ * `unsubscribe.history` pair per account, asked in parallel and filled in as
+ * each account answers (`byAccount[id].status`: loading, ready, error).
+ * It lives here rather than in the page so it outlasts a switch to another
+ * Settings page or a minimize; SettingsPage clears it when it closes.
+ */
+export const useUnsubscribeSendersStore = create((set, get) => ({
+  byAccount: {},
+  /** Asks for every account not asked yet. */
+  load: accountIds => accountIds.filter(id => !get().byAccount[id]).forEach(id => fetchAccount(set, id)),
+  /** Asks again for one account, or every one when it is not known. */
+  refresh: accountId => Object.keys(get().byAccount)
+    .filter(id => !accountId || id === accountId)
+    .forEach(id => fetchAccount(set, id)),
+  clear: () => { inFlight.clear(); set({ byAccount: {} }); },
 }));

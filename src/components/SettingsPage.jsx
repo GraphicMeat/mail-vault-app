@@ -61,6 +61,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
 import { useUnsavedStore } from '../stores/unsavedStore';
+import { useUnsubscribeSendersStore } from '../stores/unsubscribeStore';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 
 const featureTabs = [
@@ -395,6 +396,9 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
   const [backupSubTab, setBackupSubTab] = useState(null);
   const contentRef = useRef(null);
   const [searchNavigation, setSearchNavigation] = useState(0);
+  // Unsubscribe's senders are kept while this session lives (another page, a
+  // minimize) and asked for afresh by the next one.
+  useEffect(() => () => useUnsubscribeSendersStore.getState().clear(), []);
   const searchTargetRef = useRef(null);
 
   // The chosen result disappears. Move keyboard focus into its destination,
@@ -592,7 +596,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       )}
 
       {activeTab === 'unsubscribe' && (
-        <UnsubscribeSettings />
+        <UnsubscribeSettings onMinimize={onMinimize} />
       )}
 
       {activeTab === 'storage' && (

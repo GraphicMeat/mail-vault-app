@@ -21,7 +21,7 @@
 import { ImapFlow } from 'imapflow';
 import { MOCK_PASSWORD } from './mockImap.js';
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
-import { modalOpen, fieldValue, setField, closeComposeHard } from './composeHelpers.js';
+import { modalOpen, fieldValue, closeComposeHard } from './composeHelpers.js';
 
 const YODA = 'yoda@mock.test';
 const LUKE = 'luke@mock.test';
@@ -90,6 +90,10 @@ describe('Unsubscribe', function () {
 
   const sendersListed = () => browser.execute(() =>
     [...document.querySelectorAll('[data-testid="unsubscribe-senders"] tr[data-sender]')].map((r) => r.getAttribute('data-sender')));
+
+  // The scope is a row of pills now, one per account; switching asks nothing.
+  const pickScope = (accountId) => browser.execute((id) =>
+    document.querySelector(`[data-testid="unsubscribe-scope"] [data-scope="${id}"]`)?.click(), accountId);
 
   const settled = () => browser.execute(() => {
     const page = document.querySelector('[data-testid="unsubscribe-settings"]');
@@ -208,12 +212,12 @@ describe('Unsubscribe', function () {
       timeout: 10_000, interval: 300, timeoutMsg: 'the history never showed the unsubscribe just made',
     });
 
-    await setField('unsubscribe-scope', idOf(YODA));
+    await pickScope(idOf(YODA));
     await browser.waitUntil(async () => (await settled()) && (await sendersListed()).includes(SENDER), {
       timeout: 60_000, interval: 500, timeoutMsg: `yoda's scope never listed ${SENDER}`,
     });
 
-    await setField('unsubscribe-scope', idOf(LUKE));
+    await pickScope(idOf(LUKE));
     await browser.waitUntil(settled, { timeout: 60_000, interval: 500, timeoutMsg: "luke's scope never finished loading" });
     expect(await sendersListed()).not.toContain(SENDER);
 
