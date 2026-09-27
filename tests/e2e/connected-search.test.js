@@ -70,29 +70,13 @@ describe('Connected Search', function () {
   });
 
   it('should open advanced filters dropdown', async function () {
-    // Click the filter button near the search input
+    // By testid: the operator help is also an icon-only button, and it comes
+    // first in the box.
     const clicked = await browser.execute(() => {
-      const searchInput = document.querySelector('input[placeholder*="Search"], input[placeholder*="search"]');
-      if (!searchInput) return false;
-
-      // Walk up to the search form/container
-      const container = searchInput.closest('form') || searchInput.parentElement?.parentElement?.parentElement;
-      if (!container) return false;
-
-      // Find buttons with SVG icons (filter toggle)
-      const buttons = container.querySelectorAll('button');
-      for (const btn of buttons) {
-        const svg = btn.querySelector('svg');
-        if (svg && btn.offsetHeight > 0) {
-          // Skip the clear/X button — look for the filter button
-          const text = (btn.textContent || '').trim();
-          if (text === '' || text.toLowerCase().includes('filter')) {
-            btn.click();
-            return true;
-          }
-        }
-      }
-      return false;
+      const btn = document.querySelector('[data-testid="search-filters-toggle"]');
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
     });
 
     expect(clicked).toBe(true);
