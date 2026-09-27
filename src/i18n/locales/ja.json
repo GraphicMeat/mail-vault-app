@@ -192,6 +192,7 @@
   "backup.upsell.wantHappenAutomaticallyEveryDay": "これを毎日自動で行いますか？",
   "backupUpsell.emailsBackedUp": "{{count}} 件のメールをバックアップしました。",
   "bimi.logoAlt": "{{domain}} のロゴ",
+  "bugReport.availableAgainIn": "{{time}} 後に再度利用できます",
   "bugReport.browseDiscussions": "ディスカッションを見る",
   "bugReport.by": "作",
   "bugReport.cookedOver": "調理に使ったのは",

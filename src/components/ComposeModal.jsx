@@ -117,7 +117,7 @@ const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
   const t = useT();
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
@@ -762,6 +762,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         if (onSchedule) await onSchedule(snapshot);
         else {
           await scheduleCompose({ snapshot, account: selectedAccount, settings });
+          onSend?.();
           onClose();
         }
       } else if (onQueueSend) {
@@ -773,6 +774,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings }),
           delay,
         );
+        onSend?.();
         onClose();
       }
     } catch (err) {

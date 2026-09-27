@@ -242,6 +242,32 @@ describe('the Sent reconcile', () => {
   });
 });
 
+describe('onSend', () => {
+  // The bug-report cooldown (BugReportDialog.jsx) stamps off this callback, on
+  // whichever compose window App.jsx flagged `bugReport: true`. It has to fire
+  // the moment Send commits the message to the queue — not on mere open, and
+  // not gated on the eventual SMTP result, which lands later via `_inFlight`.
+  it('fires once Send has queued the message, whether or not it later succeeds', async () => {
+    sendEmail.mockRejectedValue(new Error('Connection refused'));
+    const onSend = vi.fn();
+    render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onSend={onSend} />);
+    (await screen.findByTestId('compose-send')).click();
+    // handleSend awaits the draft save chain before queueing, so onSend lands
+    // a tick after the click, not synchronously with it.
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    await mail._inFlight;
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fires just from opening the window', async () => {
+    const onSend = vi.fn();
+    render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onSend={onSend} />);
+    await screen.findByTestId('compose-send');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
 describe('a retry after a failure', () => {
   it('reuses the staged copy instead of leaving the first attempt behind', async () => {
     sendEmail.mockRejectedValueOnce(new Error('Connection refused'));

@@ -16,17 +16,30 @@ const openInBrowser = vi.fn(() => Promise.resolve(true));
 vi.mock('../../services/billingApi', () => ({ openInBrowser: (url) => openInBrowser(url) }));
 // The dialog reads the language to pick the FAQ directory; `useT` reads
 // localeEpoch off the same store, so the selector has to be honoured.
+// `settingsState` is mutable so tests can arm the cooldown before render, and
+// `setLastBugReportAt` is a real spy that writes back into it — vi.hoisted
+// because vi.mock's factory is hoisted above these consts otherwise.
+const { settingsState, setLastBugReportAt } = vi.hoisted(() => {
+  const state = { language: 'de', localeEpoch: 0, lastBugReportAt: null };
+  return { settingsState: state, setLastBugReportAt: vi.fn((at) => { state.lastBugReportAt = at; }) };
+});
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: (sel) => (typeof sel === 'function'
-    ? sel({ language: 'de', localeEpoch: 0 })
-    : { language: 'de', localeEpoch: 0 }),
+  useSettingsStore: (sel) => {
+    const state = { ...settingsState, setLastBugReportAt };
+    return typeof sel === 'function' ? sel(state) : state;
+  },
 }));
 
 import { BugReportDialog } from '../BugReportDialog';
 
 const click = (testid) => fireEvent.click(screen.getByTestId(testid).querySelector('button'));
 
-afterEach(() => { cleanup(); openInBrowser.mockClear(); });
+afterEach(() => {
+  cleanup();
+  openInBrowser.mockClear();
+  setLastBugReportAt.mockClear();
+  settingsState.lastBugReportAt = null;
+});
 
 describe('BugReportDialog', () => {
   it('renders nothing while closed', () => {
@@ -116,5 +129,54 @@ describe('BugReportDialog', () => {
 
     expect(screen.getByAltText('Graphic Meat')).toBeTruthy();
     expect(screen.getByTestId('bug-report-dialog').textContent).toContain('Cooked over an');
+  });
+
+  it('stamps the cooldown when a report is filed on GitHub', () => {
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    click('bug-option-github');
+    expect(setLastBugReportAt).toHaveBeenCalledTimes(1);
+    expect(Math.abs(setLastBugReportAt.mock.calls[0][0] - Date.now())).toBeLessThan(1000);
+  });
+
+  it('does not stamp the cooldown just from opening the email compose window', () => {
+    const onEmail = vi.fn();
+    render(<BugReportDialog open onClose={() => {}} onEmail={onEmail} />);
+    click('bug-option-email');
+    expect(onEmail).toHaveBeenCalled();
+    expect(setLastBugReportAt).not.toHaveBeenCalled();
+  });
+
+  it('disables GitHub, email and the idea row with a countdown once a report was just filed, but leaves FAQ and Discussions open', () => {
+    settingsState.lastBugReportAt = Date.now() - 175_000; // 125s of the 300s left
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+
+    const githubButton = screen.getByTestId('bug-option-github').querySelector('button');
+    const emailButton = screen.getByTestId('bug-option-email').querySelector('button');
+    const ideaButton = screen.getByTestId('bug-option-idea').querySelector('button');
+    expect(githubButton.disabled).toBe(true);
+    expect(emailButton.disabled).toBe(true);
+    expect(ideaButton.disabled).toBe(true);
+    expect(screen.getByTestId('bug-option-github').textContent).toContain('Available again in 2:05');
+    expect(screen.getByTestId('bug-option-email').textContent).toContain('Available again in 2:05');
+    expect(screen.getByTestId('bug-option-idea').textContent).toContain('Available again in 2:05');
+
+    click('bug-option-faq');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
+    expect(screen.getByTestId('bug-option-discussions').querySelector('button').disabled).toBe(false);
+  });
+
+  it('ignores clicks on the disabled GitHub button while the cooldown is armed', () => {
+    settingsState.lastBugReportAt = Date.now() - 10_000; // just filed, 290s left
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    click('bug-option-github');
+    expect(openInBrowser).not.toHaveBeenCalled();
+    expect(setLastBugReportAt).not.toHaveBeenCalled();
+  });
+
+  it('re-enables report actions once the cooldown has fully elapsed', () => {
+    settingsState.lastBugReportAt = Date.now() - 300_000;
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    expect(screen.getByTestId('bug-option-github').querySelector('button').disabled).toBe(false);
+    expect(screen.getByTestId('bug-option-email').querySelector('button').disabled).toBe(false);
   });
 });

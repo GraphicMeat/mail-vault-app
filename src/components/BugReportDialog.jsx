@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bug, Github, HelpCircle, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
@@ -12,6 +12,17 @@ const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
 const GH_NEW_IDEA = `${GH_DISCUSSIONS}/new?category=ideas`;
 const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
+
+// One report every five minutes: filing a report is not reading help, so FAQ
+// and Discussions stay open even while this is armed.
+const COOLDOWN_MS = 300_000;
+
+function formatCountdown(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 /**
  * Where a bug report goes, ordered as a deflection ladder: the FAQ answers it
@@ -29,8 +40,28 @@ const MAKER_SITE = 'https://graphicmeat.com';
 export function BugReportDialog({ open, onClose, onEmail }) {
   const t = useT();
   const language = useSettingsStore(s => s.language) || 'en';
+  const lastBugReportAt = useSettingsStore(s => s.lastBugReportAt);
+  const setLastBugReportAt = useSettingsStore(s => s.setLastBugReportAt);
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
   const FAQ = faqUrl(language);
+
+  // Forces a re-render once a second, only while the dialog is open, so the
+  // countdown reads live without a background timer running behind a closed
+  // dialog. The remaining time itself is read straight off Date.now() below,
+  // not off state, so a reopen after the dialog sat closed for a while never
+  // renders one frame of a stale countdown before the tick corrects it.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!open || !lastBugReportAt) return;
+    const id = setInterval(() => tick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [open, lastBugReportAt]);
+
+  const cooldownRemaining = lastBugReportAt ? Math.max(0, COOLDOWN_MS - (Date.now() - lastBugReportAt)) : 0;
+  const inCooldown = cooldownRemaining > 0;
+  const cooldownSubtitle = tr('bugReport.availableAgainIn', { time: formatCountdown(cooldownRemaining) });
+
+  const reportGithub = () => { setLastBugReportAt(Date.now()); openAndClose(GH_NEW_BUG)(); };
 
   const options = [
     {
@@ -57,30 +88,37 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       testid: 'bug-option-github',
       icon: Github,
       title: tr('bugReport.reportGithub'),
-      subtitle: tr('bugReport.publicThreadSearchableGetNotified'),
+      subtitle: inCooldown ? cooldownSubtitle : tr('bugReport.publicThreadSearchableGetNotified'),
       action: tr('common.open'),
       variant: 'primary',
       url: GH_NEW_BUG,
-      onClick: openAndClose(GH_NEW_BUG),
+      onClick: reportGithub,
+      disabled: inCooldown,
     },
     {
       testid: 'bug-option-email',
       icon: Mail,
       title: tr('bugReport.emailDeveloper'),
-      subtitle: tr('bugReport.privateAppAccountDetailsFilled'),
+      subtitle: inCooldown ? cooldownSubtitle : tr('bugReport.privateAppAccountDetailsFilled'),
       action: tr('sidebar.compose'),
       variant: 'subtle',
       onClick: onEmail,
+      disabled: inCooldown,
     },
     {
       testid: 'bug-option-idea',
       icon: Lightbulb,
       title: tr('bugReport.suggestFeature'),
-      subtitle: tr('bugReport.thingWishMailvaultDidAsk'),
+      // Not stamped: filing an idea does not arm the cooldown. It is still
+      // disabled while armed — the brief names only FAQ and Discussions as
+      // staying open, because reading help is not reporting; this row files
+      // a GitHub thread same as the other two.
+      subtitle: inCooldown ? cooldownSubtitle : tr('bugReport.thingWishMailvaultDidAsk'),
       action: tr('common.open'),
       variant: 'subtle',
       url: GH_NEW_IDEA,
       onClick: openAndClose(GH_NEW_IDEA),
+      disabled: inCooldown,
     },
   ];
 
@@ -95,7 +133,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       data-testid="bug-report-dialog"
     >
       <div className="space-y-2">
-        {options.map(({ testid, icon: Icon, title, subtitle, action, variant, url, onClick }) => (
+        {options.map(({ testid, icon: Icon, title, subtitle, action, variant, url, onClick, disabled }) => (
           <div
             key={testid}
             data-testid={testid}
@@ -106,7 +144,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
               <div className="text-sm font-medium text-mail-text">{title}</div>
               <div className="text-xs text-mail-text-muted">{subtitle}</div>
             </div>
-            <Button variant={variant} size="sm" onClick={onClick} data-url={url} aria-label={`${action}: ${title}`}>{action}</Button>
+            <Button variant={variant} size="sm" onClick={onClick} disabled={disabled} data-url={url} aria-label={`${action}: ${title}`}>{action}</Button>
           </div>
         ))}
       </div>

@@ -192,6 +192,7 @@
   "backup.upsell.wantHappenAutomaticallyEveryDay": "이 작업을 매일 자동으로 실행할까요?",
   "backupUpsell.emailsBackedUp": "메일 {{count}}개를 백업했습니다.",
   "bimi.logoAlt": "{{domain}} 로고",
+  "bugReport.availableAgainIn": "{{time}} 후에 다시 이용할 수 있습니다",
   "bugReport.browseDiscussions": "토론 둘러보기",
   "bugReport.by": "제작",
   "bugReport.cookedOver": "요리에 쓴 것은",

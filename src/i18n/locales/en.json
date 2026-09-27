@@ -192,6 +192,7 @@
   "backup.upsell.wantHappenAutomaticallyEveryDay": "Want this to happen automatically every day?",
   "backupUpsell.emailsBackedUp": "{{count}} emails backed up.",
   "bimi.logoAlt": "{{domain}} logo",
+  "bugReport.availableAgainIn": "Available again in {{time}}",
   "bugReport.browseDiscussions": "Browse discussions",
   "bugReport.by": "by",
   "bugReport.cookedOver": "Cooked over an",

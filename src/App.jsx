@@ -753,6 +753,9 @@ function App() {
       `<p><strong>${title}</strong></p><p>${lines.join('<br>')}</p>`;
 
     setComposeState({
+      // Marks this window for the cooldown stamp below: the report is filed
+      // when the email actually SENDS, not when compose merely opens.
+      bugReport: true,
       initialData: {
         to: 'prime@graphicmeat.com',
         subject: `[Bug Report] MailVault v${version}`,
@@ -1390,6 +1393,7 @@ function App() {
             onClose={() => closeCompose(w.id)}
             onMinimize={() => minimizeCompose(w.id)}
             onSaveState={(data) => saveComposeState(w.id, data)}
+            onSend={w.bugReport ? () => useSettingsStore.getState().setLastBugReportAt(Date.now()) : undefined}
             onDetach={async data => composeWindowOwnerRef.current.detach({
               id: w.id,
               mode: w.mode || 'new',

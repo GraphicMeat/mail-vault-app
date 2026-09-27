@@ -631,6 +631,11 @@ export const useSettingsStore = create(
       // to the running daemon via the logs.set_verbosity RPC.
       logVerbosity: 'standard',
 
+      // When a bug report was last filed (GitHub issue opened, or the bug
+      // email actually sent — not when compose merely opens). Persisted so
+      // the 300s cooldown in BugReportDialog survives a relaunch.
+      lastBugReportAt: null,
+
       // Time Capsule snapshot configuration
       snapshotAutoEnabled: true,     // Whether automatic snapshots are created after backups
       snapshotCadence: 'after_every_backup', // 'after_every_backup' | 'daily' | 'weekly'
@@ -747,6 +752,7 @@ export const useSettingsStore = create(
       // Daemon actions
       setDaemonMode: (mode) => set({ daemonMode: mode }),
       setLogVerbosity: (verbosity) => set({ logVerbosity: verbosity === 'verbose' ? 'verbose' : 'standard' }),
+      setLastBugReportAt: (at) => set({ lastBugReportAt: at }),
 
       // Global backup actions
       setBackupGlobalEnabled: (val) => set({ backupGlobalEnabled: val }),

@@ -192,6 +192,7 @@
   "backup.upsell.wantHappenAutomaticallyEveryDay": "要每天自动执行吗？",
   "backupUpsell.emailsBackedUp": "已备份 {{count}} 封邮件。",
   "bimi.logoAlt": "{{domain}} 标志",
+  "bugReport.availableAgainIn": "{{time}} 后可再次使用",
   "bugReport.browseDiscussions": "浏览讨论",
   "bugReport.by": "作者",
   "bugReport.cookedOver": "烹制于",
