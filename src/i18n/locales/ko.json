@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "MailVault가 읽고, 검색하고, 동기화하는 작업용 사본입니다.",
   "onboarding.storageBackupTitle": "백업 폴더",
   "onboarding.storageBackupHint": "서버에서 삭제되어도 메일이 남는 별도의 안전한 사본입니다.",
+  "onboarding.storageBackupLocked": "이 버전에서 백업 폴더는 일회성 구매입니다. 나중에 설정 > 백업 설정에서 잠금 해제할 수 있습니다.",
   "onboarding.storageModeHint": "이 컴퓨터에 보관할 메일의 양입니다.",
   "onboarding.systemKeychain": "시스템 키체인",
   "onboarding.thereNoMailvaultServerSend": "보낼 대상이 되는 MailVault 서버 자체가 없습니다",

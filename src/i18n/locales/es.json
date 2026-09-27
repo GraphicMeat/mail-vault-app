@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "La copia de trabajo que MailVault lee, busca y sincroniza.",
   "onboarding.storageBackupTitle": "Carpeta de copia de seguridad",
   "onboarding.storageBackupHint": "Una copia segura y aparte que conserva tu correo aunque se borre del servidor.",
+  "onboarding.storageBackupLocked": "En esta versión, la carpeta de copia de seguridad es una compra única. Desbloquéala más tarde en Ajustes > Ajustes de copia.",
   "onboarding.storageModeHint": "Cuánto correo se queda en este ordenador.",
   "onboarding.systemKeychain": "Llavero del sistema",
   "onboarding.thereNoMailvaultServerSend": "No hay ningún servidor de MailVault al que enviar nada",

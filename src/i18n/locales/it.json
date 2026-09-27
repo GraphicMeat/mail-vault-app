@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "La copia di lavoro che MailVault legge, cerca e sincronizza.",
   "onboarding.storageBackupTitle": "Cartella di backup",
   "onboarding.storageBackupHint": "Una copia sicura e separata che conserva la tua posta anche dopo l'eliminazione dal server.",
+  "onboarding.storageBackupLocked": "In questa versione la cartella di backup è un acquisto una tantum. Sbloccala più tardi in Impostazioni > Impostazioni backup.",
   "onboarding.storageModeHint": "Quanta posta resta su questo computer.",
   "onboarding.systemKeychain": "Portachiavi di sistema",
   "onboarding.thereNoMailvaultServerSend": "Non esiste alcun server MailVault a cui inviare qualcosa",

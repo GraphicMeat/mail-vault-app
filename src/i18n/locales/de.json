@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "Die Arbeitskopie, die MailVault liest, durchsucht und synchronisiert.",
   "onboarding.storageBackupTitle": "Backup-Ordner",
   "onboarding.storageBackupHint": "Eine separate, sichere Kopie, die deine E-Mails auch nach dem Löschen auf dem Server behält.",
+  "onboarding.storageBackupLocked": "Ein Backup-Ordner ist in dieser Version ein einmaliger Kauf. Schalte ihn später unter Einstellungen > Sicherungseinstellungen frei.",
   "onboarding.storageModeHint": "Wie viele E-Mails auf diesem Computer bleiben.",
   "onboarding.systemKeychain": "System-Schlüsselbund",
   "onboarding.thereNoMailvaultServerSend": "Es gibt keinen MailVault-Server, an den irgendetwas ginge",

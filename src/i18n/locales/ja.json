@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "MailVault が読み取り、検索し、同期する作業用コピーです。",
   "onboarding.storageBackupTitle": "バックアップフォルダ",
   "onboarding.storageBackupHint": "サーバーで削除されてもメールが残る、別の安全なコピーです。",
+  "onboarding.storageBackupLocked": "このバージョンでは、バックアップフォルダは買い切りの購入です。あとで「設定」>「バックアップ設定」から解放できます。",
   "onboarding.storageModeHint": "このコンピュータに残すメールの量です。",
   "onboarding.systemKeychain": "システムキーチェーン",
   "onboarding.thereNoMailvaultServerSend": "送信先となる MailVault のサーバーは存在しません",

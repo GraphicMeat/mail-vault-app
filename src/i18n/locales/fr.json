@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "La copie de travail que MailVault lit, recherche et synchronise.",
   "onboarding.storageBackupTitle": "Dossier de sauvegarde",
   "onboarding.storageBackupHint": "Une copie sûre et séparée qui garde votre courrier même après sa suppression du serveur.",
+  "onboarding.storageBackupLocked": "Dans cette version, le dossier de sauvegarde est un achat unique. Débloquez-le plus tard dans Paramètres > Paramètres de sauvegarde.",
   "onboarding.storageModeHint": "Quelle quantité de courrier reste sur cet ordinateur.",
   "onboarding.systemKeychain": "Trousseau du système",
   "onboarding.thereNoMailvaultServerSend": "Il n'existe aucun serveur MailVault vers lequel envoyer quoi que ce soit",

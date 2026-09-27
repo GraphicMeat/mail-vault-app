@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "A cópia de trabalho que o MailVault lê, pesquisa e sincroniza.",
   "onboarding.storageBackupTitle": "Pasta de backup",
   "onboarding.storageBackupHint": "Uma cópia segura e separada que mantém seus e-mails mesmo depois de apagados do servidor.",
+  "onboarding.storageBackupLocked": "Nesta versão, a pasta de backup é uma compra única. Desbloqueie depois em Ajustes > Configurações de backup.",
   "onboarding.storageModeHint": "Quantos e-mails ficam neste computador.",
   "onboarding.systemKeychain": "Chaveiro do sistema",
   "onboarding.thereNoMailvaultServerSend": "Não existe servidor MailVault para onde enviar nada",

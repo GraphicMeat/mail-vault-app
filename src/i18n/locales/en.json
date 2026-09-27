@@ -1031,6 +1031,7 @@
   "onboarding.storageMailHint": "The working copy MailVault reads, searches and syncs.",
   "onboarding.storageBackupTitle": "Backup folder",
   "onboarding.storageBackupHint": "A separate, safe copy that keeps your mail even after it is deleted from the server.",
+  "onboarding.storageBackupLocked": "A backup folder is a one-time purchase in this version. Unlock it later in Settings > Backup Settings.",
   "onboarding.storageModeHint": "How much mail stays on this computer.",
   "onboarding.systemKeychain": "System keychain",
   "onboarding.thereNoMailvaultServerSend": "There is no MailVault server to send anything to",

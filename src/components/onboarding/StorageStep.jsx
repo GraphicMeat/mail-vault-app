@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, Download, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 import MailStorageLocation from '../settings/MailStorageLocation';
 import BackupLocationPicker from '../settings/BackupLocationPicker';
 import { DownloadModeControl } from '../settings/DownloadModeControl';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
+import { useBackupsEntitled } from '../../hooks/useBackupsEntitled';
 import { useT } from '../../i18n/index.js';
 
 /**
@@ -17,10 +18,16 @@ import { useT } from '../../i18n/index.js';
  * here is the same setting. Continue with nothing touched keeps the defaults.
  *
  * The Mac App Store build cannot relocate the vault (see BackupConfig), so it
- * gets only the backup and download mode rows.
+ * gets only the backup and download mode rows, and without the backups
+ * purchase its backup row only says where to unlock it (the shell refuses the
+ * folder otherwise), the same gate Settings > Backup applies.
  */
 export function StorageStep({ onContinue }) {
   const t = useT();
+  const [entitled] = useBackupsEntitled();
+  // Continue waits for a vault move: leaving mid-copy would add the account
+  // while the mail is between two folders.
+  const [moving, setMoving] = useState(false);
   const card = 'settings-section space-y-3';
   const heading = 'font-semibold text-mail-text flex items-center gap-2';
 
@@ -33,7 +40,7 @@ export function StorageStep({ onContinue }) {
 
       {!IS_APPSTORE_BUILD && (
         <div data-testid="storage-row-mail">
-          <MailStorageLocation title={t('onboarding.storageMailTitle')} description={t('onboarding.storageMailHint')} />
+          <MailStorageLocation title={t('onboarding.storageMailTitle')} description={t('onboarding.storageMailHint')} onBusyChange={setMoving} />
         </div>
       )}
 
@@ -43,7 +50,9 @@ export function StorageStep({ onContinue }) {
           {t('onboarding.storageBackupTitle')}
         </h4>
         <p className="text-xs text-mail-text-muted">{t('onboarding.storageBackupHint')}</p>
-        <BackupLocationPicker />
+        {entitled ? <BackupLocationPicker /> : (
+          <p data-testid="storage-backup-locked" className="text-xs text-mail-text">{t('onboarding.storageBackupLocked')}</p>
+        )}
       </section>
 
       <section data-testid="storage-row-mode" className={card}>
@@ -58,7 +67,7 @@ export function StorageStep({ onContinue }) {
       </section>
 
       <div className="flex justify-end">
-        <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
+        <Button variant="primary" size="lg" onClick={onContinue} disabled={moving} data-testid="onboarding-continue">
           {t('common.continue')}
           <ArrowRight size={14} />
         </Button>

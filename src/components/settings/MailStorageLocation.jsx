@@ -20,9 +20,10 @@ import { formatCount } from '../../utils/formatCount';
  * it. So the path and the Open Folder button stay; the move controls go.
  *
  * `title` / `description` replace the heading and its paragraph, for the
- * onboarding storage step's shorter one-line rows.
+ * onboarding storage step's shorter one-line rows. `onBusyChange` tells a host
+ * when a move, adopt or reset is running (onboarding holds Continue meanwhile).
  */
-export default function MailStorageLocation({ readOnly = false, title, description }) {
+export default function MailStorageLocation({ readOnly = false, title, description, onBusyChange }) {
   const t = useT();
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
   const setVaultStatus = useSettingsStore(s => s.setVaultStatus);
@@ -32,6 +33,7 @@ export default function MailStorageLocation({ readOnly = false, title, descripti
   const [notice, setNotice] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(!vaultStatus);
+  useEffect(() => { onBusyChange?.(busy !== null); }, [busy, onBusyChange]);
   const loadStatus = useCallback(() => {
     setLoadingStatus(true);
     return api.vaultGetStatus().then(setVaultStatus).catch(() => {}).finally(() => setLoadingStatus(false));

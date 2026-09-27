@@ -37,7 +37,8 @@ export default function BackupLocationPicker() {
     }).catch(() => {});
   }, []);
 
-  // Auto-verify external location on mount (every time user navigates to this tab)
+  // Re-check a configured location each time the picker mounts (Settings >
+  // Backup opened, or the onboarding storage step shown).
   useEffect(() => {
     const inv = window.__TAURI__?.core?.invoke;
     if (!inv) return;
@@ -72,6 +73,10 @@ export default function BackupLocationPicker() {
         setValidatingExternal(true);
         try {
           setExternalBackupLocation(await inv('backup_validate_external_location'));
+        } catch (e) {
+          // The write test never answered: do not leave save's optimistic
+          // "ready" beside an error.
+          setExternalBackupLocation({ ...saved, status: 'invalid', lastError: typeof e === 'string' ? e : e?.message || String(e) });
         } finally {
           setValidatingExternal(false);
         }

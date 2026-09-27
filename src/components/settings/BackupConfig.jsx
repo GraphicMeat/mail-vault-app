@@ -11,6 +11,7 @@ import {
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
 import BackupLocationPicker from './BackupLocationPicker';
+import { useBackupsEntitled } from '../../hooks/useBackupsEntitled';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
 
@@ -24,7 +25,7 @@ export default function BackupConfig() {
   const externalBackupLocation = useSettingsStore(s => s.externalBackupLocation);
   const setExternalBackupLocation = useSettingsStore(s => s.setExternalBackupLocation);
 
-  const [entitled, setEntitled] = useState(!IS_APPSTORE_BUILD);
+  const [entitled, setEntitled] = useBackupsEntitled();
   const [iapBusy, setIapBusy] = useState(null); // 'purchase' | 'restore' | null
   const [iapError, setIapError] = useState('');
 
@@ -39,12 +40,6 @@ export default function BackupConfig() {
         setExternalBackupLocation(loc);
         if (loc.status === 'ready') setBackupCustomPath(null);
       }).catch(() => {});
-    }
-    // IAP entitlement check — MAS only. Non-MAS builds are always entitled.
-    if (IS_APPSTORE_BUILD) {
-      inv('iap_is_entitled', { productId: IAP_PRODUCT_BACKUPS })
-        .then(v => setEntitled(!!v))
-        .catch(() => setEntitled(false));
     }
   }, []);
 

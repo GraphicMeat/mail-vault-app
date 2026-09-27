@@ -71,13 +71,47 @@ describe('onboarding storage step', () => {
     expect(screen.getByText(t('settings.storage.moveMailAnotherFolder'))).toBeTruthy();
   });
 
-  it('keeps backup and download mode but hides the mail folder chooser on the App Store build', () => {
+  it('keeps backup and download mode but hides the mail folder chooser on the App Store build', async () => {
     buildFlags.IS_APPSTORE_BUILD = true;
+    invoke.mockImplementation(async (cmd) => (cmd === 'iap_is_entitled' ? true : undefined));
     render(<StorageStep onContinue={() => {}} />);
     expect(screen.queryByTestId('storage-row-mail')).toBeNull();
     expect(screen.queryByText(t('settings.storage.moveMailAnotherFolder'))).toBeNull();
-    expect(screen.getByTestId('storage-row-backup')).toBeTruthy();
     expect(screen.getByTestId('storage-row-mode')).toBeTruthy();
+    // With the backups purchase, the backup row is the real picker.
+    expect(await screen.findByText(t('settings.backup.config.chooseFolder'))).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith('iap_is_entitled', { productId: 'com.mailvault.app.backups' });
+    expect(screen.queryByTestId('storage-backup-locked')).toBeNull();
+  });
+
+  // The shell refuses an external folder without the purchase, in English:
+  // the tour says where to unlock it instead of offering a Choose that fails.
+  it('offers no backup folder on the App Store build without the backups purchase', async () => {
+    buildFlags.IS_APPSTORE_BUILD = true;
+    invoke.mockImplementation(async (cmd) => (cmd === 'iap_is_entitled' ? false : undefined));
+    render(<StorageStep onContinue={() => {}} />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('iap_is_entitled', { productId: 'com.mailvault.app.backups' }));
+    const row = screen.getByTestId('storage-row-backup');
+    expect(row.textContent).toContain(t('onboarding.storageBackupLocked'));
+    expect(screen.queryByText(t('settings.backup.config.chooseFolder'))).toBeNull();
+    expect(wrote()).toEqual([]);
+  });
+
+  it('does not let Continue leave while the mail folder is being moved', async () => {
+    let finishMove;
+    open.mockResolvedValue('/Volumes/Mail');
+    api.vaultInspectFolder.mockResolvedValue({ writable: true, kind: 'empty' });
+    api.vaultMoveTo.mockImplementation(() => new Promise(resolve => { finishMove = resolve; }));
+    const onContinue = vi.fn();
+    render(<StorageStep onContinue={onContinue} />);
+
+    fireEvent.click(screen.getByText(t('settings.storage.moveMailAnotherFolder')));
+    await waitFor(() => expect(screen.getByTestId('onboarding-continue').disabled).toBe(true));
+    fireEvent.click(screen.getByTestId('onboarding-continue'));
+    expect(onContinue).not.toHaveBeenCalled();
+
+    finishMove({ sourceRemoved: true, filesCopied: 0 });
+    await waitFor(() => expect(screen.getByTestId('onboarding-continue').disabled).toBe(false));
   });
 
   it('saves a chosen backup folder the way Settings does, then checks it can really write there', async () => {
@@ -98,6 +132,25 @@ describe('onboarding storage step', () => {
     expect(invoke).toHaveBeenCalledWith('backup_save_external_location', { path: '/Volumes/Backup' });
     expect(cmds.lastIndexOf('backup_validate_external_location')).toBeGreaterThan(cmds.indexOf('backup_save_external_location'));
     expect(useSettingsStore.getState().externalBackupLocation.status).toBe('invalid');
+  });
+
+  // A write test that errors must not leave save's optimistic "ready" badge
+  // beside the error.
+  it('marks the folder unusable when the write check itself fails', async () => {
+    open.mockResolvedValue('/Volumes/Backup');
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === 'backup_save_external_location') return { status: 'ready', displayPath: '/Volumes/Backup' };
+      if (cmd === 'backup_validate_external_location') throw 'Bookmark resolution failed';
+      return undefined;
+    });
+    render(<StorageStep onContinue={() => {}} />);
+
+    fireEvent.click(screen.getByText(t('settings.backup.config.chooseFolder')));
+
+    expect(await screen.findByText('Bookmark resolution failed')).toBeTruthy();
+    expect(useSettingsStore.getState().externalBackupLocation).toMatchObject({ status: 'invalid', lastError: 'Bookmark resolution failed' });
+    expect(screen.queryByText(t('settings.backup.config.ready'))).toBeNull();
+    expect(screen.getByText(t('settings.backup.config.accessDenied'))).toBeTruthy();
   });
 
   it('shows why a backup folder was refused', async () => {
