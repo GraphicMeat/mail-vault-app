@@ -148,6 +148,16 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
   // Use fetched email or fall back to initial
   const email = fetchedEmail || initialEmail;
+  // That copy is a snapshot, re-synced only while it is the selection. A mark
+  // lands on the store's rows, so a modal opened from a chat bubble kept
+  // offering the direction just taken: the action bar reads the live row's flags.
+  const liveFlags = useMailStore(s => {
+    const key = emailScopeKey(email, s);
+    if (!key) return undefined;
+    return [s.selectedEmail, ...(s.selectedThread?.emails || []), ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])]
+      .find(row => row && emailScopeKey(row, s) === key)?.flags;
+  });
+  const barEmail = liveFlags && liveFlags !== email.flags ? { ...email, flags: liveFlags } : email;
   const emailLocation = resolveEmailLocation(email, useMailStore.getState());
   const emailKey = selectionKey(email, useMailStore.getState());
   const isArchived = !!email?.isArchived;
@@ -303,7 +313,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         <div className="px-3 py-2 border-b border-mail-border bg-mail-bg shrink-0">
           <TagChips email={email} />
           <FieldStrip email={email} />
-          <EmailActionBar email={email} variant="single"
+          <EmailActionBar email={barEmail} variant="single"
             onReply={async target => openCompose({ mode: 'reply', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
             onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
             onForward={async target => openCompose({ mode: 'forward', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
@@ -332,7 +342,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             } : null}
             onExport={target => useExportStore.getState().openExport({ messages: [target] })}
             onToggleEmailTheme={() => setThemeOverride(isDark ? 'light' : 'dark')}
-            emailThemeDark={isDark} isArchived={isArchived} isRead={!!email.flags?.includes('\\Seen')}
+            emailThemeDark={isDark} isArchived={isArchived} isRead={!!barEmail.flags?.includes('\\Seen')}
             isLocalOnly={isLocalOnly} isSentEmail={isSentEmail} singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
             disabled={{ archive: !emailLocation, delete: !emailLocation }}
             moveButtonRef={moveButtonRef} moveDropdownOpen={showMoveDropdown} />

@@ -13,7 +13,7 @@
 // exact first argument the effect hands to `selectEmail`.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useMailStore } from '../../../stores/mailStore';
 import { useThemeStore } from '../../../stores/themeStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -236,6 +236,22 @@ describe('FullViewEmailModal actions', () => {
     await waitFor(() => expect(actionMutations.applyFlagToKeys).toHaveBeenCalledWith(
       [`${ACCOUNT_A.id}:INBOX:82`], '\\Seen', false,
     ));
+  });
+
+  // Opened from a chat bubble with its body already in hand, the modal's copy
+  // is a snapshot and not the selected message: the mark landed on the store's
+  // rows and the button kept offering the direction just taken.
+  it('flips the read toggle when the store marks its message, even when it is not the selection', async () => {
+    configureReaderActions(readerAction('toggleRead'));
+    const target = fullMessage({ uid: 84, flags: ['\\Seen'] });
+    renderModal(vi.fn(), vi.fn(), target, spanningState({ emails: [target], selectedEmail: null }));
+    expect(screen.getByTestId('reader-action-toggleRead').textContent).toBe('Mark unread');
+
+    act(() => useMailStore.setState(s => ({ emails: s.emails.map(e => (e.uid === 84 ? { ...e, flags: [] } : e)) })));
+    expect(screen.getByTestId('reader-action-toggleRead').textContent).toBe('Mark read');
+
+    act(() => useMailStore.setState(s => ({ emails: s.emails.map(e => (e.uid === 84 ? { ...e, flags: ['\\Seen'] } : e)) })));
+    expect(screen.getByTestId('reader-action-toggleRead').textContent).toBe('Mark unread');
   });
 
   it('does not restore an old selection after a confirmed purge finishes', async () => {

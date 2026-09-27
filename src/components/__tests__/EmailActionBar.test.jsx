@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { Mail, MailOpen } from 'lucide-react';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -123,6 +124,38 @@ describe('EmailActionBar — labels name the next action', () => {
   it('offers "Mark read" for an unread email', () => {
     renderBar({ isRead: false });
     expect(action('Mark read')).toBeTruthy();
+  });
+
+  // The label always followed the read state; the glyph did not — toggleRead
+  // was pinned to the open envelope, so the button said "Mark read" under the
+  // icon for the other direction.
+  it('flips the toggle-read icon, label, title and aria-label with the read state', () => {
+    const glyph = Icon => render(<Icon size={15} />, { container: document.createElement('div') })
+      .container.querySelector('svg').innerHTML;
+    const bar = isRead => (
+      <EmailActionBar email={EMAIL} variant="single" isArchived={false} isRead={isRead} isLocalOnly={false}
+        isSentEmail={false} singleRecipient={false} emailThemeDark={false} disabled={{}} {...allHandlers()} />
+    );
+    const view = render(bar(true));
+    let button = action('Mark unread');
+    expect(button.getAttribute('title')).toBe('Mark unread');
+    expect(button.getAttribute('aria-label')).toBe('Mark unread');
+    expect(button.querySelector('svg').innerHTML).toBe(glyph(Mail));
+
+    view.rerender(bar(false));
+    button = action('Mark read');
+    expect(button.getAttribute('title')).toBe('Mark read');
+    expect(button.getAttribute('aria-label')).toBe('Mark read');
+    expect(button.querySelector('svg').innerHTML).toBe(glyph(MailOpen));
+
+    view.rerender(bar(true));
+    expect(action('Mark unread').querySelector('svg').innerHTML).toBe(glyph(Mail));
+  });
+
+  it('asks for the direction the toggle shows, not one re-read off the email copy', () => {
+    const handlers = renderBar({ isRead: false, email: { ...EMAIL, flags: ['\\Seen'] } });
+    fireEvent.click(action('Mark read'));
+    expect(handlers.onToggleRead).toHaveBeenCalledWith(expect.objectContaining({ uid: 1 }), true);
   });
 
   it('offers "Unarchive" for an archived email', () => {
@@ -313,7 +346,8 @@ describe('reader toolbar action placement', () => {
     for (const [label, handler] of [['Move', 'onMove'], ['Mark unread', 'onToggleRead'], ['Star', 'onToggleFlag'], ['Export', 'onExport']]) {
       const button = screen.getByRole('button', { name: label, exact: true });
       fireEvent.click(button);
-      expect(handlers[handler]).toHaveBeenCalledWith(...(handler === 'onToggleFlag' ? [EMAIL, true] : [EMAIL]));
+      expect(handlers[handler]).toHaveBeenCalledWith(...(handler === 'onToggleFlag' ? [EMAIL, true]
+        : handler === 'onToggleRead' ? [EMAIL, false] : [EMAIL]));
       expect(button.querySelector('svg') !== null).toBe(display !== 'text-only');
       expect(button.textContent).toBe(display === 'icon-only' ? '' : label);
     }

@@ -133,7 +133,9 @@ export const EmailActionBar = memo(function EmailActionBar({
     const special = ['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'open', 'source'].includes(entry.action)
       || entry.action === 'archive' && isArchived;
     return {
-      id: entry.id, action: entry.action, label: labelFor(entry), Icon: ICONS[entry.action],
+      id: entry.id, action: entry.action, label: labelFor(entry),
+      // The toggle shows the envelope of the direction it will take, like its label.
+      Icon: ICONS[entry.action === 'toggleRead' ? (read ? 'markUnread' : 'markRead') : entry.action],
       hidden,
       disabled: actionDisabled,
       tone: ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
@@ -155,6 +157,9 @@ export const EmailActionBar = memo(function EmailActionBar({
           await useMailStore.getState().moveEmails([selectionKey(email, useMailStore.getState())], entry.params.mailbox);
         } else if (entry.action === 'spam' && onSpam) onSpam(email);
         else if (['markRead', 'markUnread'].includes(entry.action)) onToggleRead?.(email, entry.action === 'markRead');
+        // The direction the button shows, not one each handler re-reads off
+        // an email copy that may be older than `read`.
+        else if (entry.action === 'toggleRead') onToggleRead?.(email, !read);
         else if (['star', 'unstar'].includes(entry.action)) {
           const nextFlagged = hasExplicitStarModes ? entry.action === 'star' : entry.action === 'star' ? !flagged : false;
           onToggleFlag?.(email, nextFlagged);
