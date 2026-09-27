@@ -4,6 +4,9 @@
 //! (`is_note_to_self`, `classify`, `links`) lives in
 //! `mailvault_core::notes_to_self` — spec: docs/superpowers/plans/
 //! 2026-09-26-feedback-batch-sdd/track-I-spec.md.
+//!
+//! A card's `date` is `date_utc` as a raw Unix-seconds integer (`NoteCandidate`
+//! never carries a parsed/ISO date), not a formatted string.
 use crate::handlers::common::{blocking, done, MessageRef};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -22,13 +25,14 @@ const DONE_TAG: &str = "Done";
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Account {
-    // Part of the wire shape the app sends (`{accountId, address}`); the
-    // lookup below only ever needs the address, `accountId` on a card's
-    // copies comes from the index row itself.
-    #[allow(dead_code)]
     account_id: String,
     #[serde(default)]
     address: String,
+    /// Server paths, so a copy names the mailbox it came from rather than
+    /// the vault directory it is stored in — same field, same resolver
+    /// (`mail_search::mailbox_for_vault_dir`), as `handlers::views::Account`.
+    #[serde(default)]
+    known_mailboxes: Vec<String>,
 }
 
 fn accounts_of(params: &Value) -> Result<Vec<Account>, String> {
@@ -64,8 +68,14 @@ struct Card {
     links: Vec<String>,
     attachments: Vec<NoteAttachment>,
     starred: bool,
-    /// (accountId, vaultDir, uid, messageId, msgKey) — the first four ship in
-    /// the reply, `msgKey` is only for the `Done` tag lookup below.
+    /// (accountId, mailbox, uid, messageId, msgKey) — `mailbox` is the real
+    /// IMAP path (resolved via `known_mailboxes`, like `views.rs`), the first
+    /// four ship in the reply, `msgKey` is only for the `Done` tag lookup
+    /// below. `msgKey`'s fallback form is keyed by the raw `vault_dir` slug
+    /// (`app_db::identity::msg_key`), and `MessageRef::msg_key()` re-derives
+    /// that same slug from this `mailbox` when a copy comes back through
+    /// `notes.set_done` (`vault_dir_name(real_path) == vault_dir`), so the
+    /// two never disagree.
     copies: Vec<(String, String, u32, Option<String>, String)>,
 }
 
@@ -104,7 +114,9 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     // net can only add candidates, never wrongly admit one.
     let mut own_normalized: HashSet<String> = HashSet::new();
     let mut sql_own: HashSet<String> = HashSet::new();
+    let mut known_mailboxes: HashMap<String, Vec<String>> = HashMap::new();
     for account in &accounts {
+        known_mailboxes.insert(account.account_id.clone(), account.known_mailboxes.clone());
         let addr = account.address.trim();
         if addr.is_empty() {
             continue;
@@ -135,7 +147,14 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         let starred = parse_flags_from_filename(&candidate.filename).iter().any(|f| f == "\\Flagged");
         let msg_key = app_db::identity::msg_key(candidate.message_id.as_deref(), &candidate.vault_dir, candidate.uid);
         let key = dedupe_key(candidate.message_id.as_deref(), &candidate.from_addr_lc, &display_subject, candidate.date_utc);
-        let copy = (candidate.account_id.clone(), candidate.vault_dir.clone(), candidate.uid, candidate.message_id.clone(), msg_key);
+        // Same resolution `views.rs` uses: a real server path when one maps
+        // to this vault directory unambiguously, else the raw slug (a
+        // local-only or ambiguous folder has no better name to give).
+        let empty = Vec::new();
+        let known = known_mailboxes.get(&candidate.account_id).unwrap_or(&empty);
+        let (resolved, local_only, _) = crate::handlers::mail_search::mailbox_for_vault_dir(&candidate.vault_dir, known);
+        let mailbox = if local_only { candidate.vault_dir.clone() } else { resolved };
+        let copy = (candidate.account_id.clone(), mailbox, candidate.uid, candidate.message_id.clone(), msg_key);
         let date_utc = candidate.date_utc;
         let is_new = !cards.contains_key(&key);
         let card = cards.entry(key.clone()).or_insert_with(|| Card {
@@ -325,6 +344,54 @@ mod tests {
         let cards = out["cards"].as_array().unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0]["subject"], "Cross-account");
+    }
+
+    /// A copy's `mailbox` must be the real server path, not the vault
+    /// directory slug the message is filed under — the board opens, stars
+    /// and deletes through it, and a nested folder's slug (`Projects_2026`)
+    /// is not a path IMAP or Graph would recognize.
+    #[tokio::test]
+    async fn a_nested_mailbox_resolves_to_its_real_server_path() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Projects_2026", 1, "S", Some("<n8@x.test>"), "me@x.test", "me@x.test", "Nested", 100);
+        install(&s, conn);
+        let accts = json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX", "Projects/2026"] }]);
+        let out = call(&s, "notes.list", json!({ "accounts": accts })).await;
+        let copies = out["cards"][0]["copies"].as_array().unwrap();
+        assert_eq!(copies[0]["mailbox"], "Projects/2026", "{copies:?}");
+    }
+
+    /// `notes.set_done` must still find the right row after `notes.list`
+    /// resolved its `mailbox` to a real, slash-bearing server path:
+    /// `MessageRef::msg_key()` re-slugifies it back to the same vault_dir.
+    #[tokio::test]
+    async fn set_done_round_trips_through_a_resolved_nested_mailbox() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Projects_2026", 1, "S", Some("<n10@x.test>"), "me@x.test", "me@x.test", "Nested done", 100);
+        install(&s, conn);
+        let accts = json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX", "Projects/2026"] }]);
+        let before = call(&s, "notes.list", json!({ "accounts": accts })).await;
+        let copies = before["cards"][0]["copies"].clone();
+        assert_eq!(copies[0]["mailbox"], "Projects/2026");
+
+        call(&s, "notes.set_done", json!({ "copies": copies, "done": true })).await;
+        let after = call(&s, "notes.list", json!({ "accounts": accts })).await;
+        assert_eq!(after["cards"].as_array().unwrap().len(), 0, "the tag landed on the same row");
+    }
+
+    /// No `knownMailboxes` (or none that map to this vault directory) leaves
+    /// the raw slug as the best name available, same fallback `views.rs` uses.
+    #[tokio::test]
+    async fn an_unresolvable_vault_dir_falls_back_to_the_raw_slug() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Sent", 1, "S", Some("<n9@x.test>"), "me@x.test", "me@x.test", "No mapping", 100);
+        install(&s, conn);
+        let out = call(&s, "notes.list", json!({ "accounts": accounts(&[("a", "me@x.test")]) })).await;
+        let copies = out["cards"][0]["copies"].as_array().unwrap();
+        assert_eq!(copies[0]["mailbox"], "Sent");
     }
 
     #[tokio::test]
