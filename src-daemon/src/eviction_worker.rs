@@ -117,6 +117,14 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
         if policy.mode == FetchMode::Hoarder || (policy.mode == FetchMode::KeepRecent && policy.window_months == 0) {
             continue;
         }
+        // Index Only with no body index evicts nothing: said once per
+        // account, before any folder is looked at.
+        if policy.mode == FetchMode::IndexOnly {
+            if let Err(e) = crate::search_index::indexes_bodies(&state.search_index) {
+                info!("[evict] {account_id}: evicted=0 skipped_reason=index_unavailable: {e}");
+                continue;
+            }
+        }
         let config = match credentials::resolve_account_credentials_guarded(&account_id).await {
             Ok(c) => c,
             Err(e) => {
@@ -392,6 +400,19 @@ mod tests {
         let out = evict_mailbox(&s, &config(&mock), ACCT, "INBOX", &policy(FetchMode::OnDemand, 3), now()).await;
         assert_eq!(out.evicted, 0);
         assert!(out.skipped.as_deref().is_some_and(|r| r.starts_with("uidvalidity")), "{out:?}");
+        assert_eq!(on_disk(&dir), vec![1, 2, 3]);
+    }
+
+    /// The header cache cannot be read (custody closed: startup, a vault
+    /// switch): no proof, so nothing goes, even with the server listing in.
+    #[tokio::test]
+    async fn an_unreadable_header_cache_evicts_nothing() {
+        let mock = MockImap::start(server(&[1, 2, 3], 1));
+        let (dir, s) = state(&[1, 2, 3]);
+        *mailvault_core::custody::lock(&s.custody.db) = None;
+        let out = evict_mailbox(&s, &config(&mock), ACCT, "INBOX", &policy(FetchMode::OnDemand, 3), now()).await;
+        assert_eq!(out.evicted, 0);
+        assert!(out.skipped.as_deref().is_some_and(|r| r.starts_with("header_cache_unreadable")), "{out:?}");
         assert_eq!(on_disk(&dir), vec![1, 2, 3]);
     }
 
