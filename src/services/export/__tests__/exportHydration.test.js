@@ -87,6 +87,7 @@ describe('a message that only ever had text', () => {
     const doc = new TextDecoder().decode(Uint8Array.from(atob(out.files[0].base64), c => c.charCodeAt(0)));
     expect(doc).toContain('Name: Jesse');
     expect(doc).toContain('&amp;lt;3 the app &amp;amp; the form');
-    expect(doc).toContain('&lt;pre');
+    // A pre-wrap <div>, not a <pre>: the reader's linkify skips <pre>.
+    expect(doc).toMatch(/&lt;div style=(?:&quot;|")white-space: pre-wrap/);
   });
 });

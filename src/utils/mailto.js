@@ -129,8 +129,10 @@ export function addressesToHtml(text) {
  * export share it: the export used to read `html` alone, so a message that
  * only ever had text (a contact form, most replies) came out as an empty card.
  */
+// A <div>, not a <pre>: the reader's linkify skips <pre> as code, and a web
+// address in a text/plain message has to become a link like one in HTML.
 export function plainTextBodyHtml(text) {
-  return `<pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">${addressesToHtml(text || '')}</pre>`;
+  return `<div style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">${addressesToHtml(text || '')}</div>`;
 }
 
 // ── mailto: handed over by the OS ───────────────────────────────────────────

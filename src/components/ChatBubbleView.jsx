@@ -35,6 +35,7 @@ import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { linkifyHtml } from '../utils/linkify';
 import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
@@ -480,7 +481,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 
-    const rawBody = replaceCidUrls(mergedEmail.html, mergedEmail.attachments);
+    // Linkified here: this frame is built without getEmailBodyContent.
+    const rawBody = linkifyHtml(replaceCidUrls(mergedEmail.html, mergedEmail.attachments));
     const chatScopeKey = emailScopeKey(email, useMailStore.getState());
     // Chat bubbles render the same body a third time — blocking has to hold
     // here too, or switching to Chat view undoes it.

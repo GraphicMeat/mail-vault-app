@@ -11,6 +11,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { AddressText } from '../email/AddressText';
 import { setMailtoComposeOpener } from '../../utils/mailto';
 
+const shell = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock('@tauri-apps/plugin-shell', () => ({ open: (...args) => shell.open(...args) }));
+
 describe('AddressText', () => {
   let opened;
   beforeEach(() => {
@@ -63,6 +66,22 @@ describe('AddressText', () => {
     const { container } = render(<AddressText text={'<img src=x onerror=alert(1)> a@b.com'} />);
     expect(container.querySelector('img')).toBe(null);
     expect(container.textContent).toBe('<img src=x onerror=alert(1)> a@b.com');
+  });
+
+  it('links a web address and opens it outside the app instead of navigating the webview', async () => {
+    shell.open.mockReset();
+    const onParent = vi.fn();
+    const body = 'Docs: https://example.com/guide. Or www.example.org';
+    const { container } = render(<div onClick={onParent}><AddressText text={body} /></div>);
+    expect(container.textContent).toBe(body);
+    expect([...container.querySelectorAll('a')].map(a => a.getAttribute('href')))
+      .toEqual(['https://example.com/guide', 'https://www.example.org']);
+
+    fireEvent.click(screen.getByText('https://example.com/guide'));
+
+    expect(onParent).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(shell.open).toHaveBeenCalledWith('https://example.com/guide'));
+    expect(opened).toHaveLength(0);
   });
 
   it('links every address in the body, not just the first', () => {

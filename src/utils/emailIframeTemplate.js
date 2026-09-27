@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { linkifyHtml } from './linkify';
 // Shared iframe template for rendering HTML email bodies.
 //
 // Baseline is always LIGHT (white bg, dark text). This gives Dark Reader a
@@ -15,11 +16,15 @@ import { t } from '../i18n/index.js';
 // Greedy match so a nested </body> can't truncate a genuine document either.
 const DOC_START = /^\s*(?:<!doctype[^>]*>|<\?xml[^>]*\?>|<!--[\s\S]*?-->|\s)*<(?:html|head|body)[\s>]/i;
 
+//
+// Every reader takes its body through here, so this is also where a bare
+// address in the text becomes a link (linkifyHtml): before the tracker and
+// link-safety scans, which then see those links like any other.
 export function getEmailBodyContent(html) {
   if (!html) return '';
-  if (!DOC_START.test(html)) return html;
+  if (!DOC_START.test(html)) return linkifyHtml(html);
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-  return bodyMatch ? bodyMatch[1] : html;
+  return linkifyHtml(bodyMatch ? bodyMatch[1] : html);
 }
 
 // Dark Reader overrides inline styles from a stylesheet rule
