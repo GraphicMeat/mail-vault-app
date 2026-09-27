@@ -134,6 +134,7 @@ fn check_declared_len(len: Option<usize>) -> Result<(), String> {
 /// client has no cookie store: nothing sent carries the user's session.
 pub(crate) async fn send_guarded(
     url: &str,
+    purpose: &str,
     timeout: Duration,
     https_only: bool,
     build: impl Fn(&reqwest::Client, reqwest::Url) -> reqwest::RequestBuilder,
@@ -149,17 +150,16 @@ pub(crate) async fn send_guarded(
     scheme_ok(&parsed)?;
     validate_resolved(&parsed).await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| format!("client build failed: {}", e))?;
+    // One Network Activity event per hop: a hop can change host.
+    let client = mailvault_core::net_activity::http_client_with(
+        purpose,
+        reqwest::Client::builder().timeout(timeout).redirect(reqwest::redirect::Policy::none()),
+    );
 
     let mut redirects = 0;
     loop {
-        let response = build(&client, parsed.clone())
-            .header(reqwest::header::REFERER, "")
-            .send()
+        let response = client
+            .send(build(&client, parsed.clone()).header(reqwest::header::REFERER, ""))
             .await
             .map_err(|e| format!("fetch failed: {}", e))?;
 
@@ -187,7 +187,7 @@ pub(crate) async fn send_guarded(
 /// Deliberately anonymous: no Referer, capped redirects and size, no cookie
 /// store (`send_guarded`). The exported file is an archive, not a session.
 pub async fn fetch_remote_asset(url: String) -> Result<RemoteAsset, String> {
-    let response = send_guarded(&url, Duration::from_secs(TIMEOUT_SECS), false, |c, u| c.get(u)).await?;
+    let response = send_guarded(&url, "export", Duration::from_secs(TIMEOUT_SECS), false, |c, u| c.get(u)).await?;
 
     if !response.status().is_success() {
         return Err(format!("http {}", response.status().as_u16()));
@@ -288,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn https_only_refuses_plain_http_before_any_request() {
-        let r = send_guarded("http://example.test/x", Duration::from_secs(1), true, |c, u| c.get(u)).await;
+        let r = send_guarded("http://example.test/x", "export", Duration::from_secs(1), true, |c, u| c.get(u)).await;
         assert!(r.unwrap_err().contains("refused scheme"));
     }
 

@@ -207,13 +207,13 @@ pub async fn download_model(state: Arc<LlmState>, model_id: &str) -> Result<(), 
         info!("Resuming download from byte {}", resume_from);
     }
 
-    let client = reqwest::Client::new();
+    let client = mailvault_core::net_activity::http_client("AI model", None);
     let mut request = client.get(&model.url);
     if resume_from > 0 {
         request = request.header("Range", format!("bytes={}-", resume_from));
     }
 
-    let response = request.send().await
+    let response = client.send(request).await
         .map_err(|e| format!("Download request failed: {}", e))?;
 
     if !response.status().is_success() && response.status().as_u16() != 206 {
@@ -315,8 +315,8 @@ pub async fn get_download_progress(state: &LlmState) -> DownloadProgress {
 
 /// Download tokenizer.json from a URL to the models directory.
 async fn download_tokenizer(url: &str, dest: &Path) -> Result<(), String> {
-    let client = reqwest::Client::new();
-    let response = client.get(url).send().await
+    let client = mailvault_core::net_activity::http_client("AI model", None);
+    let response = client.send(client.get(url)).await
         .map_err(|e| format!("request error: {}", e))?;
 
     if !response.status().is_success() {
@@ -447,14 +447,15 @@ async fn generate_via_endpoint(url: &str, model: &str, prompt: &str, system: Opt
     let body = mailvault_core::ai::chat_request_body(model, prompt, system, max_tokens);
     let endpoint = format!("{}/chat/completions", url.trim_end_matches('/'));
 
-    let mut req = reqwest::Client::new().post(&endpoint).json(&body);
+    let client = mailvault_core::net_activity::http_client("AI model", None);
+    let mut req = client.post(&endpoint).json(&body);
     match credentials::resolve_ai_endpoint_key_guarded().await {
         Ok(Some(key)) if !key.is_empty() => req = req.bearer_auth(key),
         Ok(_) => {} // No key stored — fine for e.g. a local Ollama endpoint.
         Err(e) => warn!("could not read the ai endpoint key, calling without one: {e}"),
     }
 
-    let resp = req.send().await.map_err(|e| format!("endpoint request failed: {e}"))?;
+    let resp = client.send(req).await.map_err(|e| format!("endpoint request failed: {e}"))?;
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();

@@ -1,5 +1,5 @@
 use base64::Engine;
-use reqwest::Client;
+use crate::net_activity::{http_client, Tracked};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -418,14 +418,19 @@ fn retry_after_secs(headers: &reqwest::header::HeaderMap) -> u64 {
 pub struct GraphClient {
     // pub (not pub(crate)) so the daemon's migration.rs can issue custom
     // authenticated Graph requests not covered by GraphClient's own methods.
-    pub client: Client,
+    pub client: Tracked,
     pub access_token: String,
 }
 
 impl GraphClient {
     pub fn new(access_token: &str) -> Self {
+        Self::for_purpose(access_token, "sync")
+    }
+
+    /// A client whose requests show under `purpose` in Network Activity.
+    pub fn for_purpose(access_token: &str, purpose: &str) -> Self {
         Self {
-            client: Client::new(),
+            client: http_client(purpose, None),
             access_token: access_token.to_string(),
         }
     }
@@ -436,9 +441,9 @@ impl GraphClient {
         let url = format!("{}/me/mailFolders?$top=100", graph_base());
         let resp = self
             .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
+            .send(self.client
+                .get(&url)
+                .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph list_folders request failed: {}", e))?;
 
@@ -505,10 +510,10 @@ impl GraphClient {
         loop {
             let resp = self
                 .client
-                .post(format!("{}/$batch", graph_base()))
-                .bearer_auth(&self.access_token)
-                .json(&body)
-                .send()
+                .send(self.client
+                    .post(format!("{}/$batch", graph_base()))
+                    .bearer_auth(&self.access_token)
+                    .json(&body))
                 .await
                 .map_err(|e| format!("Graph $batch request failed: {}", e))?;
             let status = resp.status();
@@ -561,9 +566,9 @@ impl GraphClient {
 
         let resp = self
             .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
+            .send(self.client
+                .get(&url)
+                .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph list_messages request failed: {}", e))?;
 
@@ -603,10 +608,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .header("Prefer", "outlook.body-content-type=\"html\"")
-            .send()
+            .send(self.client
+                .get(&url)
+                .bearer_auth(&self.access_token)
+                .header("Prefer", "outlook.body-content-type=\"html\""))
             .await
             .map_err(|e| format!("Graph get_message request failed: {}", e))?;
 
@@ -644,10 +649,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .patch(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "isRead": is_read }))
-            .send()
+            .send(self.client
+                .patch(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({ "isRead": is_read })))
             .await
             .map_err(|e| format!("Graph set_read_status request failed: {}", e))?;
 
@@ -682,12 +687,12 @@ impl GraphClient {
 
         let resp = self
             .client
-            .patch(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({
-                "flag": { "flagStatus": if flagged { "flagged" } else { "notFlagged" } }
-            }))
-            .send()
+            .send(self.client
+                .patch(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({
+                    "flag": { "flagStatus": if flagged { "flagged" } else { "notFlagged" } }
+                })))
             .await
             .map_err(|e| format!("Graph set_flag_status request failed: {}", e))?;
 
@@ -719,9 +724,9 @@ impl GraphClient {
 
         let resp = self
             .client
-            .delete(&url)
-            .bearer_auth(&self.access_token)
-            .send()
+            .send(self.client
+                .delete(&url)
+                .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph delete_message request failed: {}", e))?;
 
@@ -757,10 +762,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "destinationId": destination_folder_id }))
-            .send()
+            .send(self.client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({ "destinationId": destination_folder_id })))
             .await
             .map_err(|e| format!("Graph move_message request failed: {}", e))?;
 
@@ -797,9 +802,9 @@ impl GraphClient {
 
         let resp = self
             .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
+            .send(self.client
+                .get(&url)
+                .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph get_mime_content request failed: {}", e))?;
 
@@ -840,11 +845,11 @@ impl GraphClient {
 
         let resp = self
             .client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .header("Content-Type", "text/plain")
-            .body(encoded)
-            .send()
+            .send(self.client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", "text/plain")
+                .body(encoded))
             .await
             .map_err(|e| format!("Graph create_message_from_mime request failed: {}", e))?;
 
@@ -892,10 +897,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "displayName": display_name }))
-            .send()
+            .send(self.client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({ "displayName": display_name })))
             .await
             .map_err(|e| format!("Graph create_folder request failed: {}", e))?;
 
@@ -945,10 +950,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .patch(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "displayName": display_name }))
-            .send()
+            .send(self.client
+                .patch(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({ "displayName": display_name })))
             .await
             .map_err(|e| format!("Graph rename_folder request failed: {}", e))?;
 
@@ -962,10 +967,10 @@ impl GraphClient {
 
         let resp = self
             .client
-            .post(&url)
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "destinationId": destination_id }))
-            .send()
+            .send(self.client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .json(&serde_json::json!({ "destinationId": destination_id })))
             .await
             .map_err(|e| format!("Graph move_folder request failed: {}", e))?;
 
@@ -980,9 +985,9 @@ impl GraphClient {
 
         let resp = self
             .client
-            .delete(&url)
-            .bearer_auth(&self.access_token)
-            .send()
+            .send(self.client
+                .delete(&url)
+                .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph delete_folder request failed: {}", e))?;
 

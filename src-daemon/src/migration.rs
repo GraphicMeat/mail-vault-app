@@ -275,9 +275,7 @@ pub async fn fetch_dest_message_ids_graph(
         );
 
         let resp = client.client
-            .get(&url)
-            .bearer_auth(&client.access_token)
-            .send()
+            .send(client.client.get(&url).bearer_auth(&client.access_token))
             .await
             .map_err(|e| format!("Graph fetch message IDs failed: {}", e))?;
 

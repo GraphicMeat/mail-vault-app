@@ -411,14 +411,9 @@ impl OAuth2Manager {
 
         // Bounded so a slow token endpoint fails the account setup or
         // refresh instead of hanging it (Track B: Google add-account timeout).
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+        let client = crate::net_activity::http_client("sign-in", Some(Duration::from_secs(30)));
         let resp = client
-            .post(config.token_endpoint)
-            .form(&params)
-            .send()
+            .send(client.post(config.token_endpoint).form(&params))
             .await
             .map_err(|e| format!("Token request failed: {}", e))?;
 
@@ -489,14 +484,9 @@ impl OAuth2Manager {
 
         // Bounded so a slow token endpoint fails the account setup or
         // refresh instead of hanging it (Track B: Google add-account timeout).
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+        let client = crate::net_activity::http_client("sign-in", Some(Duration::from_secs(30)));
         let resp = client
-            .post(config.token_endpoint)
-            .form(&params)
-            .send()
+            .send(client.post(config.token_endpoint).form(&params))
             .await
             .map_err(|e| format!("Refresh request failed: {}", e))?;
 

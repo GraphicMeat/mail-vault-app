@@ -22,16 +22,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 }
 
 async fn fetch() -> Result<Vec<GithubRelease>, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
-        // GitHub refuses API requests without a User-Agent.
-        .user_agent(concat!("MailVault/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = mailvault_core::net_activity::http_client_with(
+        "release notes",
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(8))
+            // GitHub refuses API requests without a User-Agent.
+            .user_agent(concat!("MailVault/", env!("CARGO_PKG_VERSION"))),
+    );
     client
-        .get(RELEASES_URL)
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .send()
+        .send(client.get(RELEASES_URL).header(reqwest::header::ACCEPT, "application/vnd.github+json"))
         .await
         .and_then(|r| r.error_for_status())
         .map_err(|e| e.to_string())?

@@ -160,12 +160,9 @@ async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<Email
 async fn try_autoconfig(domain: &str) -> Result<EmailServerSettings, String> {
     let url = format!("https://autoconfig.{}/mail/config-v1.1.xml", domain);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
+    let client = crate::net_activity::http_client("account setup", Some(std::time::Duration::from_secs(5)));
 
-    let resp = client.get(&url).send().await
+    let resp = client.send(client.get(&url)).await
         .map_err(|e| format!("Autoconfig fetch failed: {}", e))?;
 
     if !resp.status().is_success() {

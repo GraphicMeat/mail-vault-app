@@ -42,7 +42,7 @@ fn one_click_request(client: &reqwest::Client, url: reqwest::Url) -> reqwest::Re
 }
 
 async fn one_click_post(url: &str) -> Result<(), String> {
-    let response = send_guarded(url, ONE_CLICK_TIMEOUT, true, one_click_request).await?;
+    let response = send_guarded(url, "unsubscribe", ONE_CLICK_TIMEOUT, true, one_click_request).await?;
     if response.status().is_success() {
         Ok(())
     } else {
@@ -217,7 +217,7 @@ async fn fetch_bimi(domain: &str) -> Result<Option<Vec<u8>>, String> {
     let Some(url) = mailvault_core::dns::bimi_logo_url_for(domain).await? else {
         return Ok(None);
     };
-    let mut response = send_guarded(&url, BIMI_TIMEOUT, true, |c, u| c.get(u)).await?;
+    let mut response = send_guarded(&url, "open message", BIMI_TIMEOUT, true, |c, u| c.get(u)).await?;
     let status = response.status();
     if status.is_server_error() {
         return Err(format!("http {}", status.as_u16()));

@@ -39,6 +39,7 @@ pub mod spellcheck;
 pub mod transfer_stats;
 pub mod transfer;
 pub mod net;
+pub mod net_activity;
 pub mod daemon_ipc;
 pub mod transport;
 pub mod paths;
