@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSearchQuery as parse } from '../searchQuery';
+import { parseSearchQuery as parse, SEARCH_OPERATORS } from '../searchQuery';
 
 /// Every operator at rest: what a query with none of them parses to.
 const NONE = {
@@ -131,5 +131,21 @@ describe('search operators', () => {
   it('keeps tags and fields beside the operators', () => {
     const parsed = parse('tag:receipt from:bob field:Priority=High');
     expect(parsed).toMatchObject({ text: '', tags: ['receipt'], sender: 'bob', fields: [{ name: 'Priority', value: 'High' }] });
+  });
+});
+
+describe('operator help', () => {
+  it('lists every operator the parser understands, and nothing else', () => {
+    expect(SEARCH_OPERATORS.map(op => op.id)).toEqual([
+      'from', 'to', 'in', 'hasAttachment', 'isUnread', 'after', 'before', 'exclude', 'tag', 'field',
+    ]);
+  });
+
+  it('gives examples the parser takes whole, each setting a filter', () => {
+    for (const { example } of SEARCH_OPERATORS) {
+      const { text, tags, fields, ...rest } = parse(example);
+      expect(text, example).toBe('');
+      expect(tags.length + fields.length > 0 || JSON.stringify(rest) !== JSON.stringify(NONE), example).toBe(true);
+    }
   });
 });

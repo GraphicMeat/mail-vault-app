@@ -502,3 +502,22 @@ describe('backup status placement persistence', () => {
     expect(useSettingsStore.getState().sidebarBackupStatusLocation).toBe('avatar');
   });
 });
+
+describe('recent searches', () => {
+  it('keeps operators intact and dedupes case-insensitively on the trimmed query', () => {
+    useSettingsStore.setState({ searchHistory: [], searchHistoryLimit: 20 });
+    const { addSearchToHistory } = useSettingsStore.getState();
+    addSearchToHistory('from:x has:attachment');
+    addSearchToHistory('invoice');
+    addSearchToHistory('  FROM:x Has:Attachment  ');
+    expect(useSettingsStore.getState().searchHistory).toEqual(['FROM:x Has:Attachment', 'invoice']);
+  });
+});
+
+describe('search operators hint', () => {
+  it('starts unseen and stays seen once marked', () => {
+    expect(useSettingsStore.getState().searchOperatorsHintSeen).toBe(false);
+    useSettingsStore.getState().markSearchOperatorsHintSeen();
+    expect(useSettingsStore.getState().searchOperatorsHintSeen).toBe(true);
+  });
+});

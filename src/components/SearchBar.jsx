@@ -1,4 +1,5 @@
 import { Button } from './ui/Button';
+import { Popover } from './ui/Popover';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { SaveSearchAsView } from './SaveSearchAsView';
@@ -9,6 +10,7 @@ import { useMailStore } from '../stores/mailStore';
 import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
 import { SUBTREE_PREFIX, mailboxDescendants } from '../services/workflows/mailboxTree';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { SEARCH_OPERATORS } from '../utils/searchQuery';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -24,7 +26,8 @@ import {
   Paperclip,
   Folder,
   Trash2,
-  TrendingUp
+  TrendingUp,
+  HelpCircle
 } from 'lucide-react';
 import { t, useT  } from '../i18n/index.js';
 import { T } from '../i18n/T.jsx';
@@ -62,9 +65,12 @@ export function SearchBar({ autoFocus = false }) {
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const effectiveSearchConcurrency = useSettingsStore(state => effectiveSearchMailboxConcurrency(state));
   const isPremium = hasPremiumAccess(billingProfile);
+  const operatorsHintSeen = useSettingsStore(s => s.searchOperatorsHintSeen);
+  const markOperatorsHintSeen = useSettingsStore(s => s.markSearchOperatorsHintSeen);
 
   const {
     searchHistory,
+    addSearchToHistory,
     removeSearchFromHistory,
     clearSearchHistory,
     addFilterUsage,
@@ -75,7 +81,11 @@ export function SearchBar({ autoFocus = false }) {
   const [showFilters, setShowFilters] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [localQuery, setLocalQuery] = useState(searchQuery);
+  // Where the operator help opens: under its button, right-aligned to it.
+  const [helpAnchor, setHelpAnchor] = useState(null);
+  const [hintVisible, setHintVisible] = useState(false);
   const inputRef = useRef(null);
+  const helpButtonRef = useRef(null);
   const filterRef = useRef(null);
   const historyRef = useRef(null);
   const searchContextRef = useRef(null);
@@ -136,8 +146,37 @@ export function SearchBar({ autoFocus = false }) {
       addFilterUsage('hasAttachments', 'true');
     }
 
+    // Saved as typed, operators and all, when it is asked for: the store also
+    // saves a run that finishes, but one cleared, replaced or failed before
+    // its last frame never reached the list.
+    if (localQuery.trim()) addSearchToHistory?.(localQuery.trim());
+
     setTimeout(() => performSearch(), 0);
     setShowHistory(false);
+  };
+
+  const openHelp = () => {
+    const rect = helpButtonRef.current?.getBoundingClientRect();
+    setHelpAnchor({ top: (rect?.bottom ?? 0) + 8, right: Math.max(8, window.innerWidth - (rect?.right ?? 0)) });
+    setShowHistory(false);
+    setHintVisible(false);
+    if (!operatorsHintSeen) markOperatorsHintSeen?.();
+  };
+
+  const closeHelp = () => {
+    setHelpAnchor(null);
+    helpButtonRef.current?.focus();
+  };
+
+  const insertExample = (example) => {
+    setHelpAnchor(null);
+    setLocalQuery(query => (query.trim() ? `${query.trimEnd()} ${example}` : example));
+    inputRef.current?.focus();
+  };
+
+  const dismissHint = () => {
+    setHintVisible(false);
+    markOperatorsHintSeen?.();
   };
 
   const handleHistorySelect = (query) => {
@@ -246,9 +285,12 @@ export function SearchBar({ autoFocus = false }) {
             type="text"
             value={localQuery}
             onChange={(e) => setLocalQuery(e.target.value)}
-            onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
+            onFocus={() => {
+              if (searchHistory.length > 0) setShowHistory(true);
+              if (!operatorsHintSeen) setHintVisible(true);
+            }}
             placeholder={t('search.searchEmails')}
-            className="w-full pl-9 pr-20 py-2 bg-mail-bg border border-mail-border rounded-lg
+            className="w-full pl-9 pr-28 py-2 bg-mail-bg border border-mail-border rounded-lg
                       text-mail-text placeholder-mail-text-muted text-sm
                       focus:border-mail-accent focus:outline-none transition-colors"
           />
@@ -263,6 +305,18 @@ export function SearchBar({ autoFocus = false }) {
                 <X size={14} className="text-mail-text-muted" />
               </Button>
             )}
+
+            <Button ref={helpButtonRef} variant="ghost" icon size="xs" className="hover:bg-mail-border"
+              type="button"
+              data-testid="search-operators-help"
+              aria-label={t('search.operators.title')}
+              title={t('search.operators.title')}
+              aria-haspopup="dialog"
+              aria-expanded={!!helpAnchor}
+              onClick={openHelp}
+            >
+              <HelpCircle size={14} className="text-mail-text-muted" />
+            </Button>
 
             <select
               value={searchFilters.location}
@@ -514,6 +568,61 @@ export function SearchBar({ autoFocus = false }) {
           {t('search.search')}
         </button>
       </form>
+
+      <Popover
+        open={!!helpAnchor}
+        onClose={closeHelp}
+        variant="panel"
+        role="dialog"
+        aria-label={t('search.operators.title')}
+        data-testid="search-operators-panel"
+        className="w-80 max-h-[70vh] overflow-y-auto"
+        style={helpAnchor || undefined}
+      >
+        <h4 className="font-medium text-mail-text mb-1 flex items-center gap-2">
+          <HelpCircle size={14} />
+          {t('search.operators.title')}
+        </h4>
+        <p className="text-xs text-mail-text-muted mb-3">{t('search.operators.intro')}</p>
+        <ul className="space-y-2.5">
+          {SEARCH_OPERATORS.map((op, index) => (
+            <li key={op.id} className="text-xs">
+              <div className="flex items-baseline justify-between gap-3">
+                {/* `has:attachment` is its own example; one of it is enough. */}
+                {op.syntax !== op.example && <code className="font-mono text-mail-text">{op.syntax}</code>}
+                <button
+                  type="button"
+                  autoFocus={index === 0}
+                  title={t('search.operators.addToSearch')}
+                  onClick={() => insertExample(op.example)}
+                  className="font-mono text-mail-accent-text hover:underline truncate"
+                >
+                  {op.example}
+                </button>
+              </div>
+              <div className="text-mail-text-muted mt-0.5">{t(`search.operators.${op.id}`)}</div>
+            </li>
+          ))}
+        </ul>
+      </Popover>
+
+      {hintVisible && !operatorsHintSeen && (
+        <div
+          data-testid="search-operators-hint"
+          role="note"
+          className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg border border-mail-accent/20
+                    bg-mail-accent/10 text-xs text-mail-text"
+        >
+          <HelpCircle size={12} className="shrink-0 text-mail-accent-text" aria-hidden="true" />
+          <span className="flex-1">{t('search.operators.hint')}</span>
+          <button type="button" onClick={openHelp} className="text-mail-accent-text underline underline-offset-2">
+            {t('search.operators.hintShow')}
+          </button>
+          <Button variant="ghost" icon size="xs" aria-label={t('search.operators.hintDismiss')} onClick={dismissHint}>
+            <X size={12} />
+          </Button>
+        </div>
+      )}
 
       {/* Search history and popular filters dropdown */}
       <AnimatePresence>

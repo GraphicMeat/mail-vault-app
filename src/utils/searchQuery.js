@@ -21,6 +21,22 @@ const IN_FOLDERS = {
   archive: 'Archive', anywhere: 'all',
 };
 
+/// What the search box's help lists: every term `parseSearchQuery` lifts, as
+/// typed, with an example it takes whole. The meaning of each is the locale
+/// key `search.operators.<id>`. A term added to the parser goes here too.
+export const SEARCH_OPERATORS = [
+  { id: 'from', syntax: 'from:', example: 'from:alice@example.com' },
+  { id: 'to', syntax: 'to:', example: 'to:bob@example.com' },
+  { id: 'in', syntax: 'in:', example: 'in:sent' },
+  { id: 'hasAttachment', syntax: 'has:attachment', example: 'has:attachment' },
+  { id: 'isUnread', syntax: 'is:unread', example: 'is:unread' },
+  { id: 'after', syntax: 'after:', example: 'after:2026-01-31' },
+  { id: 'before', syntax: 'before:', example: 'before:2026-03-01' },
+  { id: 'exclude', syntax: '-word', example: '-newsletter' },
+  { id: 'tag', syntax: 'tag:', example: 'tag:"Needs reply"' },
+  { id: 'field', syntax: 'field:', example: 'field:Status=Done' },
+];
+
 /// `YYYY-MM-DD` or `YYYY/MM/DD`, shifted by `days`, as the filter UI's
 /// `YYYY-MM-DD`. Calendar arithmetic in UTC, so no local offset moves the day.
 function day(value, days = 0) {

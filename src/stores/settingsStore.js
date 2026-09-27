@@ -489,6 +489,9 @@ export const useSettingsStore = create(
       // carry on there. Null once the tour is finished.
       onboardingSkippedAt: null,
       onboardingResumeDismissed: false,
+      // The one-time tip under the search box that points at its operator
+      // help. Seen once dismissed or once the help has been opened.
+      searchOperatorsHintSeen: false,
 
       // Search settings
       searchHistoryLimit: 20, // Max number of searches to keep (20-500)
@@ -1138,6 +1141,7 @@ export const useSettingsStore = create(
       resumeOnboarding: () => set({ onboardingComplete: false }),
       dismissOnboardingResume: () => set({ onboardingResumeDismissed: true }),
       markAppearanceOnboardingPromptSeen: () => set({ appearanceOnboardingPromptSeen: true }),
+      markSearchOperatorsHintSeen: () => set({ searchOperatorsHintSeen: true }),
 
       // Search settings
       setSearchHistoryLimit: (limit) => set({ searchHistoryLimit: Math.min(500, Math.max(20, limit)) }),
@@ -1149,8 +1153,10 @@ export const useSettingsStore = create(
         if (!query || !query.trim()) return;
         const trimmed = query.trim();
         set(state => {
-          // Remove duplicate if exists, then add to front
-          const filtered = state.searchHistory.filter(q => q !== trimmed);
+          // Remove duplicate if exists, then add to front. `FROM:x` and
+          // `from:x` are one search, so the latest spelling wins.
+          const same = trimmed.toLowerCase();
+          const filtered = state.searchHistory.filter(q => q.trim().toLowerCase() !== same);
           const newHistory = [trimmed, ...filtered].slice(0, state.searchHistoryLimit);
           return { searchHistory: newHistory };
         });

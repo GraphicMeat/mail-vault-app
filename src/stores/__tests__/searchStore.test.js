@@ -205,6 +205,15 @@ describe('daemon-backed search lifecycle', () => {
     expect(harness.settingsState.addSearchToHistory).toHaveBeenCalledWith('invoice');
   });
 
+  it('writes the raw query to history with its operators intact', async () => {
+    const run = await startSearch('from:x has:attachment');
+    expect(run.request).toMatchObject({ query: '', sender: 'x', hasAttachments: true });
+
+    progress(run, 1, { terminal: 'complete' });
+
+    expect(harness.settingsState.addSearchToHistory).toHaveBeenCalledWith('from:x has:attachment');
+  });
+
   it('releases the active event listener when the daemon run terminates', async () => {
     const run = await startSearch('invoice');
 
