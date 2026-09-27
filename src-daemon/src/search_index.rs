@@ -1807,6 +1807,111 @@ mod tests {
         assert!(!tagged("2@x.test"), "the removed one's tag goes, as before");
     }
 
+    fn tag_messages(root: &std::path::Path, keys: &[&str]) -> String {
+        mailvault_core::app_db::with(root, |c| {
+            let tag = mailvault_core::app_db::tags::ensure(c, "Clients", "")?;
+            let targets: Vec<_> =
+                keys.iter().map(|k| mailvault_core::app_db::tags::Target { account_id: "acct".into(), msg_key: k.to_string() }).collect();
+            mailvault_core::app_db::tags::assign(c, &tag.id, &targets)?;
+            Ok(tag.id)
+        })
+        .unwrap()
+    }
+
+    fn is_tagged(root: &std::path::Path, tag: &str, key: &str) -> bool {
+        mailvault_core::app_db::with(root, |c| mailvault_core::app_db::tags::for_messages(c, "acct", &[key.to_string()]))
+            .unwrap()
+            .get(key)
+            .is_some_and(|tags| tags.iter().any(|t| t == tag))
+    }
+
+    fn header_rows(uids: &[u32]) -> Vec<serde_json::Value> {
+        uids.iter().map(|u| serde_json::json!({"uid": u, "messageId": format!("<{u}@x.test>"), "subject": format!("Seed {u}")})).collect()
+    }
+
+    /// H3b fix 1: a refill after a clear lands newest first; evicted mail is
+    /// old and comes last. Until the cache holds the server's count again,
+    /// "not listed" proves nothing: the evicted rows and their tags stay.
+    #[test]
+    fn evicted_rows_and_tags_survive_a_partial_refill_until_the_cache_is_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 3);
+        let (st, custody) = with_custody(root);
+        let folder = || Some(vec![("acct".to_string(), "Projects_2026".to_string())]);
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1, 2, 3])}));
+        sweep_now(&st, root, folder());
+        let tag = tag_messages(root, &["1@x.test", "2@x.test"]);
+        let cur = root.join("Maildir/acct/Projects_2026/cur");
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
+        sweep_now(&st, root, folder());
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3]);
+
+        {
+            let g = mailvault_core::custody::lock(&custody);
+            mailvault_core::custody::cache::clear_headers(g.as_ref().unwrap(), Some("acct"), Some("Projects/2026")).unwrap();
+        }
+        // The server now holds 1 and 3; the refill has only reached uid 3.
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"syncTotalEmails": 2, "emails": header_rows(&[3])}));
+        sweep_now(&st, root, folder());
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3], "a partial listing removes nothing");
+        assert!(is_tagged(root, &tag, "1@x.test") && is_tagged(root, &tag, "2@x.test"));
+
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"emails": header_rows(&[1])}));
+        sweep_now(&st, root, folder());
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 3], "complete again: uid 2 is gone from the server");
+        assert!(is_tagged(root, &tag, "1@x.test"));
+        assert!(!is_tagged(root, &tag, "2@x.test"));
+    }
+
+    /// H3b fix 2: Empty Trash (or deleting the last message) leaves no header
+    /// row; once the daemon records the server's count as 0, the folder's
+    /// fileless rows are removed instead of staying search hits.
+    #[test]
+    fn a_folder_the_server_counts_empty_drops_its_fileless_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Trash", 2);
+        let (st, custody) = with_custody(root);
+        let folder = || Some(vec![("acct".to_string(), "Trash".to_string())]);
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"syncTotalEmails": 2, "emails": header_rows(&[1, 2])}));
+        sweep_now(&st, root, folder());
+        let cur = root.join("Maildir/acct/Trash/cur");
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"removedUids": [1, 2]}));
+        sweep_now(&st, root, folder());
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2], "no row and no count of 0 yet: unknown");
+        save_listing(&custody, "acct", "Trash", serde_json::json!({"syncTotalEmails": 0}));
+        sweep_now(&st, root, folder());
+        assert!(indexed_uids(&st, "acct").is_empty(), "verified empty: nothing left to find");
+    }
+
+    /// H3b fix 1 for the fresh-index fill: it waits while a folder's cache is
+    /// partial (the mark stays), fills once it is complete, and a folder the
+    /// header cache has never seen does not hold the mark.
+    #[test]
+    fn the_fresh_index_fill_waits_for_a_complete_header_cache() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 2);
+        seed(root, "acct", "Never_synced", 1);
+        let (st, custody) = with_custody(root);
+        let pending = || db::meta_get(lock(&st.db).as_ref().unwrap(), db::LISTED_ROWS_PENDING);
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[3])}));
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 1, 2], "files only");
+        assert_eq!(pending().as_deref(), Some("1"), "partial cache: the fill waits");
+
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"emails": header_rows(&[1, 2])}));
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 1, 2, 3]);
+        assert_eq!(pending().as_deref(), Some("0"), "every folder filled; the never-synced one had nothing to add");
+    }
+
     /// Removing an account deletes `Maildir/<account>/`: its rows go through
     /// the folder prune, not reconcile, so the no-header-rows keep rule (its
     /// header cache is wiped too) never holds them.

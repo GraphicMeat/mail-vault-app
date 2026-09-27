@@ -828,16 +828,20 @@ fn addr_text(v: &serde_json::Value) -> String {
 /// A header-only row for a message the header cache lists and no file holds.
 fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
     let text = |key: &str| header.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let list = |key: &str| header.get(key).and_then(|v| v.as_array()).map(|l| l.iter().map(addr_text).collect::<Vec<_>>()).unwrap_or_default();
+    // An address field is a list, or one address (Reply-To): either is read.
+    let list = |key: &str| match header.get(key) {
+        Some(serde_json::Value::Array(l)) => l.iter().map(addr_text).collect::<Vec<_>>(),
+        Some(one @ serde_json::Value::Object(_)) => vec![addr_text(one)],
+        _ => Vec::new(),
+    };
     let from = header.get("from").cloned().unwrap_or(serde_json::Value::Null);
     let to_addrs: Vec<String> = ["to", "cc", "bcc"].into_iter().flat_map(|k| list(k)).filter(|a| !a.is_empty()).collect();
     let mut addrs = vec![addr_text(&from)];
     addrs.extend(to_addrs.iter().cloned());
     addrs.extend(list("replyTo"));
-    let date = text("date");
-    let date_utc = mailparse::dateparse(&date).ok().or_else(|| {
-        [date, text("internalDate")].iter().find_map(|d| chrono::DateTime::parse_from_rfc3339(d).ok()).map(|d| d.timestamp())
-    });
+    // The Date header, then the arrival time, then now: never 1970.
+    let parse = |d: &str| mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|d| d.timestamp()));
+    let date_utc = parse(&text("date")).or_else(|| parse(&text("internalDate"))).or_else(|| Some(chrono::Utc::now().timestamp()));
     // The server's flags, never archived: no local archived copy exists.
     let imap: Vec<String> = header
         .get("flags")
@@ -902,7 +906,32 @@ pub fn add_listed_rows(
     if rows.is_empty() {
         return Ok(0);
     }
-    let db_path = lock(db).as_ref().ok_or_else(closed)?.path().map(str::to_owned);
+    // One message, one row: the folder may already hold it under another uid
+    // (an archived copy kept its old uid across a UIDVALIDITY change), and two
+    // mailboxes behind one folder can list it twice. No id: cannot tell, kept.
+    let (db_path, mut known) = {
+        let guard = lock(db);
+        let conn = guard.as_ref().ok_or_else(closed)?;
+        let mut stmt = conn
+            .prepare_cached("SELECT message_id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND message_id IS NOT NULL")
+            .map_err(db_err)?;
+        let known: HashSet<String> = stmt
+            .query_map(params![account_id, vault_dir], |r| r.get::<_, String>(0))
+            .map_err(db_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_err)?
+            .iter()
+            .map(|id| crate::maildir::normalize_message_id(id))
+            .collect();
+        (conn.path().map(str::to_owned), known)
+    };
+    let rows: Vec<_> = rows
+        .into_iter()
+        .filter(|(_, d, _)| match d.message_id.as_deref().map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty()) {
+            Some(id) => known.insert(id),
+            None => true,
+        })
+        .collect();
     let mut added = 0;
     for batch in rows.chunks(BATCH) {
         if !keep_going() {
@@ -934,7 +963,7 @@ pub fn add_listed_rows(
                             filename,
                             EVICTED,
                             d.message_id,
-                            d.date_utc.unwrap_or(0),
+                            d.date_utc,
                             d.from_addr.to_lowercase(),
                             d.from_name.to_lowercase(),
                             d.subject.to_lowercase(),
@@ -2223,6 +2252,60 @@ mod tests {
         assert_eq!((s.parsed, s.kept), (1, 1));
         assert_eq!(row_id(&v, 2), Some(id));
         assert_eq!(fts_hits(&v, "\"chameleon\"").len(), 1);
+    }
+
+    /// H3b fix 4: after a UIDVALIDITY change the archived copy keeps its old
+    /// uid while the header cache lists the message under a new one. The
+    /// same message is not added twice, nor twice from two mailboxes behind
+    /// one folder; a header with no Message-ID cannot be matched, so it goes in.
+    #[test]
+    fn a_header_only_row_is_not_added_for_a_message_the_folder_already_holds() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("5{INFO_PREFIX}AS.eml"), &eml_id("<dup@x.test>", "Kept copy", "aardvark"));
+        run_listed(&v, ON, &fake_parse, &no_listing);
+        let mut again = header(1, "Kept copy", "ann@x.test", &[]);
+        again["messageId"] = serde_json::json!(" dup@x.test ");
+        let mut twin = header(8, "Twin", "ann@x.test", &[]);
+        twin["messageId"] = serde_json::json!("<m7@x.test>");
+        let mut no_id = header(9, "No id", "ann@x.test", &[]);
+        no_id.as_object_mut().unwrap().remove("messageId");
+        let listed = vec![again, header(7, "Twin", "ann@x.test", &[]), twin, no_id];
+        assert_eq!(add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &listed, &|| true).unwrap(), 2);
+        assert_eq!((row_id(&v, 1), row_id(&v, 7).is_some(), row_id(&v, 8), row_id(&v, 9).is_some()), (None, true, None, true));
+    }
+
+    /// H3b fix 5: a header with no readable Date is dated by its arrival
+    /// (`internalDate`), and with neither by now, never 1970.
+    #[test]
+    fn an_undated_header_only_row_takes_its_internal_date_then_now() {
+        let v = vault();
+        std::fs::create_dir_all(v.root.join("Maildir/a1/INBOX/cur")).unwrap();
+        let mut arrived = header(1, "Arrived", "ann@x.test", &[]);
+        arrived["date"] = serde_json::json!("sometime");
+        arrived["internalDate"] = serde_json::json!("2026-09-01T08:00:00+00:00");
+        let mut undated = header(2, "Undated", "ann@x.test", &[]);
+        undated.as_object_mut().unwrap().remove("date");
+        let before = std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        assert_eq!(add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &[arrived, undated], &|| true).unwrap(), 2);
+        let date = |uid: u32| -> i64 {
+            crate::search_index::lock(&v.db).as_ref().unwrap().query_row("SELECT date_utc FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(date(1), chrono::DateTime::parse_from_rfc3339("2026-09-01T08:00:00+00:00").unwrap().timestamp());
+        assert!((before..before + 60).contains(&date(2)), "{}", date(2));
+    }
+
+    /// H3b fix 6: Reply-To is one address (an object), or a list: either is indexed.
+    #[test]
+    fn a_header_only_row_indexes_its_reply_to_address() {
+        let v = vault();
+        std::fs::create_dir_all(v.root.join("Maildir/a1/INBOX/cur")).unwrap();
+        let mut one = header(1, "One", "ann@x.test", &[]);
+        one["replyTo"] = serde_json::json!({"name": "Desk", "address": "helpdesk@x.test"});
+        let mut many = header(2, "Many", "ann@x.test", &[]);
+        many["replyTo"] = serde_json::json!([{"address": "orders@x.test"}]);
+        add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &[one, many], &|| true).unwrap();
+        assert_eq!(fts_hits(&v, "\"helpdesk@x.test\"").len(), 1);
+        assert_eq!(fts_hits(&v, "\"orders@x.test\"").len(), 1);
     }
 
     /// Only a fresh index (created, rebuilt, recovered, re-enabled after a
