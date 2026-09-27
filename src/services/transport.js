@@ -144,7 +144,7 @@ export const DAEMON_OWNED = new Set([
   // mirror's security-scoped bookmark (spec deviation 1), and forward from
   // there.
   'local_index_read', 'local_index_append', 'local_index_remove', 'custody_status',
-  'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans',
+  'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans', 'vault_rebind_uids',
   // Task 3.5: archive, bulk delete and verify move to the daemon along with
   // their cancel routes (cancel_bulk_delete is new: the old app command had
   // a single shared cancel token for both operations, N4).

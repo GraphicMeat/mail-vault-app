@@ -522,6 +522,37 @@ fn with_uid(name: &str, new_uid: u32) -> String {
     }
 }
 
+/// Re-file vault copies under the uids a move gave their messages. An undone
+/// delete comes back out of Trash with a NEW uid (UID MOVE assigns one) while
+/// its vault copy is still filed under the retired one, where it renders next
+/// to the message it is a copy of. `pairs` are `(old, new)`; returns the ones
+/// renamed. Never overwrites: a pair whose new uid already has a file, or
+/// whose old uid has none, is skipped, because `rename` would silently replace
+/// another message's copy.
+pub fn rebind_uids(cur_dir: &Path, pairs: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    let mut files = uid_file_map(cur_dir);
+    let mut rebound = Vec::new();
+    for &(old, new) in pairs {
+        if old == new || files.contains_key(&new) {
+            continue;
+        }
+        let Some(path) = files.remove(&old) else { continue };
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let target = cur_dir.join(with_uid(&name, new));
+        match fs::rename(&path, &target) {
+            Ok(()) => {
+                files.insert(new, target);
+                rebound.push((old, new));
+            }
+            Err(e) => {
+                warn!("rebind_uids: {:?} -> {:?} failed: {}", path, target, e);
+                files.insert(old, path);
+            }
+        }
+    }
+    rebound
+}
+
 /// Undo `free_orphan_path`'s dedupe suffix, so a recovered file goes back with
 /// the `.eml` extension the OS and the zip export need.
 fn strip_orphan_suffix(name: &str) -> String {
@@ -821,6 +852,33 @@ mod tests {
         assert_eq!(INFO_SEP, if cfg!(windows) { ';' } else { ':' });
         assert_eq!(INFO_PREFIX, if cfg!(windows) { ";2," } else { ":2," });
         assert!(is_info_sep(':') && is_info_sep(';') && !is_info_sep('.'));
+    }
+
+    #[test]
+    fn rebind_uids_refiles_a_copy_under_its_new_uid_and_keeps_its_flags() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        fs::write(cur.join(format!("7{INFO_PREFIX}S.eml")), b"seven").unwrap();
+
+        assert_eq!(rebind_uids(cur, &[(7, 12)]), vec![(7, 12)]);
+
+        assert!(!cur.join(format!("7{INFO_PREFIX}S.eml")).exists());
+        assert_eq!(fs::read(cur.join(format!("12{INFO_PREFIX}S.eml"))).unwrap(), b"seven");
+    }
+
+    #[test]
+    fn rebind_uids_never_overwrites_and_skips_a_uid_with_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        fs::write(cur.join(format!("7{INFO_PREFIX}.eml")), b"seven").unwrap();
+        fs::write(cur.join(format!("12{INFO_PREFIX}S.eml")), b"twelve").unwrap();
+
+        // 12 is taken by another message; 8 has no copy at all.
+        assert_eq!(rebind_uids(cur, &[(7, 12), (8, 13)]), vec![]);
+
+        assert_eq!(fs::read(cur.join(format!("7{INFO_PREFIX}.eml"))).unwrap(), b"seven");
+        assert_eq!(fs::read(cur.join(format!("12{INFO_PREFIX}S.eml"))).unwrap(), b"twelve");
+        assert!(!cur.join(format!("13{INFO_PREFIX}.eml")).exists());
     }
 
     #[test]

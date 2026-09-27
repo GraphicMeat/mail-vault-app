@@ -137,6 +137,34 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // An undone delete comes back out of Trash under a NEW uid: its vault
+        // copy and custody entry are re-filed under it (`maildir::rebind_uids`,
+        // `entries::remap`). Same locks and invalidation as the generation
+        // repair below, which re-keys files the same way.
+        "vault_rebind_uids" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let pairs = req!(crate::handlers::common::vec_arg::<(u32, u32)>(&id, params, "pairs"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let rebound = with_mailbox_write(&state, &account_id, &mailbox, |root| {
+                        let rebound = maildir::rebind_uids(&vault_files::cur_path(root, &account_id, &mailbox), &pairs);
+                        if !rebound.is_empty() {
+                            state.vault_registry.invalidate(&account_id, &mailbox);
+                            if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remap(c, &account_id, &mailbox, &rebound, &[])) {
+                                warn!("vault_rebind_uids: custody remap failed: {}", e);
+                            }
+                        }
+                        Ok(rebound)
+                    })?;
+                    Ok(serde_json::json!({ "rebound": rebound }))
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         "maildir_repair_generation" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -334,6 +362,27 @@ mod tests {
         let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
         assert_eq!(fs::read_dir(&cur).unwrap().count(), 0);
         assert_eq!(daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap(), None);
+    }
+
+    /// An undone delete comes back under a new uid: the vault copy, its
+    /// custody entry and the registry's answer all move to it.
+    #[tokio::test]
+    async fn vault_rebind_uids_refiles_the_copy_and_its_custody_entry() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        seed_file(v.path(), "acc", "INBOX", 7);
+        daemon_custody::with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 7, "flags": ["archived"]})])).unwrap();
+        let reg = &s.vault_registry;
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![7], vec![])));
+
+        let r = call(&s, "vault_rebind_uids", json!({"accountId": "acc", "mailbox": "INBOX", "pairs": [[7, 12], [8, 13]]})).await;
+        // 8 has no vault copy: nothing to re-file.
+        assert_eq!(r.result.unwrap(), json!({"rebound": [[7, 12]]}));
+
+        assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![12], vec![])));
+        let text = daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap();
+        let rows: Vec<Value> = serde_json::from_str(&text).unwrap();
+        assert_eq!(rows.iter().map(|r| r["uid"].clone()).collect::<Vec<_>>(), vec![json!(12)]);
     }
 
     #[tokio::test]

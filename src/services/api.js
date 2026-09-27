@@ -594,6 +594,15 @@ export async function vaultApplyFlags(accountId, mailbox, accountEmail, changes)
   return { renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 };
 }
 
+// Re-file vault copies under the uids a move gave their messages
+// (`pairs`: [[oldUid, newUid]]). Answers `{ rebound }`, the pairs it moved.
+export async function vaultRebindUids(accountId, mailbox, pairs) {
+  if (IS_TAURI) {
+    return tauriInvoke('vault_rebind_uids', { accountId, mailbox, pairs });
+  }
+  return { rebound: [] };
+}
+
 export async function removeFromLocalIndex(accountId, mailbox, uid) {
   if (IS_TAURI) {
     return tauriInvoke('local_index_remove', { accountId, mailbox, uid });

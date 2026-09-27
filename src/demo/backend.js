@@ -633,6 +633,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'clear_migration_state_cmd': migrationState = null; return null;
       case 'maildir_migrate_json_to_eml': case 'maildir_migrate_email_dirs': return { migrated: 0, skipped: 0, simulated: true };
       case 'maildir_repair_generation': return { repaired: false, simulated: true };
+      case 'vault_rebind_uids': return { rebound: [] };
       case 'imap_fetch_changed_flags': return { changes: [] };
       case 'vault_apply_flags': {
         const changes = args.changes || [];
