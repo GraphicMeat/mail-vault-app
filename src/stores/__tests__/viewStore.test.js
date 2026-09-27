@@ -15,7 +15,8 @@ vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: id => harness.cacheMailboxes[id] || [],
 }));
 
-const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp } = await import('../viewStore');
+const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults } = await import('../viewStore');
+const { useSettingsStore } = await import('../settingsStore');
 const { useSearchStore } = await import('../searchStore.js');
 const { useFieldStore } = await import('../fieldStore');
 
@@ -388,5 +389,40 @@ describe('effectiveViewConfig', () => {
       .toEqual({ listView: 'list', grouping: 'sender', timeline: false, overridden: true });
     expect(effectiveViewConfig(view, { emailListView: 'list', viewOverrides: { v1: { stamp: 'old', listView: 'list' } } }).overridden).toBe(false);
     expect(effectiveViewConfig({ id: 'v2', def: {} }, { emailListView: 'explorer', viewOverrides: {} }).listView).toBe('explorer');
+  });
+});
+
+// "Reset view" shows when the view looks different from how it was saved,
+// not when some choice was ever clicked: picking the saved layout again is
+// not a change.
+describe('Reset view is honest', () => {
+  const view = { id: 'v1', def: { group: 'sender', showTimeline: true } };
+  const stamp = viewPresentationStamp(view.def);
+
+  it('is not overridden when every override equals the saved layout', () => {
+    const settings = { emailListView: 'list', viewOverrides: { v1: { stamp, listView: 'explorer', grouping: 'sender', timeline: true } } };
+    expect(effectiveViewConfig(view, settings).overridden).toBe(false);
+  });
+
+  // A view saved with no grouping follows the app's list mode: an override
+  // equal to that mode is no change either.
+  it('compares against the global list mode a view without grouping follows', () => {
+    const plain = { id: 'v2', def: {} };
+    const settings = { emailListView: 'explorer', viewOverrides: { v2: { stamp: viewPresentationStamp({}), listView: 'explorer' } } };
+    expect(effectiveViewConfig(plain, settings).overridden).toBe(false);
+    expect(effectiveViewConfig(plain, { ...settings, emailListView: 'list' }).overridden).toBe(true);
+  });
+
+  it('drops a choice set back to the saved layout, and the entry with it', () => {
+    useSettingsStore.setState({ viewOverrides: {} });
+    const defaults = viewDefaults(view, { emailListView: 'list' });
+    const { setViewOverride } = useSettingsStore.getState();
+    setViewOverride('v1', stamp, { listView: 'list' }, defaults);
+    setViewOverride('v1', stamp, { timeline: false }, defaults);
+    expect(useSettingsStore.getState().viewOverrides.v1).toEqual({ stamp, listView: 'list', timeline: false });
+    setViewOverride('v1', stamp, { listView: 'explorer' }, defaults);
+    expect(useSettingsStore.getState().viewOverrides.v1).toEqual({ stamp, timeline: false });
+    setViewOverride('v1', stamp, { timeline: true }, defaults);
+    expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
   });
 });

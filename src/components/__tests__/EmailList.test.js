@@ -1740,6 +1740,23 @@ describe('a saved view drives the grouping', () => {
     expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
   });
 
+  // Switching away and back again leaves the view exactly as it was saved:
+  // Reset view has nothing to reset.
+  it('hides Reset view when the layout is back to how the view was saved', async () => {
+    const { container } = await mount({ def: {} });
+    fireEvent.click(container.querySelector('[data-testid="mail-view-explorer"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).not.toBeNull();
+    fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+    await settle();
+    fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+    await settle();
+    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+  });
+
   it('browsing a view by something else is kept for the view, not the global explorer grouping', async () => {
     const { container } = await mount({ def: { group: 'sender' } });
     const { useSettingsStore } = await import('../../stores/settingsStore');

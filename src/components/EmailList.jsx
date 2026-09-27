@@ -9,7 +9,7 @@ import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScop
 import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
-import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
+import { useViewStore, viewLabel, effectiveViewConfig, viewDefaults, viewPresentationStamp, currentListView } from '../stores/viewStore';
 import { ViewAttachmentsDownload, useTimelineDownload, PeriodDownloadButtons } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
@@ -272,7 +272,8 @@ function EmailListComponent({ stacked = false }) {
   const setViewOverride = useSettingsStore(s => s.setViewOverride);
   const clearViewOverride = useSettingsStore(s => s.clearViewOverride);
   const viewConfig = activeView ? effectiveViewConfig(activeView, { emailListView, viewOverrides }) : null;
-  const overrideView = patch => setViewOverride(activeView.id, viewPresentationStamp(activeView.def), patch);
+  const overrideView = patch => setViewOverride(activeView.id, viewPresentationStamp(activeView.def), patch,
+    viewDefaults(activeView, { emailListView }));
   const timelineVisible = viewConfig ? viewConfig.timeline : listTimelineVisible;
   const toggleTimelineVisible = () => {
     if (activeView) overrideView({ timeline: !timelineVisible });

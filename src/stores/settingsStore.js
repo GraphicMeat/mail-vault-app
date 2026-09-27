@@ -1110,11 +1110,18 @@ export const useSettingsStore = create(
       }),
       /// `stamp` is the view's saved presentation the change was made against:
       /// a change against an older one starts over instead of merging into it.
-      setViewOverride: (id, stamp, patch) => set(state => {
+      // `defaults` is the view's saved layout (viewStore's `viewDefaults`): a
+      // choice set back to it is dropped rather than stored, and an entry
+      // left with no choice goes too, so the map never holds a no-op.
+      setViewOverride: (id, stamp, patch, defaults = {}) => set(state => {
         const overrides = { ...state.viewOverrides };
-        const current = overrides[id]?.stamp === stamp ? overrides[id] : { stamp };
+        const next = { ...(overrides[id]?.stamp === stamp ? overrides[id] : { stamp }), ...patch };
+        for (const key of Object.keys(patch)) {
+          if (key in defaults && next[key] === defaults[key]) delete next[key];
+        }
         delete overrides[id];
-        return { viewOverrides: normalizeViewOverrides({ ...overrides, [id]: { ...current, ...patch } }) };
+        if (Object.keys(next).some(key => key !== 'stamp')) overrides[id] = next;
+        return { viewOverrides: normalizeViewOverrides(overrides) };
       }),
       clearViewOverride: id => set(state => {
         const overrides = { ...state.viewOverrides };

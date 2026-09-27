@@ -27,20 +27,32 @@ export function viewLabel(view, translate) {
 /// stay hidden behind an old click in the toolbar.
 export const viewPresentationStamp = def => JSON.stringify([def?.group || null, !!def?.showTimeline]);
 
+/// How a saved view shows when nothing was changed for it. A view that saved
+/// no grouping follows the app's own list mode.
+export function viewDefaults(view, settings) {
+  const def = view?.def || {};
+  return {
+    listView: def.group ? 'explorer' : settings.emailListView,
+    grouping: def.group || null,
+    timeline: !!def.showTimeline,
+  };
+}
+
 /// How a saved view is shown: list or explorer, what the explorer groups by,
 /// and whether the timeline is on. Each is what the person last picked while
-/// the view was open (`viewOverrides`), else what the view was saved with. A
-/// view that saved no grouping follows the app's own list mode.
+/// the view was open (`viewOverrides`), else `viewDefaults`. `overridden`
+/// says the result differs from those defaults, not that a choice was ever
+/// stored: picking the saved layout again leaves nothing for Reset to reset.
 export function effectiveViewConfig(view, settings) {
-  const def = view?.def || {};
+  const defaults = viewDefaults(view, settings);
   const saved = settings.viewOverrides?.[view?.id];
-  const override = saved?.stamp === viewPresentationStamp(def) ? saved : {};
-  return {
-    listView: override.listView ?? (def.group ? 'explorer' : settings.emailListView),
-    grouping: override.grouping ?? (def.group || null),
-    timeline: override.timeline ?? !!def.showTimeline,
-    overridden: ['listView', 'grouping', 'timeline'].some(key => key in override),
+  const override = saved?.stamp === viewPresentationStamp(view?.def || {}) ? saved : {};
+  const config = {
+    listView: override.listView ?? defaults.listView,
+    grouping: override.grouping ?? defaults.grouping,
+    timeline: override.timeline ?? defaults.timeline,
   };
+  return { ...config, overridden: Object.keys(config).some(key => config[key] !== defaults[key]) };
 }
 
 /// The list mode on screen right now, for code outside the list itself.
