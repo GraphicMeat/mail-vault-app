@@ -41,7 +41,7 @@ const MESSAGE = {
 };
 
 beforeEach(() => {
-  useUnsubscribeStore.setState({ pending: null, busy: false, result: null });
+  useUnsubscribeStore.setState({ pending: null, busy: false, result: null, version: 0 });
   useUnsubscribeSendersStore.getState().clear();
   mocks.daemonCall.mockReset();
   mocks.openLink.mockReset().mockResolvedValue(true);
@@ -70,7 +70,7 @@ describe('unsubscribe confirm flow', () => {
       listUnsubscribePost: 'List-Unsubscribe=One-Click', authenticationResults: 'mx.test; dkim=pass',
     });
     expect(mocks.openLink).not.toHaveBeenCalled();
-    expect(useUnsubscribeStore.getState().busy).toBe(false);
+    expect(useUnsubscribeStore.getState().version).toBe(1);
   });
 
   it('opens the page for a browser answer and compose for a mailto answer', async () => {

@@ -22,13 +22,15 @@ export function unsubscribeTarget(source, accountId) {
 /**
  * One unsubscribe flow for every surface: `request` opens the confirm dialog
  * (UnsubscribeHost), `confirm` asks the daemon (`unsubscribe` RPC), which
- * POSTs one-click itself or answers the fallback opened here. After each
- * attempt Settings > Unsubscribe asks again for that account's lists.
+ * POSTs one-click itself or answers the fallback opened here. `version`
+ * bumps after each attempt, and Settings > Unsubscribe asks again for that
+ * account's senders and history.
  */
 export const useUnsubscribeStore = create((set, get) => ({
   pending: null,
   busy: false,
   result: null,
+  version: 0,
 
   request: target => { if (target) set({ pending: target, result: null }); },
   cancel: () => { if (!get().busy) set({ pending: null }); },
@@ -49,7 +51,7 @@ export const useUnsubscribeStore = create((set, get) => ({
       console.warn('[unsubscribe] failed:', error?.message || error);
       set({ result: { type: 'error', kind: 'failed', sender } });
     } finally {
-      set({ busy: false, pending: null });
+      set(state => ({ busy: false, pending: null, version: state.version + 1 }));
       // Its history (and maybe its senders) changed; the other accounts did not.
       useUnsubscribeSendersStore.getState().refresh(target.accountId);
     }
