@@ -2755,15 +2755,21 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "ping" => Some(Duration::from_secs(10)),
 
         "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
-        | "maildir_read" | "maildir_read_light" | "maildir_read_attachment" | "maildir_read_attachments"
-        | "maildir_read_raw_source" | "maildir_exists" | "maildir_store" | "maildir_delete"
-        | "maildir_delete_many" | "maildir_set_flags" | "cache_attachment" | "cached_attachment_path"
+        | "maildir_read" | "maildir_read_light" | "maildir_exists" | "maildir_store" | "maildir_delete"
+        | "maildir_delete_many" | "maildir_set_flags"
         | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
         | "list_cached_uids" | "header_cache_month_histogram" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
         | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
         | "read_pending_operation" | "save_pending_operation" | "clear_pending_operation" | "local_index_read"
         | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
         | "maildir_orphan_stats" | "mail_search_start" | "mail_search_cancel" | "vault_rebind_uids" => Some(Duration::from_secs(30)),
+
+        // H3c: a message the vault has no copy of is downloaded by these
+        // (`raw_message`): the daemon's own 45s body timeout, possibly after
+        // another message's fallback holding the one-at-a-time lock. A 30s
+        // budget would turn a slow server into a failed attachment.
+        "maildir_read_attachment" | "maildir_read_attachments" | "maildir_read_raw_source" | "cache_attachment"
+        | "cached_attachment_path" => Some(Duration::from_secs(120)),
 
         // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
         // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
@@ -4331,9 +4337,8 @@ mod tests {
     #[test]
     fn reply_timeout_gives_every_phase_2_thirty_second_method_thirty_seconds() {
         for method in [
-            "maildir_read", "maildir_read_light", "maildir_read_attachment", "maildir_read_attachments",
-            "maildir_read_raw_source", "maildir_exists", "maildir_store", "maildir_delete",
-            "maildir_delete_many", "maildir_set_flags", "cache_attachment", "cached_attachment_path",
+            "maildir_read", "maildir_read_light", "maildir_exists", "maildir_store", "maildir_delete",
+            "maildir_delete_many", "maildir_set_flags",
             "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
             "list_cached_uids", "header_cache_month_histogram", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
             "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
@@ -4342,6 +4347,14 @@ mod tests {
             "maildir_orphan_stats", "mail_search_start", "mail_search_cancel", "vault_rebind_uids",
         ] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    /// H3c: these can download the message when the vault has no copy.
+    #[test]
+    fn reply_timeout_outlasts_the_daemons_body_fetch_for_whole_message_reads() {
+        for method in ["maildir_read_attachment", "maildir_read_attachments", "maildir_read_raw_source", "cache_attachment", "cached_attachment_path"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
         }
     }
 

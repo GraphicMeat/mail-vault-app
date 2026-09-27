@@ -265,8 +265,9 @@ mod tests {
         assert_eq!(r.result, Some(b64(PDF)), "{:?}", r.error);
         let files = vault_files_of(&dir);
         assert_eq!(files.len(), 1, "{files:?}");
-        let flags = files[0].split(":2,").nth(1).unwrap_or("");
-        assert!(!flags.contains('A'), "a cache copy is never marked archived: {}", files[0]);
+        assert!(mailvault_core::maildir::info_flags(&files[0]).is_some(), "a maildir name: {}", files[0]);
+        let flags = mailvault_core::vault_eml::parse_flags_from_filename(&files[0]);
+        assert!(!flags.iter().any(|f| f == "archived"), "a cache copy is never marked archived: {}", files[0]);
         // The next read is the vault's.
         call(&s, "maildir_read_attachment", attachment(1)).await.result.expect("second read");
         assert_eq!(fetches(&server), 1);
