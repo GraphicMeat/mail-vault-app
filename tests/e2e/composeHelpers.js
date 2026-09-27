@@ -355,12 +355,19 @@ export const testidPresent = (testid) => browser.execute((id) => {
 export const testidText = (testid) => browser.execute((id) =>
   document.querySelector(`[data-testid="${id}"]`)?.textContent.trim() ?? null, testid);
 /**
- * Text of the expanded quoted original. It renders in a sandboxed frame, so the
- * `compose-quoted` box holds no text of its own; the frame is same-origin, so
- * its document reads from here. Null until the frame has loaded.
+ * Body text of the quoted original. In the app window it is a read-only thread
+ * with the replied message open, and only the open message renders a body: an
+ * HTML one in a same-origin frame (read its document), a plain-text one in
+ * `.email-plain-body`. Folded rows' snippets and the header are never read, so
+ * the wrong message open cannot pass. The detached window shows one frame.
+ * Null until a body has loaded.
  */
-export const quotedText = () => browser.execute(() =>
-  document.querySelector('[data-testid="compose-quoted"] iframe')?.contentDocument?.body?.textContent.trim() || null);
+export const quotedText = () => browser.execute(() => {
+  const box = document.querySelector('[data-testid="compose-quoted"]');
+  return box?.querySelector('iframe')?.contentDocument?.body?.textContent.trim()
+    || box?.querySelector('.email-plain-body')?.textContent.trim()
+    || null;
+});
 
 /** Click a button inside the modal (or inside `scope`) by its exact trimmed text. */
 export async function clickButtonText(text, scope = MODAL) {

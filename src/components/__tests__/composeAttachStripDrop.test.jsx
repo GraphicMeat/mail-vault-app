@@ -90,6 +90,10 @@ vi.mock('../../stores/settingsStore', () => {
   return { useSettingsStore: hook };
 });
 
+// ComposeModal imports the read-only ThreadView for a reply's original; this
+// suite never shows one, so its module tree stays out.
+vi.mock('../email/ThreadView', () => ({ ThreadView: () => null }));
+
 const { ComposeModal } = await import('../ComposeModal');
 
 const png = () => new File([new Uint8Array(64)], 'shot.png', { type: 'image/png' });

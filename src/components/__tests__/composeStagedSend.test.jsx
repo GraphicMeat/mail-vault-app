@@ -118,6 +118,11 @@ vi.mock('../../stores/settingsStore', () => {
   return { useSettingsStore: hook };
 });
 
+// The original's pane is a read-only ThreadView with its own specs
+// (ThreadViewReadOnly, composeQuotedOriginal); this suite's stores are too thin
+// to host its body loader.
+vi.mock('../email/ThreadView', () => ({ ThreadView: () => null }));
+
 const { ComposeModal } = await import('../ComposeModal');
 
 const parent = {

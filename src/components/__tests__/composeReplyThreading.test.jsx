@@ -105,6 +105,11 @@ vi.mock('../../stores/settingsStore', () => {
   return { useSettingsStore: hook };
 });
 
+// The original's pane is a read-only ThreadView with its own specs
+// (ThreadViewReadOnly, composeQuotedOriginal); this suite's stores are too thin
+// to host its body loader.
+vi.mock('../email/ThreadView', () => ({ ThreadView: () => null }));
+
 const { ComposeModal } = await import('../ComposeModal');
 
 const parent = {
@@ -235,7 +240,9 @@ describe('the reply the compose window stages for the UI', () => {
 describe('the quote fill-in effect (radial reply)', () => {
   it('fills the quote once the body resolves, keeping the typed reply as it is', async () => {
     const headerOnly = { ...parent, text: undefined };
-    const props = { mode: 'reply', replyTo: headerOnly, onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    // Detached: the one surface whose pane is the quote HTML itself. In the
+    // app window the pane is a read-only ThreadView that loads its own body.
+    const props = { mode: 'reply', detached: true, replyTo: headerOnly, onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
     const { rerender } = render(<ComposeModal {...props} />);
     const editor = await screen.findByTestId('editor-stub');
 

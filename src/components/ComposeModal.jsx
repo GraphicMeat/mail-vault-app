@@ -6,10 +6,12 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
-import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
+import { ThreadView } from './email/ThreadView';
+import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
+import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
@@ -88,26 +90,9 @@ function AttachmentPreview({ attachment, onRemove }) {
 // minimized window (no live editor there to react to a fuller `replyTo`) —
 // see src/utils/replyQuote.js.
 
-// The message a reply answers: someone else's HTML, shown in the app's own
-// window, where withGlobalTauri puts the IPC bridge. The sandbox has no
-// allow-scripts, so nothing in the frame runs: no <script>, no onerror, no
-// javascript: link. allow-same-origin only lets the auto-size read its height.
-// The reading pane's frames allow scripts (Dark Reader, quote folding); this
-// one must not copy them.
-const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
-  const t = useT();
-  const frameRef = useRef(null);
-  useEffect(() => attachEmailIframeAutoSize(frameRef.current), []);
-  return (
-    <iframe
-      ref={frameRef}
-      sandbox="allow-same-origin"
-      srcDoc={buildEmailIframeHtml({ bodyHtml: html, extraHead: '<style>body { padding: 12px 16px; }</style>' })}
-      title={t('compose.originalMessage')}
-      className="block w-full border-0 rounded-md"
-    />
-  );
-});
+// The message a reply answers shows beside it as the reading pane would show
+// it (ThreadView, read-only). The detached compose window and the pop-out get
+// the original as HTML over IPC and show that one body (OriginalFrame).
 
 // The HTML5 drag handlers below are the browser-preview path. In the app,
 // wry answers AppKit before WebKit sees a file drag, and the drop arrives as
@@ -194,6 +179,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // Context width as a ratio of the layout; null = 400px. A draft's own wins.
   const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || composeContextSplit);
   const [originalDetached, setOriginalDetached] = useState(false);
+  // The replied message's thread, as the list threads it; resolved once, so
+  // list churn never reshuffles what is being read.
+  const [originalThread] = useState(() => (detached ? null : resolveOriginalThread(replyTo || initialData?._replyTo || null, useMailStore.getState())));
+  // The reader's theme, and a toggle for this compose only.
+  const defaultOriginalDark = useDefaultEmailDark();
+  const [originalDarkOverride, setOriginalDarkOverride] = useState(() => initialData?._originalDark ?? null);
+  const originalDark = originalDarkOverride ?? defaultOriginalDark;
   const originalWindowRef = useRef(null);
   const originalCloseStopRef = useRef(null);
   const contextDragRef = useRef(null);
@@ -252,7 +244,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     try {
       unlisten = await listen('original-message-ready', async event => {
         if (event.payload?.token !== token) return;
-        await emitTo(event.payload.label, 'original-message-payload', { token, html: contextHtml });
+        await emitTo(event.payload.label, 'original-message-payload', { token, html: contextHtml, dark: originalDark });
         unlisten?.();
       });
       const label = await invoke('open_auxiliary_window', { kind: 'original', token });
@@ -819,6 +811,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       _contextHtml: contextHtml,
       _showContext: showContext,
       _contextSplit: contextSplit,
+      _originalDark: originalDarkOverride,
       _replyTo: replyTo || initialData?._replyTo || null,
       _accountId: selectedAccountId,
       _fromAddress: composeFrom,
@@ -838,7 +831,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -858,7 +851,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   );
   const sessionSignature = JSON.stringify([
     formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
-    attachments, quotedHtml, contextHtml, showContext, contextSplit, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft,
+    attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft,
   ]);
 
   // Keep the UI session current independently of the vault draft write. App
@@ -1767,6 +1760,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   {showContext && !contextCollapsed && <span className="truncate">{t('compose.showHideOriginalMessage', { action: t('settings.backup.verify.hide') })}</span>}
                 </button>
                 {showContext && !contextCollapsed && (
+                  <OriginalThemeToggle dark={originalDark} onToggle={() => setOriginalDarkOverride(!originalDark)} />
+                )}
+                {showContext && !contextCollapsed && (
                   <Button variant="ghost" icon size="sm" onClick={openOriginalWindow}
                     title={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
                     aria-label={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
@@ -1775,21 +1771,32 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               </div>
               {showContext && !contextCollapsed && (
                 <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
-                  {[{ ratio: 0.5, label: '50/50', testid: 'compose-split-half' }, { ratio: 0.25, label: '75/25', testid: 'compose-split-quarter' }].map(({ ratio, label, testid }) => (
+                  {[{ ratio: 0.5, label: '50/50', testid: 'compose-split-half', Icon: Columns }, { ratio: 0.25, label: '75/25', testid: 'compose-split-quarter', Icon: PanelRight }].map(({ ratio, label, testid, Icon }) => (
                     <button key={label} type="button" data-testid={testid}
                       aria-pressed={contextSplit === ratio}
                       aria-label={t('compose.splitRatio', { ratio: label })}
                       title={t('compose.splitRatio', { ratio: label })}
                       onClick={() => chooseContextSplit(ratio)}
-                      className={`rounded px-2 py-1 text-xs transition-colors ${contextSplit === ratio ? 'bg-mail-accent/15 text-mail-accent-text' : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
-                    >{label}</button>
+                      className={`rounded p-1.5 transition-colors ${contextSplit === ratio ? 'bg-mail-accent/15 text-mail-accent-text' : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
+                    ><Icon size={14} aria-hidden="true" /></button>
                   ))}
                 </div>
               )}
               {showContext && !contextCollapsed && (
-                <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
-                  <div data-testid="compose-quoted" className="pt-2"><QuotedOriginal html={contextHtml} /></div>
-                </div>
+                originalThread ? (
+                  // ThreadView scrolls itself: its list is the virtualizer's scroll element.
+                  <div data-testid="compose-context-panel" className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div data-testid="compose-quoted" className="flex-1 min-h-0 flex flex-col">
+                      <ThreadView thread={originalThread.thread} openEmailKey={originalThread.openKey} readOnly emailThemeDark={originalDark} />
+                    </div>
+                  </div>
+                ) : (
+                  <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
+                    <div data-testid="compose-quoted" className="pt-2">
+                      <OriginalFrame html={contextHtml} dark={originalDark} title={t('compose.originalMessage')} />
+                    </div>
+                  </div>
+                )
               )}
             </aside>
           </>}

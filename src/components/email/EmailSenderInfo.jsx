@@ -114,7 +114,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               data-testid={hasDistinctName ? undefined : 'sender-address'}
               className="text-sm font-semibold text-mail-text truncate cursor-pointer hover:underline"
               onClick={hasDistinctName ? openDetails : composeToSender}
-              title={hasDistinctName ? t('email.sender.senderDetails') : t('emailActionBar.reply')}
+              title={hasDistinctName ? t('email.sender.senderDetails') : onReply ? t('emailActionBar.reply') : undefined}
             >
               {senderName}
             </span>
@@ -130,7 +130,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                 data-testid="sender-address"
                 className="text-xs text-mail-text-muted truncate cursor-pointer hover:underline"
                 onClick={composeToSender}
-                title={t('emailActionBar.reply')}
+                title={onReply ? t('emailActionBar.reply') : undefined}
               >
                 &lt;{email.from.address}&gt;
               </span>

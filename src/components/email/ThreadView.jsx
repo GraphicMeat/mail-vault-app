@@ -59,7 +59,7 @@ import { ReadDelayProgress } from '../ReadDelayProgress';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef, readOnly = false }) {
   const t = useT();
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
@@ -141,11 +141,12 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
   // The thread is a second reader of the same body: what it finds has to reach
   // the row, or the glyph means "you opened this in the reading pane".
-  useEffect(() => { recordTrackerSummary(scopeKey, trackerSummary); }, [trackerSummary, scopeKey]);
+  // A read-only copy (the compose pane) writes nothing back.
+  useEffect(() => { if (!readOnly) recordTrackerSummary(scopeKey, trackerSummary); }, [trackerSummary, scopeKey, readOnly]);
 
   // Persist link alert outside render
   useEffect(() => {
-    if (threadScanAlert && !email._linkAlert) {
+    if (!readOnly && threadScanAlert && !email._linkAlert) {
       email._linkAlert = threadScanAlert;
       useMailStore.setState(state => ({
         emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: threadScanAlert } : e),
@@ -153,7 +154,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       }));
       useSettingsStore.getState().setLinkAlert(scopeKey, threadScanAlert);
     }
-  }, [threadScanAlert, scopeKey]);
+  }, [threadScanAlert, scopeKey, readOnly]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
@@ -314,7 +315,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false, threadId }) {
+function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false, threadId, readOnly = false, emailThemeDark }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
@@ -332,7 +333,10 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   // Default: user preference ('light'|'dark') or follow app theme.
-  const defaultEmailTheme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
+  // A host that owns the theme (the compose pane's toggle) passes it in.
+  const defaultEmailTheme = typeof emailThemeDark === 'boolean'
+    ? (emailThemeDark ? 'dark' : 'light')
+    : emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
   const effectiveTheme = emailThemeOverride ?? defaultEmailTheme;
   const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
@@ -355,19 +359,24 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   // picking another message) stops it too, and only a countdown it cut short
   // runs again on the redraw: one that already fired, or that a hand-set read
   // state cancelled, does not.
+  // A read-only copy is not reading: it marks nothing, not even by forgetting.
   useEffect(() => {
+    if (readOnly) return undefined;
     if (!expanded) {
       forgetThreadReadTimer(scopeKey);
       return undefined;
     }
     void startThreadReadTimer(threadId, email);
     return () => { if (stopThreadReadTimer(scopeKey)) forgetThreadReadTimer(scopeKey); };
-  }, [expanded, scopeKey, threadId]);
+  }, [expanded, scopeKey, threadId, readOnly]);
 
   const bodyEntry = bodiesMapRef.current.get(key);
-  const loadedEmail = bodyEntry?.status === 'loaded' ? bodyEntry.email : null;
-  const isLoading = bodyEntry?.status === 'loading';
-  const loadError = bodyEntry?.status === 'error';
+  // A message handed over with its body (composeOriginalThread) shows it while
+  // the loader has nothing better.
+  const ownBody = email._bodyLoaded ? email : null;
+  const loadedEmail = bodyEntry?.status === 'loaded' ? bodyEntry.email : ownBody;
+  const isLoading = !loadedEmail && bodyEntry?.status === 'loading';
+  const loadError = !loadedEmail && bodyEntry?.status === 'error';
 
   // The click, Reply, Reply All and Forward all quote this message; the body
   // is fetched first when the loader has not reached it yet.
@@ -437,7 +446,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           variant="thread"
           expanded={expanded}
           onToggle={onToggle}
-          onReply={() => compose('reply')}
+          onReply={readOnly ? undefined : () => compose('reply')}
           showRaw={showRaw}
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}
@@ -451,10 +460,10 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           </p>
         )}
       </div>
-      <div className="pl-12 pb-1"><TagChips email={email} /></div>
+      {!readOnly && <div className="pl-12 pb-1"><TagChips email={email} /></div>}
 
       {/* Action bar — below sender info, above content */}
-      {expanded && (
+      {expanded && !readOnly && (
         <div className="px-3 pb-1">
           <EmailActionBar
             email={email}
@@ -525,13 +534,13 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
                 {rawError || atob(rawSource)}
               </pre>
             ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} selectionRef={selectionRef} />
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} selectionRef={selectionRef} readOnly={readOnly} />
             )}
           </div>
 
           {/* Quick Replies (Phase 5) — under the newest message only, never
               under an older one in the same thread. */}
-          {isNewest && !showRaw && (
+          {isNewest && !showRaw && !readOnly && (
             <div className="pl-9">
               <QuickReplyChips email={email} suppressed={isSentEmail} contextMessages={recentContext} />
             </div>
@@ -579,7 +588,11 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
 
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
-export function ThreadView({ thread, onComposeReply }) {
+// `readOnly`: a reader with no actions (the compose pane's original). It folds
+// and unfolds, and changes nothing: no action bar, quick replies, reply, tags,
+// read timers, selection or reply shortcut. `emailThemeDark` pins the theme,
+// `openEmailKey` names the message shown open (else the newest).
+export function ThreadView({ thread, onComposeReply, readOnly = false, emailThemeDark, openEmailKey }) {
   const t = useT();
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
@@ -587,7 +600,9 @@ export function ThreadView({ thread, onComposeReply }) {
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
-  const readerLayout = useSettingsStore(s => s.threadReaderLayout) || 'timeline';
+  const layoutSetting = useSettingsStore(s => s.threadReaderLayout) || 'timeline';
+  // Split needs a reader's width; a compose pane gets the timeline.
+  const readerLayout = readOnly ? 'timeline' : layoutSetting;
   const setReaderLayout = useSettingsStore(s => s.setThreadReaderLayout);
   const [expandedMessages, setExpandedMessages] = useState({});
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -710,7 +725,11 @@ export function ThreadView({ thread, onComposeReply }) {
   // marks itself read and nobody opened this one. An arrival that is already
   // read (the reply you just sent) still takes over, as does the newest once
   // the opened one has left the thread.
-  const [openedOn, setOpenedOn] = useState({ threadId: thread.threadId, newestKey, key: newestKey });
+  const [openedOn, setOpenedOn] = useState(() => ({
+    threadId: thread.threadId,
+    newestKey,
+    key: openEmailKey && thread.emails.some(email => emailKey(email) === openEmailKey) ? openEmailKey : newestKey,
+  }));
   if (openedOn.threadId !== thread.threadId || openedOn.newestKey !== newestKey) {
     const arrivedRead = thread.emails.find(email => emailKey(email) === newestKey)?.flags?.includes('\\Seen');
     setOpenedOn({ threadId: thread.threadId, newestKey, key: openedOn.threadId !== thread.threadId || arrivedRead ? newestKey : openedOn.key });
@@ -748,7 +767,7 @@ export function ThreadView({ thread, onComposeReply }) {
   const selectedEmail = sortedEmails.find(email => emailKey(email) === selectedMessage)
     || sortedEmails.find(email => emailKey(email) === openKey);
   useEffect(() => {
-    if (!selectedEmail) return undefined;
+    if (readOnly || !selectedEmail) return undefined;
     const reply = async (mode) => {
       if (mode !== 'reply' && mode !== 'replyAll') return false;
       const store = useMailStore.getState();
@@ -760,7 +779,7 @@ export function ThreadView({ thread, onComposeReply }) {
     };
     registerActiveReply(reply);
     return () => registerActiveReply(null);
-  }, [selectedEmail, sortedEmails, bodiesMapRef, onComposeReply]);
+  }, [selectedEmail, sortedEmails, bodiesMapRef, onComposeReply, readOnly]);
   const THREAD_ROW_HEIGHT = readerLayout === 'timeline' ? 72 : 56;
   const virtualizer = useVirtualizer({
     count: sortedEmails.length,
@@ -823,9 +842,9 @@ export function ThreadView({ thread, onComposeReply }) {
 
   return (
     <div className="thread-reader flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full">
-      <ReadDelayProgress />
-      {/* Thread header */}
-      <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
+      {!readOnly && <ReadDelayProgress />}
+      {/* Thread header. Read-only sits inside the main window: no drag region. */}
+      <div data-tauri-drag-region={readOnly ? undefined : true} className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
         <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">
           <h1 className="text-sm font-semibold text-mail-text truncate">
             {thread.subject}
@@ -835,6 +854,7 @@ export function ThreadView({ thread, onComposeReply }) {
           </span>
         </div>
 
+        {!readOnly && <>
         <button
           onClick={() => useExportStore.getState().openExport({ messages: sortedEmails })}
           title={t('email.thread.exportThread')}
@@ -861,9 +881,10 @@ export function ThreadView({ thread, onComposeReply }) {
         )}
 
         <CloseViewerButton className="ml-2" />
+        </>}
       </div>
 
-      <div className="px-3 py-2 border-b border-mail-border flex items-center gap-2">
+      {!readOnly && <div className="px-3 py-2 border-b border-mail-border flex items-center gap-2">
         <label htmlFor="thread-reader-layout" className="text-xs text-mail-text-muted">{t('email.thread.layout')}</label>
         <select id="thread-reader-layout" value={readerLayout} onChange={e => setReaderLayout(e.target.value)}
           className="bg-mail-surface text-mail-text text-xs border border-mail-border rounded px-2 py-1">
@@ -880,7 +901,7 @@ export function ThreadView({ thread, onComposeReply }) {
             onResult={(_actionId, text) => setAiSummary(text)}
           />
         </div>
-      </div>
+      </div>}
       {aiSummary && (
         <div data-testid="ai-summary-panel" className="mx-3 mt-2 rounded-lg border border-mail-border bg-mail-surface p-3 text-sm text-mail-text space-y-2">
           <p className="whitespace-pre-wrap">{aiSummary}</p>
@@ -951,6 +972,8 @@ export function ThreadView({ thread, onComposeReply }) {
                   onToggleFlag={handleQuickFlag}
                   onActionStart={beginQuickAction}
                   saving={saving}
+                  readOnly={readOnly}
+                  emailThemeDark={emailThemeDark}
                 />}
               </div>
             );
@@ -971,7 +994,7 @@ export function ThreadView({ thread, onComposeReply }) {
         </div>
       )}
       </div>
-      <DeleteConfirmModal pending={pendingDelete} onClose={() => { setPendingDelete(null); restoreConfirmationFocus(); }} />
+      {!readOnly && <DeleteConfirmModal pending={pendingDelete} onClose={() => { setPendingDelete(null); restoreConfirmationFocus(); }} />}
     </div>
   );
 }

@@ -55,6 +55,18 @@ vi.mock('../RichTextEditor', async (importOriginal) => ({
   },
 }));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
+// The pane's reader is ThreadView (its own spec, ThreadViewReadOnly.test.jsx,
+// pins what read-only means). Here: which thread, which message open, which
+// theme, and that it is read-only.
+vi.mock('../email/ThreadView', () => ({
+  ThreadView: ({ thread, readOnly, emailThemeDark, openEmailKey }) => React.createElement('div', {
+    'data-testid': 'original-thread',
+    'data-read-only': String(readOnly === true),
+    'data-dark': String(emailThemeDark),
+    'data-open-key': openEmailKey,
+    'data-subjects': thread.emails.map(e => e.subject).join('|'),
+  }),
+}));
 vi.mock('../../services/localDrafts', () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
   saveLocalDraft,
@@ -114,6 +126,8 @@ vi.mock('../../stores/settingsStore', () => {
 });
 
 const { ComposeModal } = await import('../ComposeModal');
+const { buildThreads } = await import('../../utils/emailParser');
+const { emailKey } = await import('../../stores/slices/unifiedHelpers');
 
 // Marks the app document when it runs. Through `document`, not `window`: vitest
 // hands the spec Node's global as `window`, while jsdom runs an inline handler
@@ -158,7 +172,14 @@ beforeEach(() => {
   settings.composeContextVisible = true;
   settings.composeOpenMode = undefined;
   settings.composeContextSplit = null;
+  settings.emailViewerTheme = 'light';
   settings.setComposeContextSplit.mockClear();
+  delete mail.getChatEmails;
+  delete mail.getThreads;
+  delete mail.sortedEmails;
+  delete mail.selectedThread;
+  delete mail.unifiedFolder;
+  mail.activeMailbox = 'INBOX';
   buildOutgoingMime.mockClear();
   saveLocalDraft.mockReset();
   saveLocalDraft.mockResolvedValue(undefined);
@@ -269,8 +290,14 @@ describe('the quoted original in a reply', () => {
     expect(document.querySelector('[onerror]')).toBeNull();
   });
 
-  it('shows the original in a frame whose sandbox runs no script', async () => {
-    openReply(original);
+  // The detached compose window gets the original as HTML (no store to thread
+  // from) and shows that one body. Light runs nothing; dark runs Dark Reader
+  // under the reading pane's nonce CSP, which runs only scripts carrying it.
+  const openDetachedReply = (replyTo) => render(<ComposeModal mode="reply" detached replyTo={replyTo}
+    onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+
+  it('shows a light original in a frame whose sandbox runs no script', async () => {
+    openDetachedReply(original);
     const frame = (await expandQuote()).querySelector('iframe');
 
     expect(frame).not.toBeNull();
@@ -278,8 +305,40 @@ describe('the quoted original in a reply', () => {
     // it can run. Any added token is a decision, not a drive-by.
     expect(frame.getAttribute('sandbox')).toBe('allow-same-origin');
     const shown = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
+    expect(shown.documentElement.getAttribute('data-mv-theme')).toBe('light');
     expect(shown.body.textContent).toContain('Original Message');
     expect(shown.body.querySelector('b')?.textContent).toBe('much');
+    expect(screen.queryByTestId('original-thread')).toBeNull();
+  });
+
+  it('shows a dark original with Dark Reader, and only nonced scripts may run', async () => {
+    settings.emailViewerTheme = 'dark';
+    openDetachedReply(original);
+    const frame = (await expandQuote()).querySelector('iframe');
+
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-scripts');
+    const shown = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
+    expect(shown.documentElement.getAttribute('data-mv-theme')).toBe('dark');
+    const csp = shown.querySelector('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+    const nonce = /'nonce-([^']+)'/.exec(csp)[1];
+    const scripts = [...shown.querySelectorAll('script')];
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) expect(script.getAttribute('nonce')).toBe(nonce);
+  });
+
+  it('flips the detached frame between light and dark with its toggle', async () => {
+    openDetachedReply(original);
+    const theme = () => new DOMParser().parseFromString(
+      screen.getByTestId('compose-quoted').querySelector('iframe').getAttribute('srcdoc'), 'text/html',
+    ).documentElement.getAttribute('data-mv-theme');
+    await expandQuote();
+    const toggle = screen.getByTestId('compose-original-theme');
+    expect(theme()).toBe('light');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(toggle);
+    expect(theme()).toBe('dark');
+    expect(screen.getByTestId('compose-original-theme').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('shows full reading context by default and hides it with one toggle', async () => {
@@ -287,7 +346,7 @@ describe('the quoted original in a reply', () => {
     const toggle = await screen.findByTestId('compose-context-toggle');
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(await screen.findByTestId('compose-context-panel')).not.toBeNull();
-    expect((await screen.findByTestId('compose-quoted')).querySelector('iframe')).not.toBeNull();
+    expect((await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]')).not.toBeNull();
 
     fireEvent.click(toggle);
     expect((await screen.findByTestId('compose-context-toggle')).getAttribute('aria-pressed')).toBe('false');
@@ -468,10 +527,9 @@ describe('the quoted original in a reply', () => {
         { ...original, uid: 11, subject: 'Follow up', html: '<p>Second message</p>' },
       ],
     });
-    const frame = (await screen.findByTestId('compose-quoted')).querySelector('iframe');
-    const shown = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
-    expect(shown.body.textContent).toContain('Quote request');
-    expect(shown.body.textContent).toContain('Second message');
+    const pane = (await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]');
+    expect(pane.getAttribute('data-subjects')).toBe('Quote request|Follow up');
+    expect(pane.getAttribute('data-read-only')).toBe('true');
   });
 
   it('keeps reading context available while forwarding without adding a second outgoing quote', async () => {
@@ -519,5 +577,127 @@ describe('the quoted original in a reply', () => {
     // quote still shows who wrote it.
     expect(sent.html.startsWith('<hr><p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;<br>Date: ')).toBe(true);
     expect(sent.html.endsWith(`<br>Subject: Quote request<br>To: me@example.test</p><blockquote>${original.html}</blockquote>`)).toBe(true);
+  });
+});
+
+describe('the original beside a reply', () => {
+  const reply = {
+    uid: 3,
+    _mailbox: 'Sent',
+    _accountId: 'acct-1',
+    _fromSentFolder: true,
+    messageId: '<reply@example.test>',
+    inReplyTo: '<parent@example.test>',
+    references: ['<parent@example.test>'],
+    subject: 'Re: Quote request',
+    from: { address: 'me@example.test', name: 'Me' },
+    to: [{ address: 'them@example.test' }],
+    date: '2026-09-08T09:00:00Z',
+    flags: ['\\Seen'],
+  };
+  const pane = async () => (await screen.findByTestId('compose-quoted')).querySelector('[data-testid="original-thread"]');
+
+  it('shows the split choices as icons, still named for assistive tech', async () => {
+    openReply(original);
+    const half = await screen.findByTestId('compose-split-half');
+    const quarter = screen.getByTestId('compose-split-quarter');
+
+    expect(half.querySelector('[data-icon="Columns"]')).not.toBeNull();
+    expect(quarter.querySelector('[data-icon="PanelRight"]')).not.toBeNull();
+    expect(half.getAttribute('aria-label')).toBe('Split compose/original 50/50');
+    expect(half.getAttribute('title')).toBe('Split compose/original 50/50');
+    expect(quarter.getAttribute('aria-label')).toBe('Split compose/original 75/25');
+    expect(quarter.getAttribute('title')).toBe('Split compose/original 75/25');
+    expect(half.textContent).not.toContain('50/50');
+    expect(quarter.textContent).not.toContain('75/25');
+  });
+
+  it('reads the replied message in the thread the list shows, Sent replies included', async () => {
+    // The Sent reply lives only in the list's INBOX+Sent pool, and the replied
+    // message carries no thread of its own: only the list can supply it.
+    mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
+    mail.getThreads = () => buildThreads(mail.getChatEmails());
+    openReply({ ...original, _accountId: 'acct-1', _mailbox: 'INBOX' });
+
+    const thread = await pane();
+    expect(thread.getAttribute('data-read-only')).toBe('true');
+    expect(thread.getAttribute('data-subjects').split('|').sort()).toEqual(['Quote request', 'Re: Quote request']);
+    expect(thread.getAttribute('data-open-key')).toBe(emailKey({ ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }));
+  });
+
+  it('reads a message the list does not hold as that one message', async () => {
+    mail.getChatEmails = () => [reply];
+    mail.getThreads = () => buildThreads(mail.getChatEmails());
+    openReply(original);
+
+    const thread = await pane();
+    expect(thread.getAttribute('data-read-only')).toBe('true');
+    expect(thread.getAttribute('data-subjects')).toBe('Quote request');
+    expect(thread.getAttribute('data-open-key')).toBe(emailKey(original));
+  });
+
+  it('finds the list thread in All inboxes by a Message-ID spelled apart, with no folder on the body', async () => {
+    // A fetched body names its account, not its folder, and All inboxes has
+    // no folder to guess: only the canonical Message-ID can match.
+    mail.activeMailbox = 'UNIFIED';
+    mail.unifiedFolder = 'INBOX';
+    mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
+    mail.getThreads = () => buildThreads(mail.getChatEmails());
+    openReply({ ...original, _accountId: 'acct-1', messageId: ' parent@example.test ' });
+
+    const thread = await pane();
+    expect(thread.getAttribute('data-subjects').split('|').sort()).toEqual(['Quote request', 'Re: Quote request']);
+    expect(thread.getAttribute('data-open-key')).toBe(emailKey({ ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }));
+  });
+
+  it('never takes another folder\'s row that shares the uid of a body with no folder', async () => {
+    // Replying to my own Sent message from its body: uid 10 there is not
+    // INBOX uid 10, whatever folder is open.
+    mail.getChatEmails = () => [reply, { ...original, _accountId: 'acct-1', _mailbox: 'INBOX' }];
+    mail.getThreads = () => buildThreads(mail.getChatEmails());
+    const mine = { ...original, _accountId: 'acct-1', messageId: '<mine@example.test>', subject: 'My own', from: { address: 'me@example.test' }, to: [{ address: 'x@example.test' }] };
+    openReply(mine);
+
+    const thread = await pane();
+    expect(thread.getAttribute('data-subjects')).toBe('My own');
+    expect(thread.getAttribute('data-open-key')).toBe(emailKey(mine));
+  });
+
+  it('opens in the email theme the reader uses', async () => {
+    settings.emailViewerTheme = 'dark';
+    openReply(original);
+    expect((await pane()).getAttribute('data-dark')).toBe('true');
+    expect(screen.getByTestId('compose-original-theme').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('flips light and dark for this compose only, with a pressed state and a name', async () => {
+    openReply(original);
+    const toggle = await screen.findByTestId('compose-original-theme');
+    expect((await pane()).getAttribute('data-dark')).toBe('false');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('title')).toBe('Dark');
+    expect(toggle.getAttribute('aria-label')).toBe('Dark');
+
+    fireEvent.click(toggle);
+    expect((await pane()).getAttribute('data-dark')).toBe('true');
+    const pressed = screen.getByTestId('compose-original-theme');
+    expect(pressed.getAttribute('aria-pressed')).toBe('true');
+    expect(pressed.getAttribute('title')).toBe('Light');
+    // The setting the reader reads is untouched.
+    expect(settings.emailViewerTheme).toBe('light');
+  });
+
+  it('keeps the flipped theme through a minimize or detach, and reopens in it', async () => {
+    const onSaveState = vi.fn();
+    render(<ComposeModal mode="reply" replyTo={original} onClose={() => {}} onMinimize={() => {}} onSaveState={onSaveState} />);
+    fireEvent.click(await screen.findByTestId('compose-original-theme'));
+    await waitFor(() => expect(onSaveState).toHaveBeenLastCalledWith(expect.objectContaining({ _originalDark: true })));
+    cleanup();
+
+    render(<ComposeModal mode="reply" initialData={{
+      to: 'them@example.test', subject: 'Re: Quote request', body: '<p>Draft</p>', _replyTo: original,
+      _contextHtml: '<p>Original</p>', _showContext: true, _originalDark: true, _baseline: null,
+    }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    expect((await pane()).getAttribute('data-dark')).toBe('true');
   });
 });
