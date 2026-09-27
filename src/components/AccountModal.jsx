@@ -427,10 +427,24 @@ export function AccountModal({ onClose, onSuccess }) {
 
       if (cancelled) return; // User cancelled while waiting
 
-      // Step 4: Update form data with OAuth2 tokens
-      // Email must be entered manually by the user (no OpenID scopes = no email from token)
-      setFormData(prev => ({
-        ...prev,
+      // Google's id_token carries the `email` claim once `openid email` is
+      // requested (src-core/src/oauth2.rs); Microsoft returns no id_token
+      // today, so tokenData.email is undefined there and this check is
+      // skipped — a typo'd Microsoft address has no guard yet (Track B, Q3
+      // concern). A mismatch means the user signed into a different mailbox
+      // than the one they typed: stop before the account is ever saved,
+      // and don't store these tokens under the typed (wrong) address.
+      if (tokenData.email && tokenData.email.trim().toLowerCase() !== userEnteredEmail.trim().toLowerCase()) {
+        setError(t('account.oauthEmailMismatch', { typed: userEnteredEmail, signedIn: tokenData.email }));
+        return;
+      }
+
+      // Step 4: Update form data with the OAuth2 tokens and finish the add
+      // ourselves — no extra click needed. `next` is handed straight to
+      // submitAccount instead of being read back out of `formData`, which
+      // React has not applied yet at this point in the same tick.
+      const next = {
+        ...formData,
         authType: 'oauth2',
         oauth2Provider: currentProvider,
         oauth2AccessToken: tokenData.accessToken,
@@ -438,9 +452,15 @@ export function AccountModal({ onClose, onSuccess }) {
         oauth2ExpiresAt: tokenData.expiresAt,
         oauth2Transport: isPersonalMs ? 'graph' : 'imap',
         password: '' // Clear password — not needed for OAuth2
-      }));
-
+      };
+      setFormData(next);
       setOauthConnected(true);
+
+      // Fire-and-forget: submitAccount owns its own testing/success/error
+      // state, and the "Add Account" button (enabled now that oauthConnected
+      // is true, using the same tokens via `formData`) stays as a manual
+      // fallback if this fails.
+      submitAccount(next);
     } catch (err) {
       if (cancelled) return; // User cancelled — don't show error
       console.error('[AccountModal] OAuth2 sign-in failed:', err);
@@ -458,14 +478,17 @@ export function AccountModal({ onClose, onSuccess }) {
     setError(null);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    console.log('[AccountModal] handleSubmit called');
+  // Split out of handleSubmit (Track B) so a completed OAuth sign-in can
+  // finish the add itself, without a synthetic form event and without
+  // reading formData back before React has applied the tokens just set —
+  // the caller hands over the exact data to submit.
+  const submitAccount = async (formDataToSubmit) => {
+    console.log('[AccountModal] submitAccount called');
     setError(null);
     setTesting(true);
 
     try {
-      const accountData = { ...formData };
+      const accountData = { ...formDataToSubmit };
 
       // Set the auth type properly
       if (authType === 'oauth2') {
@@ -499,6 +522,11 @@ export function AccountModal({ onClose, onSuccess }) {
     } finally {
       setTesting(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    return submitAccount(formData);
   };
 
   const providerConfig = provider && PROVIDER_CONFIGS()[provider];

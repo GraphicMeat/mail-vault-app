@@ -61,7 +61,13 @@ export async function addAccount(accountData) {
   console.log('[mailStore] Account added to store');
 
   if (get().accounts.length === 1) {
-    await get().activateAccount(account.id, 'INBOX');
+    // Fire-and-forget: activation (mailbox listing, first sync) can take far
+    // longer than saving the account, and the caller (the add-account modal)
+    // only needs the save to have landed before it reports success. Awaiting
+    // it here held the modal's spinner up for the whole first sync.
+    Promise.resolve(get().activateAccount(account.id, 'INBOX')).catch(error => {
+      console.error('[mailStore] First-account activation failed:', error);
+    });
   }
 
   return account;

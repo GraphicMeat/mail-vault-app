@@ -194,6 +194,32 @@ pub struct TokenResponse {
     pub refresh_token: Option<String>,
     #[serde(rename = "expiresAt")]
     pub expires_at: u64,
+    /// The `email` (or `preferred_username`) claim of the id_token, when the
+    /// provider returned one (Google, once `openid email` is requested).
+    /// `None` for a flow that never asked for an id_token (Microsoft today).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}
+
+/// Decode the `email` (falling back to `preferred_username`) claim out of an
+/// id_token's payload segment, with no signature check — the token came
+/// straight from the provider's token endpoint over TLS in `exchange_code`,
+/// never from an untrusted party, so verifying it again buys nothing here.
+/// This is a UX typo guard, not an auth boundary: IMAP still authenticates
+/// with the access token regardless of what this returns.
+pub fn id_token_email(id_token: &str) -> Option<String> {
+    let payload_b64 = id_token.split('.').nth(1)?;
+    let payload_bytes = {
+        use base64::Engine;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload_b64.trim_end_matches('='))
+            .ok()?
+    };
+    let claims: serde_json::Value = serde_json::from_slice(&payload_bytes).ok()?;
+    claims["email"]
+        .as_str()
+        .or_else(|| claims["preferred_username"].as_str())
+        .map(str::to_string)
 }
 
 // ── OAuth2 Manager ──────────────────────────────────────────────────────────
@@ -253,6 +279,16 @@ impl OAuth2Manager {
         // For personal Microsoft accounts, request Graph API scopes instead of IMAP scopes
         if use_graph && provider_name == "microsoft" {
             config.scopes = "offline_access Mail.ReadWrite Mail.Send".to_string();
+        }
+
+        // Google only: ask for the `email` claim on the id_token so the
+        // caller can catch a typo'd address (Track B, Q3). Added only to the
+        // auth-URL scope, never to `get_provider_config`'s shared `scopes` —
+        // `refresh_token` reuses that value, and every Google account
+        // authorized before this change was granted without openid/email;
+        // widening the refresh request risks `invalid_scope` for all of them.
+        if provider_name == "google" {
+            config.scopes = format!("{} openid email", config.scopes);
         }
 
         let code_verifier = generate_code_verifier();
@@ -404,6 +440,7 @@ impl OAuth2Manager {
             .ok_or("No access_token in response")?
             .to_string();
         let refresh_token = data["refresh_token"].as_str().map(|s| s.to_string());
+        let email = data["id_token"].as_str().and_then(id_token_email);
         let expires_in = data["expires_in"].as_u64().unwrap_or(3600);
         let expires_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -418,6 +455,7 @@ impl OAuth2Manager {
             access_token,
             refresh_token,
             expires_at,
+            email,
         })
     }
 
@@ -495,6 +533,7 @@ impl OAuth2Manager {
             access_token,
             refresh_token: new_refresh,
             expires_at,
+            email: None,
         })
     }
 
@@ -607,7 +646,41 @@ async fn run_callback_server(senders: SenderMap) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::html_escape;
+    use super::{html_escape, id_token_email};
+
+    /// Build a fake (unsigned) id_token: two base64url segments joined by
+    /// dots, matching what `id_token_email` reads — it never checks the
+    /// signature, so a dummy header and no third segment are enough.
+    fn fake_id_token(claims_json: &str) -> String {
+        use base64::Engine;
+        let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        format!("{}.{}.sig", enc.encode(b"{}"), enc.encode(claims_json.as_bytes()))
+    }
+
+    #[test]
+    fn id_token_email_reads_the_email_claim() {
+        let token = fake_id_token(r#"{"email":"user@gmail.com","sub":"123"}"#);
+        assert_eq!(id_token_email(&token).as_deref(), Some("user@gmail.com"));
+    }
+
+    #[test]
+    fn id_token_email_falls_back_to_preferred_username() {
+        let token = fake_id_token(r#"{"preferred_username":"user@outlook.com"}"#);
+        assert_eq!(id_token_email(&token).as_deref(), Some("user@outlook.com"));
+    }
+
+    #[test]
+    fn id_token_email_is_none_when_neither_claim_is_present() {
+        let token = fake_id_token(r#"{"sub":"123"}"#);
+        assert_eq!(id_token_email(&token), None);
+    }
+
+    #[test]
+    fn id_token_email_is_none_for_garbage_input() {
+        assert_eq!(id_token_email("not-a-jwt"), None);
+        assert_eq!(id_token_email(""), None);
+        assert_eq!(id_token_email("only.one.dot.too.many"), None);
+    }
 
     #[test]
     fn html_escape_neutralizes_script_injection() {

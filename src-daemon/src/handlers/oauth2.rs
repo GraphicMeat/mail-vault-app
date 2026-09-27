@@ -57,14 +57,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing state")),
             };
             match state.oauth2.exchange_code(oauth_state).await {
+                // `serde_json::to_value` (not a hand-built `json!`) so a new
+                // field on `TokenResponse` — like `email`, Track B's id_token
+                // claim — reaches the caller without a second edit here.
                 Ok(result) => RpcResponse::success(
                     id,
-                    json!({
-                        "success": true,
-                        "accessToken": result.access_token,
-                        "refreshToken": result.refresh_token,
-                        "expiresAt": result.expires_at,
-                    }),
+                    serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
                 ),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
@@ -83,12 +81,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             match state.oauth2.refresh_token(refresh_token, provider, custom_client_id, tenant_id, use_graph).await {
                 Ok(result) => RpcResponse::success(
                     id,
-                    json!({
-                        "success": true,
-                        "accessToken": result.access_token,
-                        "refreshToken": result.refresh_token,
-                        "expiresAt": result.expires_at,
-                    }),
+                    serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
                 ),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
@@ -195,6 +188,36 @@ mod tests {
         let result = resp.result.expect("success");
         let auth_url = result["authUrl"].as_str().expect("authUrl present");
         assert!(auth_url.starts_with("https://accounts.google.com/"), "{auth_url}");
+    }
+
+    // Track B / Q3: Google add-account requests the id_token's email claim so
+    // a typo'd address can be caught before the account is saved.
+    #[tokio::test]
+    async fn auth_url_requests_the_openid_email_scope_for_google() {
+        let s = st();
+        let resp = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await;
+        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+        let query = auth_url.split('?').nth(1).unwrap_or("");
+        let scope = url::form_urlencoded::parse(query.as_bytes())
+            .find(|(k, _)| k == "scope")
+            .map(|(_, v)| v.to_string())
+            .expect("scope param present");
+        assert!(scope.contains("openid"), "{scope}");
+        assert!(scope.contains("email"), "{scope}");
+    }
+
+    // Microsoft never asked for an id_token — no scope change, no email claim.
+    #[tokio::test]
+    async fn auth_url_does_not_request_openid_for_microsoft() {
+        let s = st();
+        let resp = call(&s, "oauth2_auth_url", json!({})).await;
+        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+        let query = auth_url.split('?').nth(1).unwrap_or("");
+        let scope = url::form_urlencoded::parse(query.as_bytes())
+            .find(|(k, _)| k == "scope")
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_default();
+        assert!(!scope.contains("openid"), "{scope}");
     }
 
     #[tokio::test]

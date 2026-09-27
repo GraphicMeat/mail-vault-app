@@ -30,6 +30,7 @@
   "account.mailvaultConnectsThroughProtonMail": "MailVault はお使いのマシンで動作する Proton Mail Bridge 経由で接続します。先に Bridge をインストールしてサインインしてください。",
   "account.noSettingsFoundDomainProvider": "このドメインの設定は見つかりませんでした。プロバイダーのヘルプページに IMAP と SMTP のホスト名が載っています。下に入力してください（推測値を入れてあります）。",
   "account.none": "なし",
+  "account.oauthEmailMismatch": "{{typed}} と入力しましたが、{{signedIn}} でサインインしました。アドレスを確認してもう一度お試しください。",
   "account.otherCustom": "その他 / カスタム",
   "account.outlookCom": "you@outlook.com",
   "account.outlookMicrosoft365": "Outlook / Microsoft 365",

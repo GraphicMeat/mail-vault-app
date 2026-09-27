@@ -30,6 +30,7 @@
   "account.mailvaultConnectsThroughProtonMail": "MailVault 通过本机运行的 Proton Mail Bridge 连接，请先安装并登录 Bridge。",
   "account.noSettingsFoundDomainProvider": "未找到该域名的设置。服务商的帮助页面会列出 IMAP 和 SMTP 主机名，请在下方填写，我们已预填了一个猜测值。",
   "account.none": "无",
+  "account.oauthEmailMismatch": "你输入的是 {{typed}}，但登录的账户是 {{signedIn}}。请检查地址后重试。",
   "account.otherCustom": "其他 / 自定义",
   "account.outlookCom": "you@outlook.com",
   "account.outlookMicrosoft365": "Outlook / Microsoft 365",

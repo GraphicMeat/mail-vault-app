@@ -30,6 +30,7 @@
   "account.mailvaultConnectsThroughProtonMail": "MailVault verbindet sich über die Proton Mail Bridge auf deinem Rechner — installiere sie und melde dich zuerst dort an.",
   "account.noSettingsFoundDomainProvider": "Keine Einstellungen für diese Domain gefunden. Die Hilfeseiten deines Anbieters nennen IMAP- und SMTP-Hostnamen — trag sie unten ein; wir haben eine Vermutung vorausgefüllt.",
   "account.none": "Keine",
+  "account.oauthEmailMismatch": "Sie haben {{typed}} eingegeben, aber sich als {{signedIn}} angemeldet. Bitte die Adresse prüfen und erneut versuchen.",
   "account.otherCustom": "Andere / Benutzerdefiniert",
   "account.outlookCom": "du@outlook.com",
   "account.outlookMicrosoft365": "Outlook / Microsoft 365",
