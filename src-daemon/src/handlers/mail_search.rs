@@ -1043,8 +1043,10 @@ async fn run_server_lane(
         frame.completed = report.completed;
         frame.total = report.total;
         match outcome.result {
-            Ok(rows) => {
+            Ok(mut rows) => {
                 report.successful_sources += 1;
+                // The preview line the folder's own list stamps on these rows.
+                crate::search_index::attach_snippets(&state.search_index, &outcome.job.account_id, &outcome.job.mailbox, &mut rows);
                 frame.rows = rows;
             }
             Err(error) => {
@@ -2291,6 +2293,40 @@ mod tests {
         assert_eq!(hit["source"], "local-only");
     }
 
+    /// The index's preview line for one message, the way a body read writes it.
+    fn set_snippet(state: &Arc<DaemonState>, mailbox: &str, uid: u32, snippet: &str) {
+        let guard = state.search_index.db.lock().unwrap();
+        guard
+            .as_ref()
+            .unwrap()
+            .execute(
+                "UPDATE messages SET snippet = ?1 WHERE account_id = 'acct' AND vault_dir = ?2 AND uid = ?3",
+                rusqlite::params![snippet, mailbox, uid],
+            )
+            .unwrap();
+    }
+
+    /// A search result is a list row, so with preview lines on it shows the
+    /// same preview line the folder's own list does for that message.
+    #[tokio::test]
+    async fn indexed_rows_carry_the_list_preview_line() {
+        let (_tmp, state) = state();
+        let mut row = serde_json::from_str::<Value>(&indexed_row("preview wanted")).unwrap();
+        row["uid"] = json!(7);
+        enable_index(&state, &[("INBOX", 7, "preview wanted", &row.to_string())], &[("INBOX", 1)]);
+        set_snippet(&state, "INBOX", 7, "Hi Ann, the invoice is attached.");
+
+        let mut rx = state.events.subscribe();
+        call(&state, "mail_search_start", request("preview", 1)).await;
+        let frames = collect_until_terminal(&mut rx, "preview").await;
+        let hit = frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .find(|row| row["subject"] == "preview wanted")
+            .unwrap();
+        assert_eq!(hit["previewText"], "Hi Ann, the invoice is attached.");
+    }
+
     #[test]
     fn custody_proof_maps_unique_vault_only_dirs_but_not_colliding_dirs() {
         let known = vec!["INBOX".to_owned()];
@@ -2722,6 +2758,27 @@ mod tests {
                 server.connection_count() >= 2,
                 "the dead socket should be replaced"
             );
+        }
+
+        /// A server hit the index has read a body for gets the preview line the
+        /// folder's own list stamps on that row; one it has not read gets none.
+        #[tokio::test]
+        async fn server_rows_carry_the_preview_line_the_index_holds() {
+            plaintext();
+            let mailboxes = vec!["INBOX".to_string()];
+            let server = MockImap::start(scenario_for(&mailboxes));
+            let (_tmp, state) = state();
+            enable_index(&state, &[("INBOX", 1, "Message 1", &indexed_row("Message 1"))], &[("INBOX", 1)]);
+            set_snippet(&state, "INBOX", 1, "Body of message 1.");
+            let mut rx = state.events.subscribe();
+            let frames = run(&state, &mut rx, "server-preview", &server, &mailboxes, 1, "server").await;
+            let rows = frames
+                .iter()
+                .flat_map(|frame| frame["rows"].as_array().into_iter().flatten())
+                .collect::<Vec<_>>();
+            let by_uid = |uid: u64| rows.iter().find(|row| row["uid"] == uid).unwrap_or_else(|| panic!("no uid {uid}: {rows:?}"));
+            assert_eq!(by_uid(1)["previewText"], "Body of message 1.");
+            assert!(by_uid(2).get("previewText").is_none());
         }
 
         #[tokio::test]

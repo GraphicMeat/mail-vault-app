@@ -280,6 +280,11 @@ pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
             obj.insert("flags".into(), serde_json::json!(flags));
             obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
             obj.insert("matchedIn".into(), serde_json::json!(matched_in));
+            // The same preview line a list read stamps (`attach_snippets`): a
+            // hit is a list row, and preview lines apply to it too.
+            if let Some(snippet) = h.snippet.as_deref().filter(|s| !s.is_empty()) {
+                obj.insert("previewText".into(), snippet.into());
+            }
             Some(row)
         })
         .collect()
@@ -1468,6 +1473,7 @@ mod tests {
                 attach_matched: true,
                 date_utc: 1,
                 row_id: 7,
+                snippet: None,
             }],
             total: 1,
             needles: vec!["indexed".into()],
@@ -1493,6 +1499,7 @@ mod tests {
                 attach_matched: false,
                 date_utc: 1,
                 row_id: 5,
+                snippet: None,
             }],
             total: 1,
             needles: vec!["budget".into()],

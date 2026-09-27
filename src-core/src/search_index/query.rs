@@ -90,6 +90,8 @@ pub struct SearchHit {
     /// alone carries is invisible in the message the reader opens, so the row
     /// has to say where the match actually lives.
     pub attach_matched: bool,
+    /// The list's preview line (`messages.snippet`), when a body has been read.
+    pub snippet: Option<String>,
     /// Internal merge keys preserving SQLite's existing newest-first order across mailbox batches.
     pub date_utc: i64,
     pub row_id: i64,
@@ -401,12 +403,12 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id, m.snippet FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)? })
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
