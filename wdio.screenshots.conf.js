@@ -253,6 +253,9 @@ export const config = {
           // The download-mode eviction worker stays off: its first pass would
           // delete seeded cache copies and add a UID FETCH mid-suite.
           MAILVAULT_DISABLE_EVICTION: '1',
+          // Same for the Hoarder worker: it would fill the vault from every
+          // mock folder and add LIST / UID FETCH commands mid-suite.
+          MAILVAULT_DISABLE_HOARDER: '1',
         },
       });
       let started = false;

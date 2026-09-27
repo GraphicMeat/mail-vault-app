@@ -192,6 +192,9 @@ pub struct DaemonState {
     /// The download-mode eviction worker's wake signal:
     /// `storage.fetch_mode_changed` pokes it (Track H).
     pub eviction_worker: crate::eviction_worker::EvictionWorkerState,
+    /// The Hoarder worker's wake signal and daily download budget (Track H4):
+    /// `storage.fetch_mode_changed` and a sync that found new mail poke it.
+    pub hoarder_worker: crate::hoarder_worker::HoarderWorkerState,
     /// Server fallback for a message the vault has no copy of, and the
     /// in-memory copies On Demand keeps (`raw_message`, Track H3c).
     pub(crate) raw_messages: crate::raw_message::RawMessages,
@@ -624,9 +627,11 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
 
         // ── Download modes (Track H) ────────────────────────────────
         // The app saved a new download mode or window: the eviction worker
-        // re-derives what it may delete now instead of at its daily pass.
+        // re-derives what it may delete now instead of at its daily pass, and
+        // the Hoarder worker starts (or stops) downloading.
         "storage.fetch_mode_changed" => {
             state.eviction_worker.wake();
+            state.hoarder_worker.wake();
             RpcResponse::success(id, serde_json::json!({"ok": true}))
         }
 
@@ -773,6 +778,7 @@ impl DaemonState {
             snooze: crate::snooze_worker::SnoozeState::default(),
             auto_tag_worker,
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
+            hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),
             raw_messages: Default::default(),
         });
         state.idle.set_daemon(&state);

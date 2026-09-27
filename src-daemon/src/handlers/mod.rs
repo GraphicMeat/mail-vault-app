@@ -109,6 +109,8 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
             // classification enqueues on below, but unconditional — auto-tag
             // rules are not gated by the classification feature's own toggle.
             state.auto_tag_worker.wake();
+            // Hoarder: new mail may sit in a folder no one has opened.
+            state.hoarder_worker.wake();
 
             // Auto-trigger heuristic classification after successful sync (if enabled)
             if auto_classify {

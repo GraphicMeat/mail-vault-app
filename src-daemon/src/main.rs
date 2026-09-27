@@ -7,6 +7,7 @@ mod attachment_extract;
 mod auth;
 mod auto_tag_worker;
 mod eviction_worker;
+mod hoarder_worker;
 mod backup_zip;
 mod channel;
 pub mod classification;
@@ -483,6 +484,7 @@ async fn daemon_main() {
         snooze: snooze_worker::SnoozeState::default(),
         auto_tag_worker,
         eviction_worker: eviction_worker::EvictionWorkerState::default(),
+        hoarder_worker: hoarder_worker::HoarderWorkerState::default(),
         raw_messages: raw_message::RawMessages::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
@@ -565,6 +567,11 @@ async fn daemon_main() {
     // has each message. First pass after launch settles, then daily, and at
     // once on `storage.fetch_mode_changed`.
     eviction_worker::start(Arc::clone(&state));
+
+    // Hoarder (Track H4, Premium): downloads every folder's full history in
+    // the background for Hoarder accounts with `fetchModePremium`. Paced,
+    // one message at a time on the background lane; see its module doc.
+    hoarder_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));
