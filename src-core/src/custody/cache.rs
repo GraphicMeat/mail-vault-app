@@ -267,6 +267,56 @@ pub fn uid_set(conn: &Connection, account: &str, mailbox: &str) -> Result<HashSe
     Ok(rows)
 }
 
+/// Which of `uids` the server listing (as last synced) still holds in the
+/// vault folder `vault_dir`, each with the Message-ID its header carries
+/// (`None` when it has none or the row will not parse). The search index asks
+/// this to keep an evicted message searchable while the server has it.
+///
+/// The header cache is keyed by mailbox path and the vault by
+/// `vault_dir_name(path)`, which does not invert, so every cached mailbox of
+/// the account whose folder name matches answers. No such mailbox (an account
+/// removed, a folder never synced) lists nothing.
+///
+/// ponytail: `mailboxes_with_headers` walks the account's key range once per
+/// call; the index asks only when a folder has files gone, but a
+/// `vault_dir` column would make this one lookup if large vaults show it.
+pub fn listed_message_ids(conn: &Connection, account: &str, vault_dir: &str, uids: &[u32]) -> Result<HashMap<u32, Option<String>>, String> {
+    let mut out = HashMap::new();
+    if uids.is_empty() {
+        return Ok(out);
+    }
+    let mailboxes = mailboxes_with_headers(conn, Some(account))?
+        .into_iter()
+        .filter(|(_, mailbox)| crate::search_index::text::vault_dir_name(mailbox) == vault_dir);
+    for (_, mailbox) in mailboxes {
+        for chunk in uids.chunks(UID_CHUNK) {
+            let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT uid, CASE WHEN json_valid(header_json)
+                                  THEN COALESCE(json_extract(header_json, '$.messageId'), json_extract(header_json, '$.message_id')) END
+                 FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks})"
+            );
+            let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.clone().into()];
+            args.extend(chunk.iter().map(|u| i64::from(*u).into()));
+            let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+            let found = stmt
+                .query_map(params_from_iter(args), |r| {
+                    let id = match r.get::<_, rusqlite::types::Value>(1)? {
+                        rusqlite::types::Value::Text(s) => Some(s),
+                        _ => None,
+                    };
+                    Ok((r.get::<_, u32>(0)?, id))
+                })
+                .map_err(err)?;
+            for row in found {
+                let (uid, id) = row.map_err(err)?;
+                out.insert(uid, id);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Every cached header of one mailbox, newest first — what a consumer that
 /// used to walk the sidecar directory (the classifier, the contacts cold
 /// build) reads instead.
@@ -589,6 +639,37 @@ mod tests {
         put(&c, "a", "INBOX", 3, ms(2026, 3, 1), json!({"uid": 3, "from": {"address": "erin@example.com"}, "date": "Sun, 01 Mar 2026 12:00:00 -0500"}));
         put(&c, "a", "INBOX", 4, ms(2026, 9, 1), json!({"uid": 4, "from": {"address": "erin@example.com"}, "date": "Tue, 01 Sep 2026 12:00:00 +0000"}));
         assert_eq!(sender_clock(&c, "erin@example.com").unwrap(), None);
+    }
+
+    /// The search index asks by vault folder name, the header cache is keyed
+    /// by mailbox path: every cached mailbox of the account whose folder name
+    /// matches answers, and nothing else does.
+    #[test]
+    fn listed_message_ids_answers_for_the_mailboxes_behind_a_vault_folder() {
+        let (_t, c) = store();
+        put(&c, "a", "Projects/2026", 1, 1, json!({"uid": 1, "messageId": "<one@x.test>"}));
+        put(&c, "a", "Projects/2026", 2, 2, json!({"uid": 2}));
+        put(&c, "a", "Projects/2026", 3, 3, json!({"uid": 3, "message_id": "<three@x.test>"}));
+        c.execute(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a','Projects/2026',4,4,0,'not json')",
+            [],
+        ).unwrap();
+        put(&c, "a", "INBOX", 5, 5, json!({"uid": 5, "messageId": "<inbox@x.test>"}));
+        put(&c, "b", "Projects/2026", 6, 6, json!({"uid": 6, "messageId": "<other-account@x.test>"}));
+
+        let got = listed_message_ids(&c, "a", "Projects_2026", &[1, 2, 3, 4, 5, 6, 9]).unwrap();
+        let want: HashMap<u32, Option<String>> = [
+            (1, Some("<one@x.test>".to_string())),
+            (2, None),
+            (3, Some("<three@x.test>".to_string())),
+            (4, None),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(got, want, "a row that will not parse is still listed, just without an id");
+        assert!(listed_message_ids(&c, "a", "Archive", &[1]).unwrap().is_empty(), "no cached mailbox: nothing listed");
+        assert!(listed_message_ids(&c, "z", "Projects_2026", &[1]).unwrap().is_empty(), "a removed account lists nothing");
+        assert!(listed_message_ids(&c, "a", "Projects_2026", &[]).unwrap().is_empty());
     }
 
     #[test]

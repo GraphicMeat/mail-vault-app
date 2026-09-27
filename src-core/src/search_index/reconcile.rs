@@ -59,6 +59,26 @@ pub struct IndexConfig {
 /// (raw bytes, uid, filename) -> parsed doc, or None when the file is not mail.
 pub type ParseFn<'a> = &'a (dyn Fn(&[u8], u32, &str) -> Option<IndexDoc> + Sync);
 
+/// What the server listing (the header cache, as last synced) says about the
+/// uids of one folder whose files are gone: uid -> the Message-ID it lists
+/// (`None` when it has none), for each uid it still lists. A uid absent from
+/// the map is not on the server. `Err` = unknown this pass: nothing is removed.
+/// Called with no index guard held, at most once per folder per pass, and only
+/// when a file is missing.
+pub type ServerListing<'a> = &'a dyn Fn(&[u32]) -> Result<HashMap<u32, Option<String>>, String>;
+
+/// A server listing that holds nothing: every missing file's row is removed,
+/// which is all reconcile did before eviction existed.
+pub fn nothing_listed(_: &[u32]) -> Result<HashMap<u32, Option<String>>, String> {
+    Ok(HashMap::new())
+}
+
+/// The attachment state of a kept row's parts that were still waiting for
+/// extraction: there is no file to read them from. Out of the `pending` queue,
+/// so they never hold back the parts of messages that are on disk; a restored
+/// file is re-parsed, which writes them `pending` again.
+pub const ATTACHMENT_EVICTED: &str = "evicted";
+
 /// `parsed` and `failed` are disjoint: `failed` counts files that were
 /// unparseable or a directory-shaped path (both recorded), or gone since the
 /// listing or unreadable for any other reason (left for the next sweep).
@@ -73,6 +93,9 @@ pub struct ReconcileStats {
     /// it may open that store, and only after checking no other folder still
     /// holds the same message.
     pub removed_keys: Vec<String>,
+    /// Rows whose file is gone but whose message the server still lists
+    /// (evicted from the working cache): kept searchable, never in `removed_keys`.
+    pub kept: usize,
     pub unchanged: usize,
     pub failed: usize,
     pub interrupted: bool,
@@ -122,6 +145,32 @@ struct Row {
     needs_attachment_backfill: bool,
     /// `snippet IS NULL`: no preview line computed for it yet.
     snippet_missing: bool,
+    message_id: Option<String>,
+}
+
+/// What `apply_ops` does to one row.
+enum Op<'a> {
+    Remove,
+    Rename(&'a str),
+    /// The file is gone and the server still lists the message: keep the row
+    /// and its FTS terms, force a re-read when a file comes back, and take its
+    /// body and attachments out of the queues that need the file.
+    Keep,
+}
+
+/// `mtime_ns` of a row whose file must be read again whatever its size and
+/// mtime are then (`forget_file`, a kept evicted row). No file has it.
+const REREAD: i64 = -1;
+
+/// The listing's uid is this message unless both sides carry a Message-ID and
+/// they differ: uids restart after a UIDVALIDITY change, so the uid alone can
+/// name another message.
+fn same_message(ours: Option<&str>, listed: Option<&str>) -> bool {
+    let norm = |id: Option<&str>| id.map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty());
+    match (norm(ours), norm(listed)) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    }
 }
 
 /// `(account_id, vault_dir)` for every `Maildir/<account>/<dir>` holding a
@@ -206,6 +255,7 @@ fn same_conn<'a>(slot: &'a mut Option<Connection>, path: &Option<String>) -> Res
     }
 }
 
+/// `reconcile_mailbox_guarded` with no server listing: a missing file's row is removed.
 pub fn reconcile_mailbox(
     db: &SharedConn,
     maildir_root: &Path,
@@ -216,12 +266,16 @@ pub fn reconcile_mailbox(
     keep_going: &dyn Fn() -> bool,
     progress: &mut dyn FnMut(usize),
 ) -> Result<ReconcileStats, String> {
-    reconcile_mailbox_guarded(db, maildir_root, account_id, vault_dir, config, parse, keep_going, &|| true, progress)
+    reconcile_mailbox_guarded(db, maildir_root, account_id, vault_dir, config, parse, &nothing_listed, keep_going, &|| true, progress)
 }
 
 /// Like `reconcile_mailbox`, with a second fence checked at each DB mutation
 /// boundary, including again after acquiring the mutex. `commit_allowed` may
 /// run while the DB guard is held and therefore must inspect no DB-locked state.
+///
+/// A row whose file is gone is removed only when `server` does not list its
+/// uid (or lists another message under it); one the server still lists was
+/// evicted from the working cache and stays searchable (`ServerListing`).
 pub fn reconcile_mailbox_guarded(
     db: &SharedConn,
     maildir_root: &Path,
@@ -229,6 +283,7 @@ pub fn reconcile_mailbox_guarded(
     vault_dir: &str,
     config: IndexConfig,
     parse: ParseFn,
+    server: ServerListing,
     keep_going: &dyn Fn() -> bool,
     commit_allowed: &dyn Fn() -> bool,
     progress: &mut dyn FnMut(usize),
@@ -271,16 +326,31 @@ pub fn reconcile_mailbox_guarded(
             _ => to_parse.push(file),
         }
     }
-    let removals: Vec<i64> = rows
-        .iter()
-        .filter(|(uid, _)| !files.contains_key(uid) && !unstatted.contains(uid))
-        .map(|(_, r)| r.id)
-        .collect();
+    let gone: Vec<(&u32, &Row)> = rows.iter().filter(|(uid, _)| !files.contains_key(uid) && !unstatted.contains(uid)).collect();
+    let mut ops: Vec<(i64, Op)> = Vec::new();
+    if !gone.is_empty() {
+        let uids: Vec<u32> = gone.iter().map(|(uid, _)| **uid).collect();
+        // No guard is held: the daemon's listing locks another store. A
+        // listing that could not be read removes nothing: the next pass decides.
+        if let Ok(listed) = server(&uids) {
+            for (uid, row) in gone {
+                let kept = listed.get(uid).is_some_and(|id| same_message(row.message_id.as_deref(), id.as_deref()));
+                if !kept {
+                    ops.push((row.id, Op::Remove));
+                    continue;
+                }
+                stats.kept += 1;
+                // Marked once; again only when a bodies-on toggle made it pending.
+                if row.mtime_ns != REREAD || row.body_state == BODY_PENDING {
+                    ops.push((row.id, Op::Keep));
+                }
+            }
+        }
+    }
+    ops.extend(renames.iter().map(|&(id, name)| (id, Op::Rename(name))));
 
-    // `None` = remove the row, `Some(name)` = rename it. One transaction per
-    // chunk, so a folder emptied of 20k files never holds the lock for all of them.
-    let ops: Vec<(i64, Option<&str>)> =
-        removals.iter().map(|&id| (id, None)).chain(renames.iter().map(|&(id, name)| (id, Some(name)))).collect();
+    // One transaction per chunk, so a folder emptied of 20k files never holds
+    // the lock for all of them.
     for chunk in ops.chunks(BATCH) {
         if !keep_going() {
             stats.interrupted = true;
@@ -292,11 +362,10 @@ pub fn reconcile_mailbox_guarded(
             return Ok(stats);
         }
         let conn = same_conn(&mut guard, &db_path)?;
-        let mut gone = apply_removals_and_renames(conn, chunk).map_err(db_err)?;
+        let mut gone = apply_ops(conn, chunk).map_err(db_err)?;
         stats.removed_keys.append(&mut gone);
-        let removed = chunk.iter().filter(|(_, name)| name.is_none()).count();
-        stats.removed += removed;
-        stats.renamed += chunk.len() - removed;
+        stats.removed += chunk.iter().filter(|(_, op)| matches!(op, Op::Remove)).count();
+        stats.renamed += chunk.iter().filter(|(_, op)| matches!(op, Op::Rename(_))).count();
     }
 
     // Highest uids first: the newest mail becomes searchable soonest.
@@ -378,7 +447,7 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
     let mut st = conn.prepare_cached(
         "SELECT m.id, m.uid, m.filename, m.size, m.mtime_ns, m.body_state,
                 m.has_attachments AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.message_row = m.id),
-                m.snippet IS NULL
+                m.snippet IS NULL, m.message_id
          FROM messages m WHERE m.account_id = ?1 AND m.vault_dir = ?2",
     )?;
     let rows = st.query_map(params![account_id, vault_dir], |r| {
@@ -392,6 +461,7 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
                 body_state: r.get(5)?,
                 needs_attachment_backfill: r.get(6)?,
                 snippet_missing: r.get(7)?,
+                message_id: r.get(8)?,
             },
         ))
     })?;
@@ -399,12 +469,13 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
 }
 
 /// Returns the identities of the rows it removed.
-fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]) -> rusqlite::Result<Vec<String>> {
+fn apply_ops(conn: &mut Connection, ops: &[(i64, Op)]) -> rusqlite::Result<Vec<String>> {
     let tx = conn.transaction()?;
     let mut removed_keys = Vec::new();
-    for &(id, rename) in ops {
-        match rename {
-            None => {
+    for (id, op) in ops {
+        let id = *id;
+        match op {
+            Op::Remove => {
                 // Read the identity before the row carrying it is gone.
                 let key: Option<String> = tx
                     .prepare_cached(&format!("SELECT {MSG_KEY_SQL} FROM messages m WHERE m.id = ?1"))?
@@ -416,11 +487,21 @@ fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]
                 delete_fts(&tx, id)?;
                 tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
             }
-            Some(filename) => {
+            Op::Rename(filename) => {
                 // The flags ride the name, so a rename is how a star, a read
                 // receipt or an archive reaches the index at all.
                 tx.prepare_cached("UPDATE messages SET filename = ?1, flags = ?2 WHERE id = ?3")?
                     .execute(params![filename, flags_of(filename), id])?;
+            }
+            Op::Keep => {
+                // A body still pending can never be read without the file:
+                // recorded as unreadable, so the index can report complete.
+                tx.prepare_cached(
+                    "UPDATE messages SET mtime_ns = ?1, body_state = CASE WHEN body_state = ?2 THEN ?3 ELSE body_state END WHERE id = ?4",
+                )?
+                .execute(params![REREAD, BODY_PENDING, BODY_UNPARSEABLE, id])?;
+                tx.prepare_cached("UPDATE attachments SET state = ?1 WHERE message_row = ?2 AND state = 'pending'")?
+                    .execute(params![ATTACHMENT_EVICTED, id])?;
             }
         }
     }
@@ -540,8 +621,10 @@ pub const EXTRACT_BATCH: usize = 50;
 /// result back to the `attachments` row and rewrites the message's FTS row so
 /// the new attachment text becomes searchable immediately. `read_part` returns
 /// `None` when the message's file is gone (left `pending`; a future full
-/// reconcile will notice the file is gone and remove the message row, which
-/// cascades to its attachment rows via `ON DELETE CASCADE`). A `Transient`
+/// reconcile will notice the file is gone and either remove the message row,
+/// which cascades to its attachment rows via `ON DELETE CASCADE`, or, while
+/// the server still lists it, keep the row and move these parts to
+/// `ATTACHMENT_EVICTED`, out of this queue). A `Transient`
 /// extraction error (surfaced by `extract` as state `"pending"`) also leaves
 /// the row untouched for the next sweep to retry. Returns how many rows
 /// changed state, so the caller can decide whether a progress signal is
@@ -709,8 +792,8 @@ pub fn forget_file(db: &SharedConn, account_id: &str, vault_dir: &str, uid: u32)
     let guard = lock(db);
     let Some(conn) = guard.as_ref() else { return Ok(()) };
     conn.execute(
-        "UPDATE messages SET mtime_ns = -1 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3",
-        params![account_id, vault_dir, uid],
+        "UPDATE messages SET mtime_ns = ?4 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3",
+        params![account_id, vault_dir, uid, REREAD],
     )
     .map(|_| ())
     .map_err(db_err)
@@ -1259,6 +1342,7 @@ mod tests {
                 "INBOX",
                 ON,
                 &parse,
+                &nothing_listed,
                 &|| true,
                 &commit_allowed,
                 &mut |_| {},
@@ -1630,6 +1714,202 @@ mod tests {
         let conn = guard.as_ref().unwrap();
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending");
+    }
+
+    // ---- Eviction (Track H2): a missing file the server still lists keeps its row ----
+
+    const ATT: IndexConfig = IndexConfig { bodies: true, attachments: true, image_text: false };
+
+    fn eml_id(message_id: &str, subject: &str, body: &str) -> String {
+        eml(subject, body).replacen("\r\n\r\n", &format!("\r\nMessage-ID: {message_id}\r\n\r\n"), 1)
+    }
+
+    /// `fake_parse` plus one attachment-shaped part per message.
+    fn parse_with_part(raw: &[u8], uid: u32, name: &str) -> Option<IndexDoc> {
+        fake_parse(raw, uid, name).map(|mut d| {
+            d.has_attachments = true;
+            d.attachment_candidates = vec![AttachmentMeta { filename: format!("part{uid}.pdf"), mime: "application/pdf".into(), size: 10 }];
+            d
+        })
+    }
+
+    fn run_listed(v: &Vault, cfg: IndexConfig, parse: ParseFn, listing: ServerListing) -> ReconcileStats {
+        reconcile_mailbox_guarded(&v.db, &v.root.join("Maildir"), "a1", "INBOX", cfg, parse, listing, &|| true, &|| true, &mut |_| {}).unwrap()
+    }
+
+    fn listing_of(entries: &[(u32, Option<&str>)]) -> impl Fn(&[u32]) -> Result<HashMap<u32, Option<String>>, String> {
+        let map: HashMap<u32, Option<String>> = entries.iter().map(|&(uid, id)| (uid, id.map(str::to_owned))).collect();
+        move |uids: &[u32]| Ok(uids.iter().filter_map(|u| map.get(u).map(|id| (*u, id.clone()))).collect())
+    }
+
+    fn no_listing(_: &[u32]) -> Result<HashMap<u32, Option<String>>, String> {
+        Ok(HashMap::new())
+    }
+
+    fn cur_file(v: &Vault, uid: u32) -> std::path::PathBuf {
+        v.root.join(format!("Maildir/a1/INBOX/cur/{uid}{INFO_PREFIX}.eml"))
+    }
+
+    fn row_id(v: &Vault, uid: u32) -> Option<i64> {
+        let g = crate::search_index::lock(&v.db);
+        g.as_ref().unwrap().query_row("SELECT id FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).optional().unwrap()
+    }
+
+    fn attachment_states(v: &Vault, uid: u32) -> Vec<String> {
+        let g = crate::search_index::lock(&v.db);
+        let conn = g.as_ref().unwrap();
+        let mut st = conn
+            .prepare("SELECT a.state FROM attachments a JOIN messages m ON m.id = a.message_row WHERE m.uid = ?1 ORDER BY a.part_index")
+            .unwrap();
+        st.query_map([uid], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
+    }
+
+    fn attachment_count(v: &Vault) -> i64 {
+        crate::search_index::lock(&v.db).as_ref().unwrap().query_row("SELECT count(*) FROM attachments", [], |r| r.get(0)).unwrap()
+    }
+
+    /// The brief's case: three indexed messages, two files evicted, the server
+    /// still lists one of them. That one keeps its row, its body terms, its
+    /// preview line and its attachment rows; the other goes as it always did.
+    #[test]
+    fn an_evicted_message_the_server_still_lists_stays_searchable() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Kept", "aardvark report"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml_id("<two@x.test>", "Gone", "bumblebee report"));
+        put(&v, "a1", "INBOX", &format!("3{INFO_PREFIX}.eml"), &eml_id("<three@x.test>", "Stays", "chameleon report"));
+        let parses = AtomicUsize::new(0);
+        let parse = |raw: &[u8], uid: u32, name: &str| { parses.fetch_add(1, Ordering::SeqCst); parse_with_part(raw, uid, name) };
+        assert_eq!(run_listed(&v, ATT, &parse, &no_listing).parsed, 3);
+        assert_eq!(attachment_count(&v), 3);
+
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        std::fs::remove_file(cur_file(&v, 2)).unwrap();
+        let asked = Mutex::new(Vec::new());
+        let server = listing_of(&[(1, Some("<one@x.test>")), (3, Some("<three@x.test>"))]);
+        let listing = |uids: &[u32]| { asked.lock().unwrap().extend_from_slice(uids); server(uids) };
+        let s = run_listed(&v, ATT, &parse, &listing);
+
+        let mut asked = asked.into_inner().unwrap();
+        asked.sort_unstable();
+        assert_eq!(asked, vec![1, 2], "only the uids whose files are gone are looked up");
+        assert_eq!((s.removed, s.kept, s.parsed), (1, 1, 0));
+        assert_eq!(s.removed_keys, vec!["two@x.test".to_string()], "a kept row is not reported as gone, so its tags stay");
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1, "the evicted body is still searchable");
+        assert!(fts_hits(&v, "\"bumblebee\"").is_empty());
+        assert_eq!(snippets(&v, &[1]).get(&1).map(String::as_str), Some("aardvark report"));
+        assert_eq!(attachment_states(&v, 1), vec!["evicted".to_string()], "kept, and out of the extraction queue");
+        assert_eq!(attachment_count(&v), 2, "the removed message's attachment rows went with it");
+        assert_eq!(attachment_states(&v, 3), vec!["pending".to_string()], "a message still on disk is untouched");
+
+        let again = run_listed(&v, ATT, &parse, &listing_of(&[(1, Some("<one@x.test>"))]));
+        assert_eq!((again.removed, again.kept, again.parsed), (0, 1, 0), "a later pass keeps it without re-reading anything");
+        assert_eq!(parses.load(Ordering::SeqCst), 3);
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1);
+    }
+
+    /// Once the file is back (a re-download, a restore), it is read into the
+    /// row it had, even when the restored file matches the old size and mtime.
+    #[test]
+    fn a_restored_evicted_file_is_reparsed_into_its_own_row() {
+        let v = vault();
+        let raw = eml_id("<one@x.test>", "Kept", "aardvark report");
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &raw);
+        let parses = AtomicUsize::new(0);
+        let parse = |raw: &[u8], uid: u32, name: &str| { parses.fetch_add(1, Ordering::SeqCst); parse_with_part(raw, uid, name) };
+        run_listed(&v, ATT, &parse, &no_listing);
+        let id = row_id(&v, 1).unwrap();
+        let mtime = std::fs::metadata(cur_file(&v, 1)).unwrap().modified().unwrap();
+
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        assert_eq!(run_listed(&v, ATT, &parse, &listing_of(&[(1, Some("<one@x.test>"))])).kept, 1);
+
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &raw);
+        std::fs::File::options().write(true).open(cur_file(&v, 1)).unwrap().set_modified(mtime).unwrap();
+        let s = run_listed(&v, ATT, &parse, &listing_of(&[(1, Some("<one@x.test>"))]));
+        assert_eq!((s.parsed, s.kept, s.removed), (1, 0, 0));
+        assert_eq!(parses.load(Ordering::SeqCst), 2, "read again although size and mtime match the old file");
+        assert_eq!(row_count(&v.db), 1, "no duplicate row");
+        assert_eq!(row_id(&v, 1), Some(id), "the same row, updated in place");
+        assert_eq!(attachment_states(&v, 1), vec!["pending".to_string()], "back in the extraction queue");
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1);
+        assert_eq!(run_listed(&v, ATT, &parse, &no_listing).unchanged, 1, "then unchanged again");
+    }
+
+    /// Regression guard: with a server listing that names nothing, every
+    /// missing file is removed exactly as before eviction existed.
+    #[test]
+    fn a_missing_file_the_server_does_not_list_is_removed_as_before() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Gone", "aardvark report"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml_id("<two@x.test>", "Stays", "bumblebee report"));
+        run_listed(&v, ATT, &parse_with_part, &no_listing);
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        let s = run_listed(&v, ATT, &parse_with_part, &no_listing);
+        assert_eq!((s.removed, s.kept), (1, 0));
+        assert_eq!(s.removed_keys, vec!["one@x.test".to_string()]);
+        assert_eq!(row_id(&v, 1), None);
+        assert!(fts_hits(&v, "\"aardvark\"").is_empty());
+        assert_eq!(attachment_count(&v), 1);
+    }
+
+    /// The header cache could not be read: nothing is removed this pass (a
+    /// failed read never deletes), and nothing is marked either.
+    #[test]
+    fn an_unreadable_server_listing_removes_nothing_this_pass() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Gone", "aardvark report"));
+        run_listed(&v, ATT, &parse_with_part, &no_listing);
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        let broken = |_: &[u32]| -> Result<HashMap<u32, Option<String>>, String> { Err("custody store is not open".into()) };
+        let s = run_listed(&v, ATT, &parse_with_part, &broken);
+        assert_eq!((s.removed, s.kept), (0, 0));
+        assert!(s.removed_keys.is_empty());
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1);
+        assert_eq!(attachment_states(&v, 1), vec!["pending".to_string()]);
+
+        let s = run_listed(&v, ATT, &parse_with_part, &no_listing);
+        assert_eq!((s.removed, s.removed_keys.len()), (1, 1), "the next readable listing decides");
+    }
+
+    /// Uids restart after a UIDVALIDITY change: the listing's uid 2 can be a
+    /// different message than the vault's uid 2. A Message-ID that disagrees
+    /// is not the server holding this message. Without one on either side,
+    /// the uid is all there is to go on.
+    #[test]
+    fn a_listed_uid_that_names_another_message_does_not_keep_the_row() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Same", "aardvark"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml_id("<two@x.test>", "Other", "bumblebee"));
+        put(&v, "a1", "INBOX", &format!("3{INFO_PREFIX}.eml"), &eml("No id", "chameleon"));
+        put(&v, "a1", "INBOX", &format!("4{INFO_PREFIX}.eml"), &eml_id("<four@x.test>", "Unlisted id", "dromedary"));
+        run_listed(&v, ON, &fake_parse, &no_listing);
+        for uid in 1..=4 {
+            std::fs::remove_file(cur_file(&v, uid)).unwrap();
+        }
+        let listing = listing_of(&[(1, Some(" <one@x.test> ")), (2, Some("<new-two@x.test>")), (3, Some("<three@x.test>")), (4, None)]);
+        let s = run_listed(&v, ON, &fake_parse, &listing);
+        assert_eq!((s.kept, s.removed), (3, 1));
+        assert_eq!(s.removed_keys, vec!["two@x.test".to_string()]);
+        assert_eq!((row_id(&v, 1).is_some(), row_id(&v, 2).is_some(), row_id(&v, 3).is_some(), row_id(&v, 4).is_some()), (true, false, true, true));
+    }
+
+    /// A kept row whose body was never read (bodies were off at eviction, then
+    /// turned on) has no file to read it from: it must not hold the index at
+    /// "not complete" forever.
+    #[test]
+    fn an_evicted_row_waiting_for_its_body_does_not_keep_the_index_incomplete() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Headers only", "aardvark"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}.eml"), &eml_id("<two@x.test>", "On disk", "bumblebee"));
+        run_listed(&v, OFF, &fake_parse, &no_listing);
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        let server = listing_of(&[(1, Some("<one@x.test>"))]);
+        run_listed(&v, OFF, &fake_parse, &server);
+        set_bodies_enabled(&v.db, true).unwrap();
+        let s = run_listed(&v, ON, &fake_parse, &server);
+        assert_eq!((s.kept, s.parsed), (1, 1));
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 2, total: 2 });
+        assert_eq!(fts_hits(&v, "\"headers\"").len(), 1, "its headers stay searchable");
     }
 
     #[test]

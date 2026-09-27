@@ -714,6 +714,7 @@ impl DaemonState {
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
         contacts.attach_db(Arc::clone(&custody.db));
         let search_index = crate::search_index::SearchIndexState::new(mail_dir.clone(), app_dir_for_index.clone(), mail_dir_ok, events.clone());
+        search_index.attach_custody_db(Arc::clone(&custody.db));
         // A registry file of its own per state: many tests pass the vault dir
         // (or one shared dir) as `app_dir`, and one file under two roots wipes.
         let registry_dir = tempfile::tempdir().expect("registry tempdir").keep();

@@ -32,6 +32,10 @@ pub struct SearchIndexState {
     /// Where `app.db` lives. A sweep that removes a message has to forget the
     /// tags and field values keyed to it, and that store is not this one.
     pub(crate) app_dir: PathBuf,
+    /// The custody store, for its header cache: the server listing a sweep
+    /// checks before removing the row of a file that is gone (eviction).
+    /// Attached once at startup; its own lock, never taken while `db` is held.
+    pub(crate) custody_db: Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
     pub(crate) mail_dir_ok: bool,
     pub(crate) bus: EventBus,
     pub(crate) config: Mutex<Option<IndexConfig>>,
@@ -64,12 +68,17 @@ pub struct SearchIndexState {
 }
 
 impl SearchIndexState {
+    pub fn attach_custody_db(&self, db: Arc<mailvault_core::custody::SharedConn>) {
+        *g(&self.custody_db) = Some(db);
+    }
+
     pub fn new(vault_root: PathBuf, app_dir: PathBuf, mail_dir_ok: bool, bus: EventBus) -> Arc<Self> {
         Arc::new(Self {
             db: Mutex::new(None),
             root: Mutex::new(None),
             vault_root,
             app_dir,
+            custody_db: Mutex::new(None),
             mail_dir_ok,
             bus,
             config: Mutex::new(None),
@@ -1213,6 +1222,25 @@ fn prescan_folder_counts(
     Ok(())
 }
 
+/// What the header cache (the server listing as last synced) holds for
+/// `uids` of one vault folder, for reconcile's eviction check. A store that is
+/// attached but not open (it opens after the socket is up, so the first sweep
+/// can beat it; a vault switch closes it) or will not answer is an error:
+/// reconcile then removes nothing this pass rather than read "no answer" as
+/// "the server has none of them". No store attached at all (unit tests that
+/// build this state alone) lists nothing, which is reconcile as it was.
+fn server_listing(
+    st: &SearchIndexState,
+    account_id: &str,
+    vault_dir: &str,
+    uids: &[u32],
+) -> Result<std::collections::HashMap<u32, Option<String>>, String> {
+    let Some(custody) = g(&st.custody_db).clone() else { return Ok(Default::default()) };
+    let guard = mailvault_core::custody::lock(&custody);
+    let conn = guard.as_ref().ok_or("custody store is not open")?;
+    mailvault_core::custody::cache::listed_message_ids(conn, account_id, vault_dir, uids)
+}
+
 pub(crate) fn sweep(
     st: &SearchIndexState,
     maildir: &Path,
@@ -1272,7 +1300,11 @@ pub(crate) fn sweep(
             return SweepOutcome { parsed, completed, success: false, error: None };
         }
         let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); };
-        match reconcile::reconcile_mailbox_guarded(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &keep_going, &mut on_batch) {
+        let listing = |uids: &[u32]| {
+            server_listing(st, &account, &dir, uids)
+                .inspect_err(|e| warn!("search index {account}/{dir}: server listing unreadable, keeping {} rows this pass: {e}", uids.len()))
+        };
+        match reconcile::reconcile_mailbox_guarded(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &listing, &keep_going, &keep_going, &mut on_batch) {
             // configure/rebuild/close asked us to stop
             Ok(s) => {
                 parsed += s.parsed;
@@ -1575,6 +1607,48 @@ mod tests {
         assert_eq!(nested.len(), 1);
         assert_eq!(nested[0]["isArchived"], false);
         assert_eq!(nested[0]["flags"], serde_json::json!([]));
+    }
+
+    /// Eviction (Track H2): the sweep asks the custody header cache, found by
+    /// the SERVER path behind the vault folder, before removing a row whose
+    /// file is gone; a custody store not open yet (startup) removes nothing.
+    #[test]
+    fn a_sweep_keeps_an_evicted_row_the_header_cache_lists_and_removes_nothing_while_custody_is_closed() {
+        use mailvault_core::search_index::{db, lock};
+        use std::sync::atomic::Ordering::SeqCst;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 3);
+        let st = crate::search_index::SearchIndexState::new(root.to_path_buf(), root.to_path_buf(), true, crate::events::EventBus::new(64));
+        *lock(&st.db) = Some(db::open(root).unwrap());
+        let custody = std::sync::Arc::new(std::sync::Mutex::new(None));
+        st.attach_custody_db(std::sync::Arc::clone(&custody));
+        let maildir = root.join("Maildir");
+        let config = mailvault_core::search_index::reconcile::IndexConfig { bodies: true, attachments: false, image_text: false };
+        let sweep = || {
+            let only = Some(vec![("acct".to_string(), "Projects_2026".to_string())]);
+            assert!(crate::search_index::sweep(&st, &maildir, config, only, st.operation_generation.load(SeqCst)).success);
+        };
+        let uids = || -> Vec<u32> {
+            let g = lock(&st.db);
+            let mut stmt = g.as_ref().unwrap().prepare("SELECT uid FROM messages ORDER BY uid").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+        };
+        sweep();
+        assert_eq!(uids(), vec![1, 2, 3]);
+        let cur = maildir.join("acct/Projects_2026/cur");
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
+
+        sweep();
+        assert_eq!(uids(), vec![1, 2, 3], "custody attached but not open: no answer is not 'the server has none'");
+
+        let conn = mailvault_core::custody::db::open(root).unwrap();
+        let listed = serde_json::json!({ "emails": [{ "uid": 1, "messageId": "<1@x.test>" }, { "uid": 3, "messageId": "<3@x.test>" }] });
+        mailvault_core::custody::cache::save_headers(&conn, "acct", "Projects/2026", &listed.to_string()).unwrap();
+        *mailvault_core::custody::lock(&custody) = Some(conn);
+        sweep();
+        assert_eq!(uids(), vec![1, 3], "uid 1 is still on the server and stays searchable; uid 2 is gone");
     }
 
     #[test]

@@ -442,6 +442,7 @@ async fn daemon_main() {
 
     let custody = custody::CustodyState::default();
     sync_eng.attach_custody_db(Arc::clone(&custody.db));
+    search_index_state.attach_custody_db(Arc::clone(&custody.db));
     contacts.attach_db(Arc::clone(&custody.db));
     let state = Arc::new(server::DaemonState {
         token,
