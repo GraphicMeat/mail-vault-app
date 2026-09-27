@@ -107,6 +107,11 @@ pub struct MailboxInfo {
     pub path: String,
     #[serde(rename = "specialUse")]
     pub special_use: Option<String>,
+    /// `special_use` was read off the name, not declared by the server
+    /// (SPECIAL-USE attribute). A guess never moves a folder out of its parent
+    /// in the sidebar: Gmail's `[Imap]/Trash` label is not the account's Trash.
+    #[serde(rename = "specialUseGuessed")]
+    pub special_use_guessed: bool,
     pub flags: Vec<String>,
     pub delimiter: Option<String>,
     #[serde(rename = "noselect")]
@@ -622,6 +627,29 @@ async fn list_names(session: &mut ImapSession) -> Result<Vec<Name>, String> {
     Ok(names)
 }
 
+/// A quoted-string's payload with its escapes resolved (`\\` -> `\`, `\"` -> `"`).
+///
+/// imap-proto hands a LIST name back with the escapes still in: a Gmail label
+/// sent as `"\\Trash"` arrives as `\\Trash`. async-imap escapes the argument
+/// again on SELECT, so the escaped form asks for a mailbox that does not exist
+/// and the folder showed 0 emails. Every place a LIST `Name` becomes a String
+/// goes through here. An atom never holds `\` or `"`, so only quoted names change.
+///
+/// ponytail: a name sent as a literal is raw bytes, and one holding `\` would be
+/// unescaped too; imap-proto does not say which form it parsed. No server seen
+/// sends a backslash name as a literal.
+pub fn unescape_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.push(chars.next().unwrap_or('\\')),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// List all mailboxes
 pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo>, String> {
     let names = list_names(session).await?;
@@ -630,8 +658,15 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
 
     let mut all: Vec<MailboxInfo> = Vec::new();
     for name in &names {
-        let path = name.name().to_string();
-        let delimiter = name.delimiter().map(|d| d.to_string());
+        // The raw shape, so the next "folder missing" report settles itself.
+        info!(
+            "[IMAP] LIST name={:?} delimiter={:?} attrs={:?}",
+            name.name(),
+            name.delimiter(),
+            name.attributes()
+        );
+        let path = unescape_quoted(name.name());
+        let delimiter = name.delimiter().map(unescape_quoted);
         let short_name = if let Some(ref delim) = delimiter {
             path.rsplit(delim.as_str()).next().unwrap_or(&path).to_string()
         } else {
@@ -643,7 +678,8 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
             .iter()
             .map(|a| format!("{:?}", a))
             .collect();
-        let special_use = detect_special_use(&attrs, &path);
+        let declared = declared_special_use(&attrs, &path);
+        let guessed = if declared.is_none() { guessed_special_use(&path) } else { None };
         let noselect = attrs.iter().any(|a| {
             let lower = a.to_lowercase();
             lower.contains("noselect") || lower.contains("nonexistent")
@@ -652,12 +688,29 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         all.push(MailboxInfo {
             name: short_name,
             path,
-            special_use,
+            special_use_guessed: guessed.is_some(),
+            special_use: declared.or(guessed),
             flags: attrs,
             delimiter,
             noselect,
             children: Vec::new(),
         });
+    }
+
+    // A guess never competes with the server's own answer. Gmail declares
+    // \Trash on [Gmail]/Bin; a label called [Imap]/Trash or Deleted Messages
+    // left as a second \Trash is one every "first \Trash" resolver (delete,
+    // migration, the unified Trash view) could pick instead.
+    let declared: std::collections::HashSet<String> = all
+        .iter()
+        .filter(|m| !m.special_use_guessed)
+        .filter_map(|m| m.special_use.clone())
+        .collect();
+    for m in all.iter_mut().filter(|m| m.special_use_guessed) {
+        if m.special_use.as_ref().is_some_and(|r| declared.contains(r)) {
+            m.special_use = None;
+            m.special_use_guessed = false;
+        }
     }
 
     // Return flat list — the frontend handles grouping/display.
@@ -667,7 +720,9 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
     Ok(all)
 }
 
-fn detect_special_use(attrs: &[String], path: &str) -> Option<String> {
+/// The role the server gave the mailbox: a SPECIAL-USE attribute, or INBOX,
+/// which RFC 3501 defines by name.
+fn declared_special_use(attrs: &[String], path: &str) -> Option<String> {
     for attr in attrs {
         let lower = attr.to_lowercase();
         if lower.contains("sent") {
@@ -686,10 +741,12 @@ fn detect_special_use(attrs: &[String], path: &str) -> Option<String> {
             return Some("\\Archive".to_string());
         }
     }
+    path.eq_ignore_ascii_case("INBOX").then(|| "\\Inbox".to_string())
+}
+
+/// A role read off the name, for servers that declare none (no SPECIAL-USE).
+fn guessed_special_use(path: &str) -> Option<String> {
     let p = path.to_lowercase();
-    if p == "inbox" {
-        return Some("\\Inbox".to_string());
-    }
     if p.contains("sent") {
         return Some("\\Sent".to_string());
     }
@@ -1687,7 +1744,7 @@ async fn ensure_role_mailbox(
     let entries: Vec<(String, Vec<String>)> = names
         .iter()
         .map(|n| {
-            let path = n.name().to_string();
+            let path = unescape_quoted(n.name());
             let attrs: Vec<String> = n.attributes().iter().map(|a| format!("{:?}", a)).collect();
             (path, attrs)
         })
@@ -3268,7 +3325,7 @@ pub fn resolve_mailbox_path(requested: &str, mailboxes: &[MailboxInfo]) -> Optio
     // Otherwise read the request as a role name ("Sent", "Sent Messages") and
     // hand back the folder the server flagged for that role. A name with no
     // role is never guessed at.
-    let role = detect_special_use(&[], requested)?;
+    let role = declared_special_use(&[], requested).or_else(|| guessed_special_use(requested))?;
     mailboxes
         .iter()
         .filter(selectable)
@@ -3336,6 +3393,7 @@ mod resolve_mailbox_path_tests {
             name: path.rsplit('/').next().unwrap_or(path).to_string(),
             path: path.to_string(),
             special_use: special_use.map(str::to_string),
+            special_use_guessed: false,
             flags: Vec::new(),
             delimiter: Some("/".to_string()),
             noselect: false,
@@ -3425,5 +3483,34 @@ mod bounded_tests {
             bounded("x", 60, async { Err::<(), _>("NO Mailbox doesn't exist".to_string()) }).await,
             Err("NO Mailbox doesn't exist".to_string())
         );
+    }
+}
+
+#[cfg(test)]
+mod unescape_quoted_tests {
+    use super::unescape_quoted;
+
+    #[test]
+    fn a_quoted_backslash_is_one_backslash() {
+        // `* LIST () "/" "\\Trash"` hands back `\\Trash`; the mailbox is `\Trash`.
+        assert_eq!(unescape_quoted(r"\\Trash"), r"\Trash");
+    }
+
+    #[test]
+    fn a_quoted_dquote_is_one_dquote() {
+        assert_eq!(unescape_quoted(r#"Say \"hi\""#), r#"Say "hi""#);
+    }
+
+    #[test]
+    fn plain_names_are_untouched() {
+        for name in ["INBOX", "[Gmail]/Sent Mail", "INBOX.Bokelmu&Awg-hle", "会議/議事録", ""] {
+            assert_eq!(unescape_quoted(name), name);
+        }
+    }
+
+    #[test]
+    fn an_escaped_backslash_does_not_escape_what_follows() {
+        assert_eq!(unescape_quoted(r#"a\\\"b"#), r#"a\"b"#);
+        assert_eq!(unescape_quoted(r"a\\\\b"), r"a\\b");
     }
 }

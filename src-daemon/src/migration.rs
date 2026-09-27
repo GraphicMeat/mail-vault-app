@@ -1503,6 +1503,7 @@ async fn list_transport_mailboxes(
                 name: f.display_name.clone(),
                 path: f.display_name,
                 special_use: None,
+                special_use_guessed: false,
                 flags: Vec::new(),
                 delimiter: Some("/".to_string()),
                 noselect: false,

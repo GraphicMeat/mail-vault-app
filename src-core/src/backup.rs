@@ -1821,6 +1821,7 @@ mod tests {
             name: path.to_string(),
             path: path.to_string(),
             special_use: None,
+            special_use_guessed: false,
             flags: vec![],
             delimiter: Some("/".to_string()),
             noselect,
