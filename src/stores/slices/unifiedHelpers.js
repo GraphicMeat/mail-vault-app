@@ -437,7 +437,9 @@ export function isWindowsPlatform() {
 }
 
 export function vaultDirName(mailbox) {
-  const safe = String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
+  let safe = String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
+  // `.` and `..` would name the account dir or climb out of it.
+  if (safe === '.' || safe === '..') safe = safe.replace(/\./g, '_');
   return isWindowsPlatform() ? avoidReserved(safe) : safe;
 }
 

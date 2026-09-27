@@ -11,6 +11,8 @@ pub fn vault_dir_name(mailbox: &str) -> String {
     let safe: String = mailbox.chars()
         .map(|c| if c.is_alphabetic() || c.is_numeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
         .collect();
+    // `.` and `..` would name the account dir or climb out of it.
+    let safe = if safe == "." || safe == ".." { safe.replace('.', "_") } else { safe };
     // Unix keeps the fixture's output byte for byte: existing vault directories
     // are named by this function and must not move.
     #[cfg(windows)]
