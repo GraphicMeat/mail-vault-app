@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SearchIndexSettings } from './SearchIndexSettings';
+import { DownloadModeControl } from './DownloadModeControl';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { send } from '../../services/transport';
@@ -40,8 +41,6 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const {
     localStoragePath,
     setLocalStoragePath,
-    localCacheDurationMonths,
-    setLocalCacheDurationMonths,
     hiddenAccounts,
     billingProfile,
     cleanupRules,
@@ -159,56 +158,15 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </p>
       </div>
 
-      {/* Local Email Caching */}
+      {/* Download mode: how much mail stays on this computer */}
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          {t('settings.storage.localEmailCaching')}
+          {t('settings.storage.downloadMode')}
         </h4>
 
         <div className="space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-mail-text">
-                {t('settings.storage.cacheDuration')}
-              </label>
-              <span className="text-sm font-medium text-mail-accent-text">
-                {localCacheDurationMonths === 0 ? t('settings.storage.allEmails') :
-                 localCacheDurationMonths === 1 ? t('settings.storage.month1') :
-                 localCacheDurationMonths === 12 ? t('settings.storage.year1') :
-                 t('settings.storage.monthsCount', { count: localCacheDurationMonths })}
-              </span>
-            </div>
-
-            {/* Slider - 5 steps: 1, 3, 6, 12 months, All */}
-            <div className="relative">
-              <input aria-label={t('settings.storage.cacheDuration')}
-                type="range"
-                min="0"
-                max="4"
-                value={
-                  localCacheDurationMonths === 1 ? 0 :
-                  localCacheDurationMonths === 3 ? 1 :
-                  localCacheDurationMonths === 6 ? 2 :
-                  localCacheDurationMonths === 12 ? 3 : 4
-                }
-                onChange={(e) => {
-                  const steps = [1, 3, 6, 12, 0]; // 0 = All
-                  setLocalCacheDurationMonths(steps[parseInt(e.target.value)]);
-                }}
-                className="w-full"
-              />
-
-              {/* Tick marks */}
-              <div className="flex justify-between mt-1 px-1">
-                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo1')}</span>
-                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo3')}</span>
-                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo6')}</span>
-                <span className="text-xs text-mail-text-muted">{t('settings.storage.year1')}</span>
-                <span className="text-xs text-mail-text-muted">{t('settings.storage.all')}</span>
-              </div>
-            </div>
-          </div>
+          <DownloadModeControl onUpgrade={onUpgrade} />
 
           {/* Local storage usage */}
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">

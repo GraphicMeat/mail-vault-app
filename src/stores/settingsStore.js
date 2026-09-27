@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { safeStorage } from './safeStorage';
+import { safeStorage, flushSafeStorage } from './safeStorage';
+import { daemonCall } from '../services/daemonClient';
+import { FETCH_MODES } from '../utils/fetchPolicy';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
@@ -316,6 +318,14 @@ export function migrateSettings(persisted, version) {
   // asked once whether to rebuild (SearchIndexReindexPrompt). A seed that
   // says false (e2e, the demo) is not an update.
   if (version < 11 && next.searchIndexReindexOffer !== false) next = { ...next, searchIndexReindexOffer: true };
+  // v11 -> v12: download modes. "All emails" (window 0) kept everything, which
+  // is Hoarder now; its window becomes 12 for a later switch to Keep Recent.
+  // Any other window stays, as Keep Recent. A saved mode is never rewritten.
+  if (version < 12 && next.fetchMode === undefined) {
+    next = next.localCacheDurationMonths === 0
+      ? { ...next, fetchMode: 'hoarder', localCacheDurationMonths: 12 }
+      : { ...next, fetchMode: 'keepRecent' };
+  }
   return next;
 }
 
@@ -329,8 +339,17 @@ export const useSettingsStore = create(
       // Cache settings
       cacheLimitMB: 128, // Maximum cache size in MB (0 = unlimited), default 128MB
 
-      // Local email caching duration (in months)
+      // Local email caching duration (in months): the Keep Recent / Index
+      // Only window. 0 = no cutoff (legacy; the UI offers 1/3/6/12).
       localCacheDurationMonths: 3, // Default 3 months
+
+      // Download mode (src/utils/fetchPolicy.js; the daemon reads these keys
+      // from frontend-settings.json): the default, per-account overrides
+      // { [accountId]: mode }, and whether Premium runs Hoarder's background
+      // download (kept equal to hasPremiumAccess, see the subscriber below).
+      fetchMode: 'keepRecent',
+      fetchModes: {},
+      fetchModePremium: false,
 
       // User-added classification categories
       customCategories: [],
@@ -868,6 +887,23 @@ export const useSettingsStore = create(
         }
       },
       
+      // Hoarder is Premium: refused without it. An existing 'hoarder' is never
+      // rewritten here, so a lapse or a grandfathered free Hoarder keeps it.
+      setFetchMode: (mode) => {
+        if (!FETCH_MODES.includes(mode) || mode === get().fetchMode) return;
+        if (mode === 'hoarder' && !hasPremiumAccess(get().billingProfile)) return;
+        set({ fetchMode: mode });
+      },
+      // null = use the default.
+      setAccountFetchMode: (accountId, mode) => {
+        if (!accountId || (mode !== null && !FETCH_MODES.includes(mode))) return;
+        if (mode === 'hoarder' && !hasPremiumAccess(get().billingProfile)) return;
+        set(state => {
+          const { [accountId]: _, ...rest } = state.fetchModes || {};
+          return { fetchModes: mode ? { ...rest, [accountId]: mode } : rest };
+        });
+      },
+
       // Signature management
       setSignature: (accountId, signature) => {
         set(state => ({
@@ -1330,6 +1366,8 @@ export const useSettingsStore = create(
           storageConfigured: false,
           cacheLimitMB: 128,
           localCacheDurationMonths: 3,
+          fetchMode: 'keepRecent',
+          fetchModes: {},
           customCategories: [],
           accountOrder: [],
           hiddenAccounts: {},
@@ -1442,7 +1480,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its
@@ -1465,6 +1503,34 @@ export const useSettingsStore = create(
     }
   )
 );
+
+// The daemon reads the download mode fresh from the settings file, so a change
+// is written first and the daemon woken after (its eviction and Hoarder
+// workers). Never throws: a missing daemon picks the change up on its next pass.
+export async function notifyFetchModeChanged() {
+  try {
+    await flushSafeStorage().catch(e => console.warn('[settings] flush before fetch mode change failed:', e));
+    await daemonCall('storage.fetch_mode_changed');
+  } catch (e) {
+    console.warn('[settings] could not tell the daemon about the download mode:', e?.message || e);
+  }
+}
+
+const FETCH_MODE_KEYS = ['fetchMode', 'fetchModes', 'localCacheDurationMonths', 'fetchModePremium'];
+
+// One place for every way these keys change: the setters, a detached Settings
+// window's relay (a plain setState), a transfer import. `fetchModePremium`
+// follows hasPremiumAccess on every billing change. Not during hydration: a
+// launch must not wake the workers ahead of their own schedule.
+useSettingsStore.subscribe((state, previous) => {
+  const premium = hasPremiumAccess(state.billingProfile);
+  if (premium !== state.fetchModePremium) {
+    useSettingsStore.setState({ fetchModePremium: premium }); // re-enters and notifies
+    return;
+  }
+  if (!useSettingsStore.persist?.hasHydrated?.()) return;
+  if (FETCH_MODE_KEYS.some(key => state[key] !== previous[key])) void notifyFetchModeChanged();
+});
 
 /**
  * Check whether the premium dev override should be honored.

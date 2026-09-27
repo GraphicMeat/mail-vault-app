@@ -148,3 +148,13 @@ it('clears unsubmitted password and destructive confirmation when choosing anoth
   fireEvent.click(screen.getByRole('button', { name: /Personal personal@example.test/ }));
   expect(screen.queryByText(t('settings.accounts.sureRemoveAccount', { email: 'personal@example.test' }))).toBeNull();
 });
+
+it('overrides the download mode for one account under Advanced', () => {
+  useSettingsStore.setState({ fetchMode: 'keepRecent', fetchModes: {} });
+  render(<AccountSettings accounts={accounts} />);
+  fireEvent.click(tab('Advanced'));
+  const modes = screen.getByRole('radiogroup', { name: t('settings.storage.downloadMode') });
+  fireEvent.click(within(modes).getByRole('radio', { name: t('settings.storage.modeIndexOnly') }));
+  expect(useSettingsStore.getState().fetchModes).toEqual({ studio: 'indexOnly' });
+  expect(useSettingsStore.getState().fetchMode).toBe('keepRecent');
+});

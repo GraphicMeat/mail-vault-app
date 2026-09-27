@@ -26,11 +26,11 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'emailTemplates', 'quickActions', 'keyboardShortcuts', 'keyboardShortcutsEnabled',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
   'searchIndexEnabled', 'searchIndexBodies', 'searchIndexAttachments', 'searchIndexImageText',
-  'cacheLimitMB', 'localCacheDurationMonths', 'customCategories',
+  'cacheLimitMB', 'localCacheDurationMonths', 'fetchMode', 'customCategories',
   'backupNotifyOnSuccess', 'backupNotifyOnFailure',
 ];
 // notificationSettings is handled specially: globals copied, .accounts filtered per account.
-export const PER_ACCOUNT_MAPS = ['signatures', 'displayNames', 'sendAsAddresses', 'accountColors', 'hiddenAccounts'];
+export const PER_ACCOUNT_MAPS = ['signatures', 'displayNames', 'sendAsAddresses', 'accountColors', 'hiddenAccounts', 'fetchModes'];
 
 const pickIds = (map, ids) =>
   Object.fromEntries(ids.filter(id => map && Object.hasOwn(map, id)).map(id => [id, map[id]]));

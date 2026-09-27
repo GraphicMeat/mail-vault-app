@@ -250,7 +250,8 @@ export const settingSearchGroups = [
     ['settings.searchIndex.concurrency', 'search index mailboxes searched at once speed performance concurrency'],
   ] },
   { id: 'storage', settings: [
-    ['settings.storage.cacheDuration', 'cache duration local email caching how long keep'],
+    ['settings.storage.downloadMode', 'download mode on demand keep recent index only hoarder offline cache duration local email caching how long keep'],
+    ['settings.storage.keepWindow', 'keep mail months year window cache duration how long'],
     ['settings.storage.advancedCustomStorageFolder', 'storage location folder custom move vault where files kept'],
     ['settings.storage.addCleanupRule', 'cleanup rule automatic delete archive old emails age folder schedule'],
     ['settings.storage.storageStatus', 'storage usage space used disk size'],
@@ -581,7 +582,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       )}
 
       {activeTab === 'accounts' && (
-        <AccountSettings accounts={accounts} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
+        <AccountSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
           initialSection={accountSection} onSectionChange={setAccountSection} />
       )}
 

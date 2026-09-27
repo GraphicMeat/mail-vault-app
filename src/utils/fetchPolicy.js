@@ -8,7 +8,7 @@
  * under `mailvault-settings.state`).
  */
 
-const MODES = ['onDemand', 'keepRecent', 'indexOnly', 'hoarder'];
+export const FETCH_MODES = ['onDemand', 'keepRecent', 'indexOnly', 'hoarder'];
 const DEFAULT_WINDOW_MONTHS = 3;
 const U32_MAX = 0xffffffff;
 const I32_MAX = 0x7fffffff;
@@ -16,7 +16,7 @@ const I32_MAX = 0x7fffffff;
 const MIN_YEAR = -262144;
 const MAX_YEAR = 262143;
 
-const asMode = (v) => (MODES.includes(v) ? v : null);
+const asMode = (v) => (FETCH_MODES.includes(v) ? v : null);
 
 /**
  * The account's policy, or null for a hidden account (nothing is kept).

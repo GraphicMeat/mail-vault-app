@@ -546,7 +546,30 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, headerRow);
     if (!isCurrent()) return;
 
-    if (localEmail && (source === 'local-only' || localEmail.html !== undefined)) {
+    const usableLocal = localEmail && (source === 'local-only' || localEmail.html !== undefined);
+    // Vault miss (On Demand, or evicted by Keep Recent / Index Only): show the
+    // search index's stored snippet at once, marked as still loading, while
+    // the body downloads. Never waited on: the row's own preview if it has
+    // one, else one header-cache read. Only while this open is still in
+    // flight with nothing shown, so the body (or its error) always wins.
+    if (!usableLocal && source !== 'local-only' && headerRow) {
+      const showSnippet = (text) => {
+        const s = get();
+        if (!text || s.selectedEmailId !== selectedEmailId || !s.loadingEmail || s.selectedEmail) return;
+        publish({ selectedEmail: withAccount({ ...headerRow, text, _bodyLoading: true }), loadingEmail: false });
+      };
+      const own = headerRow.previewText || headerRow.snippet;
+      if (own) showSnippet(own);
+      else {
+        try {
+          db.getEmailHeadersByUids(accountId, mailbox, [realUid])
+            .then(rows => showSnippet(rows?.find(r => r?.uid === realUid)?.previewText))
+            .catch(() => {});
+        } catch { /* no snippet: the spinner stays until the body lands */ }
+      }
+    }
+
+    if (usableLocal) {
       email = localEmail;
       actualSource = source === 'local-only' ? 'local-only' : 'local';
       get().addToCache(cacheKey, email, cacheLimitMB);

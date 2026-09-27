@@ -13,6 +13,7 @@ import { Send } from 'lucide-react';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
 import { AccountTransfer } from './AccountTransfer';
+import { DownloadModeControl } from './DownloadModeControl';
 import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
 import { Toast } from '../Toast';
@@ -31,6 +32,7 @@ import {
   Eye,
   EyeOff,
   Server,
+  HardDrive,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
@@ -54,7 +56,7 @@ function SavedBadge({ visible }) {
   );
 }
 
-export function AccountSettings({ accounts, onAddAccount, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
+export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
   const { removeAccount, activeAccountId, activeMailbox, connectionStatus, connectionError, connectionErrorType, activateAccount } = useAccountStore();
   const {
@@ -893,6 +895,15 @@ export function AccountSettings({ accounts, onAddAccount, onExportAccounts, onIm
                     )}
                   </div>
                 </div>
+            </div>
+            {/* Download mode override (the default lives in Settings > Storage) */}
+            <div className="settings-section">
+              <h4 className="font-semibold text-mail-text mb-2 flex items-center gap-2">
+                <HardDrive size={18} className="text-mail-accent-text" />
+                {t('settings.storage.downloadMode')}
+              </h4>
+              <p className="text-sm text-mail-text-muted mb-3">{t('settings.accounts.downloadModeHint')}</p>
+              <DownloadModeControl accountId={selectedAccountId} onUpgrade={onUpgrade} />
             </div>
             {/* Hide Account */}
             <div className="settings-section">

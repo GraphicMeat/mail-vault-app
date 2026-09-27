@@ -52,7 +52,7 @@ const ALLOWLIST = new Set([
   'settings.accounts.accountSettings', 'settings.accounts.authentication', 'settings.appearance.dateAndTime',
   'settings.appearance.readingAndConversations', 'settings.colors.title', 'workspace.title',
   'settings.behavior.deleting', 'settings.behavior.emailSync', 'settings.behavior.markRead', 'settings.behavior.sending',
-  'settings.storage.localEmailCaching', 'settings.timeCapsule.automaticSnapshots',
+  'settings.timeCapsule.automaticSnapshots',
   'settings.migration.selectDestinationAccount', 'settings.migration.selectFoldersMigrate',
   'settings.language.title', 'settings.logs.applicationLogs', 'settings.templates.emailTemplates',
   // duplicate labels for a setting already indexed under a different key

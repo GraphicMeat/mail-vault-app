@@ -762,6 +762,12 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
         <div className="p-3 flex-1 flex flex-col">
           {!showRaw && <PgpDecryptedBadge email={selectedEmail} />}
+          {/* The index's snippet stands in while the body downloads (selectEmail). */}
+          {selectedEmail._bodyLoading && (
+            <p data-testid="email-body-loading" role="status" className="mb-2 text-xs text-mail-text-muted">
+              {t('viewer.showingPreviewWhileDownloading')}
+            </p>
+          )}
           {showRaw && (rawSource || rawError) ? (
             <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
               {rawError || atob(rawSource)}

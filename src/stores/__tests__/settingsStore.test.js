@@ -172,6 +172,8 @@ describe('persist migration v3 → v4', () => {
       dismissedQuickReplyThreads: {},
       // v11: every pre-v11 install is an update, offered the index rebuild.
       searchIndexReindexOffer: true,
+      // v12: no window 0 saved, so the download mode is Keep Recent.
+      fetchMode: 'keepRecent',
     });
   });
 });
