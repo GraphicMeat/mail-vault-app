@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 /// A right-click opens the row's quick actions at the pointer, in whatever
 /// layout the row surface is configured for (radial, menu, …), instead of the
@@ -6,17 +6,49 @@ import { useCallback, useState } from 'react';
 ///
 /// Windows fires `contextmenu` on mouse-up, not mouse-down: waiting for it
 /// costs a full click of latency before the wheel appears. Opening on
-/// `pointerdown` (button 2) instead paints it immediately; the `contextmenu`
-/// that follows only swallows the OS menu, it must not reopen or move the one
-/// already on screen.
+/// `pointerdown` (button 2) instead paints it immediately.
+///
+/// Not every gesture that opens a context menu delivers a button-2 pointer
+/// event first: macOS Ctrl+click is a plain button-0 click with `ctrlKey`,
+/// and the keyboard Menu key / Shift+F10 and a touch long-press never fire a
+/// pointerdown at all. All of those only ever reach `contextmenu`, so it has
+/// to be a fallback opener, not just an OS-menu-suppressor — but a real
+/// right-click's `contextmenu` (which follows its own button-2 pointerdown)
+/// must still only swallow the OS menu, not reopen or move the wheel that
+/// pointerdown already placed. `openedByPointerDownRef` is that "already
+/// handled this gesture" flag; it is short-lived (cleared on the very next
+/// contextmenu, or by the fallback timer if one oddly never arrives) so a
+/// gesture that opens without ever getting a matching contextmenu can't wedge
+/// the flag on and silently swallow the next, unrelated Ctrl+click.
 export function useMenuAtPointer() {
   const [menuAt, setMenuAt] = useState(null);
+  const openedByPointerDownRef = useRef(false);
+  const clearFlagTimerRef = useRef(null);
   const openMenuAtPointer = useCallback((event) => {
     if (event.button !== 2) return;
+    openedByPointerDownRef.current = true;
+    clearTimeout(clearFlagTimerRef.current);
+    clearFlagTimerRef.current = setTimeout(() => {
+      openedByPointerDownRef.current = false;
+    }, 500);
     setMenuAt({ x: event.clientX, y: event.clientY });
   }, []);
-  const suppressContextMenu = useCallback((event) => {
+  const openMenuFromContextMenu = useCallback((event) => {
     event.preventDefault();
+    if (openedByPointerDownRef.current) {
+      openedByPointerDownRef.current = false;
+      clearTimeout(clearFlagTimerRef.current);
+      return;
+    }
+    // No button-2 pointerdown opened this gesture. A keyboard-triggered
+    // contextmenu carries no real pointer position (0,0): anchor to the row
+    // itself instead of the screen origin.
+    const atOrigin = event.clientX === 0 && event.clientY === 0;
+    const rect = atOrigin ? event.currentTarget?.getBoundingClientRect() : null;
+    setMenuAt({
+      x: rect ? rect.left + rect.width / 2 : event.clientX,
+      y: rect ? rect.top + rect.height / 2 : event.clientY,
+    });
   }, []);
-  return [menuAt, { onPointerDown: openMenuAtPointer, onContextMenu: suppressContextMenu }];
+  return [menuAt, { onPointerDown: openMenuAtPointer, onContextMenu: openMenuFromContextMenu }];
 }

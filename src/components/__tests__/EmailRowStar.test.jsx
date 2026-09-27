@@ -155,5 +155,26 @@ for (const [name, renderRow] of variants) {
       fireEvent.pointerDown(screen.getByTestId('email-row'), { button: 0, clientX: 12, clientY: 34 });
       expect(screen.getByTestId('row-archive').dataset.openAt).toBe('');
     });
+
+    // No button-2 pointerdown ever precedes these: macOS Ctrl+click, the
+    // keyboard Menu key / Shift+F10, and a touch long-press all reach
+    // `contextmenu` directly, so it has to open the wheel on its own too.
+    it('opens the row actions from a bare contextmenu with no preceding pointerdown', () => {
+      render(renderRow(email()));
+      const notCancelled = fireEvent.contextMenu(screen.getByTestId('email-row'), { clientX: 12, clientY: 34 });
+      expect(notCancelled).toBe(false);
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('12,34');
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('opens exactly once on a macOS Ctrl+click (pointerdown button 0 + ctrlKey, then contextmenu)', () => {
+      render(renderRow(email()));
+      const row = screen.getByTestId('email-row');
+      fireEvent.pointerDown(row, { button: 0, ctrlKey: true, clientX: 12, clientY: 34 });
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('');
+      const notCancelled = fireEvent.contextMenu(row, { clientX: 12, clientY: 34 });
+      expect(notCancelled).toBe(false);
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('12,34');
+    });
   });
 }
