@@ -505,7 +505,60 @@ describe('deleteSelectedFromServer', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 1, 'Kunden.Company XY');
-    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+    // The child folder the message lived in is pruned — rows only, no count:
+    // the listing's total is the branch's, not the child's. The root gets
+    // nothing at all.
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden.Company XY', [], null, { removedUids: [1] });
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[1] === 'Kunden')).toBe(false);
+  });
+
+  // All Inboxes is a merge of each account's header cache. Skipping the
+  // prune there left the row on disk, hidden only by a session tombstone — so
+  // the next loadUnifiedInbox after an undo (which lifted it) repainted it.
+  it('prunes the header cache of the folder a row came from in All Inboxes', async () => {
+    const rows = seedThread().map(e => ({ ...e, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
+    primeStore(rows, [_selKey(rows[0])]);
+    useMailStore.setState({ activeMailbox: 'UNIFIED', _sortedEmailsFingerprint: '' });
+    useMailStore.getState().updateSortedEmails();
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [], null, { removedUids: [1] });
+  });
+
+  // The reader in All Inboxes is named by a full key. The batch compared it
+  // with bare uids, so a deleted message stayed open in the reader.
+  it('closes the reader showing a deleted row in All Inboxes', async () => {
+    const rows = seedThread().map(e => ({ ...e, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
+    primeStore(rows, [_selKey(rows[0])]);
+    useMailStore.setState({
+      activeMailbox: 'UNIFIED', _sortedEmailsFingerprint: '',
+      selectedEmailId: _selKey(rows[0]), selectedEmail: rows[0], selectedEmailSource: 'server',
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    const s = useMailStore.getState();
+    expect(s.selectedEmailId).toBeNull();
+    expect(s.selectedEmail).toBeNull();
+    expect(s.selectedEmailSource).toBeNull();
+    expect(s.sortedEmails.map(e => e.uid)).toEqual([2]);
+  });
+
+  // The reader draws an open thread from `selectedThread`, not from the id.
+  it('closes an open thread whose only message the batch deleted', async () => {
+    const rows = seedThread();
+    primeStore(rows, [1]);
+    useMailStore.setState({
+      selectedEmailId: 1, selectedEmail: rows[0],
+      selectedThread: { threadId: 'a@mock', subject: 'General', emails: [rows[0]], lastEmail: rows[0], messageCount: 1 },
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().selectedThread).toBeNull();
+    expect(useMailStore.getState().selectedEmailId).toBeNull();
   });
 
   // The whole delete runs in the webview, so a reload or quit inside the loop
@@ -860,6 +913,31 @@ describe('deleteEmailFromServer', () => {
 
     expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([2]);
     expect(useMailStore.getState().selectedEmailId).toBe(2);
+  });
+
+  // The count is part of the same paint as the row. It used to drop only once
+  // the server answered — and never for an offline or queued delete.
+  it('takes the row off the count before the server answers, and only once', async () => {
+    let release;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    primeStore(seedThread(), []);
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(useMailStore.getState().totalEmails).toBe(1);
+
+    release();
+    await pending;
+    expect(useMailStore.getState().totalEmails).toBe(1);
+  });
+
+  it('offline: the count drops with the row', async () => {
+    netOnline = false;
+    primeStore(seedThread(), []);
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().totalEmails).toBe(1);
   });
 
   it('pulls the row out of the list before the server answers', async () => {

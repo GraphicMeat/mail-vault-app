@@ -12,7 +12,7 @@ import { filterUnread } from '../../utils/emailParser';
 import { retryOnce } from './mailboxTree';
 import { cancelPendingMarkRead } from './selectEmail';
 import {
-  bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
+  bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { withoutUids } from '../../stores/slices/serverUids';
@@ -669,12 +669,147 @@ function _openAfterDelete(state, isOpenRow, isRemoved) {
 }
 
 
+// ── one delete, every view ──
+//
+// A deleted message has to leave everything that shows it in the same paint:
+// the rows of the list on screen, its count, the account's unread badge, the
+// reader, and the unified folder cache switchUnifiedFolder repaints from. An
+// undo has to put all of it back the same way. The single delete, the bulk
+// delete and the undo each did a part of this by hand and each missed a
+// different part: the bulk path in All Inboxes never closed the reader (it
+// compared bare uids with a full key), the single path counted the row a round
+// trip late, and none of them told the badge or the folder cache.
+//
+// A target is `{ accountId, mailbox, uid }`, and a row is matched by where it
+// lives, never by its bare uid — the same key the tombstone filter uses.
+const READER_CLOSED = { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null };
+const _targetId = ({ accountId, mailbox, uid }) => `${accountId}|${mailbox}|${uid}`;
+const _rowId = (e, state) => {
+  const loc = resolveEmailLocation(e, state);
+  return _targetId({ accountId: loc?.accountId ?? e._accountId, mailbox: loc?.mailbox ?? 'INBOX', uid: e.uid });
+};
+// The view a row was deleted from. An undo puts it back only into that one;
+// any other view learns it from its reload.
+const _viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? ''].join('|');
+
+// ±1 on an account's INBOX badge per unread message leaving or coming back.
+// Never a recount from `emails`: in All Inboxes that holds a window of each
+// account's cache, not its inbox. A single INBOX recounts in
+// updateSortedEmails right after, which wins.
+function _shiftUnread(entries, sign) {
+  const byAccount = new Map();
+  for (const { accountId, mailbox, row } of entries) {
+    if (mailbox !== 'INBOX' || row?.flags?.includes('\\Seen')) continue;
+    byAccount.set(accountId, (byAccount.get(accountId) || 0) + sign);
+  }
+  const settings = useSettingsStore.getState();
+  for (const [id, n] of byAccount) {
+    settings.setUnreadForAccount(id, Math.max(0, (settings.unreadPerAccount?.[id] || 0) + n));
+  }
+}
+
+// Switching unified folders repaints from this cache for five minutes; a row
+// it still holds comes back on the next switch. Leaving All Inboxes clears it,
+// so only a change made inside that view can leave it stale.
+function _dropUnifiedFolderCache(state) {
+  if (state.activeMailbox !== 'UNIFIED') return;
+  import('./activateAccount')
+    .then(({ _unifiedFolderCache }) => _unifiedFolderCache.clear())
+    .catch(error => console.warn('[messageMutations] Could not drop the unified folder cache:', error));
+}
+
+// Take `targets` off every view that shows them, now. `keys` are selection
+// keys to untick beyond the rows found. Returns what an undo needs to put the
+// rows back, and what the caller needs about the reader.
+function _hideDeleted(useMailStore, targets, { keys = [] } = {}) {
+  const live = useMailStore.getState();
+  const ids = new Set(targets.map(_targetId));
+  const gone = (e) => !!e && ids.has(_rowId(e, live));
+  const view = _viewId(live);
+  const removed = [...live.emails, ...live.sentEmails].filter(gone).map((row) => {
+    const loc = resolveEmailLocation(row, live);
+    return { accountId: loc?.accountId ?? row._accountId, mailbox: loc?.mailbox ?? 'INBOX', uid: row.uid, row, view };
+  });
+  const dropKeys = new Set([...keys, ...removed.map(r => selectionKey(r.row, live))]);
+  // The open thread is a snapshot: take the message out of it, and close the
+  // reader only when nothing is left (pruneSelectedThread).
+  const threadUpdate = pruneSelectedThread(live, gone);
+  const closes = threadUpdate
+    ? threadUpdate.selectedThread === null
+    : gone(live.selectedEmail) || targets.some(t => selectionStillNames(() => live, t));
+  const isOpen = (e) => selectionKey(e, live) === live.selectedEmailId;
+  const openNext = closes ? (_openAfterDelete(live, isOpen, gone) ?? _openAfterDelete(live, gone, gone)) : null;
+  const emails = live.emails.filter(e => !gone(e));
+  useMailStore.setState({
+    deleteTombstones: new Set([...live.deleteTombstones, ...ids]),
+    emails,
+    sentEmails: live.sentEmails.filter(e => !gone(e)),
+    totalEmails: Math.max(0, (live.totalEmails || 0) - (live.emails.length - emails.length)),
+    selectedEmailIds: new Set([...live.selectedEmailIds].filter(k => !dropKeys.has(k))),
+    ...(threadUpdate ?? (closes ? READER_CLOSED : {})),
+  });
+  _shiftUnread(removed, -1);
+  _dropUnifiedFolderCache(live);
+  useMailStore.getState().updateSortedEmails();
+  // Now, not after the round trip: the reader is empty from this paint, and a
+  // message that appears seconds later reads as a bug.
+  if (openNext) useMailStore.getState().selectEmail(selectionKey(openNext, live));
+  return { removed, counted: live.emails.length > emails.length, closes, threadUpdate, openNext, before: live };
+}
+
+// The reverse, for rows `_hideDeleted` returned: back into the view they left,
+// with their count and badge, and their tombstones lifted so they render.
+// Returns the ones it put back.
+function _reinsertRestored(useMailStore, restored) {
+  const live = useMailStore.getState();
+  const view = _viewId(live);
+  const onScreen = new Set([...live.emails, ...live.sentEmails].map(e => _rowId(e, live)));
+  const back = restored.filter(r => r.row && r.view === view && !onScreen.has(_targetId(r)));
+  if (!back.length) return back;
+  const tombstones = new Set(live.deleteTombstones);
+  for (const r of back) tombstones.delete(_targetId(r));
+  const toEmails = back.filter(r => !r.row._fromSentFolder).map(r => r.row);
+  useMailStore.setState({
+    deleteTombstones: tombstones,
+    emails: [...live.emails, ...toEmails],
+    sentEmails: [...live.sentEmails, ...back.filter(r => r.row._fromSentFolder).map(r => r.row)],
+    totalEmails: (live.totalEmails || 0) + toEmails.length,
+  });
+  _shiftUnread(back, 1);
+  _dropUnifiedFolderCache(live);
+  useMailStore.getState().updateSortedEmails();
+  return back;
+}
+
+// An undo whose move is still on the wire, and the uids the last undo retired.
+// A delete aimed at a row it put back — while the move runs, or from a caller
+// that still holds the row it was handed before — waits for it, then
+// addresses the uid the server gave the message: the old one names nothing.
+// ponytail: only the last undo's uids, like the undo slot itself.
+let _restoreInFlight = null;
+const _restoredUids = new Map(); // `account|mailbox|old uid` -> new uid
+
+// `key` re-pointed at the new uid in `newUids`, when it names a retired one.
+// `retired` (the tombstones) limits that to a uid this session actually
+// retired and still hides.
+function _restoredKey(key, newUids, accountId, mailbox, retired = null) {
+  const p = _parseSelKey(key);
+  const id = _targetId({ accountId: p.accountId ?? accountId, mailbox: p.mailbox ?? mailbox, uid: p.uid });
+  const nu = newUids.get(id);
+  if (nu == null || (retired && !retired.has(id))) return key;
+  return p.accountId ? _selKey({ _accountId: p.accountId, _mailbox: p.mailbox, uid: nu }) : nu;
+}
+
+
 // ── deleteEmailFromServer workflow ──
 
 export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null, accountId: explicitAccountId = null } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
+  await _restoreInFlight;
+  uid = _restoredKey(uid, _restoredUids, explicitAccountId ?? get().activeAccountId,
+    mailboxOverride ?? get().activeMailbox, get().deleteTombstones);
   const state = get();
   const isUnified = spansMailboxes(state);
   const explicitScope = explicitAccountId != null;
@@ -741,97 +876,24 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // (Graph, local-only); a journalled one keeps the row gone and leaves the
   // entry for replayOps — see the catch below.
   const tombstone = `${accountId}|${mailbox}|${realUid}`;
-  // The folder is part of the identity, exactly as in applyServerRemoval's
-  // `sameMessage`: a thread and the unified list both merge INBOX with Sent,
-  // and the two share uids — without it, deleting the INBOX copy took the Sent
-  // row off the list too.
-  const isThisEmail = (e) => {
-    if (explicitScope) {
-      const location = resolveEmailLocation(e, state);
-      return e.uid === realUid && location?.accountId === accountId && location?.mailbox === mailbox;
-    }
-    return isUnified
-      ? _selKey(e) === String(uid)
-        || (e._accountId === accountId && e.uid === realUid && (e._mailbox == null || e._mailbox === mailbox))
-      : e.uid === uid;
-  };
-  // The open thread is a snapshot; take the message out of it too, and close
-  // the reader only when nothing is left (pruneSelectedThread). Matched by
-  // folder wherever the row can say where it lives: a thread merges INBOX with
-  // Sent, and the two share uids.
-  const isThisMessage = (e) => {
-    const loc = resolveEmailLocation(e, state);
-    return loc ? e.uid === realUid && loc.accountId === accountId && loc.mailbox === mailbox : isThisEmail(e);
-  };
-  // The journal write above is awaited. Read the view again before the
-  // optimistic paint: a reader opened during that write belongs to the user,
-  // not to this delete. If the user changed account/folder, keep that view's
-  // rows and reader completely untouched; the uid may exist there too.
-  const liveState = get();
-  const sameView = liveState.activeAccountId === state.activeAccountId
-    && liveState.activeMailbox === state.activeMailbox
-    && liveState.mailboxScope === state.mailboxScope;
-  const liveSelectedEmailId = sameView ? liveState.selectedEmailId : null;
-  const threadBeforeDelete = sameView ? liveState.selectedThread : null;
-  const selectedEmailIdBeforeDelete = sameView ? liveState.selectedEmailId : null;
-  const threadUpdate = sameView ? pruneSelectedThread(liveState, isThisMessage) : null;
-  const selectedLocation = resolveEmailLocation(liveState.selectedEmail, liveState);
-  const selectedMatchesTarget = explicitScope
-    ? (liveState.selectedEmail?.uid === realUid
-      && selectedLocation?.accountId === accountId && selectedLocation?.mailbox === mailbox)
-      || selectionStillNames(() => liveState, { uid: realUid, accountId, mailbox })
-    : liveSelectedEmailId === uid || liveSelectedEmailId === realUid;
-  // Keep the ownership of the row removed by the optimistic paint. The
-  // completion path runs after more awaits, by which time that paint has
-  // already removed the only row that could prove this message belonged to a
-  // spanning view. The view identity prevents this count from leaking into a
-  // different account or folder that happens to span mailboxes too.
-  const optimisticView = sameView && isUnified ? {
-    accountId: liveState.activeAccountId,
-    mailbox: liveState.activeMailbox,
-    mailboxScope: liveState.mailboxScope,
-    targetWasInView: [...liveState.emails, ...liveState.sentEmails].some(isThisEmail),
-  } : null;
-  // Only a delete that CLOSES the reader hands it a new message: a thread with
-  // messages left keeps the one pruneSelectedThread moved to.
-  const closedReader = threadUpdate ? threadUpdate.selectedThread === null : selectedMatchesTarget;
-  const targetVisible = isUnified
-    ? [...liveState.emails, ...liveState.sentEmails].some(isThisEmail)
-    : liveState.activeAccountId === accountId && liveState.activeMailbox === mailbox;
-  const openNext = closedReader && (!explicitScope || targetVisible)
-    ? _openAfterDelete(liveState, isThisEmail, isThisEmail)
-    : null;
-  useMailStore.setState({
-    deleteTombstones: new Set(liveState.deleteTombstones).add(tombstone),
-    emails: sameView ? liveState.emails.filter(e => !isThisEmail(e)) : liveState.emails,
-    sentEmails: sameView ? liveState.sentEmails.filter(e => !isThisEmail(e)) : liveState.sentEmails,
-    selectedEmailIds: sameView
-      ? new Set([...liveState.selectedEmailIds].filter(k => explicitScope
-        ? ![...liveState.emails, ...liveState.sentEmails].some(e => isThisEmail(e) && selectionKey(e, liveState) === k)
-        : k !== uid && k !== realUid))
-      : liveState.selectedEmailIds,
-    ...(threadUpdate ?? (closedReader
-      ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null }
-      : {})),
-  });
-  get().updateSortedEmails();
+  // Read live, after the awaited journal write: a reader opened during it
+  // belongs to the user, and a view switched to during it keeps its rows —
+  // _hideDeleted matches rows by where they live, so the same uid in another
+  // account or folder is not this message.
+  const hidden = _hideDeleted(useMailStore, [{ accountId, mailbox, uid: realUid }]);
+  const { threadUpdate } = hidden;
   // The result list is not `emails` — it needs telling separately.
   await pruneSearchResults([{ accountId, mailbox, uid: realUid }]);
-  // Now, not after the round trip: the reader is empty from this paint, and a
-  // message that appears seconds later reads as a bug. A delete the server
-  // refuses restores the row, not the reader — the same trade the optimistic
-  // removal above already makes.
-  if (openNext) get().selectEmail(selectionKey(openNext, state));
 
-  // Put the row back and let the reconcile re-derive it. `totalEmails` is
-  // untouched above — applyServerRemoval owns that decrement on the success
-  // path, so a failure has nothing to restore there.
+  // Put the row back, with its count and badge, and let the reconcile
+  // re-derive it.
   //
   // ponytail: the search result evicted at the optimistic paint is NOT put
   // back — `pruneSearchResults` is one-way for the run, same as the move path.
   // Only the two unjournalled callers reach this now (Graph, local-only), and
   // re-running the query brings the hit back.
   const restoreRow = () => {
+    _reinsertRestored(useMailStore, hidden.removed);
     const ts = new Set(get().deleteTombstones);
     ts.delete(tombstone);
     useMailStore.setState({ deleteTombstones: ts });
@@ -846,8 +908,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     const cur = get();
     if (threadUpdate && cur.selectedThread === threadUpdate.selectedThread && cur.selectedEmailId === threadUpdate.selectedEmailId) {
       useMailStore.setState({
-        selectedThread: threadBeforeDelete,
-        selectedEmailId: selectedEmailIdBeforeDelete,
+        selectedThread: hidden.before.selectedThread,
+        selectedEmailId: hidden.before.selectedEmailId,
       });
     }
     if (!isUnified
@@ -897,6 +959,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
           // The only handle left when the server reports no COPYUID — same
           // fallback the move undo uses. See setDeleteUndo.
           messageId: candidate?.messageId ?? null,
+          // What an undo puts back on screen before its move goes out.
+          row: hidden.removed[0]?.row ?? null, view: hidden.removed[0]?.view ?? null,
         };
       }
       console.log(`[deleteEmail] Successfully deleted UID ${realUid} from "${mailbox}"`);
@@ -929,9 +993,10 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
-    optimisticView,
+    // The optimistic paint already took the row off the count.
+    counted: hidden.counted,
     // Never over a message this delete just opened.
-    clearSelection: sameView && !threadUpdate && selectedMatchesTarget && !openNext,
+    clearSelection: hidden.closes && !threadUpdate && !hidden.openNext,
     deletedByUs: true,
   });
 
@@ -987,17 +1052,32 @@ export async function setDeleteUndo(outcomes) {
 
 // Put the messages back where they were deleted from — one IMAP move per
 // (account, Trash, source folder), not one per message.
+//
+// The rows go back on screen FIRST, before any round trip: the user pressed
+// Undo, and a list that stays empty through a token refresh, a MOVE and a
+// reload reads as an undo that did nothing. The server follows. A move that
+// throws takes its rows back out, and runUndo says "Undo failed".
 async function _restoreFromTrash(outcomes) {
   const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+  const back = _reinsertRestored(useMailStore, outcomes);
+  _restoredUids.clear();
+  let settle;
+  _restoreInFlight = new Promise((resolve) => { settle = resolve; });
+
   const groups = new Map();
   for (const o of outcomes) {
     const k = `${o.accountId}|${o.trash}|${o.mailbox}`;
-    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [], messageIds: [] });
+    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [], messageIds: [], outcomes: [] });
     groups.get(k).trashUids.push(o.trashUid);
     groups.get(k).uids.push(o.uid);
     groups.get(k).messageIds.push(o.messageId);
+    groups.get(k).outcomes.push(o);
   }
-  // A throw on the second group must still repaint what the first one restored.
+  // A row this undo could not put back (another view is on screen now), or a
+  // message whose new uid the server did not name, is repainted by a reload.
+  let reload = back.length < outcomes.length;
+  const moved = new Set();
   try {
     for (const g of groups.values()) {
       const account = await ensureFreshToken(g.account);
@@ -1005,27 +1085,119 @@ async function _restoreFromTrash(outcomes) {
       // by Message-ID in the folder it was moved to — never a guessed uid,
       // which would move somebody else's message back.
       const known = g.trashUids.filter(u => u != null);
-      const trashUids = known.length === g.uids.length
-        ? known
-        : await _resolveDestinationUids(account, g.trash, g.messageIds);
+      const byCopyUid = known.length === g.uids.length;
+      const trashUids = byCopyUid ? known : await _resolveDestinationUids(account, g.trash, g.messageIds);
       // Bare: runUndo already says "Undo failed: {{err}}" around whatever this
       // throws, and saying it twice reads as a bug.
       if (!trashUids.length) throw new Error(g.trash);
-      await api.moveEmails(account, trashUids, g.trash, g.mailbox);
-      // The vault copy was stamped "we deleted the server copy" a moment ago
-      // (markServerDeleted / applyServerRemoval); it is back, so custody must
-      // stop claiming this is the only copy left. See stores/slices/custody.js.
-      for (const uid of g.uids) await stampVaultEntry(g.accountId, g.mailbox, uid, { serverDeleted: false });
-      // The restored message gets a NEW uid in the source folder, so the old
-      // tombstone would not hide it — but a tombstone naming a uid that is no
-      // longer deleted is a lie the next reconcile has to work around.
-      const ts = new Set(useMailStore.getState().deleteTombstones);
-      for (const uid of g.uids) ts.delete(`${g.accountId}|${g.mailbox}|${uid}`);
-      useMailStore.setState({ deleteTombstones: ts });
+      const res = await api.moveEmails(account, trashUids, g.trash, g.mailbox);
+      for (const o of g.outcomes) moved.add(_targetId(o));
+      // Old uid -> new uid. COPYUID lists the destination uids in the order of
+      // the source set, which servers send ascending, and the trash uids came
+      // from COPYUIDs of their own. A Message-ID search gives no such pairing.
+      // ponytail: pairs by ascending trash uid; a server that reorders the set
+      // is not caught here, add a per-uid MOVE if one ever shows up.
+      const newUids = byCopyUid && Array.isArray(res?.newUids) && res.newUids.length === g.uids.length
+        ? [...res.newUids].sort((a, b) => a - b) : null;
+      if (!newUids) {
+        reload = true;
+        // The vault copy was stamped "we deleted the server copy" a moment
+        // ago; it is back, so custody must stop claiming it is the only copy.
+        for (const uid of g.uids) await stampVaultEntry(g.accountId, g.mailbox, uid, { serverDeleted: false });
+        continue;
+      }
+      const byTrash = g.uids.map((uid, i) => [g.trashUids[i], uid]).sort((a, b) => a[0] - b[0]);
+      await _rekeyRestored(useMailStore, g, byTrash.map(([, uid], i) => [uid, newUids[i]]));
     }
+  } catch (error) {
+    // Only what did not move comes back out; what did is on the server again.
+    const failed = back.filter(r => !moved.has(_targetId(r)));
+    if (failed.length) _hideDeleted(useMailStore, failed);
+    throw error;
   } finally {
-    await reloadListInView();
+    try {
+      if (reload) await reloadListInView();
+    } finally {
+      // A retired uid stays tombstoned: the message it named has a new one,
+      // and anything still holding the old number (a header cache a sync
+      // wrote back, a vault row filed under it) must not paint it. After the
+      // reload, which is what replaces a row whose new uid nobody named.
+      useMailStore.setState({
+        deleteTombstones: new Set([...get().deleteTombstones, ...outcomes.map(_targetId)]),
+      });
+      get().updateSortedEmails();
+      settle();
+      _restoreInFlight = null;
+    }
   }
+}
+
+// Point the rows an undo put back at the uids the server gave them: on screen,
+// in the header cache, and in the vault. Best effort past the store write —
+// the message is already back on the server.
+async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pairs) {
+  const get = () => useMailStore.getState();
+  const newOf = new Map(pairs.map(([old, uid]) => [_targetId({ accountId, mailbox, uid: old }), uid]));
+  for (const [id, uid] of newOf) _restoredUids.set(id, uid);
+  const live = get();
+  const moveRow = (e) => {
+    const uid = e && newOf.get(_rowId(e, live));
+    return uid == null ? e : { ...e, uid };
+  };
+  const rekey = (k) => _restoredKey(k, newOf, live.activeAccountId, live.activeMailbox);
+  useMailStore.setState({
+    emails: live.emails.map(moveRow),
+    sentEmails: live.sentEmails.map(moveRow),
+    selectedEmailIds: new Set([...live.selectedEmailIds].map(rekey)),
+    ...(live.selectedEmailId != null
+      ? { selectedEmailId: rekey(live.selectedEmailId), selectedEmail: moveRow(live.selectedEmail) }
+      : {}),
+  });
+  // A new uid moves no row in or out, so like a flag change it is invisible to
+  // the list's fingerprints: the thread rows kept the old row, which the
+  // retired uid's tombstone then hid.
+  _refreshAfterFlagChange(useMailStore);
+
+  try {
+    // Under the new uid, the old one pruned: a reload paints this row from the
+    // cache, not the retired one.
+    const rows = outcomes.filter(o => o.row).map(o => ({ ...o.row, uid: newOf.get(_targetId(o)) }));
+    await db.saveEmailHeaders(accountId, mailbox, rows, null, { removedUids: pairs.map(([old]) => old) });
+  } catch (error) {
+    console.warn('[undo] Could not re-key the header cache:', error);
+  }
+
+  // The vault copy is filed under the uid the delete retired. Left there it
+  // renders next to the message it is a copy of, and a second delete stamps
+  // nothing on it — it stays on screen claiming to be on the server.
+  let rebound = [];
+  try {
+    rebound = (await api.vaultRebindUids(accountId, mailbox, pairs))?.rebound || [];
+  } catch (error) {
+    console.warn('[undo] Could not re-file the vault copy:', error);
+  }
+  if (!rebound.length) return;
+  // Stamped "we deleted the server copy" by the delete; it is back, so custody
+  // must stop claiming this is the only copy left. See stores/slices/custody.js.
+  for (const [, uid] of rebound) await stampVaultEntry(accountId, mailbox, uid, { serverDeleted: false });
+  const swap = (set) => {
+    if (!set) return set;
+    const out = new Set(set);
+    for (const [old, uid] of rebound) if (out.delete(old)) out.add(uid);
+    return out;
+  };
+  setArchivedGroup(accountId, mailbox, swap(getArchivedGroup(accountId, mailbox)) ?? null);
+  const now = get();
+  const localOf = new Map(rebound.map(([old, uid]) => [_targetId({ accountId, mailbox, uid: old }), uid]));
+  useMailStore.setState({
+    archivedEmailIds: swap(now.archivedEmailIds),
+    savedEmailIds: swap(now.savedEmailIds),
+    localEmails: now.localEmails.map((e) => {
+      const uid = localOf.get(_rowId(e, now));
+      return uid == null ? e : { ...e, uid, serverDeleted: false };
+    }),
+  });
+  _refreshAfterFlagChange(useMailStore);
 }
 
 
@@ -1159,7 +1331,7 @@ export function selectionStillNames(get, { uid, accountId, mailbox, keys } = {})
 // `removedUids` is what stops the sidecar re-hydrating the row on reload.
 export async function applyServerRemoval(uid, {
   accountId, mailbox, isUnified = false, skipRefresh = false, clearSelection = true,
-  deletedByUs = false, optimisticView = null,
+  deletedByUs = false, counted = false,
 } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -1219,13 +1391,8 @@ export async function applyServerRemoval(uid, {
   const currentSentEmails = live.sentEmails;
   const targetIsInSpanningView = liveSpansMailboxes
     && [...currentEmails, ...currentSentEmails].some(sameMessage);
-  const sameOptimisticView = optimisticView
-    && live.activeAccountId === optimisticView.accountId
-    && live.activeMailbox === optimisticView.mailbox
-    && live.mailboxScope === optimisticView.mailboxScope;
-  const totalIncludesTarget = targetViewMatches
-    || targetIsInSpanningView
-    || (sameOptimisticView && optimisticView.targetWasInView);
+  // `counted`: a delete's optimistic paint (_hideDeleted) already took it off.
+  const totalIncludesTarget = !counted && (targetViewMatches || targetIsInSpanningView);
   const filteredEmails = currentEmails.filter(e => !isRemoved(e));
   const filteredSent = currentSentEmails.filter(e => !isRemoved(e));
   const newTotal = totalIncludesTarget
@@ -1859,6 +2026,9 @@ export async function deleteSelectedFromServer() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
+  // A ticked row an undo put back keeps its selection key through the rewrite
+  // to its new uid (_rekeyRestored), so waiting is all this path needs.
+  await _restoreInFlight;
   const state = get();
   const { selectedEmailIds } = state;
   const isUnified = spansMailboxes(state);
@@ -1907,55 +2077,18 @@ export async function deleteSelectedFromServer() {
   const offline = !useConnectivityStore.getState().online;
 
   // Remove from the UI immediately — the server/maildir deletes below can take
-  // seconds (pool checkout + one round-trip per email). The post-loop
-  // loadEmails() reconcile restores anything whose server delete failed.
-  const deletedKeySet = new Set(keys);
-  const realUidSet = new Set(keys.map(k => (isUnified ? requireUnifiedContext(k, state).uid : k)));
-
-  const newTombstones = new Set(state.deleteTombstones);
-  for (const key of keys) newTombstones.add(contextOf(key).tombstone);
-
-  // The open message may be one of the ticked ones; if it is, the same setting
-  // the single delete honours decides what replaces it. Live, not `state`: the
-  // journal write above is an await, and a message opened across it is not this
-  // batch's to close or to replace.
-  const closesReader = selectionStillNames(get, { keys: realUidSet });
-  // …and the row it replaces is the one the reader holds NOW. Read from the
-  // snapshot, "what comes next" was measured from whichever message was open
-  // when the batch started, so a reselection inside the window handed the user
-  // the neighbour of a row they had already left.
-  const openId = get().selectedEmailId;
-  const isDeletedRow = (e) => deletedKeySet.has(selectionKey(e, state));
-  const openNext = closesReader
-    ? _openAfterDelete(state, (e) => selectionKey(e, state) === openId, isDeletedRow)
-    : null;
-
-  // The reader's two fields are written only when this batch owns them —
-  // writing the snapshot back would null a fresh selection and resurrect a
-  // closed one just as readily.
-  useMailStore.setState({
-    deleteTombstones: newTombstones,
-    // Live minus what this batch owns, never a blanket clear: the journal
-    // write above is awaited, and a row the user ticks across it is theirs.
-    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !deletedKeySet.has(k))),
-    emails: state.emails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
-    sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
-    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
-    ...(closesReader ? { selectedEmailId: null, selectedEmail: null } : {}),
-  });
-  get().updateSortedEmails();
+  // seconds (pool checkout + one round-trip per email). Live, not `state`: the
+  // journal write above is an await, and a message opened or a row ticked
+  // across it is the user's, not this batch's (_hideDeleted reads live).
+  const hidden = _hideDeleted(useMailStore, keys.map(contextOf), { keys });
   await pruneSearchResults(keys.map(key => {
     const { uid, accountId, mailbox } = contextOf(key);
     return { accountId, mailbox, uid };
   }));
-  if (openNext) get().selectEmail(selectionKey(openNext, state));
 
   const deletedRealUids = new Set();
-  // Uids deleted out of the mailbox currently on screen. Only these are
-  // pruned from the header sidecar here, together with the view's count, which
-  // is the active mailbox's alone. Deletes in other mailboxes (Sent) are pruned
-  // when those are next loaded.
-  const deletedInActiveMailbox = new Set();
+  // Server-deleted uids per (account, mailbox), for the header sidecar prune.
+  const prunes = new Map();
   // Tombstones to lift once the server delete succeeds AND the message still
   // has a surviving local (archived) copy on disk — those rows must re-render
   // as "Local only" rather than staying hidden for the rest of the session.
@@ -2018,14 +2151,18 @@ export async function deleteSelectedFromServer() {
         await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId), { delayMs: SERVER_RETRY_MS });
       } else {
         const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
+        const shown = hidden.removed.find(r => _targetId(r) === tombstone);
         deleted.push({
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
           messageId: emailObj?.messageId ?? null,
+          row: shown?.row ?? null, view: shown?.view ?? null,
         });
       }
       deletedRealUids.add(realUid);
-      if (!isUnified && mailbox === state.activeMailbox) deletedInActiveMailbox.add(realUid);
+      const groupKey = `${accountId}|${mailbox}`;
+      if (!prunes.has(groupKey)) prunes.set(groupKey, { accountId, mailbox, uids: [] });
+      prunes.get(groupKey).uids.push(realUid);
       if (!isUnified && get().archivedEmailIds.has(realUid)) {
         survivingLocalTombstones.add(tombstone);
       }
@@ -2046,6 +2183,7 @@ export async function deleteSelectedFromServer() {
         stillQueued.add(`${failedAccountId}|${failedMailbox}|${failedUid}`);
         continue;
       }
+      _reinsertRestored(useMailStore, hidden.removed.filter(r => _targetId(r) === tombstone));
       const ts = new Set(get().deleteTombstones);
       ts.delete(tombstone);
       useMailStore.setState({ deleteTombstones: ts });
@@ -2100,23 +2238,23 @@ export async function deleteSelectedFromServer() {
   //     only thing hiding the row, and the next reload repaints a message that
   //     is gone from the server. Deleting and then switching account made a
   //     delete permanently fail to stick.
-  if (!isUnified && deletedInActiveMailbox.size > 0) {
-    const s = get();
-    const viewUnmoved = s.activeAccountId === state.activeAccountId && s.activeMailbox === state.activeMailbox;
+  //
+  // Every folder the batch touched, in every view shape. All Inboxes and a
+  // branch listing skipped this once, and their rows came straight back from
+  // the header cache the next loadUnifiedInbox read — hidden only by a session
+  // tombstone, which an undo then lifted.
+  const viewUnmoved = get().activeAccountId === state.activeAccountId && get().activeMailbox === state.activeMailbox;
+  for (const g of prunes.values()) {
+    // The count only for the single folder on screen: a spanning view's total
+    // is its own, never one folder's.
+    const ownFolder = !isUnified && viewUnmoved && g.accountId === state.activeAccountId && g.mailbox === state.activeMailbox;
     // Same reasoning as the sidecar prune, for the in-memory uid set: these
     // uids are gone from the server and nothing downstream will take them out
-    // (see withoutUids). Only when the view has not moved — the store holds
-    // whatever mailbox is on screen now, and uids are per-mailbox.
-    if (viewUnmoved) {
-      useMailStore.setState({ serverUids: withoutUids(s.serverUids, deletedInActiveMailbox) });
-    }
+    // (see withoutUids).
+    if (ownFolder) useMailStore.setState({ serverUids: withoutUids(get().serverUids, new Set(g.uids)) });
     // Rows are never written — the cache holds them already, and the list
     // would serialise the whole mailbox for a prune.
-    await db.saveEmailHeaders(
-      state.activeAccountId, state.activeMailbox, [],
-      viewUnmoved ? s.totalEmails : null,
-      { removedUids: [...deletedInActiveMailbox] },
-    );
+    await db.saveEmailHeaders(g.accountId, g.mailbox, [], ownFolder ? get().totalEmails : null, { removedUids: g.uids });
   }
 
   // Reconcile with the server: prunes the header cache and restores any email
@@ -2233,19 +2371,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // running the guard first would widen the window in which a row the store
   // gains mid-purge gets clobbered by the `emails: state.emails.filter(...)`
   // write below.
-  const keySet = new Set(keys);
-  const tombstones = new Set(state.deleteTombstones);
-  for (const t of targets) tombstones.add(t.tombstone);
-  useMailStore.setState({
-    deleteTombstones: tombstones,
-    // Live minus this purge's own keys — the provenance reads above are
-    // awaited, and a tick made across them is not this purge's to drop.
-    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
-    emails: state.emails.filter(e => !keySet.has(selectionKey(e, state))),
-    sentEmails: state.sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
-    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
-  });
-  get().updateSortedEmails();
+  // Live, not `state` — the provenance reads above are awaited, and a tick or
+  // a reader opened across them is not this purge's to drop.
+  _hideDeleted(useMailStore, targets, { keys });
   await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
 
   // ── UIDVALIDITY guard ──

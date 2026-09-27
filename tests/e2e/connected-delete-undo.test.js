@@ -121,7 +121,7 @@ describe('Delete from server, then undo', function () {
    * stall. So the poll for the toast is tight, and the click happens in the
    * same step that finds it rather than in a later one.
    */
-  async function deleteThenUndo() {
+  async function deleteRow() {
     await openRowMenu();
     expect(await clickRowAction('deleteServer')).toBe(true);
     await browser.waitUntil(async () => !!(await clickDialogButton('Delete from server')), {
@@ -129,6 +129,10 @@ describe('Delete from server, then undo', function () {
     });
 
     await waitForRow(false, `"${SUBJECT}" never left the list after the delete`);
+  }
+
+  async function deleteThenUndo() {
+    await deleteRow();
 
     let toast = null;
     await browser.waitUntil(async () => {
@@ -145,6 +149,55 @@ describe('Delete from server, then undo', function () {
     expect(await browser.execute(() =>
       !!document.querySelector('[data-testid="undo-toast-button"]')
       && (document.querySelector('[data-testid="undo-toast-button"]').click(), true))).toBe(true);
+  }
+
+  /** The uid the list holds for SUBJECT, or null. */
+  const uidOnScreen = () => browser.execute((needle) =>
+    (window.__MAIL_STORE__.getState().emails || []).find((e) => e.subject === needle)?.uid ?? null, SUBJECT);
+
+  /** Leave for luke, then open All Inboxes and wait for the merged list. */
+  async function enterAllInboxes() {
+    // A unified view whose active account is the one under test gets the
+    // right answer for the wrong reason.
+    const luke = (browser.mockAccounts || []).find((a) => a.email === 'luke@mock.test');
+    await activate(luke.id);
+    await browser.waitUntil(
+      async () => (await browser.execute(() => window.__MAIL_STORE__.getState().activeAccountId)) === luke.id,
+      { timeout: 60_000, interval: 500, timeoutMsg: 'never switched to luke' },
+    );
+
+    expect(await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
+    })).toBe(true);
+
+    // Wait for the DATA the mode implies, never the mode flag: `activeMailbox`
+    // flips to 'UNIFIED' synchronously on the click while the merged list
+    // arrives later, so a wait on the flag asserts against luke's rows.
+    await browser.waitUntil(async () => browser.execute(() => {
+      const s = window.__MAIL_STORE__.getState();
+      if (!s || s.activeMailbox !== 'UNIFIED' || s.loadingProgress) return false;
+      return new Set((s.sortedEmails || []).map((e) => e._accountId).filter(Boolean)).size >= 2;
+    }), { timeout: 90_000, interval: 500, timeoutMsg: 'the unified list never merged two accounts' });
+  }
+
+  /** yoda's INBOX, freshly listed, so the header cache All Inboxes reads is current. */
+  async function openYodaInbox() {
+    await activate(yodaId);
+    await browser.waitUntil(async () => browser.execute((id) => {
+      const s = window.__MAIL_STORE__.getState();
+      return s.activeAccountId === id && s.activeMailbox === 'INBOX';
+    }, yodaId), { timeout: 60_000, interval: 500, timeoutMsg: 'never switched to yoda\'s INBOX' });
+    await browser.execute(() => window.__MAIL_STORE__.getState().loadEmails());
+  }
+
+  /** Absent, and still absent after the view has had time to settle. */
+  async function staysOffScreen(msg) {
+    await waitForRow(false, msg);
+    await browser.pause(3_000);
+    expect(await rowIsOnScreen()).toBe(false);
   }
 
   /**
@@ -221,30 +274,7 @@ describe('Delete from server, then undo', function () {
     await browser.execute(() => window.__MAIL_STORE__.getState().loadEmails());
     await waitForRow(true, `yoda's INBOX never re-listed "${SUBJECT}"`);
 
-    // Then leave for another account: a unified view whose active account is
-    // the one under test gets the right answer for the wrong reason.
-    const luke = (browser.mockAccounts || []).find((a) => a.email === 'luke@mock.test');
-    await activate(luke.id);
-    await browser.waitUntil(
-      async () => (await browser.execute(() => window.__MAIL_STORE__.getState().activeAccountId)) === luke.id,
-      { timeout: 60_000, interval: 500, timeoutMsg: 'never switched to luke' },
-    );
-
-    expect(await browser.execute(() => {
-      const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
-      if (!btn || btn.offsetHeight === 0) return false;
-      btn.click();
-      return true;
-    })).toBe(true);
-
-    // Wait for the DATA the mode implies, never the mode flag: `activeMailbox`
-    // flips to 'UNIFIED' synchronously on the click while the merged list
-    // arrives later, so a wait on the flag asserts against luke's rows.
-    await browser.waitUntil(async () => browser.execute(() => {
-      const s = window.__MAIL_STORE__.getState();
-      if (!s || s.activeMailbox !== 'UNIFIED' || s.loadingProgress) return false;
-      return new Set((s.sortedEmails || []).map((e) => e._accountId).filter(Boolean)).size >= 2;
-    }), { timeout: 90_000, interval: 500, timeoutMsg: 'the unified list never merged two accounts' });
+    await enterAllInboxes();
 
     await waitForRow(true, `All Inboxes never rendered "${SUBJECT}"`);
     expect(await uidsIn('INBOX')).toHaveLength(1);
@@ -262,5 +292,84 @@ describe('Delete from server, then undo', function () {
       `"${SUBJECT}" is back on the server but never repainted in All Inboxes`);
     expect(await browser.execute(() =>
       window.__MAIL_STORE__.getState().activeMailbox)).toBe('UNIFIED');
+  });
+
+  // Rokas: delete, undo, delete again, and the message showed in All Inboxes
+  // as well as in Trash. The undo lifted the tombstone of the uid the delete
+  // retired, so anything still holding that number painted a ghost.
+  it('delete, undo, delete again: gone from INBOX and All Inboxes, once in Trash', async function () {
+    await openYodaInbox();
+    await waitForRow(true, `yoda's INBOX never re-listed "${SUBJECT}"`);
+    const [original] = await uidsIn('INBOX');
+
+    await deleteThenUndo();
+    // Back on screen at once: yoda's MOVE stalls 4s, so a row that waits for
+    // the server cannot make this.
+    await browser.waitUntil(rowIsOnScreen, {
+      timeout: 1_500, interval: 100,
+      timeoutMsg: `"${SUBJECT}" did not come back within 1.5s of Undo`,
+    });
+
+    await browser.waitUntil(async () => (await uidsIn('INBOX')).length === 1, {
+      timeout: 120_000, interval: 1000,
+      timeoutMsg: `"${SUBJECT}" never came back to yoda's INBOX on the server`,
+    });
+    const [restored] = await uidsIn('INBOX');
+    expect(restored).not.toBe(original);
+    // The row on screen now names the message the server holds (COPYUID).
+    await browser.waitUntil(async () => (await uidOnScreen()) === restored, {
+      timeout: 30_000, interval: 300,
+      timeoutMsg: `the restored row never took the uid the server gave it (${restored})`,
+    });
+
+    await deleteRow();
+    await browser.waitUntil(async () => (await uidsIn('INBOX')).length === 0, {
+      timeout: 120_000, interval: 1000, timeoutMsg: `"${SUBJECT}" never left yoda's INBOX on the server`,
+    });
+    expect(await uidsIn('Trash')).toHaveLength(1);
+    await staysOffScreen(`"${SUBJECT}" came back to yoda's INBOX after the second delete`);
+
+    await enterAllInboxes();
+    await staysOffScreen(`"${SUBJECT}" is in Trash but All Inboxes still shows it`);
+  });
+
+  // Rokas: deleting in All Inboxes left the message open in the reader and the
+  // count where it was, and the inbox it came from still listed it.
+  it('delete the open message in All Inboxes: reader closes, count drops, INBOX agrees', async function () {
+    await openYodaInbox();
+    await waitForRow(true, `yoda's INBOX never re-listed "${SUBJECT}"`);
+    await enterAllInboxes();
+    await waitForRow(true, `All Inboxes never rendered "${SUBJECT}"`);
+
+    expect(await browser.execute((needle) => {
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((r) => r.offsetHeight > 0 && (r.textContent || '').includes(needle));
+      if (!row) return false;
+      row.click();
+      return true;
+    }, SUBJECT)).toBe(true);
+    await browser.waitUntil(async () => browser.execute((needle) =>
+      window.__MAIL_STORE__.getState().selectedEmail?.subject === needle, SUBJECT),
+    { timeout: 30_000, interval: 300, timeoutMsg: `"${SUBJECT}" never opened in the reader` });
+    const total = await browser.execute(() => window.__MAIL_STORE__.getState().totalEmails);
+
+    await deleteRow();
+
+    await browser.waitUntil(async () => browser.execute(() => {
+      const s = window.__MAIL_STORE__.getState();
+      return s.selectedEmailId == null && s.selectedEmail == null && s.selectedThread == null;
+    }), { timeout: 3_000, interval: 100, timeoutMsg: 'the reader kept the deleted message open' });
+    expect(await browser.execute(() => window.__MAIL_STORE__.getState().totalEmails)).toBe(total - 1);
+
+    await browser.waitUntil(async () => (await uidsIn('INBOX')).length === 0, {
+      timeout: 120_000, interval: 1000, timeoutMsg: `"${SUBJECT}" never left yoda's INBOX on the server`,
+    });
+
+    await activate(yodaId);
+    await browser.waitUntil(async () => browser.execute((id) => {
+      const s = window.__MAIL_STORE__.getState();
+      return s.activeAccountId === id && s.activeMailbox === 'INBOX' && !s.loading;
+    }, yodaId), { timeout: 60_000, interval: 500, timeoutMsg: 'never switched to yoda\'s INBOX' });
+    await staysOffScreen(`"${SUBJECT}" was deleted in All Inboxes but yoda's INBOX still lists it`);
   });
 });

@@ -148,6 +148,9 @@ describe('a server delete the server refuses', () => {
     // The whole point: nothing clears the entry, so replayOps owns it now.
     expect(mockClearOps).not.toHaveBeenCalled();
     expect(useMailStore.getState().emails).toEqual([]);
+    // The row stays gone, so the count does too: it drops with the row, not
+    // on a server answer that never came.
+    expect(useMailStore.getState().totalEmails).toBe(0);
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
     expect(mockNoteOpFailure).toHaveBeenCalledWith(
       { op: 'delete', accountId: ACCT.id, mailbox: 'INBOX', uid: 7 },

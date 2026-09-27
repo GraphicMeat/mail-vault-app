@@ -98,6 +98,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       emailListStyle: 'default',
       linkAlerts: {},
       linkSafetyEnabled: false,
+      unreadPerAccount: { 'acct-b': 2 },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -269,6 +270,28 @@ describe('deleting from a unified list', () => {
     const out = await useMailStore.getState().deleteEmailFromServer(_selKey(r));
 
     expect(out).toMatchObject({ uid: 7, trash: null, trashUid: null });
+  });
+
+  // The unified list holds a window of each account's cache, so the badge is
+  // never recounted from it: an unread row leaving takes one off ITS account.
+  it('takes an unread row off its own account\'s badge, in the same paint', async () => {
+    let release;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const unread = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    const read = row(8, { _accountId: ACCT_B.id, _mailbox: 'INBOX', flags: ['\\Seen'] });
+    primeUnified([unread, read]);
+
+    const pending = useMailStore.getState().deleteEmailFromServer(_selKey(unread));
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(mockSetUnreadForAccount).toHaveBeenCalledWith(ACCT_B.id, 1);
+    expect(useMailStore.getState().totalEmails).toBe(1);
+    release();
+    await pending;
+
+    mockSetUnreadForAccount.mockClear();
+    await useMailStore.getState().deleteEmailFromServer(_selKey(read));
+    // Already read: nothing to take off.
+    expect(mockSetUnreadForAccount).not.toHaveBeenCalled();
   });
 
   it('offline: the row goes, the op stays journalled, the server is not called', async () => {
