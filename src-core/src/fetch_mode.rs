@@ -7,7 +7,7 @@
 //! decide what to touch.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,6 +118,17 @@ impl FetchPolicy {
         }
     }
 
+    /// `keeps_body` for a message whose date may be unknown: the download
+    /// gate's question. An unknown date is kept by every mode that keeps
+    /// anything (never judged old on an ambiguous value); `OnDemand` keeps
+    /// nothing whatever the date.
+    pub fn keeps_body_dated(&self, date_ms: Option<i64>, now_ms: i64) -> bool {
+        match date_ms {
+            Some(d) => self.keeps_body(d, now_ms),
+            None => self.mode != FetchMode::OnDemand,
+        }
+    }
+
     /// Whether the daemon's proactive all-folders Hoarder worker should run
     /// for this account. Premium gates only this worker (ruling 09-27): a
     /// missing or lapsed Premium never deletes anything, it just leaves a
@@ -211,6 +222,52 @@ pub fn eviction_candidates(
         })
         .map(|f| f.uid)
         .collect()
+}
+
+/// A cache file as the eviction worker read it: its `CacheFile` facts plus
+/// the Message-ID its own header carries (`None`: no header, or an archived
+/// copy the worker never reads).
+#[derive(Clone, Debug)]
+pub struct CachedCopy {
+    pub file: CacheFile,
+    pub message_id: Option<String>,
+}
+
+/// What the eviction worker may delete from one mailbox. A uid counts as
+/// still on the server only when BOTH:
+/// - the fresh server listing taken in this pass has it (`server`), and
+/// - the header cache lists it (`listed`, `custody::cache::listed_message_ids`)
+///   with a Message-ID equal, normalized, to the file's own.
+///
+/// A missing id on either side is no proof and keeps the file: after a
+/// UIDVALIDITY change the same uid can name another message, and the search
+/// index keeps an evicted message's row only while the header cache lists it
+/// (H2), so a uid it does not list must stay on disk. The survivors then go
+/// through `eviction_candidates` (archived, mode, window, index).
+pub fn eviction_plan(
+    copies: &[CachedCopy],
+    policy: &FetchPolicy,
+    now_ms: i64,
+    server: &HashSet<u32>,
+    listed: &HashMap<u32, Option<String>>,
+    indexed: &HashSet<u32>,
+) -> Vec<u32> {
+    let proven: HashSet<u32> = copies
+        .iter()
+        .filter(|c| server.contains(&c.file.uid))
+        .filter(|c| {
+            let file_id = c.message_id.as_deref().map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty());
+            let listed_id = listed
+                .get(&c.file.uid)
+                .and_then(|id| id.as_deref())
+                .map(crate::maildir::normalize_message_id)
+                .filter(|id| !id.is_empty());
+            matches!((file_id, listed_id), (Some(a), Some(b)) if a == b)
+        })
+        .map(|c| c.file.uid)
+        .collect();
+    let files: Vec<CacheFile> = copies.iter().map(|c| c.file.clone()).collect();
+    eviction_candidates(&files, policy, now_ms, &proven, indexed)
 }
 
 #[cfg(test)]
@@ -428,5 +485,82 @@ mod tests {
         let indexed: HashSet<u32> = [1].into_iter().collect(); // 2 not indexed yet
         let policy = FetchPolicy { mode: FetchMode::IndexOnly, window_months: 3, hoarder_premium: false };
         assert_eq!(eviction_candidates(&files, &policy, NOW_MS, &on_server, &indexed), vec![1]);
+    }
+
+    // ── H3: eviction_plan (server listing AND header cache with matching id) ──
+
+    fn copy(uid: u32, archived: bool, id: Option<&str>) -> CachedCopy {
+        CachedCopy { file: file(uid, archived, STALE_DATE_MS), message_id: id.map(str::to_string) }
+    }
+
+    fn on_demand() -> FetchPolicy {
+        FetchPolicy { mode: FetchMode::OnDemand, window_months: 3, hoarder_premium: false }
+    }
+
+    #[test]
+    fn eviction_plan_evicts_a_uid_the_server_lists_and_the_header_cache_names_with_the_same_id() {
+        let copies = vec![copy(1, false, Some("<a@x>"))];
+        let server: HashSet<u32> = [1].into_iter().collect();
+        // Brackets and space normalize away on both sides.
+        let listed: HashMap<u32, Option<String>> = [(1, Some(" a@x ".to_string()))].into_iter().collect();
+        assert_eq!(eviction_plan(&copies, &on_demand(), NOW_MS, &server, &listed, &HashSet::new()), vec![1]);
+    }
+
+    #[test]
+    fn eviction_plan_keeps_a_uid_missing_from_the_fresh_server_listing() {
+        let copies = vec![copy(1, false, Some("<a@x>"))];
+        let listed: HashMap<u32, Option<String>> = [(1, Some("<a@x>".to_string()))].into_iter().collect();
+        assert!(eviction_plan(&copies, &on_demand(), NOW_MS, &HashSet::new(), &listed, &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn eviction_plan_keeps_a_uid_the_header_cache_does_not_list() {
+        let copies = vec![copy(1, false, Some("<a@x>"))];
+        let server: HashSet<u32> = [1].into_iter().collect();
+        assert!(eviction_plan(&copies, &on_demand(), NOW_MS, &server, &HashMap::new(), &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn eviction_plan_keeps_a_uid_whose_listed_message_id_is_another_message() {
+        let copies = vec![copy(1, false, Some("<a@x>"))];
+        let server: HashSet<u32> = [1].into_iter().collect();
+        let listed: HashMap<u32, Option<String>> = [(1, Some("<b@x>".to_string()))].into_iter().collect();
+        assert!(eviction_plan(&copies, &on_demand(), NOW_MS, &server, &listed, &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn eviction_plan_keeps_a_uid_when_either_side_has_no_message_id() {
+        let server: HashSet<u32> = [1, 2].into_iter().collect();
+        let copies = vec![copy(1, false, None), copy(2, false, Some("<b@x>"))];
+        let listed: HashMap<u32, Option<String>> =
+            [(1, Some("<a@x>".to_string())), (2, None)].into_iter().collect();
+        assert!(eviction_plan(&copies, &on_demand(), NOW_MS, &server, &listed, &HashSet::new()).is_empty());
+        let blank = vec![copy(1, false, Some("<>"))];
+        let listed_blank: HashMap<u32, Option<String>> = [(1, Some("<>".to_string()))].into_iter().collect();
+        assert!(
+            eviction_plan(&blank, &on_demand(), NOW_MS, &server, &listed_blank, &HashSet::new()).is_empty(),
+            "two empty ids are not a match"
+        );
+    }
+
+    #[test]
+    fn eviction_plan_never_evicts_an_archived_copy_even_when_proven_on_the_server() {
+        let copies = vec![copy(1, true, Some("<a@x>"))];
+        let server: HashSet<u32> = [1].into_iter().collect();
+        let listed: HashMap<u32, Option<String>> = [(1, Some("<a@x>".to_string()))].into_iter().collect();
+        assert!(eviction_plan(&copies, &on_demand(), NOW_MS, &server, &listed, &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn keeps_body_dated_keeps_an_unknown_date_except_on_demand() {
+        for (mode, expected) in
+            [(FetchMode::OnDemand, false), (FetchMode::KeepRecent, true), (FetchMode::IndexOnly, true), (FetchMode::Hoarder, true)]
+        {
+            let policy = FetchPolicy { mode, window_months: 3, hoarder_premium: false };
+            assert_eq!(policy.keeps_body_dated(None, NOW_MS), expected, "{mode:?}");
+        }
+        let keep_recent = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
+        assert!(!keep_recent.keeps_body_dated(Some(STALE_DATE_MS), NOW_MS));
+        assert!(keep_recent.keeps_body_dated(Some(NOW_MS), NOW_MS));
     }
 }

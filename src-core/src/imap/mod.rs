@@ -1232,6 +1232,17 @@ pub async fn search_all_uid_flags(
     session: &mut ImapSession,
     mailbox: &str,
 ) -> Result<Vec<(u32, Vec<String>)>, String> {
+    Ok(search_all_uid_flags_in_generation(session, mailbox).await?.1)
+}
+
+/// `search_all_uid_flags` plus the UIDVALIDITY of the SELECT it ran under.
+/// A uid is only a name inside one UIDVALIDITY: a caller that matches the
+/// listing against uids recorded earlier (the eviction worker, against the
+/// header cache) must check they belong to the same generation.
+pub async fn search_all_uid_flags_in_generation(
+    session: &mut ImapSession,
+    mailbox: &str,
+) -> Result<(Option<u32>, Vec<(u32, Vec<String>)>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let expected = mbox.exists;
 
@@ -1269,7 +1280,7 @@ pub async fn search_all_uid_flags(
 
     info!("[IMAP] UID FETCH 1:* returned {} UIDs for {}", result.len(), mailbox);
 
-    Ok(result)
+    Ok((mbox.uid_validity, result))
 }
 
 /// Fetch headers for specific UIDs — used for delta-sync to fetch only new

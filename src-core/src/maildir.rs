@@ -460,10 +460,33 @@ thread_local! {
 pub fn read_message_id(path: &Path) -> Option<String> {
     #[cfg(test)]
     READ_MESSAGE_ID_CALLS.with(|c| c.set(c.get() + 1));
+    message_id_of(&header_value(&read_header_text(path)?, "message-id:")?)
+}
+
+/// `read_message_id` plus the `Date:` header as epoch milliseconds, from one
+/// bounded read. What the eviction worker needs of a cache copy: the id that
+/// ties it to the server's message, and the age a window judges. Either is
+/// `None` when the header is missing or unreadable (the file is unreadable:
+/// both).
+pub fn read_message_id_and_date(path: &Path) -> (Option<String>, Option<i64>) {
+    let Some(text) = read_header_text(path) else { return (None, None) };
+    let id = header_value(&text, "message-id:").and_then(|v| message_id_of(&v));
+    let date = header_value(&text, "date:")
+        .and_then(|v| mailparse::dateparse(&v).ok())
+        .and_then(|secs| secs.checked_mul(1000));
+    (id, date)
+}
+
+/// The header section of the file's first 128 KiB, lossily decoded.
+fn read_header_text(path: &Path) -> Option<String> {
     let mut buf = Vec::new();
     fs::File::open(path).ok()?.take(128 * 1024).read_to_end(&mut buf).ok()?;
-    let text = String::from_utf8_lossy(header_section(&buf));
+    Some(String::from_utf8_lossy(header_section(&buf)).into_owned())
+}
 
+/// The first header named `key` (lowercase, with its colon), folded
+/// continuation lines joined. `None` when the header is absent.
+fn header_value(text: &str, key: &str) -> Option<String> {
     let mut value: Option<String> = None;
     for line in text.split('\n') {
         let line = line.trim_end_matches('\r');
@@ -475,16 +498,19 @@ pub fn read_message_id(path: &Path) -> Option<String> {
             }
             break;
         }
-        const KEY: &str = "message-id:";
         // `get`, not a slice: a header line can start mid-way through a
         // multi-byte character once the bytes go through `from_utf8_lossy`, and
         // slicing off a non-boundary panics.
-        if matches!(line.get(..KEY.len()), Some(head) if head.eq_ignore_ascii_case(KEY)) {
-            value = Some(line[KEY.len()..].trim().to_string());
+        if matches!(line.get(..key.len()), Some(head) if head.eq_ignore_ascii_case(key)) {
+            value = Some(line[key.len()..].trim().to_string());
         }
     }
+    value
+}
 
-    let v = value?;
+/// A Message-ID header value, bracket-stripped and normalized; `None` when
+/// that leaves nothing.
+fn message_id_of(v: &str) -> Option<String> {
     let inner = match (v.find('<'), v.rfind('>')) {
         (Some(a), Some(b)) if b > a => &v[a + 1..b],
         _ => v.trim(),

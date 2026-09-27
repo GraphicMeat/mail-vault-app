@@ -572,13 +572,11 @@ pub fn clear_cache(
                 continue;
             }
             gate(&mut || {
-                match fs::remove_file(entry.path()) {
-                    Ok(()) => {
-                        deleted_count += 1;
-                        if let (Some(cur), Some(uid)) = (entry.path().parent(), vault_filename_uid(&name)) {
-                            crate::pgp::remove_copy(cur, uid);
-                        }
-                    }
+                match remove_cache_copy(entry.path(), &name) {
+                    Ok(true) => deleted_count += 1,
+                    // A draft with no `A` (never written that way, but a
+                    // draft is never a cache copy either).
+                    Ok(false) => skipped_archived += 1,
                     Err(e) => warn!("Failed to delete cached email {:?}: {}", entry.path(), e),
                 }
                 Ok(())
@@ -593,6 +591,95 @@ pub fn clear_cache(
 
     info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
     Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
+}
+
+/// The one delete of a working-cache copy, shared by `clear_cache` and
+/// `evict_files`: the file, then its `.decrypted/<uid>.eml` sidecar. Refuses
+/// (`Ok(false)`, nothing touched) a copy whose CURRENT name carries `A`
+/// (backup/archive/restore) or `D` (draft): those are never cache, whatever
+/// a caller decided from an older listing.
+fn remove_cache_copy(path: &Path, name: &str) -> std::io::Result<bool> {
+    let flags = parse_flags_from_filename(name);
+    if flags.iter().any(|f| f == "archived" || f == "draft") {
+        return Ok(false);
+    }
+    fs::remove_file(path)?;
+    if let (Some(cur), Some(uid)) = (path.parent(), vault_filename_uid(name)) {
+        crate::pgp::remove_copy(cur, uid);
+    }
+    Ok(true)
+}
+
+/// One mailbox's cache copies of `uids`, as the eviction worker judges them:
+/// archived (`A`) and draft (`D`) copies come back `archived: true` without
+/// being read; every other copy with the Message-ID and `Date:` of its own
+/// header (`None` when unreadable, which keeps it). Reads `cur/` only, so
+/// `orphaned/` and `.decrypted/` are never listed. A missing `cur/` is an
+/// empty folder; any other listing error is `Err` (an unlistable directory
+/// is not an empty one). The caller holds the mailbox's write lock.
+pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<crate::fetch_mode::CachedCopy>, String> {
+    use crate::fetch_mode::{CacheFile, CachedCopy};
+    let cur_dir = cur_path(root, account_id, mailbox);
+    let entries = match fs::read_dir(&cur_dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Failed to list {:?}: {}", cur_dir, e)),
+    };
+    let mut out = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to list {:?}: {}", cur_dir, e))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(uid) = vault_filename_uid(&name) else { continue };
+        if !uids.contains(&uid) {
+            continue;
+        }
+        let flags = parse_flags_from_filename(&name);
+        let archived = flags.iter().any(|f| f == "archived" || f == "draft");
+        let (message_id, date_ms) = if archived { (None, None) } else { maildir::read_message_id_and_date(&entry.path()) };
+        out.push(CachedCopy { file: CacheFile { uid, archived, date_ms }, message_id });
+    }
+    Ok(out)
+}
+
+/// Delete the working-cache copies of `uids` in one mailbox: the eviction
+/// worker's delete, through `clear_cache`'s own per-file delete
+/// (`remove_cache_copy`), so the `.decrypted` sidecar goes with its original
+/// and a copy whose current name carries `A` or `D` stays even when its uid
+/// is passed by mistake. Reads `cur/` only: `orphaned/` is never touched.
+/// Returns the uids removed; the registry drops them, which nudges the search
+/// index for the folder. `Err` (nothing removed) when `cur/` cannot be
+/// listed. The caller holds the mailbox's write lock.
+pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<u32>, String> {
+    let cur_dir = cur_path(root, account_id, mailbox);
+    let entries = match fs::read_dir(&cur_dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Failed to list {:?}: {}", cur_dir, e)),
+    };
+    let mut gone: Vec<u32> = Vec::new();
+    let mut failed = false;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(uid) = vault_filename_uid(&name) else { continue };
+        if !uids.contains(&uid) {
+            continue;
+        }
+        match remove_cache_copy(&entry.path(), &name) {
+            Ok(true) => gone.push(uid),
+            Ok(false) => {}
+            Err(e) => {
+                failed = true;
+                warn!("eviction: failed to remove {:?}: {}", entry.path(), e);
+            }
+        }
+    }
+    gone.sort_unstable();
+    gone.dedup();
+    reg.remove(account_id, mailbox, &gone);
+    if failed {
+        reg.invalidate(account_id, mailbox);
+    }
+    Ok(gone)
 }
 
 /// One-time migration of pre-.eml JSON sidecars (`<uid>.json` with a
@@ -1888,6 +1975,94 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
         assert!(cur.join(format!("2{INFO_PREFIX}AS.eml")).exists());
         assert!(orphan_dir.join(format!("3{INFO_PREFIX}S.eml")).exists());
+    }
+
+    // ── H3: evict_files / cache_copies (the eviction worker's disk side) ──
+
+    /// The vault fixture every eviction test starts from: one mailbox with a
+    /// cache copy (uid 1) and its `.decrypted` sidecar, an archived copy
+    /// (uid 2), a draft (uid 3, `AD` as `DRAFT_FLAGS` writes it) and a bare
+    /// `D` copy (uid 4), plus an orphaned copy that reuses uid 1.
+    fn eviction_fixture(root: &Path) -> PathBuf {
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(format!("1{INFO_PREFIX}S.eml")), b"Message-ID: <one@x>\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\nbody").unwrap();
+        fs::write(cur.join(format!("2{INFO_PREFIX}AS.eml")), b"Message-ID: <two@x>\r\n\r\nb").unwrap();
+        fs::write(cur.join(format!("3{INFO_PREFIX}AD.eml")), b"Message-ID: <three@x>\r\n\r\nc").unwrap();
+        fs::write(cur.join(format!("4{INFO_PREFIX}D.eml")), b"Message-ID: <four@x>\r\n\r\nd").unwrap();
+        crate::pgp::write_copy(&cur, 1, b"decrypted").unwrap();
+        let orphan_dir = cur.parent().unwrap().join(maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphan_dir).unwrap();
+        fs::write(orphan_dir.join(format!("1{INFO_PREFIX}S.eml")), b"orphan").unwrap();
+        cur
+    }
+
+    #[test]
+    fn evict_files_removes_the_cache_copy_and_its_decrypted_sidecar_and_nothing_else() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = eviction_fixture(root);
+        let sidecar = crate::pgp::copy_path(&cur, 1);
+        assert!(sidecar.exists());
+
+        // Every uid passed, archived and drafts included "by mistake": the
+        // delete re-reads each current name and refuses A and D.
+        let uids: HashSet<u32> = [1, 2, 3, 4].into_iter().collect();
+        let gone = evict_files(&reg, root, "acct", "INBOX", &uids).unwrap();
+
+        assert_eq!(gone, vec![1]);
+        assert!(!cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
+        assert!(!sidecar.exists(), "the .decrypted copy goes with its original");
+        assert!(cur.join(format!("2{INFO_PREFIX}AS.eml")).exists(), "an archived copy is never evicted");
+        assert!(cur.join(format!("3{INFO_PREFIX}AD.eml")).exists(), "a draft is never evicted");
+        assert!(cur.join(format!("4{INFO_PREFIX}D.eml")).exists(), "a D copy is never evicted");
+        let orphan = cur.parent().unwrap().join(maildir::ORPHAN_DIR).join(format!("1{INFO_PREFIX}S.eml"));
+        assert!(orphan.exists(), "orphaned/ is never touched, even under an evicted uid");
+    }
+
+    #[test]
+    fn evict_files_leaves_uids_it_was_not_given() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = eviction_fixture(root);
+        let gone = evict_files(&reg, root, "acct", "INBOX", &HashSet::new()).unwrap();
+        assert!(gone.is_empty());
+        assert!(cur.join(format!("1{INFO_PREFIX}S.eml")).exists());
+        assert!(crate::pgp::copy_path(&cur, 1).exists());
+    }
+
+    #[test]
+    fn evict_files_on_a_missing_folder_removes_nothing_and_is_not_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_app, reg) = registry(tmp.path());
+        let uids: HashSet<u32> = [1].into_iter().collect();
+        assert_eq!(evict_files(&reg, tmp.path(), "acct", "Nowhere", &uids).unwrap(), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn cache_copies_reads_id_and_date_of_cache_copies_and_marks_archived_and_drafts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        eviction_fixture(root);
+        let uids: HashSet<u32> = [1, 2, 3, 4].into_iter().collect();
+        let mut copies = cache_copies(root, "acct", "INBOX", &uids).unwrap();
+        copies.sort_by_key(|c| c.file.uid);
+        let summary: Vec<(u32, bool, Option<String>, Option<i64>)> =
+            copies.iter().map(|c| (c.file.uid, c.file.archived, c.message_id.clone(), c.file.date_ms)).collect();
+        assert_eq!(
+            summary,
+            vec![
+                (1, false, Some("one@x".to_string()), Some(1_420_070_400_000)),
+                (2, true, None, None),
+                (3, true, None, None),
+                (4, true, None, None),
+            ],
+            "the orphaned uid 1 is not listed twice"
+        );
+        let only_one: HashSet<u32> = [2].into_iter().collect();
+        assert_eq!(cache_copies(root, "acct", "INBOX", &only_one).unwrap().len(), 1);
     }
 
     /// Same order-probe shape as prefetch's I1 test: the gate must wrap each
