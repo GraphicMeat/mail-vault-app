@@ -87,3 +87,24 @@ describe('appearance preview', () => {
     expect(screen.getByTestId('preview-list').dataset.density).toBe('compact');
   });
 });
+
+// The sample rows are the list's rows in miniature: the same leading gutter on
+// every row, and in an expandable list a disclosure slot on every row, so the
+// text starts at one x whether or not a row carries the chevron.
+describe('sample row gutter', () => {
+  const rows = () => [...screen.getByTestId('preview-list').querySelectorAll('.onboarding-sample-row')];
+
+  it('leads every sample row with the gutter', () => {
+    render(<AppearancePreview {...base} threadMode="expandable" />);
+    expect(rows().length).toBeGreaterThan(2);
+    for (const row of rows()) expect(row.firstElementChild.dataset.testid).toBe('row-gutter');
+  });
+
+  it('reserves the disclosure slot on every row of an expandable list only', () => {
+    const slots = () => rows().map(row => row.firstElementChild.querySelectorAll(':scope > .row-gutter-slot').length);
+    const { rerender } = render(<AppearancePreview {...base} threadMode="expandable" />);
+    expect(new Set(slots())).toEqual(new Set([1]));
+    rerender(<AppearancePreview {...base} threadMode="grouped" />);
+    expect(new Set(slots())).toEqual(new Set([0]));
+  });
+});

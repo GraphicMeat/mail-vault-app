@@ -7,9 +7,18 @@ import { listRowGround } from '../../utils/listRowGround';
 import { SampleConversation } from '../ui/SampleConversation';
 
 // An isolated illustration. Never mount live readers or seed the mail store.
-function SampleRow({ row, selected, highlight, singleLine, nested, count, expandable }) {
+// The list's row gutter (RowGutter in EmailRow.jsx), same classes: an
+// expandable list reserves the disclosure slot on every row, so the text
+// starts at one x whether a row has a chevron or not.
+function SampleRow({ row, selected, highlight, singleLine, nested, count, expandable, threadSlot }) {
   return <div className={`onboarding-sample-row ${singleLine ? 'onboarding-sample-single' : ''} ${nested ? 'onboarding-sample-nested' : ''} ${listRowGround({ highlight, selected, unread: row.unread, markedPad: '' })}`}>
-    {expandable ? <ChevronDown size={12} aria-hidden="true" /> : <Cloud size={12} className="text-mail-server" aria-hidden="true" />}
+    <span data-testid="row-gutter" className={`row-gutter${singleLine ? '' : ' row-gutter-stacked'}`} aria-hidden="true">
+      {threadSlot && <span className="row-gutter-slot">{expandable && <ChevronDown size={12} />}</span>}
+      <span className="row-gutter-cell">
+        <span className="row-gutter-check"><span className="custom-checkbox preview-checkbox" /></span>
+        <span className="row-gutter-slot"><Cloud size={12} className="text-mail-server" /></span>
+      </span>
+    </span>
     <div className="onboarding-sample-row-copy"><strong>{row.sender}{count && <span className="onboarding-sample-count">{count}</span>}</strong><span>{row.subject}</span></div>
     <span className="onboarding-sample-time">{row.time}</span>
   </div>;
@@ -34,6 +43,7 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
   const threeColumn = layoutMode === 'three-column';
   const chat = viewStyle === 'chat';
   const singleLine = emailListStyle !== 'compact';
+  const threadSlot = threadMode === 'expandable';
   const emailTheme = emailViewerTheme === 'system' ? theme : emailViewerTheme;
   const colors = getEmailColors(emailTheme, palette);
   const thread = { id: 'preview-thread', sender: 'Nell, Rowan', subject: t('settings.preview.subject'), time: replies.at(-1).time };
@@ -57,10 +67,10 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
         {chat ? <div data-testid="preview-chat" className="onboarding-sample-chat"><SampleConversation /></div> : <>
           <div data-testid="preview-list" data-view="list" data-density={emailListStyle} data-threads={threadMode} className="onboarding-sample-list">
             <strong className="onboarding-sample-list-heading">{t('sidebar.inbox')}</strong>
-            <SampleRow row={rows[0]} selected highlight={highlight} singleLine={singleLine} />
-            {threadMode !== 'flat' && <SampleRow row={thread} count={3} expandable={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} />}
-            {threadMode !== 'grouped' && replies.map(reply => <SampleRow key={reply.id} row={{ ...reply, subject: thread.subject }} nested={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} />)}
-            {rows.slice(1, 4).map(row => <SampleRow key={row.id} row={row} highlight={highlight} singleLine={singleLine} />)}
+            <SampleRow row={rows[0]} selected highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />
+            {threadMode !== 'flat' && <SampleRow row={thread} count={3} expandable={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />}
+            {threadMode !== 'grouped' && replies.map(reply => <SampleRow key={reply.id} row={{ ...reply, subject: thread.subject }} nested={threadMode === 'expandable'} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />)}
+            {rows.slice(1, 4).map(row => <SampleRow key={row.id} row={row} highlight={highlight} singleLine={singleLine} threadSlot={threadSlot} />)}
           </div>
           <div data-testid="preview-pane-viewer" className="onboarding-sample-reader">
             <h3>{rows[0].subject}</h3>
