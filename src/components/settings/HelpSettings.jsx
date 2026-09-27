@@ -17,7 +17,7 @@ import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
 import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
-// ponytail: same two links as the native Help menu (src-tauri/src/main.rs).
+// ponytail: same three links as the native Help menu (src-tauri/src/main.rs).
 // Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
 const LINKS = () => ([
   {
@@ -25,6 +25,12 @@ const LINKS = () => ([
     title: tr('settings.help.mailvaultWebsite'),
     subtitle: tr('settings.help.docsFaqLatestRelease'),
     url: 'https://mailvaultapp.com',
+  },
+  {
+    testid: 'settings-link-blog',
+    title: tr('settings.help.blog'),
+    subtitle: tr('settings.help.blogSubtitle'),
+    url: 'https://mailvaultapp.com/blog.html',
   },
   {
     testid: 'settings-link-more-apps',

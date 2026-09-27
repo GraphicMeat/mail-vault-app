@@ -3557,6 +3557,8 @@ fn main() {
             #[cfg(not(windows))]
             let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
             #[cfg(not(windows))]
+            let blog_item = MenuItem::with_id(app, "open_blog", "Blog", true, None::<&str>)?;
+            #[cfg(not(windows))]
             let more_apps_item = MenuItem::with_id(app, "open_more_apps", "More Apps by GraphicMeat", true, None::<&str>)?;
             // PROBE (not for merge): "Probe: Backup Bookmark Scope (automatic)".
             #[cfg(target_os = "macos")]
@@ -3612,6 +3614,7 @@ fn main() {
                         if let Some(sub) = item.as_submenu() {
                             if sub.text().unwrap_or_default() == "Help" {
                                 let _ = sub.append(&website_item);
+                                let _ = sub.append(&blog_item);
                                 let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
                                 let _ = sub.append(&probe_backup_scope_item);
@@ -3637,6 +3640,7 @@ fn main() {
                 file_submenu.append(&open_settings)?;
                 file_submenu.append(&report_bug)?;
                 file_submenu.append(&website_item)?;
+                file_submenu.append(&blog_item)?;
                 file_submenu.append(&more_apps_item)?;
                 file_submenu.append(&sep)?;
                 file_submenu.append(&quit_item)?;
@@ -3680,6 +3684,9 @@ fn main() {
                 } else if event.id().as_ref() == "open_website" {
                     use tauri_plugin_shell::ShellExt;
                     let _ = app_handle_for_menu.shell().open("https://mailvaultapp.com", None::<tauri_plugin_shell::open::Program>);
+                } else if event.id().as_ref() == "open_blog" {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app_handle_for_menu.shell().open("https://mailvaultapp.com/blog.html", None::<tauri_plugin_shell::open::Program>);
                 } else if event.id().as_ref() == "open_more_apps" {
                     use tauri_plugin_shell::ShellExt;
                     let _ = app_handle_for_menu.shell().open("https://graphicmeat.com", None::<tauri_plugin_shell::open::Program>);
