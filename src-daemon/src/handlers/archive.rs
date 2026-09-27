@@ -407,9 +407,20 @@ mod tests {
     #[tokio::test]
     async fn verify_archived_emails_matches_verified_missing_mismatched_shape() {
         let (v, s) = st(true);
-        seed_file(v.path(), "acc", "INBOX", 1, &[]);
+        seed_file(v.path(), "acc", "INBOX", 1, &["archived"]);
         let r = call(&s, "verify_archived_emails", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [1, 2]})).await;
         assert_eq!(r.result.unwrap(), json!({"verified": [1], "missing": [2], "mismatched": []}));
+    }
+
+    /// A working-cache copy (no `A`) is not an archive: the delete that
+    /// follows a verify must not trust it, since eviction may remove it.
+    #[tokio::test]
+    async fn verify_archived_emails_does_not_verify_a_cache_copy() {
+        let (v, s) = st(true);
+        seed_file(v.path(), "acc", "INBOX", 1, &["seen"]);
+        seed_file(v.path(), "acc", "INBOX", 2, &["archived", "seen"]);
+        let r = call(&s, "verify_archived_emails", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [1, 2]})).await;
+        assert_eq!(r.result.unwrap(), json!({"verified": [2], "missing": [1], "mismatched": []}));
     }
 
     #[tokio::test]
@@ -419,7 +430,7 @@ mod tests {
         // caller expects: present-but-different is `mismatched`, not
         // `verified` (a fixture with no Message-ID at all would fall through
         // to `verified` instead, per `maildir::verify_listed`).
-        seed_file_with_body(v.path(), "acc", "INBOX", 1, &[], b"Message-ID: <on-disk@example.com>\r\n\r\nbody\r\n");
+        seed_file_with_body(v.path(), "acc", "INBOX", 1, &["archived"], b"Message-ID: <on-disk@example.com>\r\n\r\nbody\r\n");
         let r = call(
             &s,
             "verify_archived_emails",
@@ -432,7 +443,7 @@ mod tests {
     #[tokio::test]
     async fn verify_archived_emails_null_expected_ids_is_not_a_parse_error() {
         let (v, s) = st(true);
-        seed_file(v.path(), "acc", "INBOX", 1, &[]);
+        seed_file(v.path(), "acc", "INBOX", 1, &["archived"]);
         let r = call(&s, "verify_archived_emails", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [1], "expectedIds": null})).await;
         assert_eq!(r.result.unwrap(), json!({"verified": [1], "missing": [], "mismatched": []}));
     }

@@ -9,9 +9,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockSavePendingOperation = vi.fn().mockResolvedValue(undefined);
 const mockClearPendingOperation = vi.fn().mockResolvedValue(undefined);
+const mockVerifyArchivedEmails = vi.fn();
+const mockBulkDeleteEmails = vi.fn().mockResolvedValue({});
 vi.mock('../api', () => ({
   savePendingOperation: (...a) => mockSavePendingOperation(...a),
   clearPendingOperation: (...a) => mockClearPendingOperation(...a),
+  verifyArchivedEmails: (...a) => mockVerifyArchivedEmails(...a),
+  bulkDeleteEmails: (...a) => mockBulkDeleteEmails(...a),
 }));
 
 vi.mock('../authUtils', () => ({
@@ -162,6 +166,34 @@ describe('BulkOperationManager archive lane', () => {
         onProgress: () => {},
       });
       expect(mockSend).toHaveBeenCalledWith('archive_emails', expect.objectContaining({ background: true }));
+    } finally {
+      delete globalThis.window;
+    }
+  });
+});
+
+// Archive-then-delete trusts only what the vault verified. The daemon
+// verifies archived (`A`) copies only (`maildir::verify_copies`): a uid whose
+// only local file is a working-cache copy comes back `missing`, because the
+// eviction worker may delete that copy once the server has the message.
+describe('BulkOperationManager archive-then-delete', () => {
+  it('deletes from the server only the uids the vault verified as archived', async () => {
+    globalThis.window = { __TAURI__: { core: { invoke: () => {} } } };
+    try {
+      mockBulkDeleteEmails.mockClear();
+      mockVerifyArchivedEmails.mockResolvedValue({ verified: [2], missing: [1], mismatched: [] });
+      const { bulkOperationManager } = await import('../BulkOperationManager.js');
+      await bulkOperationManager.start({
+        type: 'archive_and_delete',
+        accountId: 'acc1',
+        account: { id: 'acc1', email: 'me@test.com' },
+        mailbox: 'INBOX',
+        uids: [1, 2],
+        onProgress: () => {},
+      });
+      expect(mockVerifyArchivedEmails).toHaveBeenCalledWith('acc1', 'INBOX', [1, 2]);
+      expect(mockBulkDeleteEmails).toHaveBeenCalledTimes(1);
+      expect(mockBulkDeleteEmails.mock.calls[0][3]).toEqual([2]);
     } finally {
       delete globalThis.window;
     }

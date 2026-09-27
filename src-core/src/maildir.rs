@@ -381,12 +381,38 @@ pub fn normalize_message_id(raw: &str) -> String {
 ///
 /// The absence of proof is not proof of a swap: a uid with no expected id, or
 /// a file whose header carries none, verifies on presence alone.
+///
+/// Only an ARCHIVED copy (`A` in its current name) counts. A working-cache
+/// copy (an opened or downloaded message, no `A`) is not an archive: the
+/// eviction worker may delete it once the server has the message, so a
+/// server delete that trusted it could lose the last copy. A uid whose only
+/// file is a cache copy is `missing`.
 pub fn verify_copies(
     cur_dir: &Path,
     uids: &[u32],
     expected_ids: Option<&HashMap<u32, String>>,
 ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
-    verify_listed(cur_dir, &uid_file_map(cur_dir), uids, expected_ids)
+    verify_listed(cur_dir, &archived_file_map(cur_dir), uids, expected_ids)
+}
+
+/// Whether a vault file name carries the `A` (archived) flag letter.
+pub fn carries_archived(name: &str) -> bool {
+    info_flags(name).is_some_and(|rest| rest.split('.').next().unwrap_or("").contains('A'))
+}
+
+/// `uid_file_map` restricted to archived copies: a uid with a cache copy and
+/// an `A` copy side by side maps to the `A` one.
+fn archived_file_map(cur_dir: &Path) -> HashMap<u32, PathBuf> {
+    let mut map = HashMap::new();
+    let Ok(entries) = fs::read_dir(cur_dir) else { return map };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(uid) = vault_filename_uid(&name) else { continue };
+        if carries_archived(&name) {
+            map.entry(uid).or_insert_with(|| entry.path());
+        }
+    }
+    map
 }
 
 /// `verify_copies` against a listing taken earlier. A uid the listing lacks
@@ -403,7 +429,13 @@ fn verify_listed(
     let mut mismatched: Vec<u32> = Vec::new();
 
     for uid in uids {
-        let Some(path) = listing.get(uid).and_then(|listed| find_listed_by_uid(cur_dir, *uid, listed)) else {
+        // A listed path renamed since resolves by uid again; whatever it
+        // resolves to must still be an archived copy.
+        let Some(path) = listing
+            .get(uid)
+            .and_then(|listed| find_listed_by_uid(cur_dir, *uid, listed))
+            .filter(|p| p.file_name().is_some_and(|n| carries_archived(&n.to_string_lossy())))
+        else {
             missing.push(*uid);
             continue;
         };
@@ -1634,7 +1666,7 @@ mod tests {
     #[test]
     fn a_file_whose_message_id_matches_is_verified() {
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AS"), Some("<a@host.test>"));
 
         let mut expected = HashMap::new();
         // The caller's angle brackets must not decide the answer.
@@ -1651,7 +1683,7 @@ mod tests {
         // The uid is present, so the old presence-only check called this proof
         // and the caller deleted the server's only copy of a@host.test.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<somethingelse@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AS"), Some("<somethingelse@host.test>"));
 
         let mut expected = HashMap::new();
         expected.insert(12u32, "<a@host.test>".to_string());
@@ -1660,6 +1692,33 @@ mod tests {
         assert!(verified.is_empty());
         assert!(missing.is_empty());
         assert_eq!(mismatched, vec![12]);
+    }
+
+    /// A working-cache copy (no `A`) is not an archive: the eviction worker
+    /// may delete it, so a server delete must never be verified by it.
+    #[test]
+    fn a_cache_copy_without_the_archived_flag_is_missing_not_verified() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S.eml"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}S.eml"), Some("<b@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}AS.eml"), Some("<b@host.test>"));
+        let expected = HashMap::from([(12u32, "<a@host.test>".to_string()), (13, "<b@host.test>".to_string())]);
+
+        for ids in [None, Some(&expected)] {
+            let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], ids);
+            assert_eq!(verified, vec![13], "only the uid with an archived copy verifies");
+            assert_eq!(missing, vec![12]);
+            assert!(mismatched.is_empty());
+        }
+    }
+
+    #[test]
+    fn carries_archived_reads_the_flag_letters_only() {
+        assert!(carries_archived(&format!("12{INFO_PREFIX}AS.eml")));
+        assert!(carries_archived("12;2,A.eml"));
+        assert!(!carries_archived(&format!("12{INFO_PREFIX}S.eml")));
+        assert!(!carries_archived(&format!("12{INFO_PREFIX}.eml")));
+        assert!(!carries_archived("12.eml"));
     }
 
     #[test]
@@ -1676,8 +1735,8 @@ mod tests {
         // No expected id, and a file that carries none: presence alone verifies,
         // which is what every caller before this change relied on.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
-        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}S"), None);
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AS"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}AS"), None);
 
         let mut expected = HashMap::new();
         expected.insert(13u32, "<a@host.test>".to_string());
@@ -1694,8 +1753,8 @@ mod tests {
         // nothing to compare a Message-ID against, so the header parse must
         // not run at all, not just be ignored once it does.
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}S"), Some("<a@host.test>"));
-        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}S"), Some("<b@host.test>"));
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AS"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}AS"), Some("<b@host.test>"));
 
         READ_MESSAGE_ID_CALLS.with(|c| c.set(0));
         let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], None);
@@ -1715,8 +1774,8 @@ mod tests {
     #[test]
     fn a_file_renamed_after_the_listing_is_still_checked_against_its_message_id() {
         let tmp = tempfile::tempdir().unwrap();
-        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}FS"), Some("<somethingelse@host.test>"));
-        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}S")))]);
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AFS"), Some("<somethingelse@host.test>"));
+        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}AS")))]);
         let expected = HashMap::from([(12u32, "<a@host.test>".to_string())]);
 
         let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], Some(&expected));
@@ -1728,7 +1787,7 @@ mod tests {
     #[test]
     fn a_file_deleted_after_the_listing_is_missing_not_verified() {
         let tmp = tempfile::tempdir().unwrap();
-        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}S")))]);
+        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}AS")))]);
 
         let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], None);
         assert!(verified.is_empty(), "the caller deletes the server copy of whatever verifies");
@@ -1736,8 +1795,8 @@ mod tests {
         assert!(mismatched.is_empty());
     }
 
-    /// src-tauri's `verify_copies` before the one-pass listing: `find_by_uid`
-    /// per uid.
+    /// src-tauri's `verify_copies` before the one-pass listing, one lookup
+    /// per uid, with the archived-only rule: the uid's first `A` file.
     fn verify_copies_per_uid(
         cur_dir: &Path,
         uids: &[u32],
@@ -1745,7 +1804,11 @@ mod tests {
     ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
         let (mut verified, mut missing, mut mismatched) = (Vec::new(), Vec::new(), Vec::new());
         for uid in uids {
-            let Some(path) = find_by_uid(cur_dir, *uid) else {
+            let archived = fs::read_dir(cur_dir).ok().into_iter().flatten().flatten().map(|e| e.path()).find(|p| {
+                let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                vault_filename_uid(&name) == Some(*uid) && carries_archived(&name)
+            });
+            let Some(path) = archived else {
                 missing.push(*uid);
                 continue;
             };
@@ -1765,12 +1828,15 @@ mod tests {
     fn verify_copies_agrees_with_the_per_uid_lookup() {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        write_vault_msg(cur, &format!("1{INFO_PREFIX}S.eml"), Some("<one@host.test>"));
-        write_vault_msg(cur, &format!("10{INFO_PREFIX}.eml"), Some("<ten@host.test>"));
-        write_vault_msg(cur, &format!("100{INFO_PREFIX}F.eml"), Some("<swapped@host.test>"));
-        write_vault_msg(cur, &format!("11{INFO_PREFIX}S.eml"), None);
+        write_vault_msg(cur, &format!("1{INFO_PREFIX}AS.eml"), Some("<one@host.test>"));
+        write_vault_msg(cur, &format!("10{INFO_PREFIX}A.eml"), Some("<ten@host.test>"));
+        write_vault_msg(cur, &format!("100{INFO_PREFIX}AF.eml"), Some("<swapped@host.test>"));
+        write_vault_msg(cur, &format!("11{INFO_PREFIX}AS.eml"), None);
+        // A cache copy beside an archived one: only the archived one counts.
         write_vault_msg(cur, &format!("3{INFO_PREFIX}S.eml"), Some("<three@host.test>"));
-        write_vault_msg(cur, &format!("3{INFO_PREFIX}FS.eml"), Some("<three-dup@host.test>"));
+        write_vault_msg(cur, &format!("3{INFO_PREFIX}AFS.eml"), Some("<three-dup@host.test>"));
+        // A cache copy alone: missing.
+        write_vault_msg(cur, &format!("5{INFO_PREFIX}S.eml"), Some("<five@host.test>"));
         // Not vault rows for find_by_uid, so not for verify either.
         write_vault_msg(cur, &format!("07{INFO_PREFIX}S.eml"), Some("<seven@host.test>"));
         write_vault_msg(cur, "9.eml", Some("<nine@host.test>"));
@@ -1784,7 +1850,7 @@ mod tests {
             (7, "<seven@host.test>".to_string()),
             (10, "   ".to_string()),
         ]);
-        let uids = [1u32, 10, 100, 11, 3, 7, 9, 20, 12, 1];
+        let uids = [1u32, 10, 100, 11, 3, 5, 7, 9, 20, 12, 1];
 
         for ids in [None, Some(&expected)] {
             assert_eq!(verify_copies(cur, &uids, ids), verify_copies_per_uid(cur, &uids, ids));
@@ -1799,7 +1865,7 @@ mod tests {
         let cur = tmp.path();
         let n = 20_000u32;
         for uid in 1..=n {
-            fs::write(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), format!("Message-ID: <{uid}@host.test>\r\n\r\nx")).unwrap();
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}AS.eml")), format!("Message-ID: <{uid}@host.test>\r\n\r\nx")).unwrap();
         }
         let uids: Vec<u32> = (1..=n).collect();
         let expected: HashMap<u32, String> = uids.iter().map(|u| (*u, format!("<{u}@host.test>"))).collect();
