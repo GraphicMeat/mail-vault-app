@@ -228,7 +228,9 @@ function QuickActionsConfigured({
   }, [identity, onOpenChange]);
   // A right-click on the row hands in the pointer. Only a new point opens the
   // menu: a re-render with the same one must not reopen what was just closed.
-  useEffect(() => {
+  // Layout, not passive: the pointerdown that hands in `openAt` already fired
+  // this frame, so the anchor must land before paint, not after.
+  useLayoutEffect(() => {
     if (!openAt) return;
     onOpenChange?.(true);
     setRadialPage(0);

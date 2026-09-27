@@ -184,7 +184,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
-  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
+  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
   const alerts = getCachedAlerts(scopeKey);
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
@@ -227,7 +227,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
-      onContextMenu={openMenuAtPointer}
+      {...pointerMenuHandlers}
     >
       <RowGutter stacked={stacked} threadSlot={threadSlot} checked={isChecked}
         onToggle={() => onToggleSelection(email.uid, email._accountId, email._mailbox)}
@@ -299,7 +299,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
-  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
+  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
   const alerts = getCachedAlerts(scopeKey);
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
@@ -338,7 +338,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
-      onContextMenu={openMenuAtPointer}
+      {...pointerMenuHandlers}
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={threadSlot} checked={isChecked}

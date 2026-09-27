@@ -133,15 +133,27 @@ for (const [name, renderRow] of variants) {
 }
 
 // Right-click on a row is the row's quick actions at the pointer, in place of
-// the webview's own Reload menu.
+// the webview's own Reload menu. Opened on pointerdown so the wheel paints
+// immediately; the `contextmenu` that follows (mouse-up, on Windows) only
+// swallows the OS menu and must not reopen or move the one already showing.
 for (const [name, renderRow] of variants) {
   describe(`${name} — right-click`, () => {
     it('opens the row actions at the pointer instead of the native menu', () => {
       render(renderRow(email()));
-      const notCancelled = fireEvent.contextMenu(screen.getByTestId('email-row'), { clientX: 12, clientY: 34 });
-      expect(notCancelled).toBe(false);
+      const row = screen.getByTestId('email-row');
+      fireEvent.pointerDown(row, { button: 2, clientX: 12, clientY: 34 });
       expect(screen.getByTestId('row-archive').dataset.openAt).toBe('12,34');
       expect(onSelect).not.toHaveBeenCalled();
+
+      const notCancelled = fireEvent.contextMenu(row, { clientX: 99, clientY: 99 });
+      expect(notCancelled).toBe(false);
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('12,34');
+    });
+
+    it('ignores a left-button pointerdown', () => {
+      render(renderRow(email()));
+      fireEvent.pointerDown(screen.getByTestId('email-row'), { button: 0, clientX: 12, clientY: 34 });
+      expect(screen.getByTestId('row-archive').dataset.openAt).toBe('');
     });
   });
 }

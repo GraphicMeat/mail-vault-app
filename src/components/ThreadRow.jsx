@@ -76,7 +76,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
+  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
 
   // Build participant display: every distinct sender in the thread, the user
   // included — a conversation you replied to shows your name too. In an
@@ -115,7 +115,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
-      onContextMenu={openMenuAtPointer}
+      {...pointerMenuHandlers}
     >
       <RowGutter stacked={stacked} threadSlot={expandable} checked={anyChecked}
         onToggle={() => onSetSelection(members, !anyChecked)}
@@ -205,7 +205,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const [menuAt, openMenuAtPointer] = useMenuAtPointer();
+  const [menuAt, pointerMenuHandlers] = useMenuAtPointer();
 
   const participantNames = useMemo(() => {
     const seen = new Set();
@@ -241,7 +241,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
-      onContextMenu={openMenuAtPointer}
+      {...pointerMenuHandlers}
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={expandable} checked={anyChecked}
