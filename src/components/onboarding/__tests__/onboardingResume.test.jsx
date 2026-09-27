@@ -9,6 +9,7 @@ import { onboardingSteps } from '../steps.js';
 
 // Same stubs as onboardingBack.test.jsx: the shell's flow is under test.
 vi.mock('../Splash', () => ({ Splash: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>splash</button> }));
+vi.mock('../StorageStep', () => ({ StorageStep: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>storage</button> }));
 vi.mock('../AccountStep', () => ({ AccountStep: ({ onSkip }) => <button data-testid="go" onClick={onSkip}>account</button> }));
 vi.mock('../AppearanceStep', () => ({ AppearanceStep: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>appearance</button> }));
 vi.mock('../DefaultMailStep', () => ({ DefaultMailStep: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>defaultMail</button> }));
@@ -35,6 +36,7 @@ afterEach(cleanup);
 describe('skipping onboarding', () => {
   it('finishes the tour from any step and remembers where', () => {
     render(<Onboarding />);
+    fireEvent.click(screen.getByTestId('go'));
     fireEvent.click(screen.getByTestId('go'));
     fireEvent.click(screen.getByTestId('go'));
     expect(currentStep()).toBe('appearance');

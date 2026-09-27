@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
 import { onboardingSteps } from './onboarding/steps.js';
 import { Splash } from './onboarding/Splash';
+import { StorageStep } from './onboarding/StorageStep';
 import { AccountStep } from './onboarding/AccountStep';
 import { AppearanceStep } from './onboarding/AppearanceStep';
 import { DefaultMailStep } from './onboarding/DefaultMailStep';
@@ -80,6 +81,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
       </header>
       <div className="onboarding-step">
       {step === 'splash'  && <Splash onContinue={next} />}
+      {step === 'storage' && <StorageStep onContinue={next} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
       {step === 'defaultMail' && <DefaultMailStep onContinue={next} />}

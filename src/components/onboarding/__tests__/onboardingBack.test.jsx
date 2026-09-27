@@ -14,6 +14,9 @@ import { Onboarding } from '../../Onboarding';
 vi.mock('../Splash', () => ({
   Splash: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>splash</button>,
 }));
+vi.mock('../StorageStep', () => ({
+  StorageStep: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>storage</button>,
+}));
 vi.mock('../AccountStep', () => ({
   AccountStep: ({ onSkip }) => <button data-testid="go" onClick={onSkip}>account</button>,
 }));
@@ -74,7 +77,7 @@ describe('onboarding back button', () => {
   it('appears once the flow has moved and returns to the previous step', () => {
     render(<Onboarding />);
     advance();
-    expect(currentStep()).toBe('account');
+    expect(currentStep()).toBe('storage');
 
     fireEvent.click(screen.getByTestId('onboarding-back'));
     expect(currentStep()).toBe('splash');
@@ -95,8 +98,8 @@ describe('onboarding back button', () => {
     expect(currentStep()).toBe('splash');
   });
 
-  // A replay skips the credentials step, so back from `appearance` has to land
-  // on `splash` — not on a step this run never had.
+  // A replay skips the storage and credentials steps, so back from
+  // `appearance` has to land on `splash`, not on a step this run never had.
   it('skips the step the replay skipped', () => {
     accounts = [{ id: 'a1' }];
     render(<Onboarding />);

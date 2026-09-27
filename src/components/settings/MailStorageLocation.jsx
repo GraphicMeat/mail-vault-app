@@ -18,8 +18,11 @@ import { formatCount } from '../../utils/formatCount';
  * daemon would need its own security-scoped access), but it must still be able
  * to SHOW the folder — that is the whole reason people write in unable to find
  * it. So the path and the Open Folder button stay; the move controls go.
+ *
+ * `title` / `description` replace the heading and its paragraph, for the
+ * onboarding storage step's shorter one-line rows.
  */
-export default function MailStorageLocation({ readOnly = false }) {
+export default function MailStorageLocation({ readOnly = false, title, description }) {
   const t = useT();
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
   const setVaultStatus = useSettingsStore(s => s.setVaultStatus);
@@ -134,11 +137,11 @@ export default function MailStorageLocation({ readOnly = false }) {
     <div className="settings-section space-y-4">
       <h4 className="font-semibold text-mail-text flex items-center gap-2">
         <HardDrive size={18} className="text-mail-accent-text" />
-        {t('settings.mailLocation.whereMailStored')}
+        {title || t('settings.mailLocation.whereMailStored')}
       </h4>
 
       <p className="text-xs text-mail-text-muted">
-        {t('settings.mailLocation.thisIsTheWorkingCopy')}
+        {description || t('settings.mailLocation.thisIsTheWorkingCopy')}
       </p>
 
       <div className="flex items-center gap-2">
