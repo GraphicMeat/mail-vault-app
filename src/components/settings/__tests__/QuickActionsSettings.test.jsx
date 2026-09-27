@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QuickActionsSettings } from '../QuickActionsSettings';
 import { quickActionScopeKey } from '../../../utils/quickActions';
 import { pinQuickActionScope } from '../../../hooks/useQuickActionConfiguration';
@@ -151,6 +151,43 @@ describe('QuickActionsSettings', () => {
     expect(within(screen.getByRole('radiogroup', { name: 'Wheel layout' })).getByRole('radio', { name: 'Categories' })
       .getAttribute('aria-checked')).toBe('true');
     expect(screen.queryByRole('radiogroup', { name: 'Page actions in the wheel' })).toBeNull();
+  });
+
+  it('picks the favorite action through Tom Select and saves it', () => {
+    state.quickActions = {
+      defaults: { row: { mode: 'favorite-menu', entries: [{ id: 'archive', action: 'archive' }, { id: 'reply', action: 'reply' }], favoriteId: 'archive', palette: 'neutral' } },
+      overrides: {},
+    };
+    render(<QuickActionsSettings />);
+    const favorite = document.querySelector('select[aria-label="Favorite action"]');
+    expect(favorite.tomselect).toBeTruthy();
+    expect(favorite.tomselect.options.archive.text).toBe('Archive');
+    expect(favorite.tomselect.options.reply.text).toBe('Reply');
+    expect(favorite.tomselect.getValue()).toBe('archive');
+    act(() => { favorite.tomselect.setValue('reply'); });
+    expect(state.quickActions.defaults.row.favoriteId).toBe('reply');
+  });
+
+  it('offers the favorite picker for a categorized wheel too', () => {
+    state.quickActions = {
+      defaults: { row: { mode: 'radial', radialLayout: 'categories', entries: [{ id: 'archive', action: 'archive' }], favoriteId: 'archive', palette: 'neutral' } },
+      overrides: {},
+    };
+    render(<QuickActionsSettings />);
+    expect(document.querySelector('select[aria-label="Favorite action"]').tomselect).toBeTruthy();
+  });
+
+  it('chooses how selection buttons show from a radio group', () => {
+    state.quickActions = {
+      defaults: { selection: { mode: 'inline', entries: [{ id: 'markRead', action: 'markRead' }], favoriteId: 'markRead', palette: 'neutral', selectionDisplay: 'icon-label', selectionActionLimit: 3 } },
+      overrides: {},
+    };
+    render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Selection bar' }));
+    const display = screen.getByRole('radiogroup', { name: 'Selection buttons' });
+    expect(within(display).getByRole('radio', { name: 'Icons and text' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(display).getByRole('radio', { name: 'Icons only' }));
+    expect(state.quickActions.defaults.selection.selectionDisplay).toBe('icon-only');
   });
 
   it('resets only the active surface', () => {

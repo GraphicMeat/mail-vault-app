@@ -27,6 +27,7 @@ import { QuickActions } from "../QuickActions";
 import { EmailActionBar } from "../email/EmailActionBar";
 import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
+import { TomSelectField } from "../ui/TomSelectField";
 import { useMailStore } from "../../stores/mailStore";
 import { useTagStore } from "../../stores/tagStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -303,6 +304,13 @@ export function QuickActionsSettings() {
     }
     return t(LABELS[entry.action] || "quickActions.title");
   };
+  // Tom Select rebuilds its list whenever `options` changes identity, so the
+  // list only changes when a label or an entry does.
+  const favoriteKey = JSON.stringify([
+    { value: "", label: t("quickActions.param.autoFavorite") },
+    ...config.entries.map((item) => ({ value: item.id, label: getLabel(item) })),
+  ]);
+  const favoriteOptions = useMemo(() => JSON.parse(favoriteKey), [favoriteKey]);
   const getDescriptors = (entries) =>
     entries.map((entry) => {
       const missingTemplate = entry.action === "replyTemplate" &&
@@ -406,22 +414,17 @@ export function QuickActionsSettings() {
             config.mode === "radial" && config.radialLayout === "categories") && (
             <label>
               {t("quickActions.favorite")}
-              <select
-                aria-label={t("quickActions.favorite")}
+              <TomSelectField
+                label={t("quickActions.favorite")}
                 value={config.favoriteId || ""}
-                onChange={(event) =>
-                  persist({
-                    ...config,
-                    favoriteId: event.target.value || null,
-                  })}
-              >
-                <option value="">{t("quickActions.param.autoFavorite")}</option>
-                {config.entries.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {getLabel(item)}
-                  </option>
-                ))}
-              </select>
+                placeholder={t("quickActions.param.autoFavorite")}
+                options={favoriteOptions}
+                onChange={(favoriteId) => {
+                  if ((favoriteId || null) !== (config.favoriteId || null)) {
+                    persist({ ...config, favoriteId: favoriteId || null });
+                  }
+                }}
+              />
             </label>
           )}
           {config.mode === "radial" && (
@@ -455,25 +458,18 @@ export function QuickActionsSettings() {
           {surface === "selection" &&
             ["inline", "favorite-menu"].includes(config.mode) && (
             <>
-              <label>
-                {t("quickActions.selectionDisplay")}
-                <select
-                  aria-label={t("quickActions.selectionDisplay")}
+              <div className="quick-actions-choice-field">
+                <span>{t("quickActions.selectionDisplay")}</span>
+                <SegmentedChoice
+                  label={t("quickActions.selectionDisplay")}
                   value={config.selectionDisplay || "icon-label"}
-                  onChange={(event) =>
-                    persist({
-                      ...config,
-                      selectionDisplay: event.target.value,
-                    })}
-                >
-                  <option value="icon-label">
-                    {t("quickActions.selectionDisplay.iconLabel")}
-                  </option>
-                  <option value="icon-only">
-                    {t("quickActions.selectionDisplay.iconOnly")}
-                  </option>
-                </select>
-              </label>
+                  onChange={(selectionDisplay) => persist({ ...config, selectionDisplay })}
+                  options={[
+                    { value: "icon-label", label: t("quickActions.selectionDisplay.iconLabel") },
+                    { value: "icon-only", label: t("quickActions.selectionDisplay.iconOnly") },
+                  ]}
+                />
+              </div>
               {config.mode === "inline" &&
                 config.selectionDisplay !== "icon-only" && (
                 <label>

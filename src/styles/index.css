@@ -1145,13 +1145,24 @@ input[type="range"]::-moz-range-thumb:hover {
   position: sticky; top: 0; z-index: 1; display: flex; gap: 20px; overflow-x: auto;
   padding: 0 28px; background: var(--mail-bg); border-bottom: 1px solid var(--mail-border);
 }
-.settings-tabs > button {
+/* A settings choice group (SegmentedChoice) wears the tab row's look, so every
+   one-of-a-few choice in Settings and onboarding reads like the tabs above it. */
+.segmented-choice {
+  display: inline-flex; flex-wrap: wrap; column-gap: 20px; max-width: 100%;
+  border-bottom: 1px solid var(--mail-border);
+}
+.settings-tabs > button,
+.segmented-choice > button {
   flex-shrink: 0; min-height: 48px; padding: 12px 0; font-size: 13px; font-weight: 500;
   color: var(--mail-text-muted); border-bottom: 2px solid transparent;
 }
-.settings-tabs > button:hover { color: var(--mail-text); }
-.settings-tabs > button[aria-selected="true"] { color: var(--mail-accent-text); border-color: var(--mail-accent); }
-.settings-tabs > button:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.settings-tabs > button:hover,
+.segmented-choice > button:hover:not(:disabled) { color: var(--mail-text); }
+.settings-tabs > button[aria-selected="true"],
+.segmented-choice > button[aria-checked="true"] { color: var(--mail-accent-text); border-color: var(--mail-accent); }
+.settings-tabs > button:focus-visible,
+.segmented-choice > button:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.segmented-choice > button:disabled { opacity: .48; cursor: not-allowed; }
 .settings-mobile-navigation { display: none; }
 .settings-account-filter { display: flex; align-items: center; gap: 8px; padding: 12px 28px; border-bottom: 1px solid var(--mail-border); flex-shrink: 0; overflow-x: auto; }
 /* Everyday preferences use one quiet label/control rhythm, without nested cards. */
