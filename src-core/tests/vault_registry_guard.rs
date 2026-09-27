@@ -51,6 +51,7 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     ("src-core/src/backup.rs", "purge_backup_files", "removes files from the external mirror's cur/, never the app vault"),
     ("src-core/src/maildir.rs", "migrate_add_eml_extension", "startup rename sweep; daemon main runs it before the registry opens"),
     ("src-core/src/maildir.rs", "repair_generation", "renames and orphans wholesale; its caller maildir_repair_generation invalidates when anything moved"),
+    ("src-core/src/maildir.rs", "rebind_uids", "re-files undone deletes under their new uids; its caller vault_rebind_uids invalidates when anything moved"),
     ("src-core/src/pgp.rs", "write_copy", "writes the decrypted copy into .decrypted/ beside cur/, which holds no registry row"),
     ("src-core/src/pgp.rs", "remove_copy", "removes the decrypted copy from .decrypted/ beside cur/, which holds no registry row"),
     ("src-core/src/vault_files.rs", "migrate_json_to_eml", "whole-vault legacy migration; one invalidate_all after the walk"),
