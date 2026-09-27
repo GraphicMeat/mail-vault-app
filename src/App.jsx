@@ -40,6 +40,7 @@ import { useUnsavedStore } from './stores/unsavedStore';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { SnoozePicker } from './components/SnoozePicker';
 import { MigrationToast } from './components/MigrationToast';
+import { SearchIndexReindexPrompt } from './components/SearchIndexReindexPrompt';
 import { KeychainToast } from './components/KeychainToast';
 import { KeychainUnlockCard } from './components/KeychainUnlockCard';
 import { PortableUnlockCard } from './components/PortableUnlockCard';
@@ -1507,6 +1508,7 @@ function App() {
       {!insightsOpen && <SelectionActionBar />}
       <BulkSaveProgress />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
+      <SearchIndexReindexPrompt />
       <KeychainToast
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}

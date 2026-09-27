@@ -85,6 +85,7 @@ function seedFrontendSettings(accounts) {
       state: {
         listPaneSize: 470,
         onboardingComplete: !ONBOARDING,
+        searchIndexReindexOffer: false,
         sidebarCollapsed: false,
         // "More ways to make MailVault yours" is a one-time toast that opens
         // top-right on first launch and photobombs whatever is under it. It is

@@ -297,6 +297,8 @@ function seedOnboardingComplete(home) {
       version: 4,
       state: {
         onboardingComplete: true,
+        // A seed is not an update: no reindex prompt over the specs.
+        searchIndexReindexOffer: false,
         // New installs default to expandable threads and a radial row menu,
         // whose actions mount in a portal only while open. The specs were
         // written against grouped threads and find unarchived rows by the

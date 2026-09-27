@@ -4,7 +4,7 @@ import { DemoWorkspaceStorage, DEMO_STORAGE_SCHEMA, DEMO_SEED_VERSION } from './
 // Defaults are installed into the backend before any React/store module is
 // imported. A restored workspace replaces them during initialization.
 const settingsState = {
-  onboardingComplete: true, appearanceOnboardingPromptSeen: true, language: 'en',
+  onboardingComplete: true, appearanceOnboardingPromptSeen: true, searchIndexReindexOffer: false, language: 'en',
   sidebarLayout: 'split', sidebarDensity: 'comfortable', sidebarStyle: 'list',
   emailListView: 'list', threadMode: 'grouped', cacheLimitMB: 128,
   linkSafetyEnabled: true, linkSafetyClickConfirm: true, trackerBlockingEnabled: true,

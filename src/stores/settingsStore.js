@@ -310,6 +310,12 @@ export function migrateSettings(persisted, version) {
       },
     };
   }
+  // v10 -> v11: the search index now stores each message's sender-auth and
+  // list headers. Rows an older build indexed lack them until a rebuild, so an
+  // update (never a new install: that has no saved settings to migrate) is
+  // asked once whether to rebuild (SearchIndexReindexPrompt). A seed that
+  // says false (e2e, the demo) is not an update.
+  if (version < 11 && next.searchIndexReindexOffer !== false) next = { ...next, searchIndexReindexOffer: true };
   return next;
 }
 
@@ -593,6 +599,7 @@ export const useSettingsStore = create(
       // Offline search index (daemon). Attachments and image text are
       // premium and only take effect through `effectiveSearchIndexConfig`.
       searchIndexEnabled: true,
+      searchIndexReindexOffer: false,
       searchIndexBodies: true,
       searchIndexAttachments: true,
       searchIndexImageText: true,
@@ -1410,6 +1417,7 @@ export const useSettingsStore = create(
           trackerBlockingEnabled: true,
           trackerAlerts: {},
           searchIndexEnabled: true,
+          searchIndexReindexOffer: false,
           searchIndexBodies: true,
           searchIndexAttachments: true,
           searchIndexImageText: true,
@@ -1427,7 +1435,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 10,
+      version: 11,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

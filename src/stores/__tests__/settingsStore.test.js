@@ -170,6 +170,8 @@ describe('persist migration v3 → v4', () => {
       linkAlerts: { 'acct-1-INBOX-41': 'red' },
       aiSettings: DEFAULT_AI_SETTINGS,
       dismissedQuickReplyThreads: {},
+      // v11: every pre-v11 install is an update, offered the index rebuild.
+      searchIndexReindexOffer: true,
     });
   });
 });
@@ -519,5 +521,24 @@ describe('search operators hint', () => {
     expect(useSettingsStore.getState().searchOperatorsHintSeen).toBe(false);
     useSettingsStore.getState().markSearchOperatorsHintSeen();
     expect(useSettingsStore.getState().searchOperatorsHintSeen).toBe(true);
+  });
+});
+
+// Settings saved by an older build are migrated; a new install has none, so
+// `migrate` never runs for it. That is what tells an update from a first run:
+// only an update is offered the search index rebuild.
+describe('search index reindex offer', () => {
+  it('is raised for settings saved by a build before v11', async () => {
+    const { migrateSettings } = await import('../settingsStore');
+    expect(migrateSettings({ searchIndexEnabled: true }, 10).searchIndexReindexOffer).toBe(true);
+    expect(migrateSettings({ searchIndexEnabled: true }, 3).searchIndexReindexOffer).toBe(true);
+  });
+
+  it('is never raised by a new install or once answered', async () => {
+    const { migrateSettings } = await import('../settingsStore');
+    expect(useSettingsStore.getState().searchIndexReindexOffer).toBe(false);
+    expect(migrateSettings({ searchIndexReindexOffer: false }, 11).searchIndexReindexOffer).toBe(false);
+    // A seeded profile (e2e harness, website demo) says so explicitly.
+    expect(migrateSettings({ onboardingComplete: true, searchIndexReindexOffer: false }, 4).searchIndexReindexOffer).toBe(false);
   });
 });
