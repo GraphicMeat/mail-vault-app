@@ -35,19 +35,39 @@ pub type VaultGate<'a> = &'a dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> R
 
 // ── Paths and filenames ──────────────────────────────────────────────────────
 
-/// `{root}/Maildir/{account_id}/{vault_dir_name(mailbox)}/cur`.
-///
-/// `account_id` is NOT sanitized here (unlike `mailbox`): a legacy,
+/// True when `account_id` is exactly one ordinary path component, so joining
+/// it under `Maildir` cannot climb out: not empty, `.` or `..`, and no `/`,
+/// `\` or NUL (nor, on Windows, `:`, which carries a drive prefix like `C:`).
+/// Raw email addresses (`@`, `.`, `+`) and UUIDs pass.
+pub fn is_plain_account_id(account_id: &str) -> bool {
+    !account_id.is_empty()
+        && account_id != "."
+        && account_id != ".."
+        && !account_id.contains(['/', '\\', '\0'])
+        && !(cfg!(windows) && account_id.contains(':'))
+}
+
+/// `{maildir}/{account_id}`, where `maildir` is `{root}/Maildir`: always a
+/// direct child of it. A plain id is joined unchanged, because a legacy,
 /// pre-migration account directory is keyed by the raw email address
-/// (`migrate_email_dirs` reads `maildir_base.join(email)` literally, `@` and
-/// all), so sanitizing it in this shared builder would silently point reads
-/// and writes at the wrong directory for any account not yet migrated to its
-/// UUID dir. Callers that accept `account_id` from an untrusted surface must
-/// sanitize it themselves before calling in (see `backup_zip::import` and
-/// `mbox::import_mbox`).
+/// (`migrate_email_dirs` reads it `@` and all) and sanitizing it would point
+/// at the wrong directory. Anything else (`..`, `a/b`, `C:`) is neutralised:
+/// `vault_dir_name` strips the separators and the `_` prefix keeps `..` and
+/// the empty id from staying special.
+pub fn account_dir(maildir: &Path, account_id: &str) -> PathBuf {
+    if is_plain_account_id(account_id) {
+        maildir.join(account_id)
+    } else {
+        maildir.join(format!("_{}", crate::search_index::text::vault_dir_name(account_id)))
+    }
+}
+
+/// `{root}/Maildir/{account_id}/{vault_dir_name(mailbox)}/cur`. Containment
+/// in `{root}/Maildir` holds by construction (see `account_dir`); callers need
+/// not sanitize `account_id` first.
 pub fn cur_path(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
     let safe_mailbox = crate::search_index::text::vault_dir_name(mailbox);
-    root.join("Maildir").join(account_id).join(&safe_mailbox).join("cur")
+    account_dir(&root.join("Maildir"), account_id).join(&safe_mailbox).join("cur")
 }
 
 /// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml` (`;2,`
@@ -470,7 +490,7 @@ pub struct MaildirStorageStats {
 pub fn storage_stats(root: &Path, account_id: Option<&str>) -> MaildirStorageStats {
     let base = root.join("Maildir");
     let scan_dir = match account_id {
-        Some(id) => base.join(id),
+        Some(id) => account_dir(&base, id),
         None => base,
     };
 
@@ -719,8 +739,8 @@ pub fn migrate_email_dirs(
 
     let walked = (|| -> Result<(), String> {
         for (email, uuid) in account_map {
-            let email_dir = maildir_base.join(email);
-            let uuid_dir = maildir_base.join(uuid);
+            let email_dir = account_dir(&maildir_base, email);
+            let uuid_dir = account_dir(&maildir_base, uuid);
 
             if !email_dir.exists() || email_dir == uuid_dir {
                 continue;
@@ -1130,7 +1150,7 @@ pub fn prefetch_attachments(
 pub fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let accounts: Vec<PathBuf> = match account_id {
-        Some(id) => vec![base.join(id)],
+        Some(id) => vec![account_dir(base, id)],
         None => fs::read_dir(base)
             .into_iter()
             .flatten()
@@ -1161,6 +1181,33 @@ mod tests {
         let app = tempfile::tempdir().unwrap();
         let reg = VaultRegistry::open(app.path(), root);
         (app, reg)
+    }
+
+    /// An account id that is not one plain path component can never lead
+    /// `cur_path` out of `{root}/Maildir`: the account dir is always a direct
+    /// child of it. (`C:` is only a traversal on Windows; on unix it is an
+    /// ordinary name and this row is vacuous.)
+    #[test]
+    fn cur_path_keeps_a_hostile_account_id_inside_the_maildir() {
+        let root = Path::new("/vault");
+        let maildir = root.join("Maildir");
+        for id in ["../../../../tmp/evil", "..", ".", "a/b", "a\\b", "", "C:", "C:\\evil", "a\0b"] {
+            let cur = cur_path(root, id, "INBOX");
+            let account = cur.parent().unwrap().parent().unwrap();
+            assert_eq!(account.parent(), Some(maildir.as_path()), "{id:?} -> {cur:?}");
+            let name = account.file_name().unwrap().to_str().unwrap();
+            assert!(!name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0']), "{id:?} -> {name:?}");
+        }
+    }
+
+    /// Legacy (raw email) and current (UUID) account dirs pass through byte
+    /// for byte: sanitizing them would point at the wrong directory.
+    #[test]
+    fn cur_path_leaves_a_plain_account_id_untouched() {
+        let root = Path::new("/vault");
+        for id in ["user+tag@example.com", "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b"] {
+            assert_eq!(cur_path(root, id, "INBOX"), root.join("Maildir").join(id).join("INBOX").join("cur"));
+        }
     }
 
     #[test]

@@ -443,7 +443,7 @@ pub fn import(
         // listing reads a uid from lands as a row right after its write; any
         // other name is not a vault message to it, as on a relisting.
         let wrote = match common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<bool, String> {
-            let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
+            let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
             let dest_path = cur_dir.join(&filename_owned);
             if dest_path.exists() {

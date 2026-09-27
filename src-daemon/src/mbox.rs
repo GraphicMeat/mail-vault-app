@@ -277,12 +277,12 @@ pub fn import_mbox(
     // mailbox's current max uid; the actual per-message write is gated
     // below, inside the loop.
     let root = common::vault_root(state)?;
-    // account_id joins a filesystem path same as mailbox does, so it needs
-    // the same sanitizer: an unsanitized id (this is an internal RPC
-    // surface, not assumed-trusted) could otherwise escape the Maildir tree.
+    // account_id joins a filesystem path same as mailbox does, so it gets
+    // the same sanitizer (belt and braces: `vault_files::account_dir` already
+    // keeps any id inside the Maildir tree).
     let safe_account_id = common::sanitize_mailbox_name(&account_id);
     let safe_mailbox = common::sanitize_mailbox_name(&mailbox);
-    let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
+    let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
     std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
     let mut max_uid: u32 = 0;
@@ -318,7 +318,7 @@ pub fn import_mbox(
         // sanitized names, the directory itself), and each file lands as a
         // row right after its write.
         let write_result = common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<(), String> {
-            let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
+            let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
             max_uid += 1;

@@ -896,7 +896,7 @@ fn inventory(
             }
             Err(_) => snapshot.problem("unreadableLocation", &account, None),
         }
-        let vault_root = root.join("Maildir").join(&account);
+        let vault_root = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &account);
         let vault_files = snapshot.walk(&vault_root, &account);
         let mut physical = HashSet::new();
         for path in vault_files.iter().filter(|p| {

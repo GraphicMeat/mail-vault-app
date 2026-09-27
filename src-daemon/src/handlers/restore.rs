@@ -25,6 +25,17 @@ fn mailbox_concurrency(params: &Value) -> usize {
     params.get("mailboxConcurrency").and_then(Value::as_u64).unwrap_or(1).clamp(1, 5) as usize
 }
 
+/// Refuse an `accountId` that is not one plain path component before it
+/// reaches the vault (`vault_files::account_dir` would neutralise it anyway;
+/// this is the boundary check).
+fn plain_account_id(id: &Value, account_id: String) -> Result<String, RpcResponse> {
+    if mailvault_core::vault_files::is_plain_account_id(&account_id) {
+        Ok(account_id)
+    } else {
+        Err(RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, format!("Invalid accountId: {account_id:?}")))
+    }
+}
+
 macro_rules! req {
     ($result:expr) => {
         match $result {
@@ -38,7 +49,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     Some(match method {
         "start_restore" => {
             let account = req!(str_arg(&id, params, "account"));
-            let account_id = req!(str_arg(&id, params, "accountId"));
+            let account_id = req!(str_arg(&id, params, "accountId").and_then(|a| plain_account_id(&id, a)));
             let folders = req!(vec_arg::<String>(&id, params, "folders"));
             let mailbox_concurrency = mailbox_concurrency(params);
             let config: ImapConfig = match serde_json::from_str(&account) {
@@ -59,7 +70,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "cancel_restore" => RpcResponse::success(id, serde_json::json!({"cancelled": cancel_kind(state, "restore")})),
         "count_local_folder" => {
-            let account_id = req!(str_arg(&id, params, "accountId"));
+            let account_id = req!(str_arg(&id, params, "accountId").and_then(|a| plain_account_id(&id, a)));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let state = Arc::clone(state);
             let result = blocking(move || restore::list_local_messages(&state, &account_id, &mailbox).map(|v| v.len()))
@@ -154,6 +165,27 @@ mod tests {
 
         let resp = call(&s, "count_local_folder", json!({"accountId": "acct1", "mailbox": "INBOX"})).await;
         assert_eq!(resp.result.unwrap(), json!(3));
+    }
+
+    /// A traversal `accountId` is refused, and a maildir seeded where the
+    /// traversal resolves (`{root}/outside/INBOX/cur`) is never counted.
+    #[tokio::test]
+    async fn count_local_folder_refuses_an_account_id_that_escapes_the_vault() {
+        let (v, _a, s) = st(true);
+        let escaped = v.path().join("Maildir").join("../outside").join("INBOX").join("cur");
+        std::fs::create_dir_all(&escaped).unwrap();
+        std::fs::write(escaped.join(vault_files::build_maildir_filename(1, &[] as &[String])), b"x").unwrap();
+
+        let resp = call(&s, "count_local_folder", json!({"accountId": "../outside", "mailbox": "INBOX"})).await;
+        assert!(resp.error.is_some(), "a traversal accountId must be refused, got {:?}", resp.result);
+        assert_eq!(resp.error.unwrap().code, ipc::INVALID_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn start_restore_refuses_an_account_id_that_escapes_the_vault() {
+        let (_v, _a, s) = st(true);
+        let resp = call(&s, "start_restore", json!({"account": json!({"email": "x@example.com", "imapHost": "127.0.0.1"}).to_string(), "accountId": "../outside", "folders": ["INBOX"]})).await;
+        assert_eq!(resp.error.expect("a traversal accountId must be refused").code, ipc::INVALID_PARAMS);
     }
 
     #[tokio::test]

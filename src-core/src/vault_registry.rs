@@ -116,8 +116,7 @@ fn key(account: &str, mailbox: &str) -> Key {
 }
 
 fn cur_dir(root: &Path, account: &str, vault_dir: &str) -> PathBuf {
-    // account is NOT sanitized: see `vault_files::cur_path`.
-    root.join("Maildir").join(account).join(vault_dir).join("cur")
+    crate::vault_files::account_dir(&root.join("Maildir"), account).join(vault_dir).join("cur")
 }
 
 fn mtime_ns(meta: &std::fs::Metadata) -> i64 {
