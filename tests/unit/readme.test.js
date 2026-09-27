@@ -35,7 +35,10 @@ describe('README', () => {
   });
 
   it('lists only package formats the release workflow ships', () => {
-    const release = read('.github/workflows/release.yml').toLowerCase();
+    const main = read('.github/workflows/release.yml');
+    // A job moved into a reusable workflow (build-snap.yml) still ships with the release.
+    const called = [...main.matchAll(/uses:\s*\.\/(\.github\/workflows\/[\w.-]+\.ya?ml)/g)].map((m) => read(m[1]));
+    const release = [main, ...called].join('\n').toLowerCase();
     for (const [name, needle] of [['AppImage', 'appimage'], ['Flatpak', 'flatpak'], ['Snap', 'snapcraft'], ['.deb', '.deb']]) {
       if (readme.includes(name)) expect(release.includes(needle), `${name} is claimed but never released`).toBe(true);
     }
