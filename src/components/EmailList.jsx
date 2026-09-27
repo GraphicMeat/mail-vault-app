@@ -10,7 +10,7 @@ import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel, effectiveViewConfig, viewPresentationStamp, currentListView } from '../stores/viewStore';
-import { ViewAttachmentsDownload } from './ViewAttachmentsDownload';
+import { ViewAttachmentsDownload, useTimelineDownload, PeriodDownloadButtons } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
@@ -898,6 +898,22 @@ function EmailListComponent({ stacked = false }) {
   const monthList = useMonthBuckets(threadedDisplay, !isExplorer && emailListGrouping !== 'sender');
   const showScrubber = timelineVisible && emailListGrouping === 'chronological' && monthList.length >= 2;
   const monthHeaders = useMemo(() => (showScrubber ? firstRowOfMonth(monthList) : EMPTY_SET), [showScrubber, monthList]);
+  // A saved view's timeline: every month header saves that month's
+  // attachments, and the first header of each year that year's. Only a view
+  // carries a definition the daemon can narrow to a month; a mailbox has none.
+  const timelineDownload = useTimelineDownload(activeView);
+  const firstOfYear = useMemo(() => new Set(monthList
+    .filter((bucket, i) => i === 0 || monthList[i - 1].y !== bucket.y)
+    .map(bucket => bucket.key)), [monthList]);
+  const monthActions = activeView?.def && showScrubber
+    ? (bucket, pinned = false) => (
+      <PeriodDownloadButtons bucket={bucket} withYear={firstOfYear.has(bucket.key)} timeline={timelineDownload} pinned={pinned} />
+    )
+    : null;
+  const monthHeaderAt = index => {
+    const bucket = bucketAtIndex(monthList, index);
+    return <MonthHeader bucket={bucket} actions={bucket && monthActions ? monthActions(bucket) : null} />;
+  };
 
   const virtualizer = useVirtualizer({
     count: rowCount,
@@ -1617,7 +1633,7 @@ function EmailListComponent({ stacked = false }) {
                     }}
                     className={monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                   >
-                    {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
+                    {monthHeaders.has(vr.index) && monthHeaderAt(vr.index)}
                     {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
                     <ThreadRowComponent
                       key={rowId}
@@ -1660,7 +1676,7 @@ function EmailListComponent({ stacked = false }) {
                   data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
                   className={item.type === 'thread-member' ? 'thread-member' : monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
                 >
-                  {monthHeaders.has(vr.index) && <MonthHeader bucket={bucketAtIndex(monthList, vr.index)} />}
+                  {monthHeaders.has(vr.index) && monthHeaderAt(vr.index)}
                   {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
                   <RowComponent
                     key={item.email.uid}
@@ -1696,7 +1712,7 @@ function EmailListComponent({ stacked = false }) {
       </div>
       {showScrubber && !skeletonOn && (
         <DateScrubber scrollRef={scrollContainerRef} virtualizer={virtualizer} buckets={monthList}
-          segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} />
+          segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} headerActions={monthActions} />
       )}
       </div>
 

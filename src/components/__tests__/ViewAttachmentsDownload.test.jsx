@@ -16,7 +16,11 @@ vi.mock('@tauri-apps/api/path', () => ({
   downloadDir: async () => '/Users/me/Downloads',
   join: async (...parts) => parts.join('/'),
 }));
-vi.mock('../email/AttachmentBar', () => ({ exportFolderName: (name, fallback) => `${name} - ${fallback}` }));
+vi.mock('../email/AttachmentBar', () => ({
+  exportFolderName: (name, fallback) => `${name} - ${fallback}`,
+  ExportProgress: () => null,
+  SavedToFolder: () => null,
+}));
 const exportAttachments = vi.fn(async () => ({ dir: '/Users/me/Downloads/x', files: 3, skipped: 0 }));
 const exportRowAttachments = vi.fn(async () => ({ dir: '/Users/me/Downloads/x', files: 1, skipped: 0 }));
 vi.mock('../../stores/viewStore', () => ({

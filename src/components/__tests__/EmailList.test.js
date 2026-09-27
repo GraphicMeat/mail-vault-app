@@ -57,6 +57,12 @@ vi.mock('lucide-react', () => {
   });
 });
 
+// A view's timeline saves into a folder under the one the picker answers.
+vi.mock('@tauri-apps/api/path', () => ({
+  downloadDir: async () => '/Users/me/Downloads',
+  join: async (...parts) => parts.join('/'),
+}));
+
 // Mock child components
 vi.mock('../SearchBar', () => ({ SearchBar: () => null }));
 vi.mock('../BulkOperationsModal', () => ({ BulkOperationsModal: () => null }));
@@ -1880,5 +1886,131 @@ describe('the timeline toggle is per view', () => {
     fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
     await settle();
     expect(useSettingsStore.getState().listTimelineVisible).toBe(true);
+  });
+});
+
+// A saved view whose timeline spans months offers each month's attachments,
+// and each year's on the first header of that year, as a download of its
+// own: the view's definition narrowed to that month or year.
+describe('a view\'s timeline downloads a month or a year', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+  const email = (uid, y, m) => ({ ...makeEmails(1)[0], uid, subject: `Email ${uid}`, date: new Date(y, m - 1, 15).toISOString() });
+  const THREE_MONTHS = [email(1, 2025, 2), email(2, 2025, 1), email(3, 2024, 12)];
+  const sec = (y, m) => Math.floor(new Date(y, m - 1, 1).getTime() / 1000);
+  let exportAttachments;
+  let realExport;
+
+  const mount = async ({ def = { showTimeline: true }, emails = THREE_MONTHS } = {}) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    useMailStore.setState({
+      sortedEmails: emails, totalEmails: emails.length,
+      activeMailbox: 'INBOX', activeAccountId: 'acc1',
+      unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
+    });
+    useSettingsStore.setState({
+      emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {}, listTimelineVisible: true, viewOverrides: {},
+    });
+    realExport = useViewStore.getState().exportAttachments;
+    exportAttachments = vi.fn(async () => ({ dir: '/picked/x', files: 2, skipped: 0 }));
+    useViewStore.setState({ views: def ? [{ id: 'v1', name: 'Saved', def }] : [], activeViewId: def ? 'v1' : null, exportAttachments });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+  // The inline headers only: the pinned band repeats the top month's buttons.
+  const inHeaders = (container, testid) => [...container.querySelectorAll(`[data-testid="list-month-header"] [data-testid="${testid}"]`)];
+
+  beforeEach(() => {
+    window.__TAURI__ = { core: { invoke: vi.fn(async (cmd) => (cmd === 'plugin:dialog|open' ? '/picked' : null)) } };
+  });
+
+  afterEach(async () => {
+    cleanup();
+    delete window.__TAURI__;
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
+    useSettingsStore.setState({ emailListView: 'list', listTimelineVisible: false, viewOverrides: {} });
+    useViewStore.setState({ views: [], activeViewId: null, exportAttachments: realExport });
+  });
+
+  it('puts a month button on every month and a year button on the first month of each year', async () => {
+    const { container } = await mount();
+    expect(inHeaders(container, 'view-month-download')).toHaveLength(3);
+    const years = inHeaders(container, 'view-year-download');
+    expect(years).toHaveLength(2);
+    // February 2025 opens 2025; December 2024 opens 2024.
+    expect(years.map(b => b.closest('[data-testid="list-month-header"]').textContent)).toEqual([
+      expect.stringContaining('2025-2'), expect.stringContaining('2024-12'),
+    ]);
+  });
+
+  it('offers nothing for a view whose rows sit in one month', async () => {
+    const { container } = await mount({ emails: [email(1, 2025, 2), email(2, 2025, 2)] });
+    expect(container.querySelector('[data-testid="view-month-download"]')).toBeNull();
+    expect(container.querySelector('[data-testid="view-year-download"]')).toBeNull();
+  });
+
+  // A mailbox has no definition the daemon could narrow.
+  it('offers nothing in a mailbox, only in a saved view', async () => {
+    const { container } = await mount({ def: null });
+    expect(container.querySelector('[data-testid="list-month-header"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="view-month-download"]')).toBeNull();
+  });
+
+  it('downloads one month through the view, narrowed to that month, into the picked folder', async () => {
+    const { container } = await mount();
+    fireEvent.click(inHeaders(container, 'view-month-download')[1]);
+    await settle();
+    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('plugin:dialog|open', expect.objectContaining({
+      options: expect.objectContaining({ directory: true }),
+    }));
+    expect(exportAttachments).toHaveBeenCalledTimes(1);
+    const [def, destDir] = exportAttachments.mock.calls[0];
+    expect(def).toMatchObject({ showTimeline: true, range: null, withinDays: null, dateFrom: sec(2025, 1), dateTo: sec(2025, 2) - 1 });
+    expect(destDir).toBe('/picked/Saved - 2025-1');
+  });
+
+  it('downloads a whole year from the year button', async () => {
+    const { container } = await mount();
+    fireEvent.click(inHeaders(container, 'view-year-download')[1]);
+    await settle();
+    const [def, destDir] = exportAttachments.mock.calls[0];
+    expect(def).toMatchObject({ dateFrom: sec(2024, 1), dateTo: sec(2025, 1) - 1 });
+    expect(destDir).toBe('/picked/Saved - 2024');
+  });
+
+  it('saves nothing when the folder picker is cancelled', async () => {
+    const { container } = await mount();
+    window.__TAURI__.core.invoke.mockResolvedValue(null);
+    fireEvent.click(inHeaders(container, 'view-month-download')[0]);
+    await settle();
+    expect(exportAttachments).not.toHaveBeenCalled();
+  });
+
+  it('locks every timeline button while one save runs, and says where it went', async () => {
+    const { container } = await mount();
+    let finish;
+    exportAttachments.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    fireEvent.click(inHeaders(container, 'view-month-download')[0]);
+    await settle();
+    expect(inHeaders(container, 'view-month-download').every(b => b.disabled)).toBe(true);
+    expect(inHeaders(container, 'view-year-download').every(b => b.disabled)).toBe(true);
+    await act(async () => { finish({ dir: '/picked/Saved - 2025-2', files: 3, skipped: 0 }); });
+    await settle();
+    expect(container.textContent).toContain('Saved to Saved - 2025-2');
+    expect(inHeaders(container, 'view-year-download').every(b => !b.disabled)).toBe(true);
+  });
+
+  it('says a month had nothing to save', async () => {
+    const { container } = await mount();
+    exportAttachments.mockResolvedValue({ dir: '/picked/x', files: 0, skipped: 0 });
+    fireEvent.click(inHeaders(container, 'view-month-download')[2]);
+    await settle();
+    expect(container.textContent).toContain('No attachments in 2024-12');
   });
 });

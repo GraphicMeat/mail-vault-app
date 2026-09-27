@@ -3,9 +3,10 @@ import { Check, FolderDown, CalendarRange } from 'lucide-react';
 import { Popover } from './ui/Popover';
 import { wedgeClip, radialContentPosition } from './QuickActions';
 import { useViewStore, viewLabel } from '../stores/viewStore';
-import { downloadChoices, narrowDef } from '../utils/viewRange';
-import { exportFolderName } from './email/AttachmentBar';
-import { useAttachmentExports, viewExportKey } from '../services/attachmentExport';
+import { downloadChoices, narrowDef, periodDef } from '../utils/viewRange';
+import { exportFolderName, ExportProgress, SavedToFolder } from './email/AttachmentBar';
+import { useAttachmentExports, viewExportKey, pickFolder } from '../services/attachmentExport';
+import { formatMonthYear } from '../utils/dateFormat';
 import { getLocale, useT } from '../i18n/index.js';
 import '../styles/quick-actions.css';
 
@@ -96,4 +97,74 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
       </div>}
     </Popover>
   </>;
+}
+
+/// A saved view's timeline downloads: one month's attachments, or one year's,
+/// into a folder the person picks. One save per view at a time; `running` is
+/// the period being saved (`2025-2`, `2025`) and `outcome` what the last one
+/// did, for the header it came from.
+export function useTimelineDownload(view) {
+  const t = useT();
+  const exportAttachments = useViewStore(state => state.exportAttachments);
+  const progress = useAttachmentExports(exports => exports[viewExportKey(view?.id)]);
+  const [running, setRunning] = useState(null);
+  const [outcome, setOutcome] = useState(null);
+
+  const download = async ({ y, m = null }) => {
+    if (!view?.def || progress || running) return;
+    const period = m ? `${y}-${m}` : String(y);
+    const label = m ? formatMonthYear(y, m) : String(y);
+    setOutcome(null);
+    setRunning(period);
+    let next = null;
+    try {
+      const chosen = await pickFolder(t('email.attachments.chooseFolder'));
+      if (!chosen) return; // cancelled: nothing happens
+      const { join } = await import('@tauri-apps/api/path');
+      // `<view> - <Month YYYY | YYYY>`: the period is the folder's suffix.
+      const destDir = await join(chosen, exportFolderName(viewLabel(view, t), label));
+      const result = await exportAttachments(periodDef(view.def, y, m), destDir);
+      next = result?.files ? { period, dir: result.dir } : { period, text: t('views.download.noneIn', { period: label }) };
+    } catch (error) {
+      console.error('[views] timeline attachment download failed:', error);
+      next = { period, text: t('email.attachments.failedDownload'), error: true };
+    } finally {
+      setRunning(null);
+    }
+    setOutcome(next);
+    setTimeout(() => setOutcome(current => (current === next ? null : current)), 6000);
+  };
+
+  return { busy: !!progress || !!running, running, progress, outcome, download };
+}
+
+/// A month header's downloads: the month, and on the first header of a year
+/// the year too. While a save runs every timeline button is disabled, and the
+/// header it came from shows its progress, then where it went.
+export function PeriodDownloadButtons({ bucket, withYear, timeline, pinned = false }) {
+  const t = useT();
+  const { y, m } = bucket;
+  const mine = [`${y}-${m}`, withYear && String(y)].filter(Boolean);
+  if (timeline.progress && mine.includes(timeline.running)) {
+    return <ExportProgress progress={timeline.progress} label={t('email.attachments.saving')} />;
+  }
+  const outcome = timeline.outcome && mine.includes(timeline.outcome.period) ? timeline.outcome : null;
+  if (outcome?.dir) return <SavedToFolder dir={outcome.dir} />;
+  if (outcome) return <span role="status" className={`font-normal ${outcome.error ? 'text-mail-danger' : ''}`}>{outcome.text}</span>;
+
+  const button = (testid, label, onClick, content) => (
+    <button type="button" data-testid={testid} onClick={onClick} disabled={timeline.busy}
+      title={label} aria-label={label} tabIndex={pinned ? -1 : undefined}
+      className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text disabled:opacity-40 disabled:hover:bg-transparent">
+      {content}
+    </button>
+  );
+  return (
+    <span className="flex items-center gap-0.5">
+      {button('view-month-download', t('views.download.month', { period: formatMonthYear(y, m) }),
+        () => timeline.download({ y, m }), <FolderDown size={13} aria-hidden="true" />)}
+      {withYear && button('view-year-download', t('views.download.year', { year: y }),
+        () => timeline.download({ y }), <><CalendarRange size={13} aria-hidden="true" /><span>{y}</span></>)}
+    </span>
+  );
 }

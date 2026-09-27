@@ -96,4 +96,30 @@ describe('DateScrubber', () => {
     render(<MonthHeader bucket={buckets[1]} />);
     expect(screen.getByTestId('list-month-header').textContent).toBe('February 2021');
   });
+
+  it('carries the actions it is given beside the month', () => {
+    render(<MonthHeader bucket={buckets[1]} actions={<button type="button">save</button>} />);
+    expect(within(screen.getByTestId('list-month-header')).getByRole('button', { name: 'save' })).toBeTruthy();
+  });
+
+  // The pinned band covers the top month's own header, so the month's
+  // actions have to be on the band too, and clickable through its overlay.
+  it('puts the current month\'s actions on the pinned band', () => {
+    const headerActions = vi.fn(bucket => <button type="button" data-testid="band-action">{bucket.key}</button>);
+    function Band() {
+      const ref = useRef(null);
+      return (
+        <div style={{ position: 'relative' }}>
+          <div ref={ref} />
+          <DateScrubber scrollRef={ref} virtualizer={{ getVirtualItemForOffset: () => ({ index: 0 }), scrollToIndex: vi.fn() }}
+            buckets={buckets} segments={segments} onJump={() => {}} loading={null} headerActions={headerActions} />
+        </div>
+      );
+    }
+    render(<Band />);
+    const action = screen.getByTestId('band-action');
+    expect(action.textContent).toBe('2021-03');
+    expect(headerActions).toHaveBeenCalledWith(buckets[0], true);
+    expect(action.closest('.pointer-events-auto')).not.toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { downloadChoices, narrowDef, rangeBounds, viewWindow } from '../viewRange';
+import { downloadChoices, narrowDef, periodDef, rangeBounds, viewWindow } from '../viewRange';
 
 const at = (y, m, d, h = 12) => new Date(y, m - 1, d, h);
 const sec = (y, m, d) => Math.floor(new Date(y, m - 1, d).getTime() / 1000);
@@ -61,5 +61,26 @@ describe('what the download button offers', () => {
     expect(narrowDef(def, { key: 'all' })).toBe(def);
     expect(narrowDef(def, { key: 'earlier', from: 5, to: 9 }))
       .toEqual({ ...def, range: null, withinDays: null, dateFrom: 5, dateTo: 9 });
+  });
+});
+
+describe('one month or one year of a view, from its timeline', () => {
+  it('narrows to the whole calendar month, or the whole year', () => {
+    const def = { query: 'invoice', range: null, withinDays: null, dateFrom: null, dateTo: null };
+    expect(periodDef(def, 2025, 2)).toEqual({ ...def, dateFrom: sec(2025, 2, 1), dateTo: sec(2025, 3, 1) - 1 });
+    expect(periodDef(def, 2024, 12)).toEqual({ ...def, dateFrom: sec(2024, 12, 1), dateTo: sec(2025, 1, 1) - 1 });
+    expect(periodDef(def, 2025)).toEqual({ ...def, dateFrom: sec(2025, 1, 1), dateTo: sec(2026, 1, 1) - 1 });
+  });
+
+  // The month a rolling window starts in is only partly inside the view:
+  // its download must not reach back past where the view starts.
+  it('never widens the view it narrows', () => {
+    const now = at(2026, 9, 25);
+    const def = { withinDays: 30 };
+    const from = Math.floor(now.getTime() / 1000) - 30 * 86_400;
+    const august = periodDef(def, 2026, 8, now);
+    expect(august).toMatchObject({ range: null, withinDays: null, dateFrom: from, dateTo: sec(2026, 9, 1) - 1 });
+    const year = periodDef({ dateFrom: sec(2025, 6, 1), dateTo: sec(2025, 8, 1) }, 2025, null, now);
+    expect(year).toMatchObject({ dateFrom: sec(2025, 6, 1), dateTo: sec(2025, 8, 1) });
   });
 });

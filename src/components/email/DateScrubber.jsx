@@ -19,12 +19,14 @@ const PILL_IDLE_MS = 800;
 const PENDING_MS = 1500;
 const HEADER_CLASS = 'flex items-end px-4 pb-1 text-xs font-semibold text-mail-text-muted bg-mail-surface';
 
-/** The band drawn above the first row of a month, inside that row's wrapper. */
-export function MonthHeader({ bucket }) {
+/** The band drawn above the first row of a month, inside that row's wrapper.
+ *  `actions` (a saved view's downloads) sit at its far end. */
+export function MonthHeader({ bucket, actions = null }) {
   if (!bucket) return null;
   return (
-    <div data-testid="list-month-header" className={HEADER_CLASS} style={{ height: MONTH_HEADER_H }}>
+    <div data-testid="list-month-header" className={`${HEADER_CLASS} justify-between gap-2`} style={{ height: MONTH_HEADER_H }}>
       {formatMonthYear(bucket.y, bucket.m)}
+      {actions}
     </div>
   );
 }
@@ -213,7 +215,7 @@ function segLabel(seg, olderLabel) {
   return seg.kind === 'older' ? olderLabel : formatMonthYear(seg.y, seg.m);
 }
 
-export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer, buckets, segments, onJump, loading }) {
+export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer, buckets, segments, onJump, loading, headerActions = null }) {
   const t = useT();
   const older = t('list.older');
   const reduced = usePrefersReducedMotion();
@@ -405,8 +407,14 @@ export const DateScrubber = memo(function DateScrubber({ scrollRef, virtualizer,
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-      <div aria-hidden="true" className={`absolute top-0 left-0 ${HEADER_CLASS}`} style={{ right: 0, height: MONTH_HEADER_H }}>
+      <div aria-hidden="true" className={`absolute top-0 left-0 ${HEADER_CLASS} justify-between gap-2`} style={{ right: 0, height: MONTH_HEADER_H }}>
         {current ? segLabel(current, older) : null}
+        {/* The band covers the top month's own header, so its actions are
+            repeated here and take clicks through the overlay. Pointer-only
+            (`pinned`): the header underneath keeps the keyboard's copy. */}
+        {current?.bucket && headerActions
+          ? <span className="pointer-events-auto flex items-center">{headerActions(current.bucket, true)}</span>
+          : null}
       </div>
 
       <div ref={pillRef} aria-hidden="true"

@@ -55,3 +55,18 @@ export function downloadChoices(def, now = new Date()) {
 /// The view's definition narrowed to one choice, for the daemon to run.
 export const narrowDef = (def, choice) => (choice.key === 'all' ? def
   : { ...def, range: null, withinDays: null, dateFrom: choice.from, dateTo: choice.to });
+
+/// The view's definition narrowed to one calendar month (`m` 1-12) or, with no
+/// month, one year: what a timeline header's download asks for. Clipped to the
+/// view's own window, so the month a rolling window starts in never reaches
+/// back past where the view starts.
+export function periodDef(def, y, m = null, now = new Date()) {
+  const from = monthStart(y, m ? m - 1 : 0);
+  const to = (m ? monthStart(y, m) : monthStart(y + 1, 0)) - 1;
+  const view = viewWindow(def, now);
+  return narrowDef(def, {
+    key: 'period',
+    from: Math.max(from, view.from ?? from),
+    to: Math.min(to, view.to ?? to),
+  });
+}
