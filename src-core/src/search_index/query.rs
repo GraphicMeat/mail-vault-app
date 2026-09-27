@@ -109,6 +109,8 @@ pub struct SearchPage {
 pub struct NoteAttachment {
     pub filename: String,
     pub mime: String,
+    /// `attachments.part_index`, for the daemon's attachment-read RPC.
+    pub part_index: i64,
 }
 
 /// A message this index says came from one of Notes to Self's own
@@ -121,6 +123,8 @@ pub struct NoteCandidate {
     pub account_id: String,
     pub vault_dir: String,
     pub uid: u32,
+    /// The vault file name, flags and all — `starred` reads `\Flagged` off it.
+    pub filename: String,
     /// `messages.message_id`, when the index has it (dedupe key for I2).
     pub message_id: Option<String>,
     pub from_addr_lc: String,
@@ -148,7 +152,7 @@ pub fn notes_to_self_candidates(
     }
     let marks = own.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
-        "SELECT id, account_id, vault_dir, uid, message_id, from_addr_lc, to_lc, row_json, snippet, date_utc \
+        "SELECT id, account_id, vault_dir, uid, filename, message_id, from_addr_lc, to_lc, row_json, snippet, date_utc \
          FROM messages WHERE from_addr_lc IN ({marks}) AND to_lc != '' ORDER BY date_utc DESC"
     );
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -156,7 +160,7 @@ pub fn notes_to_self_candidates(
     let mut candidates = Vec::new();
     while let Some(row) = rows.next().map_err(|e| e.to_string())? {
         let row_id: i64 = row.get(0).map_err(|e| e.to_string())?;
-        let row_json: String = row.get(7).map_err(|e| e.to_string())?;
+        let row_json: String = row.get(8).map_err(|e| e.to_string())?;
         let subject = serde_json::from_str::<serde_json::Value>(&row_json)
             .ok()
             .and_then(|v| v.get("subject").and_then(|s| s.as_str()).map(String::from))
@@ -166,12 +170,13 @@ pub fn notes_to_self_candidates(
             account_id: row.get(1).map_err(|e| e.to_string())?,
             vault_dir: row.get(2).map_err(|e| e.to_string())?,
             uid: row.get(3).map_err(|e| e.to_string())?,
-            message_id: row.get(4).map_err(|e| e.to_string())?,
-            from_addr_lc: row.get(5).map_err(|e| e.to_string())?,
-            to_lc: row.get(6).map_err(|e| e.to_string())?,
+            filename: row.get(4).map_err(|e| e.to_string())?,
+            message_id: row.get(5).map_err(|e| e.to_string())?,
+            from_addr_lc: row.get(6).map_err(|e| e.to_string())?,
+            to_lc: row.get(7).map_err(|e| e.to_string())?,
             subject,
-            snippet: row.get(8).map_err(|e| e.to_string())?,
-            date_utc: row.get(9).map_err(|e| e.to_string())?,
+            snippet: row.get(9).map_err(|e| e.to_string())?,
+            date_utc: row.get(10).map_err(|e| e.to_string())?,
             attachments: Vec::new(),
         });
     }
@@ -183,10 +188,10 @@ pub fn notes_to_self_candidates(
 
 fn note_attachments(conn: &rusqlite::Connection, row_id: i64) -> Result<Vec<NoteAttachment>, String> {
     let mut stmt = conn
-        .prepare("SELECT filename, mime FROM attachments WHERE message_row = ?1 ORDER BY part_index")
+        .prepare("SELECT filename, mime, part_index FROM attachments WHERE message_row = ?1 ORDER BY part_index")
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([row_id], |r| Ok(NoteAttachment { filename: r.get(0)?, mime: r.get(1)? }))
+        .query_map([row_id], |r| Ok(NoteAttachment { filename: r.get(0)?, mime: r.get(1)?, part_index: r.get(2)? }))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
@@ -1462,6 +1467,7 @@ mod tests {
         assert_eq!(found[0].subject, "Note one", "original case comes from row_json, not subject_lc");
         assert_eq!(found[0].to_lc, "me@x.test");
         assert_eq!(found[0].snippet.as_deref(), Some("a snippet"));
+        assert_eq!(found[0].filename, format!("1{INFO_PREFIX}.eml"));
     }
 
     #[test]
@@ -1492,8 +1498,8 @@ mod tests {
         assert_eq!(
             found[0].attachments,
             vec![
-                NoteAttachment { filename: "a.pdf".into(), mime: "application/pdf".into() },
-                NoteAttachment { filename: "b.png".into(), mime: "image/png".into() },
+                NoteAttachment { filename: "a.pdf".into(), mime: "application/pdf".into(), part_index: 0 },
+                NoteAttachment { filename: "b.png".into(), mime: "image/png".into(), part_index: 1 },
             ]
         );
     }

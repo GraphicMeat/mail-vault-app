@@ -541,6 +541,21 @@ pub fn holds_account(st: &SearchIndexState, account_id: &str) -> Result<bool, St
         .map_err(|e| e.to_string())
 }
 
+/// Notes to Self's raw candidates: every message this index says came from
+/// `sql_own` with a non-empty recipient list. `[]` while the index is off or
+/// closed — the board is a convenience view, not a claim about the mail.
+pub fn notes_candidates(
+    st: &SearchIndexState,
+    sql_own: &std::collections::HashSet<String>,
+) -> Result<Vec<core::query::NoteCandidate>, String> {
+    if *g(&st.enabled) == Some(false) {
+        return Ok(Vec::new());
+    }
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Ok(Vec::new()) };
+    core::query::notes_to_self_candidates(conn, sql_own)
+}
+
 /// The view editor's sender suggestions. None while the index is off or
 /// closed: a suggestion list is a convenience, not a claim about the mail.
 pub fn suggest_senders(

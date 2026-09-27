@@ -28,6 +28,21 @@ pub fn normalize_identity(addr: &str) -> String {
     format!("{canonical_local}@gmail.com")
 }
 
+/// `messages.to_lc` as `commit_batch` writes it: To+Cc+Bcc, `\n`-joined,
+/// each line `"name <addr>"` or a bare address. Splits it into bare addresses
+/// for `is_note_to_self`. A line with no `<...>` wrapper is used as-is.
+pub fn split_to_lc(to_lc: &str) -> Vec<String> {
+    to_lc
+        .split('\n')
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| match (line.rfind('<'), line.rfind('>')) {
+            (Some(open), Some(close)) if open < close => line[open + 1..close].trim().to_string(),
+            _ => line.to_string(),
+        })
+        .collect()
+}
+
 /// Track I rule: sender in own identities AND every recipient (to + cc + bcc)
 /// in own identities. `own` is already normalized; `from`/`recipients` are not.
 pub fn is_note_to_self(from: &str, recipients: &[String], own: &HashSet<String>) -> bool {
@@ -49,17 +64,20 @@ pub enum Column {
     Notes,
 }
 
-static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#(\w+)").unwrap());
+// I1 review fix (folded into I2): a bare `#` mid-token ("Invoice#42 paid")
+// is not a tag, only one at the subject's start or after whitespace is.
+static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(^|\s)#(\w+)").unwrap());
 static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"https?://[^\s<>]+").unwrap());
 
 /// First `#tag` token in `subject` -> `(TitleCased, subject with that token
 /// removed)`. A second tag is left in the returned subject untouched.
 fn extract_tag(subject: &str) -> Option<(String, String)> {
-    let m = TAG.find(subject)?;
-    let word = &subject[m.start() + 1..m.end()];
+    let caps = TAG.captures(subject)?;
+    let whole = caps.get(0)?;
+    let word = caps.get(2)?.as_str();
     let mut rest = String::with_capacity(subject.len());
-    rest.push_str(&subject[..m.start()]);
-    rest.push_str(&subject[m.end()..]);
+    rest.push_str(&subject[..whole.start()]);
+    rest.push_str(&subject[whole.end()..]);
     let rest = rest.split_whitespace().collect::<Vec<_>>().join(" ");
     Some((title_case(word), rest))
 }
@@ -183,6 +201,17 @@ mod tests {
     }
 
     #[test]
+    fn split_to_lc_extracts_bare_addresses_from_name_wrapped_lines() {
+        let addrs = split_to_lc("ann <ann@x.test>\nme@x.test\nbob smith <bob@x.test>");
+        assert_eq!(addrs, vec!["ann@x.test", "me@x.test", "bob@x.test"]);
+    }
+
+    #[test]
+    fn split_to_lc_of_empty_string_is_no_recipients() {
+        assert!(split_to_lc("").is_empty());
+    }
+
+    #[test]
     fn classify_tag_column_strips_the_tag() {
         let (col, subject) = classify("#recipes Pasta", "", &[]);
         assert_eq!(col, Column::Tag("Recipes".into()));
@@ -193,6 +222,21 @@ mod tests {
     fn classify_two_tags_first_one_wins() {
         let (col, _) = classify("#recipes #dinner Pasta", "", &[]);
         assert_eq!(col, Column::Tag("Recipes".into()));
+    }
+
+    /// I1 review fix: a `#` mid-token is not a tag marker.
+    #[test]
+    fn classify_a_hash_mid_token_is_not_a_tag() {
+        let (col, subject) = classify("Invoice#42 paid", "", &[]);
+        assert_eq!(col, Column::Notes);
+        assert_eq!(subject, "Invoice#42 paid");
+    }
+
+    #[test]
+    fn classify_tag_supports_non_ascii_words() {
+        let (col, subject) = classify("#café Bonjour", "", &[]);
+        assert_eq!(col, Column::Tag("Café".into()));
+        assert_eq!(subject, "Bonjour");
     }
 
     #[test]
