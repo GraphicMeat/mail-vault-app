@@ -5,7 +5,6 @@ import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
-import { formatDateTime } from '../utils/dateFormat';
 import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
@@ -30,6 +29,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
+import { buildQuoteBlocks } from '../utils/replyQuote';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
@@ -84,34 +84,9 @@ function AttachmentPreview({ attachment, onRemove }) {
   );
 }
 
-// Fields of a received message go into the quote's HTML as text.
-const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-
-function originalHtml(message, label) {
-  const fromAddress = message.from?.address || '';
-  const fromName = message.from?.name || '';
-  const originalDate = message.date ? formatDateTime(message.date) : '';
-  const originalTo = message.to?.map(recipient => recipient.address).join(', ') || '';
-  const header = `<p><strong>${label}</strong><br>From: ${escapeHtml(fromName)} &lt;${escapeHtml(fromAddress)}&gt;<br>Date: ${escapeHtml(originalDate)}<br>Subject: ${escapeHtml(message.subject || '')}<br>To: ${escapeHtml(originalTo)}</p>`;
-  return header + (message.html || textToHtml(message.text || ''));
-}
-
-// The quote toggle and the full-thread context panel, both built from
-// `replyTo`'s body. Shared by the initializer and by the effect that fills
-// them in once a radial reply's body resolves after compose already opened
-// on the header alone (RowQuickActions.jsx, src/utils/replyTarget.js).
-function buildQuoteBlocks(replyTo, label) {
-  const fullQuotedHtml = originalHtml(replyTo, label);
-  const quotedHeaderHtml = fullQuotedHtml.slice(0, fullQuotedHtml.indexOf('</p>') + 4);
-  const fullQuotedBodyHtml = fullQuotedHtml.slice(quotedHeaderHtml.length);
-  const contextMessages = replyTo._threadContext?.length ? replyTo._threadContext : [replyTo];
-  return {
-    quotedHeaderHtml,
-    fullQuotedBodyHtml,
-    quotedHtml: quotedHeaderHtml + (replyTo._selectedQuoteHtml || fullQuotedBodyHtml),
-    contextHtml: contextMessages.map(message => originalHtml(message, label)).join('<hr>'),
-  };
-}
+// buildQuoteBlocks also feeds App's `openCompose` _fillFrom patch for a
+// minimized window (no live editor there to react to a fuller `replyTo`) —
+// see src/utils/replyQuote.js.
 
 // The message a reply answers: someone else's HTML, shown in the app's own
 // window, where withGlobalTauri puts the IPC bridge. The sandbox has no

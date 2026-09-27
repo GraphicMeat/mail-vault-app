@@ -162,10 +162,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     title: purge.title, description: purge.description, confirmLabel: purge.label,
   });
   // Reply/replyAll open on the header alone right away — the wheel closes and
-  // compose appears instantly — then hand in the resolved body once it lands;
-  // ComposeModal fills the quote in without disturbing anything already typed
-  // (see its `quotedBodyReadyRef` effect). Forward inlines the body into the
-  // message itself, so it still waits for the fetch before opening.
+  // compose appears instantly — then hand in the resolved body once it lands.
+  // `_fillFrom: newest` makes that second call fill-only (App.jsx's
+  // openCompose): it patches whichever window is still open on this exact
+  // header instead of possibly reopening one the user already sent, closed
+  // or minimized while the fetch was in flight. Forward inlines the body
+  // into the message itself, so it still waits for the fetch before opening.
   const openReply = async mode => {
     if (mode === 'forward') {
       openCompose({ mode, replyTo: await replyTarget(newest, null, useMailStore.getState()) });
@@ -173,7 +175,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     }
     openCompose({ mode, replyTo: newest });
     const resolved = await replyTarget(newest, null, useMailStore.getState());
-    if (resolved !== newest) openCompose({ mode, replyTo: resolved });
+    if (resolved !== newest) openCompose({ mode, replyTo: resolved, _fillFrom: newest });
   };
   const openNewMessage = () => openCompose({ initialData: { to: senderAddress, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
   const actionLabel = entry => {

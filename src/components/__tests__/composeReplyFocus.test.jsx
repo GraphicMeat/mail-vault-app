@@ -9,11 +9,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
+import { signatureCaretPos } from '../../utils/signatureCaret';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
+// The real RichTextEditor, wrapped just to capture the `editorRef` ComposeModal
+// hands it — the same ref object throughout, so `latestEditorRef.current` is
+// the live TipTap instance once it exists. Needed to assert the caret's exact
+// position (I3); every other test here only needs the DOM the real editor
+// draws, not this.
+let latestEditorRef = null;
+vi.mock('../RichTextEditor', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    RichTextEditor: (props) => {
+      latestEditorRef = props.editorRef;
+      return React.createElement(actual.RichTextEditor, props);
+    },
+  };
+});
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return new Proxy({}, {
@@ -110,7 +127,7 @@ const parent = {
   flags: ['\\Seen'],
 };
 
-beforeEach(() => { invoke.mockReset(); });
+beforeEach(() => { invoke.mockReset(); settings.getSignature = () => ''; latestEditorRef = null; });
 afterEach(() => cleanup());
 
 const baseProps = { onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
@@ -140,5 +157,20 @@ describe('compose focus on open', () => {
     render(<ComposeModal mode="forward" replyTo={parent} {...baseProps} />);
     const to = await screen.findByTestId('compose-to');
     await waitFor(() => expect(document.activeElement).toBe(to));
+  });
+
+  it('lands the caret above the signature, not at the very top of an empty document', async () => {
+    settings.getSignature = () => ({ enabled: true, html: '<p>Best,<br>Me</p>' });
+    render(<ComposeModal mode="reply" replyTo={parent} {...baseProps} />);
+    const body = await screen.findByTestId('compose-body');
+    await within(body).findByRole('textbox');
+
+    await waitFor(() => expect(latestEditorRef?.current).toBeTruthy());
+    const editor = latestEditorRef.current;
+    await waitFor(() => {
+      const expected = signatureCaretPos(editor.state.doc);
+      expect(expected).not.toBeNull();
+      expect(editor.state.selection.from).toBe(expected);
+    });
   });
 });

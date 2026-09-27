@@ -290,7 +290,23 @@ describe('RowQuickActions', () => {
 
     resolveBody(resolved);
     await waitFor(() => expect(mocks.openCompose).toHaveBeenCalledTimes(2));
-    expect(mocks.openCompose).toHaveBeenLastCalledWith({ mode: 'reply', replyTo: resolved });
+    expect(mocks.openCompose).toHaveBeenLastCalledWith({ mode: 'reply', replyTo: resolved, _fillFrom: target });
+  });
+
+  it('does not send a fill-in call when the body resolve fails and hands back the same header', async () => {
+    const target = email({ uid: 16, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
+    mocks.replyTarget.mockImplementation(async header => header);
+    setActions(action('reply'));
+    renderActions({ emails: [target] });
+
+    fireEvent.click(screen.getByTestId('quick-action-reply'));
+    await waitFor(() => expect(mocks.openCompose).toHaveBeenCalledTimes(1));
+
+    // Give the resolved-but-unchanged promise a tick to settle, then confirm
+    // no second call ever came.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mocks.openCompose).toHaveBeenCalledTimes(1);
   });
 
   it('waits for the body before opening a forward, which inlines it into the message', async () => {

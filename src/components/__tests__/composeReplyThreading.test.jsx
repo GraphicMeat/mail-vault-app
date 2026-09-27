@@ -226,3 +226,27 @@ describe('the reply the compose window stages for the UI', () => {
     expect(staged.references).toBeFalsy();
   });
 });
+
+// A radial reply/replyAll opens on the header alone (RowQuickActions.jsx)
+// and App's openCompose patches in the resolved body once it lands — as a
+// `replyTo` prop change on the same, already-mounted ComposeModal. The quote
+// panel has to pick that up, and whatever was typed while the fetch was
+// still in flight must come through untouched.
+describe('the quote fill-in effect (radial reply)', () => {
+  it('fills the quote once the body resolves, keeping the typed reply as it is', async () => {
+    const headerOnly = { ...parent, text: undefined };
+    const props = { mode: 'reply', replyTo: headerOnly, onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    const { rerender } = render(<ComposeModal {...props} />);
+    const editor = await screen.findByTestId('editor-stub');
+
+    fireEvent.change(editor, { target: { value: 'Thanks, will check.' } });
+
+    const quotedIframeHtml = () => screen.getByTestId('compose-quoted').querySelector('iframe').getAttribute('srcdoc');
+    expect(quotedIframeHtml()).not.toContain('How much?');
+
+    rerender(<ComposeModal {...props} replyTo={{ ...parent, text: 'How much?' }} />);
+
+    await waitFor(() => expect(quotedIframeHtml()).toContain('How much?'));
+    expect(editor.value).toBe('Thanks, will check.');
+  });
+});

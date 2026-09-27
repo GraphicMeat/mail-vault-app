@@ -80,7 +80,7 @@ import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { loadComposeSession, mergeComposeSession, saveComposeSession } from './services/composeSession';
-import { sameReply } from './utils/sameReply';
+import { sameReply, applyReplyFill } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
@@ -321,15 +321,31 @@ function App() {
   // A reply already open on this message comes forward instead of stacking —
   // see utils/sameReply.js for why the header made that necessary.
   const openCompose = useCallback((state = {}) => {
+    // Fill-only: a radial reply/replyAll opens on the header right away
+    // (RowQuickActions.jsx) and calls back in here once resolveMessageBody
+    // lands, carrying the ORIGINAL header as `_fillFrom` instead of the
+    // resolved copy — matched with `sameReply` below, so a messageId that
+    // only shows up once the fetch lands can never change the match key and
+    // stack a duplicate. This path never opens, un-minimizes or focuses a
+    // window: the fetch finishing late must not reopen a reply the user
+    // already sent, discarded or closed, or pull one they minimized back out.
+    if (state._fillFrom) {
+      // buildQuote is only needed for the (rare) minimized case, and pulls in
+      // RichTextEditor's textToHtml — a dynamic import so a plain reply-fill
+      // never drags TipTap into App's own chunk (see composeSend.js for the
+      // same rule). applyReplyFill (utils/sameReply.js) is the pure merge —
+      // unit tested there without a live ComposeModal.
+      import('./utils/replyQuote').then(({ buildQuoteBlocks }) => {
+        setComposeWindows(prev => applyReplyFill(prev, state,
+          replyTo => buildQuoteBlocks(replyTo, tr('compose.originalMessage'))));
+      });
+      return;
+    }
     setComposeWindows(prev => {
       const already = prev.find(w => sameReply(w, state));
       if (already) {
         if (already.detached && already.nativeLabel) void focusNativeCompose(already.nativeLabel).catch(() => {});
-        // A radial reply opens on the header alone and calls back in here a
-        // second time once its body resolves (RowQuickActions.jsx) — same
-        // message, so patch the richer replyTo into the window already open
-        // instead of stacking a duplicate.
-        return prev.map(w => w.id === already.id ? { ...w, minimized: false, ...(state.replyTo && { replyTo: state.replyTo }) } : w);
+        return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
       }
       composeIdRef.current += 1;
       return [...prev, { id: composeIdRef.current, minimized: false, ...state }];
