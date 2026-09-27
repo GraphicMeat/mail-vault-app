@@ -1,0 +1,40 @@
+name: Snap Edge
+
+# Builds the x86_64 snap from the dispatched ref and publishes it to the edge
+# channel, so a Linux fix can be tried with `snap refresh mailvault --edge`
+# before it rides a release.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-snap.yml
+    with:
+      arch: x86_64
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download snap
+        uses: actions/download-artifact@v7
+        with:
+          name: snap-x86_64-artifact
+          path: snaps
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Publish to edge
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          for snap in snaps/*.snap; do
+            snapcraft upload "$snap" --release=edge
+          done

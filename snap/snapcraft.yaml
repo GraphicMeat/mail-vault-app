@@ -53,3 +53,22 @@ parts:
       - libssl3
       - libsecret-1-0
       - ca-certificates
+
+  # The gnome extension mounts gnome-42-2204, which already ships GTK, WebKitGTK
+  # and a Mesa matched to its own DRI drivers. The stage-packages above drag in
+  # older jammy copies of the same libraries, and $SNAP/usr/lib comes first on
+  # LD_LIBRARY_PATH, so the app paired the archive's libEGL with the content
+  # snap's radeonsi_dri.so and died with "did not find extension DRI_Mesa
+  # version 1" (issue #16). Drop every library the content snap provides, so
+  # each one has a single source. usr/share and etc stay: DICPATH and
+  # SSL_CERT_FILE point at our own copies there.
+  cleanup:
+    after: [mailvault]
+    plugin: nil
+    build-snaps: [gnome-42-2204]
+    override-prime: |
+      set -eu
+      cd /snap/gnome-42-2204/current
+      find lib usr/lib \( -type f -o -type l \) | while read -r f; do
+        rm -f "$CRAFT_PRIME/$f"
+      done
