@@ -49,7 +49,7 @@ import { boundedThreadText } from '../../utils/quickReplies';
 import { describePurge } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
-import { startThreadReadTimer, stopThreadReadTimer } from '../../services/workflows/threadReadTimer';
+import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { AddressText } from './AddressText';
@@ -348,14 +348,19 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
     return registerListener(key, () => forceUpdate(n => n + 1));
   }, [key, registerListener]);
 
-  // An expanded unread message is read on its own countdown, and folding it
-  // stops the countdown (so does the virtualizer dropping the row; drawing it
-  // again starts a new one). The flags are left out on purpose: a message
-  // marked unread by hand while it is open must stay unread, not start over.
+  // An expanded unread message is read on its own countdown, once per
+  // expansion. Folding it stops the countdown and lets the next expansion
+  // start another. An unmount (the virtualizer dropping the row, split view
+  // picking another message) stops it too, and only a countdown it cut short
+  // runs again on the redraw: one that already fired, or that a hand-set read
+  // state cancelled, does not.
   useEffect(() => {
-    if (!expanded) return undefined;
+    if (!expanded) {
+      forgetThreadReadTimer(scopeKey);
+      return undefined;
+    }
     void startThreadReadTimer(threadId, email);
-    return () => stopThreadReadTimer(scopeKey);
+    return () => { if (stopThreadReadTimer(scopeKey)) forgetThreadReadTimer(scopeKey); };
   }, [expanded, scopeKey, threadId]);
 
   const bodyEntry = bodiesMapRef.current.get(key);
@@ -793,9 +798,9 @@ export function ThreadView({ thread, onComposeReply }) {
         virtualizer.measureElement(node);
       });
     }
-    const index = sortedEmails.findIndex(email => emailKey(email) === newestKey);
+    const index = sortedEmails.findIndex(email => emailKey(email) === openKey);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: 'start' });
-  }, [threadId, threadSortOrder, readerLayout, newestKey, virtualizer]);
+  }, [threadId, threadSortOrder, readerLayout, openKey, virtualizer]);
 
   // Archive All acts on the part of the thread that lives in the folder on
   // screen — the same rule as the row's archive button (see threadRowMembers).

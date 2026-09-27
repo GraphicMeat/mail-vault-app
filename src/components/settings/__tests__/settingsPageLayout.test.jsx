@@ -19,7 +19,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { allTabs, settingsHosts, SettingsPage } from '../../SettingsPage';
 import { useMailStore } from '../../../stores/mailStore';
 
-vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
+vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {}, readOps: async () => [], opFailures: () => [] }));
 
 beforeEach(() => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })));

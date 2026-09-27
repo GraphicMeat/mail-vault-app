@@ -41,10 +41,12 @@ export function cancelPendingMarkRead(targetKeys) {
 
 let _insightsSelectionGeneration = 0;
 export function getSelectionGeneration() { return _insightsSelectionGeneration; }
-export function cancelSelection() {
+// `keepThreadTimers`: the open thread stays open (its own row clicked again).
+// Read off an optional object because this is also handed out as a callback.
+export function cancelSelection(opts) {
   _insightsSelectionGeneration += 1;
   _clearPendingMarkRead();
-  cancelThreadReadTimers();
+  if (!opts?.keepThreadTimers) cancelThreadReadTimers();
 }
 export const cancelInsightsSelection = cancelSelection;
 

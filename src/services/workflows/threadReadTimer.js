@@ -12,6 +12,11 @@ import { emailScopeKey, selectionKey } from '../../stores/slices/unifiedHelpers'
 import { applyFlagToKeys } from './messageMutations';
 
 const _timers = new Map();
+// Messages whose countdown this expansion has already had. A countdown runs
+// once per expansion, not once per render or mount: a row the virtualizer
+// redraws, or a chat conversation rebuilt by an arrival, must not mark read
+// again a message the user has since set unread by hand. Folding forgets it.
+const _started = new Set();
 let _threadId = null;
 // Bumped by every cancel. A start still waiting on the store import when one
 // lands belongs to a reader that has gone.
@@ -27,16 +32,25 @@ function _clearAll() {
   _store?.setState({ markReadProgress: null });
 }
 
+// True when it cut a running countdown short.
 export function stopThreadReadTimer(key) {
-  if (!_timers.has(key)) return;
+  if (!_timers.has(key)) return false;
   clearTimeout(_timers.get(key));
   _timers.delete(key);
   if (!_timers.size) _store?.setState({ markReadProgress: null });
+  return true;
+}
+
+// The message was folded, or its countdown was cut short: the next
+// expansion starts one again.
+export function forgetThreadReadTimer(key) {
+  _started.delete(key);
 }
 
 export function cancelThreadReadTimers() {
   _epoch += 1;
   _threadId = null;
+  _started.clear();
   _clearAll();
 }
 
@@ -46,13 +60,16 @@ export async function startThreadReadTimer(threadId, email) {
   if (epoch !== _epoch) return;
   if (threadId !== _threadId) {
     _clearAll();
+    _started.clear();
     _threadId = threadId;
   }
 
   const { markAsReadMode, markAsReadDelay } = useSettingsStore.getState();
   const opened = _store.getState();
   const key = emailScopeKey(email, opened);
-  if (markAsReadMode === 'manual' || !key || email?.flags?.includes('\\Seen') || _timers.has(key)) return;
+  if (!key || _started.has(key)) return;
+  _started.add(key);
+  if (markAsReadMode === 'manual' || email?.flags?.includes('\\Seen')) return;
 
   // Resolved now, against the view the message was opened in: a single
   // folder's key is a bare uid, and after a switch of folder or account the

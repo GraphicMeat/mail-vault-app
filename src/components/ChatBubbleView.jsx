@@ -71,10 +71,12 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
 
   // A conversation shows every message open at once, so each unread one in it
   // is read on the countdown an expanded thread message gets. Leaving the
-  // conversation stops them.
+  // conversation stops them. A rebuild of the same conversation (any mail from
+  // this correspondent arriving or going) only starts the new arrivals: the
+  // rest keep their countdown, or their hand-set state.
+  useEffect(() => () => cancelThreadReadTimers(), [threadId]);
   useEffect(() => {
     for (const email of topic.emails) void startThreadReadTimer(threadId, email);
-    return () => cancelThreadReadTimers();
   }, [threadId, topic]);
 
   // Build a flattened display list with date separators interleaved

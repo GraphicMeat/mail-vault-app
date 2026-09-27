@@ -46,7 +46,11 @@ export const createSelectionSlice = (set, get) => ({
 
   // Select a thread (shows all emails in the thread in the viewer)
   selectThread: (thread) => {
-    _cancelSelection();
+    // Clicking the row of the thread already open changes nothing on screen,
+    // so it must not cancel that thread's mark-as-read countdowns: nothing
+    // would start them again. A selection still loading is cancelled either way.
+    const reopen = get().selectedThread?.threadId === thread.threadId;
+    _cancelSelection({ keepThreadTimers: reopen });
     set(state => ({
       selectedThread: thread,
       // The same key the rows are drawn with, or the row never reads as open.
@@ -54,7 +58,7 @@ export const createSelectionSlice = (set, get) => ({
       selectedEmail: null,
       selectedEmailSource: null,
       loadingEmail: false,
-      markReadProgress: null,
+      markReadProgress: reopen ? state.markReadProgress : null,
       // Only unified rows are tagged; a single-account row leaves it standing.
       lastSelectedAccountId: thread.lastEmail._accountId || state.lastSelectedAccountId,
     }));

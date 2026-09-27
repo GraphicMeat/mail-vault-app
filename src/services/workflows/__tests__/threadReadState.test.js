@@ -243,6 +243,39 @@ describe('thread reader: mark-as-read countdown per expanded message', () => {
     expect(useMailStore.getState().selectedThread.emails.find(e => e.uid === 2).flags).not.toContain('\\Seen');
   });
 
+  it('8b. a message set unread by hand stays unread when its row is redrawn', async () => {
+    const emails = [row(1, 1, ['\\Seen']), row(2, 2)];
+    prime(emails);
+    openThread('t1', emails);
+    let view = render(createElement(Reader));
+
+    // A redraw that cuts a countdown short starts it again...
+    await advance(1000);
+    view.unmount();
+    view = render(createElement(Reader));
+    await advance(3100);
+    await vi.waitFor(() => expect(marked()).toEqual(['acct1/INBOX/2']));
+
+    // ...but one after the user set the message unread by hand does not.
+    await act(async () => { await applyFlagToKeys([2], '\\Seen', false); });
+    view.unmount();
+    render(createElement(Reader));
+    await advance(5000);
+    expect(marked()).toEqual(['acct1/INBOX/2']);
+  });
+
+  it('8c. clicking the row of the thread already open keeps its countdown', async () => {
+    const emails = [row(1, 1, ['\\Seen']), row(2, 2)];
+    prime(emails);
+    openThread('t1', emails);
+    render(createElement(Reader));
+
+    await advance(1000);
+    openThread('t1', emails);
+    await advance(2100);
+    await vi.waitFor(() => expect(marked()).toEqual(['acct1/INBOX/2']));
+  });
+
   it('9. auto mode marks a message as soon as it is expanded', async () => {
     useSettingsStore.setState({ markAsReadMode: 'auto' });
     const emails = [row(1, 1), row(2, 2, ['\\Seen'])];
@@ -362,6 +395,31 @@ describe('thread reader: mark-as-read countdown per expanded message', () => {
     expect(marked()).toEqual([]);
     await advance(200);
     await vi.waitFor(() => expect(marked().sort()).toEqual(['acct1/INBOX/1', 'acct1/INBOX/2']));
+  });
+
+  it('15b. chat: a message set unread by hand stays unread when the conversation is rebuilt', async () => {
+    const emails = [row(1, 1), row(2, 2)];
+    prime(emails);
+    const chat = () => {
+      const rows = useMailStore.getState().emails;
+      return createElement(ChatBubbleView, {
+        correspondent: { email: 's1@mock.test', name: 'Sender 1', emails: rows },
+        threadId: 'chat-1', threadsMap: new Map([['chat-1', { subject: 'Topic', emails: rows }]]),
+        userEmail: ['me@mock.test'], onBack: () => {}, onReply: () => {},
+      });
+    };
+    const view = render(chat());
+    await advance(3100);
+    await vi.waitFor(() => expect(marked().sort()).toEqual(['acct1/INBOX/1', 'acct1/INBOX/2']));
+
+    await act(async () => { await applyFlagToKeys([1], '\\Seen', false); });
+    // Mail from the same correspondent arrives: the conversation is rebuilt.
+    act(() => { useMailStore.setState(s => ({ emails: [...s.emails, row(3, 3)] })); });
+    view.rerender(chat());
+    await advance(5000);
+
+    await vi.waitFor(() => expect(marked()).toContain('acct1/INBOX/3'));
+    expect(marked().filter(k => k === 'acct1/INBOX/1')).toHaveLength(1);
   });
 
   it('16. a single message still goes through selectEmail and marks after the delay', async () => {
