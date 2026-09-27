@@ -545,23 +545,28 @@ mod tests {
         assert_eq!(looked_up, path);
 
         let dest = dir.join("out").join("Report attachments");
+        let mut events = s.events.subscribe();
         let r = call(
             &s,
             "export_attachments",
-            json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "indices": [0], "destDir": dest.to_string_lossy()}),
+            json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "indices": [0], "destDir": dest.to_string_lossy(), "jobId": "r-1"}),
         )
         .await;
-        r.result.expect("exported");
+        r.result.expect("export started");
+        let (_, last) = crate::handlers::vault_files::finished_export(&mut events, "r-1").await;
+        assert!(last.get("error").is_none(), "{last}");
         assert_eq!(std::fs::read(dest.join("report.pdf")).unwrap(), PDF);
 
         let bulk = dir.join("out").join("Bulk");
         let r = call(
             &s,
             "views.export_attachments",
-            json!({"destDir": bulk.to_string_lossy(), "messages": [{"accountId": "acc1", "mailbox": "INBOX", "uid": 1}]}),
+            json!({"destDir": bulk.to_string_lossy(), "messages": [{"accountId": "acc1", "mailbox": "INBOX", "uid": 1}], "jobId": "r-2"}),
         )
         .await;
-        let out = r.result.expect("bulk export");
+        r.result.expect("bulk export started");
+        let (_, last) = crate::handlers::vault_files::finished_export(&mut events, "r-2").await;
+        let out = last["result"].clone();
         assert_eq!((out["files"].clone(), out["skipped"].clone()), (json!(1), json!(0)), "{out}");
         assert_eq!(std::fs::read(bulk.join("report.pdf")).unwrap(), PDF);
 

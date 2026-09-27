@@ -20,7 +20,8 @@
  *      without a click — the row opens "Click to open"
  *   6. An image shows itself in the tile, a PDF does not borrow one
  *   7. Save As is on the row, with a label no other button in it shares
- *   8. Download All writes a folder under ~/Downloads holding both files
+ *   8. Download All asks for a folder (the probe picks Downloads) and writes
+ *      a folder inside it holding both files
  *   9. Dragging a row cancels the browser drag and starts a native one on
  *      the real path (WebDriver cannot perform the OS drag itself)
  */
@@ -82,6 +83,11 @@ const installInvokeProbe = () => browser.execute(() => {
     // window and a live drag session all steal focus from every later spec.
     if (cmd === 'open_file' || cmd === 'show_in_folder' || cmd === 'plugin:drag|start_drag') {
       return Promise.resolve(null);
+    }
+    // A native folder picker cannot be driven from WebDriver: pick the
+    // folder it opens on (Downloads), as a person pressing Choose would.
+    if (cmd === 'plugin:dialog|open' && args?.options?.directory) {
+      return Promise.resolve(args.options.defaultPath);
     }
     return real(cmd, args);
   };
@@ -322,7 +328,7 @@ describe('Connected Attachments', function () {
   // cache, so the files were downloaded nowhere the user could reach. This
   // asserts against the real filesystem — the folder and both names are read
   // back off disk after the button runs.
-  it('exports every attachment into one new folder under Downloads', async function () {
+  it('exports every attachment into one new folder inside the picked one', async function () {
     expect(await installInvokeProbe()).toBe(true);
     let exported = null;
     try {
@@ -333,8 +339,15 @@ describe('Connected Attachments', function () {
         return true;
       })).toBe(true);
 
-      // Finder is stubbed above, so its argument is the only place the
-      // exported folder's real path surfaces.
+      // The button turns into its progress, then "Saved to <folder>" with a
+      // Show in Folder button. Finder is stubbed above, so its argument is
+      // the only place the exported folder's real path surfaces.
+      await browser.waitUntil(() => browser.execute(() => {
+        const show = document.querySelector('[data-testid="attachment-export-show-folder"]');
+        if (!show) return false;
+        show.click();
+        return true;
+      }), { timeout: 60_000, interval: 250, timeoutMsg: 'the export never said where it saved' });
       await browser.waitUntil(async () => (await invokedCommands()).includes('show_in_folder'), {
         timeout: 60_000, interval: 250,
         timeoutMsg: `the export never reached show_in_folder (saw ${JSON.stringify(await invokedCommands())})`,

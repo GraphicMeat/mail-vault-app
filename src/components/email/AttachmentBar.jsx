@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import { send } from '../../services/transport';
+import { useAttachmentExports, messageExportKey, runAttachmentExport, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -342,6 +343,10 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   const isTauri = !!window.__TAURI__ && !isDemo;
   const kind = previewKind(attachment);
   const location = { accountId, mailbox, uid: emailUid, attachmentIndex };
+  // "Download All" is saving this message's attachments: hands off until it
+  // is done, so no click lands between its writes.
+  const locked = useAttachmentExports(state => !!state[messageExportKey(accountId, mailbox, emailUid)]);
+  const refuse = (event) => { event.preventDefault(); event.stopPropagation(); };
 
   // The prefetch (or an earlier click) may have cached this already.
   useEffect(() => {
@@ -580,10 +585,16 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     <>
       <div
         ref={rowRef}
-        className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group cursor-pointer
+        className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group
+                   ${locked ? 'opacity-60 cursor-default' : 'cursor-pointer'}
                    ${error ? 'border-mail-danger' : justDownloaded ? 'border-mail-success/50' : 'border-mail-border hover:border-mail-accent/50'}`}
-        draggable={isTauri}
-        onDragStart={isTauri ? handleDragStart : undefined}
+        draggable={isTauri && !locked}
+        onDragStart={isTauri && !locked ? handleDragStart : undefined}
+        // Capture phase: a locked row stops the click before any of its own
+        // buttons hears it.
+        onClickCapture={locked ? refuse : undefined}
+        onKeyDownCapture={locked ? refuse : undefined}
+        onContextMenuCapture={locked ? refuse : undefined}
         onClick={handleRowClick}
         onKeyDown={event => {
           if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
@@ -592,7 +603,9 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
         }}
         onContextMenu={handleContextMenu}
         role="button"
-        tabIndex={0}
+        tabIndex={locked ? -1 : 0}
+        aria-disabled={locked || undefined}
+        {...(locked ? { inert: '' } : {})}
         data-testid="attachment-item"
       >
         <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} shrink-0 rounded-lg overflow-hidden flex items-center justify-center ${justDownloaded ? 'bg-mail-success-tint' : 'bg-mail-accent/10'}`}>
@@ -726,7 +739,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
  * only the `save_attachment_to` write the single-file Download already makes,
  * which creates its parent directories itself.
  */
-async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, attachments) {
+async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, attachments, report = () => {}) {
   const { join } = await import('@tauri-apps/api/path');
   const { invoke } = window.__TAURI__.core;
   const byIndex = new Map(attachments.map((a) => [a._originalIndex, a]));
@@ -740,12 +753,10 @@ async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, atta
     const dest = await uniqueIn(destDir, leaf, join);
     await invoke('save_attachment_to', { filename: leaf, contentBase64: getCleanBase64(b64), destPath: dest });
     files.push(leafOf(dest));
+    report(files.length, indices.length);
   }
   return { dir: destDir, files };
 }
-
-/** The last component of a native path: `\` separates on Windows, `/` elsewhere. */
-const leafOf = (path) => path.split(/[\\/]/).pop();
 
 /** The first free name for `leaf` inside `dir`, `name (1).ext` style. */
 async function uniqueIn(dir, leaf, join) {
@@ -765,95 +776,142 @@ async function uniqueIn(dir, leaf, join) {
 }
 
 /**
- * Export every attachment of one message into a folder of its own.
+ * A save in flight, drawn where its button was: `done` of `total`, and a
+ * busy bar before the first step is known.
+ */
+export function ExportProgress({ progress, label, className = '' }) {
+  const { done = 0, total = 0 } = progress || {};
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className={`flex items-center gap-2 ${className}`} data-testid="attachment-export-progress">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={total || undefined}
+        aria-valuenow={total ? done : undefined}
+        className="w-28 h-1.5 rounded-full bg-mail-accent/15 overflow-hidden"
+      >
+        <div
+          className={`h-full bg-mail-accent transition-[width] duration-200 ${total ? '' : 'w-1/3 animate-pulse'}`}
+          style={total ? { width: `${pct}%` } : undefined}
+        />
+      </div>
+      {total > 0 && <span className="text-xs tabular-nums text-mail-text-muted">{done}/{total}</span>}
+    </div>
+  );
+}
+
+/**
+ * "Saved to <folder>" and a way to get there, for a few seconds after a save.
+ * The folder's own name, because when Finder refuses to open (a sandbox scope
+ * it does not hold) this line is the only thing that says where the files went.
+ */
+export function SavedToFolder({ dir }) {
+  const t = useT();
+  return (
+    <span className="flex items-center gap-1.5 text-sm text-mail-text-muted" role="status">
+      <Check size={14} className="text-mail-success shrink-0" />
+      <span className="max-w-[16rem] truncate">{t('email.attachments.savedTo', { folder: leafOf(dir) })}</span>
+      <button
+        type="button"
+        onClick={() => showSavedFolder(dir)}
+        data-testid="attachment-export-show-folder"
+        className="p-1 rounded-md text-mail-accent-text hover:bg-mail-accent/10"
+        title={t('email.attachments.showFolder')}
+        aria-label={t('email.attachments.showFolder')}
+      >
+        <FolderOpen size={14} />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Save every attachment of one message into a folder of its own.
  *
  * It used to loop `cache_attachment`, which writes into the app's PRIVATE
- * attachment cache — the files were "downloaded" somewhere the user could
- * not find. The daemon now writes them into `~/Downloads/<subject> -
- * Attachments` (a `(n)` sibling when that folder is taken, so two messages
- * never merge) and the folder is revealed when it lands.
+ * attachment cache: the files were "downloaded" somewhere the user could not
+ * find. Now it asks where, and the daemon writes them into `<picked>/<subject>
+ * - Attachments` (a `(n)` sibling when that folder is taken, so two messages
+ * never merge) as a job: the button turns into its progress, and the message's
+ * attachments stay locked until it is over.
  */
 export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, subject }) {
   const t = useT();
-  const [downloading, setDownloading] = useState(false);
-  const [done, setDone] = useState(null);
+  const key = messageExportKey(accountId, mailbox, emailUid);
+  const progress = useAttachmentExports(state => state[key]);
+  const [picking, setPicking] = useState(false);
+  const [saved, setSaved] = useState(null);
   const [error, setError] = useState(null);
   const isDemo = !!window.__MAILVAULT_DEMO__;
   const isTauri = !!window.__TAURI__ && !isDemo;
 
   const handleDownloadAll = async () => {
-    if (attachments.length === 0) return;
-    setDownloading(true);
+    if (attachments.length === 0 || progress || picking) return;
     setError(null);
+    setSaved(null);
+    const args = {
+      accountId,
+      mailbox,
+      uid: emailUid,
+      indices: attachments.map((a) => a._originalIndex),
+    };
     try {
-      const destDir = isTauri
-        ? await (async () => {
-            const { downloadDir, join } = await import('@tauri-apps/api/path');
-            return join(await downloadDir(), exportFolderName(subject, t('email.attachments.folderName')));
-          })()
-        : '';
-      const args = {
-        accountId,
-        mailbox,
-        uid: emailUid,
-        indices: attachments.map((a) => a._originalIndex),
-        destDir,
-      };
-      let result;
+      if (!isTauri) {
+        // The demo has no filesystem: its backend hands each file to the browser.
+        await send('export_attachments', { ...args, destDir: '' });
+        setSaved('');
+        setTimeout(() => setSaved(null), 6000);
+        return;
+      }
+      setPicking(true);
       try {
-        result = await send('export_attachments', args);
-      } catch (err) {
-        if (!isTauri) throw err;
+        const chosen = await pickFolder(t('email.attachments.chooseFolder'));
+        if (!chosen) return; // cancelled: nothing happens
+        const { join } = await import('@tauri-apps/api/path');
+        args.destDir = await join(chosen, exportFolderName(subject, t('email.attachments.folderName')));
+      } finally {
+        setPicking(false);
+      }
+      const result = await runAttachmentExport(
+        key,
+        jobId => send('export_attachments', { ...args, jobId }),
         // The daemon is the only writer here that has never written OUTSIDE
-        // the vault root: on a signed build it reaches ~/Downloads only
-        // through the sandbox it inherits from the app, and the Developer ID
-        // sidecar carries neither `app-sandbox` nor `inherit` of its own
-        // (`src-daemon/entitlements.plist`). If that turns out not to hold,
-        // the app itself demonstrably can write there — that is what the
-        // per-file Download button has done since it stopped writing into
-        // the cache — so the export falls back to exactly that command
-        // rather than failing. Not app-side logic: the same one-file write,
-        // run N times, only when the daemon could not do it.
-        console.warn('[Attachment] Daemon export failed, writing from the app:', err);
-        result = await exportFromApp(args, attachments);
-      }
-      // The folder's own name, not "Downloaded": when Finder refuses to open
-      // (a sandbox scope it does not hold), this is the only thing that says
-      // where the files went.
-      setDone(isTauri && result?.dir ? leafOf(result.dir) : t('email.attachments.downloaded'));
-      setTimeout(() => setDone(null), 6000);
-      if (isTauri && result?.dir) {
-        await window.__TAURI__.core.invoke('show_in_folder', { path: result.dir }).catch(() => {});
-      }
+        // the vault root: the Developer ID sidecar carries neither
+        // `app-sandbox` nor `inherit` of its own (`src-daemon/entitlements.plist`),
+        // and the MAS one inherits a sandbox fixed before the folder was
+        // picked. The app holds the picked folder's access, so when the job
+        // cannot write there the app writes the same files itself, one
+        // `save_attachment_to` per file, rather than failing.
+        (_error, report) => exportFromApp(args, attachments, report),
+      );
+      setSaved(result?.dir || args.destDir);
+      setTimeout(() => setSaved(null), 6000);
     } catch (err) {
       console.error('[Attachment] Download all failed:', err);
       setError(t('email.attachments.failedDownload'));
       setTimeout(() => setError(null), 3000);
-    } finally {
-      setDownloading(false);
     }
   };
 
+  if (progress) return <ExportProgress progress={progress} label={t('email.attachments.saving')} />;
+  if (saved) return <SavedToFolder dir={saved} />;
   return (
     <button
       onClick={handleDownloadAll}
-      disabled={downloading}
+      disabled={picking}
       data-testid="attachment-download-all"
       className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-accent/10
                 text-mail-accent-text hover:bg-mail-accent/20 rounded-lg text-sm
                 font-medium transition-colors disabled:opacity-70"
     >
-      {downloading ? (
-        <>
-          <div className="w-3.5 h-3.5 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
-          <span>{t('email.attachments.downloadAll')}</span>
-        </>
-      ) : error ? (
+      {error ? (
         <span className="text-mail-danger">{error}</span>
-      ) : done ? (
+      ) : saved === '' ? (
         <>
           <Check size={14} />
-          <span className="max-w-[16rem] truncate">{done}</span>
+          <span>{t('email.attachments.downloaded')}</span>
         </>
       ) : (
         <>

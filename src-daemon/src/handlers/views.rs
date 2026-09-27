@@ -5,6 +5,7 @@
 //! The definition lives in `app.db`; the rows come from the search index, in
 //! the same shape `mail_search` returns, so the list renders them unchanged.
 use crate::handlers::common::{blocking, done};
+use crate::handlers::vault_files::ExportJob;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::app_db;
@@ -56,8 +57,66 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     }
     let state = Arc::clone(state);
     let params = params.clone();
+    if method == "views.export_attachments" {
+        let Some(job_id) = params.get("jobId").and_then(Value::as_str).map(str::to_owned) else {
+            return Some(done(id, Err("Missing jobId".to_string())));
+        };
+        if params.get("destDir").and_then(Value::as_str).is_none_or(str::is_empty) {
+            return Some(done(id, Err("Missing destDir".to_string())));
+        }
+        // A job (`vault_files::ExportJob`): answered at once, reported in frames.
+        let mut job = ExportJob::new(&state, job_id.clone(), 0);
+        tokio::spawn(async move {
+            let _ = blocking(move || {
+                let result = export_attachments(&state, &params, &mut job);
+                job.finish(result);
+            })
+            .await;
+        });
+        return Some(done(id, Ok(serde_json::json!({ "jobId": job_id }))));
+    }
     let method = method.to_string();
     Some(done(id, blocking(move || run(&state, &method, &params)).await.and_then(|r| r)))
+}
+
+/// Every real attachment the view finds, flat in one folder the person
+/// picked. The app narrows the definition first when a person picked one
+/// month or year out of the range; `hasAttachments` is forced here so a view
+/// without it cannot walk every message in the vault. A search is not a view
+/// (its targets span folders and servers a definition cannot name), so it
+/// hands over the rows on screen as `messages`. Progress is counted in
+/// messages: how many files a view holds is unknown until each is parsed.
+fn export_attachments(state: &Arc<DaemonState>, params: &Value, job: &mut ExportJob) -> Result<Value, String> {
+    let app_dir = state.app_dir.as_path();
+    let dest_dir = params.get("destDir").and_then(Value::as_str).filter(|d| !d.is_empty()).ok_or("Missing destDir")?;
+    let messages = match params.get("messages") {
+        Some(list) => serde_json::from_value::<Vec<Message>>(list.clone())
+            .map_err(|e| format!("messages: {e}"))?
+            .into_iter()
+            .map(|m| (m.account_id, m.mailbox, m.uid))
+            .collect(),
+        None => {
+            let accounts = accounts_of(params)?;
+            let (mut def, keys) = app_db::with(app_dir, |conn| {
+                let def = definition(conn, params)?;
+                Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
+            })?;
+            def.has_attachments = true;
+            messages_of(state, &def, &accounts, &keys)?
+        }
+    };
+    // An unreachable vault fails the export whole, as before; a message it
+    // has no copy of comes from the server (`raw_message`).
+    crate::handlers::common::vault_root(state)?;
+    // Called on a blocking thread (`route`), so it may wait here.
+    let handle = tokio::runtime::Handle::current();
+    let total = messages.len();
+    json_of(mailvault_core::vault_files::export_many_attachments(
+        &messages,
+        std::path::Path::new(dest_dir),
+        &mut |account_id, mailbox, uid| handle.block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true)).map(|raw| raw.to_vec()),
+        &mut |done| job.step(done, total, None),
+    )?)
 }
 
 fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, String> {
@@ -90,41 +149,6 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
                 Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
             })?;
             evaluate(state, &def, &accounts, &keys, limit)
-        }
-        // Every real attachment the view finds, flat in one folder the app
-        // named. The app narrows the definition first when a person picked
-        // one month out of the range; `hasAttachments` is forced here so a
-        // view without it cannot walk every message in the vault. A search
-        // is not a view — its targets span folders and servers a definition
-        // cannot name — so it hands over the rows on screen as `messages`.
-        "views.export_attachments" => {
-            let dest_dir = params.get("destDir").and_then(Value::as_str).filter(|d| !d.is_empty()).ok_or("Missing destDir")?;
-            let messages = match params.get("messages") {
-                Some(list) => serde_json::from_value::<Vec<Message>>(list.clone())
-                    .map_err(|e| format!("messages: {e}"))?
-                    .into_iter()
-                    .map(|m| (m.account_id, m.mailbox, m.uid))
-                    .collect(),
-                None => {
-                    let accounts = accounts_of(params)?;
-                    let (mut def, keys) = app_db::with(app_dir, |conn| {
-                        let def = definition(conn, params)?;
-                        Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
-                    })?;
-                    def.has_attachments = true;
-                    messages_of(state, &def, &accounts, &keys)?
-                }
-            };
-            // An unreachable vault fails the export whole, as before; a
-            // message it has no copy of comes from the server (`raw_message`).
-            crate::handlers::common::vault_root(state)?;
-            // `run` is on a blocking thread (`route`), so it may wait here.
-            let handle = tokio::runtime::Handle::current();
-            json_of(mailvault_core::vault_files::export_many_attachments(
-                &messages,
-                std::path::Path::new(dest_dir),
-                &mut |account_id, mailbox, uid| handle.block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true)).map(|raw| raw.to_vec()),
-            )?)
         }
         "views.counts" => {
             let accounts = accounts_of(params)?;
@@ -422,9 +446,15 @@ mod tests {
         let eml = "From: ann@x.test\r\nSubject: Plain two\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nhi\r\n--B\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\nJVBERi0xLjQK\r\n--B--\r\n";
         std::fs::write(cur.join(format!("2{p}S.eml")), eml).unwrap();
         let dest = s.data_dir.join("out").join("View - Attachments");
-        let out = call(&s, "views.export_attachments", json!({
-            "def": {}, "accounts": accounts(), "destDir": dest.to_string_lossy(),
+        let mut events = s.events.subscribe();
+        let started = call(&s, "views.export_attachments", json!({
+            "def": {}, "accounts": accounts(), "destDir": dest.to_string_lossy(), "jobId": "v-1",
         })).await;
+        assert_eq!(started, json!({"jobId": "v-1"}));
+        let (progress, last) = crate::handlers::vault_files::finished_export(&mut events, "v-1").await;
+        // Counted in messages: the one message the view found with an attachment.
+        assert_eq!(progress.last().map(|f| (f["done"].clone(), f["total"].clone())), Some((json!(1), json!(1))));
+        let out = &last["result"];
         assert_eq!(out["files"], 1, "{out}");
         assert_eq!(out["skipped"], 0, "{out}");
         assert!(dest.join("a.pdf").exists());
@@ -439,10 +469,13 @@ mod tests {
         let eml = "From: ann@x.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: application/pdf; name=\"b.pdf\"\r\nContent-Disposition: attachment; filename=\"b.pdf\"\r\n\r\nx\r\n--B--\r\n";
         std::fs::write(cur.join(format!("5{p}S.eml")), eml).unwrap();
         let dest = s.data_dir.join("out").join("Search - Attachments");
-        let out = call(&s, "views.export_attachments", json!({
+        let mut events = s.events.subscribe();
+        call(&s, "views.export_attachments", json!({
             "messages": [{ "accountId": "a", "mailbox": "INBOX", "uid": 5 }, { "accountId": "a", "mailbox": "INBOX", "uid": 6 }],
-            "destDir": dest.to_string_lossy(),
+            "destDir": dest.to_string_lossy(), "jobId": "v-2",
         })).await;
+        let (_, last) = crate::handlers::vault_files::finished_export(&mut events, "v-2").await;
+        let out = &last["result"];
         assert_eq!((out["files"].as_u64(), out["skipped"].as_u64()), (Some(1), Some(1)), "{out}");
         assert!(dest.join("b.pdf").exists());
     }

@@ -7,6 +7,7 @@ import { useSettingsStore } from './settingsStore';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
+import { runAttachmentExport, viewExportKey } from '../services/attachmentExport';
 
 /// What a view is called. A starter carries no name in the database — storing
 /// "Needs reply" there would pin one language into the store — so it is
@@ -216,15 +217,18 @@ export const useViewStore = create((set, get) => ({
   },
 
   /// Every real attachment a definition finds — or, for a search, the rows on
-  /// screen — written flat into `destDir` by the daemon. Replies
+  /// screen — written flat into `destDir` by the daemon, as a job whose
+  /// progress sits under `viewExportKey` while it runs. Answers
   /// `{ dir, files, skipped }`.
-  exportAttachments: (def, destDir) =>
-    daemonCall('views.export_attachments', { def, accounts: accountsPayload(), destDir }),
-  exportRowAttachments: (rows, destDir) => daemonCall('views.export_attachments', {
-    messages: rows.filter(row => row._accountId && row._mailbox && row.uid != null)
-      .map(row => ({ accountId: row._accountId, mailbox: row._mailbox, uid: row.uid })),
-    destDir,
-  }),
+  exportAttachments: (def, destDir) => runAttachmentExport(viewExportKey(get().activeViewId), jobId =>
+    daemonCall('views.export_attachments', { def, accounts: accountsPayload(), destDir, jobId })),
+  exportRowAttachments: (rows, destDir) => runAttachmentExport(viewExportKey(null), jobId =>
+    daemonCall('views.export_attachments', {
+      messages: rows.filter(row => row._accountId && row._mailbox && row.uid != null)
+        .map(row => ({ accountId: row._accountId, mailbox: row._mailbox, uid: row.uid })),
+      destDir,
+      jobId,
+    })),
 
   /// What a definition would find, for the editor's preview. Never shows its
   /// rows on the mail screen — that is what `openView` is for — and answers

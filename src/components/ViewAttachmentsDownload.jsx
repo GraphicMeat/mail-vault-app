@@ -5,6 +5,7 @@ import { wedgeClip, radialContentPosition } from './QuickActions';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { downloadChoices, narrowDef } from '../utils/viewRange';
 import { exportFolderName } from './email/AttachmentBar';
+import { useAttachmentExports, viewExportKey } from '../services/attachmentExport';
 import { getLocale, useT } from '../i18n/index.js';
 import '../styles/quick-actions.css';
 
@@ -22,6 +23,8 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
   const [menu, setMenu] = useState(null);
   const [active, setActive] = useState(0);
   const [state, setState] = useState(null);
+  // A month or year of this view saving from the timeline holds the button too.
+  const exporting = useAttachmentExports(exports => !!exports[viewExportKey(view ? view.id : null)]);
 
   const monthName = date => new Intl.DateTimeFormat(getLocale(), {
     month: 'long', ...(date.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }),
@@ -71,7 +74,7 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
   const current = menu?.choices[active];
   return <>
     <button ref={buttonRef} type="button" data-testid="view-download-attachments" className="mail-toolbar-button shrink-0"
-      disabled={!!state?.busy} aria-haspopup="menu" aria-expanded={!!menu} onClick={open}
+      disabled={!!state?.busy || exporting} aria-haspopup="menu" aria-expanded={!!menu} onClick={open}
       title={t('views.download.title')}>
       {state?.done && !state.error ? <Check size={14} /> : <FolderDown size={14} className={state?.busy ? 'animate-pulse' : undefined} />}
       <span className={state?.error ? 'text-mail-danger' : undefined}>{state?.done || t('views.download.title')}</span>

@@ -38,6 +38,70 @@ async fn with_message<T: Send + 'static>(
     blocking(move || f(raw)).await.and_then(|r| r)
 }
 
+/// A bulk attachment save is a job: its RPC answers `{ jobId }` at once, and
+/// the app draws a progress bar from `attachment-export-progress` frames, one
+/// per step and then a last one (`finished`) carrying the result or the
+/// error. A save may download every message the vault lacks first, which
+/// takes longer than any reply should wait.
+pub(crate) const EXPORT_PROGRESS: &str = "attachment-export-progress";
+
+pub(crate) struct ExportJob {
+    bus: crate::events::EventBus,
+    job_id: String,
+    done: usize,
+    total: usize,
+    last_pct: Option<usize>,
+}
+
+impl ExportJob {
+    pub(crate) fn new(state: &DaemonState, job_id: String, total: usize) -> Self {
+        Self { bus: state.events.clone(), job_id, done: 0, total, last_pct: None }
+    }
+
+    /// `done` of `total` steps are through. At most one frame per percent: a
+    /// view of thousands of messages must not flood the event channel that
+    /// also carries the last frame the app is waiting for.
+    pub(crate) fn step(&mut self, done: usize, total: usize, file: Option<&str>) {
+        (self.done, self.total) = (done, total);
+        let pct = if total == 0 { 100 } else { done * 100 / total };
+        if self.last_pct == Some(pct) && done != total {
+            return;
+        }
+        self.last_pct = Some(pct);
+        self.bus.emit(EXPORT_PROGRESS, serde_json::json!({ "jobId": self.job_id, "done": done, "total": total, "file": file }));
+    }
+
+    pub(crate) fn finish(self, result: Result<Value, String>) {
+        let mut frame = serde_json::json!({ "jobId": self.job_id, "finished": true, "done": self.done, "total": self.total });
+        match result {
+            Ok(value) => frame["result"] = value,
+            Err(error) => frame["error"] = Value::String(error),
+        }
+        self.bus.emit(EXPORT_PROGRESS, frame);
+    }
+}
+
+/// The frames of one export job, up to and including its last one. Test-only:
+/// subscribe BEFORE the call, or a fast job ends before anyone listens.
+#[cfg(test)]
+pub(crate) async fn finished_export(events: &mut tokio::sync::broadcast::Receiver<Arc<str>>, job_id: &str) -> (Vec<Value>, Value) {
+    let mut progress = Vec::new();
+    loop {
+        let line = tokio::time::timeout(std::time::Duration::from_secs(10), events.recv())
+            .await
+            .expect("the export job must end with a finished frame")
+            .expect("event channel open");
+        let Some((name, frame)) = mailvault_core::daemon_ipc::parse_event(&line) else { continue };
+        if name != EXPORT_PROGRESS || frame["jobId"] != job_id {
+            continue;
+        }
+        if frame["finished"] == Value::Bool(true) {
+            return (progress, frame);
+        }
+        progress.push(frame);
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "maildir_read" => {
@@ -280,29 +344,43 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             )
         }
         // Reads the .eml and writes N files OUTSIDE the vault (a folder the
-        // app named under ~/Downloads). Not a vault write, so no
-        // `with_vault_write`: the gate guards the vault's own files, and the
-        // daemon inherits the app's sandbox (`com.apple.security.inherit`),
-        // which is what lets it reach Downloads at all.
+        // person picked). Not a vault write, so no `with_vault_write`: the
+        // gate guards the vault's own files. The MAS sidecar inherits the
+        // app's sandbox (`com.apple.security.inherit`); the Developer ID one
+        // holds no file entitlement at all, and the app writes the files
+        // itself when this job fails. A job (`ExportJob`): the reply only
+        // says it started.
         "export_attachments" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let indices = req!(vec_arg::<usize>(&id, params, "indices"));
             let dest_dir = req!(str_arg(&id, params, "destDir"));
+            let job_id = req!(str_arg(&id, params, "jobId"));
             // Checked before the message is read: nothing to export must not
             // cost a download.
             if indices.is_empty() {
                 return Some(done(id, Err("No attachments to export".to_string())));
             }
-            done(
-                id,
-                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
-                    let out = vault_files::export_attachments(&raw, uid, &indices, std::path::Path::new(&dest_dir))?;
-                    serde_json::to_value(out).map_err(|e| e.to_string())
+            let mut job = ExportJob::new(state, job_id.clone(), indices.len());
+            let state = Arc::clone(state);
+            tokio::spawn(async move {
+                let raw = match crate::raw_message::raw_message(&state, &account_id, &mailbox, uid, true).await {
+                    Ok(raw) => raw,
+                    Err(e) => return job.finish(Err(e)),
+                };
+                // Parsing and writing block: off the runtime, frame by frame.
+                let _ = blocking(move || {
+                    let total = indices.len();
+                    let written = vault_files::export_attachments(&raw, uid, &indices, std::path::Path::new(&dest_dir), &mut |n, name| {
+                        job.step(n, total, Some(name))
+                    })
+                    .and_then(|out| serde_json::to_value(out).map_err(|e| e.to_string()));
+                    job.finish(written);
                 })
-                .await,
-            )
+                .await;
+            });
+            done(id, Ok(serde_json::json!({ "jobId": job_id })))
         }
         // Writes one file under <root>/attachment_cache: with_vault_write,
         // scoped to this one call (one file), per the Global constraint that
@@ -676,18 +754,78 @@ mod tests {
         seed_email(t.path(), "acc", "INBOX", 7);
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("hi - Attachments");
+        let mut events = s.events.subscribe();
 
         let r = call(&s, "export_attachments", json!({
             "accountId": "acc", "mailbox": "INBOX", "uid": 7,
-            "indices": [0], "destDir": dest.to_string_lossy(),
+            "indices": [0], "destDir": dest.to_string_lossy(), "jobId": "job-1",
         })).await;
 
-        let v = r.result.expect("export_attachments must succeed");
+        // The reply only says the job started; the result rides the last frame.
+        assert_eq!(r.result, Some(json!({"jobId": "job-1"})));
+        let (_, last) = finished_export(&mut events, "job-1").await;
+        let v = &last["result"];
         assert_eq!(v["dir"], json!(dest.to_string_lossy()));
         assert_eq!(v["files"], json!(["pixel.png"]));
         assert!(dest.join("pixel.png").exists());
         // The export is the user's folder, not the app's private cache.
         assert!(!t.path().join("attachment_cache").exists());
+    }
+
+    /// A bulk save can take minutes (a message the vault lacks is downloaded
+    /// first): the app draws its bar from one frame per file, then a last
+    /// frame that carries the result.
+    #[tokio::test]
+    async fn export_attachments_reports_each_file_then_a_final_frame() {
+        let (t, s) = st(true);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let raw = b"From: a@b.com\r\nSubject: two\r\nContent-Type: multipart/mixed; boundary=X\r\n\r\n--X\r\nContent-Type: text/plain\r\n\r\nbody\r\n--X\r\nContent-Type: application/pdf; name=a.pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\n\r\nA\r\n--X\r\nContent-Type: application/pdf; name=b.pdf\r\nContent-Disposition: attachment; filename=b.pdf\r\n\r\nB\r\n--X--\r\n";
+        fs::write(cur.join(vault_files::build_maildir_filename(8, &[])), raw).unwrap();
+        let out = tempfile::tempdir().unwrap();
+        let mut events = s.events.subscribe();
+
+        call(&s, "export_attachments", json!({
+            "accountId": "acc", "mailbox": "INBOX", "uid": 8,
+            "indices": [0, 1], "destDir": out.path().join("two").to_string_lossy(), "jobId": "job-2",
+        })).await.result.expect("started");
+        let (progress, last) = finished_export(&mut events, "job-2").await;
+
+        let steps: Vec<_> = progress.iter().map(|f| (f["done"].clone(), f["total"].clone(), f["file"].clone())).collect();
+        assert_eq!(steps, vec![(json!(1), json!(2), json!("a.pdf")), (json!(2), json!(2), json!("b.pdf"))]);
+        assert_eq!((last["done"].clone(), last["total"].clone()), (json!(2), json!(2)), "{last}");
+        assert_eq!(last["result"]["files"], json!(["a.pdf", "b.pdf"]));
+        assert!(last.get("error").is_none(), "{last}");
+    }
+
+    /// A job that fails still ends: its last frame carries the error, so the
+    /// app's bar never waits forever.
+    #[tokio::test]
+    async fn a_failed_export_ends_with_an_error_frame() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let out = tempfile::tempdir().unwrap();
+        let mut events = s.events.subscribe();
+
+        call(&s, "export_attachments", json!({
+            "accountId": "acc", "mailbox": "INBOX", "uid": 7,
+            "indices": [5], "destDir": out.path().join("x").to_string_lossy(), "jobId": "job-3",
+        })).await.result.expect("started");
+        let (_, last) = finished_export(&mut events, "job-3").await;
+
+        assert!(last["error"].as_str().is_some_and(|e| e.contains("out of range")), "{last}");
+    }
+
+    #[tokio::test]
+    async fn export_attachments_without_a_job_id_is_a_bad_request() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let out = tempfile::tempdir().unwrap();
+        let r = call(&s, "export_attachments", json!({
+            "accountId": "acc", "mailbox": "INBOX", "uid": 7,
+            "indices": [0], "destDir": out.path().join("x").to_string_lossy(),
+        })).await;
+        assert!(r.error.is_some());
     }
 
     #[tokio::test]
@@ -699,7 +837,7 @@ mod tests {
 
         let r = call(&s, "export_attachments", json!({
             "accountId": "acc", "mailbox": "INBOX", "uid": 7,
-            "indices": [], "destDir": dest.to_string_lossy(),
+            "indices": [], "destDir": dest.to_string_lossy(), "jobId": "job-0",
         })).await;
 
         assert!(r.error.is_some());

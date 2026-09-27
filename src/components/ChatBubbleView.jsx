@@ -28,6 +28,7 @@ import { EmailActionBar } from './email/EmailActionBar';
 import { SenderInfoPopover } from './email/SenderInfoPopover';
 import { FullViewEmailModal } from './email/FullViewEmailModal';
 import { AttachmentItem } from './EmailViewer';
+import { DownloadAllButton } from './email/AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
@@ -861,6 +862,17 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             <div className={`flex flex-col gap-1.5 px-3 py-2 border-t ${
               fromUser ? 'border-white/20' : 'border-mail-border'
             }`}>
+              {realAttachments.length > 1 && (
+                <div className="flex justify-end">
+                  <DownloadAllButton
+                    attachments={realAttachments}
+                    emailUid={email.uid}
+                    accountId={activeAccountId}
+                    mailbox={emailMailbox}
+                    subject={email.subject}
+                  />
+                </div>
+              )}
               {realAttachments.map((att) => (
                 <AttachmentItem
                   key={att._originalIndex}

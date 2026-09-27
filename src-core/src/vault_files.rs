@@ -1144,12 +1144,14 @@ fn next_free(path: &Path) -> PathBuf {
 /// exports of two messages never merge.
 ///
 /// `raw` is the message's readable bytes, read by the caller (the vault, or
-/// the server when the vault has no copy).
+/// the server when the vault has no copy). `on_file` hears each file as it
+/// lands: how many are written so far, and the name it got on disk.
 pub fn export_attachments(
     raw: &[u8],
     uid: u32,
     indices: &[usize],
     dest_dir: &Path,
+    on_file: &mut dyn FnMut(usize, &str),
 ) -> Result<ExportedAttachments, String> {
     if indices.is_empty() {
         return Err("No attachments to export".to_string());
@@ -1170,6 +1172,7 @@ pub fn export_attachments(
         write_atomic(&dest, &body).map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
         mark_from_internet(&dest);
         files.push(dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+        on_file(files.len(), files.last().map(String::as_str).unwrap_or_default());
     }
 
     info!("Exported {} attachment(s) of uid {} to {}", files.len(), uid, dir.display());
@@ -1193,16 +1196,19 @@ pub struct BulkExport {
 ///
 /// `read` answers a message's readable bytes: the daemon passes its
 /// `raw_message`, which reads the vault first and the server when the vault
-/// has no copy.
+/// has no copy. `on_message` hears how many messages are done, read or
+/// skipped: a view's file count is unknown until every message is parsed, so
+/// its progress is counted in messages.
 pub fn export_many_attachments(
     messages: &[(String, String, u32)],
     dest_dir: &Path,
     read: &mut dyn FnMut(&str, &str, u32) -> Result<Vec<u8>, String>,
+    on_message: &mut dyn FnMut(usize),
 ) -> Result<BulkExport, String> {
     let dir = next_free(dest_dir);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
     let (mut files, mut skipped) = (0, 0);
-    for (account_id, mailbox, uid) in messages {
+    for (done, (account_id, mailbox, uid)) in messages.iter().enumerate() {
         match read(account_id, mailbox, *uid).and_then(|raw| write_real_attachments(&raw, &dir)) {
             Ok(written) => files += written,
             Err(e) => {
@@ -1210,6 +1216,7 @@ pub fn export_many_attachments(
                 skipped += 1;
             }
         }
+        on_message(done + 1);
     }
     // An empty folder in Downloads says nothing the reply does not.
     if files == 0 {
@@ -1909,7 +1916,7 @@ R0lGODlhAQABAAAAACw=\r\n\
 
         // Index 0 is the photo; 1 and 2 are the inline logo and the tracking
         // pixel the viewer filters out and therefore never asks for.
-        let r = export_attachments(&eml_at(&cur, 9), 9, &[0], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 9), 9, &[0], &dest, &mut |_, _| {}).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string()]);
         assert_eq!(Path::new(&r.dir), dest);
@@ -1929,7 +1936,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let dest = out.path().join("Invoices - Attachments");
         let messages = [9, 7, 8].map(|uid| ("acct".to_string(), "INBOX".to_string(), uid));
 
-        let r = export_many_attachments(&messages, &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid)).unwrap();
+        let r = export_many_attachments(&messages, &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid), &mut |_| {}).unwrap();
 
         // The photo and the PDF; not the inline logo, not the pixel, and uid 8
         // is not in the vault at all.
@@ -1945,7 +1952,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let (_app, reg) = registry(root.path());
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Empty");
-        let r = export_many_attachments(&[("acct".into(), "INBOX".into(), 1)], &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid)).unwrap();
+        let r = export_many_attachments(&[("acct".into(), "INBOX".into(), 1)], &dest, &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid), &mut |_| {}).unwrap();
         assert_eq!((r.files, r.skipped), (0, 1));
         assert!(!dest.exists());
     }
@@ -1956,8 +1963,8 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let first = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
-        let second = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let first = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest, &mut |_, _| {}).unwrap();
+        let second = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest, &mut |_, _| {}).unwrap();
 
         assert_eq!(Path::new(&first.dir), dest);
         assert_eq!(leaf(Path::new(&second.dir)), "Attachments (1)");
@@ -1974,9 +1981,43 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Photo");
 
-        let r = export_attachments(&eml_at(&cur, 9), 9, &[0, 1], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 9), 9, &[0, 1], &dest, &mut |_, _| {}).unwrap();
 
         assert_eq!(r.files, vec!["photo.png".to_string(), "photo (1).png".to_string()]);
+    }
+
+    /// The export's progress bar moves once per file, and names the file as
+    /// it is on disk.
+    #[test]
+    fn export_reports_each_file_as_it_lands() {
+        let raw = String::from_utf8(photo_with_inline_and_pixel()).unwrap()
+            .replace("Content-ID: <logo123>\r\nContent-Disposition: inline",
+                     "Content-Disposition: attachment; filename=\"photo.png\"");
+        let (_d, cur, _c) = maildir_with(&[(9, raw.as_bytes())]);
+        let out = tempfile::tempdir().unwrap();
+        let mut seen = Vec::new();
+
+        export_attachments(&eml_at(&cur, 9), 9, &[0, 1], &out.path().join("P"), &mut |done, name| seen.push((done, name.to_string()))).unwrap();
+
+        assert_eq!(seen, vec![(1, "photo.png".to_string()), (2, "photo (1).png".to_string())]);
+    }
+
+    /// A bulk export counts messages, read or skipped, so its bar reaches the
+    /// end even when a message could not be read.
+    #[test]
+    fn a_bulk_export_reports_every_message_it_went_through() {
+        let root = tempfile::tempdir().unwrap();
+        let cur = cur_path(root.path(), "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(build_maildir_filename(7, &[])), multipart_with_attachment()).unwrap();
+        let (_app, reg) = registry(root.path());
+        let out = tempfile::tempdir().unwrap();
+        let messages = [7, 8].map(|uid| ("acct".to_string(), "INBOX".to_string(), uid));
+        let mut seen = Vec::new();
+
+        export_many_attachments(&messages, &out.path().join("B"), &mut |a, m, uid| read_body_eml(&reg, root.path(), a, m, uid), &mut |done| seen.push(done)).unwrap();
+
+        assert_eq!(seen, vec![1, 2]);
     }
 
     #[test]
@@ -1987,7 +2028,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let out = tempfile::tempdir().unwrap();
         let dest = out.path().join("Attachments");
 
-        let r = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest).unwrap();
+        let r = export_attachments(&eml_at(&cur, 7), 7, &[0], &dest, &mut |_, _| {}).unwrap();
 
         assert_eq!(r.files, vec!["escape.pdf".to_string()]);
         assert!(dest.join("escape.pdf").exists());
@@ -1998,7 +2039,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn export_refuses_an_index_the_message_does_not_have() {
         let (_d, cur, _c) = maildir_with(&[(7, &multipart_with_attachment())]);
         let out = tempfile::tempdir().unwrap();
-        let err = export_attachments(&eml_at(&cur, 7), 7, &[5], &out.path().join("A")).unwrap_err();
+        let err = export_attachments(&eml_at(&cur, 7), 7, &[5], &out.path().join("A"), &mut |_, _| {}).unwrap_err();
         assert!(err.contains("out of range"), "{err}");
     }
 

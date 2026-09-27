@@ -10,7 +10,7 @@
 //   - an attachment the prefetch already cached opens on the first click.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
@@ -28,6 +28,19 @@ vi.mock('@tauri-apps/api/path', () => ({
 }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ exists: async (p) => existing.has(p) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
+
+// The daemon's export job reports through app events. A plain map of
+// listeners stands in for Tauri's, so a test can play the frames in order.
+const { bus } = vi.hoisted(() => ({ bus: new Map() }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (name, handler) => {
+    const handlers = bus.get(name) || new Set();
+    handlers.add(handler);
+    bus.set(name, handlers);
+    return () => handlers.delete(handler);
+  },
+}));
+const emit = (name, payload) => [...(bus.get(name) || [])].forEach(handler => handler({ event: name, payload }));
 
 // Dragging out is a native AppKit/Win32/GTK drag session behind a plugin
 // command; jsdom can only prove the seam — the right path, a PNG drag image.
@@ -304,91 +317,196 @@ describe('AttachmentItem drag out', () => {
 
 describe('DownloadAllButton', () => {
   const ATTACHMENTS = [{ ...PDF, _originalIndex: 0 }, { ...ZIP, _originalIndex: 3 }];
+  const PICKED = '/Users/test/Picked';
+  const FOLDER = `${PICKED}/Q3 report - Attachments`;
 
+  // The button and the message's own attachment rows, as the viewer lays them out.
   const renderAll = (props = {}) => render(
-    <DownloadAllButton
-      attachments={ATTACHMENTS}
-      emailUid={7}
-      accountId="acct-1"
-      mailbox="INBOX"
-      subject="Q3 report"
-      {...props}
-    />,
+    <>
+      <DownloadAllButton
+        attachments={ATTACHMENTS}
+        emailUid={7}
+        accountId="acct-1"
+        mailbox="INBOX"
+        subject="Q3 report"
+        {...props}
+      />
+      <AttachmentItem attachment={ATTACHMENTS[0]} attachmentIndex={0} emailUid={7} accountId="acct-1" mailbox="INBOX" />
+    </>,
   );
 
-  // The old loop called cache_attachment, which writes into the app's PRIVATE
-  // cache: "Download All" put the files where the user could not find them.
-  it('exports into a folder under Downloads and reveals it', async () => {
-    invoke.mockImplementation(async (cmd) => {
-      if (cmd === 'export_attachments') return { dir: '/Users/test/Downloads/Q3 report - Attachments', files: ['invoice.pdf', 'bundle.zip'] };
-      return null;
-    });
+  let jobId = null;
+  let picked = PICKED;
+  const exportCall = () => invoke.mock.calls.find(([cmd]) => cmd === 'export_attachments');
+  const dialogCalls = () => invoke.mock.calls.filter(([cmd]) => cmd === 'plugin:dialog|open');
+  // The folder picker answers `picked`; the daemon answers at once with the
+  // job, and the frames come later.
+  const acceptJob = (extra = async () => null) => invoke.mockImplementation(async (cmd, args) => {
+    if (cmd === 'plugin:dialog|open') return picked;
+    if (cmd === 'export_attachments') { jobId = args.jobId; return { jobId: args.jobId }; }
+    return extra(cmd, args);
+  });
+  const frame = payload => act(() => emit('attachment-export-progress', { jobId, ...payload }));
+
+  beforeEach(() => {
+    jobId = null;
+    picked = PICKED;
+    bus.clear();
+  });
+
+  it('asks where to save, and a cancelled dialog saves nothing', async () => {
+    picked = null;
+    acceptJob();
     renderAll();
     fireEvent.click(screen.getByTestId('attachment-download-all'));
 
-    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'export_attachments')).toBe(true));
-    const call = invoke.mock.calls.find(([cmd]) => cmd === 'export_attachments');
-    expect(call[1]).toEqual({
+    await waitFor(() => expect(dialogCalls()).toHaveLength(1));
+    expect(dialogCalls()[0][1].options).toMatchObject({ directory: true, defaultPath: '/Users/test/Downloads' });
+    await act(async () => {});
+    expect(exportCall()).toBeUndefined();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByTestId('attachment-download-all')).toBeTruthy();
+  });
+
+  // The old loop called cache_attachment, which writes into the app's PRIVATE
+  // cache: "Download All" put the files where the user could not find them.
+  it('saves into a folder inside the picked one, never the private cache', async () => {
+    acceptJob();
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+
+    await waitFor(() => expect(exportCall()).toBeTruthy());
+    expect(exportCall()[1]).toEqual({
       accountId: 'acct-1',
       mailbox: 'INBOX',
       uid: 7,
       indices: [0, 3],
-      destDir: '/Users/test/Downloads/Q3 report - Attachments',
+      destDir: FOLDER,
+      jobId: expect.any(String),
     });
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
-    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(true));
-    // The folder's own name, so a refused reveal still says where it went.
-    await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
+  });
+
+  it('shows the progress in place of the button and locks the attachments until it is done', async () => {
+    acceptJob();
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+
+    frame({ done: 1, total: 2, file: 'invoice.pdf' });
+    const bar = await screen.findByRole('progressbar');
+    expect(bar.getAttribute('aria-valuenow')).toBe('1');
+    expect(bar.getAttribute('aria-valuemax')).toBe('2');
+    expect(screen.queryByTestId('attachment-download-all')).toBeNull();
+    const item = screen.getByTestId('attachment-item');
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(item);
+    fireEvent.click(screen.getByTestId('attachment-download'));
+    await act(async () => {});
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(false);
+
+    frame({ finished: true, done: 2, total: 2, result: { dir: FOLDER, files: ['invoice.pdf', 'bundle.zip'] } });
+    await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+    // Where the files went, and a way to get there; no Finder window thrown open.
+    expect(screen.getByText('Saved to Q3 report - Attachments')).toBeTruthy();
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(false);
+    expect(screen.getByTestId('attachment-item').getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(screen.getByTestId('attachment-export-show-folder'));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('show_in_folder', { path: FOLDER }));
   });
 
   it('names the folder from a Windows path too', async () => {
-    invoke.mockImplementation(async (cmd) => {
-      if (cmd === 'export_attachments') return { dir: 'C:\\Users\\test\\Downloads\\Q3 report - Attachments', files: ['invoice.pdf'] };
-      return null;
-    });
+    acceptJob();
     renderAll();
     fireEvent.click(screen.getByTestId('attachment-download-all'));
-    await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ finished: true, done: 1, total: 1, result: { dir: 'C:\\Users\\test\\Picked\\Q3 report - Attachments', files: ['invoice.pdf'] } });
+    await waitFor(() => expect(screen.getByText('Saved to Q3 report - Attachments')).toBeTruthy());
   });
 
   // The daemon is the only writer here that has never written outside the
-  // vault, and the Developer ID sidecar holds no downloads entitlement of its
-  // own. If it cannot reach ~/Downloads, the app writes the files itself
-  // rather than the button failing.
-  it('writes the files from the app when the daemon cannot reach Downloads', async () => {
-    invoke.mockImplementation(async (cmd, args) => {
-      if (cmd === 'export_attachments') throw new Error('Failed to create export folder: Operation not permitted');
+  // vault, and the Developer ID sidecar holds no file entitlement of its
+  // own. If it cannot reach the picked folder, the app writes the files
+  // itself rather than the button failing. The refusal now arrives as the
+  // job's last frame, not as the reply.
+  it('writes the files from the app when the daemon job fails to reach the folder', async () => {
+    acceptJob(async (cmd, args) => {
       if (cmd === 'maildir_read_attachment') return PNG_B64;
       if (cmd === 'save_attachment_to') return args?.destPath;
       return null;
     });
     renderAll();
     fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ finished: true, done: 0, total: 2, error: 'Failed to create export folder: Operation not permitted' });
 
     await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to')).toHaveLength(2));
     const written = invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to').map(([, a]) => a.destPath);
     // Both files, inside the one folder, read back from the daemon by index.
-    expect(written).toEqual([
-      '/Users/test/Downloads/Q3 report - Attachments/invoice.pdf',
-      '/Users/test/Downloads/Q3 report - Attachments/bundle.zip',
-    ]);
+    expect(written).toEqual([`${FOLDER}/invoice.pdf`, `${FOLDER}/bundle.zip`]);
     expect(invoke.mock.calls.filter(([cmd]) => cmd === 'maildir_read_attachment').map(([, a]) => a.attachmentIndex))
       .toEqual([0, 3]);
+    await waitFor(() => expect(screen.getByText('Saved to Q3 report - Attachments')).toBeTruthy());
     expect(screen.queryByText('Failed to download')).toBeNull();
   });
 
-  it('says so when neither the daemon nor the app can write, instead of claiming a download', async () => {
-    invoke.mockImplementation(async (cmd) => {
+  it('writes the files from the app when the daemon refuses the job outright', async () => {
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === 'plugin:dialog|open') return PICKED;
       if (cmd === 'export_attachments') throw new Error('Operation not permitted');
+      if (cmd === 'maildir_read_attachment') return PNG_B64;
+      if (cmd === 'save_attachment_to') return args?.destPath;
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to')).toHaveLength(2));
+  });
+
+  it('says so when neither the daemon nor the app can write, and gives the button back', async () => {
+    acceptJob(async (cmd) => {
       if (cmd === 'maildir_read_attachment') return PNG_B64;
       if (cmd === 'save_attachment_to') throw new Error('Operation not permitted');
       return null;
     });
     renderAll();
     fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ finished: true, error: 'Operation not permitted' });
 
     await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByTestId('attachment-item').getAttribute('aria-disabled')).toBeNull();
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(false);
+  });
+
+  // A helper that restarted mid-export never sends its last frame; the bar
+  // must not wait for it forever.
+  it('stops waiting when the helper restarts mid-export', async () => {
+    acceptJob(async (cmd) => {
+      if (cmd === 'maildir_read_attachment') throw new Error('helper not running');
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ done: 1, total: 2, file: 'invoice.pdf' });
+    await screen.findByRole('progressbar');
+    act(() => emit('daemon-reconnected', {}));
+
+    await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  // A frame for another export (another message's job) is not this one's.
+  it('ignores the frames of another job', async () => {
+    acceptJob();
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    act(() => emit('attachment-export-progress', { jobId: 'someone-else', finished: true, result: { dir: '/x/Other', files: [] } }));
+    await act(async () => {});
+    expect(screen.queryByText('Saved to Other')).toBeNull();
   });
 
   // A subject is not a path component.
