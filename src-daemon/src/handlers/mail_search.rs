@@ -1046,8 +1046,15 @@ async fn run_server_lane(
             Ok(mut rows) => {
                 report.successful_sources += 1;
                 // The preview line the folder's own list stamps on these rows.
-                crate::search_index::attach_snippets(&state.search_index, &outcome.job.account_id, &outcome.job.mailbox, &mut rows);
-                frame.rows = rows;
+                // Off the async worker: it may wait ~50 ms for the index lock.
+                let snippet_state = Arc::clone(&state);
+                let (account_id, mailbox) = (outcome.job.account_id.clone(), outcome.job.mailbox.clone());
+                frame.rows = tokio::task::spawn_blocking(move || {
+                    crate::search_index::attach_snippets(&snippet_state.search_index, &account_id, &mailbox, &mut rows);
+                    rows
+                })
+                .await
+                .unwrap_or_default();
             }
             Err(error) => {
                 let failure = server_failure(&outcome.job.account_id, &outcome.job.mailbox, &error);
