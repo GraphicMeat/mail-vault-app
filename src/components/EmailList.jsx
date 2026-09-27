@@ -1489,8 +1489,9 @@ function EmailListComponent({ stacked = false }) {
                               <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">{t('list.sent')}</span>
                             )}
                           </div>
-                          {item.email.snippet && (
-                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.snippet}</div>
+                          {/* The same text a list row's preview line shows (RowSnippet). */}
+                          {(item.email.previewText || item.email.snippet) && (
+                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.previewText || item.email.snippet}</div>
                           )}
                           <TagChips email={item.email} />
                         </div>

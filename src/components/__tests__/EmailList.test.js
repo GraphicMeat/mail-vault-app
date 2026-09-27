@@ -413,6 +413,63 @@ describe('EmailList virtualization', () => {
     }
   });
 
+  // A search hit carries its preview as `previewText`, not a vault `snippet`;
+  // the sender-grouped list shows the same text a list row's preview does.
+  it('shows the preview text on a sender-grouped message row', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { groupBySender } = await import('../../utils/emailParser');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const search = useSearchStore.getState();
+    const settings = useSettingsStore.getState();
+    const previousMail = { ...mail };
+    const previousSearch = { ...search };
+    const previousSettings = { ...settings };
+    const previousGroupBySender = groupBySender.getMockImplementation();
+    const hit = {
+      ...makeEmails(1)[0], _accountId: 'acc1', _mailbox: 'INBOX', source: 'local', snippet: undefined,
+      previewText: 'Hi Ann, the invoice for September is attached.',
+    };
+    try {
+      Object.assign(mail, { activeMailbox: 'Sent', unifiedInbox: false, sortedEmails: [], sentEmails: [] });
+      Object.assign(search, { searchActive: false, searchResults: [] });
+      Object.assign(settings, { emailListGrouping: 'sender', threadMode: 'flat' });
+      groupBySender.mockImplementation(emails => emails.length ? [{
+        senderEmail: 'sender@test.com', senderName: 'Sender', totalEmails: emails.length,
+        unreadCount: 0, lastDate: new Date(hit.date),
+        topics: [{
+          topicId: 'preview-topic', originalSubject: hit.subject, participants: [], emails,
+          unreadCount: 0, lastDate: new Date(hit.date),
+        }],
+      }] : []);
+      const view = render(React.createElement(EmailList));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      Object.assign(search, { searchActive: true, searchResults: [hit] });
+      await act(async () => {
+        view.rerender(React.createElement(EmailList, { stacked: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      await screen.findByTestId('sender-group-row');
+      const press = key => fireEvent.keyDown(window, { key });
+      press('j');
+      press('Enter');
+      press('j');
+      press('Enter');
+      const row = await screen.findByTestId('sender-email-row');
+      expect(row.textContent).toContain(hit.previewText);
+    } finally {
+      cleanup();
+      groupBySender.mockReset();
+      if (previousGroupBySender) groupBySender.mockImplementation(previousGroupBySender);
+      else groupBySender.mockReturnValue([]);
+      Object.assign(mail, previousMail);
+      Object.assign(search, previousSearch);
+      Object.assign(settings, previousSettings);
+    }
+  });
+
   it('EmailRow does not use object selectors from useMailStore (PERF-04)', async () => {
     // Verify at module level that EmailRow uses individual selectors
     // by reading the source — the useMailStore mock tracks calls

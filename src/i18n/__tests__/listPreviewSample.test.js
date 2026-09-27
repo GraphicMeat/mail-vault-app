@@ -20,7 +20,9 @@ describe('listPreview.sample', () => {
   const catalogs = { en, es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhHans };
   for (const [locale, catalog] of Object.entries(catalogs)) {
     it(`${locale} runs well past three preview lines`, () => {
-      expect(width(catalog['listPreview.sample'])).toBeGreaterThan(300);
+      const sample = catalog['listPreview.sample'];
+      expect([...sample].length).toBeGreaterThan(200);
+      expect(width(sample)).toBeGreaterThan(300);
     });
   }
 });
