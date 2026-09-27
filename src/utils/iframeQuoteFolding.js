@@ -46,24 +46,50 @@ export function getQuoteFoldingScript(nonce = '') {
     el.parentNode.insertBefore(toggle, el);
   }
 
-  // 1. Structural quotes — the wrapper a client puts the quote in.
-  var selectors = [
-    'blockquote',
-    '.gmail_quote',
-    '#appendonsend',
-    'div[class*="moz-cite"]',
-    '.yahoo_quoted',
-  ];
-  var found = [];
-  for (var i = 0; i < selectors.length; i++) {
-    var els = document.querySelectorAll(selectors[i]);
-    for (var j = 0; j < els.length; j++) {
-      if (!els[j].dataset.quoteFolded && !els[j].closest('[data-quote-folded]')) {
-        found.push(els[j]);
-      }
-    }
+  // Text a reader would see: a blank line, &nbsp; or a zero-width space is not.
+  function hasText(node) {
+    return /[^\\s\\u00a0\\u200b-\\u200d\\ufeff]/.test(node.textContent || '');
   }
-  found.forEach(fold);
+  function blank(node) {
+    return !hasText(node) && !(node.nodeType === 1 && (node.nodeName === 'IMG' || node.querySelector('img')));
+  }
+  // What follows a node in its parent, less blank text at either end.
+  function after(node) {
+    var nodes = [];
+    for (var n = node.nextSibling; n; n = n.nextSibling) {
+      if (n.nodeType === 1 && (n.nodeName === 'SCRIPT' || n.nodeName === 'STYLE')) continue;
+      nodes.push(n);
+    }
+    while (nodes.length && nodes[0].nodeType === 3 && blank(nodes[0])) nodes.shift();
+    while (nodes.length && nodes[nodes.length - 1].nodeType === 3 && blank(nodes[nodes.length - 1])) nodes.pop();
+    return nodes;
+  }
+
+  // Each region is a run of sibling nodes that folds under one toggle. Nothing
+  // folds until every region is known: a message that would fold to nothing
+  // stays whole.
+  var regions = [];
+  function inRegion(node) {
+    return regions.some(function(r) {
+      return r.some(function(n) { return n.contains(node); });
+    });
+  }
+
+  // 1. Structural quotes — the wrapper a client puts the quote in. Outermost
+  //    only: a quote inside a quote folds with it, and Gmail's
+  //    blockquote.gmail_quote is one quote, not a match for two selectors.
+  //    The line naming who wrote it (Gmail's gmail_attr, Thunderbird's
+  //    moz-cite-prefix, localized, so found by class) is never folded.
+  var ATTRIBUTION = '.gmail_attr, .moz-cite-prefix';
+  var quotes = [].slice.call(document.querySelectorAll('blockquote, .gmail_quote, #appendonsend, .yahoo_quoted'));
+  quotes.forEach(function(el) {
+    if (quotes.some(function(other) { return other !== el && other.contains(el); })) return;
+    // Gmail's wrapper holds the attribution AND the quote: fold what follows it.
+    var attribution = [].filter.call(el.children, function(c) { return c.matches(ATTRIBUTION); })[0];
+    var nodes = attribution ? after(attribution) : [el];
+    // Outlook's #appendonsend is an empty marker: a toggle over nothing.
+    if (nodes.some(hasText)) regions.push(nodes);
+  });
 
   // 2. Marker quotes — Fastmail (replying to a message) and Outlook write the
   //    attribution as a plain <div> and leave the quoted message as its
@@ -87,34 +113,64 @@ export function getQuoteFoldingScript(nonce = '') {
   var marker = null;
   for (var c = 0; c < candidates.length && !marker; c++) {
     var el = candidates[c];
-    if (el.closest('[data-quote-folded]')) continue;
+    if (inRegion(el)) continue;
     // A wrapper holding only the quote matches too — keep the tightest header.
     var wrapsAnother = candidates.some(function(other) {
       return other !== el && el.contains(other);
     });
     if (!wrapsAnother) marker = el;
   }
-  if (!marker) return;
-
-  // Leave the "On … wrote:" line alone when its blockquote already folded:
-  // the attribution stays readable above the toggle, which is the shape the
-  // structural pass produces.
-  var next = marker.nextElementSibling;
-  while (next && next.dataset.quoteToggle) next = next.nextElementSibling;
-  if (next && next.dataset.quoteFolded) return;
-
-  var nodes = [];
-  for (var n = marker.nextSibling; n; n = n.nextSibling) {
-    if (n.nodeType === 1 && (n.nodeName === 'SCRIPT' || n.nodeName === 'STYLE')) continue;
-    nodes.push(n);
+  // Leave the "On … wrote:" line alone when its blockquote is already a
+  // region: the attribution stays readable above the toggle.
+  var next = marker && marker.nextElementSibling;
+  if (marker && !(next && inRegion(next))) {
+    var tail = after(marker);
+    if (tail.some(hasText)) {
+      regions = regions.filter(function(r) {
+        return !tail.some(function(n) { return n.contains(r[0]); });
+      });
+      regions.push(tail);
+    }
   }
-  var quoted = nodes.map(function(node) { return node.textContent || ''; }).join('').trim();
-  if (!quoted) return;
 
-  var wrap = document.createElement('div');
-  marker.parentNode.insertBefore(wrap, marker.nextSibling);
-  nodes.forEach(function(node) { wrap.appendChild(node); });
-  fold(wrap);
+  // 3. A message must never render as only toggles: a reply that is all quote,
+  //    or one typed inside the quote wrapper, is shown whole.
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var own = false;
+  for (var text = walker.nextNode(); text && !own; text = walker.nextNode()) {
+    if (text.parentNode.closest('script, style, ' + ATTRIBUTION)) continue;
+    if (marker && marker.contains(text)) continue;
+    own = hasText(text) && !inRegion(text);
+  }
+  if (!own) return;
+
+  // 4. One toggle per quote: regions with only blank lines between them fold
+  //    together.
+  regions.sort(function(a, b) {
+    return a[0].compareDocumentPosition(b[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+  var merged = [];
+  regions.forEach(function(r) {
+    var prev = merged[merged.length - 1];
+    if (prev) {
+      var gap = [];
+      var n = prev[prev.length - 1].nextSibling;
+      while (n && n !== r[0] && blank(n)) { gap.push(n); n = n.nextSibling; }
+      if (n === r[0]) {
+        merged[merged.length - 1] = prev.concat(gap, r);
+        return;
+      }
+    }
+    merged.push(r);
+  });
+
+  merged.forEach(function(nodes) {
+    if (nodes.length === 1 && nodes[0].nodeType === 1) return fold(nodes[0]);
+    var wrap = document.createElement('div');
+    nodes[0].parentNode.insertBefore(wrap, nodes[0]);
+    nodes.forEach(function(node) { wrap.appendChild(node); });
+    fold(wrap);
+  });
 })();
 <\/script>`;
 }

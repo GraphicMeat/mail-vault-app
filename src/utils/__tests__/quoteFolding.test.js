@@ -33,4 +33,15 @@ describe('splitQuotedContent', () => {
     const text = 'I re-read your original message twice.\nThanks!';
     expect(splitQuotedContent(text)).toEqual({ newContent: text, quotedContent: '' });
   });
+
+  // Folding a reply that is all quote leaves nothing to read.
+  it('keeps a reply that is all quote whole', () => {
+    for (const text of [
+      'On Fri, Sep 26, 2026 at 19:40, Person A <a@example.com> wrote:\n> Quoted line',
+      '-------- Original Message --------\nFrom: Person A\nQuoted line',
+      '\n> Quoted line\n> More quoted',
+    ]) {
+      expect(splitQuotedContent(text)).toEqual({ newContent: text, quotedContent: '' });
+    }
+  });
 });

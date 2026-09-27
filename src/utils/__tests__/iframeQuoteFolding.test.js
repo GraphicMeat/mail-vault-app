@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../iframeQuoteFolding';
 import { setLocale } from '../../i18n/index.js';
+import GMAIL_REPLY from './fixtures/quote-fold-gmail-reply.html?raw';
 
 /** Run the injected fold script against `html` the way the iframe does. */
 function render(html) {
@@ -124,5 +125,118 @@ describe('getQuoteFoldingScript', () => {
     render('<div>I re-read your original message twice.</div><div>Thanks!</div>');
 
     expect(toggles()).toHaveLength(0);
+  });
+});
+
+// Hidden means hidden by any ancestor: Gmail nests its quote, so a toggle or
+// an attribution line can sit inside an element the script folded.
+const shown = (node) => {
+  for (let n = node.nodeType === 1 ? node : node.parentElement; n && n !== document.body; n = n.parentElement) {
+    if (n.style.display === 'none') return false;
+  }
+  return true;
+};
+const shownToggles = () => toggles().filter(shown);
+const shownText = () => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let text = '';
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (shown(n) && !n.parentElement.closest('[data-quote-toggle]')) text += n.textContent;
+  }
+  return text;
+};
+
+// Gmail's reply: the attribution line and the quote share one wrapper that
+// carries `gmail_quote`, and the quote itself is a `blockquote.gmail_quote`.
+// The attribution is localized, so no English "wrote:" to match on.
+const GMAIL_ALL_QUOTE = GMAIL_REPLY.replace(/^<div dir="ltr">.*?<\/div><\/div>/, '<div dir="ltr"><br></div>');
+const GMAIL_QUOTE = '<blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex"><div dir="ltr">Quoted text.</div></blockquote>';
+
+// Our own wire format, and a reply to our own sent reply: header above the
+// quote, the earlier reply nested inside it.
+const OWN_HEADER = (n) => `<p><strong>Original Message</strong><br>From: Person A &lt;a@example.com&gt;<br>Date: 26 Sep 2026, 19:4${n}<br>Subject: Question<br>To: b@example.com</p>`;
+const OWN_REPLY = `<p>Second reply.</p><hr>${OWN_HEADER(5)}<blockquote><p>First reply.</p><hr>${OWN_HEADER(0)}<blockquote><p>Question text.</p></blockquote></blockquote>`;
+
+describe('getQuoteFoldingScript: one toggle, never a whole message', () => {
+  it('Gmail reply: one toggle, attribution and reply visible', () => {
+    render(GMAIL_REPLY);
+
+    expect(shownToggles()).toHaveLength(1);
+    expect(shownText()).toContain('Reply text.');
+    expect(shownText()).toContain('schrieb:');
+    expect(shownText()).not.toContain('Quoted paragraph.');
+  });
+
+  it('Gmail reply that is all quote: shown whole, no toggle', () => {
+    render(GMAIL_ALL_QUOTE);
+
+    expect(toggles()).toHaveLength(0);
+    expect(shownText()).toContain('Quoted paragraph.');
+  });
+
+  it('a gmail_quote blockquote is one quote, not two toggles', () => {
+    render(`<div dir="ltr">Reply text.</div>${GMAIL_QUOTE}`);
+
+    expect(toggles()).toHaveLength(1);
+    expect(shownText()).toContain('Reply text.');
+    expect(shownText()).not.toContain('Quoted text.');
+  });
+
+  it('a reply that is only a gmail_quote blockquote renders as text, not as toggles', () => {
+    render(`<div dir="ltr"><br></div>${GMAIL_QUOTE}`);
+
+    expect(toggles()).toHaveLength(0);
+    expect(shownText()).toContain('Quoted text.');
+  });
+
+  it('own text inside the quote wrapper is never folded away', () => {
+    render(`<blockquote><p>Reply typed inside the quote.</p><p>Quoted text.</p></blockquote>`);
+
+    expect(toggles()).toHaveLength(0);
+    expect(shownText()).toContain('Reply typed inside the quote.');
+  });
+
+  it('our reply to our own sent reply: one toggle, header visible', () => {
+    render(OWN_REPLY);
+
+    expect(shownToggles()).toHaveLength(1);
+    expect(shownText()).toContain('Second reply.');
+    expect(shownText()).toContain('Date: 26 Sep 2026, 19:45');
+    expect(shownText()).not.toContain('First reply.');
+  });
+
+  it('our reply with no text of its own is shown whole', () => {
+    render(`<p></p><hr><blockquote>${OWN_HEADER(0)}<p>Question text.</p></blockquote>`);
+
+    expect(toggles()).toHaveLength(0);
+    expect(shownText()).toContain('Question text.');
+  });
+
+  it('Thunderbird: the moz-cite-prefix attribution stays visible above one toggle', () => {
+    render(`<p>Reply text.</p><div class="moz-cite-prefix">Am 26.09.26 um 19:40 schrieb Person A:<br></div>
+      <blockquote type="cite"><p>Quoted text.</p></blockquote>`);
+
+    expect(shownToggles()).toHaveLength(1);
+    expect(shownText()).toContain('schrieb Person A:');
+    expect(shownText()).not.toContain('Quoted text.');
+  });
+
+  it('Outlook: the empty appendonsend marker gets no toggle of its own', () => {
+    render(`<div>Reply text.</div><div id="appendonsend"></div><hr>
+      <div id="divRplyFwdMsg"><b>From:</b> Person A &lt;a@example.com&gt;<br><b>Sent:</b> Friday, 26 September 2026 19:40</div>
+      <div>Quoted text.</div>`);
+
+    expect(toggles()).toHaveLength(1);
+    expect(shownText()).toContain('From: Person A');
+    expect(shownText()).not.toContain('Quoted text.');
+  });
+
+  it('adjacent quotes fold under one toggle that reveals both', () => {
+    render('<p>Reply text.</p><blockquote><p>First quote.</p></blockquote>\n<br><blockquote><p>Second quote.</p></blockquote>');
+
+    expect(toggles()).toHaveLength(1);
+    toggles()[0].dispatchEvent(new window.MouseEvent('click'));
+    expect(shownText()).toContain('First quote.');
+    expect(shownText()).toContain('Second quote.');
   });
 });

@@ -13,6 +13,11 @@ const QUOTE_START_PATTERNS = [
   /^_{4,}/m,
 ];
 
+// A reply that is all quote would fold to nothing but a toggle: show it whole.
+function keepWhole(text, newContent, quotedContent) {
+  return newContent.trim() ? { newContent, quotedContent } : { newContent: text, quotedContent: '' };
+}
+
 export function splitQuotedContent(text) {
   if (!text) return { newContent: '', quotedContent: '' };
 
@@ -26,10 +31,7 @@ export function splitQuotedContent(text) {
   }
 
   if (splitIndex < text.length) {
-    return {
-      newContent: text.substring(0, splitIndex).trimEnd(),
-      quotedContent: text.substring(splitIndex),
-    };
+    return keepWhole(text, text.substring(0, splitIndex).trimEnd(), text.substring(splitIndex));
   }
 
   // 2. Check for > prefix quote blocks at the end
@@ -46,10 +48,7 @@ export function splitQuotedContent(text) {
   }
 
   if (quoteStartLine >= 0 && lines.slice(quoteStartLine).some(l => l.trim().startsWith('>'))) {
-    return {
-      newContent: lines.slice(0, quoteStartLine).join('\n').trimEnd(),
-      quotedContent: lines.slice(quoteStartLine).join('\n'),
-    };
+    return keepWhole(text, lines.slice(0, quoteStartLine).join('\n').trimEnd(), lines.slice(quoteStartLine).join('\n'));
   }
 
   return { newContent: text, quotedContent: '' };
