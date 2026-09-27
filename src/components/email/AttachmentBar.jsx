@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import { send } from '../../services/transport';
-import { useAttachmentExports, messageExportKey, runAttachmentExport, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
+import { useAttachmentExports, messageExportKey, runAttachmentExport, startExportJob, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -746,12 +746,20 @@ async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, atta
   const files = [];
   for (const index of indices) {
     const filename = byIndex.get(index)?.filename || `attachment-${index}`;
-    const b64 = await send('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex: index });
-    // A sender picks the filename; see `safeLeaf`. A name already taken in
-    // the folder gets the same `(n)` the daemon would have given it.
+    const b64 = getCleanBase64(await send('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex: index }));
+    // A sender picks the filename; see `safeLeaf`.
     const leaf = safeLeaf(filename);
+    const plain = await join(destDir, leaf);
+    // The job may have written this file before it failed: the same name at
+    // the same size is that file, not a stranger to step around with `(n)`.
+    if (await sizeOf(plain) === base64Size(b64)) {
+      files.push(leaf);
+      report(files.length, indices.length);
+      continue;
+    }
+    // A name taken by another file gets the same `(n)` the daemon would give it.
     const dest = await uniqueIn(destDir, leaf, join);
-    await invoke('save_attachment_to', { filename: leaf, contentBase64: getCleanBase64(b64), destPath: dest });
+    await invoke('save_attachment_to', { filename: leaf, contentBase64: b64, destPath: dest });
     files.push(leafOf(dest));
     report(files.length, indices.length);
   }
@@ -759,6 +767,25 @@ async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, atta
 }
 
 /** The first free name for `leaf` inside `dir`, `name (1).ext` style. */
+/** Decoded byte count of clean base64. */
+const base64Size = (b64) => Math.floor((b64.length * 3) / 4) - (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0);
+
+/** A file's size, or null when there is no file (or it cannot be read). */
+async function sizeOf(path) {
+  const { stat } = await import('@tauri-apps/plugin-fs');
+  const info = await stat(path).catch(() => null);
+  return info ? info.size : null;
+}
+
+/**
+ * The failures the app can do something about: the daemon could not create
+ * or write the folder (a sandbox or permission refusal), which the app, holding
+ * the picked folder's access itself, may still manage. A daemon that died or a
+ * message that cannot be read would fail the app's copy the same way, so
+ * those stay errors.
+ */
+const APP_CAN_RETRY = /not permitted|permission denied|access is denied|operation not allowed|failed to create export folder|folder not accessible|os error (1|5|13)\b/i;
+
 async function uniqueIn(dir, leaf, join) {
   const { exists } = await import('@tauri-apps/plugin-fs');
   const dot = leaf.lastIndexOf('.');
@@ -807,7 +834,7 @@ export function ExportProgress({ progress, label, className = '' }) {
  * The folder's own name, because when Finder refuses to open (a sandbox scope
  * it does not hold) this line is the only thing that says where the files went.
  */
-export function SavedToFolder({ dir }) {
+export function SavedToFolder({ dir, pinned = false }) {
   const t = useT();
   return (
     <span className="flex items-center gap-1.5 text-sm text-mail-text-muted" role="status">
@@ -816,7 +843,10 @@ export function SavedToFolder({ dir }) {
       <button
         type="button"
         onClick={() => showSavedFolder(dir)}
-        data-testid="attachment-export-show-folder"
+        // The pinned month band repeats a header under `aria-hidden`: its
+        // copy is pointer-only and not a second match for the header's.
+        data-testid={pinned ? undefined : 'attachment-export-show-folder'}
+        tabIndex={pinned ? -1 : undefined}
         className="p-1 rounded-md text-mail-accent-text hover:bg-mail-accent/10"
         title={t('email.attachments.showFolder')}
         aria-label={t('email.attachments.showFolder')}
@@ -866,8 +896,9 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
         return;
       }
       setPicking(true);
+      let chosen;
       try {
-        const chosen = await pickFolder(t('email.attachments.chooseFolder'));
+        chosen = await pickFolder(t('email.attachments.chooseFolder'));
         if (!chosen) return; // cancelled: nothing happens
         const { join } = await import('@tauri-apps/api/path');
         args.destDir = await join(chosen, exportFolderName(subject, t('email.attachments.folderName')));
@@ -876,7 +907,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
       }
       const result = await runAttachmentExport(
         key,
-        jobId => send('export_attachments', { ...args, jobId }),
+        jobId => startExportJob('export_attachments', chosen, { ...args, jobId }),
         // The daemon is the only writer here that has never written OUTSIDE
         // the vault root: the Developer ID sidecar carries neither
         // `app-sandbox` nor `inherit` of its own (`src-daemon/entitlements.plist`),
@@ -884,7 +915,10 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
         // picked. The app holds the picked folder's access, so when the job
         // cannot write there the app writes the same files itself, one
         // `save_attachment_to` per file, rather than failing.
-        (_error, report) => exportFromApp(args, attachments, report),
+        (error, report) => {
+          if (!APP_CAN_RETRY.test(String(error?.message || error))) throw error;
+          return exportFromApp(args, attachments, report);
+        },
       );
       setSaved(result?.dir || args.destDir);
       setTimeout(() => setSaved(null), 6000);

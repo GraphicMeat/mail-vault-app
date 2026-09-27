@@ -38,6 +38,10 @@ pub struct ExternalLocation {
 /// mail store when the user moved it off the app data dir.
 pub const SLOT_EXTERNAL_BACKUP: &str = "external-backup";
 pub const SLOT_VAULT: &str = "vault";
+/// The folder the last attachment save was pointed at (`export_folder.rs`),
+/// overwritten per pick. Every user-picked export destination goes through
+/// this slot, never the backup's.
+pub const SLOT_ATTACHMENT_EXPORT: &str = "attachment-export";
 
 use mailvault_core::app_db::{locations, with as with_app_db};
 
@@ -499,7 +503,7 @@ pub fn release_external_access(path: &str) {
 /// for a folder outside the sandbox container.
 #[cfg(target_os = "macos")]
 pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool, app: Option<&str>) -> Result<(), String> {
-    let bookmark = [SLOT_EXTERNAL_BACKUP, SLOT_VAULT].iter().find_map(|slot| {
+    let bookmark = [SLOT_EXTERNAL_BACKUP, SLOT_VAULT, SLOT_ATTACHMENT_EXPORT].iter().find_map(|slot| {
         let stored = saved(app_data_dir, slot)?;
         if stored.display_path.is_empty() || !std::path::Path::new(path).starts_with(&stored.display_path) {
             return None;

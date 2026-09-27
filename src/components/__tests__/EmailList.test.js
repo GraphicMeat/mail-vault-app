@@ -1990,6 +1990,8 @@ describe('a view\'s timeline downloads a month or a year', () => {
     const [def, destDir] = exportAttachments.mock.calls[0];
     expect(def).toMatchObject({ showTimeline: true, range: null, withinDays: null, dateFrom: sec(2025, 1), dateTo: sec(2025, 2) - 1 });
     expect(destDir).toBe('/picked/Saved - 2025-1');
+    // The picked folder itself, for the shell to hold access to during the job.
+    expect(exportAttachments.mock.calls[0][2]).toBe('/picked');
   });
 
   it('downloads a whole year from the year button', async () => {
@@ -2020,7 +2022,38 @@ describe('a view\'s timeline downloads a month or a year', () => {
     await act(async () => { finish({ dir: '/picked/Saved - 2025-2', files: 3, skipped: 0 }); });
     await settle();
     expect(container.textContent).toContain('Saved to Saved - 2025-2');
+    // The pinned band repeats it pointer-only: one Show in Folder to find,
+    // and the band's copy is out of the tab order.
+    expect(container.querySelectorAll('[data-testid="attachment-export-show-folder"]')).toHaveLength(1);
+    const copies = [...container.querySelectorAll('button[aria-label="Show in Folder"]')];
+    expect(copies.filter(b => b.getAttribute('tabindex') === '-1')).toHaveLength(copies.length - 1);
     expect(inHeaders(container, 'view-year-download').every(b => !b.disabled)).toBe(true);
+  });
+
+  // Messages the vault never stored are not "no attachments".
+  it('counts the messages it could not read instead of saying there was nothing', async () => {
+    const { container } = await mount();
+    exportAttachments.mockResolvedValue({ dir: '/picked/x', files: 0, skipped: 2 });
+    fireEvent.click(inHeaders(container, 'view-month-download')[2]);
+    await settle();
+    expect(container.textContent).toContain('2 messages are not in the vault');
+    expect(container.textContent).not.toContain('No attachments in');
+  });
+
+  // Another view with the same months must not show this view's save.
+  it('keeps a save to the view it was started in', async () => {
+    const { container } = await mount();
+    const { useViewStore } = await import('../../stores/viewStore');
+    fireEvent.click(inHeaders(container, 'view-month-download')[0]);
+    await settle();
+    expect(container.textContent).toContain('Saved to x');
+    act(() => { useViewStore.setState({
+      views: [{ id: 'v1', name: 'Saved', def: { showTimeline: true } }, { id: 'v2', name: 'Other', def: { showTimeline: true } }],
+      activeViewId: 'v2',
+    }); });
+    await settle();
+    expect(container.textContent).not.toContain('Saved to x');
+    expect(inHeaders(container, 'view-month-download')).toHaveLength(3);
   });
 
   it('says a month had nothing to save', async () => {

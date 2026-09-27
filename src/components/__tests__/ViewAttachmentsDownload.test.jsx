@@ -18,7 +18,7 @@ vi.mock('@tauri-apps/api/path', () => ({
 }));
 vi.mock('../email/AttachmentBar', () => ({
   exportFolderName: (name, fallback) => `${name} - ${fallback}`,
-  ExportProgress: () => null,
+  ExportProgress: ({ progress }) => <div role="progressbar" aria-valuenow={progress.done} aria-valuemax={progress.total} />,
   SavedToFolder: () => null,
 }));
 const exportAttachments = vi.fn(async () => ({ dir: '/Users/me/Downloads/x', files: 3, skipped: 0 }));
@@ -29,6 +29,12 @@ vi.mock('../../stores/viewStore', () => ({
 }));
 
 const { ViewAttachmentsDownload } = await import('../ViewAttachmentsDownload');
+const { useAttachmentExports } = await import('../../services/attachmentExport');
+
+// The folder picker, answered through the live bridge like the app's.
+let picked = '/Users/me/Picked';
+const invoke = vi.fn(async (cmd) => (cmd === 'plugin:dialog|open' ? picked : null));
+const dialogCalls = () => invoke.mock.calls.filter(([cmd]) => cmd === 'plugin:dialog|open');
 
 const view = def => ({ id: 'v1', name: 'Invoices', def: { hasAttachments: true, ...def } });
 
@@ -36,9 +42,15 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 8, 25, 12));
   exportAttachments.mockClear();
+  exportRowAttachments.mockClear();
+  picked = '/Users/me/Picked';
+  invoke.mockClear();
+  window.__TAURI__ = { core: { invoke } };
+  useAttachmentExports.setState({}, true);
 });
 afterEach(() => {
   cleanup();
+  delete window.__TAURI__;
   vi.useRealTimers();
 });
 
@@ -54,7 +66,8 @@ describe('downloading a view’s attachments', () => {
     await waitFor(() => expect(exportAttachments).toHaveBeenCalledTimes(1));
     const [def, destDir] = exportAttachments.mock.calls[0];
     expect(def).toMatchObject({ withinDays: null, range: null, dateTo: Math.floor(new Date(2026, 8, 1).getTime() / 1000) - 1 });
-    expect(destDir).toBe('/Users/me/Downloads/Invoices August - email.attachments.folderName');
+    expect(destDir).toBe('/Users/me/Picked/Invoices August - email.attachments.folderName');
+    expect(exportAttachments.mock.calls[0][2]).toBe('/Users/me/Picked');
     await waitFor(() => expect(screen.getByTestId('view-download-attachments').textContent).toContain('views.download.done'));
   });
 
@@ -63,7 +76,7 @@ describe('downloading a view’s attachments', () => {
     render(<ViewAttachmentsDownload view={saved} />);
     fireEvent.click(screen.getByTestId('view-download-attachments'));
     fireEvent.click(screen.getAllByRole('menuitem')[0]);
-    await waitFor(() => expect(exportAttachments).toHaveBeenCalledWith(saved.def, '/Users/me/Downloads/Invoices - email.attachments.folderName'));
+    await waitFor(() => expect(exportAttachments).toHaveBeenCalledWith(saved.def, '/Users/me/Picked/Invoices - email.attachments.folderName', '/Users/me/Picked'));
   });
 
   it('a long range downloads everything straight away', async () => {
@@ -91,7 +104,7 @@ describe('downloading a view’s attachments', () => {
     render(<ViewAttachmentsDownload rows={rows} name="Search results" />);
     fireEvent.click(screen.getByTestId('view-download-attachments'));
     expect(screen.queryByRole('menuitem')).toBeNull();
-    await waitFor(() => expect(exportRowAttachments).toHaveBeenCalledWith(rows, '/Users/me/Downloads/Search results - email.attachments.folderName'));
+    await waitFor(() => expect(exportRowAttachments).toHaveBeenCalledWith(rows, '/Users/me/Picked/Search results - email.attachments.folderName', '/Users/me/Picked'));
     expect(exportAttachments).not.toHaveBeenCalled();
   });
 
@@ -100,6 +113,33 @@ describe('downloading a view’s attachments', () => {
     render(<ViewAttachmentsDownload rows={[{ _accountId: 'a', _mailbox: 'INBOX', uid: 4 }]} name="Search results" />);
     fireEvent.click(screen.getByTestId('view-download-attachments'));
     await waitFor(() => expect(screen.getByTestId('view-download-attachments').textContent).toBe('views.download.skipped:{"count":2}'));
+  });
+
+  // Owner 09-28: the toolbar asks where to save, like Download All.
+  it('asks for a folder, opening on Downloads, and saves into it', async () => {
+    render(<ViewAttachmentsDownload view={view({ range: 'lastYear' })} />);
+    fireEvent.click(screen.getByTestId('view-download-attachments'));
+    await waitFor(() => expect(exportAttachments).toHaveBeenCalledTimes(1));
+    expect(dialogCalls()).toHaveLength(1);
+    expect(dialogCalls()[0][1].options).toMatchObject({ directory: true, defaultPath: '/Users/me/Downloads' });
+    expect(exportAttachments.mock.calls[0][1]).toBe('/Users/me/Picked/Invoices - email.attachments.folderName');
+  });
+
+  it('a cancelled folder picker saves nothing', async () => {
+    picked = null;
+    render(<ViewAttachmentsDownload view={view({ withinDays: 30 })} />);
+    fireEvent.click(screen.getByTestId('view-download-attachments'));
+    fireEvent.click(screen.getAllByRole('menuitem')[1]);
+    await waitFor(() => expect(dialogCalls()).toHaveLength(1));
+    await waitFor(() => expect(screen.getByTestId('view-download-attachments').disabled).toBe(false));
+    expect(exportAttachments).not.toHaveBeenCalled();
+  });
+
+  it('shows the progress of a save in place of the button', () => {
+    useAttachmentExports.setState({ 'view:v1': { done: 2, total: 5 } }, true);
+    render(<ViewAttachmentsDownload view={view({})} />);
+    expect(screen.queryByTestId('view-download-attachments')).toBeNull();
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('2');
   });
 
   it('arrow keys go round the wheel', () => {

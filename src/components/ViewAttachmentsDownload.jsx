@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Check, FolderDown, CalendarRange } from 'lucide-react';
 import { Popover } from './ui/Popover';
 import { wedgeClip, radialContentPosition } from './QuickActions';
@@ -24,8 +24,9 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
   const [menu, setMenu] = useState(null);
   const [active, setActive] = useState(0);
   const [state, setState] = useState(null);
-  // A month or year of this view saving from the timeline holds the button too.
-  const exporting = useAttachmentExports(exports => !!exports[viewExportKey(view ? view.id : null)]);
+  // Any save of this view (this button's, or a month or year from the
+  // timeline) holds the button, and shows its progress in its place.
+  const progress = useAttachmentExports(exports => exports[viewExportKey(view ? view.id : null)]);
 
   const monthName = date => new Intl.DateTimeFormat(getLocale(), {
     month: 'long', ...(date.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }),
@@ -36,12 +37,19 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
     setMenu(null);
     setState({ busy: true });
     try {
+      // Where to save, as for Download All: the picker opens on Downloads and
+      // a cancel saves nothing.
+      const chosen = await pickFolder(t('email.attachments.chooseFolder'));
+      if (!chosen) {
+        setState(null);
+        return;
+      }
       const folder = [view ? viewLabel(view, t) : name, choice.month && monthName(choice.month)].filter(Boolean).join(' ');
-      const { downloadDir, join } = await import('@tauri-apps/api/path');
-      const destDir = await join(await downloadDir(), exportFolderName(folder, t('email.attachments.folderName')));
+      const { join } = await import('@tauri-apps/api/path');
+      const destDir = await join(chosen, exportFolderName(folder, t('email.attachments.folderName')));
       const result = view
-        ? await exportAttachments(narrowDef(view.def, choice), destDir)
-        : await exportRowAttachments(rows || [], destDir);
+        ? await exportAttachments(narrowDef(view.def, choice), destDir, chosen)
+        : await exportRowAttachments(rows || [], destDir, chosen);
       // A search can hold server hits the vault never stored; "none found"
       // would be a false answer for those.
       const found = result?.files ? t('views.download.done', { count: result.files }) : !result?.skipped && t('views.download.none');
@@ -73,9 +81,10 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
   };
 
   const current = menu?.choices[active];
+  if (progress) return <ExportProgress progress={progress} label={t('email.attachments.saving')} className="shrink-0 px-2" />;
   return <>
     <button ref={buttonRef} type="button" data-testid="view-download-attachments" className="mail-toolbar-button shrink-0"
-      disabled={!!state?.busy || exporting} aria-haspopup="menu" aria-expanded={!!menu} onClick={open}
+      disabled={!!state?.busy} aria-haspopup="menu" aria-expanded={!!menu} onClick={open}
       title={t('views.download.title')}>
       {state?.done && !state.error ? <Check size={14} /> : <FolderDown size={14} className={state?.busy ? 'animate-pulse' : undefined} />}
       <span className={state?.error ? 'text-mail-danger' : undefined}>{state?.done || t('views.download.title')}</span>
@@ -100,9 +109,9 @@ export function ViewAttachmentsDownload({ view, rows, name }) {
 }
 
 /// A saved view's timeline downloads: one month's attachments, or one year's,
-/// into a folder the person picks. One save per view at a time; `running` is
-/// the period being saved (`2025-2`, `2025`) and `outcome` what the last one
-/// did, for the header it came from.
+/// into a folder the person picks. One save per view at a time. `running` and
+/// `outcome.key` name the view and the period (`v1|2025-2`, `v1|2025`), so a
+/// save started in one view never lights up another view's headers.
 export function useTimelineDownload(view) {
   const t = useT();
   const exportAttachments = useViewStore(state => state.exportAttachments);
@@ -110,12 +119,18 @@ export function useTimelineDownload(view) {
   const [running, setRunning] = useState(null);
   const [outcome, setOutcome] = useState(null);
 
+  // One object per state change, not per render: the month headers and the
+  // memoized DateScrubber re-render only when a save starts, moves or ends.
+  return useMemo(() => {
+  const keyOf = period => `${view?.id}|${period}`;
+  const mineRunning = running?.startsWith(`${view?.id}|`) ? running : null;
+
   const download = async ({ y, m = null }) => {
     if (!view?.def || progress || running) return;
-    const period = m ? `${y}-${m}` : String(y);
+    const key = keyOf(m ? `${y}-${m}` : String(y));
     const label = m ? formatMonthYear(y, m) : String(y);
     setOutcome(null);
-    setRunning(period);
+    setRunning(key);
     let next = null;
     try {
       const chosen = await pickFolder(t('email.attachments.chooseFolder'));
@@ -123,11 +138,15 @@ export function useTimelineDownload(view) {
       const { join } = await import('@tauri-apps/api/path');
       // `<view> - <Month YYYY | YYYY>`: the period is the folder's suffix.
       const destDir = await join(chosen, exportFolderName(viewLabel(view, t), label));
-      const result = await exportAttachments(periodDef(view.def, y, m), destDir);
-      next = result?.files ? { period, dir: result.dir } : { period, text: t('views.download.noneIn', { period: label }) };
+      const result = await exportAttachments(periodDef(view.def, y, m), destDir, chosen);
+      // Messages the vault never stored are counted, as the toolbar does:
+      // "no attachments" would be a false answer for those.
+      const skipped = result?.skipped ? t('views.download.skipped', { count: result.skipped }) : null;
+      next = result?.files ? { key, dir: result.dir, note: skipped }
+        : { key, text: skipped || t('views.download.noneIn', { period: label }) };
     } catch (error) {
       console.error('[views] timeline attachment download failed:', error);
-      next = { period, text: t('email.attachments.failedDownload'), error: true };
+      next = { key, text: t('email.attachments.failedDownload'), error: true };
     } finally {
       setRunning(null);
     }
@@ -135,25 +154,41 @@ export function useTimelineDownload(view) {
     setTimeout(() => setOutcome(current => (current === next ? null : current)), 6000);
   };
 
-  return { busy: !!progress || !!running, running, progress, outcome, download };
+  return {
+    busy: !!progress || !!mineRunning,
+    running: mineRunning,
+    progress,
+    outcome: outcome?.key?.startsWith(`${view?.id}|`) ? outcome : null,
+    keyOf,
+    download,
+  };
+  }, [view, t, exportAttachments, progress, running, outcome]);
 }
 
 /// A month header's downloads: the month, and on the first header of a year
 /// the year too. While a save runs every timeline button is disabled, and the
-/// header it came from shows its progress, then where it went.
+/// header it came from shows its progress, then where it went. `pinned` is the
+/// copy on the pinned month band: pointer-only, and no second test id.
 export function PeriodDownloadButtons({ bucket, withYear, timeline, pinned = false }) {
   const t = useT();
   const { y, m } = bucket;
-  const mine = [`${y}-${m}`, withYear && String(y)].filter(Boolean);
+  const mine = [timeline.keyOf(`${y}-${m}`), withYear && timeline.keyOf(String(y))].filter(Boolean);
   if (timeline.progress && mine.includes(timeline.running)) {
     return <ExportProgress progress={timeline.progress} label={t('email.attachments.saving')} />;
   }
-  const outcome = timeline.outcome && mine.includes(timeline.outcome.period) ? timeline.outcome : null;
-  if (outcome?.dir) return <SavedToFolder dir={outcome.dir} />;
+  const outcome = timeline.outcome && mine.includes(timeline.outcome.key) ? timeline.outcome : null;
+  if (outcome?.dir) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <SavedToFolder dir={outcome.dir} pinned={pinned} />
+        {outcome.note && <span className="font-normal">{outcome.note}</span>}
+      </span>
+    );
+  }
   if (outcome) return <span role="status" className={`font-normal ${outcome.error ? 'text-mail-danger' : ''}`}>{outcome.text}</span>;
 
   const button = (testid, label, onClick, content) => (
-    <button type="button" data-testid={testid} onClick={onClick} disabled={timeline.busy}
+    <button type="button" data-testid={pinned ? undefined : testid} onClick={onClick} disabled={timeline.busy}
       title={label} aria-label={label} tabIndex={pinned ? -1 : undefined}
       className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text disabled:opacity-40 disabled:hover:bg-transparent">
       {content}

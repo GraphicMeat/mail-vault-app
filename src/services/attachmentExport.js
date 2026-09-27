@@ -50,7 +50,12 @@ export async function runAttachmentExport(key, start, fallback) {
       else if (payload.finished) settle.resolve(payload.result);
       else report(payload.done || 0, payload.total || 0);
     }));
-    unlisten.push(await listen('daemon-reconnected', () => settle.reject(new Error('The helper restarted during the export'))));
+    // A restarted helper never sends the last frame, and a lagging event
+    // stream may have dropped it: either way this job's end is lost, so it
+    // fails here rather than holding its attachments locked until a reload.
+    // The shell releases the folder's access on the same two events.
+    unlisten.push(await listen('daemon-reconnected', () => settle.reject(new Error('export ended unseen: helper restarted'))));
+    unlisten.push(await listen('daemon-events-lagged', () => settle.reject(new Error('export ended unseen: events lagged'))));
     await start(jobId);
     return await finished;
   } catch (error) {
@@ -63,6 +68,16 @@ export async function runAttachmentExport(key, start, fallback) {
     }
     setExport(key, null);
   }
+}
+
+/// Start an export job whose files go under `folder`, a folder the person
+/// picked. Through the shell, not straight to the daemon: the shell keeps the
+/// folder as a security-scoped bookmark (its own slot, like the backup
+/// location), checks a write lands there, and holds that access until the
+/// job's last frame (`export_folder.rs`). `params` carry `destDir` inside
+/// `folder` and the `jobId`.
+export function startExportJob(method, folder, params) {
+  return window.__TAURI__.core.invoke('attachment_export_start', { method, folder, params });
 }
 
 /// Ask where to save: the native folder picker, opening on Downloads. `null`

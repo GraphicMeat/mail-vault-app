@@ -906,14 +906,15 @@ function EmailListComponent({ stacked = false }) {
   const firstOfYear = useMemo(() => new Set(monthList
     .filter((bucket, i) => i === 0 || monthList[i - 1].y !== bucket.y)
     .map(bucket => bucket.key)), [monthList]);
-  const monthActions = activeView?.def && showScrubber
-    ? (bucket, pinned = false) => (
-      <PeriodDownloadButtons bucket={bucket} withYear={firstOfYear.has(bucket.key)} timeline={timelineDownload} pinned={pinned} />
-    )
-    : null;
+  const hasViewDef = !!activeView?.def;
+  // Stable while nothing about the downloads changed: DateScrubber is memoized.
+  const monthActions = useCallback((bucket, pinned = false) => (
+    <PeriodDownloadButtons bucket={bucket} withYear={firstOfYear.has(bucket.key)} timeline={timelineDownload} pinned={pinned} />
+  ), [firstOfYear, timelineDownload]);
+  const headerActions = hasViewDef && showScrubber ? monthActions : null;
   const monthHeaderAt = index => {
     const bucket = bucketAtIndex(monthList, index);
-    return <MonthHeader bucket={bucket} actions={bucket && monthActions ? monthActions(bucket) : null} />;
+    return <MonthHeader bucket={bucket} actions={bucket && headerActions ? headerActions(bucket) : null} />;
   };
 
   const virtualizer = useVirtualizer({
@@ -1713,7 +1714,7 @@ function EmailListComponent({ stacked = false }) {
       </div>
       {showScrubber && !skeletonOn && (
         <DateScrubber scrollRef={scrollContainerRef} virtualizer={virtualizer} buckets={monthList}
-          segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} headerActions={monthActions} />
+          segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} headerActions={headerActions} />
       )}
       </div>
 

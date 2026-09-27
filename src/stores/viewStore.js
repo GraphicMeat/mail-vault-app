@@ -7,7 +7,7 @@ import { useSettingsStore } from './settingsStore';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
-import { runAttachmentExport, viewExportKey } from '../services/attachmentExport';
+import { runAttachmentExport, startExportJob, viewExportKey } from '../services/attachmentExport';
 
 /// What a view is called. A starter carries no name in the database — storing
 /// "Needs reply" there would pin one language into the store — so it is
@@ -232,10 +232,13 @@ export const useViewStore = create((set, get) => ({
   /// screen — written flat into `destDir` by the daemon, as a job whose
   /// progress sits under `viewExportKey` while it runs. Answers
   /// `{ dir, files, skipped }`.
-  exportAttachments: (def, destDir) => runAttachmentExport(viewExportKey(get().activeViewId), jobId =>
-    daemonCall('views.export_attachments', { def, accounts: accountsPayload(), destDir, jobId })),
-  exportRowAttachments: (rows, destDir) => runAttachmentExport(viewExportKey(null), jobId =>
-    daemonCall('views.export_attachments', {
+  /// `folder` is the one the person picked, `destDir` the new folder inside
+  /// it: the shell holds the picked folder's access for the job
+  /// (`startExportJob`).
+  exportAttachments: (def, destDir, folder) => runAttachmentExport(viewExportKey(get().activeViewId), jobId =>
+    startExportJob('views.export_attachments', folder, { def, accounts: accountsPayload(), destDir, jobId })),
+  exportRowAttachments: (rows, destDir, folder) => runAttachmentExport(viewExportKey(null), jobId =>
+    startExportJob('views.export_attachments', folder, {
       messages: rows.filter(row => row._accountId && row._mailbox && row.uid != null)
         .map(row => ({ accountId: row._accountId, mailbox: row._mailbox, uid: row.uid })),
       destDir,

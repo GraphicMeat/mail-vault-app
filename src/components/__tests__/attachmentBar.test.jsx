@@ -26,7 +26,12 @@ vi.mock('@tauri-apps/api/path', () => ({
   downloadDir: async () => '/Users/test/Downloads',
   join: async (...parts) => parts.join('/'),
 }));
-vi.mock('@tauri-apps/plugin-fs', () => ({ exists: async (p) => existing.has(p) }));
+// Sizes of files already on disk, for the fallback's "the job wrote this one" check.
+const sizes = new Map();
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  exists: async (p) => existing.has(p),
+  stat: async (p) => { if (!sizes.has(p)) throw new Error('not found'); return { size: sizes.get(p) }; },
+}));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
 
 // The daemon's export job reports through app events. A plain map of
@@ -69,6 +74,7 @@ vi.mock('../../stores/accountStore', () => ({
 }));
 
 const { AttachmentItem, DownloadAllButton, attachmentIcon, exportFolderName } = await import('../email/AttachmentBar');
+const { useAttachmentExports } = await import('../../services/attachmentExport');
 
 const PNG_B64 = 'iVBORw0KGgo=';
 const PDF = { filename: 'invoice.pdf', contentType: 'application/pdf', size: 1200 };
@@ -90,6 +96,10 @@ function renderItem(attachment, props = {}) {
 
 beforeEach(() => {
   window.__TAURI__ = { core: { invoke } };
+  // A job a test left running would lock the next test's rows: the store is a
+  // module singleton.
+  useAttachmentExports.setState({}, true);
+  sizes.clear();
   invoke.mockReset();
   invoke.mockImplementation(async (cmd, args) => {
     if (cmd === 'cached_attachment_path') return null;
@@ -337,13 +347,14 @@ describe('DownloadAllButton', () => {
 
   let jobId = null;
   let picked = PICKED;
-  const exportCall = () => invoke.mock.calls.find(([cmd]) => cmd === 'export_attachments');
+  // Through the shell's bookmark forwarder, never straight to the daemon.
+  const exportCall = () => invoke.mock.calls.find(([cmd]) => cmd === 'attachment_export_start');
   const dialogCalls = () => invoke.mock.calls.filter(([cmd]) => cmd === 'plugin:dialog|open');
   // The folder picker answers `picked`; the daemon answers at once with the
   // job, and the frames come later.
   const acceptJob = (extra = async () => null) => invoke.mockImplementation(async (cmd, args) => {
     if (cmd === 'plugin:dialog|open') return picked;
-    if (cmd === 'export_attachments') { jobId = args.jobId; return { jobId: args.jobId }; }
+    if (cmd === 'attachment_export_start') { jobId = args.params.jobId; return { jobId }; }
     return extra(cmd, args);
   });
   const frame = payload => act(() => emit('attachment-export-progress', { jobId, ...payload }));
@@ -376,14 +387,21 @@ describe('DownloadAllButton', () => {
     fireEvent.click(screen.getByTestId('attachment-download-all'));
 
     await waitFor(() => expect(exportCall()).toBeTruthy());
+    // The picked folder goes to the shell, which bookmarks it and holds its
+    // access for the job; the new folder inside it goes to the daemon.
     expect(exportCall()[1]).toEqual({
-      accountId: 'acct-1',
-      mailbox: 'INBOX',
-      uid: 7,
-      indices: [0, 3],
-      destDir: FOLDER,
-      jobId: expect.any(String),
+      method: 'export_attachments',
+      folder: PICKED,
+      params: {
+        accountId: 'acct-1',
+        mailbox: 'INBOX',
+        uid: 7,
+        indices: [0, 3],
+        destDir: FOLDER,
+        jobId: expect.any(String),
+      },
     });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'export_attachments')).toBe(false);
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
   });
 
@@ -453,7 +471,7 @@ describe('DownloadAllButton', () => {
   it('writes the files from the app when the daemon refuses the job outright', async () => {
     invoke.mockImplementation(async (cmd, args) => {
       if (cmd === 'plugin:dialog|open') return PICKED;
-      if (cmd === 'export_attachments') throw new Error('Operation not permitted');
+      if (cmd === 'attachment_export_start') throw new Error('Folder not accessible: Write test failed: Operation not permitted');
       if (cmd === 'maildir_read_attachment') return PNG_B64;
       if (cmd === 'save_attachment_to') return args?.destPath;
       return null;
@@ -496,6 +514,57 @@ describe('DownloadAllButton', () => {
 
     await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
     expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  // A lagging event stream may have dropped the last frame: the rows must
+  // not stay locked until a reload.
+  it('stops waiting when the event stream lags', async () => {
+    acceptJob();
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ done: 1, total: 2, file: 'invoice.pdf' });
+    await screen.findByRole('progressbar');
+    act(() => emit('daemon-events-lagged', { missed: 12 }));
+
+    await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByTestId('attachment-item').getAttribute('aria-disabled')).toBeNull();
+    // Not a refusal the app could get round: nothing is written from here.
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(false);
+  });
+
+  // Only a refusal to write is the app's to retry: a message that could not
+  // be read would fail the app's copy the same way.
+  it('does not write from the app when the job failed for another reason', async () => {
+    acceptJob(async (cmd, args) => (cmd === 'save_attachment_to' ? args?.destPath : null));
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ finished: true, error: 'Failed to parse email: bad boundary' });
+
+    await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(false);
+  });
+
+  // The job wrote invoice.pdf before it was refused: the app finishes the
+  // rest instead of adding an "invoice (1).pdf" copy.
+  it('keeps a file the job already wrote rather than copying it again', async () => {
+    sizes.set(`${FOLDER}/invoice.pdf`, 8); // PNG_B64 decodes to 8 bytes
+    existing.add(`${FOLDER}/invoice.pdf`);
+    acceptJob(async (cmd, args) => {
+      if (cmd === 'maildir_read_attachment') return PNG_B64;
+      if (cmd === 'save_attachment_to') return args?.destPath;
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+    await waitFor(() => expect(jobId).toBeTruthy());
+    frame({ finished: true, done: 1, total: 2, error: 'Failed to write bundle.zip: Operation not permitted' });
+
+    await waitFor(() => expect(screen.getByText('Saved to Q3 report - Attachments')).toBeTruthy());
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to').map(([, a]) => a.destPath))
+      .toEqual([`${FOLDER}/bundle.zip`]);
   });
 
   // A frame for another export (another message's job) is not this one's.

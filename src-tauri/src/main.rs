@@ -100,6 +100,7 @@ mod dropped_files;
 // same context from its own state (`handlers::archive::archive_ctx`) under a
 // real gate. Deleting it takes the app's last ungated vault writer with it.
 mod external_location;
+mod export_folder;
 mod github;
 // graph/imap/oauth2 all live in mailvault_core (shared with src-daemon) and
 // src-tauri no longer references any of them: OAuth2Manager is constructed
@@ -3335,6 +3336,7 @@ fn main() {
     // app-side IMAP callers.
     let builder = builder
         .manage(backup::HeldBackupPaths::default())
+        .manage(export_folder::HeldExportPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
@@ -3406,6 +3408,7 @@ fn main() {
             // resolve_email_settings and dns_mail_health moved to the daemon
             // (Task 5.8, src-daemon/src/handlers/dns.rs) — routed via
             // transport.js's DAEMON_OWNED, no Tauri command left to register.
+            export_folder::attachment_export_start,
             commands::backup_run_account,
             commands::backup_status,
             commands::backup_save_external_location,
