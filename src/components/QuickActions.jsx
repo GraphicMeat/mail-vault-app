@@ -17,7 +17,14 @@ import "../styles/quick-actions.css";
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const UNSAFE_FAVORITE = new Set([...DESTRUCTIVE, "unarchive"]);
 const PAGE_SIZE = 8;
+// A wedge's clip-path depends only on its position and the wheel's size, both
+// bounded (at most PAGE_SIZE per page): cache it at module level so hovering
+// never re-walks the trig and rebuilds the polygon string.
+const wedgeClipCache = new Map();
 export function wedgeClip(index, count) {
+  const key = `${count}:${index}`;
+  const cached = wedgeClipCache.get(key);
+  if (cached) return cached;
   const gap = Math.min(1.3, 10 / Math.max(count, 1));
   const start = -90 + index * 360 / count + gap;
   const end = -90 + (index + 1) * 360 / count - gap;
@@ -34,7 +41,9 @@ export function wedgeClip(index, count) {
   };
   const outer = arc(start, end, 50);
   const inner = arc(end, start, 24);
-  return `polygon(${[...outer, ...inner].join(", ")})`;
+  const clip = `polygon(${[...outer, ...inner].join(", ")})`;
+  wedgeClipCache.set(key, clip);
+  return clip;
 }
 
 export function radialContentPosition(index, count) {
@@ -45,6 +54,66 @@ export function radialContentPosition(index, count) {
     top: `${50 + Math.sin(angle) * radius}%`,
   };
 }
+
+// Owns the one bit of "which wedge is active" state on its own, so a hover or
+// focus move only re-renders this label, never the 16 wedges around it. The
+// wheel hands its setter out through `hoverRef` instead of a prop, since the
+// wedges are siblings, not children, of this component.
+const RadialCenter = React.memo(function RadialCenter({
+  hoverRef,
+  menuEntries,
+  page,
+  pageCount,
+  onPrevPage,
+  onNextPage,
+  previousPageLabel,
+  nextPageLabel,
+}) {
+  const [activeId, setActiveId] = useState(null);
+  useEffect(() => {
+    hoverRef.current = setActiveId;
+    return () => {
+      hoverRef.current = null;
+    };
+  }, [hoverRef]);
+  const active = menuEntries.find((item) => item.entry.id === activeId) ||
+    menuEntries[0];
+  const ActiveIcon = active?.descriptor.Icon;
+  return (
+    <div
+      className={`quick-actions-radial-center ${
+        pageCount > 1 ? "has-pages" : ""
+      }`}
+      aria-live="polite"
+    >
+      {ActiveIcon && <ActiveIcon size={25} aria-hidden="true" />}
+      <span>{active?.descriptor.label}</span>
+      {pageCount > 1 && (
+        <div className="quick-action-radial-pages">
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={previousPageLabel}
+            disabled={page === 0}
+            onClick={onPrevPage}
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span>{page + 1}/{pageCount}</span>
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={nextPageLabel}
+            disabled={page >= pageCount - 1}
+            onClick={onNextPage}
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
 
 function QuickActionsConfigured({
   surface = "row",
@@ -69,7 +138,11 @@ function QuickActionsConfigured({
   const actionsRef = useRef(null);
   const [anchor, setAnchor] = useState(null);
   const [radialPage, setRadialPage] = useState(0);
-  const [activeRadial, setActiveRadial] = useState(null);
+  // The hovered/focused wedge only repaints the center label: this ref holds
+  // that leaf's own setter, so telling it which item is active never
+  // re-renders the wheel itself (16 wedges rebuilding clip-paths on hover was
+  // the actual lag).
+  const radialHoverRef = useRef(null);
   // Opened from a right-click rather than the trigger: every action is on
   // offer, whatever the inline or favorite slots already show.
   const [atPointer, setAtPointer] = useState(false);
@@ -200,7 +273,7 @@ function QuickActionsConfigured({
   const close = useCallback((restoreFocus = true) => {
     setAnchor(null);
     setAtPointer(false);
-    setActiveRadial(null);
+    radialHoverRef.current?.(null);
     onOpenChange?.(false);
     // A menu opened at the pointer has no trigger to go back to: focusing the
     // row's hidden one would pin the row's hover bar open.
@@ -223,7 +296,7 @@ function QuickActionsConfigured({
     setAnchor(null);
     setAtPointer(false);
     setRadialPage(0);
-    setActiveRadial(null);
+    radialHoverRef.current?.(null);
     onOpenChange?.(false);
   }, [identity, onOpenChange]);
   // A right-click on the row hands in the pointer. Only a new point opens the
@@ -366,14 +439,13 @@ function QuickActionsConfigured({
         data-quick-action={saved.action}
         aria-label={descriptor.titleLabel || descriptor.label}
         aria-expanded={descriptor.expanded}
-        aria-current={activeRadial?.entry.id === saved.id ? "true" : undefined}
         disabled={!!descriptor.disabled}
         style={{
           clipPath: wedgeClip(index, count),
           ...(color ? { "--quick-action-color": color } : {}),
         }}
-        onMouseEnter={() => setActiveRadial(item)}
-        onFocus={() => setActiveRadial(item)}
+        onMouseEnter={() => radialHoverRef.current?.(saved.id)}
+        onFocus={() => radialHoverRef.current?.(saved.id)}
         onClick={(event) => activate(item, event)}
       >
         <span
@@ -400,12 +472,8 @@ function QuickActionsConfigured({
       maxHeight: "min(70vh, 520px)",
       overflowY: "auto",
     };
-  const active =
-    menuEntries.find((item) => item.entry.id === activeRadial?.entry.id) ||
-    menuEntries[0];
-  const ActiveIcon = active?.descriptor.Icon;
   const changePage = (next) => {
-    setActiveRadial(null);
+    radialHoverRef.current?.(null);
     setRadialPage(next);
   };
   const wheel = (
@@ -413,38 +481,16 @@ function QuickActionsConfigured({
       {menuEntries.map((item, index) =>
         radialButton(item, index, menuEntries.length)
       )}
-      <div
-        className={`quick-actions-radial-center ${
-          pageCount > 1 ? "has-pages" : ""
-        }`}
-        aria-live="polite"
-      >
-        {ActiveIcon && <ActiveIcon size={25} aria-hidden="true" />}
-        <span>{active?.descriptor.label}</span>
-        {pageCount > 1 && (
-          <div className="quick-action-radial-pages">
-            <button
-              type="button"
-              role="menuitem"
-              aria-label={t("quickActions.previousPage")}
-              disabled={page === 0}
-              onClick={() => changePage(page - 1)}
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <span>{page + 1}/{pageCount}</span>
-            <button
-              type="button"
-              role="menuitem"
-              aria-label={t("quickActions.nextPage")}
-              disabled={page >= pageCount - 1}
-              onClick={() => changePage(page + 1)}
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-        )}
-      </div>
+      <RadialCenter
+        hoverRef={radialHoverRef}
+        menuEntries={menuEntries}
+        page={page}
+        pageCount={pageCount}
+        onPrevPage={() => changePage(page - 1)}
+        onNextPage={() => changePage(page + 1)}
+        previousPageLabel={t("quickActions.previousPage")}
+        nextPageLabel={t("quickActions.nextPage")}
+      />
     </>
   );
   if (preview && radial) {

@@ -58,6 +58,7 @@
 - **A message that timed out or hit a dropped connection while opening now retries once on its own.** Most of the time it simply opens on the second try instead of showing an error, while a message the server has confirmed is gone is never retried.
 - **Adding a Google account no longer fails with "the server did not answer in time" on a slow connection.** Testing the connection now retries once if the first attempt stalls, and no longer waits on a slow sign-out after the test has already succeeded.
 - **Signing in with Google or Microsoft now finishes adding the account on its own.** After you complete sign-in in the browser and return to MailVault, the account is added right away, with no extra click on Add Account needed; that button is still there if the automatic add fails. If you sign in to a different Google account than the address you typed, MailVault now says so and does not add it.
+- **The radial quick-actions wheel opens and reacts instantly, especially on Windows.** Right-clicking a message opened the wheel only after the button was released, and moving between its actions could feel sluggish. It now opens the moment the button goes down, and moving between actions no longer redraws the whole wheel.
 
 ## [2.16.0] - 2026-09-25
 

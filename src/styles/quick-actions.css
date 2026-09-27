@@ -123,7 +123,6 @@
   color: var(--quick-action-color, var(--mail-text-muted));
   background: radial-gradient(circle at center, var(--mail-surface) 0 67%, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 72%, var(--mail-surface)) 68% 71%, var(--mail-surface) 72%);
   cursor: pointer;
-  transition: background-color var(--mv-transition), color var(--mv-transition), filter var(--mv-transition);
 }
 
 .quick-action-radial-content {
@@ -135,12 +134,13 @@
   transform: translate(-50%, -50%);
 }
 
+/* A flat fill, not another gradient: a paint the compositor can do on every
+   mouseenter without measuring layout or blending a filter over it. */
 .quick-action-radial-item:hover:not(:disabled),
 .quick-action-radial-item:focus-visible:not(:disabled) {
   z-index: 2;
   color: var(--quick-action-color, var(--mail-text));
-  background: radial-gradient(circle at center, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 22%, var(--mail-surface)) 0 67%, var(--quick-action-color, var(--mail-accent)) 68% 71%, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 22%, var(--mail-surface)) 72%);
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 26%, var(--mail-surface));
 }
 
 .quick-action-radial-item:disabled {
