@@ -274,8 +274,13 @@ pub fn uid_set(conn: &Connection, account: &str, mailbox: &str) -> Result<HashSe
 ///
 /// The header cache is keyed by mailbox path and the vault by
 /// `vault_dir_name(path)`, which does not invert, so every cached mailbox of
-/// the account whose folder name matches answers. No such mailbox (an account
-/// removed, a folder never synced) lists nothing.
+/// the account whose folder name matches answers.
+///
+/// No such mailbox holding a single row (a folder never synced, a backfill not
+/// there yet, a cache cleared and refilling, an account's cache wiped) is
+/// `Err` starting with `FOLDER_NOT_LISTED`: unknown, never "the server holds
+/// none of them", which would take evicted mail out of search and its tags
+/// with it.
 ///
 /// ponytail: `mailboxes_with_headers` walks the account's key range once per
 /// call; the index asks only when a folder has files gone, but a
@@ -285,34 +290,116 @@ pub fn listed_message_ids(conn: &Connection, account: &str, vault_dir: &str, uid
     if uids.is_empty() {
         return Ok(out);
     }
-    let mailboxes = mailboxes_with_headers(conn, Some(account))?
+    let mailboxes = listed_mailboxes(conn, account, vault_dir)?;
+    for chunk in uids.chunks(UID_CHUNK) {
+        listed_chunk(conn, account, vault_dir, &mailboxes, chunk, &mut out)?;
+    }
+    Ok(out)
+}
+
+/// `listed_message_ids` against the shared custody store, taking its lock per
+/// chunk rather than across the whole lookup: a folder that is mostly evicted
+/// asks for thousands of uids on every sweep, and sync writes wait on the same
+/// lock. A store that is not open, or a folder whose header rows are cleared
+/// between two chunks, fails the whole lookup: the chunks already read are
+/// never taken as the full answer.
+pub fn listed_message_ids_shared(
+    db: &crate::custody::SharedConn,
+    account: &str,
+    vault_dir: &str,
+    uids: &[u32],
+) -> Result<HashMap<u32, Option<String>>, String> {
+    let mut out = HashMap::new();
+    if uids.is_empty() {
+        return Ok(out);
+    }
+    let closed = || "custody store is not open".to_string();
+    let mailboxes = listed_mailboxes(crate::custody::lock(db).as_ref().ok_or_else(closed)?, account, vault_dir)?;
+    for chunk in uids.chunks(UID_CHUNK) {
+        let guard = crate::custody::lock(db);
+        listed_chunk(guard.as_ref().ok_or_else(closed)?, account, vault_dir, &mailboxes, chunk, &mut out)?;
+    }
+    Ok(out)
+}
+
+/// How a lookup for a folder with no header row at all starts its `Err`.
+pub const FOLDER_NOT_LISTED: &str = "the header cache lists nothing for this folder";
+
+/// The cached mailboxes behind vault folder `vault_dir`, each holding rows.
+fn folder_mailboxes(conn: &Connection, account: &str, vault_dir: &str) -> Result<Vec<String>, String> {
+    Ok(mailboxes_with_headers(conn, Some(account))?
         .into_iter()
-        .filter(|(_, mailbox)| crate::search_index::text::vault_dir_name(mailbox) == vault_dir);
-    for (_, mailbox) in mailboxes {
-        for chunk in uids.chunks(UID_CHUNK) {
-            let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
-            let sql = format!(
-                "SELECT uid, CASE WHEN json_valid(header_json)
-                                  THEN COALESCE(json_extract(header_json, '$.messageId'), json_extract(header_json, '$.message_id')) END
-                 FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks})"
-            );
-            let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.clone().into()];
-            args.extend(chunk.iter().map(|u| i64::from(*u).into()));
-            let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
-            let found = stmt
-                .query_map(params_from_iter(args), |r| {
-                    let id = match r.get::<_, rusqlite::types::Value>(1)? {
-                        rusqlite::types::Value::Text(s) => Some(s),
-                        _ => None,
-                    };
-                    Ok((r.get::<_, u32>(0)?, id))
-                })
-                .map_err(err)?;
-            for row in found {
-                let (uid, id) = row.map_err(err)?;
-                out.insert(uid, id);
-            }
+        .filter(|(_, mailbox)| crate::search_index::text::vault_dir_name(mailbox) == vault_dir)
+        .map(|(_, mailbox)| mailbox)
+        .collect())
+}
+
+/// `folder_mailboxes`, with none being the lookup's `Err`.
+fn listed_mailboxes(conn: &Connection, account: &str, vault_dir: &str) -> Result<Vec<String>, String> {
+    let mailboxes = folder_mailboxes(conn, account, vault_dir)?;
+    if mailboxes.is_empty() {
+        return Err(format!("{FOLDER_NOT_LISTED}: {account}/{vault_dir}"));
+    }
+    Ok(mailboxes)
+}
+
+/// One chunk of the lookup over `mailboxes`. A mailbox that has lost every
+/// row since the lookup began (a clear between two locks) is `Err`.
+fn listed_chunk(
+    conn: &Connection,
+    account: &str,
+    vault_dir: &str,
+    mailboxes: &[String],
+    chunk: &[u32],
+    out: &mut HashMap<u32, Option<String>>,
+) -> Result<(), String> {
+    let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT uid, CASE WHEN json_valid(header_json)
+                          THEN COALESCE(json_extract(header_json, '$.messageId'), json_extract(header_json, '$.message_id')) END
+         FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks})"
+    );
+    for mailbox in mailboxes {
+        let has_rows: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM header_cache WHERE account_id=?1 AND mailbox_path=?2)",
+                params![account, mailbox],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        if !has_rows {
+            return Err(format!("{FOLDER_NOT_LISTED}: {account}/{vault_dir} was cleared during the lookup"));
         }
+        let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.clone().into()];
+        args.extend(chunk.iter().map(|u| i64::from(*u).into()));
+        let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+        let found = stmt
+            .query_map(params_from_iter(args), |r| {
+                let id = match r.get::<_, rusqlite::types::Value>(1)? {
+                    rusqlite::types::Value::Text(s) => Some(s),
+                    _ => None,
+                };
+                Ok((r.get::<_, u32>(0)?, id))
+            })
+            .map_err(err)?;
+        for row in found {
+            let (uid, id) = row.map_err(err)?;
+            out.insert(uid, id);
+        }
+    }
+    Ok(())
+}
+
+/// Every cached header of every mailbox behind vault folder `vault_dir`: what
+/// a fresh (rebuilt) index adds header-only rows from for mail no file holds.
+/// A folder with no header row has none.
+///
+/// ponytail: one read of the whole folder under the caller's lock, run once
+/// per fresh index; chunk it by uid if a huge folder's first pass shows.
+pub fn folder_headers(conn: &Connection, account: &str, vault_dir: &str) -> Result<Vec<Value>, String> {
+    let mut out = Vec::new();
+    for mailbox in folder_mailboxes(conn, account, vault_dir)? {
+        out.extend(all_headers(conn, account, &mailbox)?);
     }
     Ok(out)
 }
@@ -667,9 +754,66 @@ mod tests {
         .into_iter()
         .collect();
         assert_eq!(got, want, "a row that will not parse is still listed, just without an id");
-        assert!(listed_message_ids(&c, "a", "Archive", &[1]).unwrap().is_empty(), "no cached mailbox: nothing listed");
-        assert!(listed_message_ids(&c, "z", "Projects_2026", &[1]).unwrap().is_empty(), "a removed account lists nothing");
         assert!(listed_message_ids(&c, "a", "Projects_2026", &[]).unwrap().is_empty());
+    }
+
+    /// H3b (a): a folder with no header row at all (never opened, backfill
+    /// not there yet, cleared and refilling, an account's cache wiped) is not
+    /// "the server holds none of them": the lookup is unknown, so the index
+    /// keeps its rows and nothing reaches the metadata prune.
+    #[test]
+    fn a_folder_with_no_header_rows_is_unknown_not_empty() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 5, 5, json!({"uid": 5, "messageId": "<inbox@x.test>"}));
+        let unknown = listed_message_ids(&c, "a", "Archive", &[1]).unwrap_err();
+        assert!(unknown.starts_with(FOLDER_NOT_LISTED), "{unknown}");
+        assert!(listed_message_ids(&c, "z", "INBOX", &[1]).unwrap_err().starts_with(FOLDER_NOT_LISTED));
+        // Meta alone (a sync that wrote its counts first) lists nothing either.
+        save_headers(&c, "a", "Archive", &json!({"totalEmails": 3, "uidValidity": 1}).to_string()).unwrap();
+        assert!(listed_message_ids(&c, "a", "Archive", &[1]).unwrap_err().starts_with(FOLDER_NOT_LISTED));
+        clear_headers(&c, Some("a"), Some("INBOX")).unwrap();
+        assert!(listed_message_ids(&c, "a", "INBOX", &[5]).unwrap_err().starts_with(FOLDER_NOT_LISTED), "cleared, refilling");
+    }
+
+    /// The daemon's lookup takes the custody lock per chunk, so a big evicted
+    /// folder never holds sync writes for the whole walk; it answers exactly
+    /// what the single-connection lookup does, and a closed store is an error.
+    #[test]
+    fn the_shared_lookup_answers_like_the_plain_one_across_chunks() {
+        let (_t, mut c) = store();
+        let tx = c.transaction().unwrap();
+        for uid in 1..=2_000u32 {
+            let id = if uid % 7 == 0 { json!(null) } else { json!(format!("<{uid}@x.test>")) };
+            tx.execute(
+                "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a','Projects/2026',?1,0,0,?2)",
+                params![uid, json!({"uid": uid, "messageId": id}).to_string()],
+            ).unwrap();
+        }
+        tx.commit().unwrap();
+        let uids: Vec<u32> = (1..=2_500).collect();
+        let plain = listed_message_ids(&c, "a", "Projects_2026", &uids).unwrap();
+        assert_eq!(plain.len(), 2_000);
+        let shared: crate::custody::SharedConn = std::sync::Mutex::new(Some(c));
+        assert_eq!(listed_message_ids_shared(&shared, "a", "Projects_2026", &uids).unwrap(), plain);
+        assert!(listed_message_ids_shared(&shared, "a", "Archive", &uids).unwrap_err().starts_with(FOLDER_NOT_LISTED));
+        assert!(listed_message_ids_shared(&shared, "a", "Projects_2026", &[]).unwrap().is_empty());
+        *crate::custody::lock(&shared) = None;
+        assert!(listed_message_ids_shared(&shared, "a", "Projects_2026", &uids).is_err(), "closed: unknown, never empty");
+    }
+
+    /// What a fresh index adds header-only rows from: every cached header of
+    /// every mailbox behind the vault folder; an unknown folder has none.
+    #[test]
+    fn folder_headers_reads_every_mailbox_behind_a_vault_folder() {
+        let (_t, c) = store();
+        put(&c, "a", "Projects/2026", 1, 1, json!({"uid": 1, "subject": "One"}));
+        put(&c, "a", "Projects_2026", 2, 2, json!({"uid": 2, "subject": "Two"}));
+        put(&c, "a", "INBOX", 3, 3, json!({"uid": 3}));
+        put(&c, "b", "Projects/2026", 4, 4, json!({"uid": 4}));
+        let mut uids: Vec<u64> = folder_headers(&c, "a", "Projects_2026").unwrap().iter().map(|h| h["uid"].as_u64().unwrap()).collect();
+        uids.sort_unstable();
+        assert_eq!(uids, vec![1, 2]);
+        assert!(folder_headers(&c, "a", "Archive").unwrap().is_empty());
     }
 
     #[test]

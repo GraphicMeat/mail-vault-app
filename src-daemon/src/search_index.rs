@@ -1260,8 +1260,10 @@ fn prescan_folder_counts(
 /// attached but not open (it opens after the socket is up, so the first sweep
 /// can beat it; a vault switch closes it) or will not answer is an error:
 /// reconcile then removes nothing this pass rather than read "no answer" as
-/// "the server has none of them". No store attached at all (unit tests that
-/// build this state alone) lists nothing, which is reconcile as it was.
+/// "the server has none of them"; so is a folder with no header row at all
+/// (`FOLDER_NOT_LISTED`). No store attached at all (unit tests that build this
+/// state alone) lists nothing, which is reconcile as it was. The custody lock
+/// is taken per chunk of uids, never across the whole lookup.
 fn server_listing(
     st: &SearchIndexState,
     account_id: &str,
@@ -1269,9 +1271,21 @@ fn server_listing(
     uids: &[u32],
 ) -> Result<std::collections::HashMap<u32, Option<String>>, String> {
     let Some(custody) = g(&st.custody_db).clone() else { return Ok(Default::default()) };
-    let guard = mailvault_core::custody::lock(&custody);
-    let conn = guard.as_ref().ok_or("custody store is not open")?;
-    mailvault_core::custody::cache::listed_message_ids(conn, account_id, vault_dir, uids)
+    mailvault_core::custody::cache::listed_message_ids_shared(&custody, account_id, vault_dir, uids)
+}
+
+/// A fresh index's header-only rows for one folder (`reconcile::add_listed_rows`)
+/// from what the header cache lists for it. A custody store attached but not
+/// open is an error, so the fresh-index mark stays for a later pass; none
+/// attached (unit tests) has nothing to add.
+fn add_listed_rows(st: &SearchIndexState, maildir: &Path, account_id: &str, vault_dir: &str, keep_going: &dyn Fn() -> bool) -> Result<usize, String> {
+    let Some(custody) = g(&st.custody_db).clone() else { return Ok(0) };
+    let headers = {
+        let guard = mailvault_core::custody::lock(&custody);
+        let conn = guard.as_ref().ok_or("custody store is not open")?;
+        mailvault_core::custody::cache::folder_headers(conn, account_id, vault_dir)?
+    };
+    reconcile::add_listed_rows(&st.db, maildir, account_id, vault_dir, &headers, keep_going)
 }
 
 pub(crate) fn sweep(
@@ -1327,6 +1341,10 @@ pub(crate) fn sweep(
     }
     let mut completed = full && listed;
     let mut parsed = 0usize;
+    // A fresh index (rebuilt, recovered, first built): evicted mail is not in
+    // `cur/`, so each folder also gets header-only rows from the header cache.
+    let listed_rows_pending = lock(&st.db).as_ref().and_then(|c| db::meta_get(c, db::LISTED_ROWS_PENDING)).as_deref() == Some("1");
+    let mut listed_rows_failed = false;
     for (account, dir) in dirs {
         if !keep_going() {
             completed = false;
@@ -1334,8 +1352,15 @@ pub(crate) fn sweep(
         }
         let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); };
         let listing = |uids: &[u32]| {
-            server_listing(st, &account, &dir, uids)
-                .inspect_err(|e| warn!("search index {account}/{dir}: server listing unreadable, keeping {} rows this pass: {e}", uids.len()))
+            server_listing(st, &account, &dir, uids).inspect_err(|e| {
+                // A folder the header cache has no row for stays so until it is
+                // synced: every pass would say so.
+                if e.starts_with(mailvault_core::custody::cache::FOLDER_NOT_LISTED) {
+                    debug!("search index {account}/{dir}: keeping {} rows with no file: {e}", uids.len());
+                } else {
+                    warn!("search index {account}/{dir}: server listing unreadable, keeping {} rows this pass: {e}", uids.len());
+                }
+            })
         };
         match reconcile::reconcile_mailbox_guarded(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &listing, &keep_going, &keep_going, &mut on_batch) {
             // configure/rebuild/close asked us to stop
@@ -1344,6 +1369,16 @@ pub(crate) fn sweep(
                 if s.interrupted {
                     completed = false;
                     break;
+                }
+                if listed_rows_pending {
+                    match add_listed_rows(st, maildir, &account, &dir, &keep_going) {
+                        Ok(0) => {}
+                        Ok(added) => info!("search index {account}/{dir}: {added} header-only rows for mail with no file"),
+                        Err(e) => {
+                            listed_rows_failed = true;
+                            debug!("search index {account}/{dir}: header-only rows wait for a later pass: {e}");
+                        }
+                    }
                 }
                 if !s.removed_keys.is_empty() {
                     match prune_metadata(st, &account, &s.removed_keys) {
@@ -1394,6 +1429,13 @@ pub(crate) fn sweep(
             Ok(true) => {}
             Err(e) => {
                 return SweepOutcome { parsed, completed: false, success: false, error: Some(format!("checking first pass completion failed: {e}")) };
+            }
+        }
+        // Every folder was visited and got its header-only rows: done for this
+        // index. Otherwise the mark stays and the next pass fills the rest.
+        if listed_rows_pending && !listed_rows_failed {
+            if let Err(e) = db::meta_set(conn, db::LISTED_ROWS_PENDING, "0") {
+                warn!("search index: could not record the header-only rows as done: {e}");
             }
         }
     }
@@ -1682,6 +1724,153 @@ mod tests {
         *mailvault_core::custody::lock(&custody) = Some(conn);
         sweep();
         assert_eq!(uids(), vec![1, 3], "uid 1 is still on the server and stays searchable; uid 2 is gone");
+    }
+
+    /// A daemon index over `root` with an open custody store attached.
+    fn with_custody(root: &std::path::Path) -> (std::sync::Arc<crate::search_index::SearchIndexState>, std::sync::Arc<mailvault_core::custody::SharedConn>) {
+        let st = state(root);
+        *mailvault_core::search_index::lock(&st.db) = Some(mailvault_core::search_index::db::open(root).unwrap());
+        let custody = std::sync::Arc::new(std::sync::Mutex::new(Some(mailvault_core::custody::db::open(root).unwrap())));
+        st.attach_custody_db(std::sync::Arc::clone(&custody));
+        (st, custody)
+    }
+
+    fn sweep_now(st: &crate::search_index::SearchIndexState, root: &std::path::Path, only: Option<Vec<(String, String)>>) -> crate::search_index::SweepOutcome {
+        let config = mailvault_core::search_index::reconcile::IndexConfig { bodies: true, attachments: false, image_text: false };
+        let outcome = crate::search_index::sweep(st, &root.join("Maildir"), config, only, st.operation_generation.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(outcome.success, "{:?}", outcome.error);
+        outcome
+    }
+
+    fn indexed_uids(st: &crate::search_index::SearchIndexState, account: &str) -> Vec<u32> {
+        let g = mailvault_core::search_index::lock(&st.db);
+        let mut stmt = g.as_ref().unwrap().prepare("SELECT uid FROM messages WHERE account_id = ?1 ORDER BY uid").unwrap();
+        stmt.query_map([account], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+    }
+
+    fn save_listing(custody: &mailvault_core::custody::SharedConn, account: &str, mailbox: &str, data: serde_json::Value) {
+        let g = mailvault_core::custody::lock(custody);
+        mailvault_core::custody::cache::save_headers(g.as_ref().unwrap(), account, mailbox, &data.to_string()).unwrap();
+    }
+
+    /// H3b (a): the header cache of an evicted folder is emptied (cleared by a
+    /// UIDVALIDITY resync or a reset and refilling, or never filled). No
+    /// header row is not "the server has none of them": the evicted rows stay
+    /// searchable and the tags on them survive, since nothing is reported
+    /// removed. Once headers are back, the listing decides again.
+    #[test]
+    fn evicted_rows_and_their_tags_survive_a_folder_with_no_header_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 3);
+        let (st, custody) = with_custody(root);
+        let folder = || Some(vec![("acct".to_string(), "Projects_2026".to_string())]);
+        let listing = |uids: &[u32]| serde_json::json!({ "emails": uids.iter().map(|u| serde_json::json!({"uid": u, "messageId": format!("<{u}@x.test>")})).collect::<Vec<_>>() });
+        save_listing(&custody, "acct", "Projects/2026", listing(&[1, 2, 3]));
+        sweep_now(&st, root, folder());
+        let tag = mailvault_core::app_db::with(root, |c| {
+            let tag = mailvault_core::app_db::tags::ensure(c, "Clients", "")?;
+            let targets: Vec<_> = ["1@x.test", "2@x.test"]
+                .iter()
+                .map(|k| mailvault_core::app_db::tags::Target { account_id: "acct".into(), msg_key: k.to_string() })
+                .collect();
+            mailvault_core::app_db::tags::assign(c, &tag.id, &targets)?;
+            Ok(tag.id)
+        })
+        .unwrap();
+        let tagged = |key: &str| {
+            mailvault_core::app_db::with(root, |c| mailvault_core::app_db::tags::for_messages(c, "acct", &[key.to_string()]))
+                .unwrap()
+                .get(key)
+                .is_some_and(|tags| tags.contains(&tag))
+        };
+
+        let cur = root.join("Maildir/acct/Projects_2026/cur");
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        sweep_now(&st, root, folder());
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3], "evicted while listed: kept");
+
+        {
+            let g = mailvault_core::custody::lock(&custody);
+            mailvault_core::custody::cache::clear_headers(g.as_ref().unwrap(), Some("acct"), Some("Projects/2026")).unwrap();
+        }
+        std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
+        sweep_now(&st, root, folder());
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3], "no header row for the folder: nothing removed");
+        assert!(tagged("1@x.test") && tagged("2@x.test"), "no removal reported, so no tag pruned");
+
+        save_listing(&custody, "acct", "Projects/2026", listing(&[1, 3]));
+        sweep_now(&st, root, folder());
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 3], "refilled: uid 2 is gone from the server");
+        assert!(tagged("1@x.test"), "the kept message keeps its tag");
+        assert!(!tagged("2@x.test"), "the removed one's tag goes, as before");
+    }
+
+    /// Removing an account deletes `Maildir/<account>/`: its rows go through
+    /// the folder prune, not reconcile, so the no-header-rows keep rule (its
+    /// header cache is wiped too) never holds them.
+    #[test]
+    fn a_removed_accounts_rows_go_although_it_has_no_header_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "gone", "INBOX", 2);
+        seed(root, "kept", "INBOX", 1);
+        let (st, _custody) = with_custody(root);
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "gone"), vec![1, 2]);
+        std::fs::remove_dir_all(root.join("Maildir/gone")).unwrap();
+        sweep_now(&st, root, None);
+        assert!(indexed_uids(&st, "gone").is_empty());
+        assert_eq!(indexed_uids(&st, "kept"), vec![1]);
+    }
+
+    /// H3b (b): a rebuilt index is re-derived from `cur/`, which no longer
+    /// holds evicted mail. The first passes add a header-only row for every
+    /// uid the header cache lists for the folder with no file; while the
+    /// custody store cannot answer (startup recovery runs before it opens)
+    /// the fresh-index mark stays so a later pass does it.
+    #[test]
+    fn a_rebuilt_index_finds_evicted_mail_by_its_headers_once_custody_answers() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 2);
+        let (st, custody) = with_custody(root);
+        let conn = mailvault_core::custody::lock(&custody).take();
+        let pending = || db::meta_get(lock(&st.db).as_ref().unwrap(), db::LISTED_ROWS_PENDING);
+        assert_eq!(pending().as_deref(), Some("1"), "a fresh index, as a rebuild or recovery leaves it");
+
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2]);
+        assert_eq!(pending().as_deref(), Some("1"), "custody closed: asked again next pass");
+
+        *mailvault_core::custody::lock(&custody) = conn;
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({ "emails": [
+            {"uid": 1, "messageId": "<1@x.test>", "subject": "Seed 1"},
+            {"uid": 3, "messageId": "<3@x.test>", "subject": "Evicted budget", "from": {"name": "Carol", "address": "carol@x.test"},
+             "to": [{"address": "bob@x.test"}], "date": "Sat, 12 Sep 2026 10:00:00 +0000", "flags": ["\\Seen", "archived"]},
+        ]}));
+        sweep_now(&st, root, None);
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3]);
+        assert_eq!(pending().as_deref(), Some("0"), "done once every folder was filled");
+        let hits = |q: &str| -> Vec<u32> {
+            let g = lock(&st.db);
+            let mut stmt = g.as_ref().unwrap().prepare("SELECT uid FROM messages WHERE id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?1) ORDER BY uid").unwrap();
+            stmt.query_map([q], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+        };
+        assert_eq!(hits("\"budget\""), vec![3], "by subject");
+        assert_eq!(hits("\"carol@x.test\""), vec![3], "by sender");
+        let (flags, snippet): (String, Option<String>) = lock(&st.db)
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT flags, snippet FROM messages WHERE uid = 3", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!((flags.as_str(), snippet), ("S", None));
+
+        let again = sweep_now(&st, root, None);
+        assert_eq!(again.parsed, 0, "nothing re-read");
+        assert_eq!(indexed_uids(&st, "acct"), vec![1, 2, 3], "still listed: kept");
     }
 
     #[test]

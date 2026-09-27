@@ -197,7 +197,8 @@ fn migrate(conn: &Connection) -> Result<(), Fail> {
     }
     if version < 1 {
         conn.execute_batch(&format!(
-            "BEGIN; {SCHEMA_V1} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1'); COMMIT;"
+            "BEGIN; {SCHEMA_V1} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1');
+             INSERT OR REPLACE INTO meta(key, value) VALUES ('{LISTED_ROWS_PENDING}', '1'); COMMIT;"
         ))
         .map_err(schema_sql)?;
     }
@@ -243,7 +244,7 @@ fn validate_schema(conn: &Connection) -> Result<(), Fail> {
     // index. Validate their storage classes here so malformed derived metadata
     // is classified as rebuildable instead of trapping every retry in the
     // same health-read failure. Missing keys and arbitrary text values remain valid.
-    for key in [FIRST_PASS_DONE, "bodies_enabled"] {
+    for key in [FIRST_PASS_DONE, "bodies_enabled", LISTED_ROWS_PENDING] {
         let _: Option<String> = conn
             .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
             .optional()
@@ -267,6 +268,14 @@ pub fn meta_get_checked(conn: &Connection, key: &str) -> Result<Option<String>, 
 /// A fresh or rebuilt index misses mail the scan finds until then, so searches
 /// and status report it unavailable.
 pub const FIRST_PASS_DONE: &str = "first_pass_done";
+
+/// `"1"` from the moment a fresh index is created (first build, a rebuild,
+/// corruption recovery, building again after a destroy) until a full pass has
+/// added a header-only row for every message the header cache lists in a
+/// folder but no file holds: mail evicted from the working cache, which a
+/// re-derivation from `cur/` alone would drop from search. The daemon sets it
+/// to `"0"`; an index that predates it never has it.
+pub const LISTED_ROWS_PENDING: &str = "listed_rows_pending";
 
 pub fn first_pass_done(conn: &Connection) -> bool {
     first_pass_done_checked(conn).unwrap_or(false)

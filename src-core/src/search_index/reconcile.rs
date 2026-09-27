@@ -154,13 +154,28 @@ enum Op<'a> {
     Rename(&'a str),
     /// The file is gone and the server still lists the message: keep the row
     /// and its FTS terms, force a re-read when a file comes back, and take its
-    /// body and attachments out of the queues that need the file.
-    Keep,
+    /// body and attachments out of the queues that need the file. Carries the
+    /// row's name without the archived flag: the local archived copy is gone.
+    Keep(String),
 }
 
 /// `mtime_ns` of a row whose file must be read again whatever its size and
-/// mtime are then (`forget_file`, a kept evicted row). No file has it.
+/// mtime are then (`forget_file`). No file has it.
 const REREAD: i64 = -1;
+
+/// `mtime_ns` of a row kept with no file (`Op::Keep`, a header-only row): its
+/// file, should one come back, is read like `REREAD`. Distinct from it, so a
+/// file evicted after a `forget_file` is still marked evicted.
+const EVICTED: i64 = -2;
+
+/// `filename` without the archived flag letter, the rest untouched (the
+/// extension after the flags is lowercase).
+fn without_archived(filename: &str) -> String {
+    match crate::maildir::info_flags(filename) {
+        Some(rest) => format!("{}{}", &filename[..filename.len() - rest.len()], rest.replace('A', "")),
+        None => filename.to_string(),
+    }
+}
 
 /// The listing's uid is this message unless both sides carry a Message-ID and
 /// they differ: uids restart after a UIDVALIDITY change, so the uid alone can
@@ -341,8 +356,8 @@ pub fn reconcile_mailbox_guarded(
                 }
                 stats.kept += 1;
                 // Marked once; again only when a bodies-on toggle made it pending.
-                if row.mtime_ns != REREAD || row.body_state == BODY_PENDING {
-                    ops.push((row.id, Op::Keep));
+                if row.mtime_ns != EVICTED || row.body_state == BODY_PENDING {
+                    ops.push((row.id, Op::Keep(without_archived(&row.filename))));
                 }
             }
         }
@@ -493,13 +508,14 @@ fn apply_ops(conn: &mut Connection, ops: &[(i64, Op)]) -> rusqlite::Result<Vec<S
                 tx.prepare_cached("UPDATE messages SET filename = ?1, flags = ?2 WHERE id = ?3")?
                     .execute(params![filename, flags_of(filename), id])?;
             }
-            Op::Keep => {
+            Op::Keep(filename) => {
                 // A body still pending can never be read without the file:
                 // recorded as unreadable, so the index can report complete.
                 tx.prepare_cached(
-                    "UPDATE messages SET mtime_ns = ?1, body_state = CASE WHEN body_state = ?2 THEN ?3 ELSE body_state END WHERE id = ?4",
+                    "UPDATE messages SET mtime_ns = ?1, filename = ?2, flags = ?3,
+                            body_state = CASE WHEN body_state = ?4 THEN ?5 ELSE body_state END WHERE id = ?6",
                 )?
-                .execute(params![REREAD, BODY_PENDING, BODY_UNPARSEABLE, id])?;
+                .execute(params![EVICTED, filename, flags_of(filename), BODY_PENDING, BODY_UNPARSEABLE, id])?;
                 tx.prepare_cached("UPDATE attachments SET state = ?1 WHERE message_row = ?2 AND state = 'pending'")?
                     .execute(params![ATTACHMENT_EVICTED, id])?;
             }
@@ -797,6 +813,151 @@ pub fn forget_file(db: &SharedConn, account_id: &str, vault_dir: &str, uid: u32)
     )
     .map(|_| ())
     .map_err(db_err)
+}
+
+/// A list-row address as `Name <address>`, or the bare address (the daemon's
+/// adapter spells index addresses the same way).
+fn addr_text(v: &serde_json::Value) -> String {
+    let address = v.get("address").and_then(|x| x.as_str()).unwrap_or("");
+    match v.get("name").and_then(|x| x.as_str()) {
+        Some(name) if !name.is_empty() => format!("{name} <{address}>"),
+        _ => address.to_string(),
+    }
+}
+
+/// A header-only row for a message the header cache lists and no file holds.
+fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
+    let text = |key: &str| header.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let list = |key: &str| header.get(key).and_then(|v| v.as_array()).map(|l| l.iter().map(addr_text).collect::<Vec<_>>()).unwrap_or_default();
+    let from = header.get("from").cloned().unwrap_or(serde_json::Value::Null);
+    let to_addrs: Vec<String> = ["to", "cc", "bcc"].into_iter().flat_map(|k| list(k)).filter(|a| !a.is_empty()).collect();
+    let mut addrs = vec![addr_text(&from)];
+    addrs.extend(to_addrs.iter().cloned());
+    addrs.extend(list("replyTo"));
+    let date = text("date");
+    let date_utc = mailparse::dateparse(&date).ok().or_else(|| {
+        [date, text("internalDate")].iter().find_map(|d| chrono::DateTime::parse_from_rfc3339(d).ok()).map(|d| d.timestamp())
+    });
+    // The server's flags, never archived: no local archived copy exists.
+    let imap: Vec<String> = header
+        .get("flags")
+        .and_then(|v| v.as_array())
+        .map(|l| l.iter().filter_map(|f| f.as_str()).filter(|f| !f.eq_ignore_ascii_case("archived")).map(str::to_owned).collect())
+        .unwrap_or_default();
+    let filename = crate::vault_files::build_maildir_filename(uid, &crate::vault_flags::merge_flags(&[], &imap));
+    let mut row = header.clone();
+    if let Some(obj) = row.as_object_mut() {
+        for key in ["text", "html", "flags"] {
+            obj.remove(key);
+        }
+    }
+    let doc = IndexDoc {
+        message_id: header.get("messageId").or_else(|| header.get("message_id")).and_then(|v| v.as_str()).map(str::to_owned),
+        date_utc,
+        from_addr: from.get("address").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        from_name: from.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        addrs: addrs.into_iter().filter(|a| !a.is_empty()).collect(),
+        to_addrs,
+        subject: text("subject"),
+        has_attachments: header.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false),
+        row_json: row.to_string(),
+        ..IndexDoc::default()
+    };
+    (doc, filename)
+}
+
+/// After a fresh index is built from `cur/` (a rebuild, corruption recovery,
+/// a first build): a header-only row for each message `listed` (the header
+/// cache's rows for this folder) names that no file holds, so mail evicted
+/// from the working cache stays findable by subject, sender and recipients.
+/// No body terms, no preview line, never archived; kept (`EVICTED`) while the
+/// server lists it, like any evicted row, and re-read into the same row if a
+/// file comes back. A uid already in the index or on disk is left alone.
+/// Returns how many rows it added. `keep_going` is checked before each batch
+/// and again under the lock, like reconcile's `commit_allowed`. Only a closed
+/// (or swapped) index is an error.
+pub fn add_listed_rows(
+    db: &SharedConn,
+    maildir_root: &Path,
+    account_id: &str,
+    vault_dir: &str,
+    listed: &[serde_json::Value],
+    keep_going: &dyn Fn() -> bool,
+) -> Result<usize, String> {
+    let cur = crate::vault_files::account_dir(maildir_root, account_id).join(vault_dir).join("cur");
+    // Unreadable or missing: nothing to compare against, and reconcile leaves
+    // such a folder alone too. Not an error, so it never pins the fresh-index
+    // mark (and a whole-cache re-read on every pass) for good.
+    let Some((files, unstatted)) = list_cur(&cur) else { return Ok(0) };
+    let rows: Vec<(u32, IndexDoc, String)> = listed
+        .iter()
+        .filter_map(|h| {
+            let uid = h.get("uid").and_then(|v| v.as_u64()).and_then(|u| u32::try_from(u).ok())?;
+            (!files.contains_key(&uid) && !unstatted.contains(&uid)).then(|| {
+                let (doc, filename) = listed_row(uid, h);
+                (uid, doc, filename)
+            })
+        })
+        .collect();
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let db_path = lock(db).as_ref().ok_or_else(closed)?.path().map(str::to_owned);
+    let mut added = 0;
+    for batch in rows.chunks(BATCH) {
+        if !keep_going() {
+            break;
+        }
+        let mut guard = lock(db);
+        if !keep_going() {
+            break;
+        }
+        let conn = same_conn(&mut guard, &db_path)?;
+        let tx = conn.transaction().map_err(db_err)?;
+        {
+            let mut insert = tx
+                .prepare_cached(
+                    "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
+                        from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc, snippet)
+                     VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL)
+                     ON CONFLICT(account_id, vault_dir, uid) DO NOTHING RETURNING id",
+                )
+                .map_err(db_err)?;
+            for (uid, d, filename) in batch {
+                let addrs = d.addrs.join("\n");
+                let id: Option<i64> = insert
+                    .query_row(
+                        params![
+                            account_id,
+                            vault_dir,
+                            uid,
+                            filename,
+                            EVICTED,
+                            d.message_id,
+                            d.date_utc.unwrap_or(0),
+                            d.from_addr.to_lowercase(),
+                            d.from_name.to_lowercase(),
+                            d.subject.to_lowercase(),
+                            addrs.to_lowercase(),
+                            d.has_attachments,
+                            BODY_UNPARSEABLE,
+                            d.row_json,
+                            flags_of(filename),
+                            d.to_addrs.join("\n").to_lowercase(),
+                        ],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(db_err)?;
+                if let Some(id) = id {
+                    insert_fts(&tx, id, &d.subject, &addrs, "", "").map_err(db_err)?;
+                    added += 1;
+                }
+            }
+        }
+        tx.commit().map_err(db_err)?;
+    }
+    Ok(added)
 }
 
 pub fn set_bodies_enabled(db: &SharedConn, enabled: bool) -> Result<(), String> {
@@ -1926,5 +2087,155 @@ mod tests {
             None
         }, &|| true);
         assert!(observed_unlocked.load(Ordering::SeqCst), "message and attachment reading must happen outside the DB mutex");
+    }
+
+    fn mtime_of(v: &Vault, uid: u32) -> i64 {
+        crate::search_index::lock(&v.db).as_ref().unwrap().query_row("SELECT mtime_ns FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+    }
+
+    fn name_and_flags(v: &Vault, uid: u32) -> (String, String) {
+        crate::search_index::lock(&v.db)
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT filename, flags FROM messages WHERE uid = ?1", [uid], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+    }
+
+    /// H3b (c): `forget_file` (a pgp copy written beside the file) marks the
+    /// row for a re-read. When the file is evicted before the next sweep, the
+    /// row must still be kept as evicted: its parts leave the extraction
+    /// queue, and its mark is not the re-read one.
+    #[test]
+    fn a_file_evicted_after_a_reread_mark_is_still_kept_and_leaves_the_extraction_queue() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<one@x.test>", "Sealed", "aardvark report"));
+        let parses = AtomicUsize::new(0);
+        let parse = |raw: &[u8], uid: u32, name: &str| { parses.fetch_add(1, Ordering::SeqCst); parse_with_part(raw, uid, name) };
+        run_listed(&v, ATT, &parse, &no_listing);
+        assert_eq!(attachment_states(&v, 1), vec!["pending".to_string()]);
+
+        forget_file(&v.db, "a1", "INBOX", 1).unwrap();
+        std::fs::remove_file(cur_file(&v, 1)).unwrap();
+        let server = listing_of(&[(1, Some("<one@x.test>"))]);
+        let s = run_listed(&v, ATT, &parse, &server);
+        assert_eq!((s.kept, s.removed, s.parsed), (1, 0, 0));
+        assert_eq!(attachment_states(&v, 1), vec![ATTACHMENT_EVICTED.to_string()], "out of the extraction queue");
+        assert_eq!(mtime_of(&v, 1), EVICTED);
+        assert_ne!(EVICTED, REREAD, "an evicted row is told apart from one waiting for a re-read");
+
+        let again = run_listed(&v, ATT, &parse, &server);
+        assert_eq!((again.kept, again.parsed), (1, 0));
+        assert_eq!(parses.load(Ordering::SeqCst), 1);
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1);
+    }
+
+    /// H3b (d): the local archived copy is gone once the file is, so a kept
+    /// row stops saying archived, in its flags and in the name the search
+    /// results read `isArchived` from. Its other flags stay.
+    #[test]
+    fn keeping_an_evicted_row_drops_its_archived_flag() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}AS.eml"), &eml_id("<one@x.test>", "Archived", "aardvark"));
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}F.eml"), &eml_id("<two@x.test>", "Flagged", "bumblebee"));
+        run_listed(&v, ON, &fake_parse, &no_listing);
+        assert_eq!(name_and_flags(&v, 1).1, "AS");
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/1{INFO_PREFIX}AS.eml"))).unwrap();
+        std::fs::remove_file(v.root.join(format!("Maildir/a1/INBOX/cur/2{INFO_PREFIX}F.eml"))).unwrap();
+        let s = run_listed(&v, ON, &fake_parse, &listing_of(&[(1, Some("<one@x.test>")), (2, Some("<two@x.test>"))]));
+        assert_eq!(s.kept, 2);
+        assert_eq!(name_and_flags(&v, 1), (format!("1{INFO_PREFIX}S.eml"), "S".to_string()));
+        assert_eq!(name_and_flags(&v, 2), (format!("2{INFO_PREFIX}F.eml"), "F".to_string()));
+        assert_eq!(fts_hits(&v, "\"aardvark\"").len(), 1);
+    }
+
+    fn header(uid: u32, subject: &str, from: &str, flags: &[&str]) -> serde_json::Value {
+        serde_json::json!({
+            "uid": uid,
+            "messageId": format!("<m{uid}@x.test>"),
+            "subject": subject,
+            "from": {"name": "Carol Jones", "address": from},
+            "to": [{"name": "", "address": "bob@x.test"}],
+            "cc": [{"name": "Dan", "address": "dan@x.test"}],
+            "date": "Sat, 12 Sep 2026 10:00:00 +0000",
+            "flags": flags,
+            "hasAttachments": true,
+            "text": "never indexed from the header cache",
+        })
+    }
+
+    /// H3b (b): after a rebuild from `cur/`, a message the header cache lists
+    /// for the folder but no file holds (evicted) gets a header-only row:
+    /// found by subject and sender, never by body, no preview line, no
+    /// archived flag. A uid on disk and a row already there are left alone.
+    #[test]
+    fn listed_mail_missing_from_cur_gets_a_header_only_row() {
+        let v = vault();
+        put(&v, "a1", "INBOX", &format!("1{INFO_PREFIX}.eml"), &eml_id("<m1@x.test>", "On disk", "aardvark"));
+        run_listed(&v, ON, &fake_parse, &no_listing);
+        let listed = vec![
+            header(1, "Header of the file", "ann@x.test", &[]),
+            header(2, "Quarterly budget", "carol@x.test", &["\\Seen", "archived", "\\Flagged"]),
+            header(3, "Unread note", "erin@x.test", &[]),
+        ];
+        assert_eq!(add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &listed, &|| true).unwrap(), 2);
+
+        let g = crate::search_index::lock(&v.db);
+        let conn = g.as_ref().unwrap();
+        let (subject, from, to, date, flags, name, snippet, body_state, message_id, row_json, mtime): (String, String, String, i64, String, String, Option<String>, i64, Option<String>, String, i64) = conn
+            .query_row(
+                "SELECT subject_lc, from_addr_lc, to_lc, date_utc, flags, filename, snippet, body_state, message_id, row_json, mtime_ns FROM messages WHERE uid = 2",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?)),
+            )
+            .unwrap();
+        assert_eq!((subject.as_str(), from.as_str()), ("quarterly budget", "carol@x.test"));
+        assert!(to.contains("bob@x.test") && to.contains("dan <dan@x.test>"), "{to}");
+        assert_eq!(date, mailparse::dateparse("Sat, 12 Sep 2026 10:00:00 +0000").unwrap());
+        assert_eq!(flags, "FS", "the server's flags, never archived");
+        assert_eq!(name, format!("2{INFO_PREFIX}FS.eml"));
+        assert_eq!(snippet, None, "no body was ever read");
+        assert_eq!(body_state, BODY_UNPARSEABLE, "no body to wait for");
+        assert_eq!(message_id.as_deref(), Some("<m2@x.test>"));
+        assert_eq!(mtime, EVICTED);
+        let row: serde_json::Value = serde_json::from_str(&row_json).unwrap();
+        assert_eq!(row["subject"], "Quarterly budget");
+        assert!(row.get("flags").is_none() && row.get("text").is_none(), "{row}");
+        let subject_on_disk: String = conn.query_row("SELECT subject_lc FROM messages WHERE uid = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(subject_on_disk, "on disk", "the file's own row is not overwritten");
+        drop(g);
+
+        assert_eq!(fts_hits(&v, "\"budget\"").len(), 1, "found by subject");
+        assert_eq!(fts_hits(&v, "\"carol@x.test\"").len(), 1, "found by sender");
+        assert!(fts_hits(&v, "\"never indexed\"").is_empty(), "no body terms");
+        assert!(snippets(&v, &[2, 3]).is_empty());
+        assert_eq!(add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &listed, &|| true).unwrap(), 0, "once");
+
+        // Later passes keep them while the server lists them, without reading anything.
+        let server = listing_of(&[(2, Some("<m2@x.test>")), (3, Some("<m3@x.test>"))]);
+        let s = run_listed(&v, ON, &fake_parse, &server);
+        assert_eq!((s.kept, s.removed, s.parsed, s.unchanged), (2, 0, 0, 1));
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 3, total: 3 });
+
+        // The body coming back is read into the same row.
+        let id = row_id(&v, 2).unwrap();
+        put(&v, "a1", "INBOX", &format!("2{INFO_PREFIX}FS.eml"), &eml_id("<m2@x.test>", "Quarterly budget", "chameleon figures"));
+        let s = run_listed(&v, ON, &fake_parse, &server);
+        assert_eq!((s.parsed, s.kept), (1, 1));
+        assert_eq!(row_id(&v, 2), Some(id));
+        assert_eq!(fts_hits(&v, "\"chameleon\"").len(), 1);
+    }
+
+    /// Only a fresh index (created, rebuilt, recovered, re-enabled after a
+    /// destroy) asks for header-only rows; the daemon clears the mark.
+    #[test]
+    fn a_fresh_index_asks_for_listed_rows() {
+        let v = vault();
+        let g = crate::search_index::lock(&v.db);
+        assert_eq!(meta_get(g.as_ref().unwrap(), db::LISTED_ROWS_PENDING).as_deref(), Some("1"));
+        meta_set(g.as_ref().unwrap(), db::LISTED_ROWS_PENDING, "0").unwrap();
+        drop(g);
+        *crate::search_index::lock(&v.db) = None; // exclusive locking: one connection at a time
+        let reopened = db::open(&v.root).unwrap();
+        assert_eq!(meta_get(&reopened, db::LISTED_ROWS_PENDING).as_deref(), Some("0"), "an existing index is not asked again");
     }
 }
