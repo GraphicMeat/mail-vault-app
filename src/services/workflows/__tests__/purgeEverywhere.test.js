@@ -645,3 +645,24 @@ describe('purgeEverywhere and the rest of the app', () => {
     expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
   });
 });
+
+// The purge paints through the same helper as every delete: the message it
+// takes off the list leaves the reader too, and the count drops by the rows
+// it actually took.
+describe('purgeEverywhere — the view on screen', () => {
+  it('closes the reader showing a purged message and counts only the rows it removed', async () => {
+    prime({ emails: [serverMsg(1), serverMsg(2)] });
+    useMailStore.setState({
+      selectedEmailId: 1, selectedEmail: serverMsg(1), selectedEmailSource: 'server',
+      selectedThread: { threadId: 'm1@mock', emails: [serverMsg(1)], lastEmail: serverMsg(1), messageCount: 1 },
+    });
+
+    // 9 names no row on screen.
+    await purgeEverywhere([1, 9]);
+
+    const s = useMailStore.getState();
+    expect(s.selectedEmailId).toBeNull();
+    expect(s.selectedThread).toBeNull();
+    expect(s.totalEmails).toBe(1);
+  });
+});
