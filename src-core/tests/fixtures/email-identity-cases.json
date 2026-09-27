@@ -1,0 +1,15 @@
+{
+  "_comment": "Shared fixture for normalizeEmailIdentity / normalize_identity. Consumed verbatim by src-core/src/notes_to_self.rs (Rust, via include_str!) and by src/utils/__tests__/emailIdentity.cases.test.js (vitest), so the two implementations cannot drift.",
+
+  "cases": [
+    { "name": "gmail_dots_stripped", "input": "John.Doe@gmail.com", "expected": "johndoe@gmail.com" },
+    { "name": "gmail_plus_tag_stripped", "input": "john.doe+news@gmail.com", "expected": "johndoe@gmail.com" },
+    { "name": "gmail_uppercase_folded", "input": "JOHN.DOE@GMAIL.COM", "expected": "johndoe@gmail.com" },
+    { "name": "googlemail_domain_dot_insensitive", "input": "a.b+promo@googlemail.com", "expected": "ab@gmail.com" },
+    { "name": "non_gmail_dots_kept", "input": "Jane.Smith@Example.com", "expected": "jane.smith@example.com" },
+    { "name": "non_gmail_plus_kept", "input": "jane+tag@example.com", "expected": "jane+tag@example.com" },
+    { "name": "whitespace_trimmed", "input": "  user@gmail.com  ", "expected": "user@gmail.com" },
+    { "name": "no_at_sign_returned_lowercased", "input": "Not-An-Email", "expected": "not-an-email" },
+    { "name": "empty_string", "input": "", "expected": "" }
+  ]
+}

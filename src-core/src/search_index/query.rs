@@ -104,6 +104,93 @@ pub struct SearchPage {
     pub needles: Vec<String>,
 }
 
+/// One (filename, mime) attachment of a `NoteCandidate`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NoteAttachment {
+    pub filename: String,
+    pub mime: String,
+}
+
+/// A message this index says came from one of Notes to Self's own
+/// identities, raw enough for `notes_to_self::is_note_to_self` and
+/// `classify` to judge: sender filtering only, everything else (recipient
+/// set, column) is the caller's call.
+#[derive(Debug, Clone, Default)]
+pub struct NoteCandidate {
+    pub row_id: i64,
+    pub account_id: String,
+    pub vault_dir: String,
+    pub uid: u32,
+    /// `messages.message_id`, when the index has it (dedupe key for I2).
+    pub message_id: Option<String>,
+    pub from_addr_lc: String,
+    /// To+Cc+Bcc, `\n`-joined lowercase `"Name <addr>"` (or bare address)
+    /// lines, as `commit_batch` writes it — split and normalized by the caller.
+    pub to_lc: String,
+    /// Original-case subject, read out of `row_json` (only `subject_lc` is
+    /// indexed lowercase).
+    pub subject: String,
+    pub snippet: Option<String>,
+    pub date_utc: i64,
+    pub attachments: Vec<NoteAttachment>,
+}
+
+/// Every message any of `own` (normalized identities) sent, across every
+/// account this index holds. Narrows on `from_addr_lc` and a non-empty
+/// `to_lc` only — the index has no column to filter recipients by identity,
+/// so `is_note_to_self` re-checks the full rule against the returned row.
+pub fn notes_to_self_candidates(
+    conn: &rusqlite::Connection,
+    own: &std::collections::HashSet<String>,
+) -> Result<Vec<NoteCandidate>, String> {
+    if own.is_empty() {
+        return Ok(Vec::new());
+    }
+    let marks = own.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT id, account_id, vault_dir, uid, message_id, from_addr_lc, to_lc, row_json, snippet, date_utc \
+         FROM messages WHERE from_addr_lc IN ({marks}) AND to_lc != '' ORDER BY date_utc DESC"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(own.iter())).map_err(|e| e.to_string())?;
+    let mut candidates = Vec::new();
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let row_id: i64 = row.get(0).map_err(|e| e.to_string())?;
+        let row_json: String = row.get(7).map_err(|e| e.to_string())?;
+        let subject = serde_json::from_str::<serde_json::Value>(&row_json)
+            .ok()
+            .and_then(|v| v.get("subject").and_then(|s| s.as_str()).map(String::from))
+            .unwrap_or_default();
+        candidates.push(NoteCandidate {
+            row_id,
+            account_id: row.get(1).map_err(|e| e.to_string())?,
+            vault_dir: row.get(2).map_err(|e| e.to_string())?,
+            uid: row.get(3).map_err(|e| e.to_string())?,
+            message_id: row.get(4).map_err(|e| e.to_string())?,
+            from_addr_lc: row.get(5).map_err(|e| e.to_string())?,
+            to_lc: row.get(6).map_err(|e| e.to_string())?,
+            subject,
+            snippet: row.get(8).map_err(|e| e.to_string())?,
+            date_utc: row.get(9).map_err(|e| e.to_string())?,
+            attachments: Vec::new(),
+        });
+    }
+    for candidate in &mut candidates {
+        candidate.attachments = note_attachments(conn, candidate.row_id)?;
+    }
+    Ok(candidates)
+}
+
+fn note_attachments(conn: &rusqlite::Connection, row_id: i64) -> Result<Vec<NoteAttachment>, String> {
+    let mut stmt = conn
+        .prepare("SELECT filename, mime FROM attachments WHERE message_row = ?1 ORDER BY part_index")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([row_id], |r| Ok(NoteAttachment { filename: r.get(0)?, mime: r.get(1)? }))
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 pub fn fts_string(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
@@ -1330,5 +1417,91 @@ mod tests {
         let (_t, conn) = term_fixture(&[("a", 1, "Invoice", &[])]);
         assert!(suggest_terms(&conn, &[], "i", 0, 20).unwrap().is_empty());
         assert!(suggest_terms(&conn, &[], " ", 0, 20).unwrap().is_empty());
+    }
+
+    /// Inserts one `messages` row shaped like Notes to Self needs it: a
+    /// `subject` in `row_json` (only `subject_lc` is otherwise indexed), and
+    /// `to_lc` exactly as `commit_batch` writes it (`\n`-joined lowercase
+    /// "Name <addr>" lines, To+Cc+Bcc merged).
+    #[allow(clippy::too_many_arguments)]
+    fn note_row(
+        conn: &rusqlite::Connection,
+        account: &str,
+        vault_dir: &str,
+        uid: u32,
+        message_id: Option<&str>,
+        from_addr_lc: &str,
+        to_lc: &str,
+        subject: &str,
+        date_utc: i64,
+    ) -> i64 {
+        let row_json = serde_json::json!({ "subject": subject }).to_string();
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, subject_lc, row_json, to_lc, snippet)
+             VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?6, ?7, ?8, ?9, ?10, 'a snippet')",
+            rusqlite::params![
+                account, vault_dir, uid, format!("{uid}{INFO_PREFIX}.eml"), message_id, date_utc,
+                from_addr_lc, subject.to_lowercase(), row_json, to_lc,
+            ],
+        ).unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn notes_candidates_filters_by_sender_and_requires_recipients() {
+        let (_tmp, conn) = coverage_fixture();
+        note_row(&conn, "a", "INBOX", 1, Some("<n1@x.test>"), "me@x.test", "me@x.test", "Note one", 100);
+        note_row(&conn, "a", "Sent", 2, None, "stranger@other.test", "me@x.test", "Not mine", 200);
+        note_row(&conn, "a", "Drafts", 3, None, "me@x.test", "", "No recipients yet", 300);
+        let own: std::collections::HashSet<String> = ["me@x.test".to_string()].into_iter().collect();
+        let found = notes_to_self_candidates(&conn, &own).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].uid, 1);
+        assert_eq!(found[0].account_id, "a");
+        assert_eq!(found[0].message_id.as_deref(), Some("<n1@x.test>"));
+        assert_eq!(found[0].subject, "Note one", "original case comes from row_json, not subject_lc");
+        assert_eq!(found[0].to_lc, "me@x.test");
+        assert_eq!(found[0].snippet.as_deref(), Some("a snippet"));
+    }
+
+    #[test]
+    fn notes_candidates_are_unified_across_accounts_newest_first() {
+        let (_tmp, conn) = coverage_fixture();
+        note_row(&conn, "a", "INBOX", 1, None, "me@x.test", "me@x.test", "Older", 100);
+        note_row(&conn, "b", "INBOX", 1, None, "me@x.test", "me@x.test", "Newer", 200);
+        let own: std::collections::HashSet<String> = ["me@x.test".to_string()].into_iter().collect();
+        let found = notes_to_self_candidates(&conn, &own).unwrap();
+        let accounts: Vec<&str> = found.iter().map(|c| c.account_id.as_str()).collect();
+        assert_eq!(accounts, vec!["b", "a"]);
+    }
+
+    #[test]
+    fn notes_candidates_carry_their_attachments_in_part_order() {
+        let (_tmp, conn) = coverage_fixture();
+        let row_id = note_row(&conn, "a", "INBOX", 1, None, "me@x.test", "me@x.test", "With files", 100);
+        conn.execute(
+            "INSERT INTO attachments (message_row, part_index, filename, mime, size, state) VALUES (?1, 1, 'b.png', 'image/png', 1, 'done')",
+            [row_id],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO attachments (message_row, part_index, filename, mime, size, state) VALUES (?1, 0, 'a.pdf', 'application/pdf', 1, 'done')",
+            [row_id],
+        ).unwrap();
+        let own: std::collections::HashSet<String> = ["me@x.test".to_string()].into_iter().collect();
+        let found = notes_to_self_candidates(&conn, &own).unwrap();
+        assert_eq!(
+            found[0].attachments,
+            vec![
+                NoteAttachment { filename: "a.pdf".into(), mime: "application/pdf".into() },
+                NoteAttachment { filename: "b.png".into(), mime: "image/png".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_identity_set_short_circuits_to_no_candidates() {
+        let (_tmp, conn) = coverage_fixture();
+        note_row(&conn, "a", "INBOX", 1, None, "me@x.test", "me@x.test", "Note", 100);
+        assert!(notes_to_self_candidates(&conn, &std::collections::HashSet::new()).unwrap().is_empty());
     }
 }
