@@ -692,7 +692,31 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const keychainBlocked = useKeychainGateStore(s => s.blocked);
   // Same for a portable copy's unlock card.
   const portableLocked = usePortableStore(s => s.status.portable && s.status.locked);
-  const showError = !keychainBlocked && !portableLocked && errorReadyFor !== null && errorReadyFor === activeAccountId;
+  // Retry hides the notice until the attempt settles; a failure then shows it
+  // again at once, since the status never left `error`. The restore
+  // descriptor's paint would return before the server is even asked, so the
+  // retry takes the background-refresh path, which awaits it and keeps the
+  // rows on screen. The ref turns away a second click on the card while it
+  // animates out.
+  // All Inboxes keeps the call it always made: the background path would
+  // sync a folder named 'UNIFIED' into the list on screen.
+  const [retryingFor, setRetryingFor] = useState(null);
+  const retryingRef = useRef(false);
+  const retryConnection = useCallback(async (accountId, mailbox) => {
+    if (retryingRef.current) return;
+    retryingRef.current = true;
+    setRetryingFor(accountId);
+    try {
+      await activateAccount(accountId, mailbox, mailbox === 'UNIFIED' ? undefined : { _backgroundRefresh: true });
+    } catch (err) {
+      console.warn('[Sidebar] connection retry failed:', err);
+    } finally {
+      retryingRef.current = false;
+      setRetryingFor(null);
+    }
+  }, [activateAccount]);
+  const showError = !keychainBlocked && !portableLocked && errorReadyFor !== null && errorReadyFor === activeAccountId
+    && retryingFor !== activeAccountId;
 
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
@@ -1129,7 +1153,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {showError && connectionStatus === 'error' && (
           <motion.div key="connection-error" {...noticeMotion}>
             <ConnectionErrorCard account={account} connectionErrorType={connectionErrorType}
-              activeMailbox={activeMailbox} activateAccount={activateAccount}
+              activeMailbox={activeMailbox} activateAccount={retryConnection}
               setShowErrorModal={setShowErrorModal} onOpenAccounts={onOpenAccounts} />
           </motion.div>
         )}

@@ -210,6 +210,28 @@ describe('Sidebar navigation', () => {
   });
 });
 
+describe('connection notice Retry', () => {
+  const realActivate = useMailStore.getState().activateAccount;
+  afterEach(() => useMailStore.setState({ activateAccount: realActivate }));
+
+  // With the real AnimatePresence the card stays in the DOM while it animates
+  // out, and its Retry is still clickable. (Hiding itself is covered in
+  // sidebarConnectionRetry.test.jsx, where exits finish at once.)
+  it('starts one retry however often Retry is clicked while it runs', async () => {
+    let finish;
+    const activateAccount = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+    vi.useFakeTimers();
+    useMailStore.setState({ connectionStatus: 'error', connectionErrorType: 'serverError', connectionError: 'Connection failed', activateAccount });
+    render(<Sidebar />);
+    act(() => vi.advanceTimersByTime(3000));
+    const retry = screen.getByRole('button', { name: t('common.retry') });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    expect(activateAccount).toHaveBeenCalledOnce();
+    await act(async () => finish());
+  });
+});
+
 describe('Insights workspace entry', () => {
   it.each(['account','current folder','all inboxes','mail source'])('leaves Insights before navigating to %s',async target=>{
     const onOpenMail=vi.fn();render(<Sidebar onOpenMail={onOpenMail} insightsOpen />);
