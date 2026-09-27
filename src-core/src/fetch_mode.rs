@@ -307,7 +307,7 @@ struct RawEntry {
     account: String,
     mailbox: String,
     uid: u32,
-    raw: Vec<u8>,
+    raw: std::sync::Arc<[u8]>,
 }
 
 /// On Demand keeps no body on disk, so a message it fetched lives here, in
@@ -337,17 +337,23 @@ impl RawLru {
         Some(entry)
     }
 
-    /// The message's bytes, now the most recently used.
-    pub fn get(&mut self, account: &str, mailbox: &str, uid: u32) -> Option<Vec<u8>> {
+    /// The message's bytes, now the most recently used. Shared, never copied.
+    pub fn get(&mut self, account: &str, mailbox: &str, uid: u32) -> Option<std::sync::Arc<[u8]>> {
         let entry = self.take(account, mailbox, uid)?;
-        let raw = entry.raw.clone();
+        let raw = std::sync::Arc::clone(&entry.raw);
         self.bytes += entry.raw.len();
         self.entries.push_back(entry);
         Some(raw)
     }
 
+    /// Whether the message is held, without touching its recency.
+    pub fn contains(&self, account: &str, mailbox: &str, uid: u32) -> bool {
+        self.entries.iter().any(|e| e.uid == uid && e.account == account && e.mailbox == mailbox)
+    }
+
     /// Keep `raw` as the most recently used, replacing what the key held.
-    pub fn put(&mut self, account: &str, mailbox: &str, uid: u32, raw: Vec<u8>) {
+    pub fn put(&mut self, account: &str, mailbox: &str, uid: u32, raw: impl Into<std::sync::Arc<[u8]>>) {
+        let raw = raw.into();
         self.take(account, mailbox, uid);
         if raw.len() > self.max_bytes || self.max_count == 0 {
             return;
@@ -683,7 +689,7 @@ mod tests {
             lru.put("a", "INBOX", uid, vec![0; 10]);
         }
         assert_eq!(lru.get("a", "INBOX", 1), None, "the oldest went first");
-        assert_eq!(lru.get("a", "INBOX", 3), Some(vec![0; 10]));
+        assert_eq!(lru.get("a", "INBOX", 3).as_deref(), Some(&[0u8; 10][..]));
         assert_eq!(lru.entries.len(), 2);
     }
 
@@ -708,7 +714,8 @@ mod tests {
         lru.put("a", "INBOX", 3, vec![3]);
         assert_eq!(lru_keys(&lru), vec![1, 3], "uid 1 was read last, so uid 2 went");
         lru.put("a", "INBOX", 3, vec![9, 9]);
-        assert_eq!(lru.get("a", "INBOX", 3), Some(vec![9, 9]));
+        assert_eq!(lru.get("a", "INBOX", 3).as_deref(), Some(&[9u8, 9][..]));
+        assert!(lru.contains("a", "INBOX", 3) && !lru.contains("a", "INBOX", 2));
         assert_eq!((lru.entries.len(), lru.bytes), (2, 3));
         // Same uid, another mailbox or account: another message.
         assert_eq!(lru.get("a", "Sent", 3), None);

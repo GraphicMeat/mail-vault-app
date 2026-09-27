@@ -6,23 +6,35 @@
 //!
 //! `raw_message` is the one path: the vault file when there is one; else the
 //! in-memory copy On Demand keeps (`RawLru`); else the server, on the priority
-//! lane (a user action), checked against the header cache's Message-ID before
-//! it is used or kept, then kept the way an open keeps a body
-//! (`imap::auto_cache`, opened: written in every mode but On Demand, never
-//! `A`). A body the vault did not keep goes to the in-memory copy instead.
-//! Any server failure (offline, refused, timed out, gone) answers the vault's
-//! own "not found" error, unchanged, which is what the app matches on.
+//! lane (a user action). Bytes from memory or the server are used only when
+//! their Message-ID agrees with the header cache's row, and a downloaded
+//! message is kept the way an open keeps a body (`imap::auto_cache`, opened:
+//! written in every mode but On Demand, never `A`); one the vault did not
+//! keep goes to memory. Any server failure (offline, refused, timed out,
+//! gone) answers the vault's own "not found" error, unchanged, which is what
+//! the app matches on.
+//!
+//! Timing: one download per message at a time (a per-message lock; other
+//! messages never wait on it), the whole fallback bounded by
+//! `FALLBACK_BOUND` (under the app's 75 s reply budget for these routes), and
+//! a failure remembered for `FAILURE_MEMO` so the reads queued behind it, and
+//! the app's own retries, fail at once instead of dialling again.
+//!
+//! `local_message` is the no-network half (vault, then memory), for the
+//! attachment bar's mount-time "already cached?" probe.
 //!
 //! Graph accounts: the daemon holds no Graph token, so it cannot fetch one
 //! here. What `graph_cache_mime` fetched for an open and did not keep is in
 //! the in-memory copy; past that, the vault's error stands.
-use crate::handlers::common::{blocking, vault_root};
+use crate::handlers::common::{blocking, vault_root, with_vault_write};
 use crate::imap::{self, ImapConfig};
 use crate::server::DaemonState;
 use mailvault_core::fetch_mode::{same_message, RawLru};
 use mailvault_core::vault_files;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 /// Bodies On Demand keeps in memory. A message is kept whole, so the byte
@@ -31,86 +43,193 @@ use tracing::{info, warn};
 const LRU_MESSAGES: usize = 20;
 const LRU_BYTES: usize = 100 * 1024 * 1024;
 
+/// The whole server fallback of one read: waiting for this message's lock,
+/// the keychain read, connect, the body fetch (itself capped at 45 s) and
+/// the cache write. The app's reply budget for the routes that may download
+/// is 75 s (`reply_timeout` in `src-tauri/src/main.rs`): a hung server
+/// answers the vault's error before the app gives up on the daemon.
+const FALLBACK_BOUND: Duration = Duration::from_secs(60);
+
+/// How long a failed download answers "not found" without dialling again.
+const FAILURE_MEMO: Duration = Duration::from_secs(30);
+
+/// Folders that exist only on this computer: never asked of the server.
+const LOCAL_ONLY_MAILBOXES: &[&str] = &[crate::handlers::scheduled::MAILBOX];
+
+type Key = (String, String, u32);
+
 pub(crate) struct RawMessages {
     lru: Mutex<RawLru>,
-    /// One server fallback at a time. A message's attachment bar asks for
-    /// every attachment's cached path and its inline images at once; without
-    /// this each would download the same message. The second waits, then
-    /// finds the first's copy in the vault or in memory.
-    // ponytail: one lock for every message; per-message locks if unrelated
-    // fallbacks queueing behind a slow server ever shows.
-    fetching: tokio::sync::Mutex<()>,
+    /// One download per message: an attachment bar asks for the inline
+    /// images and every attachment at once, and the second read of the same
+    /// message waits, then finds the first's copy. Entries are dropped once
+    /// nobody holds them.
+    fetching: Mutex<HashMap<Key, Arc<tokio::sync::Mutex<()>>>>,
+    /// Downloads that failed, and when.
+    failed: Mutex<HashMap<Key, Instant>>,
     /// Tests only: the credentials `raw_message` resolves. The keychain is
     /// never read under `cfg(test)`; a missing account is "no server".
     #[cfg(test)]
-    pub(crate) accounts: Mutex<std::collections::HashMap<String, ImapConfig>>,
+    pub(crate) accounts: Mutex<HashMap<String, ImapConfig>>,
+    /// Tests only: `FALLBACK_BOUND`, shortened.
+    #[cfg(test)]
+    pub(crate) bound: Mutex<Duration>,
 }
 
 impl Default for RawMessages {
     fn default() -> Self {
         RawMessages {
             lru: Mutex::new(RawLru::new(LRU_MESSAGES, LRU_BYTES)),
-            fetching: tokio::sync::Mutex::new(()),
+            fetching: Mutex::new(HashMap::new()),
+            failed: Mutex::new(HashMap::new()),
             #[cfg(test)]
-            accounts: Mutex::new(Default::default()),
+            accounts: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            bound: Mutex::new(FALLBACK_BOUND),
         }
     }
+}
+
+fn locked<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 impl RawMessages {
     /// A body the user opened that the vault did not keep (On Demand, a
     /// hidden account, a failed write): the reads that follow the open (its
     /// inline images, its attachments) are served from memory.
-    pub(crate) fn remember(&self, account_id: &str, mailbox: &str, uid: u32, raw: Vec<u8>) {
-        self.lru.lock().unwrap_or_else(|p| p.into_inner()).put(account_id, mailbox, uid, raw);
+    pub(crate) fn remember(&self, account_id: &str, mailbox: &str, uid: u32, raw: impl Into<Arc<[u8]>>) {
+        locked(&self.lru).put(account_id, mailbox, uid, raw);
     }
 
-    fn recall(&self, account_id: &str, mailbox: &str, uid: u32) -> Option<Vec<u8>> {
-        self.lru.lock().unwrap_or_else(|p| p.into_inner()).get(account_id, mailbox, uid)
+    fn recall(&self, account_id: &str, mailbox: &str, uid: u32) -> Option<Arc<[u8]>> {
+        locked(&self.lru).get(account_id, mailbox, uid)
+    }
+
+    fn holds(&self, account_id: &str, mailbox: &str, uid: u32) -> bool {
+        locked(&self.lru).contains(account_id, mailbox, uid)
+    }
+
+    fn lock_for(&self, key: &Key) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(locked(&self.fetching).entry(key.clone()).or_default())
+    }
+
+    /// Drop `key`'s lock once no read holds it.
+    fn tidy(&self, key: &Key) {
+        let mut map = locked(&self.fetching);
+        if map.get(key).is_some_and(|lock| Arc::strong_count(lock) == 1) {
+            map.remove(key);
+        }
+    }
+
+    fn failed_recently(&self, key: &Key) -> bool {
+        locked(&self.failed).get(key).is_some_and(|at| at.elapsed() < FAILURE_MEMO)
+    }
+
+    fn note_failure(&self, key: &Key) {
+        let mut failed = locked(&self.failed);
+        failed.retain(|_, at| at.elapsed() < FAILURE_MEMO);
+        failed.insert(key.clone(), Instant::now());
+    }
+
+    fn bound(&self) -> Duration {
+        #[cfg(test)]
+        return *locked(&self.bound);
+        #[cfg(not(test))]
+        FALLBACK_BOUND
     }
 }
 
 /// The message's bytes: `readable` for everything parsed out of it
 /// (attachments, parts: an OpenPGP message decrypted), else the original
 /// (View Source, `.eml` export).
-pub(crate) async fn raw_message(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Vec<u8>, String> {
-    if let Some(raw) = from_vault(state, account_id, mailbox, uid, readable).await? {
+pub(crate) async fn raw_message(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Arc<[u8]>, String> {
+    if let Some(raw) = local_message(state, account_id, mailbox, uid, readable).await? {
         return Ok(raw);
     }
-    let _one = state.raw_messages.fetching.lock().await;
-    // The fallback that held the lock may just have written it.
+    if LOCAL_ONLY_MAILBOXES.contains(&mailbox) {
+        return Err(missing(uid));
+    }
+    let key: Key = (account_id.to_string(), mailbox.to_string(), uid);
+    let lock = state.raw_messages.lock_for(&key);
+    let outcome = tokio::time::timeout(state.raw_messages.bound(), fallback(state, &key, lock, readable)).await;
+    state.raw_messages.tidy(&key);
+    outcome.unwrap_or_else(|_| {
+        warn!("[raw] {account_id}/{mailbox} uid {uid}: server fallback gave up after {:?}", state.raw_messages.bound());
+        state.raw_messages.note_failure(&key);
+        Err(missing(uid))
+    })
+}
+
+/// The no-network half of `raw_message`: the vault file, else the in-memory
+/// copy (checked against the header cache). `Ok(None)`: neither holds it.
+pub(crate) async fn local_message(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Arc<[u8]>>, String> {
     if let Some(raw) = from_vault(state, account_id, mailbox, uid, readable).await? {
+        return Ok(Some(raw.into()));
+    }
+    let Some(raw) = state.raw_messages.recall(account_id, mailbox, uid) else { return Ok(None) };
+    verify(state, account_id, mailbox, uid, &raw).await?;
+    readable_bytes(state, account_id, mailbox, uid, raw, false, readable).await.map(Some)
+}
+
+fn missing(uid: u32) -> String {
+    format!("Email UID {} not found", uid)
+}
+
+/// Holds `key`'s lock for the whole download, so a read of the same message
+/// queued behind it finds the copy it leaves (or its failure) instead of
+/// downloading again.
+async fn fallback(state: &Arc<DaemonState>, key: &Key, lock: Arc<tokio::sync::Mutex<()>>, readable: bool) -> Result<Arc<[u8]>, String> {
+    let (account_id, mailbox, uid) = (key.0.as_str(), key.1.as_str(), key.2);
+    let _one = lock.lock().await;
+    if let Some(raw) = local_message(state, account_id, mailbox, uid, readable).await? {
         return Ok(raw);
     }
-    let missing = || format!("Email UID {} not found", uid);
-    let (raw, fetched) = match state.raw_messages.recall(account_id, mailbox, uid) {
-        Some(raw) => (raw, false),
-        None => match from_server(state, account_id, mailbox, uid).await {
-            Ok(Some(raw)) => (raw, true),
-            Ok(None) => return Err(missing()),
-            Err(e) => {
-                info!("[raw] {account_id}/{mailbox} uid {uid}: no vault copy, server fallback failed: {e}");
-                return Err(missing());
-            }
-        },
+    if state.raw_messages.failed_recently(key) {
+        return Err(missing(uid));
+    }
+    let raw = match from_server(state, account_id, mailbox, uid).await {
+        Ok(Some(raw)) => raw,
+        Ok(None) => {
+            state.raw_messages.note_failure(key);
+            return Err(missing(uid));
+        }
+        Err(e) => {
+            info!("[raw] {account_id}/{mailbox} uid {uid}: no vault copy, server fallback failed: {e}");
+            state.raw_messages.note_failure(key);
+            return Err(missing(uid));
+        }
     };
-    let listed = listed_message_id(state, account_id, mailbox, uid).await;
-    if !same_message(listed.as_deref(), &raw) {
-        warn!("[raw] {account_id}/{mailbox} uid {uid}: the server's message is not the one the header cache lists; refused");
-        return Err(format!("Message UID {uid} in {mailbox} is now a different message on the server; refresh the folder"));
+    verify(state, account_id, mailbox, uid, &raw).await?;
+    let cached = crate::handlers::imap::auto_cache(state, account_id.to_string(), mailbox.to_string(), uid, raw.clone(), None, true).await;
+    let raw: Arc<[u8]> = raw.into();
+    if !cached {
+        state.raw_messages.remember(account_id, mailbox, uid, Arc::clone(&raw));
     }
-    let cached = fetched
-        && crate::handlers::imap::auto_cache(state, account_id.to_string(), mailbox.to_string(), uid, raw.clone(), None, true).await;
-    if fetched && !cached {
-        state.raw_messages.remember(account_id, mailbox, uid, raw.clone());
+    readable_bytes(state, account_id, mailbox, uid, raw, cached, readable).await
+}
+
+/// `raw` must be the message the header cache lists under `uid`. A header
+/// cache that cannot be read is no proof either way: refused, so nothing
+/// unverified is shown or written.
+async fn verify(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, raw: &[u8]) -> Result<(), String> {
+    let listed = listed_message_id(state, account_id, mailbox, uid).await?;
+    if same_message(listed.as_deref(), raw) {
+        return Ok(());
     }
-    if !readable {
+    warn!("[raw] {account_id}/{mailbox} uid {uid}: the server's message is not the one the header cache lists; refused");
+    Err(format!("Message UID {uid} in {mailbox} is now a different message on the server; refresh the folder"))
+}
+
+/// An OpenPGP message decrypted for a `readable` read (`render` blocks on
+/// the keychain: off the runtime); anything else as it is.
+async fn readable_bytes(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, raw: Arc<[u8]>, in_vault: bool, readable: bool) -> Result<Arc<[u8]>, String> {
+    if !readable || !mailvault_core::pgp::is_encrypted(&raw) {
         return Ok(raw);
     }
-    let state2 = Arc::clone(state);
+    let state = Arc::clone(state);
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
-    // `render` blocks on the keychain for an encrypted message: off the runtime.
-    blocking(move || crate::handlers::pgp::render(&state2, &account_id, &mailbox, uid, raw, cached).0).await
+    blocking(move || crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw.to_vec(), in_vault).0.into()).await
 }
 
 /// `Ok(None)`: the vault verifiably does not hold the uid. An unreachable
@@ -126,19 +245,22 @@ async fn from_vault(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, u
     .and_then(|r| r)
 }
 
-/// The Message-ID the header cache lists for `uid`; `None` when it lists no
-/// row, the row carries no id, or the store is closed (no proof either way).
-async fn listed_message_id(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Option<String> {
+/// The Message-ID the header cache lists for `uid`. `Ok(None)`: it lists no
+/// row, or the row carries no id (no proof either way: let through). `Err`:
+/// the store could not be read.
+async fn listed_message_id(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<String>, String> {
     let state = Arc::clone(state);
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     let rows = blocking(move || {
         crate::custody::with_conn(&state, |c| mailvault_core::custody::cache::load_by_uids(c, &account_id, &mailbox, &[uid]))
     })
     .await
-    .ok()?
-    .ok()?;
-    let row = rows.into_iter().next()?;
-    row.get("messageId").or_else(|| row.get("message_id")).and_then(Value::as_str).map(str::to_string)
+    .and_then(|r| r)
+    .map_err(|e| format!("Message UID {uid} could not be checked against the folder's listing: {e}"))?;
+    Ok(rows
+        .into_iter()
+        .next()
+        .and_then(|row| row.get("messageId").or_else(|| row.get("message_id")).and_then(Value::as_str).map(str::to_string)))
 }
 
 /// The whole message from the server. `Ok(None)`: the server proved the uid
@@ -164,6 +286,39 @@ async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
     }
 }
 
+/// Removes attachment-cache files written before `older_than` whose message
+/// has neither a vault `.eml` (a verified miss) nor an in-memory copy. Parts
+/// of a vault-held message stay (the eviction worker removes those with the
+/// `.eml`); these are On Demand's, which no eviction ever reaches. Any doubt
+/// (vault unreachable, header cache unreadable, folder unverified) keeps the
+/// file. Returns how many it removed.
+pub(crate) async fn prune_attachment_cache(state: &Arc<DaemonState>, older_than: std::time::SystemTime) -> usize {
+    let state = Arc::clone(state);
+    blocking(move || {
+        let Ok(root) = vault_root(&state) else { return 0 };
+        let mailboxes = match crate::custody::with_conn(&state, |c| mailvault_core::custody::cache::mailboxes_with_headers(c, None)) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("[raw] attachment cache not pruned: header cache unreadable: {e}");
+                return 0;
+            }
+        };
+        let stale = vault_files::stale_attachment_cache_files(&root.join("attachment_cache"), &mailboxes, older_than, &mut |a, m, uid| {
+            state.raw_messages.holds(a, m, uid) || state.vault_registry.resolve(&root, a, m, uid) != Some(None)
+        });
+        let removed = stale
+            .iter()
+            .filter(|path| with_vault_write(&state, |_| std::fs::remove_file(path).map_err(|e| e.to_string())).is_ok())
+            .count();
+        if removed > 0 {
+            info!("[raw] removed {removed} attachment cache file(s) of messages kept nowhere on this computer");
+        }
+        removed
+    })
+    .await
+    .unwrap_or(0)
+}
+
 #[cfg(not(test))]
 async fn account_config(_state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
     crate::credentials::resolve_account_credentials_guarded(account_id).await
@@ -184,6 +339,7 @@ mod tests {
     use mock_imap::{MockImap, Scenario};
     use serde_json::json;
     use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
 
     const PDF: &[u8] = b"%PDF-1.4 server copy";
 
@@ -446,6 +602,160 @@ mod tests {
 
         assert_eq!(r.error.expect("no copy").message, "Email UID 1 not found");
         assert_eq!(server.connection_count(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── fix round 1 ──
+
+    fn stalling(scenario: Scenario, needle: &str) -> Scenario {
+        scenario.fault(mock_imap::scenario::Trigger::with("FETCH", needle), mock_imap::scenario::Action::StallMidResponse(0))
+    }
+
+    /// A read the vault or memory can answer never waits on another
+    /// message's download, however long that one takes.
+    #[tokio::test]
+    async fn a_memory_hit_never_waits_behind_another_messages_download() {
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(Message::new(1, raw_with_attachment("<r1@example.com>")));
+        let server = MockImap::start(stalling(Scenario::new().mailbox(inbox), "1 (UID"));
+        let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
+        s.raw_messages.remember("acc1", "INBOX", 2, raw_with_attachment("<r2@example.com>").into_bytes());
+
+        let blocked = {
+            let s = Arc::clone(&s);
+            tokio::spawn(async move { call(&s, "maildir_read_attachment", attachment(1)).await })
+        };
+        // Let the download of uid 1 take its lock and stall on the FETCH.
+        for _ in 0..100 {
+            if fetches(&server) > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(fetches(&server), 1, "uid 1's download is in flight");
+
+        let hit = tokio::time::timeout(Duration::from_secs(5), call(&s, "maildir_read_attachment", attachment(2))).await;
+
+        assert_eq!(hit.expect("uid 2 must not wait on uid 1").result, Some(b64(PDF)));
+        assert!(!blocked.is_finished(), "uid 1 is still stalled: the hit really overlapped it");
+        blocked.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The mount-time "already cached?" probe never dials the server (nor
+    /// reads the keychain): no local copy is simply "not cached".
+    #[tokio::test]
+    async fn cached_attachment_path_with_no_local_copy_never_dials_the_server() {
+        let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+        let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
+
+        let r = call(&s, "cached_attachment_path", attachment(1)).await;
+
+        assert_eq!(r.result, Some(Value::Null), "{:?}", r.error);
+        assert_eq!(server.connection_count(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A download that just failed is not retried by the reads queued behind
+    /// it, nor by the app's own retries a moment later.
+    #[tokio::test]
+    async fn a_read_after_a_failed_download_fails_without_dialling_again() {
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(Message::new(1, raw_with_attachment("<r1@example.com>")));
+        let scenario = Scenario::new()
+            .mailbox(inbox)
+            .fault(mock_imap::scenario::Trigger::with("FETCH", "BODY.PEEK[]"), mock_imap::scenario::Action::Respond("NO".into(), "try later".into()));
+        let server = MockImap::start(scenario);
+        let (dir, s) = state("keepRecent", Some(&server), "<r1@example.com>");
+
+        let (a, b) = tokio::join!(call(&s, "maildir_read_attachment", attachment(1)), call(&s, "maildir_read_attachment", attachment(1)));
+        let (fetched, dialled) = (fetches(&server), server.connection_count());
+        let c = call(&s, "maildir_read_raw_source", attachment(1)).await;
+
+        for r in [a, b, c] {
+            assert_eq!(r.error.expect("no copy").message, "Email UID 1 not found");
+        }
+        assert!(fetched >= 1, "the first read did ask the server");
+        assert_eq!((fetches(&server), server.connection_count()), (fetched, dialled), "the later reads did not");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A server that accepts the FETCH and goes quiet answers the existing
+    /// error within the daemon's own bound, not the app's reply budget.
+    #[tokio::test]
+    async fn a_stalled_server_answers_the_existing_error_within_the_daemons_bound() {
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(Message::new(1, raw_with_attachment("<r1@example.com>")));
+        let server = MockImap::start(stalling(Scenario::new().mailbox(inbox), "BODY.PEEK[]"));
+        let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
+        *s.raw_messages.bound.lock().unwrap() = Duration::from_millis(500);
+
+        let started = Instant::now();
+        let r = tokio::time::timeout(Duration::from_secs(10), call(&s, "maildir_read_attachment", attachment(1)))
+            .await
+            .expect("bounded by the daemon");
+
+        assert_eq!(r.error.expect("no copy").message, "Email UID 1 not found");
+        assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A header cache that cannot be read proves nothing: the bytes are
+    /// neither shown nor written.
+    #[tokio::test]
+    async fn an_unreadable_header_cache_refuses_the_servers_copy_and_writes_nothing() {
+        let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+        let (dir, s) = state("keepRecent", Some(&server), "<r1@example.com>");
+        *mailvault_core::custody::lock(&s.custody.db) = None;
+
+        let r = call(&s, "maildir_read_attachment", attachment(1)).await;
+
+        let err = r.error.expect("refused").message;
+        assert!(err.contains("could not be checked"), "{err}");
+        assert!(vault_files_of(&dir).is_empty(), "nothing unverified is written");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A folder that exists only on this computer is never asked of the server.
+    #[tokio::test]
+    async fn a_local_only_mailbox_never_falls_back_to_the_server() {
+        let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+        let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
+
+        let r = call(&s, "maildir_read_raw_source", json!({"accountId": "acc1", "mailbox": "Scheduled", "uid": 1})).await;
+
+        assert_eq!(r.error.expect("no copy").message, "Email UID 1 not found");
+        assert_eq!(server.connection_count(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Parts extracted for a message kept nowhere on this computer are
+    /// removed; those of a vault-held or in-memory message stay.
+    #[tokio::test]
+    async fn the_attachment_cache_prune_removes_only_parts_of_messages_kept_nowhere() {
+        let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+        let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
+        // uid 1: extracted from the server's copy, which memory now holds.
+        let in_memory = call(&s, "cache_attachment", attachment(1)).await.result.expect("cached");
+        // uid 7: a vault message's part.
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(raw_with_attachment("<r7@example.com>"));
+        call(&s, "maildir_store", json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": raw_b64, "flags": []}))
+            .await
+            .result
+            .expect("stored");
+        let cache = dir.join("attachment_cache");
+        let (vault_part, orphan) = (cache.join("acc1_INBOX_7_0_kept.pdf"), cache.join("acc1_INBOX_5_0_gone.pdf"));
+        std::fs::write(&vault_part, PDF).unwrap();
+        std::fs::write(&orphan, PDF).unwrap();
+        let later = std::time::SystemTime::now() + Duration::from_secs(60);
+
+        assert_eq!(prune_attachment_cache(&s, std::time::UNIX_EPOCH).await, 0, "nothing is a day old yet");
+        let removed = prune_attachment_cache(&s, later).await;
+
+        assert_eq!(removed, 1);
+        assert!(!orphan.exists(), "uid 5 is kept nowhere");
+        assert!(vault_part.exists(), "uid 7 is in the vault");
+        assert!(Path::new(in_memory.as_str().unwrap()).exists(), "uid 1 is in memory");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

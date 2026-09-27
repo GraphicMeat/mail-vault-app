@@ -92,6 +92,9 @@ async fn run(state: Arc<DaemonState>) {
             _ = tokio::time::sleep(wait) => {}
         }
         wait = PASS_EVERY;
+        // Needs no network: parts extracted for On Demand messages kept
+        // nowhere on this computer, a day after they were written.
+        crate::raw_message::prune_attachment_cache(&state, std::time::SystemTime::now() - Duration::from_secs(24 * 60 * 60)).await;
         // Offline every listing would fail anyway; a blocked keychain would
         // fail every credential read. The credential reads themselves never
         // prompt (`resolve_account_credentials_quiet`).

@@ -32,7 +32,7 @@ async fn with_message<T: Send + 'static>(
     mailbox: &str,
     uid: u32,
     readable: bool,
-    f: impl FnOnce(Vec<u8>) -> Result<T, String> + Send + 'static,
+    f: impl FnOnce(Arc<[u8]>) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     let raw = crate::raw_message::raw_message(state, account_id, mailbox, uid, readable).await?;
     blocking(move || f(raw)).await.and_then(|r| r)
@@ -258,16 +258,25 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
+            // The attachment bar's mount-time probe, one per row: vault and
+            // memory only (`local_message`), never the server or the
+            // keychain. No copy here is "not cached yet"; the click path
+            // (`cache_attachment`) is what downloads.
             let state2 = Arc::clone(state);
-            let (a, m) = (account_id.clone(), mailbox.clone());
+            let local = match crate::raw_message::local_message(state, &account_id, &mailbox, uid, true).await {
+                Ok(local) => local,
+                Err(e) => return Some(done(id, Err(e))),
+            };
+            let Some(raw) = local else { return Some(done(id, Ok(Value::Null))) };
             done(
                 id,
-                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state2)?;
-                    let path = vault_files::cached_attachment_path(&root, &raw, &a, &m, uid, index)?;
+                    let path = vault_files::cached_attachment_path(&root, &raw, &account_id, &mailbox, uid, index)?;
                     serde_json::to_value(path).map_err(|e| e.to_string())
                 })
-                .await,
+                .await
+                .and_then(|r| r),
             )
         }
         // Reads the .eml and writes N files OUTSIDE the vault (a folder the

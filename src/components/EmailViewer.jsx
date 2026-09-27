@@ -251,7 +251,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
 
   const handleExport = async () => {
     if (!selectedEmail) return;
-    const exported = await exportEmail(selectedEmail.uid);
+    const exported = await exportEmail(selectedEmail.uid, selectedEmail.subject);
     if (!exported) return;
 
     try {

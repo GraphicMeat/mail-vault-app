@@ -2756,7 +2756,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
 
         "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
         | "maildir_read" | "maildir_read_light" | "maildir_exists" | "maildir_store" | "maildir_delete"
-        | "maildir_delete_many" | "maildir_set_flags"
+        | "maildir_delete_many" | "maildir_set_flags" | "cached_attachment_path"
         | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
         | "list_cached_uids" | "header_cache_month_histogram" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
         | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
@@ -2765,11 +2765,16 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "maildir_orphan_stats" | "mail_search_start" | "mail_search_cancel" | "vault_rebind_uids" => Some(Duration::from_secs(30)),
 
         // H3c: a message the vault has no copy of is downloaded by these
-        // (`raw_message`): the daemon's own 45s body timeout, possibly after
-        // another message's fallback holding the one-at-a-time lock. A 30s
-        // budget would turn a slow server into a failed attachment.
-        "maildir_read_attachment" | "maildir_read_attachments" | "maildir_read_raw_source" | "cache_attachment"
-        | "cached_attachment_path" => Some(Duration::from_secs(120)),
+        // (`raw_message`). The daemon bounds its whole fallback at 60s
+        // (`FALLBACK_BOUND`: this message's lock, keychain, connect, the 45s
+        // body fetch, the cache write) and then answers the vault's error;
+        // 75s leaves room for the parse after a download that just made it.
+        // A vault hit answers in milliseconds, so the width is only ever
+        // spent on a real download. `cached_attachment_path` never
+        // downloads and stays in the 30s family above.
+        "maildir_read_attachment" | "maildir_read_attachments" | "maildir_read_raw_source" | "cache_attachment" => {
+            Some(Duration::from_secs(75))
+        }
 
         // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
         // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
@@ -4338,7 +4343,7 @@ mod tests {
     fn reply_timeout_gives_every_phase_2_thirty_second_method_thirty_seconds() {
         for method in [
             "maildir_read", "maildir_read_light", "maildir_exists", "maildir_store", "maildir_delete",
-            "maildir_delete_many", "maildir_set_flags",
+            "maildir_delete_many", "maildir_set_flags", "cached_attachment_path",
             "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
             "list_cached_uids", "header_cache_month_histogram", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
             "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
@@ -4353,8 +4358,9 @@ mod tests {
     /// H3c: these can download the message when the vault has no copy.
     #[test]
     fn reply_timeout_outlasts_the_daemons_body_fetch_for_whole_message_reads() {
-        for method in ["maildir_read_attachment", "maildir_read_attachments", "maildir_read_raw_source", "cache_attachment", "cached_attachment_path"] {
-            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
+        // Above the daemon's 60s FALLBACK_BOUND (src-daemon/src/raw_message.rs).
+        for method in ["maildir_read_attachment", "maildir_read_attachments", "maildir_read_raw_source", "cache_attachment"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(75)), "method={method}");
         }
     }
 

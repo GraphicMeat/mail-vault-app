@@ -578,7 +578,9 @@ export async function getVaultUidSets(accountId, mailbox) {
   }
 }
 
-export async function exportEmail(localId) {
+// `subject`: the row's, for the file name when the vault holds no light row
+// (a message it has no copy of: the raw source then comes from the server).
+export async function exportEmail(localId, subject) {
   await initDB();
   const parsed = parseLocalId(localId);
   if (!parsed || !invoke) return null;
@@ -601,7 +603,7 @@ export async function exportEmail(localId) {
     if (!rawBase64) return null;
 
     return {
-      filename: `${(email?.subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
+      filename: `${(email?.subject || subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
       content: atob(rawBase64),
       rawBase64,
       mimeType: 'message/rfc822'

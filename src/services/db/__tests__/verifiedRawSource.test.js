@@ -100,6 +100,13 @@ describe('exportEmail', () => {
     expect(out?.filename).toMatch(/\.eml$/);
   });
 
+  it('names the file after the row subject when the vault holds no light row', async () => {
+    const raw = rawWith(ROW_ID);
+    mockInvoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_raw_source' ? raw : null));
+
+    expect((await exportEmail(LOCAL_ID, 'Quarterly report'))?.filename).toBe('Quarterly_report.eml');
+  });
+
   it('names the file after the subject when the vault has the message', async () => {
     const raw = rawWith(ROW_ID);
     mockInvoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_raw_source' ? raw : { subject: 'Hello there' }));

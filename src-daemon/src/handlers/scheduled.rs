@@ -31,7 +31,7 @@ macro_rules! req {
 /// The mailbox every frozen schedule lives in — one name, not a param: it is
 /// an implementation detail of how this app stores its own drafts, not
 /// something the caller chooses.
-const MAILBOX: &str = "Scheduled";
+pub(crate) const MAILBOX: &str = "Scheduled";
 const DRAFT_FLAGS: [&str; 3] = ["archived", "seen", "draft"];
 /// What `update` answers when an edit arrives for a row that is no longer
 /// waiting, and `cancel` for a row being or already sent. The app maps the

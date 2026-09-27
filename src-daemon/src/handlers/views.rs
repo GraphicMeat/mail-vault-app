@@ -123,7 +123,7 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             json_of(mailvault_core::vault_files::export_many_attachments(
                 &messages,
                 std::path::Path::new(dest_dir),
-                &mut |account_id, mailbox, uid| handle.block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true)),
+                &mut |account_id, mailbox, uid| handle.block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true)).map(|raw| raw.to_vec()),
             )?)
         }
         "views.counts" => {

@@ -1746,7 +1746,7 @@ export async function markEmailReadStatus(uid, read) {
 
 // ── exportEmail workflow ──
 
-export async function exportEmail(uid) {
+export async function exportEmail(uid, subject) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -1756,7 +1756,7 @@ export async function exportEmail(uid) {
   const accountId = unified?.accountId || state.activeAccountId;
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
   const localId = `${accountId}-${mailbox}-${uid}`;
-  return db.exportEmail(localId);
+  return db.exportEmail(localId, subject);
 }
 
 

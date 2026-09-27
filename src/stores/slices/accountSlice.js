@@ -158,7 +158,7 @@ export const createAccountSlice = (set, get) => ({
   removeLocalEmails: (targets) => _removeLocalEmails(targets),
   deleteEmailFromServer: (uid, opts) => _deleteEmailFromServer(uid, opts),
   markEmailReadStatus: (uid, read) => _markEmailReadStatus(uid, read),
-  exportEmail: (uid) => _exportEmail(uid),
+  exportEmail: (uid, subject) => _exportEmail(uid, subject),
 
   setTotalUnreadCount: (count) => set({ totalUnreadCount: count }),
 

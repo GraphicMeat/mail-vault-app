@@ -1059,6 +1059,41 @@ pub fn cached_attachment_path(root: &Path, raw: &[u8], account_id: &str, mailbox
         .map(|p| p.to_string_lossy().to_string()))
 }
 
+/// Attachment-cache files last written before `older_than` whose message
+/// `keep` does not claim. The cache outlives nothing on its own: an On Demand
+/// message has no vault `.eml` whose eviction would take its parts along.
+///
+/// A file is placed by its name (`attachment_cache_path`:
+/// `{account}_{mailbox}_{uid}_{index}_{leaf}`, both `fs_safe`) against
+/// `mailboxes`, the longest matching prefix winning. A file no listed mailbox
+/// places, whose name does not parse, or whose age cannot be read is kept.
+pub fn stale_attachment_cache_files(
+    cache_dir: &Path,
+    mailboxes: &[(String, String)],
+    older_than: std::time::SystemTime,
+    keep: &mut dyn FnMut(&str, &str, u32) -> bool,
+) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(cache_dir) else { return Vec::new() };
+    let prefixes: Vec<(String, &str, &str)> =
+        mailboxes.iter().map(|(a, m)| (format!("{}_{}_", fs_safe(a), fs_safe(m)), a.as_str(), m.as_str())).collect();
+    let mut stale = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((prefix, account, mailbox)) = prefixes.iter().filter(|(p, _, _)| name.starts_with(p.as_str())).max_by_key(|(p, _, _)| p.len()) else {
+            continue;
+        };
+        let mut rest = name[prefix.len()..].splitn(3, '_');
+        let (Some(Ok(uid)), Some(Ok(_index)), Some(_leaf)) = (rest.next().map(str::parse::<u32>), rest.next().map(str::parse::<usize>), rest.next()) else {
+            continue;
+        };
+        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < older_than);
+        if old && entry.file_type().is_ok_and(|t| t.is_file()) && !keep(account, mailbox, uid) {
+            stale.push(entry.path());
+        }
+    }
+    stale
+}
+
 /// What `export_attachments` wrote: the folder it created, and the file names
 /// inside it (already de-duplicated, so they are what is on disk).
 #[derive(Debug, Serialize, Deserialize)]
@@ -1835,6 +1870,35 @@ R0lGODlhAQABAAAAACw=\r\n\
 
         let missing = read_attachments(&reg, root.path(), "acct", "INBOX", 8, &[0]).unwrap_err();
         assert_eq!(missing, "Email UID 8 not found");
+    }
+
+    #[test]
+    fn stale_attachment_cache_files_are_the_old_unclaimed_ones_of_a_listed_mailbox() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["acct_INBOX_5_0_a.pdf", "acct_INBOX_7_0_b.pdf", "acct_Sent_5_1_c.pdf", "other_INBOX_5_0_d.pdf", "acct_INBOX_x_0_e.pdf", "junk.txt"] {
+            fs::write(dir.path().join(name), b"x").unwrap();
+        }
+        let mailboxes = [("acct".to_string(), "INBOX".to_string()), ("acct".to_string(), "Sent".to_string())];
+        let mut asked = Vec::new();
+        let mut keep = |a: &str, m: &str, uid: u32| {
+            asked.push(format!("{a}/{m}/{uid}"));
+            uid == 7
+        };
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+
+        let mut stale: Vec<String> = stale_attachment_cache_files(dir.path(), &mailboxes, later, &mut keep)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        stale.sort();
+
+        // uid 7 is claimed; `other` is no listed account; `x` is no uid; junk has no place.
+        assert_eq!(stale, vec!["acct_INBOX_5_0_a.pdf".to_string(), "acct_Sent_5_1_c.pdf".to_string()]);
+        asked.sort();
+        assert_eq!(asked, vec!["acct/INBOX/5", "acct/INBOX/7", "acct/Sent/5"]);
+        // Nothing is older than the epoch.
+        assert!(stale_attachment_cache_files(dir.path(), &mailboxes, std::time::UNIX_EPOCH, &mut |_, _, _| false).is_empty());
+        assert!(stale_attachment_cache_files(&dir.path().join("missing"), &mailboxes, later, &mut |_, _, _| false).is_empty());
     }
 
     #[test]
