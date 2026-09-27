@@ -33,7 +33,7 @@ jobs:
 
       - name: Publish to edge
         env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS_EDGE }}
         run: |
           for snap in snaps/*.snap; do
             snapcraft upload "$snap" --release=edge
