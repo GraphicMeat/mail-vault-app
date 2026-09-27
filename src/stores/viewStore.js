@@ -78,7 +78,7 @@ export function viewLimitReached(views, premium) {
 /// The folders of one account, and which of them are its bin, junk and
 /// archive. A folder's name is a per-mailbox word, so "not the bin" is only
 /// answerable here, never in the daemon.
-function accountPayload(account, mail) {
+export function accountPayload(account, mail) {
   const tree = getAccountCacheMailboxes(account.id)
     || (account.id === mail.activeAccountId ? mail.mailboxes : [])
     || [];

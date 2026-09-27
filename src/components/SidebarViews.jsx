@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, ChevronRight, ChevronDown, StickyNote } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n/index.js';
@@ -11,7 +11,10 @@ import { ViewIcon } from './ViewIcon';
 /// Nothing here edits a view, and no row carries a way to: views are edited on
 /// the Views page in Settings, where the builder can show what a change would
 /// find before it is saved. A row only opens its view.
-export function SidebarViews({ collapsed = false, onOpenSettings }) {
+///
+/// Notes to Self sits above them as a fixed entry: it is not a saved view and
+/// cannot be edited, folded away or deleted.
+export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, notesOpen = false }) {
   const t = useT();
   const views = useViewStore(state => state.views);
   const counts = useViewStore(state => state.counts);
@@ -45,11 +48,20 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
     </button>;
   };
 
+  const notesEntry = <button type="button" data-testid="open-notes"
+    className={`sidebar-view-row${notesOpen ? ' is-active' : ''}`}
+    aria-current={notesOpen ? 'page' : undefined}
+    aria-label={collapsed ? t('notes.title') : undefined}
+    title={t('notes.title')} onClick={() => onOpenNotes?.()}>
+    <StickyNote size={collapsed ? 18 : 14} aria-hidden="true" />
+    {!collapsed && <span className="sidebar-view-name">{t('notes.title')}</span>}
+  </button>;
+
   if (collapsed) {
-    if (!views?.length) return null;
     return <div className="sidebar-collapsed-views w-full py-2 border-b border-mail-border flex flex-col items-center gap-1"
       aria-label={t('views.section')}>
-      {views.map(row)}
+      {notesEntry}
+      {views?.map(row)}
     </div>;
   }
 
@@ -71,6 +83,8 @@ export function SidebarViews({ collapsed = false, onOpenSettings }) {
         <Plus size={14} />
       </button>
     </div>
+    {/* Not in .sidebar-view-list: every button there is a saved view. */}
+    <div className="sidebar-notes-entry flex flex-col pb-0.5">{notesEntry}</div>
     {!folded && <>
       <div className="sidebar-view-list">
         {views.map(row)}

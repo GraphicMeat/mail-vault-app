@@ -105,11 +105,12 @@ describe('the Views section', () => {
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
     // Rows have no edit action; the shared Edit button sits beside +.
     expect(screen.getAllByRole('button').map(b => b.dataset.testid).sort())
-      .toEqual(['view-edit', 'view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
+      .toEqual(['open-notes', 'view-edit', 'view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
     unmount();
     render(<SidebarViews collapsed onOpenSettings={vi.fn()} />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    // The two views, and the fixed Notes to Self entry above them.
+    expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 
   /// The + is the accounts + : it makes one, rather than only showing the
@@ -143,5 +144,37 @@ describe('the Views section', () => {
     render(<SidebarViews />);
     expect(screen.queryByTestId('view-row-v1')).toBeNull();
     expect(screen.getByTestId('views-fold').getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('the Notes to Self entry', () => {
+  /// A fixed entry, not a saved view: it sits above the views, wide or
+  /// collapsed, and stays when the list is folded or empty.
+  it('sits above the saved views and opens the board', () => {
+    const onOpenNotes = vi.fn();
+    render(<SidebarViews onOpenNotes={onOpenNotes} />);
+    const rows = [...document.querySelectorAll('[data-testid="open-notes"], [data-testid^="view-row-"]')].map(el => el.dataset.testid);
+    expect(rows[0]).toBe('open-notes');
+    expect(screen.getByTestId('open-notes').textContent).toContain('notes.title');
+    fireEvent.click(screen.getByTestId('open-notes'));
+    expect(onOpenNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks itself as the page on screen while the board is open', () => {
+    const { unmount } = render(<SidebarViews />);
+    expect(screen.getByTestId('open-notes').getAttribute('aria-current')).toBeNull();
+    unmount();
+    render(<SidebarViews notesOpen />);
+    expect(screen.getByTestId('open-notes').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('stays when the views are folded away or there are none, collapsed too', () => {
+    useSettingsStoreMock.setState({ viewsSectionCollapsed: true });
+    const { unmount } = render(<SidebarViews />);
+    expect(screen.getByTestId('open-notes')).toBeTruthy();
+    unmount();
+    useViewStoreMock.setState({ views: [] });
+    render(<SidebarViews collapsed />);
+    expect(screen.getByTestId('open-notes').getAttribute('aria-label')).toBe('notes.title');
   });
 });

@@ -5,6 +5,7 @@ import { initSnooze } from './stores/snoozeStore';
 import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
+import { useNotesStore } from './stores/notesStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
 import * as selectionWorkflow from './services/workflows/selectEmail';
 import { useAccountStore } from './stores/accountStore';
@@ -101,6 +102,7 @@ import { formatCount } from './utils/formatCount';
 // message list can paint — ComposeModal alone drags in TipTap and ProseMirror.
 // Each one is warmed at idle below, so the first click still opens instantly.
 const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
+const NotesBoard = lazy(() => import('./components/notes/NotesBoard'));
 const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
 
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
@@ -177,6 +179,10 @@ const debugLog = (...args) => {
 function App() {
   const t = useT();
   const insightsOpen = useInsightsStore(s => s.isOpen);
+  const notesOpen = useNotesStore(s => s.isOpen);
+  // Insights and Notes to Self are full pages over the mail view, one at a
+  // time; they share the reader scope that puts the open message back.
+  const overlayOpen = insightsOpen || notesOpen;
   const insightsReaderScope = useRef(null);
   if (!insightsReaderScope.current) insightsReaderScope.current = createInsightsReaderScope(useMailStore, {
     cancelSelection: () => selectionWorkflow.cancelInsightsSelection?.(),
@@ -185,6 +191,7 @@ function App() {
   const openInsights = useCallback(() => {
     if (useInsightsStore.getState().isOpen) return;
     insightsReaderScope.current.enter();
+    if (useNotesStore.getState().isOpen) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
     void useInsightsStore.getState().openInsights();
   }, []);
   const closeInsights = useCallback(() => {
@@ -192,13 +199,27 @@ function App() {
     void insightsReaderScope.current.exit();
     requestAnimationFrame(() => document.querySelector('[data-testid="open-insights"]')?.focus());
   }, []);
+  const openNotes = useCallback(() => {
+    if (useNotesStore.getState().isOpen) return;
+    insightsReaderScope.current.enter();
+    if (useInsightsStore.getState().isOpen) useInsightsStore.getState().closeInsights();
+    void useNotesStore.getState().open();
+  }, []);
+  const closeNotes = useCallback(() => {
+    selectionWorkflow.cancelInsightsSelection?.();
+    useNotesStore.getState().close();
+    void insightsReaderScope.current.exit();
+    requestAnimationFrame(() => document.querySelector('[data-testid="open-notes"]')?.focus());
+  }, []);
   const openMailFromSidebar = useCallback(() => {
     insightsReaderScope.current.cancelRestore();
-    if (!useInsightsStore.getState().isOpen) return;
-    useInsightsStore.getState().closeInsights();
+    const insights = useInsightsStore.getState().isOpen, notes = useNotesStore.getState().isOpen;
+    if (!insights && !notes) return;
+    if (insights) useInsightsStore.getState().closeInsights();
+    if (notes) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
     void insightsReaderScope.current.exit({restoreSelection:false});
   }, []);
-  useEffect(() => () => useInsightsStore.getState().resetSession(), []);
+  useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); }, []);
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -692,6 +713,12 @@ function App() {
         else closeInsights();
         return;
       }
+      if (notesOpen && !composeState && !showSettings && !showShortcutsModal) {
+        const notes = useNotesStore.getState();
+        if (notes.detailOpen) { selectionWorkflow.cancelInsightsSelection?.(); notes.setDetailOpen(false); }
+        else closeNotes();
+        return;
+      }
       const {
         selectedEmailIds, clearSelection, bulkModalOpen, bulkSession, endBulkSession,
       } = useMailStore.getState();
@@ -732,7 +759,7 @@ function App() {
       const keys = selectedEmailIds.size > 0 ? [...selectedEmailIds] : selectedEmailId ? [selectedEmailId] : [];
       if (keys.length) setSnoozeKeys(keys);
     },
-  }, { allowedActions: insightsOpen ? INSIGHTS_SHORTCUTS : null });
+  }, { allowedActions: overlayOpen ? INSIGHTS_SHORTCUTS : null });
 
   // Handle resize for email list pane
   const handleListResize = useCallback((position) => {
@@ -1317,8 +1344,10 @@ function App() {
           onReportBug={handleReportBug}
           onReferFriend={handleReferFriend}
           onOpenInsights={openInsights}
+          onOpenNotes={openNotes}
           onOpenMail={openMailFromSidebar}
           insightsOpen={insightsOpen}
+          notesOpen={notesOpen}
         />
       </div>
 
@@ -1332,10 +1361,10 @@ function App() {
           sidebar off-screen. */}
       <div
         ref={mainContainerRef}
-        hidden={insightsOpen}
-        inert={insightsOpen ? '' : undefined}
-        style={insightsOpen ? {display:'none'} : undefined}
-        aria-hidden={insightsOpen || undefined}
+        hidden={overlayOpen}
+        inert={overlayOpen ? '' : undefined}
+        style={overlayOpen ? {display:'none'} : undefined}
+        aria-hidden={overlayOpen || undefined}
         className={`flex-1 flex min-w-0 min-h-0 ${layoutMode === 'two-column' ? 'flex-col' : 'flex-row'}`}
       >
         {viewStyle === 'chat' ? (
@@ -1365,7 +1394,7 @@ function App() {
                   className="flex-1 min-h-0 min-w-0 flex flex-col"
                   style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: MIN_VIEWER_HEIGHT }}
                 >
-                  {!insightsOpen && <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />}
+                  {!overlayOpen && <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />}
                 </div>
               </>
             )}
@@ -1375,6 +1404,9 @@ function App() {
 
       {insightsOpen && <ChunkErrorBoundary name="Insights"><Suspense fallback={<div className="flex-1 bg-mail-bg" />}>
         <InsightsPage onClose={closeInsights} onComposeReply={(mode, email) => setComposeState({mode,replyTo:email})} />
+      </Suspense></ChunkErrorBoundary>}
+      {notesOpen && <ChunkErrorBoundary name="Notes to Self"><Suspense fallback={<div className="flex-1 bg-mail-bg" />}>
+        <NotesBoard onClose={closeNotes} onComposeReply={(mode, email) => setComposeState({mode,replyTo:email})} />
       </Suspense></ChunkErrorBoundary>}
 
       <ChunkErrorBoundary name="Add account">
@@ -1514,7 +1546,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      {!insightsOpen && <SelectionActionBar />}
+      {!overlayOpen && <SelectionActionBar />}
       <BulkSaveProgress />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
       <SearchIndexReindexPrompt />

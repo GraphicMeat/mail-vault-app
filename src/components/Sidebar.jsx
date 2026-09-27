@@ -515,8 +515,11 @@ function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow
   </Popover>;
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenMail, insightsOpen = false }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenNotes, onOpenMail, insightsOpen = false, notesOpen = false }) {
   const t = useT();
+  // Either full page hides the mail view, so neither leaves a folder or an
+  // account looking selected.
+  const mailHidden = insightsOpen || notesOpen;
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   // A view and a folder are two lists, and only one of them is on screen. The
@@ -942,7 +945,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               data-testid="all-inboxes-btn"
               onClick={() => { onOpenMail?.(); setUnifiedInbox(true); }}
               className={`p-2 rounded-lg transition-all
-                         ${unifiedInbox && !insightsOpen
+                         ${unifiedInbox && !mailHidden
                            ? 'bg-mail-accent/10 text-mail-accent-text'
                            : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
               title={t('sidebar.allInboxes')}
@@ -973,7 +976,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Account icons */}
-        <SidebarViews collapsed onOpenSettings={onOpenSettings} />
+        <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} notesOpen={notesOpen} />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
@@ -997,7 +1000,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   openMailFolder(account.id, lastMailbox || 'INBOX');
                 }}
                 onOpenBackup={onOpenBackup}
-                insightsOpen={insightsOpen}
+                insightsOpen={mailHidden}
               />
             </div>
           ))}
@@ -1104,8 +1107,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   };
   const useSwitcher = sidebarLayout === 'switcher';
   const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
-    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !insightsOpen && !activeViewId ? 'true' : undefined}
-      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !insightsOpen && !activeViewId ? 'sidebar-account-selected' : ''}`}
+    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !mailHidden && !activeViewId ? 'true' : undefined}
+      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !mailHidden && !activeViewId ? 'sidebar-account-selected' : ''}`}
       onClick={() => {
         if (chooser) closeChooser();
         if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
@@ -1125,7 +1128,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         isActive={account.id === activeAccountId && !activeViewId} color={getAccountColor(accountColors, account)}
         initial={getAccountInitial(account, displayNames[account.id])} unifiedInbox={unifiedInbox}
         connectionStatus={connectionStatus} unreadCount={unreadPerAccount[account.id] || 0}
-        insightsOpen={insightsOpen}
+        insightsOpen={mailHidden}
         onActivateInbox={() => { if (chooser) closeChooser(); activateInbox(account.id); }}
         onActivate={() => {
           if (chooser) closeChooser();
@@ -1212,7 +1215,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
           )}
         </button>
-        <SidebarViews onOpenSettings={onOpenSettings} />
+        <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} notesOpen={notesOpen} />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>

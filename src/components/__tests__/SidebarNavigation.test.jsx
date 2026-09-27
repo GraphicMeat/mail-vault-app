@@ -46,6 +46,15 @@ describe('Sidebar navigation', () => {
     expect(screen.getByTestId('open-insights').getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('button', { name: 'Design studio, studio@example.com' }).getAttribute('aria-current')).toBeNull();
   });
+  it('makes Notes to Self the only selected navigation entry while open', () => {
+    const onOpenNotes = vi.fn();
+    render(<Sidebar notesOpen onOpenNotes={onOpenNotes} />);
+    expect(screen.getByTestId('open-notes').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('open-insights').getAttribute('aria-current')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Design studio, studio@example.com' }).getAttribute('aria-current')).toBeNull();
+    fireEvent.click(screen.getByTestId('open-notes'));
+    expect(onOpenNotes).toHaveBeenCalledTimes(1);
+  });
   it('does not visually select collapsed All Inboxes while Insights is open', () => {
     useSettingsStore.setState({ sidebarCollapsed: true });
     useMailStore.setState({ unifiedInbox: true });
