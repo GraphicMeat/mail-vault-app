@@ -342,7 +342,7 @@ export function padEmptyLines(html) {
   return doc.body.innerHTML;
 }
 
-export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
+export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, onCreate }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const [card, setCard] = useState(null);          // hovered link: { a, href, top, left }
@@ -358,6 +358,10 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     immediatelyRender: false,
     extensions: editorExtensions(placeholder),
     content,
+    // Fires once the instance above is actually built (never during render —
+    // see the immediatelyRender note above). Reply/replyAll use this to put
+    // the caret in the body instead of the To field (ComposeModal).
+    onCreate,
     onUpdate: ({ editor }) => {
       setCard(null);
       onUpdate(padEmptyLines(editor.getHTML()));

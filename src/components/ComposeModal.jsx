@@ -32,7 +32,7 @@ import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 
 // Recipient input row with inline autocomplete + contacts-popover button.
-function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId }) {
+function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
   const inputRef = useRef(null);
   return (
     <div className="flex items-center gap-2 relative">
@@ -43,7 +43,7 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
           type="text"
           name={name}
           data-testid={testid}
-          data-autofocus={name === 'to' ? true : undefined}
+          data-autofocus={autoFocus ? true : undefined}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
@@ -96,6 +96,23 @@ function originalHtml(message, label) {
   return header + (message.html || textToHtml(message.text || ''));
 }
 
+// The quote toggle and the full-thread context panel, both built from
+// `replyTo`'s body. Shared by the initializer and by the effect that fills
+// them in once a radial reply's body resolves after compose already opened
+// on the header alone (RowQuickActions.jsx, src/utils/replyTarget.js).
+function buildQuoteBlocks(replyTo, label) {
+  const fullQuotedHtml = originalHtml(replyTo, label);
+  const quotedHeaderHtml = fullQuotedHtml.slice(0, fullQuotedHtml.indexOf('</p>') + 4);
+  const fullQuotedBodyHtml = fullQuotedHtml.slice(quotedHeaderHtml.length);
+  const contextMessages = replyTo._threadContext?.length ? replyTo._threadContext : [replyTo];
+  return {
+    quotedHeaderHtml,
+    fullQuotedBodyHtml,
+    quotedHtml: quotedHeaderHtml + (replyTo._selectedQuoteHtml || fullQuotedBodyHtml),
+    contextHtml: contextMessages.map(message => originalHtml(message, label)).join('<hr>'),
+  };
+}
+
 // The message a reply answers: someone else's HTML, shown in the app's own
 // window, where withGlobalTauri puts the IPC bridge. The sandbox has no
 // allow-scripts, so nothing in the frame runs: no <script>, no onerror, no
@@ -129,7 +146,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const t = useT();
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
-  const dialogRef = useDialogA11y(true);
+  // Reply/replyAll skip the hook's own mount-time autofocus: the editor that
+  // should get the caret doesn't exist yet (TipTap builds it lazily), and its
+  // own onCreate callback below focuses it once it does.
+  const dialogRef = useDialogA11y(true, undefined, { skipInitialFocus: mode === 'reply' || mode === 'replyAll' });
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   // Which mailbox the user is reading, which is who a fresh compose is from.
@@ -347,6 +367,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const replyTemplateApplied = useRef(false);
   const replyTemplateCurrentBody = useRef('');
   const initializedRef = useRef(false);
+  // A radial reply opens on the header alone, before resolveMessageBody has
+  // run (RowQuickActions.jsx) — true here already means the body was there
+  // from the start, so the fill-in effect below never has anything to do.
+  const quotedBodyReadyRef = useRef(Boolean(replyTo?.html || replyTo?.text));
   const publishedSnapshotRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => {
@@ -422,18 +446,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     }
 
     const originalSubject = replyTo.subject || '';
-    const fullQuotedHtml = originalHtml(replyTo, t('compose.originalMessage'));
-    const quotedHeaderHtml = fullQuotedHtml.slice(0, fullQuotedHtml.indexOf('</p>') + 4);
-    const fullQuotedBodyHtml = fullQuotedHtml.slice(quotedHeaderHtml.length);
-    const quotedBodyHtml = replyTo._selectedQuoteHtml || fullQuotedBodyHtml;
-    const contextMessages = replyTo._threadContext?.length ? replyTo._threadContext : [replyTo];
-    const fullContextHtml = contextMessages.map(message => originalHtml(message, t('compose.originalMessage'))).join('<hr>');
+    const { quotedHeaderHtml, fullQuotedBodyHtml, quotedHtml: replyQuotedHtml, contextHtml: fullContextHtml } =
+      buildQuoteBlocks(replyTo, t('compose.originalMessage'));
 
     // Replies keep the original behind the collapsible toggle. A forward puts
     // it inline in the body, so storing it here as well would render the
     // toggle AND append the original a second time at send.
     if (mode !== 'forward') {
-      setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
+      setQuotedHtml(replyQuotedHtml);
     }
     // A forward already carries its original in the outgoing body, but people
     // still need the complete source/thread while editing. Keep that reading
@@ -491,6 +511,20 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // it while this draft is active must not rerun this initializer and erase
   // the text the person is currently writing.
   }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
+
+  // A radial reply/reply-all opens immediately on the header so the wheel
+  // never stalls on a slow fetch, then App patches in the resolved `replyTo`
+  // once resolveMessageBody lands. Fill the quote and context panel in at
+  // that point — recipients, subject and headers are already correct from
+  // the header alone, so nothing else here needs a second pass.
+  useEffect(() => {
+    if (quotedBodyReadyRef.current || (mode !== 'reply' && mode !== 'replyAll')) return;
+    if (!replyTo || !(replyTo.html || replyTo.text)) return;
+    quotedBodyReadyRef.current = true;
+    const { quotedHtml: nextQuotedHtml, contextHtml: nextContextHtml } = buildQuoteBlocks(replyTo, t('compose.originalMessage'));
+    setQuotedHtml(nextQuotedHtml);
+    setContextHtml(nextContextHtml);
+  }, [replyTo, mode, t]);
 
   // The initializer runs once, so a draft being written is never rebuilt.
   // Changing From swaps the signature in place instead, and an untouched body
@@ -1283,6 +1317,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               setValue={(v) => setFormData(prev => ({ ...prev, to: v }))}
               testid="compose-to"
               boostAccountId={selectedAccountId}
+              // Reply/replyAll already have a recipient — the caret belongs in
+              // the body instead (RichTextEditor's onCreate below). Forward
+              // starts with no recipients, so To is still the right landing spot.
+              autoFocus={mode === 'new' || mode === 'forward'}
             />
 
             {/* CC */}
@@ -1399,6 +1437,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               content={formData.body}
               editorRef={editorRef}
               onFiles={addFiles}
+              // Reply/replyAll: put the caret in the body instead of To
+              // (RecipientField above skips data-autofocus for these modes).
+              // Runs from TipTap's own onCreate, never during render — see the
+              // immediatelyRender note in RichTextEditor.jsx.
+              onCreate={(mode === 'reply' || mode === 'replyAll')
+                ? ({ editor }) => editor.commands.focus(signatureCaretPos(editor.state.doc) ?? 'start')
+                : undefined}
               onUpdate={(html) => {
                 if (detaching) return;
                 if (replyTemplateApplied.current) replyTemplateCurrentBody.current = html;

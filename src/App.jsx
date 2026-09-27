@@ -325,7 +325,11 @@ function App() {
       const already = prev.find(w => sameReply(w, state));
       if (already) {
         if (already.detached && already.nativeLabel) void focusNativeCompose(already.nativeLabel).catch(() => {});
-        return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
+        // A radial reply opens on the header alone and calls back in here a
+        // second time once its body resolves (RowQuickActions.jsx) — same
+        // message, so patch the richer replyTo into the window already open
+        // instead of stacking a duplicate.
+        return prev.map(w => w.id === already.id ? { ...w, minimized: false, ...(state.replyTo && { replyTo: state.replyTo }) } : w);
       }
       composeIdRef.current += 1;
       return [...prev, { id: composeIdRef.current, minimized: false, ...state }];

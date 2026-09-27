@@ -273,6 +273,40 @@ describe('RowQuickActions', () => {
     expect(mocks.openCompose).toHaveBeenCalledWith({ mode: 'reply', replyTo, templateBody: '<p>Thank you</p>' });
   });
 
+  it('opens reply on the header immediately, then hands in the resolved body', async () => {
+    const target = email({ uid: 14, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
+    const resolved = { uid: 14, accountId: ACCOUNT_B.id };
+    let resolveBody;
+    mocks.replyTarget.mockReturnValue(new Promise(resolve => { resolveBody = resolve; }));
+    setActions(action('reply'));
+    renderActions({ emails: [target] });
+
+    fireEvent.click(screen.getByTestId('quick-action-reply'));
+
+    // No await between the click and this assertion: the wheel must not
+    // wait on replyTarget's fetch before compose appears.
+    expect(mocks.openCompose).toHaveBeenCalledTimes(1);
+    expect(mocks.openCompose).toHaveBeenCalledWith({ mode: 'reply', replyTo: target });
+
+    resolveBody(resolved);
+    await waitFor(() => expect(mocks.openCompose).toHaveBeenCalledTimes(2));
+    expect(mocks.openCompose).toHaveBeenLastCalledWith({ mode: 'reply', replyTo: resolved });
+  });
+
+  it('waits for the body before opening a forward, which inlines it into the message', async () => {
+    const target = email({ uid: 15, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
+    const resolved = { uid: 15, accountId: ACCOUNT_B.id };
+    mocks.replyTarget.mockResolvedValue(resolved);
+    setActions(action('forward'));
+    renderActions({ emails: [target] });
+
+    fireEvent.click(screen.getByTestId('quick-action-forward'));
+
+    await waitFor(() => expect(mocks.openCompose).toHaveBeenCalled());
+    expect(mocks.openCompose).toHaveBeenCalledTimes(1);
+    expect(mocks.openCompose).toHaveBeenCalledWith({ mode: 'forward', replyTo: resolved });
+  });
+
   it('tags the exact account, mailbox, and row', () => {
     const target = email({ uid: 13, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
     const tag = { id: 'follow-up', name: 'Follow up' };

@@ -161,7 +161,20 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const requestEverywhereDelete = () => onRequestDelete?.(() => runScoped(purgeSelected, { destructive: true }), {
     title: purge.title, description: purge.description, confirmLabel: purge.label,
   });
-  const openReply = async mode => openCompose({ mode, replyTo: await replyTarget(newest, null, useMailStore.getState()) });
+  // Reply/replyAll open on the header alone right away — the wheel closes and
+  // compose appears instantly — then hand in the resolved body once it lands;
+  // ComposeModal fills the quote in without disturbing anything already typed
+  // (see its `quotedBodyReadyRef` effect). Forward inlines the body into the
+  // message itself, so it still waits for the fetch before opening.
+  const openReply = async mode => {
+    if (mode === 'forward') {
+      openCompose({ mode, replyTo: await replyTarget(newest, null, useMailStore.getState()) });
+      return;
+    }
+    openCompose({ mode, replyTo: newest });
+    const resolved = await replyTarget(newest, null, useMailStore.getState());
+    if (resolved !== newest) openCompose({ mode, replyTo: resolved });
+  };
   const openNewMessage = () => openCompose({ initialData: { to: senderAddress, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
   const actionLabel = entry => {
     if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.tagId)?.name || t('quickActions.action.tag');

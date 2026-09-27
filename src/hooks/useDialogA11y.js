@@ -55,6 +55,11 @@ export function registerPopoverLayer(onClose, { handlesTab = false } = {}) {
  * Nested dialogs stack: while an inner dialog is open the outer one ignores
  * Tab and Escape, so Escape peels one layer at a time.
  *
+ * `skipInitialFocus` leaves focus alone on mount — for a dialog whose real
+ * target isn't in the DOM yet (compose's editor, built lazily by TipTap) and
+ * moves focus there itself once it exists, rather than racing this effect's
+ * "first focusable element" fallback for it.
+ *
  * The Escape listener is on `document` in the **capture** phase and calls
  * `stopPropagation`. `App.jsx` has a global Escape shortcut on `window` in the
  * bubble phase, and window-bubble is the last stop in the event path — so
@@ -63,7 +68,7 @@ export function registerPopoverLayer(onClose, { handlesTab = false } = {}) {
  * Capture on `document` (not `window`) is narrow enough to leave inputs alone.
  * See src/utils/escapeAction.js for the rest of that ordering.
  */
-export function useDialogA11y(isOpen, onClose, { preventScroll = false } = {}) {
+export function useDialogA11y(isOpen, onClose, { preventScroll = false, skipInitialFocus = false } = {}) {
   const panelRef = useRef(null);
   const restoreRef = useRef(null);
   const closeRef = useRef(onClose);
@@ -77,15 +82,17 @@ export function useDialogA11y(isOpen, onClose, { preventScroll = false } = {}) {
     const token = {};
     openDialogs.push(token);
     restoreRef.current = document.activeElement;
-    const initial = panel.querySelector('[data-autofocus]') || [...panel.querySelectorAll(FOCUSABLE)].find(el => {
-      if (el.closest('[hidden], [inert]')) return false;
-      for (let node = el; node && node !== panel; node = node.parentElement) {
-        const style = getComputedStyle(node);
-        if (style.display === 'none' || style.visibility === 'hidden') return false;
-      }
-      return true;
-    });
-    initial?.focus({ preventScroll });
+    if (!skipInitialFocus) {
+      const initial = panel.querySelector('[data-autofocus]') || [...panel.querySelectorAll(FOCUSABLE)].find(el => {
+        if (el.closest('[hidden], [inert]')) return false;
+        for (let node = el; node && node !== panel; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+        }
+        return true;
+      });
+      initial?.focus({ preventScroll });
+    }
 
     const onKeyDown = (e) => {
       // A portal menu belongs to this dialog even though it is mounted under
@@ -132,7 +139,7 @@ export function useDialogA11y(isOpen, onClose, { preventScroll = false } = {}) {
       const restore = restoreRef.current;
       if (restore && document.contains(restore)) restore.focus({ preventScroll });
     };
-  }, [isOpen, preventScroll]);
+  }, [isOpen, preventScroll, skipInitialFocus]);
 
   return panelRef;
 }
