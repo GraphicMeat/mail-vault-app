@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "Nell’app",
   "settings.behavior.composeOpen.window": "In una nuova finestra",
   "settings.behavior.composeOpen.resetLayout": "Ripristina il layout di Scrivi",
+  "settings.behavior.closeToTray": "Resta nell'area di notifica alla chiusura",
+  "settings.behavior.closeToTrayDesc": "Chiudendo la finestra, MailVault si nasconde nell'area di notifica invece di uscire. Esci dall'icona nell'area di notifica.",
   "settings.behavior.confirmBeforeDelete": "Conferma prima di eliminare",
   "settings.behavior.confirmDeleteAsk": "Chiedi ogni volta",
   "settings.behavior.confirmDeleteAskHint": "Ogni eliminazione chiede prima conferma.",

@@ -165,6 +165,7 @@ export const settingSearchGroups = [
   ] },
   { id: 'mail-preferences', section: 'behavior', sectionKey: 'generalSettings.behavior', settings: [
     ['settings.behavior.defaultMail.title', 'default email app mailto links'],
+    ['settings.behavior.closeToTray', 'close window quit exit tray keep running background x button'],
     ['settings.behavior.refreshAppLaunch', 'sync refresh startup launch'],
     ['settings.behavior.autoRefreshInterval', 'sync refresh interval automatic check'],
     ['settings.behavior.autoDownloadAttachments', 'attachments download automatic'],

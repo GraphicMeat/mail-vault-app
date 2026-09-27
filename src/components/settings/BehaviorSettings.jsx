@@ -2,6 +2,7 @@ import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore, SWIPE_ACTIONS } from '../../stores/settingsStore';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { SettingRow } from '../ui/SettingRow';
 import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
 import { ComposeOpenMode } from './ComposeOpenMode';
@@ -47,6 +48,8 @@ export function BehaviorSettings() {
     setSendDelay,
     updateTrack,
     setUpdateTrack,
+    closeToTray,
+    setCloseToTray,
   } = useSettingsStore();
 
   // Sparkle on a macOS Developer ID build, tauri-plugin-updater on Windows.
@@ -104,6 +107,20 @@ export function BehaviorSettings() {
   return (
     <>
       <DefaultMailApp />
+
+      {/* Windows/Linux: the close button quits unless this is on. On macOS
+          closing the window never quits, so there is nothing to choose. */}
+      {!isMac && (
+        <div className="settings-section">
+          <SettingRow label={t('settings.behavior.closeToTray')} description={t('settings.behavior.closeToTrayDesc')}>
+            <ToggleSwitch
+              label={t('settings.behavior.closeToTray')} active={!!closeToTray}
+              onClick={() => setCloseToTray(!closeToTray)}
+              testId="toggle-close-to-tray"
+            />
+          </SettingRow>
+        </div>
+      )}
 
       {/* Email Sync (Behavior) */}
       <div className="settings-section">

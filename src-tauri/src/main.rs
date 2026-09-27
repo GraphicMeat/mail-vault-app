@@ -1614,6 +1614,15 @@ fn daemon_always_on() -> bool {
     mailvault_core::autostart::always_on_from_settings(&raw)
 }
 
+/// Whether closing the main window keeps the app in the tray (Windows and
+/// Linux). Read off disk at close time, like `daemon_always_on`; any problem
+/// reads as "off", so the close button quits.
+fn close_to_tray() -> bool {
+    let Ok(dir) = mailvault_core::paths::app_data_dir() else { return false };
+    let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
+    mailvault_core::autostart::close_to_tray_from_settings(&raw)
+}
+
 /// The frontend's persisted `updateTrack`, read straight off disk — this runs in
 /// `setup()`, long before a window could be asked. Any problem reads as "unset".
 fn persisted_update_track() -> Option<String> {
@@ -3840,13 +3849,22 @@ fn main() {
                 }
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Only hide-to-tray for the main window; popup windows close normally
+                // Only the main window; popup windows close normally. macOS
+                // keeps the app running (Cmd+Q and the Dock quit). Windows and
+                // Linux quit, like other mail clients, unless the user kept the
+                // tray - through `exit`, the tray Quit's path, so RunEvent::Exit
+                // still cleans up.
                 if window.label() == "main" {
-                    info!("Main window close requested, hiding to tray");
-                    if let Some(main) = window.app_handle().get_webview_window("main") {
-                        hide_main_window(&main);
-                    }
                     api.prevent_close();
+                    if cfg!(target_os = "macos") || close_to_tray() {
+                        info!("Main window close requested, hiding to tray");
+                        if let Some(main) = window.app_handle().get_webview_window("main") {
+                            hide_main_window(&main);
+                        }
+                    } else {
+                        info!("Main window close requested, quitting");
+                        window.app_handle().exit(0);
+                    }
                 }
             }
         })

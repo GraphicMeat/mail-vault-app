@@ -185,6 +185,17 @@ pub fn always_on_from_settings(raw: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether `frontend-settings.json` says closing the main window should keep
+/// the app running in the tray (Windows and Linux; macOS always does). Read at
+/// close time, same file and path as [`always_on_from_settings`]. Anything
+/// unreadable is "off": the close button quits, which is what it says.
+pub fn close_to_tray_from_settings(raw: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|v| v["mailvault-settings"]["state"]["closeToTray"].as_bool())
+        .unwrap_or(false)
+}
+
 /// Where the shipped agent plist sits inside a built `.app`, given the app
 /// binary's own path (`Contents/MacOS/mailvault`).
 ///
@@ -380,6 +391,23 @@ mod tests {
                     r#"{"mailvault-settings":{"state":{}}}"#,
                     r#"{"mailvault-settings":{"state":{"daemonAlwaysOn":"yes"}}}"#] {
             assert!(!always_on_from_settings(raw), "{raw:?} should read as off");
+        }
+    }
+
+    #[test]
+    fn close_to_tray_is_read_from_the_zustand_state_object() {
+        let on = r#"{"mailvault-settings":{"state":{"closeToTray":true},"version":10}}"#;
+        let off = r#"{"mailvault-settings":{"state":{"closeToTray":false}}}"#;
+        assert!(close_to_tray_from_settings(on));
+        assert!(!close_to_tray_from_settings(off));
+    }
+
+    #[test]
+    fn close_to_tray_is_off_when_anything_is_unreadable() {
+        for raw in ["", "{}", "not json", r#"{"mailvault-settings":{}}"#,
+                    r#"{"mailvault-settings":{"state":{}}}"#,
+                    r#"{"mailvault-settings":{"state":{"closeToTray":"yes"}}}"#] {
+            assert!(!close_to_tray_from_settings(raw), "{raw:?} should read as off");
         }
     }
 

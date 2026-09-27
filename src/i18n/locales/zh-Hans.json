@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "在应用内",
   "settings.behavior.composeOpen.window": "在新窗口中",
   "settings.behavior.composeOpen.resetLayout": "重置撰写布局",
+  "settings.behavior.closeToTray": "关闭时继续在系统托盘中运行",
+  "settings.behavior.closeToTrayDesc": "关闭窗口时，MailVault 会隐藏到系统托盘，而不是退出。可从托盘图标退出。",
   "settings.behavior.confirmBeforeDelete": "删除前确认",
   "settings.behavior.confirmDeleteAsk": "每次都询问",
   "settings.behavior.confirmDeleteAskHint": "每次删除都会先请求确认。",

@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "En la app",
   "settings.behavior.composeOpen.window": "En una ventana nueva",
   "settings.behavior.composeOpen.resetLayout": "Restablecer el diseño de Redactar",
+  "settings.behavior.closeToTray": "Seguir en la bandeja del sistema al cerrar",
+  "settings.behavior.closeToTrayDesc": "Al cerrar la ventana, MailVault se oculta en la bandeja del sistema en lugar de cerrarse. Sal desde el icono de la bandeja.",
   "settings.behavior.confirmBeforeDelete": "Confirmar antes de eliminar",
   "settings.behavior.confirmDeleteAsk": "Preguntar siempre",
   "settings.behavior.confirmDeleteAskHint": "Cada eliminación pide confirmación primero.",

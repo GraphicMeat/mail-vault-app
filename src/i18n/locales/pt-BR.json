@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "No app",
   "settings.behavior.composeOpen.window": "Em uma nova janela",
   "settings.behavior.composeOpen.resetLayout": "Redefinir o layout de Escrever",
+  "settings.behavior.closeToTray": "Continuar na bandeja do sistema ao fechar",
+  "settings.behavior.closeToTrayDesc": "Fechar a janela oculta o MailVault na bandeja do sistema em vez de encerrá-lo. Encerre pelo ícone da bandeja.",
   "settings.behavior.confirmBeforeDelete": "Confirmar antes de excluir",
   "settings.behavior.confirmDeleteAsk": "Perguntar sempre",
   "settings.behavior.confirmDeleteAskHint": "Cada exclusão pede confirmação antes.",

@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "In the app",
   "settings.behavior.composeOpen.window": "In a new window",
   "settings.behavior.composeOpen.resetLayout": "Reset compose layout",
+  "settings.behavior.closeToTray": "Keep running in the tray when closed",
+  "settings.behavior.closeToTrayDesc": "Closing the window hides MailVault in the system tray instead of quitting it. Quit from the tray icon.",
   "settings.behavior.confirmBeforeDelete": "Confirm before deleting",
   "settings.behavior.confirmDeleteAsk": "Ask every time",
   "settings.behavior.confirmDeleteAskHint": "Every delete asks for confirmation first.",

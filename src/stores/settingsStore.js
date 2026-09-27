@@ -375,6 +375,9 @@ export const useSettingsStore = create(
       // Width of that reading context as a ratio of the compose layout, set by
       // the last drag, arrow key or split button. null = the 400px default.
       composeContextSplit: null,
+      // Windows/Linux: the main window's close button hides to the tray instead
+      // of quitting. Rust reads it from the settings file at close time.
+      closeToTray: false,
       // Where a new compose opens: 'app' (over the main window) or 'window'.
       composeOpenMode: 'app',
 
@@ -893,6 +896,7 @@ export const useSettingsStore = create(
       },
       setComposeContextVisible: (visible) => set({ composeContextVisible: Boolean(visible) }),
       setComposeContextSplit: (ratio) => set({ composeContextSplit: Number.isFinite(ratio) ? Math.min(0.9, Math.max(0.1, ratio)) : null }),
+      setCloseToTray: (enabled) => set({ closeToTray: Boolean(enabled) }),
       setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 
       // Account color management

@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "In der App",
   "settings.behavior.composeOpen.window": "In einem neuen Fenster",
   "settings.behavior.composeOpen.resetLayout": "Verfassen-Layout zurücksetzen",
+  "settings.behavior.closeToTray": "Beim Schließen im Infobereich weiterlaufen",
+  "settings.behavior.closeToTrayDesc": "Das Schließen des Fensters blendet MailVault im Infobereich aus, statt es zu beenden. Beenden Sie es über das Symbol im Infobereich.",
   "settings.behavior.confirmBeforeDelete": "Vor dem Löschen bestätigen",
   "settings.behavior.confirmDeleteAsk": "Jedes Mal fragen",
   "settings.behavior.confirmDeleteAskHint": "Jedes Löschen fragt zuerst nach einer Bestätigung.",

@@ -1752,6 +1752,8 @@
   "settings.behavior.composeOpen.app": "アプリ内",
   "settings.behavior.composeOpen.window": "新しいウインドウ",
   "settings.behavior.composeOpen.resetLayout": "作成画面のレイアウトをリセット",
+  "settings.behavior.closeToTray": "閉じてもシステムトレイで実行し続ける",
+  "settings.behavior.closeToTrayDesc": "ウインドウを閉じると、MailVault は終了せずにシステムトレイに隠れます。終了はトレイアイコンから行います。",
   "settings.behavior.confirmBeforeDelete": "削除前に確認する",
   "settings.behavior.confirmDeleteAsk": "毎回確認する",
   "settings.behavior.confirmDeleteAskHint": "削除のたびに確認を求めます。",
