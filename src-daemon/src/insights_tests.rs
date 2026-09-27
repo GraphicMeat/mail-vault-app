@@ -854,3 +854,47 @@ fn file_uid_reads_the_same_uid_under_either_info_separator() {
         );
     }
 }
+
+/// Settings > Unsubscribe pages one snapshot per account in parallel. A page
+/// read (vault files parsed, every watched path stamped) must hold only its
+/// own snapshot, never the whole table, or those reads queue one behind the
+/// other. Snapshot A's read is parked inside its freshness check; B's read
+/// has to finish meanwhile.
+#[test]
+fn a_page_read_does_not_block_another_snapshots_read() {
+    use std::sync::{atomic::{AtomicBool, Ordering}, mpsc};
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", (1..=3).map(header).collect());
+    let state = InsightsSnapshots::default();
+    let id = |v: &Value| v["snapshotId"].as_str().unwrap().to_string();
+    let (a, b) = (id(&begin(&state, dir.path(), &custody, 0)), id(&begin(&state, dir.path(), &custody, 0)));
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (go_tx, go_rx) = mpsc::channel::<()>();
+    let parked = {
+        let state = state.clone();
+        std::thread::spawn(move || {
+            let first = AtomicBool::new(true);
+            state.read(&a, None, &|| {
+                if first.swap(false, Ordering::SeqCst) {
+                    entered_tx.send(()).unwrap();
+                    go_rx.recv().unwrap();
+                }
+                0
+            })
+        })
+    };
+    entered_rx.recv().unwrap();
+    let (done_tx, done_rx) = mpsc::channel();
+    {
+        let state = state.clone();
+        std::thread::spawn(move || {
+            let _ = done_tx.send(state.read(&b, None, &|| 0).map(|p| p["rows"].as_array().unwrap().len()));
+        });
+    }
+    let other = done_rx.recv_timeout(std::time::Duration::from_secs(5));
+    go_tx.send(()).unwrap();
+    assert!(parked.join().unwrap().is_ok());
+    assert_eq!(other, Ok(Ok(3)), "B's read waited on A's");
+}

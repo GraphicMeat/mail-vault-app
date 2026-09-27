@@ -90,19 +90,26 @@ pub(crate) fn begin_snapshot(state: &Arc<DaemonState>, account_ids: &[String]) -
     let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
         custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
     };
+    // Only the reads hold the one custody connection; the JSON is parsed after
+    // it is released, so snapshots of other accounts (and sync) are not queued
+    // behind parsing a big mailbox.
     let headers = |account: &str| -> Result<(Option<Value>, Vec<(String, Value)>), String> {
-        custody::with_conn(&state, |c| {
+        let (list, blobs) = custody::with_conn(&state, |c| {
             use mailvault_core::custody::cache;
-            let list = cache::load_mailboxes(c, account)?
-                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
-            let mut out = Vec::new();
+            let list = cache::load_mailboxes(c, account)?;
+            let mut blobs = Vec::new();
             for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
                 let Some(blob) = cache::load_headers(c, account, &mailbox, None, cache::HeaderOrder::Date)? else { continue };
-                let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
-                out.push((mailbox, value));
+                blobs.push((mailbox, blob));
             }
-            Ok((list, out))
-        })
+            Ok((list, blobs))
+        })?;
+        let list = list.and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+        let out = blobs
+            .into_iter()
+            .map(|(mailbox, blob)| serde_json::from_str::<Value>(&blob).map(|v| (mailbox, v)).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((list, out))
     };
     match state.insights.begin_at(&root, &rows, &headers, &configured, &account_ids, &gen_fn) {
         Ok(v) => ok(v),

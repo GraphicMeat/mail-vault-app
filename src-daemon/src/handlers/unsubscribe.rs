@@ -113,7 +113,8 @@ async fn unsubscribe(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
 }
 
 /// Subscription senders in snapshot rows: one entry per From address whose
-/// mail carries List-Unsubscribe, described by its newest such message.
+/// mail carries List-Unsubscribe, described by its newest such message
+/// (whose `mailbox` is the folder the page's sender link opens).
 /// Rows are deduplicated per message, since a message kept in the vault and
 /// still on the server arrives once from each.
 fn senders_from_rows(rows: &[Value]) -> Vec<Value> {
@@ -142,7 +143,8 @@ fn senders_from_rows(rows: &[Value]) -> Vec<Value> {
         let newer = entry.1.is_null() || at.as_deref() > entry.1["lastAt"].as_str();
         if newer {
             entry.1 = json!({
-                "address": key, "name": text(&row["from"], "name"), "accountId": account, "lastAt": at,
+                "address": key, "name": text(&row["from"], "name"), "accountId": account,
+                "mailbox": text(row, "mailbox"), "lastAt": at,
                 "method": method, "listUnsubscribe": list_unsubscribe, "listUnsubscribePost": post,
                 "authenticationResults": auth,
             });
@@ -433,7 +435,7 @@ mod tests {
             row("a", "INBOX", 1, "<1@b>", "2026-09-01T00:00:00Z", Some("<https://brand.test/u>")),
             // The same message's vault copy: counted once.
             row("a", "INBOX", 1, "<1@b>", "2026-09-01T00:00:00Z", Some("<https://brand.test/u>")),
-            row("a", "INBOX", 2, "<2@b>", "2026-09-03T00:00:00Z", Some("<https://brand.test/u2>")),
+            row("a", "Promotions", 2, "<2@b>", "2026-09-03T00:00:00Z", Some("<https://brand.test/u2>")),
             row("a", "INBOX", 3, "<3@b>", "2026-09-05T00:00:00Z", None),
             json!({"accountId": "a", "uid": 9, "from": {"address": "friend@x.test"}, "listUnsubscribe": null}),
         ];
@@ -444,6 +446,8 @@ mod tests {
         assert_eq!(senders[0]["lastAt"], "2026-09-03T00:00:00Z");
         assert_eq!(senders[0]["listUnsubscribe"], "<https://brand.test/u2>");
         assert_eq!(senders[0]["method"], "one-click");
+        // The folder the sender link opens: the newest message's.
+        assert_eq!(senders[0]["mailbox"], "Promotions");
     }
 
     /// Through the real Insights snapshot: the sender shows under all

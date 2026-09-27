@@ -431,15 +431,35 @@ impl Snapshot {
     }
 }
 
+/// Each snapshot has its own lock: a page read (vault files parsed, every
+/// watched path stamped) holds only its own snapshot, so reads of different
+/// snapshots (Settings > Unsubscribe pages one per account at once) run side
+/// by side. The table lock is only ever held for a lookup; lock order is
+/// table, then snapshot, and the table side only `try_lock`s a snapshot.
+type Entry = Arc<Mutex<Snapshot>>;
+
+/// Still wanted at `now`. A snapshot mid-read is in use, so it stays.
+fn live(entry: &Entry, now: Instant) -> bool {
+    match entry.try_lock() {
+        Ok(s) => now.saturating_duration_since(s.last_access) < EXPIRY,
+        Err(std::sync::TryLockError::WouldBlock) => true,
+        Err(std::sync::TryLockError::Poisoned(_)) => false,
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct InsightsSnapshots {
-    inner: Arc<Mutex<HashMap<String, Snapshot>>>,
+    inner: Arc<Mutex<HashMap<String, Entry>>>,
 }
 impl InsightsSnapshots {
     fn expire(&self, now: Instant) {
         if let Ok(mut snapshots) = self.inner.lock() {
-            snapshots.retain(|_, s| now.saturating_duration_since(s.last_access) < EXPIRY);
+            snapshots.retain(|_, s| live(s, now));
         }
+    }
+    fn entry(&self, id: &str) -> Result<Entry, Value> {
+        let snapshots = self.inner.lock().map_err(|_| error("snapshotUnavailable"))?;
+        snapshots.get(id).cloned().ok_or_else(|| error("snapshotExpired"))
     }
     /// 30 s sweeper (Task 3.6 Step 2): spawned once from `daemon_main`, not
     /// per-state. Same `EXPIRY` (300s) and the same `Weak`-reference exit
@@ -455,7 +475,7 @@ impl InsightsSnapshots {
                     break;
                 };
                 if let Ok(mut snapshots) = inner.lock() {
-                    snapshots.retain(|_, s| s.last_access.elapsed() < EXPIRY);
+                    snapshots.retain(|_, s| live(s, Instant::now()));
                 };
             }
         });
@@ -505,24 +525,20 @@ impl InsightsSnapshots {
         self.inner
             .lock()
             .map_err(|_| error("snapshotUnavailable"))?
-            .insert(id, snapshot);
+            .insert(id, Arc::new(Mutex::new(snapshot)));
         Ok(result)
     }
     pub(crate) fn read(&self, id: &str, cursor: Option<&str>, custody_gen: CustodyGen<'_>) -> ResultValue {
         self.expire(Instant::now());
-        let mut snapshots = self
-            .inner
-            .lock()
-            .map_err(|_| error("snapshotUnavailable"))?;
-        let snapshot = snapshots
-            .get_mut(id)
-            .ok_or_else(|| error("snapshotExpired"))?;
+        let entry = self.entry(id)?;
+        let mut guard = entry.lock().map_err(|_| error("snapshotUnavailable"))?;
+        let snapshot = &mut *guard;
         if snapshot.finished || snapshot.cursor.as_deref() != cursor {
             return Err(error("invalidCursor"));
         }
         if !snapshot.unchanged(custody_gen()) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
-            snapshots.remove(id);
+            self.release(id);
             return Err(e);
         }
         let end = (snapshot.offset + PAGE_SIZE).min(snapshot.items.len());
@@ -572,7 +588,7 @@ impl InsightsSnapshots {
         // parsed.
         if !snapshot.unchanged(custody_gen()) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
-            snapshots.remove(id);
+            self.release(id);
             return Err(e);
         }
         snapshot.offset = end;
@@ -591,11 +607,8 @@ impl InsightsSnapshots {
         }
     }
     pub(crate) fn validate_context(&self, id: &str, root: &Path, configured: &[String]) -> Result<(), Value> {
-        let snapshots = self
-            .inner
-            .lock()
-            .map_err(|_| error("snapshotUnavailable"))?;
-        let snapshot = snapshots.get(id).ok_or_else(|| error("snapshotExpired"))?;
+        let entry = self.entry(id)?;
+        let snapshot = entry.lock().map_err(|_| error("snapshotUnavailable"))?;
         if fs::canonicalize(root).ok().as_ref() != Some(&snapshot.root)
             || snapshot.accounts.iter().any(|a| !configured.contains(a))
         {
