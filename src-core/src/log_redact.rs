@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 static EMAIL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}").unwrap());
+    LazyLock::new(|| Regex::new(r"[\p{L}\p{N}][\p{L}\p{N}._%+'-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}").unwrap());
 
 static VERBOSE: AtomicBool = AtomicBool::new(false);
 
@@ -24,19 +24,29 @@ static VERBOSE: AtomicBool = AtomicBool::new(false);
 pub fn redact(line: &str, salt: &[u8]) -> String {
     EMAIL
         .replace_all(line, |c: &regex::Captures| {
-            let addr = c[0].to_ascii_lowercase();
+            let addr = c[0].to_lowercase();
             let hash = Sha256::new().chain_update(salt).chain_update(addr.as_bytes()).finalize();
             format!("<{}#{:02x}{:02x}>", provider(&addr), hash[0], hash[1])
         })
         .into_owned()
 }
 
+/// From the whole registrable domain: `me.com` is iCloud, `me.example.org`
+/// is not. Outlook and Yahoo also have country domains (`hotmail.co.uk`).
 fn provider(addr: &str) -> &'static str {
     let domain = addr.rsplit('@').next().unwrap_or("");
-    match domain.split('.').next().unwrap_or("") {
-        "gmail" | "googlemail" => "gmail",
+    match domain {
+        "gmail.com" | "googlemail.com" => return "gmail",
+        "icloud.com" | "me.com" | "mac.com" => return "icloud",
+        _ => {}
+    }
+    let labels: Vec<&str> = domain.split('.').collect();
+    let name = match labels.as_slice() {
+        [name, _] | [name, "co" | "com", _] => *name,
+        _ => return "imap",
+    };
+    match name {
         "outlook" | "hotmail" | "live" => "outlook",
-        "icloud" | "me" | "mac" => "icloud",
         "yahoo" => "yahoo",
         _ => "imap",
     }
@@ -70,7 +80,8 @@ pub fn verbose_from_settings(raw: &str) -> bool {
 
 /// The per-install salt in `<dir>/log_salt`, created once (16 random bytes).
 /// Shell and daemon both read it, so an address hashes the same in both logs.
-/// Never fails: an unusable file gives a salt for this process only.
+/// Never fails: a file left short (a crash or a full disk mid-write) is
+/// rewritten once; one that cannot be written gives a salt for this process.
 pub fn load_or_create_salt(dir: &Path) -> [u8; 16] {
     let path = dir.join("log_salt");
     let _ = std::fs::create_dir_all(dir);
@@ -91,7 +102,9 @@ pub fn load_or_create_salt(dir: &Path) -> [u8; 16] {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    rand::random()
+    let salt: [u8; 16] = rand::random();
+    let _ = std::fs::write(&path, salt);
+    salt
 }
 
 /// An `io::Write` that masks addresses unless logging is Verbose. The fmt
@@ -206,6 +219,30 @@ mod tests {
     }
 
     #[test]
+    fn the_provider_is_the_whole_registrable_domain() {
+        let label = |addr: &str| token(addr).split('#').next().unwrap().to_string();
+        assert_eq!(label("a@me.com"), "<icloud");
+        assert_eq!(label("a@mac.com"), "<icloud");
+        assert_eq!(label("a@icloud.com"), "<icloud");
+        assert_eq!(label("a@live.com"), "<outlook");
+        assert_eq!(label("a@hotmail.co.uk"), "<outlook");
+        assert_eq!(label("a@yahoo.co.jp"), "<yahoo");
+        assert_eq!(label("a@googlemail.com"), "<gmail");
+        assert_eq!(label("a@me.example.org"), "<imap");
+        assert_eq!(label("a@gmail.example.com"), "<imap");
+    }
+
+    #[test]
+    fn masks_apostrophes_and_non_ascii_addresses() {
+        assert!(token("from o'brien@example.com").starts_with("from <imap#"), "{}", token("from o'brien@example.com"));
+        assert!(token("José@Bücher.de ok").starts_with("<imap#"), "{}", token("José@Bücher.de ok"));
+        assert_eq!(token("José@Bücher.de"), token("josé@bücher.de"));
+        // A quote around the address stays outside the token.
+        let quoted = token("'a@example.com'");
+        assert!(quoted.starts_with("'<imap#") && quoted.ends_with(">'"), "{quoted}");
+    }
+
+    #[test]
     fn the_salt_changes_the_hash() {
         assert_ne!(redact("a@gmail.com", b"one"), redact("a@gmail.com", b"two"));
     }
@@ -248,6 +285,16 @@ mod tests {
         assert_eq!(std::fs::read(dir.join("log_salt")).unwrap(), first);
         assert_eq!(load_or_create_salt(&dir), first);
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_short_salt_file_is_rewritten_once() {
+        let dir = scratch("short-salt");
+        std::fs::write(dir.join("log_salt"), b"abc").unwrap();
+        let first = load_or_create_salt(&dir);
+        assert_eq!(std::fs::read(dir.join("log_salt")).unwrap(), first);
+        assert_eq!(load_or_create_salt(&dir), first, "the repaired file is used from then on");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

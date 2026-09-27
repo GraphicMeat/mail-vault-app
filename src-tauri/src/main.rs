@@ -729,12 +729,15 @@ fn read_latest_log(log_dir: &Path, lines_to_read: usize) -> Result<String, Strin
     let mut out = String::new();
     for (dir, prefix) in [(log_dir, "mailvault"), (daemon_dir.as_path(), "daemon.log")] {
         if let Some(path) = log_redact::latest_log(dir, prefix) {
-            let tail = mailvault_core::fsx::tail_lines(&path, lines_to_read)
-                .map_err(|e| format!("Failed to read log file: {}", e))?;
             if prefix == "daemon.log" {
                 out.push_str("\n===== daemon.log =====\n");
             }
-            out.push_str(&tail);
+            // An unreadable daemon log must not hide the shell's.
+            match mailvault_core::fsx::tail_lines(&path, lines_to_read) {
+                Ok(tail) => out.push_str(&tail),
+                Err(e) if prefix == "daemon.log" => out.push_str(&format!("Failed to read {:?}: {}\n", path, e)),
+                Err(e) => return Err(format!("Failed to read log file: {}", e)),
+            }
         }
     }
     if out.is_empty() {
@@ -854,7 +857,9 @@ fn send_notification(
     sound: Option<String>,
     target: Option<notification_open::NotificationTarget>,
 ) -> Result<(), String> {
-    info!("send_notification called: {} - {}", title, body);
+    // Title and body carry the subject and sender: Verbose logs only.
+    info!("send_notification called");
+    tracing::debug!("send_notification: {} - {}", title, body);
 
     // The plugin's banner cannot report a click; this one opens `target`.
     #[cfg(target_os = "macos")]
