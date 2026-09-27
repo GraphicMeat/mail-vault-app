@@ -10,6 +10,12 @@
  * The thread is luke's fragmented conversation (three incoming messages in his
  * INBOX), opened while vader is the active account, so the view and the rows
  * disagree on both the account and the mailbox — the shape of the report.
+ *
+ * All Inboxes threads each account's Sent replies in, the way one account's
+ * INBOX does, so the open thread also holds luke's two replies from HIS Sent.
+ * Archive All acts on the same members as in luke's own INBOX view: the
+ * incoming messages. The Sent copies are context there (threadRowMembers),
+ * and here too.
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
@@ -26,7 +32,7 @@ describe('All inboxes — Archive All on a thread from another account', functio
   const storeView = () => browser.execute(() => {
     const s = window.__MAIL_STORE__?.getState?.();
     if (!s) return null;
-    const pick = (e) => ({ uid: e.uid, acct: e._accountId, box: e._mailbox, subject: e.subject });
+    const pick = (e) => ({ uid: e.uid, acct: e._accountId, box: e._mailbox, subject: e.subject, fromSent: !!e._fromSentFolder });
     return {
       unified: s.activeMailbox === 'UNIFIED' || s.unifiedInbox === true,
       accountId: s.activeAccountId,
@@ -144,9 +150,21 @@ describe('All inboxes — Archive All on a thread from another account', functio
       timeoutMsg: `never opened luke's "${FRAGMENTED_SUBJECT}" thread from the unified list`,
     });
 
-    expect(opened.length).toBe(3);
-    expect(opened.every((e) => e.box === 'INBOX')).toBe(true);
-    threadUids = opened.map((e) => e.uid);
+    // luke's replies join from his own Sent folder once his Sent headers are
+    // merged in; the thread snapshot is re-read when they land.
+    await browser.waitUntil(async () => ((await storeView())?.thread || []).filter((e) => e.fromSent).length >= 2, {
+      timeout: 60_000, interval: 400,
+      timeoutMsg: `luke's Sent replies never joined the thread (it holds ${JSON.stringify((await storeView())?.thread)})`,
+    });
+    opened = (await storeView()).thread;
+    expect(opened.every((e) => e.acct === lukeId)).toBe(true);
+    const incoming = opened.filter((e) => !e.fromSent);
+    const replies = opened.filter((e) => e.fromSent);
+    expect(incoming.length).toBe(3);
+    expect(incoming.every((e) => e.box === 'INBOX')).toBe(true);
+    // At luke's own Sent path, never the active account's or the placeholder.
+    expect(replies.every((e) => e.box === 'Sent')).toBe(true);
+    threadUids = incoming.map((e) => e.uid);
     await browser.waitUntil(archiveAllButton, {
       timeout: 15_000, interval: 200, timeoutMsg: 'the thread reader shows no Archive All button',
     });
@@ -165,6 +183,8 @@ describe('All inboxes — Archive All on a thread from another account', functio
     });
 
     const after = await storeView();
+    // The three incoming messages and nothing else: luke's Sent replies are
+    // context, exactly as in his own INBOX view.
     expect(after.progress).toEqual(expect.objectContaining({ total: 3, completed: 3, errors: 0 }));
     expect(after.error).toBeNull();
     for (const uid of threadUids) expect(after.archived).toContain(uid);

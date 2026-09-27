@@ -550,7 +550,11 @@ export const createMessageListSlice = (set, get) => ({
     const { sortedEmails, sentEmails, archivedEmailIds, viewMode } = get();
 
     const { activeAccountId, activeMailbox, unifiedFolder } = get();
-    const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
+    // Hidden accounts decide which Sent rows All inboxes merges, so they are
+    // part of the key: hiding one must drop its replies at once.
+    const { hiddenAccounts } = useSettingsStore.getState() || {};
+    const hiddenKey = Object.keys(hiddenAccounts || {}).filter(id => hiddenAccounts[id]).sort().join(',');
+    const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${hiddenKey}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
     // Stamp the folder each message came from. This list mixes two mailboxes,
@@ -587,7 +591,6 @@ export const createMessageListSlice = (set, get) => ({
     // account's Sent joins it; one account's view takes that account's only,
     // or another account's replies would thread into its conversations.
     const spans = activeMailbox === 'UNIFIED';
-    const { hiddenAccounts } = useSettingsStore.getState();
     for (const email of sentEmails) {
       const foreign = activeAccountId && email._accountId && email._accountId !== activeAccountId;
       if (spans ? hiddenAccounts?.[email._accountId] : foreign) continue;

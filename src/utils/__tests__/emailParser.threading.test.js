@@ -293,6 +293,18 @@ describe('threadRowMembers', () => {
     expect(threadRowMembers(sent)).toEqual(sent);
   });
 
+  // All Inboxes: another account's thread holds that account's INBOX messages
+  // and its own Sent replies. Archive All acts on the same members as in that
+  // account's own INBOX view, so its Sent copies stay context there too.
+  it('drops another account\'s Sent copies in All Inboxes, as in its own INBOX', () => {
+    const members = threadRowMembers([
+      mk({ uid: 5, _accountId: 'luke', _mailbox: 'INBOX' }),
+      mk({ uid: 9, _accountId: 'luke', _mailbox: 'Sent', _fromSentFolder: true }),
+      mk({ uid: 6, _accountId: 'luke', _mailbox: 'INBOX' }),
+    ]);
+    expect(members.map(e => `${e._mailbox}:${e.uid}`)).toEqual(['INBOX:5', 'INBOX:6']);
+  });
+
   it('is a no-op on a folder that merges nothing', () => {
     const emails = [mk({ uid: 1 }), mk({ uid: 2 })];
     expect(threadRowMembers(emails)).toEqual(emails);

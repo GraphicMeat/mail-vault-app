@@ -1027,7 +1027,18 @@ export function loadSentHeaders(accountId, { cacheOnly = false } = {}) {
   return entry.promise;
 }
 
+// Per account: how many times a full read has merged. A cache-only read that
+// began before one of those merges holds an older snapshot of the cache, and
+// merging it last would put back rows the full read had just replaced (the
+// staged reply blinking out).
+const _sentFullMerges = new Map();
+
+// What a row shows, for "did this read change anything".
+const _sentRowSig = (e) => `${e.uid}|${e.messageId}|${(e.flags || []).join(',')}|${e._mailbox}|${e._optimistic ? 1 : 0}`;
+
 async function _loadSentHeaders(accountId, cacheOnly) {
+  // Read before the first await, so it names the cache this read will see.
+  const startMerges = _sentFullMerges.get(accountId) || 0;
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
   const isActive = () => get().activeAccountId === accountId;
@@ -1072,10 +1083,16 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   }
 
   const merge = (fresh) => {
+    if (cacheOnly && (_sentFullMerges.get(accountId) || 0) !== startMerges) return;
+    if (!cacheOnly) _sentFullMerges.set(accountId, (_sentFullMerges.get(accountId) || 0) + 1);
     const accountEmail = (get().accounts || []).find(a => a.id === accountId)?.email;
-    useMailStore.setState(s => ({
-      sentEmails: _mergeOptimisticSent(fresh, s.sentEmails, accountId, accountEmail, sentPath, spansAccounts()),
-    }));
+    const current = get().sentEmails || [];
+    const next = _mergeOptimisticSent(fresh, current, accountId, accountEmail, sentPath, spansAccounts());
+    // All Inboxes re-reads every account on each load; an unchanged read must
+    // not rebuild the rows and every thread built from them.
+    const mine = (rows) => rows.filter(e => e._accountId === accountId).map(_sentRowSig).join('\n');
+    if (next.length === current.length && mine(next) === mine(current)) return;
+    useMailStore.setState({ sentEmails: next });
     invalidateChatAndThreadCaches();
   };
 

@@ -121,7 +121,7 @@ const INBOX_ROW = {
 const SENT_COPY = {
   uid: 7, messageId: 'sent7@mock', subject: 'Re: Their message', flags: ['\\Seen'],
   from: { address: ACCT.email }, date: '2026-09-01T11:00:00Z',
-  _accountId: ACCT.id, _mailbox: 'Sent', _fromSentFolder: true, _isSent: true,
+  _accountId: ACCT.id, _mailbox: 'Sent', _fromSentFolder: true,
 };
 
 function prime(over = {}) {

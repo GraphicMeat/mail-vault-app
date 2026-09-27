@@ -733,6 +733,7 @@ describe('unread-only filter', () => {
       totalEmails: 500,
       selectedEmailId: null,
       activeMailbox: 'INBOX',
+      getChatEmails: vi.fn(() => []),
     });
   });
 
@@ -779,6 +780,9 @@ describe('unread-only filter', () => {
     useMailStore.setState({
       activeMailbox: 'UNIFIED', sortedEmails: rows, totalEmails: 2,
       unreadOnly: true, selectedEmailId: 'acc2:Archive:2',
+      // All Inboxes threads the INBOX+Sent merge, as an account's INBOX does:
+      // the list's pool is getChatEmails, here the rows themselves.
+      getChatEmails: () => useMailStore.getState().sortedEmails,
     });
 
     const { EmailList } = await import('../EmailList.jsx');
@@ -950,6 +954,7 @@ describe('thread cache follows the list it was built from', () => {
       unifiedInbox: false,
       sortedEmails: mockEmails,
       totalEmails: 500,
+      getChatEmails: vi.fn(() => []),
     });
   });
 
@@ -962,6 +967,9 @@ describe('thread cache follows the list it was built from', () => {
       unifiedInbox: true,
       sortedEmails: rows(3, false),
       totalEmails: 3,
+      // All Inboxes threads the INBOX+Sent merge, so the thread cache under
+      // test is fed by getChatEmails: the live rows, no Sent.
+      getChatEmails: () => useMailStore.getState().sortedEmails,
     });
 
     // `.type` is the unmemoized component. The export is `memo()`d and takes no

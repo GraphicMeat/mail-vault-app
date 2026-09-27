@@ -396,8 +396,10 @@ class EmailPipelineManager {
    * while All inboxes shows INBOX (read from the cache the pipeline just wrote).
    */
   _publishSent(account) {
+    // The store's active account, the same one `_loadSentHeaders` resolved the
+    // path against: the two must never disagree about whose Sent this is.
     const state = useMailStore.getState();
-    if (account.id === this._activeAccountId) {
+    if (account.id === state.activeAccountId) {
       state.loadSentHeaders(account.id);
     } else if (state.activeMailbox === 'UNIFIED' && mergesSentIntoThreads(state)) {
       state.loadSentHeaders(account.id, { cacheOnly: true });

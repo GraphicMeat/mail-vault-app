@@ -635,6 +635,16 @@ describe('getChatEmails in All inboxes', () => {
     expect(merged.map(e => e._accountId)).toEqual(['acct-1']);
   });
 
+  it('drops a hidden account\'s replies the moment it is hidden, not at the next load', () => {
+    seed({ sortedEmails: [inboxRow('acct-1', 7, 1)], sentEmails: [sentRow('acct-3', 7, 4, 'Sent')] });
+    expect(useMailStore.getState().getChatEmails().map(e => e._accountId)).toEqual(['acct-3', 'acct-1']);
+
+    // Nothing in the mail store moved, so only the memo key can notice.
+    mockSettingsState.hiddenAccounts = { 'acct-3': true };
+
+    expect(useMailStore.getState().getChatEmails().map(e => e._accountId)).toEqual(['acct-1']);
+  });
+
   it('still keeps another account\'s Sent rows out of one account\'s INBOX', () => {
     seed({
       activeMailbox: 'INBOX',
@@ -725,6 +735,37 @@ describe('loadSentHeaders for an account that is not the active one', () => {
     await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
     const sent = useMailStore.getState().sentEmails.filter(e => e._accountId === 'acct-2');
     expect(sent.map(e => e.uid)).toEqual([32]);
+  });
+
+  // A cache read that began before a full read merged holds an older copy of
+  // the cache. Landing last, it used to put back the rows the full read had
+  // just replaced: a sent reply blinked out of its thread until the next load.
+  it('drops a cache read that began before a full read merged', async () => {
+    let releaseOld;
+    const oldRead = new Promise((resolve) => { releaseOld = resolve; });
+    mockGetEmailHeadersPartial.mockImplementationOnce(() => oldRead);
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 40, messageId: '<fresh@x>' }], totalEmails: 1 });
+    seed();
+
+    const stale = useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+    await useMailStore.getState().loadSentHeaders('acct-2');
+    releaseOld({ emails: [yodaHeader], totalEmails: 1 });
+    await stale;
+
+    const yoda = useMailStore.getState().sentEmails.filter(e => e._accountId === 'acct-2');
+    expect(yoda.map(e => e.uid)).toEqual([40]);
+  });
+
+  // All Inboxes asks every account on every load. A read that finds what is
+  // already there must not rebuild the list and every thread built from it.
+  it('leaves the rows alone when the cache holds nothing new', async () => {
+    seed();
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+    const before = useMailStore.getState().sentEmails;
+
+    await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
+
+    expect(useMailStore.getState().sentEmails).toBe(before);
   });
 
   it('does nothing for another account while one account\'s view is open', async () => {
