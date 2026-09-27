@@ -1,0 +1,167 @@
+{
+  "_comment": "Shared fixture for FetchPolicy::from_settings and FetchPolicy::keeps_body. Consumed verbatim by src-core/src/fetch_mode.rs (Rust, via include_str!) and by src/utils/fetchPolicy.js's vitest suite, so the two implementations cannot drift. Plain JSON only: dates are epoch ms numbers, modes are the camelCase strings onDemand|keepRecent|indexOnly|hoarder. `state` mirrors frontend-settings.json's `mailvault-settings.state` object (not the full file root).",
+
+  "fromSettingsCases": [
+    {
+      "name": "global_default",
+      "state": { "fetchMode": "onDemand", "localCacheDurationMonths": 3 },
+      "accountId": "acct-1",
+      "expected": { "mode": "onDemand", "windowMonths": 3, "hoarderPremium": false }
+    },
+    {
+      "name": "per_account_override_wins_over_global",
+      "state": {
+        "fetchMode": "keepRecent",
+        "localCacheDurationMonths": 3,
+        "fetchModes": { "acct-1": "hoarder" },
+        "fetchModePremium": true
+      },
+      "accountId": "acct-1",
+      "expected": { "mode": "hoarder", "windowMonths": 3, "hoarderPremium": true }
+    },
+    {
+      "name": "per_account_override_does_not_affect_other_accounts",
+      "state": {
+        "fetchMode": "keepRecent",
+        "localCacheDurationMonths": 3,
+        "fetchModes": { "acct-1": "hoarder" }
+      },
+      "accountId": "acct-2",
+      "expected": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false }
+    },
+    {
+      "name": "legacy_zero_months_means_hoarder",
+      "state": { "localCacheDurationMonths": 0 },
+      "accountId": "acct-1",
+      "expected": { "mode": "hoarder", "windowMonths": 0, "hoarderPremium": false }
+    },
+    {
+      "name": "legacy_six_months_means_keep_recent_window_six",
+      "state": { "localCacheDurationMonths": 6 },
+      "accountId": "acct-1",
+      "expected": { "mode": "keepRecent", "windowMonths": 6, "hoarderPremium": false }
+    },
+    {
+      "name": "hidden_account_is_none",
+      "state": {
+        "fetchMode": "keepRecent",
+        "localCacheDurationMonths": 3,
+        "hiddenAccounts": { "acct-1": true }
+      },
+      "accountId": "acct-1",
+      "expected": null
+    },
+    {
+      "name": "hidden_flag_false_is_not_hidden",
+      "state": {
+        "fetchMode": "keepRecent",
+        "localCacheDurationMonths": 3,
+        "hiddenAccounts": { "acct-1": false }
+      },
+      "accountId": "acct-1",
+      "expected": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false }
+    },
+    {
+      "name": "garbage_fetch_mode_and_window_fall_back_to_defaults",
+      "state": { "fetchMode": "yolo-mode", "localCacheDurationMonths": "not-a-number" },
+      "accountId": "acct-1",
+      "expected": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false }
+    },
+    {
+      "name": "everything_missing_falls_back_to_defaults",
+      "state": {},
+      "accountId": "acct-1",
+      "expected": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false }
+    },
+    {
+      "name": "garbage_per_account_override_falls_back_to_global",
+      "state": {
+        "fetchMode": "indexOnly",
+        "localCacheDurationMonths": 3,
+        "fetchModes": { "acct-1": 42 }
+      },
+      "accountId": "acct-1",
+      "expected": { "mode": "indexOnly", "windowMonths": 3, "hoarderPremium": false }
+    }
+  ],
+
+  "keepsBodyCases": [
+    {
+      "name": "on_demand_never_keeps_even_a_fresh_body",
+      "policy": { "mode": "onDemand", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1768348800000,
+      "nowMs": 1768435200000,
+      "expected": false
+    },
+    {
+      "name": "hoarder_always_keeps_even_a_very_old_body",
+      "policy": { "mode": "hoarder", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "keep_recent_keeps_a_body_inside_the_window",
+      "policy": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1768348800000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "keep_recent_drops_a_body_older_than_the_window",
+      "policy": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": false
+    },
+    {
+      "name": "keep_recent_boundary_exactly_at_cutoff_is_kept",
+      "policy": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1760486400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "keep_recent_boundary_one_ms_before_cutoff_is_dropped",
+      "policy": { "mode": "keepRecent", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1760486399999,
+      "nowMs": 1768435200000,
+      "expected": false
+    },
+    {
+      "name": "keep_recent_window_zero_never_evicts_even_a_very_old_body",
+      "policy": { "mode": "keepRecent", "windowMonths": 0, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "index_only_keeps_a_body_inside_the_window",
+      "policy": { "mode": "indexOnly", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1768348800000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "index_only_drops_a_body_older_than_the_window",
+      "policy": { "mode": "indexOnly", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": false
+    },
+    {
+      "name": "index_only_boundary_exactly_at_cutoff_is_kept",
+      "policy": { "mode": "indexOnly", "windowMonths": 3, "hoarderPremium": false },
+      "dateMs": 1760486400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    },
+    {
+      "name": "index_only_window_zero_never_evicts_even_a_very_old_body",
+      "policy": { "mode": "indexOnly", "windowMonths": 0, "hoarderPremium": false },
+      "dateMs": 1420070400000,
+      "nowMs": 1768435200000,
+      "expected": true
+    }
+  ]
+}
