@@ -188,6 +188,67 @@ async function openRowMenu(subject) {
   return row;
 }
 
+/**
+ * Record what the app hands the daemon to send, and keep that one command
+ * from leaving: a reply sent here would land in the shared mock server's Sent
+ * folder and thread into the rows the cases below open. Every other command
+ * reaches the real bridge. Installed the way connected-attachments.test.js
+ * installs its probe (`core.invoke` is non-writable on this runtime).
+ */
+const installSendProbe = () => browser.execute(() => {
+  const tauri = window.__TAURI__;
+  const core = tauri.core;
+  if (core.invoke?.__mvSendProbe) return true;
+  const real = core.invoke;
+  window.__MV_SENDS__ = [];
+  const probe = (cmd, args) => {
+    // Daemon-owned: transport hands it over as `daemon_rpc`.
+    if (cmd === 'daemon_rpc' && args?.method === 'smtp_send_email') {
+      window.__MV_SENDS__.push(args.params);
+      return Promise.resolve(null);
+    }
+    return real(cmd, args);
+  };
+  probe.__mvSendProbe = true;
+  try { core.invoke = probe; } catch { /* non-writable */ }
+  if (core.invoke !== probe) {
+    try {
+      Object.defineProperty(core, 'invoke', { value: probe, writable: true, configurable: true });
+    } catch { /* non-configurable */ }
+  }
+  if (core.invoke !== probe) window.__TAURI__ = { ...tauri, core: { ...core, invoke: probe } };
+  window.__MV_SEND_PROBE_RESTORE__ = () => {
+    try { core.invoke = real; } catch { /* see above */ }
+    if (core.invoke !== real) {
+      try {
+        Object.defineProperty(core, 'invoke', { value: real, writable: true, configurable: true });
+      } catch { /* non-configurable */ }
+    }
+    window.__TAURI__ = tauri;
+    delete window.__MV_SEND_PROBE_RESTORE__;
+  };
+  return window.__TAURI__.core.invoke?.__mvSendProbe === true;
+});
+
+const removeSendProbe = () => browser.execute(() => {
+  if (typeof window.__MV_SEND_PROBE_RESTORE__ === 'function') window.__MV_SEND_PROBE_RESTORE__();
+  return true;
+});
+
+/** The text and HTML of the first message handed to smtp_send_email, or null. */
+const sentBody = () => browser.execute(() => {
+  const email = (window.__MV_SENDS__ || [])[0]?.email;
+  return email ? `${email.text || ''}\n${email.html || ''}` : null;
+});
+
+/** Press Send on the compose window on screen. */
+const clickSend = () => browser.execute(() => {
+  const btn = document.querySelector('[data-testid="compose-send"]');
+  if (!btn) return false;
+  btn.click();
+  return true;
+});
+
 /** The index of the folded thread message whose snippet already reads `snippet`. */
 const foldedWith = (headers, snippet) =>
   headers.findIndex(h => h.folded && h.text.includes(snippet));
@@ -458,23 +519,25 @@ describe('Reply entry points — header, thread message, row menu', function () 
     expect(compose.subject).toBe(`Re: ${SUBJECT}`);
     expect(compose.to).toBe(SENDER);
 
-    // The menu only ever holds the row's header: the quote proves the body
-    // was resolved before compose opened.
-    await waitFor(
-      () => testidPresent('compose-quoted'),
-      (present) => present,
-      'a reply opened from the row menu never showed its quoted original',
-      10_000,
-      200,
-    );
-    const quoted = await waitFor(
-      quotedText,
-      (text) => !!text && text.includes(BODY),
-      'the quote never showed the body the row menu resolved',
-      10_000,
-      200,
-    );
-    expect(quoted).toContain(BODY);
+    // The menu only ever holds the row's header. The compose pane loads a
+    // body of its own to show, so the quote on screen proves nothing about
+    // what compose opened with; the message sent does: its quote is built
+    // from the reply target, so it holds the body only if the body was
+    // resolved before compose opened.
+    expect(await installSendProbe()).toBe(true);
+    try {
+      expect(await clickSend()).toBe(true);
+      const sent = await waitFor(
+        sentBody,
+        (body) => body !== null,
+        'the reply opened from the row menu was never handed to smtp_send_email',
+        30_000,
+        300,
+      );
+      expect(sent).toContain(BODY);
+    } finally {
+      await removeSendProbe();
+    }
   });
 
   it('the row menu starts a new conversation with the sender', async function () {

@@ -115,3 +115,32 @@ describe('composeStateWithBody', () => {
     expect(resolveMessageBody).not.toHaveBeenCalled();
   });
 });
+
+// App's setComposeState is exactly this: a snippet stand-in never reaches
+// openCompose, only the state with the real body does.
+describe('openComposeResolved', () => {
+  it('opens compose only after the real body replaced a snippet stand-in', async () => {
+    const { openComposeResolved } = await import('../replyTarget');
+    resolveMessageBody.mockReset().mockResolvedValue({ ok: true, email: { html: '<p>The whole message.</p>' } });
+    const openCompose = vi.fn();
+    const snippet = { uid: 7, subject: 'Hi', text: 'The whole', _bodyLoading: true };
+    const pending = openComposeResolved({ mode: 'reply', replyTo: snippet }, openCompose, { accounts: [] });
+    expect(openCompose).not.toHaveBeenCalled();
+    await pending;
+    expect(openCompose).toHaveBeenCalledTimes(1);
+    const [state] = openCompose.mock.calls[0];
+    expect(state.replyTo).toEqual({ uid: 7, subject: 'Hi', html: '<p>The whole message.</p>' });
+    expect(state.replyTo._bodyLoading).toBeUndefined();
+    expect(state.replyTo.text).toBeUndefined();
+  });
+
+  it('opens any other state at once, as it came, with no fetch', async () => {
+    const { openComposeResolved } = await import('../replyTarget');
+    resolveMessageBody.mockReset();
+    const openCompose = vi.fn();
+    const loaded = { mode: 'forward', replyTo: { uid: 7, text: 'whole' } };
+    openComposeResolved(loaded, openCompose, {});
+    expect(openCompose).toHaveBeenCalledWith(loaded);
+    expect(resolveMessageBody).not.toHaveBeenCalled();
+  });
+});

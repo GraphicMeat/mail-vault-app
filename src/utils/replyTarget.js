@@ -35,3 +35,14 @@ export async function composeStateWithBody(state, store) {
   if (!state?.replyTo?._bodyLoading) return state;
   return { ...state, replyTo: await replyTarget(state.replyTo, null, store) };
 }
+
+/**
+ * App's setComposeState for a compose to open: at once when `state` holds no
+ * snippet stand-in, else once composeStateWithBody has the real body. A
+ * promise then (settles after `openCompose` ran), else what `openCompose`
+ * returned.
+ */
+export function openComposeResolved(state, openCompose, store) {
+  if (!state?.replyTo?._bodyLoading) return openCompose(state);
+  return composeStateWithBody(state, store).then(openCompose);
+}
