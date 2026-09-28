@@ -1,3 +1,5 @@
+import { rememberTokenOwner } from './tokenOwners.js';
+
 /**
  * Check if a token string looks like a JWT (exactly two '.' separators).
  * This catches the common failure mode where a non-JWT string (e.g. a refresh
@@ -184,8 +186,10 @@ async function _forceRefreshToken(account) {
     account.oauth2Provider,
     account.oauth2CustomClientId,
     account.oauth2TenantId,
-    account.oauth2Transport === 'graph'
+    account.oauth2Transport === 'graph',
+    account.email
   );
+  rememberTokenOwner(tokens.accessToken, account.email);
 
   // Log token shape for diagnostics but always persist — Microsoft Graph can return
   // opaque tokens that don't look like JWTs but are still valid.
@@ -225,6 +229,9 @@ async function _forceRefreshToken(account) {
  * Returns the account object with a fresh token (or the original if not OAuth2).
  */
 export async function ensureFreshToken(account) {
+  // Every token a Graph call sends has come through here: Network Activity
+  // names the request by it (`tokenOwners`).
+  rememberTokenOwner(account?.oauth2AccessToken, account?.email);
   if (!account || account.authType !== 'oauth2') return account;
   if (!account.oauth2RefreshToken) return account;
 
@@ -265,8 +272,10 @@ export async function ensureFreshToken(account) {
         account.oauth2Provider,
         account.oauth2CustomClientId,
         account.oauth2TenantId,
-        account.oauth2Transport === 'graph'
+        account.oauth2Transport === 'graph',
+        account.email
       );
+      rememberTokenOwner(tokens.accessToken, account.email);
 
       // Log non-JWT Graph tokens for diagnostics but persist them —
       // Microsoft can return opaque access tokens that are still valid.

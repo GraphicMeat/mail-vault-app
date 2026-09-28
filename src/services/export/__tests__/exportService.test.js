@@ -140,6 +140,21 @@ describe('the mirror toggle', () => {
     await buildExport({ messages: [thread[0]], format: 'html', layout: 'single', ...base, mirror: false });
     expect(mirrorRemoteAssets).not.toHaveBeenCalled();
   });
+
+  // Network Activity shows an export's fetches as the account whose message
+  // holds the content, which in a unified list is not the active one.
+  it('fetches a message\'s remote content as that message\'s account', async () => {
+    const before = mailState;
+    mailState = { ...mailState, accounts: [{ id: 'acct-1', email: 'r@x.test' }, { id: 'acct-2', email: 'two@x.test' }] };
+    try {
+      const fetchAsset = vi.fn(async () => null);
+      await buildExport({ messages: [{ ...thread[0], _accountId: 'acct-2' }], format: 'html', layout: 'single', ...base, fetchAsset });
+      await mirrorRemoteAssets.mock.calls[0][1].fetchAsset('https://cdn.x.test/a.png');
+      expect(fetchAsset).toHaveBeenCalledWith('https://cdn.x.test/a.png', 'two@x.test');
+    } finally {
+      mailState = before;
+    }
+  });
 });
 
 describe('partial results', () => {

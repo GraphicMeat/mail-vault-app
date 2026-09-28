@@ -128,6 +128,16 @@ export function resolveEmailLocation(email, state) {
 }
 
 /**
+ * The address of the account a message belongs to, placed the way
+ * `resolveEmailLocation` places it: what Network Activity names a request that
+ * message caused (its sender logo, an export's remote content) by.
+ */
+export function accountEmailOf(email, state) {
+  const accountId = email?._accountId || email?._srcAccountId || state?.activeAccountId;
+  return email?._accountEmail || state?.accounts?.find(a => a.id === accountId)?.email;
+}
+
+/**
  * `accountId-mailbox-uid` for a message, resolved through the view state — the
  * same shape selectEmail uses for its body cache. A bare UID is not a key: the
  * same number is a different message in every other folder/account, so keying

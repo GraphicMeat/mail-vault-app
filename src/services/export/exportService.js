@@ -8,7 +8,7 @@ import { singleName, threadName, threadMemberName, pageName, attachmentFileName,
 import { replaceCidUrls, getRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { resolveMessageBody } from './bodyResolver';
 import { useMailStore } from '../../stores/mailStore';
-import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, accountEmailOf } from '../../stores/slices/unifiedHelpers';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
@@ -25,8 +25,9 @@ export const SAMPLE = Symbol('sample');
 const E2E = Boolean(import.meta.env?.VITE_E2E);
 const forcedFailure = () => (E2E ? (globalThis.window?.__MV_FORCE_EXPORT_FAILURE__ ?? null) : null);
 
-export async function fetchAssetViaTauri(url) {
-  return send('fetch_remote_asset', { url });
+// `accountEmail`: Network Activity shows the fetch as that account's.
+export async function fetchAssetViaTauri(url, accountEmail) {
+  return send('fetch_remote_asset', { url, accountEmail });
 }
 
 export async function readAttachmentViaTauri({ accountId, mailbox, uid, attachmentIndex }) {
@@ -183,9 +184,10 @@ export async function buildExport({
       // exported file — a reference nothing outside this app can resolve, and
       // one the rasterizer's frame then waits on. Same fill the reader does.
       const full = await hydrateInlineImages(await hydrate(message), location?.accountId, location?.mailbox);
+      const accountEmail = accountEmailOf(message, useMailStore.getState());
       const fetcher = forceMirrorFailure
         ? async () => { throw new Error('forced mirror failure'); }
-        : fetchAsset;
+        : url => fetchAsset(url, accountEmail);
       prepared.push({
         message: full,
         body: await prepareBody(full, mirror, fetcher, stats),

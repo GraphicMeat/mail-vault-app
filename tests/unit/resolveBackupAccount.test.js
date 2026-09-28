@@ -31,6 +31,7 @@ vi.mock('../../src/services/api', () => ({
 
 const { resolveServerAccount, resolveBackupAccount, hasValidCredentials, hasUsableGraphToken } = await import('../../src/services/authUtils');
 const apiMod = await import('../../src/services/api');
+const { tokenOwner } = await import('../../src/services/tokenOwners');
 
 const EXPECTED_ERROR = 'Credentials unavailable — retry keychain access or re-enter in Settings > Accounts';
 
@@ -188,6 +189,38 @@ describe('resolveBackupAccount', () => {
     const r1 = await resolveServerAccount('no-creds', { id: 'no-creds', email: 'empty@test.com' });
     expect(r1.ok).toBe(false);
     expect(r1.message).toBe(EXPECTED_ERROR);
+  });
+
+  // Network Activity names each Graph request by the account its token is
+  // for, and a token refresh by the account it refreshes.
+  it('a forced refresh names its account and remembers the new token as that account\'s', async () => {
+    const malformedGraph = {
+      id: 'acc-graph', email: 'vader@outlook.com',
+      authType: 'oauth2', oauth2AccessToken: 'not-a-jwt',
+      oauth2RefreshToken: 'ref123', oauth2ExpiresAt: Date.now() + 3600_000,
+      oauth2Transport: 'graph',
+    };
+    await resolveServerAccount('acc-graph', malformedGraph);
+    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com');
+    expect(tokenOwner('new-header.new-payload.new-signature')).toBe('vader@outlook.com');
+  });
+
+  it('an expiry refresh names its account and remembers the new token as that account\'s', async () => {
+    apiMod.refreshOAuth2Token.mockResolvedValueOnce({
+      accessToken: 'expiry.refreshed.token', refreshToken: 'ref2', expiresAt: Date.now() + 3600_000,
+    });
+    const expired = {
+      id: 'acc-graph', email: 'vader@outlook.com',
+      authType: 'oauth2', oauth2AccessToken: 'old.expired.token',
+      oauth2RefreshToken: 'ref123', oauth2ExpiresAt: Date.now() - 1000,
+      oauth2Transport: 'graph',
+    };
+    await resolveServerAccount('acc-graph', expired);
+    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com');
+    expect(tokenOwner('expiry.refreshed.token')).toBe('vader@outlook.com');
+    // The token it came in with is still the account's: a call already
+    // holding it is still that account's request.
+    expect(tokenOwner('old.expired.token')).toBe('vader@outlook.com');
   });
 
   it('resolveBackupAccount is an alias for resolveServerAccount', () => {

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useT } from '../../i18n/index.js';
 import { parseAuthResults } from '../../utils/senderCheck';
 import { daemonCall } from '../../services/daemonClient';
+import { useMailStore } from '../../stores/mailStore';
+import { accountEmailOf } from '../../stores/slices/unifiedHelpers';
 
 // Logo lookups for this session, so a thread or a list asks once per message.
 // Keyed by domain AND the message's Authentication-Results: the daemon's check
@@ -32,7 +34,9 @@ export function BimiLogo({ email, size = 20 }) {
     let live = true;
     const key = `${domain}\n${auth}`;
     if (!bimiLookups.has(key)) {
-      const lookup = daemonCall('bimi_logo', { domain, authenticationResults: auth })
+      // Network Activity shows the lookup as the account whose message asked.
+      const accountEmail = accountEmailOf(email, useMailStore.getState());
+      const lookup = daemonCall('bimi_logo', { domain, authenticationResults: auth, accountEmail })
         .then(result => result?.logo || null, () => { bimiLookups.delete(key); return null; });
       bimiLookups.set(key, lookup);
     }

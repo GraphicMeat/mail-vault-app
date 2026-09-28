@@ -36,7 +36,10 @@ vi.mock('../../utils/linkSafety', () => ({
 }));
 vi.mock('../../stores/mailStore', () => {
   // Callable as a hook AND carrying .getState() — EmailRow does both.
-  const state = { serverUids: { complete: false }, activeMailbox: 'INBOX', activeAccountId: 'acct-1' };
+  const state = {
+    serverUids: { complete: false }, activeMailbox: 'INBOX', activeAccountId: 'acct-1',
+    accounts: [{ id: 'acct-1', email: 'reader@mail.test' }, { id: 'acct-2', email: 'other@mail.test' }],
+  };
   const hook = (selector) => (selector ? selector(state) : state);
   hook.getState = () => state;
   return { useMailStore: hook };
@@ -98,7 +101,17 @@ for (const [name, renderRow] of variants) {
       expect((await screen.findByTestId('bimi-logo')).getAttribute('src')).toBe(LOGO);
       expect(daemonCall).toHaveBeenCalledWith('bimi_logo', {
         domain: 'blurb.test', authenticationResults: 'mx.test; dkim=pass; dmarc=pass header.from=blurb.test',
+        accountEmail: 'reader@mail.test',
       });
+    });
+
+    // Network Activity shows the lookup as the account whose row asked, which
+    // in a unified list is not the active one.
+    it('asks as the account the row belongs to', async () => {
+      daemonCall.mockResolvedValue({ logo: null });
+      render(renderRow(email({ _accountId: 'acct-2' })));
+      await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledTimes(1));
+      expect(daemonCall.mock.calls[0][1].accountEmail).toBe('other@mail.test');
     });
 
     // What a row parsed by an older build looks like: no header at all.

@@ -5,6 +5,7 @@
 import { send as transportSend } from './transport.js';
 import { t } from '../i18n/index.js';
 import { binCaptureError } from '../utils/binCapture.js';
+import { tokenOwner } from './tokenOwners.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -422,7 +423,8 @@ export async function exchangeOAuth2Code(state) {
   });
 }
 
-export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId, useGraph) {
+// `accountEmail`: Network Activity shows the refresh as that account's.
+export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId, useGraph, accountEmail) {
   if (IS_TAURI) {
     return tauriInvoke('oauth2_refresh', {
       refreshToken,
@@ -430,6 +432,7 @@ export async function refreshOAuth2Token(refreshToken, provider, customClientId,
       customClientId: customClientId || null,
       tenantId: tenantId || null,
       useGraph: useGraph || false,
+      accountEmail,
     });
   }
   return httpRequest('/oauth2/refresh', {
@@ -502,13 +505,15 @@ export async function vaultAdoptMailboxDirs(accountId, accountEmail, pairs) {
 }
 
 // ── Graph API functions (personal Microsoft accounts) ─────────────────────
+// Each names the account its token is for (`accountEmail`), so Network
+// Activity shows the request as that account's.
 
 export async function graphListFolders(accessToken) {
-  return await tauriInvoke('graph_list_folders', { accessToken });
+  return await tauriInvoke('graph_list_folders', { accessToken, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphListMessages(accessToken, folderId, top, skip) {
-  return await tauriInvoke('graph_list_messages', { accessToken, folderId, top, skip: skip || 0 });
+  return await tauriInvoke('graph_list_messages', { accessToken, folderId, top, skip: skip || 0, accountEmail: tokenOwner(accessToken) });
 }
 
 /** One uid per [graphId, internetMessageId] entry, from the ledger the backup shares. */
@@ -517,47 +522,49 @@ export async function graphAllocateUids(accountId, mailbox, entries) {
 }
 
 export async function graphGetMessage(accessToken, messageId) {
-  return await tauriInvoke('graph_get_message', { accessToken, messageId });
+  return await tauriInvoke('graph_get_message', { accessToken, messageId, accountEmail: tokenOwner(accessToken) });
 }
 
 // `intent` as in fetchEmailLight: 'open' (default), 'backfill' or 'export'.
 export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid, intent = 'open') {
-  const data = await tauriInvoke('graph_cache_mime', { accessToken, messageId, accountId, mailbox, uid, intent });
+  const data = await tauriInvoke('graph_cache_mime', {
+    accessToken, messageId, accountId, mailbox, uid, intent, accountEmail: tokenOwner(accessToken),
+  });
   return data.email;
 }
 
 export async function graphSetRead(accessToken, messageId, isRead) {
-  return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead });
+  return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphSetFlagged(accessToken, messageId, flagged) {
-  return await tauriInvoke('graph_set_flagged', { accessToken, messageId, flagged });
+  return await tauriInvoke('graph_set_flagged', { accessToken, messageId, flagged, accountEmail: tokenOwner(accessToken) });
 }
 
 // `where` ({ accountId, mailbox, uid }) lets the daemon keep a copy in the
 // deleted-mail bin first; without it nothing is kept.
 export async function graphDeleteMessage(accessToken, messageId, where = {}) {
-  return await tauriInvoke('graph_delete_message', { accessToken, messageId, ...where });
+  return await tauriInvoke('graph_delete_message', { accessToken, messageId, ...where, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphMoveEmails(accessToken, messageIds, targetFolderId) {
-  return await tauriInvoke('graph_move_emails', { accessToken, messageIds, targetFolderId });
+  return await tauriInvoke('graph_move_emails', { accessToken, messageIds, targetFolderId, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphCreateFolder(accessToken, displayName, parentFolderId = null) {
-  return tauriInvoke('graph_create_folder', { accessToken, displayName, parentFolderId });
+  return tauriInvoke('graph_create_folder', { accessToken, displayName, parentFolderId, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphRenameFolder(accessToken, folderId, displayName) {
-  return tauriInvoke('graph_rename_folder', { accessToken, folderId, displayName });
+  return tauriInvoke('graph_rename_folder', { accessToken, folderId, displayName, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphMoveFolder(accessToken, folderId, destinationId) {
-  return tauriInvoke('graph_move_folder', { accessToken, folderId, destinationId });
+  return tauriInvoke('graph_move_folder', { accessToken, folderId, destinationId, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function graphDeleteFolder(accessToken, folderId) {
-  return tauriInvoke('graph_delete_folder', { accessToken, folderId });
+  return tauriInvoke('graph_delete_folder', { accessToken, folderId, accountEmail: tokenOwner(accessToken) });
 }
 
 export async function resolveEmailSettings(domain) {

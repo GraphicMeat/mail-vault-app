@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
+import { useMailStore } from './mailStore';
 import { openLink } from '../utils/editorLinks';
 import { openMailtoCompose } from '../utils/mailto';
 
@@ -42,7 +43,9 @@ export const useUnsubscribeStore = create((set, get) => ({
     const sender = target.name || target.sender;
     set({ busy: true });
     try {
-      const answer = await daemonCall('unsubscribe', target);
+      // Network Activity shows the one-click POST as this account's.
+      const accountEmail = useMailStore.getState().accounts?.find(a => a.id === target.accountId)?.email;
+      const answer = await daemonCall('unsubscribe', { ...target, accountEmail });
       if (answer?.method === 'browser') await openLink(answer.url);
       else if (answer?.method === 'mailto' && !openMailtoCompose(answer.url, target.accountId)) await openLink(answer.url);
       const kind = answer?.status === 'ok' ? 'done' : answer?.method === 'mailto' ? 'openedMailto' : 'openedBrowser';

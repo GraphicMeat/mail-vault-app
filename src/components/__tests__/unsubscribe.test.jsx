@@ -65,9 +65,11 @@ describe('unsubscribe confirm flow', () => {
     useUnsubscribeStore.getState().request(unsubscribeTarget(MESSAGE));
     fireEvent.click(await screen.findByRole('button', { name: 'Unsubscribe' }));
     await screen.findByText('Unsubscribed from List News.');
+    // accountEmail: Network Activity shows the one-click POST as that account's.
     expect(mocks.daemonCall).toHaveBeenCalledWith('unsubscribe', {
       accountId: 'acc-a', sender: 'news@list.test', name: 'List News', listUnsubscribe: '<https://list.test/u>',
       listUnsubscribePost: 'List-Unsubscribe=One-Click', authenticationResults: 'mx.test; dkim=pass',
+      accountEmail: 'a@example.test',
     });
     expect(mocks.openLink).not.toHaveBeenCalled();
     expect(useUnsubscribeStore.getState().version).toBe(1);
