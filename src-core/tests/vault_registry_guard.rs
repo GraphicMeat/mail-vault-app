@@ -49,6 +49,8 @@ const RECEIVERS: &[&str] = &["reg.", "registry."];
 const ALLOWED: &[(&str, &str, &str)] = &[
     ("src-core/src/backup.rs", "sync_locations", "pre-sync copy; its caller vault_uids_after_presync invalidates when a copy into the vault was attempted"),
     ("src-core/src/backup.rs", "purge_backup_files", "removes files from the external mirror's cur/, never the app vault"),
+    ("src-core/src/import_rehome.rs", "apply", "moves old imports out of server uids; its daemon caller rehome_imports_for invalidates when anything moved or failed"),
+    ("src-core/src/import_rehome.rs", "replay_into", "replays the rehome ledger onto the vault and the backup mirror; it returns whether the vault moved and its caller vault_uids_after_presync invalidates on that"),
     ("src-core/src/maildir.rs", "migrate_add_eml_extension", "startup rename sweep; daemon main runs it before the registry opens"),
     ("src-core/src/maildir.rs", "repair_generation", "renames and orphans wholesale; its caller maildir_repair_generation invalidates when anything moved"),
     ("src-core/src/maildir.rs", "rebind_uids", "re-files undone deletes under their new uids; its caller vault_rebind_uids invalidates when anything moved"),
