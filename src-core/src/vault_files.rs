@@ -589,7 +589,7 @@ pub fn clear_cache(
                 continue;
             }
             gate(&mut || {
-                match remove_cache_copy(entry.path(), &name) {
+                match remove_cache_copy(entry.path(), &name, None) {
                     Ok(true) => deleted_count += 1,
                     // A draft with no `A` (never written that way, but a
                     // draft is never a cache copy either).
@@ -615,12 +615,21 @@ pub fn clear_cache(
 /// (`Ok(false)`, nothing touched) a copy whose CURRENT name carries `A`
 /// (backup/archive/restore) or `D` (draft): those are never cache, whatever
 /// a caller decided from an older listing.
-fn remove_cache_copy(path: &Path, name: &str) -> std::io::Result<bool> {
+///
+/// `registry`: the mailbox (`reg`, account, mailbox) whose row for the uid is
+/// tombstoned right after the delete, as every vault writer keeps the
+/// registry current. A uid with a duplicate left (an `A` copy) is the
+/// caller's to relist (`evict_files` invalidates). `None` only for a
+/// whole-vault walk that ends with `invalidate_all` (`clear_cache`).
+fn remove_cache_copy(path: &Path, name: &str, registry: Option<(&VaultRegistry, &str, &str)>) -> std::io::Result<bool> {
     let flags = parse_flags_from_filename(name);
     if flags.iter().any(|f| f == "archived" || f == "draft") {
         return Ok(false);
     }
     fs::remove_file(path)?;
+    if let (Some((reg, account_id, mailbox)), Some(uid)) = (registry, vault_filename_uid(name)) {
+        reg.remove(account_id, mailbox, &[uid]);
+    }
     if let (Some(cur), Some(uid)) = (path.parent(), vault_filename_uid(name)) {
         // The sidecar serves whatever file of this uid is left (an `A`
         // duplicate reads through it), so it goes only with the last one.
@@ -688,9 +697,9 @@ pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet
 /// goes with the uid's last file. The message's extracted attachments in
 /// `<root>/attachment_cache` go too, once no file of the uid is left. Reads
 /// `cur/` only: `orphaned/` is never touched. Returns the uids whose cache
-/// copy was removed. The registry drops a uid with no file left (which
+/// copy was removed. Each removal tombstones its uid in the registry (which
 /// nudges the search index for the folder); a uid with an archived duplicate
-/// left, or a failed removal, relists the mailbox instead. `Err` (nothing
+/// left, or a failed removal, relists the mailbox as well. `Err` (nothing
 /// removed) when `cur/` cannot be listed. The caller holds the mailbox's
 /// write lock.
 pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<u32>, String> {
@@ -722,7 +731,7 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         } else {
             Vec::new()
         };
-        match remove_cache_copy(&entry.path(), &name) {
+        match remove_cache_copy(&entry.path(), &name, Some((reg, account_id, mailbox))) {
             Ok(true) => removed.push((uid, attachments)),
             Ok(false) => {}
             Err(e) => {
@@ -732,7 +741,6 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         }
     }
     let mut evicted: Vec<u32> = Vec::new();
-    let mut gone: Vec<u32> = Vec::new();
     let mut duplicate_left = false;
     // The uids with a file left, from one listing: a listing per uid would
     // hold the mailbox lock for removed x files. Unlistable: every uid counts
@@ -753,13 +761,9 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         for file in attachments {
             let _ = fs::remove_file(file);
         }
-        gone.push(uid);
     }
     evicted.sort_unstable();
     evicted.dedup();
-    gone.sort_unstable();
-    gone.dedup();
-    reg.remove(account_id, mailbox, &gone);
     if failed || duplicate_left {
         reg.invalidate(account_id, mailbox);
     }
@@ -2279,6 +2283,25 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert!(cached[0].exists(), "uid 5 still has its archived copy");
         assert!(!cached[1].exists() && !cached[2].exists(), "uids 6 and 7 are gone");
         assert!(cur.join(format!("5{INFO_PREFIX}AS.eml")).exists());
+    }
+
+    /// Every vault writer keeps the registry current (vault_registry_guard):
+    /// once the cache copy is gone, a verified mailbox no longer lists it,
+    /// with no relisting in between.
+    #[test]
+    fn remove_cache_copy_drops_the_uid_from_the_registry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let name = format!("8{INFO_PREFIX}S.eml");
+        fs::write(cur.join(&name), b"Message-ID: <eight@x>\r\n\r\nb").unwrap();
+        fs::write(cur.join(format!("9{INFO_PREFIX}S.eml")), b"Message-ID: <nine@x>\r\n\r\nb").unwrap();
+        assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![8, 9], "listed once: verified");
+
+        assert!(remove_cache_copy(&cur.join(&name), &name, Some((&reg, "acct", "INBOX"))).unwrap());
+        assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![9]);
     }
 
     #[test]
