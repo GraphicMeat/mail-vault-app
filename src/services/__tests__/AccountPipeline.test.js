@@ -132,6 +132,30 @@ describe('AccountPipeline memory cleanup', () => {
 
     expect(db.saveEmailHeaders).not.toHaveBeenCalled();
   });
+
+  // A branch listing's activeMailbox is its root, a real folder, so the
+  // unified guard above (activeMailbox is never a folder there) let it
+  // through: the rows of every folder in the branch, and the branch's total,
+  // were saved into the root folder's header cache.
+  it('never saves a branch listing as its root folder', async () => {
+    db.saveEmailHeaders.mockClear();
+    mail.state.activeMailbox = 'Kunden';
+    mail.state.mailboxScope = { root: 'Kunden', paths: ['Kunden', 'Kunden/Company XY'] };
+    mail.state.emails = [
+      { uid: 9401, _accountId: 'acc-1', _mailbox: 'Kunden' },
+      { uid: 9411, _accountId: 'acc-1', _mailbox: 'Kunden/Company XY' },
+    ];
+    mail.state.totalEmails = 2;
+    const pipeline = new AccountPipeline({ id: 'acc-1', email: 'prime@graphicmeat.com' });
+
+    try {
+      await pipeline._finish('Kunden');
+    } finally {
+      mail.state.mailboxScope = null;
+    }
+
+    expect(db.saveEmailHeaders).not.toHaveBeenCalled();
+  });
 });
 
 describe('AccountPipeline daemon headers', () => {

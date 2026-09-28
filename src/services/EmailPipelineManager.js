@@ -39,7 +39,7 @@ class EmailPipelineManager {
    * Called after loadEmails finishes and UI has stabilized.
    */
   async startActiveAccountPipeline(accountId) {
-    const { accounts, activeMailbox, emails, savedEmailIds } = useMailStore.getState();
+    const { accounts, activeMailbox, mailboxScope, emails, savedEmailIds } = useMailStore.getState();
     const account = accounts.find(a => a.id === accountId);
     if (!account || !hasValidCredentials(account) || isHidden(accountId)) return;
 
@@ -62,8 +62,19 @@ class EmailPipelineManager {
     // `_accountId` and the `_mailbox` it resolved for that account. It builds
     // the list from one folder per account, so a single mailbox covers this
     // account's whole slice of the list.
+    //
+    // A branch listing (loadSubtree) spans mailboxes the other way: one
+    // account, but rows from every folder under `activeMailbox`, which is the
+    // branch root. The pipeline fetches from one folder, so it takes the root's
+    // own rows only. Handing it the whole branch asked the root for uids it
+    // does not hold, and each "not here" answer pruned that row from the root
+    // and took one off the branch's count.
     const spanning = activeMailbox === 'UNIFIED';
-    const ownRows = spanning ? emails.filter(e => e._accountId === accountId) : emails;
+    const ownRows = spanning
+      ? emails.filter(e => e._accountId === accountId)
+      : mailboxScope
+        ? emails.filter(e => (e._mailbox ?? activeMailbox) === activeMailbox)
+        : emails;
     const pipelineMailbox = spanning
       ? (ownRows.find(e => e._mailbox)?._mailbox || 'INBOX')
       : activeMailbox;

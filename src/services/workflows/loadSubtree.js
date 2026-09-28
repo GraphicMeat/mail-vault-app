@@ -71,7 +71,11 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
   // one cheap round trip per folder, and the count a reader wants is the
   // server's, not however many headers this run happened to pull.
   const counts = await Promise.all(paths.map(p =>
-    api.checkMailboxStatus(fresh, p).then(s => s?.exists || 0).catch(() => 0)));
+    api.checkMailboxStatus(fresh, p).then(s => s?.exists || 0).catch((e) => {
+      // Counted as empty, which undercounts the branch: say so.
+      console.warn(`[loadSubtree] STATUS ${p}: ${e?.message || e}`);
+      return 0;
+    })));
   if (isStale()) return;
   set({ totalEmails: counts.reduce((a, b) => a + b, 0) });
 

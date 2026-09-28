@@ -9,6 +9,7 @@ import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { setArchivedGroup } from '../stores/slices/messageListSlice';
+import { spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { _pruneIfGone } from './workflows/messageMutations';
 
 export { hasValidCredentials };
@@ -440,14 +441,19 @@ export class AccountPipeline {
     this._lastLoadedEmails = null; // Free header data — no longer needed
     this._graphIdMap = null;
 
-    // Refresh saved/archived IDs for this account if it's the active one
+    // Refresh saved/archived IDs for this account if it's the active one.
+    // Only in a view of that one folder: a branch listing's activeMailbox is
+    // its root, a real folder, but its rows come from every folder under it.
+    // Treating it as the root saved all of them, and the branch's total, into
+    // the root's header cache, and repainted the root's vault rows into a list
+    // loadSubtree cleared of them on purpose.
     const { activeAccountId, activeMailbox } = useMailStore.getState();
-    if (this.accountId === activeAccountId && mailbox === activeMailbox) {
+    if (this.accountId === activeAccountId && mailbox === activeMailbox && !spansMailboxes(useMailStore.getState())) {
       try {
         const vault = await db.getVaultUidSets(activeAccountId, activeMailbox);
         // The read yielded: a view switched to since owns the store now.
         const live = useMailStore.getState();
-        if (live.activeAccountId === activeAccountId && live.activeMailbox === activeMailbox) {
+        if (live.activeAccountId === activeAccountId && live.activeMailbox === activeMailbox && !spansMailboxes(live)) {
           // I-5: an unknown read (`null`) keeps the store's current saved and
           // archived values instead of adopting "nothing is in the vault".
           const newArchivedIds = vault?.archived ?? live.archivedEmailIds;

@@ -144,6 +144,29 @@ describe('the active account pipeline in a view that spans mailboxes', () => {
     expect(startContentCaching).toHaveBeenCalledWith([11, 12], 'Archive');
   });
 
+  // A branch listing (loadSubtree) is the other view that spans mailboxes: its
+  // `activeMailbox` is the branch root, a real folder, but the rows come from
+  // every folder under it. Fetching them all from the root asked the server for
+  // uids the root does not hold, and each "not here" answer pruned the row and
+  // took one off the branch's count: "1 emails" over six rows on screen.
+  it('fetches only the branch root\'s own rows in a branch listing, from the root', async () => {
+    store.state = {
+      accounts: [LUKE],
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden/Company XY', 'Kunden/Company XY/Invoices'] },
+      emails: [
+        uRow(9401, 'luke', 'Kunden'),
+        uRow(9411, 'luke', 'Kunden/Company XY'),
+        uRow(9421, 'luke', 'Kunden/Company XY/Invoices'),
+      ],
+      savedEmailIds: new Set(),
+    };
+
+    await pipelineManager.startActiveAccountPipeline('luke');
+
+    expect(startContentCaching).toHaveBeenCalledWith([9401], 'Kunden');
+  });
+
   it('reuses an idle pipeline against the resolved folder, not the literal', async () => {
     store.state = {
       accounts: [LUKE],
