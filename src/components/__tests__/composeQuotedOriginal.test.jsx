@@ -122,7 +122,9 @@ vi.mock('../../stores/accountStore', () => ({ useAccountStore: (selector) => sel
 vi.mock('../../stores/settingsStore', () => {
   const hook = vi.fn((selector) => selector(settings));
   hook.getState = () => settings;
-  return { useSettingsStore: hook };
+  // OriginalFrame reads this gate directly (same as EmailViewer/EmailPreviewFrame);
+  // this suite doesn't exercise tracker blocking, so it stays off by default.
+  return { useSettingsStore: hook, isTrackerBlockingActive: (s) => !!(s || settings).trackerBlockingEnabled };
 });
 
 const { ComposeModal } = await import('../ComposeModal');

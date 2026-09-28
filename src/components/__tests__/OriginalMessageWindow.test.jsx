@@ -15,9 +15,23 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'original-1' }) }));
 
+vi.mock('../../stores/safeStorage', () => {
+  const store = {};
+  return {
+    safeStorage: {
+      getItem: (key) => store[key] || null,
+      setItem: (key, val) => { store[key] = val; },
+      removeItem: (key) => { delete store[key]; },
+    },
+  };
+});
+
 window.history.replaceState({}, '', '/?original=tok');
 const { OriginalMessageWindow } = await import('../OriginalMessageWindow');
 const { useSettingsStore } = await import('../../stores/settingsStore');
+
+const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active' };
+const BEACON = 'https://example.list-manage.com/track/open.php?u=8f2&id=a91';
 
 const frameTheme = () => new DOMParser()
   .parseFromString(document.querySelector('iframe').getAttribute('srcdoc'), 'text/html')
@@ -66,5 +80,17 @@ describe('the original message window', () => {
     await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
     act(() => handlers.at(-1)({ payload: { token: 'other', html: '<p>Not mine</p>', dark: true } }));
     expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('strips a tracking beacon in the detached original the same way the reading pane would', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM, trackerBlockingEnabled: true });
+    await deliver({ html: `<p>Hi</p><img src="${BEACON}" width="1" height="1">` });
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).not.toContain('list-manage.com');
+  });
+
+  it('keeps the beacon in the detached original when blocking is off, same as the reading pane', async () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM, trackerBlockingEnabled: false });
+    await deliver({ html: `<p>Hi</p><img src="${BEACON}" width="1" height="1">` });
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain(BEACON);
   });
 });

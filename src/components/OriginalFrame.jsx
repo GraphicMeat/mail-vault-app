@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Sun, Moon } from 'lucide-react';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { frameBody } from '../stores/netActivityStore';
@@ -38,17 +38,23 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
 export function OriginalFrame({ html, dark, padding = '12px 16px', title, className = '', autoSize = true }) {
   const frameRef = useRef(null);
   const palette = useThemeStore(s => s.palette);
+  // Same gate the reading pane uses (EmailViewer/ChatBubbleView/
+  // EmailPreviewFrame): a quoted or popped-out original must not phone home
+  // any more than opening the same message in the reader would. Reading the
+  // store directly (rather than a prop) also covers the detached pop-out
+  // window for free: it hydrates the same persisted settings file, same as
+  // `useDefaultEmailDark` already does for the theme.
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   useEffect(() => (autoSize ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize]);
   const srcDoc = useMemo(() => {
     const nonce = emailScriptNonce();
     return buildEmailIframeHtml({
-      // Counted for Network Activity only: this frame never strips beacons.
-      bodyHtml: frameBody(html, null, false).body,
+      bodyHtml: frameBody(html, null, trackerBlocking).body,
       themeTag: dark ? 'dark' : 'light',
       extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}<style>body { padding: ${padding}; }</style>`,
       nonce,
     });
-  }, [html, dark, palette, padding]);
+  }, [html, dark, palette, padding, trackerBlocking]);
   return (
     <iframe
       ref={frameRef}

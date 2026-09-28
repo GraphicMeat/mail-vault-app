@@ -111,7 +111,7 @@ vi.mock('../../stores/accountStore', () => ({ useAccountStore: (selector) => sel
 vi.mock('../../stores/settingsStore', () => {
   const hook = vi.fn((selector) => selector(settings));
   hook.getState = () => settings;
-  return { useSettingsStore: hook, hasPremiumAccess: () => false };
+  return { useSettingsStore: hook, hasPremiumAccess: () => false, isTrackerBlockingActive: (s) => !!(s || settings).trackerBlockingEnabled };
 });
 
 // The original's pane is a read-only ThreadView with its own specs
