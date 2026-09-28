@@ -58,14 +58,15 @@
  * server counts (a miss in a partial map reads as "gone from the server"),
  * and yoda's INBOX carries one message no real server could: fixture uid 909
  * (`vanishedMessage`, wdio.conf.js) is counted in EXISTS and listed by UID
- * SEARCH, yet its body fetch and its uid probe prove it absent. Once the
- * app's body pass has asked for it, the prune takes its row, nothing brings
- * it back (the daemon's reconcile only prunes), and the cache stays one short
- * of EXISTS for the rest of the run: the repair answers "cache covers 10/11,
- * waiting for a fuller sync" for ever. So, inside the same poll, the spec
- * puts back that one row and only that one, read from the server with a
- * fetch neither fault matches. Any other gap between the server's listing
- * and the cache is a real one and fails the case by name.
+ * SEARCH, yet its body fetch and its uid probe prove it absent. The app's
+ * body pass prunes its row on that answer. The daemon's sync puts it back:
+ * a listing that still names a uid the cache lost restores the row
+ * (`heal_holes`), and the delete this rule makes moves the count, so the
+ * sync that prunes the victim's row lists the mailbox. Before that heal
+ * the cache stayed one short of EXISTS for the rest of the run and the
+ * repair answered "cache covers 10/11, waiting for a fuller sync" for ever.
+ * If the repair never runs, the timeout names every server uid the cache
+ * still lacks.
  *
  * ── Why yoda ──────────────────────────────────────────────────────────────
  * MOCK_ACCOUNTS (wdio.conf.js): yoda's INBOX count is asserted nowhere, and it
@@ -98,8 +99,6 @@ const YODA_SERVER = 2;          // MOCK_ACCOUNTS order: luke, vader, yoda
 const VICTIM = 'Cleanup rule keeps a verified copy';
 const ORPHAN = 'Cleanup rule leaves an unproven copy';
 const VICTIM_ID = '<cleanup-rule-victim@mock.test>';
-// yoda's `vanishedMessage` fixture (wdio.conf.js): see the header.
-const VANISHED_FIXTURE_UID = 909;
 const ORPHAN_ID = '<cleanup-rule-orphan@mock.test>';
 
 // Older than any threshold the picker can build, and far outside the fixture
@@ -187,11 +186,10 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
   };
 
   /**
-   * Put fixture uid 909's header row back in yoda's INBOX cache, if the prune
-   * took it (see the header), so the cache names what the server counts.
-   * Throws on any other gap: that one would be a real incomplete cache.
+   * Server uids yoda's INBOX header cache does not hold: what keeps the
+   * repair gate shut (see the header). Diagnostics only.
    */
-  const putBackVanishedFixtureRow = async () => {
+  const uidsMissingFromCache = async () => {
     const serverUids = await withYoda(async (client) => {
       const lock = await client.getMailboxLock('INBOX');
       try {
@@ -201,36 +199,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
       }
     });
     const cached = new Set(await cachedUids());
-    const missing = serverUids.filter((uid) => !cached.has(uid));
-    const unexplained = missing.filter((uid) => uid !== VANISHED_FIXTURE_UID);
-    if (unexplained.length) {
-      throw new Error(`yoda's INBOX header cache lacks server uids ${unexplained.join(', ')}, `
-        + 'which no fixture explains: the repair gate is right to wait for them');
-    }
-    if (!missing.length) return;
-    // `UID FETCH 909 (UID FLAGS ENVELOPE INTERNALDATE)`: neither the
-    // `BODY.PEEK[]` fetch nor the bare `(UID)` probe the fault answers empty.
-    const msg = await withYoda(async (client) => {
-      const lock = await client.getMailboxLock('INBOX');
-      try {
-        return await client.fetchOne(String(VANISHED_FIXTURE_UID), { flags: true, envelope: true, internalDate: true }, { uid: true });
-      } finally {
-        lock.release();
-      }
-    });
-    if (!msg?.envelope?.messageId) throw new Error(`fixture uid ${VANISHED_FIXTURE_UID} has no envelope to put back: ${JSON.stringify(msg)}`);
-    const row = {
-      uid: VANISHED_FIXTURE_UID,
-      messageId: msg.envelope.messageId,
-      subject: msg.envelope.subject || '',
-      date: (msg.envelope.date || msg.internalDate || new Date()).toISOString(),
-      flags: [...(msg.flags || [])],
-    };
-    const saved = await invokeApp('daemon_rpc', {
-      method: 'save_email_cache',
-      params: { accountId: yodaId, mailbox: 'INBOX', data: JSON.stringify({ emails: [row] }) },
-    });
-    if (saved?.error) throw new Error(`save_email_cache: ${saved.error}`);
+    return serverUids.filter((uid) => !cached.has(uid));
   };
 
   const settingsText = () => browser.execute(() =>
@@ -498,18 +467,8 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     // run, rather than waiting to see which way the race went. Removed inside
     // the poll because a folder open can stamp it back between two invokes.
     let repair = null;
-    let cacheGap = null;
-    // Fixture uid 909 is put back in the same poll: the app's body pass can
-    // prune it again between two ticks.
     await browser.waitUntil(async () => {
       rmSync(stamp, { force: true });
-      try {
-        await putBackVanishedFixtureRow();
-        cacheGap = null;
-      } catch (e) {
-        cacheGap = e.message;
-        return false;
-      }
       repair = (await invokeApp('daemon_rpc', {
         method: 'maildir_repair_generation', params: { accountId: yodaId, mailbox: 'INBOX' },
       }))?.value ?? null;
@@ -519,8 +478,11 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
       interval: 1000,
       timeoutMsg: 'The vault repair never ran against the pruned cache, so nothing below is a '
         + 'question about what it does to a mailbox it has never stamped',
-    }).catch((e) => {
-      throw new Error(cacheGap ? `${e.message} (${cacheGap})` : e.message);
+    }).catch(async (e) => {
+      const missing = await uidsMissingFromCache().catch((err) => [`unknown: ${err.message}`]);
+      throw new Error(missing.length
+        ? `${e.message} (yoda's INBOX header cache lacks server uids ${missing.join(', ')})`
+        : e.message);
     });
     // Adopted, not re-keyed: a mailbox with no stamp is not a UID reissue.
     // Named uid rather than an empty list - this run also sweeps yoda's fixture
