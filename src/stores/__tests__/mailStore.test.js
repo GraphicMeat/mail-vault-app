@@ -66,8 +66,10 @@ vi.mock('../../services/authUtils', () => ({
 vi.mock('../../services/attachmentUtils', () => ({
   hasRealAttachments: () => false,
 }));
-vi.mock('../../utils/emailParser', () => ({
+vi.mock('../../utils/emailParser', async (importOriginal) => ({
   buildThreads: () => new Map(),
+  // A local snooze keys its held message by the canonical Message-ID.
+  normalizeMessageId: (await importOriginal()).normalizeMessageId,
 }));
 // Mutable so a test can seed persisted link alerts; `mock` prefix is what lets
 // the hoisted factory below reference it.
@@ -112,6 +114,7 @@ vi.mock('../../services/cacheManager', () => ({
 const { useMailStore } = await import('../mailStore');
 const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
+const { useSnoozeStore } = await import('../snoozeStore');
 
 /**
  * loadUnifiedInbox asks every account for its Sent headers once the list has
@@ -922,6 +925,83 @@ describe('updateSortedEmails memoization', () => {
     useMailStore.getState().updateSortedEmails();
     // Same array instance back means the guard short-circuited.
     expect(useMailStore.getState().sortedEmails).toBe(first);
+  });
+});
+
+// A local snooze (the server would not host a Snoozed folder) moves nothing:
+// the message stays in its folder and the list holds it out until its row
+// wakes. The rows live in another store, so its changes have to repaint.
+describe('local snooze', () => {
+  const held = { id: 's1', accountId: 'acct-1', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' };
+  const inbox = () => [
+    // Brackets differ from the row's: matched on the canonical Message-ID.
+    { uid: 1, messageId: 'held@x', flags: [], date: 'Mon, 05 Jan 2026 12:00:00 +0000' },
+    { uid: 2, messageId: '<other@x>', flags: [], date: 'Sun, 04 Jan 2026 12:00:00 +0000' },
+  ];
+  const uids = () => useMailStore.getState().sortedEmails.map(e => `${e._accountId || ''}${e.uid}`);
+  const realSetUnread = mockSettingsState.setUnreadForAccount;
+
+  beforeEach(() => {
+    useSnoozeStore.setState({ rows: [] });
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      mailboxScope: null,
+      viewMode: 'all',
+      emails: inbox(),
+      localEmails: [],
+      archivedEmailIds: new Set(),
+      savedEmailIds: new Set(),
+      serverUids: NO_SERVER_UIDS,
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+  });
+  afterEach(() => {
+    useSnoozeStore.setState({ rows: [] });
+    mockSettingsState.setUnreadForAccount = realSetUnread;
+  });
+
+  it('hides the message as its row lands and shows it again when the row wakes', () => {
+    expect(uids()).toEqual(['1', '2']);
+    useSnoozeStore.getState().upsert([held]);
+    expect(uids()).toEqual(['2']);
+    useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
+    expect(uids()).toEqual(['1', '2']);
+  });
+
+  it('holds out only that message, in that folder of that account', () => {
+    useSnoozeStore.getState().upsert([
+      { ...held, id: 'other-folder', fromMailbox: 'Archive' },
+      { ...held, id: 'other-account', accountId: 'acct-2' },
+      // A server snooze moved its message away: nothing here to hide.
+      { ...held, id: 'server', snoozedMailbox: 'Snoozed' },
+      // Nothing will wake a failed row, so its message is not kept out of sight.
+      { ...held, id: 'failed', state: 'failed' },
+    ]);
+    expect(uids()).toEqual(['1', '2']);
+  });
+
+  it('matches All Inboxes rows by their own account and folder', () => {
+    useMailStore.setState({
+      unifiedInbox: true,
+      activeMailbox: 'UNIFIED',
+      emails: [
+        { uid: 1, _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<held@x>', flags: [], date: 'Mon, 05 Jan 2026 12:00:00 +0000' },
+        { uid: 1, _accountId: 'acct-2', _mailbox: 'INBOX', messageId: '<held@x>', flags: [], date: 'Sun, 04 Jan 2026 12:00:00 +0000' },
+      ],
+    });
+    useSnoozeStore.getState().upsert([held]);
+    expect(uids()).toEqual(['acct-21']);
+  });
+
+  it('leaves a held message out of the inbox badge', () => {
+    const setUnread = vi.fn();
+    mockSettingsState.setUnreadForAccount = setUnread;
+    useSnoozeStore.getState().upsert([held]);
+    expect(setUnread).toHaveBeenLastCalledWith('acct-1', 1);
   });
 });
 

@@ -7,6 +7,12 @@
 // at the wake time, and finds it by Message-ID (the move's COPYUID is only a
 // hint), so a message with no Message-ID cannot be snoozed.
 //
+// A server that will not host a Snoozed folder (it refused both CREATEs, or
+// answered ALREADYEXISTS or BAD, or has no hierarchy) gets a LOCAL snooze:
+// nothing moves, the row's `snoozedMailbox` is '', the list holds the message
+// out of its folder until the row wakes (deriveDisplayRows), and the wake
+// marks it unread where it is. Other clients still show it in the inbox.
+//
 // Not on a Graph account: the daemon never refreshes an OAuth token, so a
 // background Graph move would fail at wake time. Not offline either: the move
 // would be journalled for later while the row already exists, and a wake that
@@ -21,6 +27,10 @@ import { resolveEmailLocation, selectionKey } from '../../stores/slices/unifiedH
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useSnoozeStore } from '../../stores/snoozeStore';
 import { t as tr } from '../../i18n/index.js';
+
+// `mailvault_core::imap::SNOOZE_FOLDER_REFUSED`: the server answered, and
+// will not host a Snoozed folder.
+const FOLDER_REFUSED = 'E_SNOOZE_FOLDER_REFUSED:';
 
 /** Whether `email` can be snoozed at all (see the header). */
 export function canSnooze(email, state) {
@@ -57,17 +67,37 @@ export async function snoozeEmails(keys, wakeAt) {
   // Every moved message gets its row or goes back where it came from; one
   // failure never stops the rest, and the first error is reported at the end.
   const created = [];
+  const heldKeys = [];
   let failure = null;
   let movedAny = false;
   try {
     for (const [accountId, groupKeys] of groups) {
       const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
-      // The server's own refusal text ("[CANNOT] create failure: NAME NOT
-      // ALLOWED") is for the log, not the toast.
       const folder = await daemonCall('snooze.ensure_folder', { account }).catch((e) => {
+        const reason = String(e?.message || e);
+        if (reason.startsWith(FOLDER_REFUSED)) {
+          console.warn('[snooze] the server will not host a Snoozed folder, snoozing on this computer:', reason);
+          return null;
+        }
         console.error('[snooze] could not resolve or create the Snoozed folder:', e);
-        throw new Error(tr('snooze.error.createFolder'));
+        throw new Error(tr('snooze.error.createFolder', { reason }));
       });
+      if (folder === null) {
+        // Nothing moved, so a row that cannot be written has nothing to put back.
+        for (const key of groupKeys) {
+          const email = rows.get(key);
+          try {
+            created.push(await daemonCall('snooze.create', {
+              accountId, mailbox: resolveEmailLocation(email, state).mailbox, snoozedMailbox: '',
+              uid: email.uid ?? null, messageId: email.messageId, wakeAt,
+            }));
+            heldKeys.push(key);
+          } catch (e) {
+            failure ||= e;
+          }
+        }
+        continue;
+      }
       if (!(accountId === state.activeAccountId && (state.mailboxes || []).some(m => m.path === folder))) {
         forceMailboxRefetch(accountId);
       }
@@ -88,6 +118,15 @@ export async function snoozeEmails(keys, wakeAt) {
       }
     }
   } finally {
+    if (heldKeys.length) {
+      // The rows hide them from the list; the reader and the selection let go too.
+      const held = new Set(heldKeys);
+      const live = get();
+      useMailStore.setState({
+        selectedEmailIds: new Set([...(live.selectedEmailIds || [])].filter(k => !held.has(k))),
+        ...(held.has(live.selectedEmailId) ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null } : {}),
+      });
+    }
     if (created.length) {
       useSnoozeStore.getState().upsert(created);
       const ids = created.map(row => row.id);
@@ -114,7 +153,10 @@ async function putBack(r, i) {
   if (uids.length) await api.moveEmails(r.account, uids, r.to, r.from);
 }
 
-/** Wake these snooze rows now (the daemon moves them back), then repaint. */
+/**
+ * Wake these snooze rows now (the daemon moves a server snooze back; a local
+ * one only ends, and the list shows its message again), then repaint.
+ */
 export async function unsnooze(ids) {
   try {
     for (const id of ids) {

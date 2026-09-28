@@ -11,6 +11,7 @@ import { createSyncSlice } from './slices/syncSlice';
 import { createUiSlice } from './slices/uiSlice';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
+import { useSnoozeStore } from './snoozeStore';
 
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
@@ -93,4 +94,10 @@ useTagStore.subscribe(() => {
 });
 useAutoTagStore.subscribe((state, prev) => {
   if (state.rules !== prev.rules) useMailStore.getState().updateSortedEmails();
+});
+
+// A local snooze holds its message out of the list until the row wakes
+// (deriveDisplayRows), so a new, woken or reloaded row re-derives it.
+useSnoozeStore.subscribe((state, prev) => {
+  if (state.rows !== prev.rows) useMailStore.getState().updateSortedEmails();
 });

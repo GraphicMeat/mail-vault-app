@@ -3069,7 +3069,7 @@
   "snooze.pickTime": "Choose a date and time",
   "snooze.confirm": "Snooze",
   "snooze.failed": "Could not snooze: {{err}}",
-  "snooze.error.createFolder": "the Snoozed folder could not be found or created on the mail server",
+  "snooze.error.createFolder": "the Snoozed folder could not be found or created on the mail server ({{reason}})",
   "snooze.offline": "Snooze needs a connection to the mail server. Try again when you are online.",
   "snooze.until": "Snoozed until {{time}}",
   "undo.snoozed_one": "Snoozed {{count}} message",

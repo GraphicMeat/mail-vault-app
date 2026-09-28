@@ -20,6 +20,7 @@ import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
 import { useTagStore, requestRowTags } from '../tagStore';
 import { useAutoTagStore } from '../autoTagStore';
+import { useSnoozeStore, localSnoozeKey, localSnoozeKeys, inboxUnread } from '../snoozeStore';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -213,6 +214,9 @@ export function deriveDisplayRows({
   // exactly today's behavior. See filterHiddenFromInbox.
   hiddenTagIds = null,
   tagsByRow = null,
+  // snoozeStore's localSnoozeKeys: messages a local snooze holds out of the
+  // folder they are still in.
+  localSnoozes = null,
 }) {
   // In unified inbox, UIDs collide across accounts — use compound key for dedup
   const uidKey = unifiedInbox
@@ -276,6 +280,14 @@ export function deriveDisplayRows({
       const mbox = activeMailbox === 'UNIFIED' ? (e._mailbox || 'INBOX') : activeMailbox;
       return !deleteTombstones.has(`${acct}|${mbox}|${e.uid}`);
     });
+  }
+
+  // A local snooze moved nothing (the server would not host a Snoozed
+  // folder): the row is kept out of its folder here until it wakes.
+  if (localSnoozes?.size) {
+    const spans = unifiedInbox || activeMailbox === 'UNIFIED';
+    result = result.filter(e => !e.messageId || !localSnoozes.has(localSnoozeKey(
+      e._accountId || activeAccountId, e._mailbox || (spans ? 'INBOX' : activeMailbox), e.messageId)));
   }
 
   // Sort by date descending (newest first)
@@ -390,6 +402,9 @@ export const createMessageListSlice = (set, get) => ({
     // Identity closes that hole at O(1): every write replaces these with fresh
     // instances, so a changed collection is always a changed reference. Keep
     // the string too — it still catches in-place growth and the scalar inputs.
+    // The rows live in snoozeStore; mailStore.js re-derives when they change.
+    const snoozeRows = useSnoozeStore.getState().rows;
+    const localSnoozes = localSnoozeKeys(snoozeRows);
     const sameInputs = _sortedInputs !== null
       && _sortedInputs.emails === emails
       && _sortedInputs.localEmails === localEmails
@@ -397,14 +412,15 @@ export const createMessageListSlice = (set, get) => ({
       && _sortedInputs.savedEmailIds === savedEmailIds
       && _sortedInputs.serverUids === serverUids
       && _sortedInputs.deleteTombstones === deleteTombstones
-      && _sortedInputs.tagsByRow === tagsByRow;
+      && _sortedInputs.tagsByRow === tagsByRow
+      && _sortedInputs.snoozeRows === snoozeRows;
     const hiddenTagKey = hiddenTagIds.size ? [...hiddenTagIds].sort().join(',') : '';
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}-${hiddenTagKey}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}-${hiddenTagKey}-${localSnoozes.size}`;
     if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
     const result = deriveDisplayRows({
       emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids,
-      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow,
+      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes,
     });
 
     annotateRowAlerts(result, get(), useSettingsStore.getState());
@@ -422,17 +438,15 @@ export const createMessageListSlice = (set, get) => ({
     //
     // INBOX only, and never a scoped branch listing (that list holds the
     // descendant folders' mail too) or the unified list (its rows span
-    // accounts — messageMutations counts those per account).
+    // accounts — messageMutations counts those per account). A message a
+    // local snooze holds out of the list is not counted either.
     if (activeAccountId && !unifiedInbox && !mailboxScope && activeMailbox === 'INBOX') {
-      useSettingsStore.getState().setUnreadForAccount(
-        activeAccountId,
-        emails.reduce((n, e) => n + (e.flags?.includes('\\Seen') ? 0 : 1), 0),
-      );
+      useSettingsStore.getState().setUnreadForAccount(activeAccountId, inboxUnread(activeAccountId, emails));
     }
 
     _chatEmailsFingerprint = '';
     _threadsFingerprint = '';
-    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones, tagsByRow };
+    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones, tagsByRow, snoozeRows };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 

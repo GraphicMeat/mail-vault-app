@@ -3069,7 +3069,7 @@
   "snooze.pickTime": "Scegli una data e un’ora",
   "snooze.confirm": "Posticipa",
   "snooze.failed": "Impossibile posticipare: {{err}}",
-  "snooze.error.createFolder": "impossibile trovare o creare la cartella Snoozed sul server di posta",
+  "snooze.error.createFolder": "impossibile trovare o creare la cartella Snoozed sul server di posta ({{reason}})",
   "snooze.offline": "Per posticipare serve una connessione al server di posta. Riprova quando sei online.",
   "snooze.until": "Posticipato fino a {{time}}",
   "undo.snoozed_one": "{{count}} messaggio posticipato",

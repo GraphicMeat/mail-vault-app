@@ -3069,7 +3069,7 @@
   "snooze.pickTime": "请选择日期和时间",
   "snooze.confirm": "稍后提醒",
   "snooze.failed": "无法稍后提醒：{{err}}",
-  "snooze.error.createFolder": "无法在邮件服务器上找到或创建 Snoozed 文件夹",
+  "snooze.error.createFolder": "无法在邮件服务器上找到或创建 Snoozed 文件夹（{{reason}}）",
   "snooze.offline": "稍后提醒需要连接邮件服务器。请在联网后重试。",
   "snooze.until": "稍后提醒至 {{time}}",
   "undo.snoozed_one": "已将 {{count}} 封设为稍后提醒",

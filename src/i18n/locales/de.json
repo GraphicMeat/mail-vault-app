@@ -3069,7 +3069,7 @@
   "snooze.pickTime": "Datum und Uhrzeit auswählen",
   "snooze.confirm": "Zurückstellen",
   "snooze.failed": "Zurückstellen fehlgeschlagen: {{err}}",
-  "snooze.error.createFolder": "der Ordner Snoozed konnte auf dem Mailserver weder gefunden noch erstellt werden",
+  "snooze.error.createFolder": "der Ordner Snoozed konnte auf dem Mailserver weder gefunden noch erstellt werden ({{reason}})",
   "snooze.offline": "Zum Zurückstellen ist eine Verbindung zum Mailserver nötig. Versuche es erneut, wenn du online bist.",
   "snooze.until": "Zurückgestellt bis {{time}}",
   "undo.snoozed_one": "{{count}} Nachricht zurückgestellt",

@@ -3,6 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { inboxUnread } from '../stores/snoozeStore';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { watchAccount, waitForSyncChanges } from '../services/syncService';
@@ -13,6 +14,79 @@ import { normalizeNotificationSound } from '../utils/notificationSounds';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
+
+// Dispatch per-account notifications; notify() itself runs the notification
+// policy (utils/notificationPolicy.decide) and decides whether each one is
+// actually shown — this is the only way a suppressed one still lands in the
+// decision log ("why didn't I get this").
+const dispatchNotifications = (perAccountResults) => {
+  if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
+
+  const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
+  const selectedSound = normalizeNotificationSound(sound);
+
+  for (const result of perAccountResults) {
+    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress } = result;
+
+    // A click opens the message the banner shows, in the folder it arrived
+    // in. Without a preview the banner names no message, so it opens the folder.
+    const uid = Number(newestUid);
+    const target = {
+      accountId,
+      mailbox: folder,
+      ...(showPreview && Number.isSafeInteger(uid) && uid > 0 ? { uid } : {}),
+    };
+    const from = newestFromAddress || '';
+    const domain = from.includes('@') ? from.slice(from.indexOf('@') + 1) : '';
+    // A view is an index query the daemon answers, and an arriving message
+    // is not in the index yet -- so nothing here can say which views it
+    // belongs to, and the mute would miss the very notification it was set
+    // for. `decide` implements view-muted and is tested for it; the control
+    // stays out of Settings until arrival-time matching exists, because a
+    // switch that silently never fires is worse than no switch.
+    const mailCtx = { accountId, folder, from, domain, viewIds: [] };
+    const notifyEmail = (title, body) => selectedSound === 'none'
+      ? notify(title, body, undefined, target, mailCtx)
+      : notify(title, body, selectedSound, target, mailCtx);
+
+    if (newCount === 1) {
+      // Single new email
+      if (showPreview) {
+        const sender = newestSender || 'Unknown sender';
+        const subject = newestSubject || '(No subject)';
+        notifyEmail(sender, subject);
+      } else {
+        notifyEmail('New Email', `New email in ${accountEmail}`);
+      }
+    } else {
+      // Multiple new emails
+      if (showPreview) {
+        const sender = newestSender || 'Unknown sender';
+        const subject = newestSubject || '(No subject)';
+        notifyEmail(
+          `${newCount} New Emails`,
+          `${sender}: ${subject} (and ${newCount - 1} more)`
+        );
+      } else {
+        notifyEmail('New Email', `${newCount} new emails in ${accountEmail}`);
+      }
+    }
+  }
+};
+
+/// One banner: `count` new in `folder` of `accountId`, previewing `header`
+/// (a cached list row, or null). The change feed and a local snooze's wake
+/// (stores/snoozeStore.js) both announce through it.
+export function notifyArrival(accountId, folder, count, header) {
+  const account = useMailStore.getState().accounts.find(a => a.id === accountId);
+  dispatchNotifications([{
+    accountId, accountEmail: account?.email, folder, newCount: count,
+    newestSender: header?.from?.name || header?.from?.address,
+    newestSubject: header?.subject,
+    newestUid: header?.uid,
+    newestFromAddress: typeof header?.from === 'string' ? header.from : (header?.from?.address || ''),
+  }]);
+}
 
 export function useEmailScheduler() {
   const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
@@ -32,65 +106,6 @@ export function useEmailScheduler() {
   const hasRefreshedOnLaunch = useRef(false);
   const hasReplayedOps = useRef(false);
   const lastBadgeCount = useRef(-1);
-
-  // Dispatch per-account notifications; notify() itself runs the notification
-  // policy (utils/notificationPolicy.decide) and decides whether each one is
-  // actually shown — this is the only way a suppressed one still lands in the
-  // decision log ("why didn't I get this").
-  const dispatchNotifications = (perAccountResults) => {
-    if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
-
-    const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
-    const selectedSound = normalizeNotificationSound(sound);
-
-    for (const result of perAccountResults) {
-      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress } = result;
-
-      // A click opens the message the banner shows, in the folder it arrived
-      // in. Without a preview the banner names no message, so it opens the folder.
-      const uid = Number(newestUid);
-      const target = {
-        accountId,
-        mailbox: folder,
-        ...(showPreview && Number.isSafeInteger(uid) && uid > 0 ? { uid } : {}),
-      };
-      const from = newestFromAddress || '';
-      const domain = from.includes('@') ? from.slice(from.indexOf('@') + 1) : '';
-      // A view is an index query the daemon answers, and an arriving message
-      // is not in the index yet -- so nothing here can say which views it
-      // belongs to, and the mute would miss the very notification it was set
-      // for. `decide` implements view-muted and is tested for it; the control
-      // stays out of Settings until arrival-time matching exists, because a
-      // switch that silently never fires is worse than no switch.
-      const mailCtx = { accountId, folder, from, domain, viewIds: [] };
-      const notifyEmail = (title, body) => selectedSound === 'none'
-        ? notify(title, body, undefined, target, mailCtx)
-        : notify(title, body, selectedSound, target, mailCtx);
-
-      if (newCount === 1) {
-        // Single new email
-        if (showPreview) {
-          const sender = newestSender || 'Unknown sender';
-          const subject = newestSubject || '(No subject)';
-          notifyEmail(sender, subject);
-        } else {
-          notifyEmail('New Email', `New email in ${accountEmail}`);
-        }
-      } else {
-        // Multiple new emails
-        if (showPreview) {
-          const sender = newestSender || 'Unknown sender';
-          const subject = newestSubject || '(No subject)';
-          notifyEmail(
-            `${newCount} New Emails`,
-            `${sender}: ${subject} (and ${newCount - 1} more)`
-          );
-        } else {
-          notifyEmail('New Email', `${newCount} new emails in ${accountEmail}`);
-        }
-      }
-    }
-  };
 
   // ── IDLE: register watchers, then follow the daemon's change feed ──
   //
@@ -138,7 +153,7 @@ export function useEmailScheduler() {
     try { cache = await db.getEmailHeaders(accountId, 'INBOX'); } catch { /* keep the count */ }
     const emails = cache?.emails;
     if (emails && !(cache.totalEmails > emails.length)) {
-      settings.setUnreadForAccount(accountId, emails.filter(e => !e.flags?.includes('\\Seen')).length);
+      settings.setUnreadForAccount(accountId, inboxUnread(accountId, emails));
     } else if (newEmails > 0) {
       settings.setUnreadForAccount(accountId, (settings.unreadPerAccount?.[accountId] || 0) + newEmails);
     } else return;
@@ -164,19 +179,12 @@ export function useEmailScheduler() {
       || (unifiedOpen && (s.unifiedFolder || 'INBOX') === mailbox);
 
     if (newEmails > 0) {
-      const account = s.accounts.find(a => a.id === accountId);
       let newest = null;
       // A missing preview is not worth losing the notification over.
       try {
         newest = (await db.getEmailHeadersPartial(accountId, mailbox, 1))?.emails?.[0] || null;
       } catch { /* no preview, still notify */ }
-      dispatchNotifications([{
-        accountId, accountEmail: account?.email, folder: mailbox, newCount: newEmails,
-        newestSender: newest?.from?.name || newest?.from?.address,
-        newestSubject: newest?.subject,
-        newestUid: newest?.uid,
-        newestFromAddress: typeof newest?.from === 'string' ? newest.from : (newest?.from?.address || ''),
-      }]);
+      notifyArrival(accountId, mailbox, newEmails, newest);
     }
     if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
     return onScreen;

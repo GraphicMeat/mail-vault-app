@@ -2,7 +2,7 @@
 // rules), then one daemon row per moved message so the worker can move it
 // back. A message in Snoozed with no row would never come back, so every
 // failure between the two steps has to put it back where it was.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { selectionKey } from '../../../stores/slices/unifiedHelpers';
 import en from '../../../i18n/locales/en.json';
 
@@ -31,11 +31,13 @@ vi.mock('../helpers/mailboxRefetch', () => ({ forceMailboxRefetch: (...a) => moc
 vi.mock('../../../stores/connectivityStore', () => ({
   useConnectivityStore: { getState: () => ({ online }) },
 }));
+const mockSetState = vi.fn();
 vi.mock('../../../stores/mailStore', () => ({
-  useMailStore: { getState: () => state, setState: vi.fn() },
+  useMailStore: { getState: () => state, setState: (...a) => mockSetState(...a) },
 }));
 
 const { snoozeEmails, unsnooze } = await import('../snooze');
+const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 
 const WAKE = Date.UTC(2026, 9, 1, 8);
 const account = { id: 'a1', email: 'u@example.com' };
@@ -43,6 +45,7 @@ const graph = { id: 'g1', email: 'g@example.com', oauth2Transport: 'graph' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useSnoozeStore.setState({ rows: [] });
   online = true;
   state = {
     activeAccountId: 'a1',
@@ -89,19 +92,79 @@ describe('snoozeEmails', () => {
     expect(mockRefetch).toHaveBeenCalledWith('a1');
   });
 
-  it('reports a folder the server would not create with the catalog message, not the server text', async () => {
+  // A server that could not be asked (a dead connection, a LIST that failed)
+  // is an error, and the toast says what the server said, so "why" has an answer.
+  it('reports a folder it could not resolve with the reason inside the catalog message', async () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const reason = 'LIST failed: connection lost';
     mockDaemon.mockImplementation(async (method) => {
-      if (method === 'snooze.ensure_folder') {
-        throw new Error('CREATE Snoozed failed: no response: code: None, info: Some("[CANNOT] create failure: NAME NOT ALLOWED")');
-      }
+      if (method === 'snooze.ensure_folder') throw new Error(reason);
       throw new Error(`unexpected ${method}`);
     });
     const err = await snoozeEmails([key(state.emails[0])], WAKE).catch(e => e);
-    expect(err.message).toBe(en['snooze.error.createFolder']);
-    expect(err.message).not.toMatch(/CANNOT|CREATE/);
+    expect(err.message).toBe(en['snooze.error.createFolder'].replace('{{reason}}', reason));
     expect(mockMove).not.toHaveBeenCalled();
+    expect(mockDaemon).not.toHaveBeenCalledWith('snooze.create', expect.anything());
     quiet.mockRestore();
+  });
+
+  // The daemon's code for a server that answered and will not host a Snoozed
+  // folder (both CREATEs refused, ALREADYEXISTS, BAD, no hierarchy).
+  describe('when the server will not host a Snoozed folder', () => {
+    const REFUSED = 'E_SNOOZE_FOLDER_REFUSED: CREATE INBOX.Snoozed failed after CREATE Snoozed was refused ([CANNOT] NAME NOT ALLOWED)';
+    beforeEach(() => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockDaemon.mockImplementation(async (method, params) => {
+        if (method === 'snooze.ensure_folder') throw new Error(REFUSED);
+        if (method === 'snooze.create') {
+          return { id: `row-${params.uid}`, accountId: params.accountId, fromMailbox: params.mailbox, snoozedMailbox: params.snoozedMailbox, messageId: params.messageId, wakeAt: params.wakeAt, state: 'snoozed' };
+        }
+        if (method === 'snooze.cancel') return { id: params.id, state: 'woken' };
+        throw new Error(`unexpected ${method}`);
+      });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('snoozes on this computer: nothing moves, and the row has no Snoozed folder', async () => {
+      const result = await snoozeEmails([key(state.emails[0])], WAKE);
+      expect(mockMove).not.toHaveBeenCalled();
+      expect(mockRefetch).not.toHaveBeenCalled();
+      expect(mockDaemon).toHaveBeenCalledWith('snooze.create', {
+        accountId: 'a1', mailbox: 'INBOX', snoozedMailbox: '', uid: 1, messageId: '<1@x>', wakeAt: WAKE,
+      });
+      expect(result).toEqual({ snoozed: 1, skipped: 0 });
+      // The row in the store is what holds the message out of the list.
+      expect(useSnoozeStore.getState().rows).toEqual([expect.objectContaining({ id: 'row-1', snoozedMailbox: '' })]);
+    });
+
+    it('closes the message if it was open and drops it from the selection', async () => {
+      state.selectedEmailId = key(state.emails[0]);
+      state.selectedEmailIds = new Set([key(state.emails[0]), 'other']);
+      await snoozeEmails([key(state.emails[0])], WAKE);
+      expect(mockSetState).toHaveBeenCalledWith(expect.objectContaining({
+        selectedEmailId: null, selectedEmail: null, selectedEmailIds: new Set(['other']),
+      }));
+    });
+
+    it('undoes by ending the row only: nothing to move back', async () => {
+      await snoozeEmails([key(state.emails[0])], WAKE);
+      const entry = setUndo.mock.calls[0][0];
+      expect(entry.labelKey).toBe('undo.snoozed');
+      await entry.run();
+      expect(mockDaemon).toHaveBeenCalledWith('snooze.cancel', { id: 'row-1' });
+      expect(mockApiMove).not.toHaveBeenCalled();
+      expect(useSnoozeStore.getState().rows).toEqual([]);
+    });
+
+    it('reports a row it could not write and moves nothing back, since nothing moved', async () => {
+      mockDaemon.mockImplementation(async (method) => {
+        if (method === 'snooze.ensure_folder') throw new Error(REFUSED);
+        throw new Error('disk full');
+      });
+      await expect(snoozeEmails([key(state.emails[0])], WAKE)).rejects.toThrow('disk full');
+      expect(mockApiMove).not.toHaveBeenCalled();
+      expect(setUndo).not.toHaveBeenCalled();
+    });
   });
 
   it('leaves out a message with no Message-ID and one on a Graph account', async () => {

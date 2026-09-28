@@ -99,6 +99,7 @@ vi.mock('../../stores/settingsStore', () => ({
 }));
 
 const { useEmailScheduler } = await import('../useEmailScheduler');
+const { useSnoozeStore } = await import('../../stores/snoozeStore');
 
 const IMAP_A = { id: 'a1', email: 'a@one.co', password: 'pw', imapHost: 'imap.one.co', imapPort: 993 };
 const IMAP_B = { id: 'a2', email: 'b@two.co', authType: 'oauth2', oauth2AccessToken: 'tok' };
@@ -552,6 +553,21 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await flush();
 
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(9);
+    });
+
+    // The inbox does not show a message a local snooze is holding out of it,
+    // so the badge does not count it either.
+    it('leaves out a message a local snooze is holding out of the inbox', async () => {
+      useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }] });
+      mailStore.setState(unifiedOpen);
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 2, flags: [], messageId: '<held@x>' }, { uid: 1, flags: [], messageId: '<b@x>' }] });
+      eventReplies = [change({ newEmails: 0, updatedFlags: 1 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      useSnoozeStore.setState({ rows: [] });
+
+      expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
     });
 
     it('leaves other folders alone', async () => {

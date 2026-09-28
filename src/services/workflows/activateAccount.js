@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
+import { inboxUnread } from '../../stores/snoozeStore';
 import { ensureFreshToken, resolveServerAccount, hasValidCredentials } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
@@ -773,8 +774,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         }
 
         if (resolvedMailbox === 'INBOX') {
-          const unread = cachedHeaders.emails.filter(e => !e.flags?.includes('\\Seen')).length;
-          useSettingsStore.getState().setUnreadForAccount(accountId, unread);
+          useSettingsStore.getState().setUnreadForAccount(accountId, inboxUnread(accountId, cachedHeaders.emails));
         }
       } else if (savedEmailIds.size > 0 && !isBackgroundRefresh) {
         // Expected recovery, not an anomaly: the sync that follows repopulates
