@@ -242,9 +242,30 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let access_token = req!(str_arg(&id, params, "accessToken"));
             let message_id = req!(str_arg(&id, params, "messageId"));
             let client = GraphClient::new(&access_token);
+            // Into the deleted-mail bin first when the caller says where the
+            // message lives (`handlers::deleted`). Best effort: a Graph delete
+            // moves it to Deleted Items, which still holds it.
+            let place = (opt_str_arg(params, "accountId"), opt_str_arg(params, "mailbox"), params.get("uid").and_then(Value::as_u64));
+            let binned = match place {
+                (Some(account_id), Some(mailbox), Some(uid)) => {
+                    let source = crate::handlers::deleted::Source::Graph(&client, &message_id);
+                    crate::handlers::deleted::capture(state, &account_id, &mailbox, uid as u32, source)
+                        .await
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("[graph_delete] {account_id}/{mailbox} uid {uid} deleted without a bin copy: {e}");
+                            None
+                        })
+                }
+                _ => None,
+            };
             match client.delete_message(&message_id).await {
-                Ok(()) => RpcResponse::success(id, Value::Null),
-                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                Ok(()) => RpcResponse::success(id, binned.map(|(bin_id, _)| json!({ "binId": bin_id })).unwrap_or(Value::Null)),
+                Err(e) => {
+                    if let Some((bin_id, true)) = binned {
+                        crate::handlers::deleted::forget(state, bin_id).await;
+                    }
+                    RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
+                }
             }
         }
 
@@ -595,6 +616,25 @@ mod tests {
         let s = st();
         let resp = call(&s, "graph_delete_message", json!({"accessToken": "tok", "messageId": "m1"})).await;
         assert_eq!(resp.result, Some(Value::Null));
+    }
+
+    /// Told where the message lives, the delete keeps a copy in the bin first:
+    /// the MIME fetched with the call's own token, since no vault copy exists.
+    #[tokio::test]
+    async fn a_delete_told_where_the_message_lives_bins_its_mime_first() {
+        let raw = "From: a@x.com\r\nSubject: Bye\r\nMessage-ID: <g1@x>\r\n\r\nbody\r\n";
+        let _g = mock_graph(vec![(200, raw.to_string()), (200, String::new())]);
+        let s = st();
+        let resp = call(
+            &s,
+            "graph_delete_message",
+            json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await;
+        let bin_id = resp.result.expect("success")["binId"].as_str().expect("a bin id").to_string();
+        let kept = mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::deleted::get(c, &bin_id)).unwrap().unwrap();
+        assert_eq!((kept.account_id.as_str(), kept.mailbox.as_str(), kept.uid), ("acct1", "INBOX", 7));
+        assert_eq!(mailvault_core::app_db::deleted::read_eml(&s.app_dir, &bin_id).unwrap(), raw.as_bytes());
     }
 
     #[tokio::test]

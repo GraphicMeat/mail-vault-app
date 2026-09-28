@@ -463,6 +463,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
+            // `bin: true`: the user deleted a message that exists only here,
+            // so it goes into the deleted-mail bin first, or not at all.
+            if params.get("bin").and_then(Value::as_bool) == Some(true) {
+                let source = crate::handlers::deleted::Source::Local;
+                if let Err(e) = crate::handlers::deleted::capture(state, &account_id, &mailbox, uid, source).await {
+                    return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, format!("Could not keep a copy before deleting: {e}")));
+                }
+            }
             let state = Arc::clone(state);
             done(
                 id,

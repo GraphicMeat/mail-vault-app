@@ -579,6 +579,9 @@ async fn daemon_main() {
     // once on `storage.fetch_mode_changed`.
     eviction_worker::start(Arc::clone(&state));
 
+    // The deleted-mail bin's purge: hourly, past the Settings retention.
+    handlers::deleted::start(Arc::clone(&state));
+
     // Hoarder (Track H4, Premium): downloads every folder's full history in
     // the background for Hoarder accounts with `fetchModePremium`. Paced,
     // one message at a time on the background lane; see its module doc.

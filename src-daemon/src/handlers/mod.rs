@@ -26,6 +26,7 @@ pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod custody;
 pub(crate) mod daemon;
+pub(crate) mod deleted;
 pub(crate) mod dns;
 pub(crate) mod export_fetch;
 pub(crate) mod fields;

@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -242,6 +242,27 @@ CREATE TABLE bimi_cache (
 );
 ";
 
+/// The deleted-mail bin (`app_db::deleted`): one row per message captured
+/// just before the app deleted it, its whole `.eml` beside app.db in
+/// `deleted/<id>.eml`. No UNIQUE on (account, mailbox, uid): a replayed
+/// delete finds its row through `message_id IS ?`, which a NULL id matches.
+const SCHEMA_V7: &str = "
+CREATE TABLE deleted_messages (
+  id          TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL,
+  mailbox     TEXT NOT NULL,
+  uid         INTEGER NOT NULL,
+  message_id  TEXT,
+  flags       TEXT NOT NULL,
+  row_json    TEXT NOT NULL,
+  trash       TEXT,
+  trash_uid   INTEGER,
+  deleted_at  INTEGER NOT NULL
+);
+CREATE INDEX deleted_messages_at ON deleted_messages(deleted_at);
+CREATE INDEX deleted_messages_uid ON deleted_messages(account_id, mailbox, uid);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -391,6 +412,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         if version < 6 {
             conn.execute_batch(&format!(
                 "{SCHEMA_V6} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6');"
+            ))
+            .map_err(sql)?;
+        }
+        if version < 7 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V7} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7');"
             ))
             .map_err(sql)?;
         }
@@ -629,13 +656,13 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("6"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM snoozes", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v5 row must survive the v6 migration");
         conn.execute("INSERT INTO unsubscribes(address, account_id, unsubscribed_at, method, status) VALUES ('a@x', 'acct', 1, 'one-click', 'ok')", []).unwrap();
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("6"));
+        assert_eq!(meta_get(&again, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         for table in ["unsubscribes", "bimi_cache"] {
             let found: i64 = again
                 .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
@@ -644,6 +671,42 @@ mod tests {
         }
         let rows: i64 = again.query_row("SELECT COUNT(*) FROM unsubscribes", [], |r| r.get(0)).unwrap();
         assert_eq!(rows, 1, "reopening a v6 store must not rerun the step");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v7 adds the deleted-mail bin on top of a v6 store without losing what
+    /// v6 held, and a second open changes nothing.
+    #[test]
+    fn a_v6_store_gains_the_deleted_bin_and_keeps_its_rows() {
+        let dir = scratch("v6");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 {SCHEMA_V4}
+                 {SCHEMA_V5}
+                 {SCHEMA_V6}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '6');
+                 INSERT INTO bimi_cache(domain, svg, expires_at) VALUES ('x.com', NULL, 1);"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("7"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM bimi_cache", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v6 row must survive the v7 migration");
+        conn.execute(
+            "INSERT INTO deleted_messages(id, account_id, mailbox, uid, flags, row_json, deleted_at) VALUES ('d1', 'a', 'INBOX', 1, '[]', '{}', 1)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let again = open(&dir).unwrap();
+        let rows: i64 = again.query_row("SELECT COUNT(*) FROM deleted_messages", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 1, "reopening a v7 store must not rerun the step");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

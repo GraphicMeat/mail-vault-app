@@ -76,7 +76,7 @@ where
 
 /// Same helper as `commands.rs`'s `with_priority` (Task 5.4b) — priority pool
 /// instead of background, otherwise identical to `with_background` above.
-async fn with_priority<F, Fut, T>(pool: &ImapPool, account: &ImapConfig, f: F) -> Result<T, String>
+pub(crate) async fn with_priority<F, Fut, T>(pool: &ImapPool, account: &ImapConfig, f: F) -> Result<T, String>
 where
     F: FnOnce(imap::pool::ImapSession) -> Fut,
     Fut: std::future::Future<Output = Result<(T, imap::pool::ImapSession, Option<String>), String>>,
@@ -636,6 +636,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let uid = req!(u32_arg(&id, params, "uid"));
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let permanent = params.get("permanent").and_then(Value::as_bool).unwrap_or(false);
+            // Into the deleted-mail bin first (`handlers::deleted`), whole,
+            // unless the caller opts out (a purge of every copy, a cleanup
+            // rule over mail the vault already holds). A permanent delete
+            // that cannot be captured is refused: the bin would be its only
+            // copy. A message already gone from the server has nothing to keep.
+            let account_id = params.get("account").and_then(|a| a.get("id")).and_then(Value::as_str);
+            let binned = match account_id.filter(|_| params.get("bin").and_then(Value::as_bool).unwrap_or(true)) {
+                Some(account_id) => match crate::handlers::deleted::capture(state, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap(&account)).await {
+                    Ok(binned) => binned,
+                    Err(e) if permanent => {
+                        tracing::error!("[delete_email] uid={} not deleted: could not keep a copy first: {}", uid, e);
+                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Could not keep a copy before deleting: {e}")));
+                    }
+                    Err(e) => {
+                        warn!("[delete_email] uid={} deleted without a bin copy (it moves to Trash): {}", uid, e);
+                        None
+                    }
+                },
+                None => None,
+            };
             // `run_uid_delete`, not `with_priority`: a pooled socket the peer
             // closed while it sat idle fails this before the SELECT lands,
             // and the frontend restores the row it had already taken out — a
@@ -669,12 +689,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             match result {
                 // Where the message went, so the caller can offer an undo
                 // instead of a search: both null for a permanent delete.
-                Ok(outcome) => RpcResponse::success(
-                    id,
-                    json!({"success": true, "trash": outcome.trash, "trashUid": outcome.trash_uid}),
-                ),
+                // `binId` names its bin copy, for an undo the server cannot do.
+                Ok(outcome) => {
+                    let bin_id = binned.map(|(bin_id, _)| bin_id);
+                    if let Some(bin_id) = bin_id.clone() {
+                        crate::handlers::deleted::landed(state, bin_id, outcome.trash.clone(), outcome.trash_uid).await;
+                    }
+                    RpcResponse::success(
+                        id,
+                        json!({"success": true, "trash": outcome.trash, "trashUid": outcome.trash_uid, "binId": bin_id}),
+                    )
+                }
                 Err(e) => {
                     tracing::error!("[delete_email] uid={} failed: {}", uid, e);
+                    if let Some((bin_id, true)) = binned {
+                        crate::handlers::deleted::forget(state, bin_id).await;
+                    }
                     RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
                 }
             }

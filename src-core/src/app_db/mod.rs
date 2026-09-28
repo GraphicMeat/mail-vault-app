@@ -12,6 +12,7 @@
 pub mod auto_tags;
 pub mod classify;
 pub mod db;
+pub mod deleted;
 pub mod identity;
 pub mod fields;
 pub mod import;

@@ -320,12 +320,12 @@ pub(crate) async fn prune_attachment_cache(state: &Arc<DaemonState>, older_than:
 }
 
 #[cfg(not(test))]
-async fn account_config(_state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
+pub(crate) async fn account_config(_state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
     crate::credentials::resolve_account_credentials_guarded(account_id).await
 }
 
 #[cfg(test)]
-async fn account_config(state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
+pub(crate) async fn account_config(state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
     state.raw_messages.accounts.lock().unwrap().get(account_id).cloned().ok_or_else(|| "no credentials in this test".to_string())
 }
 
