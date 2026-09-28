@@ -65,7 +65,7 @@ import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { useSettingsWindow } from './hooks/useSettingsWindow';
+import { useAfterSettingsClose, useSettingsWindow } from './hooks/useSettingsWindow';
 import { currentQuickActionScopeSnapshot } from './hooks/useQuickActionConfiguration';
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -559,6 +559,7 @@ function App() {
     closeSettings,
     minimizeSettings,
   } = useSettingsWindow();
+  const afterSettingsClose = useAfterSettingsClose(settingsMounted);
   const [settingsLocation, setSettingsLocation] = useState('');
   useEffect(() => {
     if (!settingsMounted) setSettingsLocation('');
@@ -1259,8 +1260,12 @@ function App() {
     return (
       <>
         <Onboarding
-          onComplete={() => setMailArrivalKind('onboarding')}
-          onOpenBilling={() => openSettings({ tab: 'billing' })}
+          onComplete={({ openBilling } = {}) => {
+            if (!openBilling) { setMailArrivalKind('onboarding'); return; }
+            // See Premium: Billing first, the arrival once Settings closes.
+            afterSettingsClose(() => setMailArrivalKind('onboarding'));
+            openSettings({ tab: 'billing' });
+          }}
           onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
         />
         {mailArrival}

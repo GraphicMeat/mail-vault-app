@@ -23,6 +23,9 @@ const HEARTS = Array.from({ length: 44 }, (_, i) => {
  * No price and no checkout here — the button hands off to Settings → Billing,
  * which already owns plans, currency and the App Store rules. That is what lets
  * this screen ship identically in every build.
+ *
+ * Without `onUpgrade` (a subscriber, or no account to buy with) the one way on
+ * is a plain Continue.
  */
 export function UpgradeCta({ onUpgrade, onSkip, onOpenFaq }) {
   const t = useT();
@@ -53,12 +56,18 @@ export function UpgradeCta({ onUpgrade, onSkip, onOpenFaq }) {
       <p className="text-sm text-mail-text-muted leading-relaxed mb-6">{t('onboarding.ctaSubtitle')}</p>
 
       <div className="flex flex-col gap-2">
-        <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} data-testid="onboarding-upgrade">
-          {t('onboarding.ctaPrimary')}
-        </Button>
-        <Button variant="ghost" size="md" fullWidth onClick={onSkip} data-testid="onboarding-skip">
-          {t('onboarding.ctaSkip')}
-        </Button>
+        {onUpgrade ? <>
+          <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} data-testid="onboarding-upgrade">
+            {t('onboarding.ctaPrimary')}
+          </Button>
+          <Button variant="ghost" size="md" fullWidth onClick={onSkip} data-testid="onboarding-skip">
+            {t('onboarding.ctaSkip')}
+          </Button>
+        </> : (
+          <Button variant="primary" size="lg" fullWidth onClick={onSkip} data-testid="onboarding-skip">
+            {t('common.continue')}
+          </Button>
+        )}
       </div>
 
       <button type="button" onClick={onOpenFaq} data-testid="onboarding-faq"

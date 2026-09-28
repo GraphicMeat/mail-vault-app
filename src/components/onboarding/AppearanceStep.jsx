@@ -11,6 +11,8 @@ import { QuickActions } from '../QuickActions';
 import { ColorOptionPreview } from '../settings/PreferencePreview';
 import { FontOptions, TextSizeChoice } from '../settings/TextSettings';
 import { AppearancePreview } from './AppearancePreview';
+import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
+import { previewNotificationSound } from '../../services/api';
 import { DEFAULT_QUICK_ACTIONS, isQuickActionStyleLinked, normalizeQuickActions, QUICK_ACTION_MODES, QUICK_ACTION_SURFACES } from '../../utils/quickActions';
 
 const QUICK_ACTION_ICONS = { archive: Archive, unarchive: ArchiveRestore, delete: Trash2, deleteServer: Trash2, deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail, star: Star, unstar: StarOff, tag: Tag, move: FolderInput, spam: ShieldAlert, reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: FileText, export: ImageDown, newMessage: MailPlus, open: ExternalLink, source: Code, theme: Moon };
@@ -22,6 +24,8 @@ function Choice({ id, active, value, onPick, disabled, children }) {
 }
 
 const SECTIONS = ['colors', 'layout', 'reading', 'quick-actions'];
+// Built-in macOS sounds, as in Settings → Notifications.
+const isMac = () => typeof navigator !== 'undefined' && !!navigator.platform?.startsWith('Mac');
 
 // Tab changes only affect what is shown. Preferences keep using the same
 // setters as Settings, and Continue never resets choices the user already made.
@@ -181,6 +185,18 @@ export function AppearanceStep({ onContinue }) {
             <p className="onboarding-choice-hint">{t(settings.confirmBeforeDelete !== false
               ? 'settings.behavior.confirmDeleteAskHint'
               : 'settings.behavior.confirmDeleteSkipHint')}</p>
+          </fieldset>}
+          {/* Same gate as Settings: a sound with notifications off never plays.
+              Picking one plays it, which is the preview. */}
+          {section === 'reading' && isMac() && settings.notificationSettings?.enabled && <fieldset data-testid="appearance-control-sound">
+            <legend>{t('settings.notifications.newEmailSound')}</legend>
+            <div className="onboarding-choices onboarding-sound-choices">
+              {['none', ...NOTIFICATION_SOUNDS].map(value => <Choice key={value} id={`appearance-sound-${value}`}
+                active={normalizeNotificationSound(settings.notificationSettings.sound)} value={value}
+                onPick={sound => { settings.setNotificationSound(sound); if (sound !== 'none') previewNotificationSound(sound).catch(() => {}); }}>
+                {value === 'none' ? t('settings.notifications.soundOff') : value}
+              </Choice>)}
+            </div>
           </fieldset>}
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>

@@ -42,6 +42,7 @@ let accounts = [];
 
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: (sel) => sel({ setOnboardingComplete }),
+  hasPremiumAccess: () => false,
 }));
 vi.mock('../../../stores/accountStore', () => ({
   useAccountStore: (sel) => sel({ accounts }),

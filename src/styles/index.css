@@ -1358,6 +1358,8 @@ input[type="range"]::-moz-range-thumb:hover {
 .onboarding-choices button:hover:not(:disabled) { border-color: var(--mail-accent); }
 .onboarding-choices button:disabled { opacity: 0.5; cursor: default; }
 .onboarding-choices button svg { flex-shrink: 0; }
+.onboarding-sound-choices { flex-wrap: wrap; }
+.onboarding-sound-choices button { flex: 1 0 28%; }
 .onboarding-appearance-example { min-width: 0; }
 .onboarding-quick-actions-preview { display: flex; flex-direction: column; gap: 16px; min-height: 208px; padding: 20px; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
 .onboarding-quick-actions-preview h3 { font-size: 14px; font-weight: 600; color: var(--mail-text); }
@@ -1446,10 +1448,16 @@ input[type="range"]::-moz-range-thumb:hover {
   .onboarding-sample-time { display: none; }
 }
 
-.onboarding-page { height: 100dvh; overflow-y: auto; background: var(--mail-bg); }
+/* The gutter is reserved so a tab tall enough to scroll does not shift every
+ * other tab sideways, and steps start at the top so a tab or a choice that
+ * changes the height grows downward instead of moving the title. */
+.onboarding-page { height: 100dvh; overflow-y: auto; scrollbar-gutter: stable; background: var(--mail-bg); }
 .onboarding-content { min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: 24px 24px 40px; }
+/* The thank-you hearts fly past the window edges: clipped here, not scrolled. */
+.onboarding-content:has(> .onboarding-step-cta) { overflow: clip; }
 .onboarding-header { width: 100%; display: flex; align-items: center; justify-content: space-between; min-height: 36px; margin-bottom: 24px; color: var(--mail-text-muted); font-size: 12px; }
-.onboarding-step { width: 100%; flex: 1; display: flex; justify-content: center; align-items: center; }
+.onboarding-step { width: 100%; flex: 1; display: flex; justify-content: center; align-items: flex-start; }
+.onboarding-step-splash, .onboarding-step-cta { align-items: center; }
 .onboarding-thankyou-art { position: relative; width: min(35vh, 300px); min-width: 150px; }
 .onboarding-thankyou-image {
   display: block;
@@ -1480,6 +1488,7 @@ input[type="range"]::-moz-range-thumb:hover {
   align-items: safe center;
   justify-items: center;
   overflow: hidden auto;
+  scrollbar-gutter: stable;
   padding: 36px 24px;
   background: var(--mail-bg);
   color: var(--mail-text);
@@ -1488,6 +1497,9 @@ input[type="range"]::-moz-range-thumb:hover {
 .mail-arrival-content {
   width: min(100%, 720px);
   min-height: min(720px, calc(100dvh - 72px));
+  /* Envelopes start off-screen: clip their flight so it never adds scroll
+   * height, which made the whole page jump while they landed. */
+  overflow-y: clip;
   display: flex;
   flex-direction: column;
   align-items: center;

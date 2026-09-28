@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 const INITIAL_STATE = { status: 'closed', request: null, nextId: 1 };
 
@@ -47,4 +47,19 @@ export function useSettingsWindow() {
     closeSettings,
     minimizeSettings,
   };
+}
+
+/**
+ * Queues `fn` to run once Settings, opened in the same event, closes again.
+ * Minimizing keeps it mounted and so does not count as closing.
+ */
+export function useAfterSettingsClose(isMounted) {
+  const pending = useRef(null);
+  useEffect(() => {
+    if (isMounted || !pending.current) return;
+    const fn = pending.current;
+    pending.current = null;
+    fn();
+  }, [isMounted]);
+  return useCallback((fn) => { pending.current = fn; }, []);
 }

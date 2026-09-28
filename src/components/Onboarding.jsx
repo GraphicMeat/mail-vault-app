@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { useSettingsStore } from '../stores/settingsStore';
+import { hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
 import { onboardingSteps } from './onboarding/steps.js';
 import { Splash } from './onboarding/Splash';
@@ -14,7 +14,7 @@ import { UpgradeCta } from './onboarding/UpgradeCta';
 import { Button } from './ui/Button';
 import { useT } from '../i18n/index.js';
 
-export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
+export function Onboarding({ onOpenFaq, onComplete }) {
   const t = useT();
   // Accounts live in useAccountStore, not useSettingsStore — App.jsx:122 reads
   // them the same way. Only `onboardingComplete` is a setting.
@@ -22,6 +22,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
   const setOnboardingComplete = useSettingsStore(s => s.setOnboardingComplete);
   const skipOnboarding = useSettingsStore(s => s.skipOnboarding);
   const skippedAt = useSettingsStore(s => s.onboardingSkippedAt);
+  const premium = useSettingsStore(s => hasPremiumAccess(s.billingProfile));
 
   // Frozen at mount: adding the first account mid-flow must not renumber the
   // steps under the user's feet.
@@ -43,10 +44,15 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
   const step = steps[index];
   const next = () => setIndex(i => Math.min(i + 1, steps.length - 1));
   const back = () => setIndex(i => Math.max(i - 1, 0));
-  const finish = () => {
+  // `openBilling`: the thank-you's See Premium, which lands on Settings → Billing
+  // before the arrival celebration (App.jsx holds that until Settings closes).
+  const finish = ({ openBilling = false } = {}) => {
     setOnboardingComplete(true);
-    onComplete?.();
+    onComplete?.({ openBilling });
   };
+  // Billing buys against an account's address, and there is no Settings to
+  // land on without an account: the offer needs one, and none for a subscriber.
+  const canUpgrade = accounts.length > 0 && !premium;
 
   return (
     <div ref={pageRef} className="onboarding-page" data-testid={`onboarding-${step}`}>
@@ -84,7 +90,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
         </button>
       )}
       </header>
-      <div className="onboarding-step">
+      <div className={`onboarding-step onboarding-step-${step}`}>
       {step === 'splash'  && <Splash onContinue={next} />}
       {step === 'storage' && <StorageStep onContinue={next} onBusyChange={setBusy} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
@@ -104,8 +110,8 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
       )}
       {step === 'cta' && (
         <UpgradeCta
-          onUpgrade={() => { finish(); onOpenBilling?.(); }}
-          onSkip={finish}
+          onUpgrade={canUpgrade ? () => finish({ openBilling: true }) : undefined}
+          onSkip={() => finish()}
           onOpenFaq={onOpenFaq}
         />
       )}

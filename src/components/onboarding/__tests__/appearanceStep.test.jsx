@@ -7,6 +7,12 @@ import { useThemeStore } from '../../../stores/themeStore';
 import { t } from '../../../i18n';
 import { AppearanceStep } from '../AppearanceStep';
 import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from '../../../utils/quickActions';
+import { previewNotificationSound } from '../../../services/api';
+
+vi.mock('../../../services/api', async (importOriginal) => ({
+  ...(await importOriginal()),
+  previewNotificationSound: vi.fn(() => Promise.resolve()),
+}));
 
 beforeEach(() => {
   useThemeStore.setState({ theme: 'dark', palette: 'indigo' });
@@ -136,6 +142,38 @@ describe('appearance step', () => {
     expect(screen.queryByTestId('appearance-control-quick-pagination')).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: 'Menu' }));
     expect(screen.queryByTestId('appearance-control-quick-radial-layout')).toBeNull();
+  });
+
+  it('restores One ring with the recommended settings', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    fireEvent.click(within(screen.getByTestId('appearance-control-quick-radial-layout')).getByRole('radio', { name: 'Categories' }));
+    fireEvent.click(screen.getByTestId('appearance-recommended'));
+    expect(within(screen.getByTestId('appearance-control-quick-radial-layout')).getByRole('radio', { name: 'One ring' }).getAttribute('aria-checked')).toBe('true');
+    expect(useSettingsStore.getState().quickActions.defaults.row.radialLayout).toBe('flat');
+  });
+
+  it('picks and plays the new email sound on the reading tab, on a Mac with notifications on', () => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    useSettingsStore.setState(s => ({ notificationSettings: { ...s.notificationSettings, enabled: true, sound: 'Glass' } }));
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('reading'));
+    const group = screen.getByTestId('appearance-control-sound');
+    expect(within(group).getByTestId('appearance-sound-Glass').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(group).getByTestId('appearance-sound-Pop'));
+    expect(useSettingsStore.getState().notificationSettings.sound).toBe('Pop');
+    expect(previewNotificationSound).toHaveBeenCalledWith('Pop');
+    fireEvent.click(within(group).getByTestId('appearance-sound-none'));
+    expect(useSettingsStore.getState().notificationSettings.sound).toBe('none');
+    expect(previewNotificationSound).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    // Notifications off: a sound would never play, so no picker.
+    useSettingsStore.setState(s => ({ notificationSettings: { ...s.notificationSettings, enabled: false } }));
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('reading'));
+    expect(screen.queryByTestId('appearance-control-sound')).toBeNull();
+    delete navigator.platform;
   });
 
   it('makes Next the default and walks every tab before Continue', () => {
