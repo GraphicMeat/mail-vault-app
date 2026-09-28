@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { TomSelectField } from '../TomSelectField';
 
 afterEach(cleanup);
@@ -30,10 +31,11 @@ describe('TomSelectField', () => {
     expect(onChange.mock.calls.map(([value]) => value)).toEqual(['b', 'a']);
   });
 
+  // The component's own markup: once mounted, Tom Select rewrites the hidden
+  // select itself (it appends its own option for the value it holds).
   it('renders one empty option when the options already hold one', () => {
     const withEmpty = [{ value: '', label: 'Automatic' }, ...options];
-    const { container } = render(<TomSelectField label="Pick" value="" options={withEmpty} placeholder="Choose" onChange={() => {}} />);
-    const select = container.querySelector('select');
-    expect([...select.querySelectorAll('option')].filter(option => option.value === '')).toHaveLength(1);
+    const html = renderToStaticMarkup(<TomSelectField label="Pick" value="" options={withEmpty} placeholder="Choose" onChange={() => {}} />);
+    expect(html.match(/<option value=""/g)).toHaveLength(1);
   });
 });

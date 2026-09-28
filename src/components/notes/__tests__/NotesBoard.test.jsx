@@ -7,7 +7,9 @@ const harness = vi.hoisted(() => ({
   openInsightsMessage: vi.fn(),
   cancelInsightsSelection: vi.fn(),
   openLink: vi.fn(),
-  send: vi.fn(),
+  // Resolves by default: db/keychain.js calls send(...).then at import,
+  // before beforeEach sets a value.
+  send: vi.fn(async () => null),
 }));
 
 vi.mock('../../../services/workflows/openInsightsMessage', () => ({

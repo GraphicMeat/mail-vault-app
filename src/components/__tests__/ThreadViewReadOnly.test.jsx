@@ -37,7 +37,6 @@ vi.mock('../../utils/mailto', async (importOriginal) => ({ ...(await importOrigi
 const { ThreadView } = await import('../email/ThreadView');
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const { useMailStore } = await import('../../stores/mailStore');
-const { useSelectionStore } = await import('../../stores/selectionStore');
 const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
 const { openMailtoCompose } = await import('../../utils/mailto');
 
@@ -62,7 +61,6 @@ beforeEach(() => {
   writes = [];
   unsubscribes = [
     useMailStore.subscribe(() => writes.push('mail')),
-    useSelectionStore.subscribe(() => writes.push('selection')),
     useSettingsStore.subscribe(() => writes.push('settings')),
     useUnsubscribeStore.subscribe(() => writes.push('unsubscribe')),
   ];

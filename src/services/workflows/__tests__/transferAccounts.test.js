@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const h = vi.hoisted(() => ({ status: 'empty', existing: [], settings: {} }));
 
-const mockDaemonCall = vi.fn(async (method) => {
+const daemonReplies = async (method) => {
   if (method === 'transfer.export') return { data: 'QkFTRTY0' };
   if (method === 'transfer.apply_config') return { tagsAdded: 0, fieldsAdded: 0, viewsAdded: 0, rulesAdded: 0, aiKeyStored: false, aiKeyError: false };
   return {};
-});
+};
+const mockDaemonCall = vi.fn(daemonReplies);
 vi.mock('../../daemonClient', () => ({ daemonCall: (...a) => mockDaemonCall(...a) }));
 
 const mockSaveAccounts = vi.fn(async () => {
@@ -22,6 +23,7 @@ vi.mock('../../keychainSession', () => ({ getStatus: () => h.status, E_KEYCHAIN_
 const mockSetSettings = vi.fn((patch) => Object.assign(h.settings, patch));
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => h.settings, setState: (...a) => mockSetSettings(...a) },
+  hasPremiumAccess: () => false,
 }));
 vi.mock('../../../stores/themeStore', () => ({ useThemeStore: { getState: () => ({ theme: 'dark', setTheme: vi.fn() }) } }));
 const mockFlush = vi.fn(async () => {});
@@ -46,7 +48,9 @@ function bundleOf(accounts, signatures = {}) {
 }
 
 beforeEach(() => {
-  mockDaemonCall.mockClear();
+  // Reset, not clear: a mockImplementationOnce a failed test never consumed
+  // must not answer the next test's first call.
+  mockDaemonCall.mockReset().mockImplementation(daemonReplies);
   mockSaveAccounts.mockClear();
   mockSetSettings.mockClear();
   h.status = 'empty';

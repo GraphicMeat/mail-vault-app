@@ -86,7 +86,7 @@ describe('Cleanup account reads', () => {
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
     expect(db.getLocalEmailLight).toHaveBeenCalledWith(account.id, 'INBOX', 42);
     expect(ensureFreshToken).toHaveBeenCalledWith(updatedAccount);
-    expect(api.fetchEmailLight).toHaveBeenCalledWith({ ...updatedAccount, accessToken: 'refreshed-token' }, 42, 'INBOX', account.id);
+    expect(api.fetchEmailLight).toHaveBeenCalledWith({ ...updatedAccount, accessToken: 'refreshed-token' }, 42, 'INBOX', account.id, { intent: 'export' });
   });
 
   // The reading pane refreshes an OAuth token before it fetches; the preview
