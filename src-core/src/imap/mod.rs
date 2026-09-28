@@ -1942,13 +1942,33 @@ async fn ensure_role_mailbox(
         }
     }
 
-    session
-        .create(create_name)
-        .await
-        .map_err(|e| format!("CREATE {} failed: {}", create_name, e))?;
-    let _ = session.subscribe(create_name).await;
-    tracing::info!("[ensure_role_mailbox] Created '{}' (no existing match for attr '{}')", create_name, attr_substring);
-    Ok(create_name.to_string())
+    // A server whose personal namespace is `INBOX.` (Dovecot/Courier on many
+    // hosts) refuses a root-level CREATE: `[CANNOT] ... NAME NOT ALLOWED`. The
+    // folder then goes under INBOX, with the delimiter INBOX's LIST line gave.
+    // Not NAMESPACE: imap-proto 0.16 does not parse its reply, and an untagged
+    // line it cannot parse fails the session mid-command.
+    let inbox_delimiter = names
+        .iter()
+        .find(|n| n.name().eq_ignore_ascii_case("INBOX"))
+        .and_then(|n| n.delimiter())
+        .map(unescape_quoted)
+        .filter(|d| !d.is_empty() && !create_name.contains(d.as_str()));
+    let path = match session.create(create_name).await {
+        Ok(()) => create_name.to_string(),
+        Err(async_imap::error::Error::No(msg)) if inbox_delimiter.is_some() && !msg.to_uppercase().contains("ALREADYEXISTS") => {
+            let nested = format!("INBOX{}{}", inbox_delimiter.unwrap_or_default(), create_name);
+            tracing::warn!("[ensure_role_mailbox] CREATE '{}' refused ({}); trying '{}'", create_name, msg, nested);
+            session
+                .create(&nested)
+                .await
+                .map_err(|e| format!("CREATE {} failed after CREATE {} was refused ({}): {}", nested, create_name, msg, e))?;
+            nested
+        }
+        Err(e) => return Err(format!("CREATE {} failed: {}", create_name, e)),
+    };
+    let _ = session.subscribe(&path).await;
+    tracing::info!("[ensure_role_mailbox] Created '{}' (no existing match for attr '{}')", path, attr_substring);
+    Ok(path)
 }
 
 /// Move `uids` from `source_mailbox` to `target_mailbox`, verifying every step.
@@ -2004,7 +2024,8 @@ pub async fn move_uids(
 }
 
 /// Resolve or auto-create the Sent mailbox for this account.
-/// Order: IMAP SPECIAL-USE `\Sent` → common name candidates → CREATE "Sent".
+/// Order: IMAP SPECIAL-USE `\Sent` → common name candidates → CREATE "Sent"
+/// (`INBOX.Sent` where the server refuses a root-level folder).
 /// Returns the resolved mailbox path.
 pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, String> {
     ensure_role_mailbox(
@@ -2023,10 +2044,8 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
 
 /// Resolve or create the folder Snooze moves mail into
 /// (`app_db::snooze::SNOOZED_MAILBOX`). An existing "Snoozed" anywhere in the
-/// tree (e.g. `INBOX.Snoozed`) is reused.
-// ponytail: CREATE is always the bare root name, like `ensure_sent_mailbox`;
-// a server that only allows folders under INBOX refuses it. Prefix with the
-// namespace if that ever shows up in a report.
+/// tree (e.g. `INBOX.Snoozed`) is reused; a new one goes under INBOX where the
+/// server refuses a root-level folder. Callers use the path this returns.
 pub async fn ensure_snoozed_mailbox(session: &mut ImapSession) -> Result<String, String> {
     let name = crate::app_db::snooze::SNOOZED_MAILBOX;
     ensure_role_mailbox(session, "snoozed", name, &[name]).await

@@ -3043,6 +3043,7 @@
   "snooze.pickTime": "日付と時刻を選んでください",
   "snooze.confirm": "スヌーズ",
   "snooze.failed": "スヌーズできませんでした: {{err}}",
+  "snooze.error.createFolder": "メールサーバー上で Snoozed フォルダーを見つけることも作成することもできませんでした",
   "snooze.offline": "スヌーズにはメールサーバーへの接続が必要です。オンラインになってから再度お試しください。",
   "snooze.until": "{{time}} までスヌーズ中",
   "undo.snoozed_one": "{{count}} 件をスヌーズしました",

@@ -218,6 +218,10 @@ pub struct ServerState {
     /// it. `Action::DropIdlers` bumps it; a Rust test can bump it in the same
     /// `mutate` that adds the message the dropped client must catch up on.
     pub idle_drops: u64,
+    /// The personal namespace prefix (`INBOX.`) on a Dovecot/Courier-style
+    /// server that keeps every folder under INBOX: CREATE of any other name is
+    /// refused, and nothing is created. `None` = folders anywhere.
+    pub personal_namespace: Option<String>,
 }
 
 impl Default for ServerState {
@@ -237,6 +241,7 @@ impl Default for ServerState {
             expect_login: None,
             permanent_flags: None,
             idle_drops: 0,
+            personal_namespace: None,
         }
     }
 }

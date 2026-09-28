@@ -187,6 +187,44 @@ async fn ensure_sent_mailbox_creates_one_when_the_server_has_none() {
     );
 }
 
+/// Dovecot/Courier with `INBOX.` as the personal namespace refuse a root-level
+/// CREATE (`[CANNOT] create failure: NAME NOT ALLOWED`), which is what "Could
+/// not snooze" reported. The mock refuses without creating anything, so the
+/// folder can only exist if the retry under INBOX made it.
+#[async_std::test]
+async fn ensure_snoozed_mailbox_goes_under_inbox_when_the_server_refuses_the_root() {
+    let server = MockImap::start(
+        Scenario::new().without_cap("SPECIAL-USE").inbox_namespace(".").mailbox(inbox_with(1)),
+    );
+    let mut sess = session(&server).await;
+
+    let snoozed = ensure_snoozed_mailbox(&mut sess).await.expect("create Snoozed");
+    assert_eq!(snoozed, "INBOX.Snoozed");
+    assert!(server.state().find("Snoozed").is_none(), "the refused root CREATE must not have made a folder");
+    assert_eq!(server.count_commands("CREATE"), 2);
+
+    // The snooze itself: the move into the path that came back.
+    move_uids(&mut sess, "INBOX", &snoozed, &[1], true, true).await.expect("move into Snoozed");
+    assert_eq!(server.state().find("INBOX.Snoozed").unwrap().messages.len(), 1);
+
+    // The next snooze finds it rather than creating another.
+    assert_eq!(ensure_snoozed_mailbox(&mut sess).await.expect("resolve Snoozed"), "INBOX.Snoozed");
+    assert_eq!(server.count_commands("CREATE"), 2);
+}
+
+#[async_std::test]
+async fn ensure_sent_mailbox_goes_under_inbox_when_the_server_refuses_the_root() {
+    let server = MockImap::start(
+        Scenario::new().without_cap("SPECIAL-USE").inbox_namespace(".").mailbox(inbox_with(1)),
+    );
+    let mut sess = session(&server).await;
+
+    let sent = ensure_sent_mailbox(&mut sess).await.expect("create Sent");
+    assert_eq!(sent, "INBOX.Sent");
+    assert!(server.state().find("INBOX.Sent").is_some());
+    assert!(server.state().find("Sent").is_none());
+}
+
 #[async_std::test]
 async fn append_stores_the_message_and_reports_the_new_uid() {
     let server = MockImap::start(

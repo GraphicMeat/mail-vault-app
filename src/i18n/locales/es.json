@@ -3043,6 +3043,7 @@
   "snooze.pickTime": "Elige una fecha y hora",
   "snooze.confirm": "Posponer",
   "snooze.failed": "No se pudo posponer: {{err}}",
+  "snooze.error.createFolder": "no se pudo encontrar ni crear la carpeta Snoozed en el servidor de correo",
   "snooze.offline": "Posponer necesita conexión con el servidor de correo. Inténtalo de nuevo cuando estés en línea.",
   "snooze.until": "Pospuesto hasta {{time}}",
   "undo.snoozed_one": "{{count}} mensaje pospuesto",

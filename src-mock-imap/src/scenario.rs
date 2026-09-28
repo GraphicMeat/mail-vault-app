@@ -220,6 +220,15 @@ impl Scenario {
         self
     }
 
+    /// A server whose personal namespace is `INBOX<delimiter>` (Dovecot and
+    /// Courier on many hosts): every folder lives under INBOX and a root-level
+    /// CREATE is refused.
+    pub fn inbox_namespace(mut self, delimiter: &str) -> Self {
+        self.state.delimiter = delimiter.to_string();
+        self.state.personal_namespace = Some(format!("INBOX{}", delimiter));
+        self
+    }
+
     pub fn greeting(mut self, g: &str) -> Self {
         self.greeting = Some(g.to_string());
         self

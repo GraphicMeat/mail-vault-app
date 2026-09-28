@@ -409,6 +409,13 @@ fn do_create(cmd: &Command, state: &mut ServerState) -> Response {
     if state.find(&name).is_some() {
         return Response::no("[ALREADYEXISTS] Mailbox already exists");
     }
+    // Dovecot's own wording for a root-level name outside the namespace.
+    if let Some(prefix) = &state.personal_namespace {
+        let upper = name.to_uppercase();
+        if upper != "INBOX" && !upper.starts_with(&prefix.to_uppercase()) {
+            return Response::no("[CANNOT] create failure: NAME NOT ALLOWED");
+        }
+    }
     state.mailboxes.push(Mailbox::new(&name));
     Response::ok("CREATE completed")
 }

@@ -4,6 +4,7 @@
 // failure between the two steps has to put it back where it was.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { selectionKey } from '../../../stores/slices/unifiedHelpers';
+import en from '../../../i18n/locales/en.json';
 
 const mockMove = vi.fn();
 const mockReload = vi.fn().mockResolvedValue(undefined);
@@ -86,6 +87,21 @@ describe('snoozeEmails', () => {
     });
     // A folder the sidebar has not listed yet must show up on the next load.
     expect(mockRefetch).toHaveBeenCalledWith('a1');
+  });
+
+  it('reports a folder the server would not create with the catalog message, not the server text', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockDaemon.mockImplementation(async (method) => {
+      if (method === 'snooze.ensure_folder') {
+        throw new Error('CREATE Snoozed failed: no response: code: None, info: Some("[CANNOT] create failure: NAME NOT ALLOWED")');
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const err = await snoozeEmails([key(state.emails[0])], WAKE).catch(e => e);
+    expect(err.message).toBe(en['snooze.error.createFolder']);
+    expect(err.message).not.toMatch(/CANNOT|CREATE/);
+    expect(mockMove).not.toHaveBeenCalled();
+    quiet.mockRestore();
   });
 
   it('leaves out a message with no Message-ID and one on a Graph account', async () => {

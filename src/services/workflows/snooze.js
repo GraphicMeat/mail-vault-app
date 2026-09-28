@@ -62,7 +62,12 @@ export async function snoozeEmails(keys, wakeAt) {
   try {
     for (const [accountId, groupKeys] of groups) {
       const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
-      const folder = await daemonCall('snooze.ensure_folder', { account });
+      // The server's own refusal text ("[CANNOT] create failure: NAME NOT
+      // ALLOWED") is for the log, not the toast.
+      const folder = await daemonCall('snooze.ensure_folder', { account }).catch((e) => {
+        console.error('[snooze] could not resolve or create the Snoozed folder:', e);
+        throw new Error(tr('snooze.error.createFolder'));
+      });
       if (!(accountId === state.activeAccountId && (state.mailboxes || []).some(m => m.path === folder))) {
         forceMailboxRefetch(accountId);
       }
