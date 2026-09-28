@@ -29,6 +29,9 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
   // A resumed tour carries on at the step it was skipped from. That step can
   // be gone (an account added since drops 'account'): start over then.
   const [index, setIndex] = useState(() => Math.max(0, steps.indexOf(skippedAt)));
+  // A step mid-way through something that must not be left (the storage
+  // step's vault move): Back and Skip tour wait, as its Continue does.
+  const [busy, setBusy] = useState(false);
   const pageRef = useRef(null);
 
   // The gallery can leave this scroll container near its bottom. Start the
@@ -57,10 +60,11 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
         <button
           type="button"
           onClick={back}
+          disabled={busy}
           data-testid="onboarding-back"
           aria-label={t('common.back')}
           className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs
-                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
+                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
         >
           <ArrowLeft size={14} />
           {t('common.back')}
@@ -72,8 +76,9 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
         <button
           type="button"
           onClick={() => skipOnboarding(step)}
+          disabled={busy}
           data-testid="onboarding-skip"
-          className="ml-2 px-2 py-1.5 rounded-lg text-xs text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
+          className="ml-2 px-2 py-1.5 rounded-lg text-xs text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
         >
           {t('onboarding.skipTour')}
         </button>
@@ -81,7 +86,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq, onComplete }) {
       </header>
       <div className="onboarding-step">
       {step === 'splash'  && <Splash onContinue={next} />}
-      {step === 'storage' && <StorageStep onContinue={next} />}
+      {step === 'storage' && <StorageStep onContinue={next} onBusyChange={setBusy} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
       {step === 'defaultMail' && <DefaultMailStep onContinue={next} />}

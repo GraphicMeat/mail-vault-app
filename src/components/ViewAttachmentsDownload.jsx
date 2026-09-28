@@ -126,7 +126,9 @@ export function useTimelineDownload(view) {
   const mineRunning = running?.startsWith(`${view?.id}|`) ? running : null;
 
   const download = async ({ y, m = null }) => {
-    if (!view?.def || progress || running) return;
+    // This view's save only: one still running in the view left behind must
+    // not turn this view's enabled buttons into dead clicks.
+    if (!view?.def || progress || mineRunning) return;
     const key = keyOf(m ? `${y}-${m}` : String(y));
     const label = m ? formatMonthYear(y, m) : String(y);
     setOutcome(null);
@@ -148,7 +150,8 @@ export function useTimelineDownload(view) {
       console.error('[views] timeline attachment download failed:', error);
       next = { key, text: t('email.attachments.failedDownload'), error: true };
     } finally {
-      setRunning(null);
+      // Only its own key: a save started since in another view keeps running.
+      setRunning(current => (current === key ? null : current));
     }
     setOutcome(next);
     setTimeout(() => setOutcome(current => (current === next ? null : current)), 6000);

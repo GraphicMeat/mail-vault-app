@@ -460,9 +460,10 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     () => mergedEmail.attachments ? getRealAttachments(mergedEmail.attachments, mergedEmail.html) : [],
     [mergedEmail.attachments, mergedEmail.html]
   );
-  // Attachments are read by (account, mailbox, uid) — resolve the message's
-  // own folder, not the active view's.
-  const emailMailbox = resolveEmailLocation(email, useMailStore.getState())?.mailbox;
+  // Attachments are read by (account, mailbox, uid): the message's own account
+  // and folder, not the active view's (All inboxes threads every account).
+  const emailMailbox = emailLocation?.mailbox;
+  const emailAccountId = emailLocation?.accountId ?? activeAccountId;
   const hasHtml = !!mergedEmail.html;
   const wasStripped = !hasHtml && strippedBody.length < (mergedEmail.text?.length || 0) * 0.8;
 
@@ -876,7 +877,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                   <DownloadAllButton
                     attachments={realAttachments}
                     emailUid={email.uid}
-                    accountId={activeAccountId}
+                    accountId={emailAccountId}
                     mailbox={emailMailbox}
                     subject={email.subject}
                   />
@@ -888,7 +889,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                   attachment={att}
                   attachmentIndex={att._originalIndex}
                   emailUid={email.uid}
-                  accountId={activeAccountId}
+                  accountId={emailAccountId}
                   mailbox={emailMailbox}
                   compact
                 />

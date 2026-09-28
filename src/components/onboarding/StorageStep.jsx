@@ -22,12 +22,14 @@ import { useT } from '../../i18n/index.js';
  * purchase its backup row only says where to unlock it (the shell refuses the
  * folder otherwise), the same gate Settings > Backup applies.
  */
-export function StorageStep({ onContinue }) {
+export function StorageStep({ onContinue, onBusyChange }) {
   const t = useT();
   const [entitled] = useBackupsEntitled();
   // Continue waits for a vault move: leaving mid-copy would add the account
   // while the mail is between two folders.
+  // The shell holds its Back and Skip tour on the same flag.
   const [moving, setMoving] = useState(false);
+  const busy = (value) => { setMoving(value); onBusyChange?.(value); };
   const card = 'settings-section space-y-3';
   const heading = 'font-semibold text-mail-text flex items-center gap-2';
 
@@ -40,7 +42,7 @@ export function StorageStep({ onContinue }) {
 
       {!IS_APPSTORE_BUILD && (
         <div data-testid="storage-row-mail">
-          <MailStorageLocation title={t('onboarding.storageMailTitle')} description={t('onboarding.storageMailHint')} onBusyChange={setMoving} />
+          <MailStorageLocation title={t('onboarding.storageMailTitle')} description={t('onboarding.storageMailHint')} onBusyChange={busy} />
         </div>
       )}
 
