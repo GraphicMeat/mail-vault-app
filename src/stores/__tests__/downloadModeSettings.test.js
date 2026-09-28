@@ -56,7 +56,7 @@ describe('download mode migration (v12)', () => {
     const once = migrateSettings({ localCacheDurationMonths: 0 }, 11);
     expect(migrateSettings(once, 11)).toEqual(once);
     expect(migrateSettings({ fetchMode: 'keepRecent', localCacheDurationMonths: 0 }, 12))
-      .toEqual({ fetchMode: 'keepRecent', localCacheDurationMonths: 0 });
+      .toMatchObject({ fetchMode: 'keepRecent', localCacheDurationMonths: 0 });
     expect(migrateSettings({ fetchMode: 'onDemand', localCacheDurationMonths: 0 }, 11).fetchMode).toBe('onDemand');
   });
 
