@@ -342,7 +342,7 @@ export function padEmptyLines(html) {
   return doc.body.innerHTML;
 }
 
-export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, onCreate }) {
+export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, placeCaret }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const [card, setCard] = useState(null);          // hovered link: { a, href, top, left }
@@ -359,9 +359,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     extensions: editorExtensions(placeholder),
     content,
     // Fires once the instance above is actually built (never during render —
-    // see the immediatelyRender note above). Reply/replyAll use this to put
-    // the caret in the body instead of the To field (ComposeModal).
-    onCreate,
+    // see the immediatelyRender note above). Reply/replyAll use `placeCaret`
+    // to put the caret in the body instead of the To field (ComposeModal).
+    onCreate: placeCaret ? ({ editor }) => placeCaret(editor) : undefined,
     onUpdate: ({ editor }) => {
       setCard(null);
       onUpdate(padEmptyLines(editor.getHTML()));
@@ -436,9 +436,17 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // edit, so keep it out of the undo history — recorded, it lights Undo on an
   // empty message and makes the first Undo press a no-op.
   // The parent holds the padded HTML this editor handed it; that echo is not a change.
+  // Replacing the document leaves the caret at its end, below the signature and
+  // any quote, so `placeCaret` puts it back unless the person is typing in
+  // another field. The editor is usually built on the empty pre-init form: a
+  // reply's body arrives here after onCreate placed the caret, and before
+  // TipTap's deferred focus, so the editor cannot be asked whether it has it.
   useEffect(() => {
     if (editor && !editor.isDestroyed && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
       editor.chain().setMeta('addToHistory', false).setContent(content).run();
+      const active = document.activeElement;
+      if (placeCaret && !(active && !editor.view.dom.contains(active)
+        && active.matches?.('input, textarea, select, [contenteditable="true"]'))) placeCaret(editor);
     }
   }, [content, editor]);
 

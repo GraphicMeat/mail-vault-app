@@ -123,7 +123,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
   // Reply/replyAll skip the hook's own mount-time autofocus: the editor that
   // should get the caret doesn't exist yet (TipTap builds it lazily), and its
-  // own onCreate callback below focuses it once it does.
+  // own onCreate callback below focuses it once it does (`placeCaret`).
   const dialogRef = useDialogA11y(true, undefined, { skipInitialFocus: mode === 'reply' || mode === 'replyAll' });
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -1499,10 +1499,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               onFiles={addFiles}
               // Reply/replyAll: put the caret in the body instead of To
               // (RecipientField above skips data-autofocus for these modes).
-              // Runs from TipTap's own onCreate, never during render — see the
+              // Runs from TipTap's own onCreate, never during render, and again
+              // when the body lands after the editor was built — see the
               // immediatelyRender note in RichTextEditor.jsx.
-              onCreate={(mode === 'reply' || mode === 'replyAll')
-                ? ({ editor }) => editor.commands.focus(signatureCaretPos(editor.state.doc) ?? 'start')
+              placeCaret={(mode === 'reply' || mode === 'replyAll')
+                ? (editor) => editor.commands.focus(signatureCaretPos(editor.state.doc) ?? 'start')
                 : undefined}
               onUpdate={(html) => {
                 if (detaching) return;
