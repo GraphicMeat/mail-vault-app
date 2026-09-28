@@ -306,6 +306,10 @@ describe("QuickActions", () => {
         screen.getByRole("menuitem", { name: "Preview 8" }),
       )
     );
+    // The pointer is still on the page button: the refocus names nothing.
+    expect(
+      document.querySelector(".quick-actions-radial-center > span:not([aria-hidden])").textContent,
+    ).toBe("");
   });
 
   it("keeps colors stable when actions are reordered and puts inline overflow in a reachable menu", () => {

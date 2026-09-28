@@ -498,7 +498,11 @@ function QuickActionsConfigured({
     previousPageRef.current = page;
     requestAnimationFrame(() => {
       const root = preview ? actionsRef.current : panelRef.current;
+      // The pointer is still on the page button in the center: this focus
+      // names nothing, like the one on opening.
+      openingFocusRef.current = true;
       root?.querySelector(".quick-action-radial-item:not(:disabled)")?.focus();
+      openingFocusRef.current = false;
     });
   }, [page, preview]);
   // A new identity (another message) closes the menu. Not on mount: a row
