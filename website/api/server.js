@@ -52,6 +52,9 @@ app.use(analytics({
   dbPath: path.join(__dirname, 'analytics.db'),
   apiKey: process.env.ANALYTICS_API_KEY,
   peers: analyticsPeers,
+  // New users vs updates: GitHub installer downloads against the installer-file
+  // clicks the tracker records here (dmg / setup.exe / deb links).
+  github: 'GraphicMeat/mail-vault-app',
 }));
 
 // ---- GraphicMeat partner API ----
