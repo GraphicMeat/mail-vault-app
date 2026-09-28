@@ -13,12 +13,18 @@
  * `daemon_rpc` the Import MBOX button sends.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reloadApp, switchToFolder, visibleRowSubjects, waitForApp, waitForEmails } from './helpers.js';
+import { appDataDir, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
+const IMPORT_UID_BASE = 0xC000_0000;
+
+const uidsIn = (cur) => (existsSync(cur) ? readdirSync(cur) : [])
+  .map((n) => Number(n.split(INFO_SEP)[0]))
+  .filter(Number.isInteger);
 
 const daemonRpc = (method, params) => browser.executeAsync((m, p, done) => {
   try {
@@ -48,6 +54,16 @@ describe('MBOX import shows the imported mail', function () {
     const lukeId = (browser.mockAccounts || []).find((a) => a.email === LUKE)?.id;
     expect(lukeId).toBeTruthy();
 
+    // The fixture must reach the old collision: the uid the old importer
+    // would have used (vault max + 1) belongs to a message the server lists.
+    await switchToFolder(LUKE, 'INBOX');
+    const cur = join(appDataDir(browser.testDataDir), 'Maildir', lukeId, 'INBOX', 'cur');
+    const before = uidsIn(cur);
+    const oldUid = Math.max(0, ...before) + 1;
+    const serverUids = await browser.execute(() =>
+      (window.__MAIL_STORE__?.getState?.().emails || []).map((e) => e.uid));
+    expect(serverUids).toContain(oldUid);
+
     // Dated now, so they sort to the top of the list and need no scrolling.
     const date = new Date().toUTCString().replace('GMT', '+0000');
     const subjects = ['Takeout import one', 'Takeout import two'];
@@ -69,6 +85,8 @@ describe('MBOX import shows the imported mail', function () {
     const resp = await daemonRpc('import_mbox', { accountId: lukeId, mailbox: 'INBOX', sourcePath: mboxPath });
     expect(resp.ok).toBe(true);
     expect(resp.v.emailCount).toBe(2);
+    const added = uidsIn(cur).filter((u) => !before.includes(u));
+    expect(added.sort()).toEqual([IMPORT_UID_BASE, IMPORT_UID_BASE + 1]);
 
     await reloadApp();
     await switchToFolder(LUKE, 'INBOX');
