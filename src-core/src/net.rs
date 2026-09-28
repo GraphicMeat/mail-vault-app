@@ -32,7 +32,12 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// Every dial is a Network Activity event, the ones cut short by the first
 /// answer included ("cancelled").
 pub async fn probe_internet() -> bool {
-    let dials = PROBE_HOSTS
+    probe(&PROBE_HOSTS).await
+}
+
+/// `probe_internet` against `hosts`, so a test can dial loopback instead.
+async fn probe(hosts: &[(&str, u16)]) -> bool {
+    let dials = hosts
         .iter()
         .map(|(host, port)| {
             Box::pin(async move {
@@ -86,22 +91,34 @@ pub fn looks_like_network_down(err: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// Every probe host shows on Network Activity, whichever answered first.
-    /// Other tests may probe too: this looks for each host since it started.
+    fn dial_on(port: u16) -> crate::net_activity::NetEvent {
+        crate::net_activity::snapshot()
+            .into_iter()
+            .find(|e| e.protocol == Protocol::TcpProbe && e.host == "127.0.0.1" && e.port == port)
+            .unwrap_or_else(|| panic!("no probe event for port {port}"))
+    }
+
+    /// Every dial is on Network Activity. Loopback only: a unit test must not
+    /// dial the public resolvers `PROBE_HOSTS` names.
     #[tokio::test]
-    async fn every_probe_dial_is_recorded() {
-        let since = crate::net_activity::now_ms();
-        let _ = probe_internet().await;
-        let events = crate::net_activity::snapshot();
-        for (host, port) in PROBE_HOSTS {
-            let e = events
-                .iter()
-                .find(|e| e.at_ms >= since && e.protocol == Protocol::TcpProbe && e.host == host)
-                .unwrap_or_else(|| panic!("no probe event for {host}: {events:?}"));
-            assert_eq!(e.port, port);
-            assert_eq!(e.purpose, "connectivity check");
-            assert_eq!(e.ip.as_deref(), Some(host));
-        }
+    async fn a_dial_that_connects_is_recorded_ok() {
+        let open = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = open.local_addr().unwrap().port();
+        assert!(probe(&[("127.0.0.1", port)]).await, "a listening port answers");
+        let e = dial_on(port);
+        assert_eq!(e.result, "ok");
+        assert_eq!(e.purpose, "connectivity check");
+        assert_eq!(e.ip.as_deref(), Some("127.0.0.1"));
+    }
+
+    #[tokio::test]
+    async fn a_refused_dial_is_recorded_as_failed() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        assert!(!probe(&[("127.0.0.1", port)]).await, "nothing listens there any more");
+        let e = dial_on(port);
+        assert_ne!(e.result, "ok");
+        assert_ne!(e.result, "cancelled", "a dial that finished says how");
+        assert_eq!(e.purpose, "connectivity check");
     }
 
     #[test]

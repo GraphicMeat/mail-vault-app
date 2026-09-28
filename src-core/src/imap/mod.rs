@@ -342,7 +342,8 @@ async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>,
 /// env var would be a TLS-downgrade vector in a shipped binary.
 /// Returns the transport plus whether the server greeting was already consumed
 /// (STARTTLS must eat it before upgrading; no second greeting follows the TLS
-/// handshake, so the auth step must not wait for one).
+/// handshake, so the auth step must not wait for one), plus the connection's
+/// Network Activity event: the caller settles it with the sign-in's outcome.
 ///
 /// `slot` is the account's connection slot (`ImapPool::connection_slot`): the
 /// socket holds it until it closes, so no connection can bypass the budget.
@@ -350,7 +351,7 @@ async fn connect_transport(
     config: &ImapConfig,
     addrs: &[std::net::SocketAddr],
     slot: tokio::sync::OwnedSemaphorePermit,
-) -> Result<(Box<dyn ImapTransport>, bool), String> {
+) -> Result<(Box<dyn ImapTransport>, bool, crate::net_activity::Shared), String> {
     // One Network Activity event per connection, recorded when it closes
     // (a failed connect is recorded here, as it fails).
     let mut ev = NetEvent::out(Protocol::Imap, &config.host, config.effective_port(), crate::net_activity::purpose());
@@ -364,14 +365,30 @@ async fn connect_transport(
         }
     };
     conn.ev.ip = tcp.peer_addr().ok().map(|a| a.ip().to_string());
-    conn.ev.result = "ok".into();
+    // Until the sign-in says otherwise: a TLS, greeting or LOGIN failure, or
+    // a caller dropped mid-way, must not read as a working connection.
+    conn.ev.result = "closed before signing in".into();
+    let conn = crate::net_activity::shared(conn);
 
     // Byte counting sits on the raw stream: COMPRESS=DEFLATE wraps the boxed
     // transport later, so what we count here is what crossed the wire.
     let counters = crate::transfer_stats::global().counters(&config.email);
 
-    let stream = CountingStream::new(tcp, counters, CMD_STALL).holding(slot).recording(conn);
+    let stream = CountingStream::new(tcp, counters, CMD_STALL).holding(slot).recording(std::sync::Arc::clone(&conn));
+    let secured = secure_transport(config, addrs, stream).await;
+    if secured.is_err() {
+        crate::net_activity::settle(&conn, &secured);
+    }
+    secured.map(|(transport, greeting_consumed)| (transport, greeting_consumed, conn))
+}
 
+/// The TLS (or plaintext) layer over a counted socket; `connect_transport`'s
+/// second half.
+async fn secure_transport(
+    config: &ImapConfig,
+    addrs: &[std::net::SocketAddr],
+    stream: CountingStream<TcpStream>,
+) -> Result<(Box<dyn ImapTransport>, bool), String> {
     let plaintext_requested = std::env::var("MAILVAULT_IMAP_PLAINTEXT").as_deref() == Ok("1");
     let all_loopback = addrs.iter().all(|a| a.ip().is_loopback());
 
@@ -547,8 +564,10 @@ async fn connect_and_auth(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSe
 /// (a busy 7-slot budget is not what should read as "timed out").
 async fn connect_and_auth_with_slot(config: &ImapConfig, slot: tokio::sync::OwnedSemaphorePermit) -> Result<ImapSession, String> {
     let addrs = resolve_addrs(config).await?;
-    let (transport, greeting_consumed) = connect_transport(config, &addrs, slot).await?;
-    authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await
+    let (transport, greeting_consumed, conn) = connect_transport(config, &addrs, slot).await?;
+    let session = authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await;
+    crate::net_activity::settle(&conn, &session);
+    session
 }
 
 pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
@@ -563,11 +582,13 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
     let addrs = resolve_addrs(config).await?;
     info!("[IMAP] DNS resolved to {:?}", addrs);
 
-    let (transport, greeting_consumed) = connect_transport(config, &addrs, slot).await?;
+    let (transport, greeting_consumed, conn) = connect_transport(config, &addrs, slot).await?;
     info!("[IMAP] Transport established, authenticating...");
 
-    let mut session =
-        authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await?;
+    let session = authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await;
+    crate::net_activity::settle(&conn, &session);
+    drop(conn);
+    let mut session = session?;
 
     // ── Cache capabilities ──────────────────────────────────────────────
     let caps = session.capabilities().await

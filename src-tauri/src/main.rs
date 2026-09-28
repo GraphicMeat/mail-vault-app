@@ -1782,7 +1782,25 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
         }
     };
 
-    match updater.check().await {
+    // Network Activity: the check is this shell's own HTTP. Both feeds
+    // (tauri.conf.json's endpoint and NIGHTLY_LATEST_JSON_URL) are on
+    // github.com; the download that may follow is not reported.
+    let mut event = mailvault_core::net_activity::NetEvent::out(
+        mailvault_core::net_activity::Protocol::Https,
+        "github.com",
+        443,
+        "update check",
+    );
+    let started = std::time::Instant::now();
+    let checked = updater.check().await;
+    event.duration_ms = started.elapsed().as_millis() as u64;
+    event.result = match &checked {
+        Ok(_) => "ok".into(),
+        Err(e) => e.to_string(),
+    };
+    daemon_channel::report_net(&event);
+
+    match checked {
         Ok(Some(update)) => {
             info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), update.version);
             let version = update.version.clone();

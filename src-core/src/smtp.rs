@@ -560,15 +560,23 @@ pub async fn test_connection(account: &ImapConfig) -> Result<(), String> {
     let transport = build_transport(account, Duration::from_secs(15))?;
 
     let conn = smtp_event(account, &smtp_host, smtp_port, "account setup", 0);
-    let tested = transport.test_connection().await;
+    let tested = test_outcome(transport.test_connection().await, account, &smtp_host, smtp_port);
     settle(conn, &tested);
+    tested
+}
+
+/// lettre's `test_connection` answer as a result: `Ok(false)`, a server that
+/// did not accept the connection, is a failure, on the page as for the caller.
+fn test_outcome<E: std::fmt::Display>(
+    tested: Result<bool, E>,
+    account: &ImapConfig,
+    host: &str,
+    port: u16,
+) -> Result<(), String> {
     match tested {
         Ok(true) => Ok(()),
-        Ok(false) => Err(format!(
-            "SMTP server {}:{} did not accept the connection.",
-            smtp_host, smtp_port
-        )),
-        Err(e) => Err(friendly_smtp_error(&smtp_host, smtp_port, account.from_address(), &e.to_string())),
+        Ok(false) => Err(format!("SMTP server {}:{} did not accept the connection.", host, port)),
+        Err(e) => Err(friendly_smtp_error(host, port, account.from_address(), &e.to_string())),
     }
 }
 
@@ -707,6 +715,23 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Network Activity: a server that did not accept the connection test is
+    /// recorded as a failure, not "ok".
+    #[test]
+    fn a_refused_connection_test_is_not_recorded_as_ok() {
+        let acc = account("okfalse@mock.test", None);
+        let tested = test_outcome(Ok::<bool, String>(false), &acc, "okfalse.test", 25);
+        assert!(tested.is_err());
+        settle(smtp_event(&acc, "okfalse.test", 25, "test: smtp refused", 0), &tested);
+        let e = crate::net_activity::snapshot()
+            .into_iter()
+            .find(|e| e.purpose == "test: smtp refused")
+            .expect("recorded");
+        assert_ne!(e.result, "ok");
+        assert!(e.result.contains("did not accept"), "{}", e.result);
+        assert_eq!(test_outcome(Ok::<bool, String>(true), &acc, "okfalse.test", 25), Ok(()));
+    }
 
     #[test]
     fn implicit_tls_explicit_flag_wins() {
@@ -1165,9 +1190,6 @@ mod tests {
             assert!(log.iter().any(|l| l.starts_with("RCPT TO:<partner@example.com>")), "{:?}", log);
         }
 
-        /// What the SMTP server takes in carries the id compose staged the
-        /// local copy under — `send_email` builds its own MIME, and used to
-        /// mint a second id for it.
         /// Network Activity: one SMTP event per send, bytes up = the message,
         /// the account masked, never the login address.
         #[tokio::test]
@@ -1196,6 +1218,9 @@ mod tests {
             assert!(!json.contains("luke@mock.test"), "raw login address in {json}");
         }
 
+        /// What the SMTP server takes in carries the id compose staged the
+        /// local copy under — `send_email` builds its own MIME, and used to
+        /// mint a second id for it.
         #[tokio::test]
         async fn send_email_delivers_the_caller_message_id() {
             let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());

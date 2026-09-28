@@ -48,6 +48,12 @@ pub fn notify(method: &str, params: Value) {
     }
 }
 
+/// A connection this shell made itself, for the daemon's Network Activity
+/// page (`net.report`, recorded there as `process: "app"`).
+pub fn report_net(event: &mailvault_core::net_activity::NetEvent) {
+    notify("net.report", json!({ "event": event }));
+}
+
 /// App exit: stop reconnecting, or the loop would respawn the daemon being killed.
 pub fn stop() {
     STOPPING.store(true, SeqCst);

@@ -1190,4 +1190,28 @@ mod net_activity_tests {
         let (server, events) = one_read(false).await;
         assert_one_connection(&server, &events, "sync");
     }
+
+    /// A wrong password is the case this page is opened for: the connection
+    /// happened, and its result must say the sign-in failed, not "ok".
+    #[tokio::test]
+    async fn a_rejected_login_is_not_recorded_as_ok() {
+        let mut scenario = Scenario::new();
+        scenario.state.expect_login = Some((ADDRESS.to_string(), "not-hunter2".to_string()));
+        let server = MockImap::start(scenario);
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+
+        let err = crate::imap::create_imap_session(&config, &pool).await.expect_err("the mock refuses this password");
+        assert!(err.contains("Login failed"), "{err}");
+
+        let events: Vec<_> = snapshot()
+            .into_iter()
+            .filter(|e| e.protocol == Protocol::Imap && e.port == server.port())
+            .collect();
+        assert_eq!(events.len(), 1, "{events:?}");
+        let e = &events[0];
+        assert_ne!(e.result, "ok");
+        assert!(e.result.contains("Login failed"), "the sign-in's own error: {}", e.result);
+        assert!(!serde_json::to_string(e).unwrap().contains(ADDRESS), "raw address in {e:?}");
+    }
 }

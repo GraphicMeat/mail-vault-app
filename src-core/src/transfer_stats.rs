@@ -97,7 +97,7 @@ pub struct CountingStream<S> {
     /// This connection's Network Activity event, recorded when the socket
     /// closes: its own byte counts beside the account's, and the last I/O
     /// error as its result.
-    net: Option<crate::net_activity::Pending>,
+    net: Option<crate::net_activity::Shared>,
 }
 
 impl<S> CountingStream<S> {
@@ -105,15 +105,17 @@ impl<S> CountingStream<S> {
         Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None, _slot: None, net: None }
     }
 
-    /// Record this connection as `conn` when it closes. A read or write
-    /// that fails sets its result.
-    pub fn recording(mut self, conn: crate::net_activity::Pending) -> Self {
+    /// Count this connection's bytes into `conn`, recorded once both the
+    /// socket and whoever else holds it let go. A read or write that fails
+    /// sets its result.
+    pub fn recording(mut self, conn: crate::net_activity::Shared) -> Self {
         self.net = Some(conn);
         self
     }
 
     fn note(&mut self, down: u64, up: u64, err: Option<&std::io::Error>) {
-        if let Some(p) = self.net.as_mut() {
+        if let Some(conn) = self.net.as_ref() {
+            let mut p = conn.lock().unwrap_or_else(|p| p.into_inner());
             p.ev.bytes_down += down;
             p.ev.bytes_up += up;
             if let Some(e) = err {

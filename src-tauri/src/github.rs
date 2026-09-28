@@ -27,13 +27,17 @@ fn repo() -> String {
     std::env::var("MV_GITHUB_REPO").unwrap_or_else(|_| GITHUB_REPO.to_string())
 }
 
-/// Send `req` and report it to the daemon's Network Activity page (the only
-/// HTTP this shell makes itself). Fire and forget: a daemon that is not
-/// there loses the row, never the request.
-async fn send(req: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
+/// Send `req` and report it to the daemon's Network Activity page. Fire and
+/// forget: a daemon that is not there loses the row, never the request.
+/// `not_found_answers`: a 404 is this request's normal "no" (the star
+/// check), so the page says "ok" rather than showing it as a failure.
+async fn send(req: reqwest::RequestBuilder, not_found_answers: bool) -> reqwest::Result<reqwest::Response> {
     let (out, event) = mailvault_core::net_activity::measure("sign-in", req).await;
-    if let Some(event) = event {
-        crate::daemon_channel::notify("net.report", json!({ "event": event }));
+    if let Some(mut event) = event {
+        if not_found_answers && event.result == "HTTP 404" {
+            event.result = "ok".into();
+        }
+        crate::daemon_channel::report_net(&event);
     }
     out
 }
@@ -51,6 +55,7 @@ pub async fn github_device_start() -> Result<Value, String> {
             // Empty scope: a default token can still read the authed user's public
             // stars, which is all we need to verify the star.
             .form(&[("client_id", client_id()), ("scope", String::new())]),
+        false,
     )
     .await
         .map_err(|e| format!("device code request failed: {e}"))?;
@@ -88,6 +93,7 @@ pub async fn github_device_poll(device_code: String) -> Result<Value, String> {
                     "urn:ietf:params:oauth:grant-type:device_code".to_string(),
                 ),
             ]),
+        false,
     )
     .await
         .map_err(|e| format!("device poll failed: {e}"))?;
@@ -126,6 +132,7 @@ pub async fn github_check_star(access_token: String) -> Result<bool, String> {
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("User-Agent", USER_AGENT),
+        true,
     )
     .await
         .map_err(|e| format!("star check failed: {e}"))?;

@@ -97,6 +97,24 @@ impl Drop for Pending {
     }
 }
 
+/// A `Pending` with two owners: a socket, and the sign-in running on it. It
+/// is recorded when the last one lets go, so a sign-in that fails after its
+/// socket is already gone (a TLS handshake that consumed the stream) still
+/// writes its verdict first.
+pub type Shared = std::sync::Arc<Mutex<Pending>>;
+
+pub fn shared(p: Pending) -> Shared {
+    std::sync::Arc::new(Mutex::new(p))
+}
+
+/// Set a shared event's result: "ok", or the error text.
+pub fn settle<T, E: std::fmt::Display>(conn: &Shared, out: &Result<T, E>) {
+    conn.lock().unwrap_or_else(|p| p.into_inner()).ev.result = match out {
+        Ok(_) => "ok".into(),
+        Err(e) => e.to_string(),
+    };
+}
+
 impl std::fmt::Debug for Pending {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pending").field("ev", &self.ev).finish()
