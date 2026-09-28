@@ -36,8 +36,11 @@ vi.mock('../../services/daemonClient.js', () => ({
 }));
 
 const mockGetHeaders = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
+// The whole INBOX cache, which the badge is recounted from.
+const mockGetAllHeaders = vi.fn().mockResolvedValue(null);
 vi.mock('../../services/db', () => ({
   getEmailHeadersPartial: (...a) => mockGetHeaders(...a),
+  getEmailHeaders: (...a) => mockGetAllHeaders(...a),
 }));
 
 const mockNotify = vi.fn();
@@ -87,6 +90,7 @@ const settingsState = () => ({
   unreadPerAccount: {},
   hiddenAccounts: {},
   billingProfile: null,
+  setUnreadForAccount: (id, count) => settingsStore.setState(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [id]: count } })),
 });
 const settingsStore = create(() => settingsState());
 vi.mock('../../stores/settingsStore', () => ({
@@ -114,6 +118,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     mockLoadEmails.mockClear();
     mockLoadUnifiedInbox.mockClear();
     mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockGetAllHeaders.mockReset().mockResolvedValue(null);
     mailStore.setState(mailState());
     settingsStore.setState(settingsState());
   });
@@ -503,5 +508,60 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     // and one banner counting both, not the same preview twice
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
+  });
+  // All Inboxes painted the arrival from the daemon's cache while the sidebar
+  // badge of the account it landed in stayed at its old count until the next
+  // scheduled refresh.
+  describe('badge', () => {
+    const unifiedOpen = { accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' };
+    const change = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1, ...fields }] });
+
+    it('recounts the arrival account from its INBOX cache', async () => {
+      mailStore.setState(unifiedOpen);
+      settingsStore.setState({ unreadPerAccount: { a1: 3, a2: 0 } });
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 3, emails: [{ uid: 3, flags: [] }, { uid: 2, flags: ['\\Seen'] }, { uid: 1, flags: [] }] });
+      eventReplies = [change()];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
+      expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 2 });
+      expect(mailStore.getState().totalUnreadCount).toBe(5);
+    });
+
+    it('recounts on a flags-only change too (read on another device)', async () => {
+      mailStore.setState(unifiedOpen);
+      settingsStore.setState({ unreadPerAccount: { a2: 4 } });
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 1, emails: [{ uid: 1, flags: ['\\Seen'] }] });
+      eventReplies = [change({ newEmails: 0, updatedFlags: 1 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(settingsStore.getState().unreadPerAccount.a2).toBe(0);
+    });
+
+    it('only adds the arrivals when the cache is partial', async () => {
+      mailStore.setState(unifiedOpen);
+      settingsStore.setState({ unreadPerAccount: { a2: 7 } });
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 500, emails: [{ uid: 1, flags: [] }] });
+      eventReplies = [change({ newEmails: 2 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(settingsStore.getState().unreadPerAccount.a2).toBe(9);
+    });
+
+    it('leaves other folders alone', async () => {
+      mailStore.setState(unifiedOpen);
+      eventReplies = [change({ mailbox: 'Archive' })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockGetAllHeaders).not.toHaveBeenCalled();
+    });
   });
 });

@@ -125,6 +125,31 @@ export function useEmailScheduler() {
   // enumerated by loadSubtree (root + every descendant), so membership in it
   // is the same check rather than a second copy of the delimiter/startsWith
   // logic.
+  // An IDLE wake-up writes the daemon's cache and nothing else, so the
+  // account's badge would wait for the next scheduled refresh. Recount it
+  // from that cache on any INBOX change, flags-only ones included (a read on
+  // another device). Only a complete cache is counted: a partial one reads as
+  // fewer unread, so it only adds the arrivals.
+  // ponytail: reads the whole INBOX cache per change; a daemon-side unread
+  // count if large inboxes make that slow.
+  const recountInboxUnread = async (accountId, newEmails) => {
+    const settings = useSettingsStore.getState();
+    let cache = null;
+    try { cache = await db.getEmailHeaders(accountId, 'INBOX'); } catch { /* keep the count */ }
+    const emails = cache?.emails;
+    if (emails && !(cache.totalEmails > emails.length)) {
+      settings.setUnreadForAccount(accountId, emails.filter(e => !e.flags?.includes('\\Seen')).length);
+    } else if (newEmails > 0) {
+      settings.setUnreadForAccount(accountId, (settings.unreadPerAccount?.[accountId] || 0) + newEmails);
+    } else return;
+    const { unreadPerAccount = {}, hiddenAccounts = {} } = useSettingsStore.getState();
+    useMailStore.setState({
+      totalUnreadCount: Object.entries(unreadPerAccount)
+        .filter(([id]) => !hiddenAccounts[id])
+        .reduce((sum, [, count]) => sum + (count || 0), 0),
+    });
+  };
+
   const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
     const s = useMailStore.getState();
     // All Inboxes lists every account, so a change on ANY of them is on
@@ -153,6 +178,7 @@ export function useEmailScheduler() {
         newestFromAddress: typeof newest?.from === 'string' ? newest.from : (newest?.from?.address || ''),
       }]);
     }
+    if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
     return onScreen;
   };
 
