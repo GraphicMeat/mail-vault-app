@@ -225,14 +225,16 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       || entry.action === 'newMessage' && !senderAddress
       || entry.action === 'snooze' && !emails.every(email => canSnooze(email, state));
     return {
-      id: entry.id, action: entry.action, label: actionLabel(entry), Icon: ICONS[entry.action],
+      id: entry.id, action: entry.action, label: actionLabel(entry),
+      // The toggle shows the envelope of the direction it will take, like its label.
+      Icon: ICONS[entry.action === 'toggleRead' ? (hasUnread ? 'markRead' : 'markUnread') : entry.action],
       disabled: !!disabledAction,
       // No copy of our own, no purge: it would only repeat "Delete from server".
       // markRead/markUnread, star/unstar and archive/unarchive hide the side
       // that does not apply to the target instead of showing it disabled.
       hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge
         || entry.action === 'unsubscribe' && !unsubscribe
-        || ['markRead', 'markUnread', 'star', 'unstar', 'archive', 'unarchive'].includes(entry.action) && !visibility[entry.action],
+        || ['markRead', 'markUnread', 'star', 'unstar', 'archive', 'unarchive'].includes(entry.action) && !visibility[entry.action] && !entry.thread,
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
       restoreFocus: !['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
@@ -271,12 +273,20 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       },
     };
   };
-  const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(describe);
+  // A thread's toggle offers both directions, as two entries of their own.
+  // Only the menu's copy: describe() keeps toggleRead for the swipe registry.
+  const menuConfig = emails.length > 1 && config.entries.some(entry => entry.action === 'toggleRead')
+    ? { ...config, entries: config.entries.flatMap(entry => entry.action !== 'toggleRead' ? [entry] : [
+      { ...entry, id: `${entry.id}:markRead`, action: 'markRead', thread: true },
+      { ...entry, id: `${entry.id}:markUnread`, action: 'markUnread', thread: true },
+    ]) }
+    : config;
+  const descriptors = menuConfig.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(describe);
   describeRef.current = describe;
 
   return <>
     <span hidden data-row-actions ref={registerMarker} />
-    <QuickActions surface="row" config={config} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} />
+    <QuickActions surface="row" config={menuConfig} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}

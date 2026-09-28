@@ -38,7 +38,7 @@ vi.mock('../QuickActions', () => ({
       'data-action': descriptor.action,
       disabled: descriptor.disabled,
       onClick: event => { void descriptor.onActivate?.(event); },
-    }, descriptor.label))),
+    }, descriptor.Icon && React.createElement(descriptor.Icon), descriptor.label))),
 }));
 
 vi.mock('../MoveToFolderDropdown', () => ({
@@ -462,6 +462,35 @@ describe('RowQuickActions — read/star/archive visibility', () => {
     renderActions({ emails: [email({ isArchived: true })], onRequestDelete: vi.fn() });
     expect(screen.queryByTestId('quick-action-archive')).toBeNull();
     expect(screen.getByTestId('quick-action-unarchive')).toBeTruthy();
+  });
+});
+
+// The radial toggle's glyph was pinned to the open envelope, so an already
+// read row showed "Mark unread" under the icon for marking read.
+describe('RowQuickActions — toggle read', () => {
+  const icon = testId => screen.getByTestId(testId).querySelector('[data-icon]')?.dataset.icon;
+
+  it('shows the envelope of the direction it will take', () => {
+    setActions(action('toggleRead'));
+    renderActions({ emails: [email()] });
+    expect(screen.getByTestId('quick-action-toggleRead').textContent).toBe('rowMenu.markRead');
+    expect(icon('quick-action-toggleRead')).toBe('MailOpen');
+    cleanup();
+    renderActions({ emails: [email({ flags: ['\\Seen'] })] });
+    expect(screen.getByTestId('quick-action-toggleRead').textContent).toBe('rowMenu.markUnread');
+    expect(icon('quick-action-toggleRead')).toBe('Mail');
+  });
+
+  it('offers both directions on a thread, whatever its members read state', async () => {
+    setActions(action('toggleRead'));
+    const thread = [email({ uid: 1, flags: ['\\Seen'] }), email({ uid: 2, flags: ['\\Seen'] })];
+    renderActions({ emails: thread });
+    expect(screen.queryByTestId('quick-action-toggleRead')).toBeNull();
+    expect(icon('quick-action-toggleRead:markRead')).toBe('MailOpen');
+    expect(icon('quick-action-toggleRead:markUnread')).toBe('Mail');
+    fireEvent.click(screen.getByTestId('quick-action-toggleRead:markUnread'));
+    await waitFor(() => expect(useMailStoreMock.getState().markSelectedAsUnread).toHaveBeenCalledTimes(1));
+    expect(useMailStoreMock.getState().markSelectedAsRead).not.toHaveBeenCalled();
   });
 });
 
