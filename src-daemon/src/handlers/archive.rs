@@ -89,6 +89,47 @@ pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) ->
     })
 }
 
+/// Every uid of a permanent bulk delete into the deleted-mail bin, five at a
+/// time on the background lane. Returns the uids to delete (kept, or already
+/// gone from the server) and how many were refused because no copy could be
+/// kept. A cancel stops capturing; what was not reached is not deleted.
+async fn capture_all(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    account_json: &str,
+    mailbox: &str,
+    uids: Vec<u32>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> (Vec<u32>, usize) {
+    use futures::StreamExt;
+    let Ok(config) = serde_json::from_str::<crate::imap::ImapConfig>(account_json) else {
+        // `bulk_delete` refuses the same JSON with its own error.
+        return (uids, 0);
+    };
+    let total = uids.len();
+    let config = &config;
+    let kept: Vec<u32> = futures::stream::iter(uids)
+        .map(|uid| async move {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
+            let source = crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false };
+            match crate::handlers::deleted::capture(state, account_id, mailbox, uid, source).await {
+                Ok(_) => Some(uid),
+                Err(e) => {
+                    warn!("bulk_delete: UID {uid} not deleted, no copy could be kept: {e}");
+                    None
+                }
+            }
+        })
+        .buffer_unordered(5)
+        .filter_map(|uid| async move { uid })
+        .collect()
+        .await;
+    let refused = if cancel.load(std::sync::atomic::Ordering::Relaxed) { 0 } else { total - kept.len() };
+    (kept, refused)
+}
+
 fn progress_reply(id: Value, result: Result<mailvault_core::archive::ArchiveProgress, String>) -> RpcResponse {
     match result {
         Ok(progress) => match serde_json::to_value(&progress) {
@@ -138,7 +179,21 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let ctx = archive_ctx(&state, std::path::PathBuf::new());
             let guard = RunGuard::register(&state, "bulk_delete");
             let cancel = guard.cancel();
-            let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await;
+            // The delete is permanent, so every message goes into the
+            // deleted-mail bin first, the same rule as `imap_delete_email`:
+            // one that cannot be kept is not deleted (an error in the tally).
+            // `bin: false` opts out: archive-and-delete, whose vault copies
+            // were verified first.
+            let (uids, refused) = if params.get("bin").and_then(Value::as_bool).unwrap_or(true) {
+                capture_all(&state, &account_id, &account_json, &mailbox, uids, &cancel).await
+            } else {
+                (uids, 0)
+            };
+            let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await.map(|mut p| {
+                p.total += refused;
+                p.errors += refused;
+                p
+            });
             drop(guard);
             progress_reply(id, result)
         }

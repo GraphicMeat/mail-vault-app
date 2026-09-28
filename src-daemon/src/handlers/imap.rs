@@ -643,11 +643,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // copy. A message already gone from the server has nothing to keep.
             let account_id = params.get("account").and_then(|a| a.get("id")).and_then(Value::as_str);
             let binned = match account_id.filter(|_| params.get("bin").and_then(Value::as_bool).unwrap_or(true)) {
-                Some(account_id) => match crate::handlers::deleted::capture(state, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap(&account)).await {
+                Some(account_id) => match crate::handlers::deleted::capture(state, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap { config: &account, permanent, priority: true }).await {
                     Ok(binned) => binned,
                     Err(e) if permanent => {
                         tracing::error!("[delete_email] uid={} not deleted: could not keep a copy first: {}", uid, e);
-                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Could not keep a copy before deleting: {e}")));
+                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("E_BIN_CAPTURE: {e}")));
                     }
                     Err(e) => {
                         warn!("[delete_email] uid={} deleted without a bin copy (it moves to Trash): {}", uid, e);

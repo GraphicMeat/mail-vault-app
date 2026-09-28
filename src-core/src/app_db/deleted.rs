@@ -1,10 +1,13 @@
 //! The deleted-mail bin (app.db schema v7).
 //!
-//! Every message the app deletes is captured here first, whole: the `.eml`
-//! in `<app_data_dir>/deleted/<id>.eml` and a row naming where it came from
-//! (account, folder, uid, Message-ID, flags, the list row) and when. Recover
-//! puts it back on the server or into the vault; a row older than the
-//! retention setting is purged, file and all.
+//! Every message the app deletes is recorded here first: a row naming where
+//! it came from (account, folder, uid, Message-ID, flags, the list row) and
+//! when, and its whole `.eml` in `<app_data_dir>/deleted/<id>.eml` when the
+//! bytes are kept. A message moved to Trash with no local copy is recorded
+//! byte-less (`has_eml` false): Trash holds it, and downloading it only to
+//! keep a second copy would make every delete a download. Recover puts it
+//! back on the server or into the vault; a row older than the retention
+//! setting is purged, file and all.
 //!
 //! It lives beside app.db and never in the vault, so no vault walk, folder
 //! list, search index, count, unified view or backup ever sees it, and the
@@ -39,9 +42,11 @@ pub struct Deleted {
     pub trash_uid: Option<u32>,
     /// Unix ms UTC.
     pub deleted_at: i64,
+    /// Whether the bin holds the bytes; false: only the Trash copy does.
+    pub has_eml: bool,
 }
 
-/// What a capture records about the message; `raw` is its whole `.eml`.
+/// What a capture records about the message.
 pub struct Capture<'a> {
     pub account_id: &'a str,
     pub mailbox: &'a str,
@@ -70,31 +75,44 @@ pub fn retention_days(settings_state: &Value) -> i64 {
         .clamp(1, MAX_RETENTION_DAYS)
 }
 
+/// A row is live when its bytes are there, or it never had any.
+fn live(app_dir: &Path, id: &str, has_eml: bool) -> bool {
+    !has_eml || eml_path(app_dir, id).exists()
+}
+
 /// The bin's id for this message and whether this call made it: the one
-/// already there (a delete sent twice, a replay), else a new capture. The
-/// file is written before the row, so a row never names a file that was
-/// never written.
-pub fn capture(conn: &Connection, app_dir: &Path, c: &Capture, raw: &[u8]) -> Result<(String, bool), String> {
-    let existing: Option<String> = conn
+/// already there (a delete sent twice, a replay), else a new capture.
+/// `raw` None records it byte-less. The file is written before the row, so a
+/// row never names a file that was never written.
+pub fn capture(conn: &Connection, app_dir: &Path, c: &Capture, raw: Option<&[u8]>) -> Result<(String, bool), String> {
+    let existing: Option<(String, bool)> = conn
         .query_row(
-            "SELECT id FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 AND message_id IS ?4",
+            "SELECT id, has_eml FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 AND message_id IS ?4",
             params![c.account_id, c.mailbox, c.uid, c.message_id],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(id) = existing.filter(|id| eml_path(app_dir, id).exists()) {
+    let (id, upgrade) = match existing {
+        Some((id, has_eml)) if live(app_dir, &id, has_eml) && (has_eml || raw.is_none()) => return Ok((id, false)),
+        // Byte-less until now: keep the bytes this attempt has.
+        Some((id, false)) => (id, true),
+        _ => (uuid::Uuid::new_v4().to_string(), false),
+    };
+    let path = eml_path(app_dir, &id);
+    if let Some(raw) = raw {
+        std::fs::create_dir_all(bin_dir(app_dir)).map_err(|e| format!("create deleted bin: {e}"))?;
+        crate::fsx::write_atomic(&path, raw).map_err(|e| format!("write deleted copy: {e}"))?;
+    }
+    if upgrade {
+        conn.execute("UPDATE deleted_messages SET has_eml = 1 WHERE id = ?1", [&id]).map_err(|e| e.to_string())?;
         return Ok((id, false));
     }
-    let id = uuid::Uuid::new_v4().to_string();
-    let path = eml_path(app_dir, &id);
-    std::fs::create_dir_all(bin_dir(app_dir)).map_err(|e| format!("create deleted bin: {e}"))?;
-    crate::fsx::write_atomic(&path, raw).map_err(|e| format!("write deleted copy: {e}"))?;
     let flags = serde_json::to_string(c.flags).map_err(|e| e.to_string())?;
     let inserted = conn.execute(
-        "INSERT INTO deleted_messages(id, account_id, mailbox, uid, message_id, flags, row_json, deleted_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        params![id, c.account_id, c.mailbox, c.uid, c.message_id, flags, c.row.to_string(), c.deleted_at],
+        "INSERT INTO deleted_messages(id, account_id, mailbox, uid, message_id, flags, row_json, deleted_at, has_eml)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        params![id, c.account_id, c.mailbox, c.uid, c.message_id, flags, c.row.to_string(), c.deleted_at, raw.is_some()],
     );
     if let Err(e) = inserted {
         let _ = std::fs::remove_file(&path);
@@ -106,15 +124,15 @@ pub fn capture(conn: &Connection, app_dir: &Path, c: &Capture, raw: &[u8]) -> Re
 /// The newest copy kept of (account, mailbox, uid), whatever its Message-ID:
 /// for a retried delete whose message the server no longer holds.
 pub fn find(conn: &Connection, app_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<String>, String> {
-    let id: Option<String> = conn
+    let row: Option<(String, bool)> = conn
         .query_row(
-            "SELECT id FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 ORDER BY deleted_at DESC LIMIT 1",
+            "SELECT id, has_eml FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 ORDER BY deleted_at DESC LIMIT 1",
             params![account_id, mailbox, uid],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    Ok(id.filter(|id| eml_path(app_dir, id).exists()))
+    Ok(row.filter(|(id, has_eml)| live(app_dir, id, *has_eml)).map(|(id, _)| id))
 }
 
 /// Where the delete put the message, once it landed.
@@ -138,10 +156,11 @@ fn from_row(r: &rusqlite::Row) -> rusqlite::Result<Deleted> {
         trash: r.get(7)?,
         trash_uid: r.get(8)?,
         deleted_at: r.get(9)?,
+        has_eml: r.get(10)?,
     })
 }
 
-const COLUMNS: &str = "id, account_id, mailbox, uid, message_id, flags, row_json, trash, trash_uid, deleted_at";
+const COLUMNS: &str = "id, account_id, mailbox, uid, message_id, flags, row_json, trash, trash_uid, deleted_at, has_eml";
 
 pub fn get(conn: &Connection, id: &str) -> Result<Option<Deleted>, String> {
     conn.query_row(&format!("SELECT {COLUMNS} FROM deleted_messages WHERE id = ?1"), [id], from_row)
@@ -149,8 +168,9 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<Deleted>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Newest first. A row whose `.eml` is gone (a copied app.db, a file removed
-/// by hand) has nothing to recover: it is dropped rather than listed.
+/// Newest first. A row whose `.eml` went missing (a copied app.db, a file
+/// removed by hand) has nothing to recover: it is dropped rather than listed.
+/// A byte-less row is listed like any other.
 pub fn list(conn: &Connection, app_dir: &Path) -> Result<Vec<Deleted>, String> {
     let mut stmt = conn
         .prepare(&format!("SELECT {COLUMNS} FROM deleted_messages ORDER BY deleted_at DESC, id"))
@@ -160,7 +180,7 @@ pub fn list(conn: &Connection, app_dir: &Path) -> Result<Vec<Deleted>, String> {
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
-    let (kept, gone): (Vec<_>, Vec<_>) = rows.into_iter().partition(|d| eml_path(app_dir, &d.id).exists());
+    let (kept, gone): (Vec<_>, Vec<_>) = rows.into_iter().partition(|d| live(app_dir, &d.id, d.has_eml));
     for d in gone {
         remove(conn, app_dir, &d.id)?;
     }
@@ -222,7 +242,7 @@ mod tests {
         let (dir, c) = store();
         let row = json!({"subject": "Hi"});
         let flags = vec!["\\Seen".to_string()];
-        let (id, created) = capture(&c, &dir, &Capture { flags: &flags, ..cap(7, Some("<m@x>"), &row, 5) }, b"raw bytes").unwrap();
+        let (id, created) = capture(&c, &dir, &Capture { flags: &flags, ..cap(7, Some("<m@x>"), &row, 5) }, Some(&b"raw bytes"[..])).unwrap();
         assert!(created);
         assert_eq!(read_eml(&dir, &id).unwrap(), b"raw bytes");
         let listed = list(&c, &dir).unwrap();
@@ -236,12 +256,12 @@ mod tests {
     fn capturing_the_same_message_twice_keeps_one_row() {
         let (dir, c) = store();
         let row = json!({});
-        let (a, _) = capture(&c, &dir, &cap(7, None, &row, 5), b"x").unwrap();
-        let (b, created) = capture(&c, &dir, &cap(7, None, &row, 6), b"x").unwrap();
+        let (a, _) = capture(&c, &dir, &cap(7, None, &row, 5), Some(&b"x"[..])).unwrap();
+        let (b, created) = capture(&c, &dir, &cap(7, None, &row, 6), Some(&b"x"[..])).unwrap();
         assert_eq!(a, b);
         assert!(!created, "a replayed delete finds the capture it already made");
         // A different message under the same uid (a reused local pseudo-uid) is its own row.
-        let (other, _) = capture(&c, &dir, &cap(7, Some("<other@x>"), &row, 7), b"y").unwrap();
+        let (other, _) = capture(&c, &dir, &cap(7, Some("<other@x>"), &row, 7), Some(&b"y"[..])).unwrap();
         assert_ne!(a, other);
         assert_eq!(list(&c, &dir).unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
@@ -252,16 +272,32 @@ mod tests {
         let (dir, c) = store();
         let row = json!({});
         let now = 100 * DAY_MS;
-        let (old, _) = capture(&c, &dir, &cap(1, None, &row, now - DAY_MS - 1), b"old").unwrap();
-        let (fresh, _) = capture(&c, &dir, &cap(2, None, &row, now - DAY_MS / 2), b"fresh").unwrap();
+        let (old, _) = capture(&c, &dir, &cap(1, None, &row, now - DAY_MS - 1), Some(&b"old"[..])).unwrap();
+        let (fresh, _) = capture(&c, &dir, &cap(2, None, &row, now - DAY_MS / 2), Some(&b"fresh"[..])).unwrap();
         assert_eq!(purge_expired(&c, &dir, now, 1).unwrap(), 1);
         assert!(get(&c, &old).unwrap().is_none());
         assert!(!eml_path(&dir, &old).exists(), "the file goes with its row");
         assert!(get(&c, &fresh).unwrap().is_some());
         // A week's retention keeps both ages.
-        let (week_old, _) = capture(&c, &dir, &cap(3, None, &row, now - 6 * DAY_MS), b"w").unwrap();
+        let (week_old, _) = capture(&c, &dir, &cap(3, None, &row, now - 6 * DAY_MS), Some(&b"w"[..])).unwrap();
         assert_eq!(purge_expired(&c, &dir, now, 7).unwrap(), 0);
         assert!(get(&c, &week_old).unwrap().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_byte_less_row_is_listed_and_takes_the_bytes_a_later_attempt_has() {
+        let (dir, c) = store();
+        let row = json!({"subject": "In Trash"});
+        let (id, created) = capture(&c, &dir, &cap(9, Some("<t@x>"), &row, 1), None).unwrap();
+        assert!(created);
+        let listed = list(&c, &dir).unwrap();
+        assert_eq!((listed.len(), listed[0].has_eml), (1, false));
+        assert!(read_eml(&dir, &id).is_err(), "no bytes kept");
+        let (again, created) = capture(&c, &dir, &cap(9, Some("<t@x>"), &row, 2), Some(&b"now"[..])).unwrap();
+        assert_eq!((again.as_str(), created), (id.as_str(), false));
+        assert_eq!(read_eml(&dir, &id).unwrap(), b"now");
+        assert!(get(&c, &id).unwrap().unwrap().has_eml);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -269,7 +305,7 @@ mod tests {
     fn a_row_without_its_file_is_not_listed() {
         let (dir, c) = store();
         let row = json!({});
-        let (id, _) = capture(&c, &dir, &cap(1, None, &row, 1), b"x").unwrap();
+        let (id, _) = capture(&c, &dir, &cap(1, None, &row, 1), Some(&b"x"[..])).unwrap();
         std::fs::remove_file(eml_path(&dir, &id)).unwrap();
         assert!(list(&c, &dir).unwrap().is_empty());
         assert!(get(&c, &id).unwrap().is_none());

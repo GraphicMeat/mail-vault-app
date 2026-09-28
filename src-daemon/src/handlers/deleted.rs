@@ -2,11 +2,14 @@
 //! delete, recover, discard, and the hourly purge.
 //!
 //! `capture` runs inside the delete routes (`imap_delete_email`,
-//! `graph_delete_message`, `maildir_delete` for a local-only message) before
-//! anything is removed. The bytes come from the vault or the in-memory copy
-//! when there is one (the original, never a decrypted copy), else from the
-//! server, fetched without keeping a vault copy of a message that is about to
-//! go. The bin sits beside app.db, never in the vault.
+//! `bulk_delete_emails`, `graph_delete_message`, `maildir_delete` for a
+//! local-only message) before anything is removed. The bytes come from the
+//! vault or the in-memory copy when there is one (the original, never a
+//! decrypted copy). Past that only a permanent delete downloads them, since
+//! nothing else will hold them, without keeping a vault copy of a message
+//! that is about to go. A move to Trash with no local copy is recorded
+//! byte-less: Trash holds it, and a bulk delete must not become a bulk
+//! download. The bin sits beside app.db, never in the vault.
 //!
 //! `deleted.recover` puts a message back on the server (moved back out of the
 //! Trash folder the delete put it in, when it is still there; else APPENDed
@@ -19,7 +22,6 @@ use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, deleted::{self as bin, Capture, Deleted}};
 use mailvault_core::custody::{cache, entries};
-use mailvault_core::graph::GraphClient;
 use mailvault_core::{vault_eml, vault_files};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -36,8 +38,14 @@ fn now_ms() -> i64 {
 /// Where a message about to be deleted can be read from when neither the
 /// vault nor memory holds it.
 pub(crate) enum Source<'a> {
-    Imap(&'a ImapConfig),
-    Graph(&'a GraphClient, &'a str),
+    /// `permanent`: the server keeps nothing, so the bytes are downloaded
+    /// when nothing local holds them. `priority`: the user's lane (a click),
+    /// else the background lane (a bulk run).
+    Imap { config: &'a ImapConfig, permanent: bool, priority: bool },
+    /// Moved to Deleted Items. Only local bytes are kept: the daemon holds no
+    /// Graph token to fetch the Deleted Items copy back, so a byte-less row
+    /// could never be recovered.
+    Graph,
     /// Only on this computer: the vault copy is all there is.
     Local,
 }
@@ -49,11 +57,12 @@ pub(crate) enum Source<'a> {
 pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, source: Source<'_>) -> Result<Option<(String, bool)>, String> {
     let local = crate::raw_message::local_message(state, account_id, mailbox, uid, false).await.ok().flatten();
     let (raw, server_flags) = match local {
-        Some(raw) => (raw.to_vec(), None),
+        Some(raw) => (Some(raw.to_vec()), None),
         None => match source {
-            Source::Imap(config) => {
+            Source::Imap { permanent: false, .. } => (None, None),
+            Source::Imap { config, priority, .. } => {
                 let mb = mailbox.to_string();
-                let fetch = state.imap_pool.run_read(config, true, |mut session| {
+                let fetch = state.imap_pool.run_read(config, priority, |mut session| {
                     let mb = mb.clone();
                     async move {
                         let email = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await?;
@@ -61,7 +70,7 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
                     }
                 });
                 match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetch).await {
-                    Ok(Ok(Some(email))) if email.uid == uid => (email.raw_source_bytes, Some(email.flags)),
+                    Ok(Ok(Some(email))) if email.uid == uid => (Some(email.raw_source_bytes), Some(email.flags)),
                     // Gone already: a retry of a delete that landed finds the
                     // copy its first attempt kept.
                     Ok(Ok(_)) => return kept_already(state, account_id, mailbox, uid).await,
@@ -69,8 +78,7 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
                     Err(_) => return Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
                 }
             }
-            Source::Graph(client, message_id) => (client.get_mime_content(message_id).await?, None),
-            Source::Local => return Ok(None),
+            Source::Graph | Source::Local => return Ok(None),
         },
     };
     let state = Arc::clone(state);
@@ -81,18 +89,21 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
             .ok()
             .and_then(|rows| rows.into_iter().next());
         let row = listed
-            .or_else(|| vault_eml::light_row_json(&raw, uid).and_then(|r| serde_json::from_str(&r).ok()))
+            .or_else(|| raw.as_deref().and_then(|raw| vault_eml::light_row_json(raw, uid)).and_then(|r| serde_json::from_str(&r).ok()))
             .unwrap_or_else(|| json!({ "uid": uid }));
         let flags: Vec<String> = server_flags.unwrap_or_else(|| {
             row.get("flags").and_then(Value::as_array).map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_string)).collect()).unwrap_or_default()
         });
         let message_id = row.get("messageId").or_else(|| row.get("message_id")).and_then(Value::as_str).map(str::to_string);
+        // Byte-less, the Message-ID is the only way back to the Trash copy.
+        if raw.is_none() && message_id.is_none() {
+            return Ok(None);
+        }
         let c = Capture { account_id: &account_id, mailbox: &mailbox, uid, message_id: message_id.as_deref(), flags: &flags, row: &row, deleted_at: now_ms() };
-        app_db::with(&state.app_dir, |conn| bin::capture(conn, &state.app_dir, &c, &raw))
+        app_db::with(&state.app_dir, |conn| bin::capture(conn, &state.app_dir, &c, raw.as_deref())).map(Some)
     })
     .await
     .and_then(|r| r)
-    .map(Some)
 }
 
 /// The bin copy an earlier attempt of this delete kept, if any.
@@ -147,9 +158,13 @@ fn bare_message_id(d: &Deleted) -> Option<String> {
 /// Into the vault under the uid it had, kept and marked as deleted from the
 /// server by this app, which is what custody reads as "your only copy".
 async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
+    let fetched = if d.has_eml { None } else { Some(from_trash(state, &d).await?) };
     let state = Arc::clone(state);
     blocking(move || {
-        let raw = bin::read_eml(&state.app_dir, &d.id)?;
+        let raw = match fetched {
+            Some(raw) => raw,
+            None => bin::read_eml(&state.app_dir, &d.id)?,
+        };
         with_mailbox_write(&state, &d.account_id, &d.mailbox, |root| {
             vault_files::store(&state.vault_registry, root, &d.account_id, &d.mailbox, d.uid, &raw, &vault_flags(&d.flags), true)
         })?;
@@ -168,16 +183,48 @@ async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, St
     .and_then(|r| r)
 }
 
-/// Back on the server: moved out of Trash when the delete put it there and it
-/// still is, else APPENDed to the folder it was deleted from.
-async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
-    let config = crate::raw_message::account_config(state, &d.account_id).await?;
+/// The server credentials a recover uses; a Graph account has none here.
+async fn imap_config(state: &Arc<DaemonState>, account_id: &str) -> Result<ImapConfig, String> {
+    let config = crate::raw_message::account_config(state, account_id).await?;
     if config.oauth2_transport.as_deref() == Some("graph") {
         return Err("deletedBin.graphServerUnsupported".to_string());
     }
-    let app_dir = state.app_dir.clone();
-    let id = d.id.clone();
-    let raw = blocking(move || bin::read_eml(&app_dir, &id)).await.and_then(|r| r)?;
+    Ok(config)
+}
+
+/// A byte-less row's bytes, read from the Trash copy the delete left.
+async fn from_trash(state: &Arc<DaemonState>, d: &Deleted) -> Result<Vec<u8>, String> {
+    let config = imap_config(state, &d.account_id).await?;
+    let (Some(trash), Some(mid)) = (d.trash.clone(), bare_message_id(d)) else {
+        return Err("deletedBin.goneFromTrash".to_string());
+    };
+    let fetched = crate::handlers::imap::with_priority(&state.imap_pool, &config, |mut session| async move {
+        imap::select_mailbox(&mut session, &trash).await?;
+        let raw = match imap::uid_of_message_id(&mut session, &mid).await? {
+            Some(in_trash) => imap::fetch_email_by_uid_light(&mut session, &trash, in_trash).await?.map(|e| e.raw_source_bytes),
+            None => None,
+        };
+        Ok((raw, session, Some(trash)))
+    });
+    match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetched).await {
+        Ok(Ok(Some(raw))) => Ok(raw),
+        Ok(Ok(None)) => Err("deletedBin.goneFromTrash".to_string()),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
+    }
+}
+
+/// Back on the server: moved out of Trash when the delete put it there and it
+/// still is, else APPENDed to the folder it was deleted from. A byte-less row
+/// has only the Trash copy: gone from there, it cannot come back.
+async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
+    let config = imap_config(state, &d.account_id).await?;
+    let raw = if d.has_eml {
+        let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
+        Some(blocking(move || bin::read_eml(&app_dir, &id)).await.and_then(|r| r)?)
+    } else {
+        None
+    };
     let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
     let message_id = bare_message_id(&d);
     let (pool, cfg) = (&state.imap_pool, &config);
@@ -192,6 +239,7 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
                 return Ok((moved.new_uids.and_then(|u| u.first().copied()), session, Some(trash.to_string())));
             }
         }
+        let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
         let (_, _, found) = imap::append_email_verified(&mut session, &mailbox, &raw, &flags, message_id.as_deref(), None).await?;
         Ok((found, session, Some(mailbox)))
     })
@@ -362,6 +410,9 @@ mod tests {
         let s = DaemonState::for_test(dir.clone(), dir, true);
         let config: ImapConfig = serde_json::from_value(account(server)).unwrap();
         s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), config);
+        // The list row the app showed, as a sync leaves it.
+        let headers = json!({"emails": [{"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]}]}).to_string();
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
         s
     }
 
@@ -389,11 +440,26 @@ mod tests {
         assert_eq!(bin::read_eml(&s.app_dir, &rows[0].id).unwrap(), RAW.as_bytes());
         assert_eq!((rows[0].mailbox.as_str(), rows[0].uid, rows[0].flags.clone()), ("INBOX", 1, vec!["\\Seen".to_string()]));
         assert_eq!(rows[0].row["subject"], json!("Keep me"));
-        // Beside the vault, never in it: no vault file, no folder, no header row.
+        // Beside the vault, never in it: no vault file, no folder of its own.
         assert!(!bin::bin_dir(&s.app_dir).starts_with(s.data_dir.join("Maildir")));
         assert_eq!(s.vault_registry.uid_sets(&s.data_dir, "acc1", "INBOX").map(|(all, _)| all).unwrap_or_default(), Vec::<u32>::new());
         let folders = crate::custody::with_conn(&s, |c| cache::mailboxes_with_headers(c, None)).unwrap();
-        assert!(folders.is_empty(), "{folders:?}");
+        assert_eq!(folders, vec![("acc1".to_string(), "INBOX".to_string())], "only the folder the sync listed");
+    }
+
+    #[tokio::test]
+    async fn a_move_to_trash_with_no_local_copy_downloads_nothing_and_still_records_it() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let result = delete(&s, &server, false).await.result.expect("deleted");
+        assert_eq!(server.count_commands("BODY.PEEK[]"), 0, "a bulk delete must not become a bulk download");
+        let rows = binned(&s);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(result["binId"], json!(rows[0].id));
+        assert!(!rows[0].has_eml, "Trash holds the only copy");
+        assert_eq!(rows[0].message_id.as_deref(), Some("<keep1@example.com>"));
+        assert_eq!(rows[0].trash.as_deref(), Some("Trash"));
+        assert_eq!(rows[0].row["subject"], json!("Keep me"), "the list row the header cache held");
     }
 
     #[tokio::test]
@@ -432,6 +498,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_bulk_delete_keeps_each_message_before_expunging_it() {
+        let bulk = |srv: &MockImap, bin: bool| json!({"accountId": "acc1", "accountJson": account(srv).to_string(), "mailbox": "INBOX", "uids": [1], "bin": bin});
+        let kept = server(Scenario::new());
+        let s = state(&kept);
+        let r = handle_request_for_test(&s, "bulk_delete_emails", bulk(&kept, true)).await.result.expect("ran");
+        assert_eq!((r["completed"].clone(), r["errors"].clone()), (json!(1), json!(0)));
+        assert!(uids(&kept, "INBOX").is_empty());
+        let rows = binned(&s);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(bin::read_eml(&s.app_dir, &rows[0].id).unwrap(), RAW.as_bytes());
+
+        // Archive-and-delete opts out: its vault copies were verified first.
+        let skipped = server(Scenario::new());
+        let s = state(&skipped);
+        handle_request_for_test(&s, "bulk_delete_emails", bulk(&skipped, false)).await.result.expect("ran");
+        assert!(binned(&s).is_empty());
+        assert_eq!(skipped.count_commands("BODY.PEEK[]"), 0);
+    }
+
+    #[tokio::test]
     async fn a_delete_opted_out_of_the_bin_keeps_nothing() {
         let server = server(Scenario::new());
         let s = state(&server);
@@ -451,11 +537,40 @@ mod tests {
         let s = state(&server);
         delete(&s, &server, false).await.result.expect("deleted");
         assert_eq!(uids(&server, "Trash").len(), 1);
+        assert!(!binned(&s)[0].has_eml, "the byte-less row, Trash is all it has");
         let out = recover(&s, "server").await;
         assert_eq!(out["failed"], json!([]));
         assert!(uids(&server, "Trash").is_empty(), "moved, not copied");
         assert_eq!(uids(&server, "INBOX").len(), 1);
         assert_eq!(server.count_commands("APPEND"), 0);
+        assert!(binned(&s).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_byte_less_row_gone_from_trash_says_so_and_stays() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete(&s, &server, false).await.result.expect("deleted");
+        server.mutate(|st| st.find_mut("Trash").unwrap().messages.clear());
+        let out = recover(&s, "server").await;
+        assert_eq!(out["failed"][0]["error"], json!("deletedBin.goneFromTrash"));
+        let out = recover(&s, "local").await;
+        assert_eq!(out["failed"][0]["error"], json!("deletedBin.goneFromTrash"));
+        assert_eq!(binned(&s).len(), 1);
+        assert_eq!(server.count_commands("APPEND"), 0);
+    }
+
+    #[tokio::test]
+    async fn recover_locally_reads_a_byte_less_row_from_trash() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete(&s, &server, false).await.result.expect("deleted");
+        let out = recover(&s, "local").await;
+        assert_eq!(out["failed"], json!([]));
+        assert_eq!(server.count_commands("BODY.PEEK[]"), 1, "one download, at recover time, from Trash");
+        let name = s.vault_registry.known("acc1", "INBOX", 1).flatten().expect("a vault file");
+        let cur = vault_files::cur_path(&s.data_dir, "acc1", "INBOX");
+        assert_eq!(std::fs::read(cur.join(name)).unwrap(), RAW.as_bytes());
         assert!(binned(&s).is_empty());
     }
 

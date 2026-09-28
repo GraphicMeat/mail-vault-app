@@ -109,7 +109,8 @@ class BulkOperationManager {
           this._emitProgress();
 
           const freshAccount2 = await ensureFreshToken(account);
-          await api.bulkDeleteEmails(freshAccount2, accountId, mailbox, verifiedUids);
+          // No deleted-mail bin copy: the vault copies were just verified.
+          await api.bulkDeleteEmails(freshAccount2, accountId, mailbox, verifiedUids, { bin: false });
         }
       } else if (type === 'delete') {
         // Delete only — no archive, no verify

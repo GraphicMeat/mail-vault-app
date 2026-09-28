@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { send } from '../transport';
 import { daemonCall } from '../daemonClient';
+import { binCaptureError } from '../../utils/binCapture';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
@@ -836,6 +837,16 @@ async function _keysAfterUndo(get, keys) {
 
 // ── deleteEmailFromServer workflow ──
 
+// A local-only message's vault file. `bin`: it is the only copy, so the daemon
+// keeps it in the deleted-mail bin first, or refuses.
+async function _deleteLocalOnly({ accountId, mailbox, uid }) {
+  try {
+    await send('maildir_delete', { accountId, mailbox, uid, bin: true });
+  } catch (e) {
+    throw binCaptureError(e);
+  }
+}
+
 export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null, accountId: explicitAccountId = null } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -952,8 +963,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   if (isLocalOnly) {
     if (invoke) {
       try {
-        // `bin`: the only copy goes into the deleted-mail bin first.
-        await send('maildir_delete', { accountId, mailbox, uid: realUid, bin: true });
+        await _deleteLocalOnly({ accountId, mailbox, uid: realUid });
         await send('local_index_remove', { accountId, mailbox, uid: realUid });
         console.log(`[deleteEmail] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
       } catch (err) {
@@ -2263,7 +2273,7 @@ export async function deleteSelectedFromServer() {
       if (isLocalOnly) {
         if (invoke) {
           try {
-            await send('maildir_delete', { accountId, mailbox, uid: realUid, bin: true });
+            await _deleteLocalOnly({ accountId, mailbox, uid: realUid });
             await send('local_index_remove', { accountId, mailbox, uid: realUid });
             console.log(`[deleteSelectedFromServer] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
           } catch (err) {

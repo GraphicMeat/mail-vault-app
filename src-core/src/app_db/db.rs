@@ -244,7 +244,8 @@ CREATE TABLE bimi_cache (
 
 /// The deleted-mail bin (`app_db::deleted`): one row per message captured
 /// just before the app deleted it, its whole `.eml` beside app.db in
-/// `deleted/<id>.eml`. No UNIQUE on (account, mailbox, uid): a replayed
+/// `deleted/<id>.eml` unless `has_eml` is 0 (moved to Trash with no local
+/// copy: the Trash copy is the only one). No UNIQUE on (account, mailbox, uid): a replayed
 /// delete finds its row through `message_id IS ?`, which a NULL id matches.
 const SCHEMA_V7: &str = "
 CREATE TABLE deleted_messages (
@@ -257,7 +258,8 @@ CREATE TABLE deleted_messages (
   row_json    TEXT NOT NULL,
   trash       TEXT,
   trash_uid   INTEGER,
-  deleted_at  INTEGER NOT NULL
+  deleted_at  INTEGER NOT NULL,
+  has_eml     INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX deleted_messages_at ON deleted_messages(deleted_at);
 CREATE INDEX deleted_messages_uid ON deleted_messages(account_id, mailbox, uid);

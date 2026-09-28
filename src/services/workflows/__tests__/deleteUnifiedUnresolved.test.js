@@ -215,6 +215,26 @@ describe('deleting from a unified list', () => {
     expect(mockQueueOp).not.toHaveBeenCalled();
   });
 
+  // The only copy, and the daemon could not keep it in the deleted-mail bin:
+  // the delete is refused, and the user reads catalog copy, not the detail.
+  it('a local-only delete the bin could not keep says so in catalog copy', async () => {
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX', _localStaged: true });
+    primeUnified([r]);
+    mockSend.mockImplementation(async (cmd) => {
+      if (cmd === 'maildir_delete') throw new Error('E_BIN_CAPTURE: write deleted copy: No space left on device');
+      return undefined;
+    });
+    globalThis.window.__TAURI__ = { core: { invoke: () => {} } };
+    try {
+      await expect(useMailStore.getState().deleteEmailFromServer(_selKey(r)))
+        .rejects.toThrow('Could not keep a copy of this email before deleting it, so it was not deleted.');
+    } finally {
+      delete globalThis.window.__TAURI__;
+    }
+    expect(mockSend).not.toHaveBeenCalledWith('local_index_remove', expect.anything());
+    mockSend.mockImplementation(async () => undefined);
+  });
+
   // "The server copy is gone by our own hand" is the durable proof that makes
   // an archived row gold. It is written against the vault index, which is
   // keyed by (account, mailbox, uid) — a selection key looks up nothing there

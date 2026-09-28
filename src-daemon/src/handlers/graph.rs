@@ -243,12 +243,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let message_id = req!(str_arg(&id, params, "messageId"));
             let client = GraphClient::new(&access_token);
             // Into the deleted-mail bin first when the caller says where the
-            // message lives (`handlers::deleted`). Best effort: a Graph delete
-            // moves it to Deleted Items, which still holds it.
+            // message lives and this computer holds its bytes
+            // (`handlers::deleted`). Best effort: a Graph delete moves it to
+            // Deleted Items, which still holds it.
             let place = (opt_str_arg(params, "accountId"), opt_str_arg(params, "mailbox"), params.get("uid").and_then(Value::as_u64));
             let binned = match place {
                 (Some(account_id), Some(mailbox), Some(uid)) => {
-                    let source = crate::handlers::deleted::Source::Graph(&client, &message_id);
+                    let source = crate::handlers::deleted::Source::Graph;
                     crate::handlers::deleted::capture(state, &account_id, &mailbox, uid as u32, source)
                         .await
                         .unwrap_or_else(|e| {
@@ -618,13 +619,14 @@ mod tests {
         assert_eq!(resp.result, Some(Value::Null));
     }
 
-    /// Told where the message lives, the delete keeps a copy in the bin first:
-    /// the MIME fetched with the call's own token, since no vault copy exists.
+    /// Told where the message lives, the delete keeps the vault's copy in the
+    /// bin first, and downloads nothing: Deleted Items holds the message.
     #[tokio::test]
-    async fn a_delete_told_where_the_message_lives_bins_its_mime_first() {
+    async fn a_delete_told_where_the_message_lives_bins_the_local_copy_first() {
         let raw = "From: a@x.com\r\nSubject: Bye\r\nMessage-ID: <g1@x>\r\n\r\nbody\r\n";
-        let _g = mock_graph(vec![(200, raw.to_string()), (200, String::new())]);
+        let _g = mock_graph(vec![(200, String::new())]);
         let s = st();
+        common::with_mailbox_write(&s, "acct1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acct1", "INBOX", 7, raw.as_bytes(), &[], false)).unwrap();
         let resp = call(
             &s,
             "graph_delete_message",
@@ -635,6 +637,22 @@ mod tests {
         let kept = mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::deleted::get(c, &bin_id)).unwrap().unwrap();
         assert_eq!((kept.account_id.as_str(), kept.mailbox.as_str(), kept.uid), ("acct1", "INBOX", 7));
         assert_eq!(mailvault_core::app_db::deleted::read_eml(&s.app_dir, &bin_id).unwrap(), raw.as_bytes());
+    }
+
+    /// No local copy: nothing is downloaded and nothing kept, since the
+    /// daemon could never fetch the Deleted Items copy back.
+    #[tokio::test]
+    async fn a_delete_with_no_local_copy_downloads_nothing() {
+        let _g = mock_graph(vec![(200, String::new())]);
+        let s = st();
+        let resp = call(
+            &s,
+            "graph_delete_message",
+            json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await;
+        assert_eq!(resp.result, Some(Value::Null));
+        assert!(QUEUE.lock().unwrap().is_empty(), "the one queued answer was the DELETE's");
     }
 
     #[tokio::test]

@@ -4,6 +4,7 @@
 
 import { send as transportSend } from './transport.js';
 import { t } from '../i18n/index.js';
+import { binCaptureError } from '../utils/binCapture.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -299,7 +300,8 @@ export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = n
     permanent = mailbox !== 'INBOX';
   }
   if (IS_TAURI) {
-    return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent, bin });
+    return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent, bin })
+      .catch((e) => { throw binCaptureError(e); });
   }
   return httpRequest(`/email/${uid}/delete`, {
     method: 'POST',
@@ -457,13 +459,16 @@ export async function clearPendingOperation() {
   }
 }
 
-export async function bulkDeleteEmails(account, accountId, mailbox, uids) {
+// `bin: false` skips the daemon's deleted-mail bin copy: archive-and-delete,
+// whose vault copies were verified first.
+export async function bulkDeleteEmails(account, accountId, mailbox, uids, { bin = true } = {}) {
   if (IS_TAURI) {
     return tauriInvoke('bulk_delete_emails', {
       accountId,
       accountJson: JSON.stringify(account),
       mailbox,
       uids,
+      bin,
     });
   }
 }

@@ -468,7 +468,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             if params.get("bin").and_then(Value::as_bool) == Some(true) {
                 let source = crate::handlers::deleted::Source::Local;
                 if let Err(e) = crate::handlers::deleted::capture(state, &account_id, &mailbox, uid, source).await {
-                    return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, format!("Could not keep a copy before deleting: {e}")));
+                    return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, format!("E_BIN_CAPTURE: {e}")));
                 }
             }
             let state = Arc::clone(state);
