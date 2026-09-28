@@ -62,6 +62,8 @@ describe('RichTextEditor placeCaret', () => {
   it('leaves the caret alone while the person types in another field', async () => {
     const view = render(<Harness content="" />);
     await waitFor(() => expect(editorRef.current).toBeTruthy());
+    // onCreate's focus is deferred a frame: let it land, then move away.
+    await waitFor(() => expect(editorRef.current.view.dom.contains(document.activeElement)).toBe(true));
     const elsewhere = view.getByTestId('elsewhere');
     elsewhere.focus();
 
