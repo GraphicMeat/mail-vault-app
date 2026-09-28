@@ -94,6 +94,31 @@ describe('live list', () => {
     stop();
   });
 
+  // A restarted daemon starts an empty ring: the rows it no longer has go.
+  it('takes a fresh snapshot when the daemon reconnects', async () => {
+    harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'before-restart.test' })] });
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    expect(harness.listeners.has('daemon-reconnected')).toBe(true);
+    harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'after-restart.test' })] });
+    harness.listeners.get('daemon-reconnected')({ payload: null });
+    await flush();
+    expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['after-restart.test']);
+    stop();
+  });
+
+  // The next visit must never open on the last visit's rows.
+  it('clears the rows and any pause when stopped', async () => {
+    harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'old-visit.test' })] });
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    useNetActivityStore.getState().pause();
+    stop();
+    expect(useNetActivityStore.getState().events).toEqual([]);
+    expect(useNetActivityStore.getState().frozen).toBeNull();
+    expect(harness.listeners.has('daemon-reconnected')).toBe(false);
+  });
+
   it('says so when the snapshot cannot be read', async () => {
     harness.daemonCall.mockRejectedValue(new Error('offline'));
     const stop = useNetActivityStore.getState().start();

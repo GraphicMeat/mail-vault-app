@@ -82,9 +82,8 @@ export function NetworkActivity() {
   const [filters, setFilters] = useState({ protocol: '', purpose: '', account: '' });
   const [copied, setCopied] = useState(false);
 
+  // The stop function also ends a pause and clears the rows for the next visit.
   useEffect(() => useNetActivityStore.getState().start(), []);
-  // A pause belongs to this visit, not to the next one.
-  useEffect(() => () => useNetActivityStore.getState().resume(), []);
 
   const shown = useMemo(() => filterEvents(rows, filters), [rows, filters]);
   const summary = useMemo(() => summarize(events), [events]);
@@ -122,15 +121,15 @@ export function NetworkActivity() {
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <select aria-label={t('netActivity.protocol')} value={filters.protocol} onChange={filter('protocol')} className={SELECT}>
             <option value="">{t('netActivity.allProtocols')}</option>
-            {distinct(events.map(e => e.protocol)).map(p => <option key={p} value={p}>{PROTOCOL_LABELS[p] || p}</option>)}
+            {distinct(rows.map(e => e.protocol)).map(p => <option key={p} value={p}>{PROTOCOL_LABELS[p] || p}</option>)}
           </select>
           <select aria-label={t('netActivity.purpose')} value={filters.purpose} onChange={filter('purpose')} className={SELECT}>
             <option value="">{t('netActivity.allPurposes')}</option>
-            {distinct(events.map(e => e.purpose)).map(p => <option key={p} value={p}>{purposeLabel(t, p)}</option>)}
+            {distinct(rows.map(e => e.purpose)).map(p => <option key={p} value={p}>{purposeLabel(t, p)}</option>)}
           </select>
           <select aria-label={t('netActivity.account')} value={filters.account} onChange={filter('account')} className={SELECT}>
             <option value="">{t('netActivity.allAccounts')}</option>
-            {distinct(events.map(e => e.account)).map(a => <option key={a} value={a}>{a}</option>)}
+            {distinct(rows.map(e => e.account)).map(a => <option key={a} value={a}>{a}</option>)}
           </select>
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={() => (paused ? useNetActivityStore.getState().resume() : useNetActivityStore.getState().pause())}>

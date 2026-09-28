@@ -106,16 +106,34 @@ describe('Network Activity', () => {
     expect(lines[1]).toContain('connection reset');
   });
 
-  it('sums up the hosts contacted today and the bytes sent and received', async () => {
-    await mount([
-      ev({ host: 'a.test', bytesUp: 1000, bytesDown: 3000 }),
-      ev({ host: 'a.test', bytesUp: 24, bytesDown: 72 }),
-      ev({ host: 'b.test', bytesUp: 0, bytesDown: 0 }),
-    ]);
-    const strip = screen.getByTestId('net-summary');
-    expect(within(strip).getByTestId('net-summary-hosts').textContent).toBe('2');
-    expect(within(strip).getByTestId('net-summary-sent').textContent).toBe('1.0 KB');
-    expect(within(strip).getByTestId('net-summary-received').textContent).toBe('3.0 KB');
+  it('sums up the hosts contacted and the bytes sent and received in today\'s rows', async () => {
+    // Pinned: the rows and the summary each read the clock, and a run across
+    // local midnight would put them on different days.
+    vi.setSystemTime(new Date(2026, 8, 28, 12, 0, 0));
+    try {
+      await mount([
+        ev({ host: 'a.test', bytesUp: 1000, bytesDown: 3000 }),
+        ev({ host: 'a.test', bytesUp: 24, bytesDown: 72 }),
+        ev({ host: 'b.test', bytesUp: 0, bytesDown: 0 }),
+        ev({ host: 'yesterday.test', atMs: new Date(2026, 8, 27, 23, 0, 0).getTime(), bytesUp: 99999, bytesDown: 99999 }),
+      ]);
+      const strip = screen.getByTestId('net-summary');
+      expect(within(strip).getByTestId('net-summary-hosts').textContent).toBe('2');
+      expect(within(strip).getByTestId('net-summary-sent').textContent).toBe('1.0 KB');
+      expect(within(strip).getByTestId('net-summary-received').textContent).toBe('3.0 KB');
+      // Not a full-day total: the list is capped and starts empty on a restart.
+      expect(strip.textContent).toContain("in today's rows");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('offers only filter values the rows on screen carry, even while paused', async () => {
+    await mount([ev({ host: 'a.test', protocol: 'imap' })]);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await push(ev({ host: 'b.test', protocol: 'smtp' }));
+    const options = [...screen.getByLabelText('Protocol').querySelectorAll('option')].map(o => o.value);
+    expect(options).toEqual(['', 'imap']);
   });
 
   it('reads the remote-images line from the session counters', async () => {
@@ -131,7 +149,7 @@ describe('Network Activity', () => {
     const text = container.textContent;
     expect(text).toContain('Connections made by MailVault and its background helper');
     expect(text).toMatch(/Remote images and other web content inside emails/);
-    expect(text).toMatch(/App update downloads/);
+    expect(text).toMatch(/App update downloads, and on macOS the update check too/);
     expect(text).not.toMatch(/all requests|every request|all connections|every connection/i);
     expect(text).not.toContain('—');
   });

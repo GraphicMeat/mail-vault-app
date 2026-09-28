@@ -38,30 +38,44 @@ export const useNetActivityStore = create((set, get) => ({
    * Listen, then ask for the snapshot: the other order loses whatever is
    * recorded between the reply and the listener. An event that arrives while
    * the snapshot is in flight may be in it too, so it is added only when not.
-   * Returns the stop function, which also covers a listener still being set up.
+   * A reconnected daemon is a restarted one with an empty ring, so it gets a
+   * fresh snapshot too. Returns the stop function, which also covers a
+   * listener still being set up, and clears the rows so the next visit never
+   * opens on this one's.
    */
   start: () => {
     let stopped = false;
-    let unlisten = null;
+    const unlistens = [];
     let early = [];
     const onEvent = ev => { if (early) early.push(ev); else get().add(ev); };
-    void (async () => {
+    const on = async (name, cb) => {
       try {
-        const stop = await listen('net-activity', e => { if (!stopped) onEvent(e.payload); });
-        if (stopped) stop(); else unlisten = stop;
+        const stop = await listen(name, e => { if (!stopped) cb(e.payload); });
+        if (stopped) stop(); else unlistens.push(stop);
       } catch { /* no Tauri here: the snapshot is all there is */ }
-      if (stopped) return;
-      let snapshot = null;
+    };
+    const snapshot = async () => {
+      early = early || [];
+      let events = null;
       try {
-        snapshot = (await daemonCall('net.activity'))?.events || [];
+        events = (await daemonCall('net.activity'))?.events || [];
       } catch { /* shown as loadError below */ }
       if (stopped) return;
-      const seen = new Set((snapshot || []).map(eventKey));
-      const arrived = early.filter(e => !seen.has(eventKey(e))).reverse();
+      const seen = new Set((events || []).map(eventKey));
+      const arrived = (early || []).filter(e => !seen.has(eventKey(e))).reverse();
       early = null;
-      set({ events: [...arrived, ...(snapshot || [])].slice(0, MAX_ROWS).map(withId), loadError: !snapshot });
+      set({ events: [...arrived, ...(events || [])].slice(0, MAX_ROWS).map(withId), loadError: !events });
+    };
+    void (async () => {
+      await on('net-activity', onEvent);
+      await on('daemon-reconnected', () => { void snapshot(); });
+      if (!stopped) await snapshot();
     })();
-    return () => { stopped = true; unlisten?.(); unlisten = null; };
+    return () => {
+      stopped = true;
+      unlistens.splice(0).forEach(stop => stop());
+      set({ events: [], frozen: null });
+    };
   },
 
   noteRemoteImages: (blocked, loaded) => set(s => ({
@@ -75,7 +89,8 @@ export const filterEvents = (events, { protocol, purpose, account } = {}) => eve
   (!protocol || e.protocol === protocol) && (!purpose || e.purpose === purpose) && (!account || e.account === account));
 
 /**
- * Today only: the daemon's ring can span days. A host counts when MailVault
+ * Today's rows only: the daemon's ring can span days, and it is capped and
+ * starts empty on a restart, so this is never a full-day total. A host counts when MailVault
  * reached out to it; a lookup reaches the resolver, not the host it names,
  * and an inbound hit is someone reaching MailVault.
  */
