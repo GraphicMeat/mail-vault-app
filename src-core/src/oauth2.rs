@@ -23,10 +23,73 @@ const MS_MAILVAULT_CLIENT_ID: &str = "d4e1c192-2c87-4aeb-b2d6-edbb91c577cd";
 // Google constants
 const GOOGLE_AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-const GOOGLE_THUNDERBIRD_CLIENT_ID: &str = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com";
+pub const GOOGLE_THUNDERBIRD_CLIENT_ID: &str = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com";
 // Google "installed app" OAuth2 requires client_secret even with PKCE (unlike Microsoft).
 // This is Thunderbird's public secret — embedded in source, not confidential by design.
-const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
+pub const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
+
+// MailVault's own Google "Desktop app" client, injected at compile time and
+// never committed. Release CI sets both; a build without them (tests, local
+// dev) signs new Google accounts in with Thunderbird's client instead.
+const GOOGLE_OWN_CLIENT_ID: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_ID");
+const GOOGLE_OWN_CLIENT_SECRET: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET");
+
+/// A Google client id with the secret it was issued with. Always a matched pair.
+type GoogleClient = (String, String);
+
+fn thunderbird_google_client() -> GoogleClient {
+    (GOOGLE_THUNDERBIRD_CLIENT_ID.to_string(), GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string())
+}
+
+/// MailVault's own pair, present only when BOTH halves are non-empty.
+fn own_google_pair<'a>(id: Option<&'a str>, secret: Option<&'a str>) -> Option<(&'a str, &'a str)> {
+    let id = id.map(str::trim).filter(|s| !s.is_empty())?;
+    let secret = secret.map(str::trim).filter(|s| !s.is_empty())?;
+    Some((id, secret))
+}
+
+fn compiled_google_pair() -> Option<(&'static str, &'static str)> {
+    own_google_pair(GOOGLE_OWN_CLIENT_ID, GOOGLE_OWN_CLIENT_SECRET)
+}
+
+/// The client for a NEW Google sign-in (Add Account, Reconnect): MailVault's
+/// own when compiled in, else Thunderbird's.
+fn google_client_for_new_sign_in(compiled: Option<(&str, &str)>) -> GoogleClient {
+    match compiled {
+        Some((id, secret)) => (id.to_string(), secret.to_string()),
+        None => thunderbird_google_client(),
+    }
+}
+
+/// The client that issued an existing grant, from the id an account (or a
+/// pending flow) recorded. A refresh token or auth code only works with the
+/// client that issued it, so this never falls back to another client: an id
+/// this build cannot pair with a secret is an error, not a guess that would
+/// surface later as a confusing `invalid_grant`.
+fn google_client_for_stamp(stamp: Option<&str>, compiled: Option<(&str, &str)>) -> Result<GoogleClient, String> {
+    // No stamp: an account from before per-account clients, i.e. Thunderbird.
+    let Some(stamp) = stamp.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(thunderbird_google_client());
+    };
+    if stamp == GOOGLE_THUNDERBIRD_CLIENT_ID {
+        return Ok(thunderbird_google_client());
+    }
+    match compiled {
+        Some((id, secret)) if stamp == id => Ok((id.to_string(), secret.to_string())),
+        _ => Err(format!(
+            "This Google account was connected with a Google client this build does not include ({}). Reconnect the account to fix it.",
+            stamp
+        )),
+    }
+}
+
+/// Which Google client a flow runs with.
+enum GoogleClientChoice<'a> {
+    /// A fresh sign-in.
+    NewSignIn,
+    /// A grant already issued: the id recorded for it (`None` = legacy).
+    Issued(Option<&'a str>),
+}
 
 
 struct ProviderConfig {
@@ -81,7 +144,17 @@ fn resolve_token_endpoint(default: &str, env_var: &str) -> String {
     }
 }
 
-fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
+fn get_provider_config(provider: &str, google: GoogleClientChoice<'_>) -> Result<ProviderConfig, String> {
+    get_provider_config_with(provider, google, compiled_google_pair())
+}
+
+/// `get_provider_config` with the compiled-in pair passed in, so tests do not
+/// depend on the build environment.
+fn get_provider_config_with(
+    provider: &str,
+    google: GoogleClientChoice<'_>,
+    compiled: Option<(&str, &str)>,
+) -> Result<ProviderConfig, String> {
     match provider {
         "microsoft" => {
             let client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
@@ -108,20 +181,16 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
             })
         }
         "google" => {
-            let client_id = std::env::var("MAILVAULT_GOOGLE_CLIENT_ID")
-                .ok()
-                .filter(|s| !s.is_empty() && s != "undefined")
-                .unwrap_or_else(|| GOOGLE_THUNDERBIRD_CLIENT_ID.to_string());
-            let client_secret = std::env::var("MAILVAULT_GOOGLE_CLIENT_SECRET")
-                .ok()
-                .filter(|s| !s.is_empty() && s != "undefined")
-                .or_else(|| Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string()));
+            let (client_id, client_secret) = match google {
+                GoogleClientChoice::NewSignIn => google_client_for_new_sign_in(compiled),
+                GoogleClientChoice::Issued(stamp) => google_client_for_stamp(stamp, compiled)?,
+            };
 
             Ok(ProviderConfig {
                 auth_endpoint: GOOGLE_AUTH_ENDPOINT.to_string(),
                 token_endpoint: resolve_token_endpoint(GOOGLE_TOKEN_ENDPOINT, "MAILVAULT_GOOGLE_TOKEN_ENDPOINT"),
                 client_id,
-                client_secret,
+                client_secret: Some(client_secret),
                 scopes: "https://mail.google.com/".to_string(),
                 extra_auth_params: vec![
                     ("access_type", "offline".to_string()),
@@ -201,6 +270,11 @@ pub struct TokenResponse {
     /// `None` for a flow that never asked for an id_token (Microsoft today).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    /// The OAuth client the tokens were issued to (or, on a refresh, sent
+    /// with). The caller records it on the account: a refresh token only
+    /// works with the client that issued it.
+    #[serde(rename = "clientId")]
+    pub client_id: String,
 }
 
 /// Decode the `email` (falling back to `preferred_username`) claim out of an
@@ -231,6 +305,10 @@ type SenderMap = Arc<Mutex<HashMap<String, oneshot::Sender<Result<String, String
 struct PendingOAuth {
     code_verifier: String,
     provider: String,
+    /// The client id the auth URL was built with. The auth code is bound to
+    /// it, so the exchange uses this client (and its matched secret), never
+    /// whatever the default has become since.
+    client_id: String,
     custom_client_id: Option<String>,
     tenant_id: Option<String>,
     code_rx: Option<oneshot::Receiver<Result<String, String>>>,
@@ -249,6 +327,29 @@ fn apply_overrides(config: &mut ProviderConfig, custom_client_id: Option<&str>, 
             config.token_endpoint = config.token_endpoint.replace("/common/", &format!("/{}/", tid));
         }
     }
+}
+
+/// The config a flow runs with once a grant exists: the client that issued it
+/// (`issued_client_id`; `None` = legacy Google), then per-account overrides.
+/// Used by the code exchange (the id stored with the pending flow) and the
+/// refresh (the id stamped on the account).
+fn issued_flow_config(
+    provider: &str,
+    issued_client_id: Option<&str>,
+    custom_client_id: Option<&str>,
+    tenant_id: Option<&str>,
+    compiled: Option<(&str, &str)>,
+) -> Result<ProviderConfig, String> {
+    // A custom client id replaces the id outright (Microsoft only in the UI),
+    // so there is no issued Google client to match.
+    let google = if custom_client_id.is_some_and(|c| !c.is_empty()) {
+        GoogleClientChoice::NewSignIn
+    } else {
+        GoogleClientChoice::Issued(issued_client_id)
+    };
+    let mut config = get_provider_config_with(provider, google, compiled)?;
+    apply_overrides(&mut config, custom_client_id, tenant_id);
+    Ok(config)
 }
 
 pub struct OAuth2Manager {
@@ -275,7 +376,8 @@ impl OAuth2Manager {
         use_graph: bool,
     ) -> Result<AuthUrlResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
-        let mut config = get_provider_config(provider_name)?;
+        // Chosen once here; the exchange reuses the id stored below.
+        let mut config = get_provider_config(provider_name, GoogleClientChoice::NewSignIn)?;
         apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         // For personal Microsoft accounts, request Graph API scopes instead of IMAP scopes
@@ -310,6 +412,7 @@ impl OAuth2Manager {
             PendingOAuth {
                 code_verifier,
                 provider: provider_name.to_string(),
+                client_id: config.client_id.clone(),
                 custom_client_id,
                 tenant_id,
                 code_rx: Some(rx),
@@ -384,6 +487,7 @@ impl OAuth2Manager {
 
         let code_verifier = flow.code_verifier.clone();
         let provider_name = flow.provider.clone();
+        let client_id = flow.client_id.clone();
         let custom_client_id = flow.custom_client_id.clone();
         let tenant_id = flow.tenant_id.clone();
         drop(pending);
@@ -394,8 +498,14 @@ impl OAuth2Manager {
             .map_err(|_| "OAuth callback channel dropped".to_string())?
             .map_err(|e| format!("OAuth callback error: {}", e))?;
 
-        let mut config = get_provider_config(&provider_name)?;
-        apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
+        let config = issued_flow_config(
+            &provider_name,
+            Some(&client_id),
+            custom_client_id.as_deref(),
+            tenant_id.as_deref(),
+            compiled_google_pair(),
+        )?;
+        let used_client_id = config.client_id.clone();
 
         let mut params = vec![
             ("client_id".to_string(), config.client_id),
@@ -453,6 +563,7 @@ impl OAuth2Manager {
             refresh_token,
             expires_at,
             email,
+            client_id: used_client_id,
         })
     }
 
@@ -463,10 +574,19 @@ impl OAuth2Manager {
         custom_client_id: Option<String>,
         tenant_id: Option<String>,
         use_graph: bool,
+        client_id: Option<String>,
     ) -> Result<TokenResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
-        let mut config = get_provider_config(provider_name)?;
-        apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
+        // `client_id` is the Google client recorded on the account when its
+        // refresh token was issued; Microsoft has one client and ignores it.
+        let mut config = issued_flow_config(
+            provider_name,
+            client_id.as_deref(),
+            custom_client_id.as_deref(),
+            tenant_id.as_deref(),
+            compiled_google_pair(),
+        )?;
+        let used_client_id = config.client_id.clone();
 
         // Graph accounts were authorized with Graph scopes — must refresh with the same scopes
         if use_graph && provider_name == "microsoft" {
@@ -526,7 +646,20 @@ impl OAuth2Manager {
             refresh_token: new_refresh,
             expires_at,
             email: None,
+            client_id: used_client_id,
         })
+    }
+
+    /// Hand `code` to the flow waiting on `state`, as the callback server does
+    /// when the browser returns. Lets a daemon test drive `exchange_code`
+    /// without a browser or the loopback port.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub async fn deliver_code_for_tests(&self, state: &str, code: &str) -> bool {
+        match self.senders.lock().await.remove(state) {
+            Some(tx) => tx.send(Ok(code.to_string())).is_ok(),
+            None => false,
+        }
     }
 
     async fn ensure_callback_server(&self) {
@@ -666,7 +799,225 @@ async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap
 
 #[cfg(test)]
 mod tests {
-    use super::{html_escape, id_token_email};
+    use super::{
+        get_provider_config_with, google_client_for_new_sign_in, google_client_for_stamp, html_escape,
+        id_token_email, issued_flow_config, own_google_pair, GoogleClientChoice, GOOGLE_THUNDERBIRD_CLIENT_ID,
+        GOOGLE_THUNDERBIRD_CLIENT_SECRET,
+    };
+
+    const OWN_ID: &str = "own-client.apps.googleusercontent.com";
+    const OWN_SECRET: &str = "own-secret";
+    const OWN: Option<(&str, &str)> = Some((OWN_ID, OWN_SECRET));
+
+    fn thunderbird() -> (String, String) {
+        (GOOGLE_THUNDERBIRD_CLIENT_ID.to_string(), GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string())
+    }
+
+    fn own() -> (String, String) {
+        (OWN_ID.to_string(), OWN_SECRET.to_string())
+    }
+
+    // ── Google client resolution ───────────────────────────────────────────
+
+    #[test]
+    fn the_compiled_pair_counts_only_when_both_halves_are_non_empty() {
+        assert_eq!(own_google_pair(Some("id"), Some("secret")), Some(("id", "secret")));
+        assert_eq!(own_google_pair(None, None), None);
+        assert_eq!(own_google_pair(Some("id"), None), None);
+        assert_eq!(own_google_pair(None, Some("secret")), None);
+        assert_eq!(own_google_pair(Some(""), Some("secret")), None);
+        assert_eq!(own_google_pair(Some("id"), Some("")), None);
+        assert_eq!(own_google_pair(Some("  "), Some("secret")), None);
+    }
+
+    #[test]
+    fn a_new_sign_in_uses_our_client_when_compiled_in_else_thunderbirds() {
+        assert_eq!(google_client_for_new_sign_in(OWN), own());
+        assert_eq!(google_client_for_new_sign_in(None), thunderbird());
+    }
+
+    #[test]
+    fn no_stamp_or_an_empty_one_means_thunderbird_with_or_without_our_client() {
+        for compiled in [None, OWN] {
+            assert_eq!(google_client_for_stamp(None, compiled), Ok(thunderbird()));
+            assert_eq!(google_client_for_stamp(Some(""), compiled), Ok(thunderbird()));
+        }
+    }
+
+    #[test]
+    fn a_thunderbird_stamp_gets_thunderbirds_pair_even_when_ours_is_compiled_in() {
+        for compiled in [None, OWN] {
+            assert_eq!(google_client_for_stamp(Some(GOOGLE_THUNDERBIRD_CLIENT_ID), compiled), Ok(thunderbird()));
+        }
+    }
+
+    #[test]
+    fn our_stamp_gets_our_matched_pair_when_compiled_in() {
+        assert_eq!(google_client_for_stamp(Some(OWN_ID), OWN), Ok(own()));
+    }
+
+    #[test]
+    fn our_stamp_without_the_compiled_pair_is_an_error_not_a_fallback() {
+        let err = google_client_for_stamp(Some(OWN_ID), None).unwrap_err();
+        assert!(err.contains(OWN_ID), "{err}");
+        assert!(err.contains("Reconnect"), "{err}");
+    }
+
+    #[test]
+    fn an_unknown_stamp_is_an_error_whether_or_not_ours_is_compiled_in() {
+        for compiled in [None, OWN] {
+            let err = google_client_for_stamp(Some("someone-elses.apps.googleusercontent.com"), compiled).unwrap_err();
+            assert!(err.contains("someone-elses"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_google_config_always_carries_a_matched_id_and_secret() {
+        let new = get_provider_config_with("google", GoogleClientChoice::NewSignIn, OWN).unwrap();
+        assert_eq!((new.client_id, new.client_secret), (OWN_ID.to_string(), Some(OWN_SECRET.to_string())));
+
+        let legacy = get_provider_config_with("google", GoogleClientChoice::Issued(None), OWN).unwrap();
+        assert_eq!(
+            (legacy.client_id, legacy.client_secret),
+            (GOOGLE_THUNDERBIRD_CLIENT_ID.to_string(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string()))
+        );
+
+        assert!(get_provider_config_with("google", GoogleClientChoice::Issued(Some("nope")), OWN).is_err());
+    }
+
+    #[test]
+    fn microsoft_ignores_the_google_client_and_never_sends_a_secret() {
+        let plain = get_provider_config_with("microsoft", GoogleClientChoice::NewSignIn, OWN).unwrap();
+        let stamped = get_provider_config_with("microsoft", GoogleClientChoice::Issued(Some("nope")), None).unwrap();
+        assert_eq!(plain.client_id, stamped.client_id);
+        assert!(plain.client_secret.is_none() && stamped.client_secret.is_none());
+    }
+
+    /// An auth code is bound to the client that requested it: the exchange
+    /// resolves the client from the id stored with the pending flow, so a
+    /// Thunderbird-issued flow stays Thunderbird's after our client is
+    /// compiled in, and ours stays ours.
+    #[test]
+    fn the_exchange_uses_the_client_the_auth_url_was_built_with() {
+        let tb = issued_flow_config("google", Some(GOOGLE_THUNDERBIRD_CLIENT_ID), None, None, OWN).unwrap();
+        assert_eq!((tb.client_id, tb.client_secret), (GOOGLE_THUNDERBIRD_CLIENT_ID.to_string(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string())));
+
+        let ours = issued_flow_config("google", Some(OWN_ID), None, None, OWN).unwrap();
+        assert_eq!((ours.client_id, ours.client_secret), (OWN_ID.to_string(), Some(OWN_SECRET.to_string())));
+
+        assert!(issued_flow_config("google", Some(OWN_ID), None, None, None).is_err());
+    }
+
+    #[test]
+    fn a_microsoft_refresh_is_unchanged_by_a_stamp_and_keeps_its_overrides() {
+        let config = issued_flow_config("microsoft", Some("whatever"), Some("custom-ms-id"), Some("tenant-1"), OWN).unwrap();
+        assert_eq!(config.client_id, "custom-ms-id");
+        assert!(config.auth_endpoint.contains("/tenant-1/"));
+        assert!(config.client_secret.is_none());
+    }
+
+    // ── Full flow against a loopback token endpoint ────────────────────────
+
+    /// A loopback token endpoint that records every request body and answers
+    /// each with `reply`. Debug builds only honour the endpoint override.
+    #[cfg(debug_assertions)]
+    async fn mock_token_endpoint(reply: &'static str) -> std::sync::Arc<std::sync::Mutex<Vec<String>>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::env::set_var("MAILVAULT_GOOGLE_TOKEN_ENDPOINT", format!("http://127.0.0.1:{port}"));
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = std::sync::Arc::clone(&seen);
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else { return };
+                let mut raw = Vec::new();
+                let mut buf = [0u8; 4096];
+                // Headers and body can arrive in separate writes: read until
+                // the declared Content-Length of body has landed.
+                let body = loop {
+                    let n = stream.read(&mut buf).await.unwrap_or(0);
+                    if n == 0 {
+                        break String::new();
+                    }
+                    raw.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                        let want = head
+                            .lines()
+                            .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                            .unwrap_or(0);
+                        if body.len() >= want {
+                            break body.to_string();
+                        }
+                    }
+                };
+                log.lock().unwrap().push(body);
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                    reply.len()
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            }
+        });
+        seen
+    }
+
+    #[cfg(debug_assertions)]
+    fn form_field(body: &str, key: &str) -> Option<String> {
+        url::form_urlencoded::parse(body.as_bytes()).find(|(k, _)| k == key).map(|(_, v)| v.to_string())
+    }
+
+    /// One test, sequential steps: the token-endpoint override is a
+    /// process-wide env var.
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn google_flows_post_a_matched_pair_and_report_the_client_they_used() {
+        let seen = mock_token_endpoint(r#"{"access_token":"at","refresh_token":"rt","expires_in":3600}"#).await;
+        let manager = super::OAuth2Manager::new();
+
+        // New sign-in: the id in the auth URL is the id stored with the flow.
+        let auth = manager.generate_auth_url(None, Some("google".into()), None, None, false).await.unwrap();
+        let url_client = form_field(auth.auth_url.split('?').nth(1).unwrap(), "client_id").unwrap();
+        assert_eq!(manager.pending.lock().await.get(&auth.state).unwrap().client_id, url_client);
+
+        assert!(manager.deliver_code_for_tests(&auth.state, "the-code").await);
+        let exchanged = manager.exchange_code(&auth.state).await.unwrap();
+        let exchange_body = seen.lock().unwrap().pop().unwrap();
+        assert_eq!(form_field(&exchange_body, "grant_type").as_deref(), Some("authorization_code"));
+        assert_eq!(form_field(&exchange_body, "client_id").as_deref(), Some(url_client.as_str()));
+        assert_eq!(exchanged.client_id, url_client);
+        // Whichever client this build picked, a secret went with it.
+        let secret = form_field(&exchange_body, "client_secret").expect("a Google exchange carries a secret");
+        if url_client == GOOGLE_THUNDERBIRD_CLIENT_ID {
+            assert_eq!(secret, GOOGLE_THUNDERBIRD_CLIENT_SECRET);
+        }
+
+        // Refresh with the recorded client and with none (a legacy account).
+        let stamped = manager
+            .refresh_token("rt", Some("google".into()), None, None, false, Some(GOOGLE_THUNDERBIRD_CLIENT_ID.into()))
+            .await
+            .unwrap();
+        let body = seen.lock().unwrap().pop().unwrap();
+        assert_eq!(form_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(form_field(&body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert_eq!(stamped.client_id, GOOGLE_THUNDERBIRD_CLIENT_ID);
+
+        let legacy = manager.refresh_token("rt", Some("google".into()), None, None, false, None).await.unwrap();
+        let body = seen.lock().unwrap().pop().unwrap();
+        assert_eq!(form_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(legacy.client_id, GOOGLE_THUNDERBIRD_CLIENT_ID);
+
+        // An id this build cannot pair fails before anything is posted.
+        let before = seen.lock().unwrap().len();
+        let err = manager
+            .refresh_token("rt", Some("google".into()), None, None, false, Some("unknown.apps.googleusercontent.com".into()))
+            .await
+            .err()
+            .expect("an unpairable client id must fail");
+        assert!(err.contains("unknown.apps.googleusercontent.com"), "{err}");
+        assert_eq!(seen.lock().unwrap().len(), before);
+    }
 
     /// Network Activity: a hit on the sign-in loopback is an inbound event,
     /// and the code and state in its query never reach it.

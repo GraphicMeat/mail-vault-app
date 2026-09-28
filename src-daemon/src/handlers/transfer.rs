@@ -203,7 +203,7 @@ mod tests {
             "appVersion": "2.16.0",
             "accounts": [
                 { "id": "a1", "email": "a@x.com", "authType": "password", "password": "pw" },
-                { "id": "a2", "email": "b@x.com", "authType": "oauth2", "oauth2RefreshToken": "rt" }
+                { "id": "a2", "email": "b@x.com", "authType": "oauth2", "oauth2RefreshToken": "rt", "oauth2ClientId": "own.apps.googleusercontent.com" }
             ],
             "accountSettings": {},
             "accountOrder": ["a1", "a2"],

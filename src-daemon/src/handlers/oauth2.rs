@@ -58,8 +58,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             match state.oauth2.exchange_code(oauth_state).await {
                 // `serde_json::to_value` (not a hand-built `json!`) so a new
-                // field on `TokenResponse` — like `email`, Track B's id_token
-                // claim — reaches the caller without a second edit here.
+                // field on `TokenResponse` (like `email`, Track B's id_token
+                // claim, or `clientId`, the OAuth client the account must be
+                // stamped with) reaches the caller without a second edit here.
                 Ok(result) => RpcResponse::success(
                     id,
                     serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
@@ -77,8 +78,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let custom_client_id = params.get("customClientId").and_then(Value::as_str).map(str::to_owned);
             let tenant_id = params.get("tenantId").and_then(Value::as_str).map(str::to_owned);
             let use_graph = params.get("useGraph").and_then(Value::as_bool).unwrap_or(false);
+            // The Google client that issued this refresh token (the account's
+            // `oauth2ClientId`); absent for an account that predates it.
+            let client_id = params.get("clientId").and_then(Value::as_str).map(str::to_owned);
 
-            match state.oauth2.refresh_token(refresh_token, provider, custom_client_id, tenant_id, use_graph).await {
+            match state.oauth2.refresh_token(refresh_token, provider, custom_client_id, tenant_id, use_graph, client_id).await {
                 Ok(result) => RpcResponse::success(
                     id,
                     serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
@@ -94,6 +98,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::oauth2::{GOOGLE_THUNDERBIRD_CLIENT_ID, GOOGLE_THUNDERBIRD_CLIENT_SECRET};
     use serde_json::json;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
@@ -116,6 +121,8 @@ mod tests {
     // module's tests over the shared response queue.
     static TEST_LOCK: Mutex<()> = Mutex::new(());
     static QUEUE: Mutex<std::collections::VecDeque<(u16, String)>> = Mutex::new(std::collections::VecDeque::new());
+    /// Form bodies the mock has received, oldest first.
+    static POSTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     fn mock_server_port() -> u16 {
         static PORT: OnceLock<u16> = OnceLock::new();
@@ -135,8 +142,28 @@ mod tests {
     }
 
     fn handle_conn(mut stream: TcpStream) {
-        let mut buf = [0u8; 8192];
-        let _ = stream.read(&mut buf);
+        // Headers and body can arrive in separate writes: keep reading until
+        // the declared Content-Length of body has landed.
+        let mut raw = Vec::new();
+        let mut buf = [0u8; 4096];
+        let body = loop {
+            let n = stream.read(&mut buf).unwrap_or(0);
+            if n == 0 {
+                break String::new();
+            }
+            raw.extend_from_slice(&buf[..n]);
+            let text = String::from_utf8_lossy(&raw).to_string();
+            if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                let want = head
+                    .lines()
+                    .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                    .unwrap_or(0);
+                if body.len() >= want {
+                    break body.to_string();
+                }
+            }
+        };
+        POSTED.lock().unwrap().push(body);
         let (status, body) = QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()));
         let reason = if (200..300).contains(&status) { "OK" } else { "Mock Error" };
         let resp = format!(
@@ -154,6 +181,16 @@ mod tests {
         mock_server_port();
         QUEUE.lock().unwrap().push_back((status, body.to_string()));
         guard
+    }
+
+    /// One field of the oldest form body the mock has not been asked about yet.
+    fn posted_field(body: &str, key: &str) -> Option<String> {
+        url::form_urlencoded::parse(body.as_bytes()).find(|(k, _)| k == key).map(|(_, v)| v.to_string())
+    }
+
+    /// Take the oldest request body the mock recorded.
+    fn take_posted() -> String {
+        POSTED.lock().unwrap().remove(0)
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
@@ -303,6 +340,101 @@ mod tests {
         assert!(resp.result.is_none(), "a provider-reported invalid_grant must not report success");
         let msg = resp.error.expect("error").message;
         assert!(msg.contains("Token expired"), "{msg}");
+    }
+
+    // A refresh token only works with the client that issued it, so the
+    // account's recorded `clientId` decides which pair goes to Google.
+    #[tokio::test]
+    async fn google_refresh_posts_the_client_named_by_client_id() {
+        let _g = mock_token_response(200, r#"{"access_token":"at","expires_in":3600}"#);
+        POSTED.lock().unwrap().clear();
+        let s = st();
+        let resp = call(
+            &s,
+            "oauth2_refresh",
+            json!({"refreshToken": "rt", "provider": "google", "clientId": GOOGLE_THUNDERBIRD_CLIENT_ID}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        let body = take_posted();
+        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(posted_field(&body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert_eq!(result["clientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
+    }
+
+    #[tokio::test]
+    async fn google_refresh_without_client_id_is_a_legacy_thunderbird_account() {
+        let _g = mock_token_response(200, r#"{"access_token":"at","expires_in":3600}"#);
+        POSTED.lock().unwrap().clear();
+        let s = st();
+        let resp = call(&s, "oauth2_refresh", json!({"refreshToken": "rt", "provider": "google"})).await;
+        let result = resp.result.expect("success");
+        let body = take_posted();
+        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(posted_field(&body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert_eq!(result["clientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
+    }
+
+    // No response is queued: nothing may be posted, and a queued one that
+    // nobody consumed would be served to the next test.
+    #[tokio::test]
+    async fn google_refresh_with_a_client_id_this_build_cannot_pair_is_an_error_not_a_fallback() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        mock_server_port();
+        POSTED.lock().unwrap().clear();
+        let s = st();
+        let resp = call(
+            &s,
+            "oauth2_refresh",
+            json!({"refreshToken": "rt", "provider": "google", "clientId": "unknown.apps.googleusercontent.com"}),
+        )
+        .await;
+        assert!(resp.result.is_none(), "an unpairable client must not report success");
+        let msg = resp.error.expect("error").message;
+        assert!(msg.contains("unknown.apps.googleusercontent.com"), "{msg}");
+        assert!(POSTED.lock().unwrap().is_empty(), "nothing may be posted with a guessed client");
+    }
+
+    #[tokio::test]
+    async fn microsoft_refresh_ignores_client_id() {
+        let _g = mock_token_response(200, r#"{"access_token":"at","expires_in":3600}"#);
+        POSTED.lock().unwrap().clear();
+        let s = st();
+        let resp = call(
+            &s,
+            "oauth2_refresh",
+            json!({"refreshToken": "rt", "provider": "microsoft", "clientId": "unknown.apps.googleusercontent.com"}),
+        )
+        .await;
+        assert!(resp.result.is_some(), "Microsoft has one client, a stamp is not its concern");
+        let body = take_posted();
+        assert_ne!(posted_field(&body, "client_id").as_deref(), Some("unknown.apps.googleusercontent.com"));
+        assert!(posted_field(&body, "client_secret").is_none());
+    }
+
+    // The client the auth URL was built with is the one the exchange posts
+    // and reports back, for the caller to record on the account.
+    #[tokio::test]
+    async fn exchange_reports_the_client_the_auth_url_used() {
+        let _g = mock_token_response(
+            200,
+            r#"{"access_token":"at","refresh_token":"rt","expires_in":3600}"#,
+        );
+        POSTED.lock().unwrap().clear();
+        let s = st();
+        let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await.result.expect("success");
+        let auth_url = auth["authUrl"].as_str().unwrap().to_string();
+        let issued_state = auth["state"].as_str().unwrap().to_string();
+        let url_client = posted_field(auth_url.split('?').nth(1).unwrap(), "client_id").expect("client_id in the auth URL");
+
+        assert!(s.oauth2.deliver_code_for_tests(&issued_state, "the-code").await);
+        let result = call(&s, "oauth2_exchange", json!({"state": issued_state})).await.result.expect("success");
+
+        let body = take_posted();
+        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(url_client.as_str()));
+        assert_eq!(result["clientId"], json!(url_client));
+        assert_eq!(result["refreshToken"], json!("rt"));
+        assert!(posted_field(&body, "client_secret").is_some());
     }
 
     #[tokio::test]
