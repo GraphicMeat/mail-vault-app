@@ -13,11 +13,11 @@
  * `daemon_rpc` the Import MBOX button sends.
  */
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reloadApp, switchToFolder, visibleRowSubjects, waitForApp, waitForEmails } from './helpers.js';
-import { appDataDir, INFO_SEP } from './mockImap.js';
+import { appDataDir, INFO_PREFIX, INFO_SEP } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const IMPORT_UID_BASE = 0xC000_0000;
@@ -99,5 +99,47 @@ describe('MBOX import shows the imported mail', function () {
       timeout: 30_000, interval: 500,
       timeoutMsg: `imported subjects never listed in ${LUKE} INBOX; rows: ${JSON.stringify(rows).slice(0, 600)}`,
     });
+  });
+
+  // A vault from before the import range: an import sits at a uid the server
+  // uses, hidden behind the server's row. Opening the folder re-homes it into
+  // the import range, where it lists, and the server's own message keeps U.
+  it('re-homes an import an earlier version filed under a server uid', async function () {
+    const lukeId = (browser.mockAccounts || []).find((a) => a.email === LUKE)?.id;
+    const mailboxDir = join(appDataDir(browser.testDataDir), 'Maildir', lukeId, 'INBOX');
+    const cur = join(mailboxDir, 'cur');
+
+    await switchToFolder(LUKE, 'INBOX');
+    const serverUids = await browser.execute(() =>
+      (window.__MAIL_STORE__?.getState?.().emails || []).map((e) => e.uid));
+    const taken = new Set(uidsIn(cur));
+    const oldUid = serverUids.filter((u) => u < IMPORT_UID_BASE && !taken.has(u)).sort((a, b) => b - a)[0];
+    expect(oldUid).toBeTruthy();
+
+    const subject = 'Takeout filed under a server uid';
+    const date = new Date().toUTCString().replace('GMT', '+0000');
+    writeFileSync(join(cur, `${oldUid}${INFO_PREFIX}A.eml`), [
+      'From: Takeout <takeout@gmail.test>', `To: ${LUKE}`, `Subject: ${subject}`, `Date: ${date}`,
+      'Message-ID: <takeout-old-uid@gmail.test>', '', `${subject} - body`, '',
+    ].join('\r\n'));
+    // A vault from before this version has no stamp; the first test's folder
+    // opens may already have stamped this one.
+    rmSync(join(mailboxDir, '.import-rehome-done'), { force: true });
+
+    let rows = [];
+    await browser.waitUntil(async () => {
+      await reloadApp();
+      await switchToFolder(LUKE, 'INBOX');
+      rows = await visibleRowSubjects();
+      return rows.some((r) => r.includes(subject));
+    }, {
+      timeout: 90_000, interval: 1_000,
+      timeoutMsg: `the old import never listed after a re-home; files: ${JSON.stringify(readdirSync(cur))}; rows: ${JSON.stringify(rows).slice(0, 400)}`,
+    });
+
+    const moved = readdirSync(cur).find((n) => Number(n.split(INFO_SEP)[0]) >= IMPORT_UID_BASE
+      && readFileSync(join(cur, n), 'utf8').includes('takeout-old-uid@gmail.test'));
+    expect(moved).toBeTruthy();
+    expect(existsSync(join(mailboxDir, '.import-rehome.json'))).toBe(true);
   });
 });
