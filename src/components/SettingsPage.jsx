@@ -352,6 +352,8 @@ export const settingSearchGroups = [
     ['netActivity.protocol', 'network activity connections traffic hosts servers requests privacy protocol filter imap smtp https dns'],
     ['netActivity.purpose', 'network activity connections purpose filter sync send sign-in backup'],
     ['netActivity.account', 'network activity connections account filter'],
+    ['netActivity.retention', 'network activity history keep retention delete saved days weeks month'],
+    ['netActivity.map.countries', 'network activity map world countries where geolocation location'],
   ] },
   { id: 'migration', settings: [
     ['settings.migration.selectSourceAccount', 'migrate mailbox move emails between accounts servers'],

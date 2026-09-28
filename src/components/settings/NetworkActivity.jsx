@@ -7,8 +7,9 @@ import { formatBytes } from '../../utils/formatBytes';
 import { compareNames } from '../../utils/collation';
 import { formatTime, formatDateTime } from '../../utils/dateFormat';
 import {
-  useNetActivityStore, visibleEvents, filterEvents, summarize, copyText, target, PROTOCOL_LABELS,
+  useNetActivityStore, visibleEvents, filterEvents, copyText, target, PROTOCOL_LABELS, RETENTIONS, rangesFor,
 } from '../../stores/netActivityStore';
+import { NetworkMap, countryName } from './NetworkMap';
 
 // The daemon's fixed purpose strings; one it adds later shows as it comes.
 const PURPOSE_KEYS = {
@@ -75,20 +76,27 @@ const Row = React.memo(function Row({ e }) {
 
 export function NetworkActivity() {
   const t = useT();
-  const events = useNetActivityStore(s => s.events);
   const rows = useNetActivityStore(visibleEvents);
   const paused = useNetActivityStore(s => s.frozen !== null);
   const loadError = useNetActivityStore(s => s.loadError);
   const remoteImages = useNetActivityStore(s => s.remoteImages);
-  const [filters, setFilters] = useState({ protocol: '', purpose: '', account: '' });
+  const query = useNetActivityStore(s => s.query);
+  const retention = useNetActivityStore(s => s.retention);
+  const retentionError = useNetActivityStore(s => s.retentionError);
+  const places = useNetActivityStore(s => s.places);
+  const summary = useNetActivityStore(s => s.summary);
+  // Protocol and purpose narrow the rows on screen; range, account and
+  // country are the daemon's query, and the map and totals follow them too.
+  const [filters, setFilters] = useState({ protocol: '', purpose: '' });
   const [copied, setCopied] = useState(false);
 
   // The stop function also ends a pause and clears the rows for the next visit.
   useEffect(() => useNetActivityStore.getState().start(), []);
 
   const shown = useMemo(() => filterEvents(rows, filters), [rows, filters]);
-  const summary = useMemo(() => summarize(events), [events]);
   const filter = key => e => setFilters(f => ({ ...f, [key]: e.target.value }));
+  const setQuery = patch => useNetActivityStore.getState().setQuery(patch);
+  const accounts = distinct([...summary.accounts, query.account]);
 
   const copy = async () => {
     try {
@@ -110,14 +118,39 @@ export function NetworkActivity() {
   return (
     <SettingsPageLayout data-testid="network-activity">
       <SettingsSection title={t('settings.tab.networkActivity')} description={t('netActivity.intro')}>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <label className="flex items-center gap-2 text-xs text-mail-text-muted">
+            {t('netActivity.retention')}
+            <select
+              value={retention}
+              onChange={e => { void useNetActivityStore.getState().setRetention(e.target.value); }}
+              className={SELECT}
+            >
+              {RETENTIONS.map(r => <option key={r} value={r}>{t(`netActivity.retentions.${r}`)}</option>)}
+            </select>
+          </label>
+          {retentionError && <span role="alert" className="text-xs text-mail-danger">{t('netActivity.retentionFailed')}</span>}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <select aria-label={t('netActivity.range')} value={query.range} onChange={e => setQuery({ range: e.target.value })} className={SELECT}>
+            {rangesFor(retention).map(r => <option key={r} value={r}>{t(`netActivity.ranges.${r}`)}</option>)}
+          </select>
+          <select aria-label={t('netActivity.account')} value={query.account} onChange={e => setQuery({ account: e.target.value })} className={SELECT}>
+            <option value="">{t('netActivity.allAccounts')}</option>
+            {accounts.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-3 gap-2 mb-2" data-testid="net-summary">
-          {stat('net-summary-hosts', 'netActivity.hostsToday', summary.hosts)}
-          {stat('net-summary-sent', 'netActivity.sentToday', formatBytes(summary.sent))}
-          {stat('net-summary-received', 'netActivity.receivedToday', formatBytes(summary.received))}
+          {stat('net-summary-hosts', 'netActivity.hostsContacted', summary.hosts)}
+          {stat('net-summary-sent', 'netActivity.sent', formatBytes(summary.sent))}
+          {stat('net-summary-received', 'netActivity.received', formatBytes(summary.received))}
         </div>
         <p className="text-xs text-mail-text-muted mb-3" data-testid="net-remote-images">
           {t('netActivity.remoteImages', { blocked: remoteImages.blocked, allowed: remoteImages.loaded })}
         </p>
+
+        <NetworkMap places={places} selected={query.country} onSelect={country => setQuery({ country })} />
 
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <select aria-label={t('netActivity.protocol')} value={filters.protocol} onChange={filter('protocol')} className={SELECT}>
@@ -128,10 +161,14 @@ export function NetworkActivity() {
             <option value="">{t('netActivity.allPurposes')}</option>
             {distinct(rows.map(e => e.purpose)).map(p => <option key={p} value={p}>{purposeLabel(t, p)}</option>)}
           </select>
-          <select aria-label={t('netActivity.account')} value={filters.account} onChange={filter('account')} className={SELECT}>
-            <option value="">{t('netActivity.allAccounts')}</option>
-            {distinct(rows.map(e => e.account)).map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          {query.country && (
+            <span className="inline-flex items-center gap-1 text-xs text-mail-text" data-testid="net-country-filter">
+              {t('netActivity.map.filtered', {
+                country: query.country === 'local' ? t('netActivity.map.localNetwork') : countryName(query.country),
+              })}
+              <Button variant="ghost" size="sm" onClick={() => setQuery({ country: '' })}>{t('netActivity.map.clear')}</Button>
+            </span>
+          )}
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={() => (paused ? useNetActivityStore.getState().resume() : useNetActivityStore.getState().pause())}>
             {paused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}

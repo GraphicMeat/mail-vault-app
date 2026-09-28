@@ -15,21 +15,26 @@ vi.mock('@tauri-apps/api/event', () => ({
   },
 }));
 
-const { useNetActivityStore, visibleEvents, filterEvents, summarize, copyText, frameBody } = await import('../netActivityStore');
+const { useNetActivityStore, visibleEvents, filterEvents, copyText, frameBody, rangesFor } = await import('../netActivityStore');
 
+// Recent by default: the live list keeps only rows inside the query's range.
 const ev = (over = {}) => ({
-  atMs: Date.UTC(2026, 8, 28, 10, 0, 0), direction: 'out', process: 'helper', protocol: 'imap',
-  host: 'imap.example.test', ip: '192.0.2.1', port: 993, purpose: 'sync', account: '<imap#ab12>',
-  bytesUp: 100, bytesDown: 2000, durationMs: 1500, result: 'ok', commands: null, ...over,
+  atMs: Date.now() - 60_000, direction: 'out', process: 'helper', protocol: 'imap',
+  host: 'imap.example.test', ip: '192.0.2.1', port: 993, purpose: 'sync', account: 'someone@example.test',
+  bytesUp: 100, bytesDown: 2000, durationMs: 1500, result: 'ok', commands: null, country: 'DE', ...over,
 });
 const push = payload => harness.listeners.get('net-activity')({ payload });
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+const calls = method => harness.daemonCall.mock.calls.filter(([m]) => m === method).map(([, p]) => p);
 
 beforeEach(() => {
   harness.daemonCall.mockReset();
   harness.unlisten.mockReset();
   harness.listeners.clear();
-  useNetActivityStore.setState({ events: [], frozen: null, loadError: false, remoteImages: { blocked: 0, loaded: 0 } });
+  useNetActivityStore.setState({
+    events: [], frozen: null, loadError: false, remoteImages: { blocked: 0, loaded: 0 },
+    query: { range: 'day', account: '', country: '' }, retention: 'week', retentionError: false,
+  });
 });
 
 describe('live list', () => {
@@ -39,7 +44,7 @@ describe('live list', () => {
     harness.daemonCall.mockResolvedValue({ events: [newer, older] });
     const stop = useNetActivityStore.getState().start();
     await flush();
-    expect(harness.daemonCall).toHaveBeenCalledWith('net.activity');
+    expect(calls('net.activity')).toHaveLength(1);
     expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['newer.test', 'older.test']);
     push(ev({ host: 'live.test' }));
     expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['live.test', 'newer.test', 'older.test']);
@@ -49,17 +54,20 @@ describe('live list', () => {
   // Arrival order, not atMs: an IMAP connection is recorded when it closes,
   // so the newest row can carry the oldest start time.
   it('keeps arrival order even when a later event started earlier', async () => {
-    harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'a.test', atMs: 5000 })] });
+    const now = Date.now();
+    harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'a.test', atMs: now - 5000 })] });
     const stop = useNetActivityStore.getState().start();
     await flush();
-    push(ev({ host: 'long-idle.test', atMs: 1000 }));
+    push(ev({ host: 'long-idle.test', atMs: now - 60 * 60 * 1000 }));
     expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['long-idle.test', 'a.test']);
     stop();
   });
 
   it('listens before it asks for the snapshot, and an event already in the snapshot is not listed twice', async () => {
     let answer;
-    harness.daemonCall.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    harness.daemonCall.mockImplementation(method => (method === 'net.activity'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve({})));
     const stop = useNetActivityStore.getState().start();
     await flush();
     expect(harness.listeners.has('net-activity')).toBe(true);
@@ -94,7 +102,7 @@ describe('live list', () => {
     stop();
   });
 
-  // A restarted daemon starts an empty ring: the rows it no longer has go.
+  // A restarted daemon answers from its store, which it may have pruned.
   it('takes a fresh snapshot when the daemon reconnects', async () => {
     harness.daemonCall.mockResolvedValue({ events: [ev({ host: 'before-restart.test' })] });
     const stop = useNetActivityStore.getState().start();
@@ -121,10 +129,94 @@ describe('live list', () => {
 
   it('says so when the snapshot cannot be read', async () => {
     harness.daemonCall.mockRejectedValue(new Error('offline'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stop = useNetActivityStore.getState().start();
     await flush();
     expect(useNetActivityStore.getState().loadError).toBe(true);
     stop();
+    warn.mockRestore();
+  });
+});
+
+describe('query', () => {
+  it('asks the daemon for the range, account and country, and the map and totals for all but the country', async () => {
+    harness.daemonCall.mockResolvedValue({ events: [] });
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    useNetActivityStore.getState().setQuery({ range: 'hour', account: 'one@example.test', country: 'JP' });
+    await flush();
+    const table = calls('net.activity').at(-1);
+    expect(Math.abs(table.sinceMs - (Date.now() - 60 * 60 * 1000))).toBeLessThan(5000);
+    expect(table).toMatchObject({ account: 'one@example.test', country: 'JP' });
+    expect(calls('net.geo').at(-1)).toMatchObject({ account: 'one@example.test' });
+    expect(calls('net.geo').at(-1).country).toBeUndefined();
+    expect(calls('net.summary').at(-1).country).toBeUndefined();
+    stop();
+  });
+
+  it('shows only the answer to the newest query', async () => {
+    const pending = [];
+    harness.daemonCall.mockImplementation(method => (method === 'net.activity'
+      ? new Promise(resolve => pending.push(resolve))
+      : Promise.resolve({})));
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    pending.shift()({ events: [] });
+    await flush();
+    useNetActivityStore.getState().setQuery({ country: 'DE' });
+    useNetActivityStore.getState().setQuery({ country: 'US' });
+    await flush();
+    const [forDe, forUs] = pending;
+    forUs({ events: [ev({ host: 'us.test', country: 'US' })] });
+    await flush();
+    forDe({ events: [ev({ host: 'de.test', country: 'DE' })] });
+    await flush();
+    expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['us.test']);
+    stop();
+  });
+
+  it('leaves a live event outside the query off the list', async () => {
+    harness.daemonCall.mockResolvedValue({ events: [] });
+    useNetActivityStore.setState({ query: { range: 'hour', account: 'one@example.test', country: 'DE' } });
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    push(ev({ host: 'other-account.test', account: 'two@example.test' }));
+    push(ev({ host: 'other-country.test', account: 'one@example.test', country: 'US' }));
+    push(ev({ host: 'too-old.test', account: 'one@example.test', atMs: Date.now() - 2 * 60 * 60 * 1000 }));
+    push(ev({ host: 'fits.test', account: 'one@example.test' }));
+    expect(useNetActivityStore.getState().events.map(e => e.host)).toEqual(['fits.test']);
+    stop();
+  });
+});
+
+describe('retention', () => {
+  it('reads the period the daemon keeps and caps the range to it', async () => {
+    harness.daemonCall.mockImplementation(async method => (method === 'net.retention' ? { retention: 'day' } : { events: [] }));
+    useNetActivityStore.setState({ query: { range: 'week', account: '', country: '' } });
+    const stop = useNetActivityStore.getState().start();
+    await flush();
+    await flush();
+    expect(useNetActivityStore.getState().retention).toBe('day');
+    expect(useNetActivityStore.getState().query.range).toBe('day');
+    stop();
+  });
+
+  it('offers the ranges a period can answer', () => {
+    expect(rangesFor('day')).toEqual(['hour', 'day']);
+    expect(rangesFor('month')).toEqual(['hour', 'day', 'week', 'twoWeeks', 'month']);
+  });
+
+  it('setting it calls the daemon and keeps the old period when that fails', async () => {
+    harness.daemonCall.mockResolvedValue({});
+    await useNetActivityStore.getState().setRetention('twoWeeks');
+    expect(calls('net.set_retention')).toEqual([{ retention: 'twoWeeks' }]);
+    expect(useNetActivityStore.getState().retention).toBe('twoWeeks');
+    harness.daemonCall.mockRejectedValue(new Error('busy'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await useNetActivityStore.getState().setRetention('month');
+    warn.mockRestore();
+    expect(useNetActivityStore.getState().retention).toBe('twoWeeks');
+    expect(useNetActivityStore.getState().retentionError).toBe(true);
   });
 });
 
@@ -144,36 +236,17 @@ describe('pause', () => {
 
 describe('filterEvents', () => {
   const rows = [
-    ev({ host: 'a', protocol: 'imap', purpose: 'sync', account: '<imap#1>' }),
-    ev({ host: 'b', protocol: 'smtp', purpose: 'send', account: '<imap#1>' }),
+    ev({ host: 'a', protocol: 'imap', purpose: 'sync', account: 'one@example.test' }),
+    ev({ host: 'b', protocol: 'smtp', purpose: 'send', account: 'one@example.test' }),
     ev({ host: 'c', protocol: 'https', purpose: 'AI model', account: null }),
-    ev({ host: 'd', protocol: 'imap', purpose: 'backup', account: '<imap#2>' }),
+    ev({ host: 'd', protocol: 'imap', purpose: 'backup', account: 'two@example.test' }),
   ];
   it('narrows by protocol, purpose and account, and an empty filter keeps everything', () => {
     expect(filterEvents(rows, {}).map(e => e.host)).toEqual(['a', 'b', 'c', 'd']);
     expect(filterEvents(rows, { protocol: 'imap' }).map(e => e.host)).toEqual(['a', 'd']);
     expect(filterEvents(rows, { purpose: 'AI model' }).map(e => e.host)).toEqual(['c']);
-    expect(filterEvents(rows, { account: '<imap#1>' }).map(e => e.host)).toEqual(['a', 'b']);
-    expect(filterEvents(rows, { protocol: 'imap', account: '<imap#2>' }).map(e => e.host)).toEqual(['d']);
-  });
-});
-
-describe('summarize', () => {
-  const now = new Date(2026, 8, 28, 15, 0, 0).getTime();
-  const today = new Date(2026, 8, 28, 9, 0, 0).getTime();
-  const yesterday = new Date(2026, 8, 27, 23, 0, 0).getTime();
-  it('counts the distinct hosts contacted today and the bytes sent and received today', () => {
-    const s = summarize([
-      ev({ host: 'imap.a.test', atMs: today, bytesUp: 10, bytesDown: 100 }),
-      ev({ host: 'imap.a.test', atMs: today, bytesUp: 5, bytesDown: 50 }),
-      ev({ host: 'smtp.a.test', protocol: 'smtp', atMs: today, bytesUp: 1000, bytesDown: 20 }),
-      // A lookup names a host but contacts the resolver, not the host.
-      ev({ host: 'only-looked-up.test', protocol: 'dns', port: 53, atMs: today, bytesUp: 0, bytesDown: 0 }),
-      // Inbound: a hit on the sign-in loopback, not a host MailVault contacted.
-      ev({ host: '127.0.0.1', direction: 'in', protocol: 'http', atMs: today, bytesUp: 7, bytesDown: 3 }),
-      ev({ host: 'yesterday.test', atMs: yesterday, bytesUp: 99999, bytesDown: 99999 }),
-    ], now);
-    expect(s).toEqual({ hosts: 2, sent: 1022, received: 173 });
+    expect(filterEvents(rows, { account: 'one@example.test' }).map(e => e.host)).toEqual(['a', 'b']);
+    expect(filterEvents(rows, { protocol: 'imap', account: 'two@example.test' }).map(e => e.host)).toEqual(['d']);
   });
 });
 
