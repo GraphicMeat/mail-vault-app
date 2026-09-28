@@ -1,6 +1,6 @@
 # MailVault
 
-> MailVault is a free, private desktop email app for macOS, Windows and Linux. It reads, sends and searches mail from Gmail, Microsoft 365, Outlook.com and IMAP accounts, and keeps a copy of the messages you choose on your own computer as plain .eml files, even after you delete them from the server. There is no MailVault account and no MailVault server in the path of your mail. Premium ($4/month or $25/year) adds scheduled backups, tracker removal, Time Capsule, cleanup rules and migration.
+> MailVault is a free, private desktop email app for macOS, Windows and Linux. It reads, sends and searches mail from Gmail, Microsoft 365, Outlook.com and IMAP accounts, and keeps a copy of the messages you choose on your own computer as plain .eml files, even after you delete them from the server. There is no MailVault account and no MailVault server in the path of your mail. Premium ($4/month or $25/year) adds scheduled backups, tracker removal, Time Capsule, cleanup rules, migration and Hoarder, a download mode that keeps every folder's full history on the computer instead of a recent window.
 
 ## Product
 

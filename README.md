@@ -90,6 +90,7 @@ Every build is on the [latest release](https://github.com/GraphicMeat/mail-vault
 - **Per-message state, on the row** - whether a message is on the server, in the vault, in both, or local-only because the server no longer has it.
 - **Delete from the server with confidence** - archive first, then delete, in one operation. The local copy stays.
 - **Portable by construction** - the mail is plain files: back the folder up, move it to another machine, mirror it to an external drive, or export the lot as MBOX for Thunderbird or Apple Mail. No lock-in.
+- **Choose how much mail stays on this computer** - Settings > Storage > Download mode, with a free choice per account too. On Demand fetches a message when you open it and keeps nothing; Keep Recent, the default, keeps the last 1, 3, 6 or 12 months; Index Only keeps a search index of that period and downloads a message in full only when you open it. Hoarder *(Premium)* downloads every folder and all history in the background and keeps it. Backups and archived mail are never removed by any mode, and a lapsed Premium subscription never deletes anything.
 
 ### Threads, or chat
 
@@ -115,6 +116,7 @@ Conversations stack chronologically with quotes folded, or switch the whole clie
 
 - **Auto Tags** - rules, written in plain English, that tag matching mail as it arrives. They run on your computer unless you point them at a remote provider, and never move or delete anything on the server.
 - **Saved views and custom fields** - filters that behave like inboxes, and your own fields, such as a priority, on any message.
+- **Notes to Self** - a board, above your views, of mail you sent yourself from any account. Put a `#tag` in the subject for a column of its own; everything else sorts into Links, Files, Photos or Notes by what it holds. Star a note to keep it on top, or mark it done to clear it from the board without touching the server.
 - **AI writing help** - draft, shorten, change tone, or summarise a thread with a model that runs on your computer, or one you choose.
 - **Layouts and themes** - three- or two-column, resizable panes, light and dark, customisable keyboard shortcuts.
 
@@ -139,6 +141,7 @@ Pick a year or a custom range, then archive, delete, or archive-and-delete thous
 - **Tracker blocking** *(Premium)* - the hidden pixels that report when you opened a message are found on every mail, named on the row, and stripped out of the HTML before it renders. Detection is free; removal comes with a subscription.
 - **Credentials in the OS store** - macOS Keychain, Windows Credential Manager, Linux Secret Service. Never in a config file.
 - **Sandboxed on macOS**, no cloud service, no tracking, no telemetry.
+- **Network Activity** - Settings > Privacy & security lists the connections MailVault and its background helper make, newest first: mail sync and sending, sign-ins, DNS lookups, backups and more, with host, purpose, account, and data sent and received. It does not list web content inside emails, requests the app window makes itself, or app update downloads, and it is kept in memory only, never saved.
 
 ### Multi-account
 
@@ -178,7 +181,7 @@ A background helper keeps mail syncing with the window closed, and the app updat
 </picture>
 </p>
 
-The client is free forever: reading, composing, search, threading, Explorer, Insights, Auto Tags, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, attachment search, and Time Capsule snapshots of a mailbox as it was on any past date. Focus sessions, a timer that covers the window and holds notifications for the minutes you choose, are Premium too. So is Scheduled Send: an email goes out at the exact date and time you pick, in any time zone, with the recipient's zone suggested from their last email; delaying a send by up to five minutes stays free. So is Portable MailVault: a copy on a USB stick or external drive that runs on any computer with your mail and accounts on the drive, locked with a password (Windows for now). Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
+The client is free forever: reading, composing, search, threading, Explorer, Insights, Auto Tags, Notes to Self, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, attachment search, and Time Capsule snapshots of a mailbox as it was on any past date. Hoarder, a download mode that fetches every folder and all history in the background and never evicts it, is Premium too; the free download modes, On Demand, Keep Recent and Index Only, cover everyone else. Focus sessions, a timer that covers the window and holds notifications for the minutes you choose, are Premium too. So is Scheduled Send: an email goes out at the exact date and time you pick, in any time zone, with the recipient's zone suggested from their last email; delaying a send by up to five minutes stays free. So is Portable MailVault: a copy on a USB stick or external drive that runs on any computer with your mail and accounts on the drive, locked with a password (Windows for now). Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
 
 ## Building
 
