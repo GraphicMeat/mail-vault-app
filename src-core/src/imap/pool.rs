@@ -1174,9 +1174,7 @@ mod net_activity_tests {
         assert_eq!(e.result, "ok");
         assert!(e.bytes_down > 0, "greeting and replies count down: {e:?}");
         assert!(e.bytes_up > 0, "LOGIN and SELECT count up: {e:?}");
-        assert!(e.account.as_deref().is_some_and(|a| a.starts_with("<imap#")), "{:?}", e.account);
-        let json = serde_json::to_string(e).unwrap();
-        assert!(!json.contains(ADDRESS), "raw address in {json}");
+        assert_eq!(e.account.as_deref(), Some(ADDRESS), "the page names the account");
     }
 
     #[tokio::test]
@@ -1212,6 +1210,6 @@ mod net_activity_tests {
         let e = &events[0];
         assert_ne!(e.result, "ok");
         assert!(e.result.contains("Login failed"), "the sign-in's own error: {}", e.result);
-        assert!(!serde_json::to_string(e).unwrap().contains(ADDRESS), "raw address in {e:?}");
+        assert!(!e.result.contains(ADDRESS), "raw address in the result: {}", e.result);
     }
 }

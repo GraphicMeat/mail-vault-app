@@ -3875,8 +3875,7 @@ mod net_activity_tests {
         assert_eq!(e.port, 53);
         assert_eq!(e.result, "ok");
         assert_eq!(e.ip.as_deref(), Some("127.0.0.1"));
-        assert!(e.account.is_some(), "the account is labelled");
-        assert!(!serde_json::to_string(e).unwrap().contains(address), "raw address in {e:?}");
+        assert_eq!(e.account.as_deref(), Some(address), "the page names the account");
     }
 
     /// A local bridge on 127.0.0.1: nothing is looked up, so nothing is shown.

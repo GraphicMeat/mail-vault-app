@@ -1,10 +1,12 @@
-//! Network Activity: every connection the helper makes, kept in memory only.
+//! Network Activity: every connection the helper makes.
 //!
-//! A ring of the newest `CAPACITY` events, never persisted and gone on quit
-//! (privacy). HTTP goes through `http_client` / `http_client_with`, whose
-//! `Tracked::send` records one event per request. Events carry host and port
-//! only, never a URL path or query (those can hold tokens), and `account` is
-//! a masked label, never an address.
+//! Recorded here into a ring of the newest `CAPACITY` events and handed to
+//! the one listener; the daemon's listener forwards each to the app and to
+//! `net_log`, which keeps them on this machine for the chosen period. HTTP
+//! goes through `http_client` / `http_client_with`, whose `Tracked::send`
+//! records one event per request. Events carry host and port only, never a
+//! URL path or query (those can hold tokens). `account` is the account's own
+//! address, shown on the page; any address in `result` is masked.
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::future::Future;
@@ -41,7 +43,7 @@ pub struct NetEvent {
     pub ip: Option<String>,
     pub port: u16,
     pub purpose: String,
-    /// Masked label, never a raw address.
+    /// The account's address, when the connection is one account's.
     pub account: Option<String>,
     pub bytes_up: u64,
     pub bytes_down: u64,
@@ -146,14 +148,15 @@ type Listener = Box<dyn Fn(&NetEvent) + Send + Sync>;
 static RING: Mutex<Ring> = Mutex::new(Ring::new());
 static LISTENER: RwLock<Option<Listener>> = RwLock::new(None);
 
-/// Record one event: addresses masked first, then to the listener, then into
-/// the ring (oldest dropped past `CAPACITY`).
+/// Record one event: any address in the result masked first, then to the
+/// listener, then into the ring (oldest dropped past `CAPACITY`). The
+/// account stays the address: the page names the account it belongs to.
 ///
 /// The listener runs under the `LISTENER` read lock and before the push, so
 /// the event is not yet in `snapshot()` when it sees it, and it must never
-/// call `record` or `subscribe` (a deadlock on the lock).
+/// call `record` or `subscribe` (a deadlock on the lock), nor wait on
+/// anything slow: it runs on the connection's own task.
 pub fn record(mut ev: NetEvent) {
-    ev.account = ev.account.map(|a| mask(&a));
     ev.result = mask(&ev.result);
     if let Some(f) = LISTENER.read().unwrap_or_else(|p| p.into_inner()).as_ref() {
         f(&ev);
@@ -181,14 +184,14 @@ fn unsubscribe() {
 static SALT: OnceLock<[u8; 16]> = OnceLock::new();
 
 /// The per-install log salt (`log_redact::load_or_create_salt`), so an
-/// account reads with the same token here as in the logs. Unset, a salt for
-/// this process is used.
+/// address in a result reads with the same token here as in the logs.
+/// Unset, a salt for this process is used.
 pub fn set_salt(salt: [u8; 16]) {
     let _ = SALT.set(salt);
 }
 
 /// Every address in `s` masked exactly as the Standard logs mask it,
-/// whatever the log level: this page never shows a raw address.
+/// whatever the log level: an error text never shows a raw address.
 fn mask(s: &str) -> String {
     if s.contains('@') {
         crate::log_redact::redact(s, SALT.get_or_init(rand::random))
@@ -439,7 +442,8 @@ mod tests {
         for p in ["listener-a", "listener-b", "listener-c"] {
             record(ev(p, 1));
         }
-        // The listener forwards to the app, so it must get the masked event.
+        // The listener forwards to the app and the store: the account as its
+        // address, the result masked.
         let mut addressed = ev("listener-address", 1);
         addressed.account = Some("Listener.Person@gmail.com".into());
         addressed.result = "Login failed for listener.person@gmail.com".into();
@@ -449,23 +453,23 @@ mod tests {
         for p in ["listener-a", "listener-b", "listener-c", "listener-address"] {
             assert!(seen.iter().any(|s| s.contains(&format!("\"{p}\""))), "{p} not seen: {seen:?}");
         }
-        assert!(
-            seen.iter().all(|s| !s.to_lowercase().contains("listener.person@gmail.com")),
-            "a raw address reached the listener: {seen:?}"
-        );
+        let addressed: serde_json::Value =
+            serde_json::from_str(seen.iter().find(|s| s.contains("\"listener-address\"")).unwrap()).unwrap();
+        assert_eq!(addressed["account"], "Listener.Person@gmail.com");
+        let result = addressed["result"].as_str().unwrap();
+        assert!(!result.to_lowercase().contains("listener.person@gmail.com"), "a raw address in the result: {result}");
         assert!(snapshot().iter().any(|e| e.purpose == "listener-c"));
     }
 
     #[test]
-    fn an_address_is_masked_in_the_account_and_the_result() {
+    fn the_account_is_its_address_and_an_address_in_the_result_is_masked() {
         let mut e = ev("mask-test", 2);
         e.account = Some("Masked.Person@gmail.com".into());
         e.result = "Login failed for masked.person@gmail.com: NO".into();
         record(e);
         let got = snapshot().into_iter().find(|e| e.purpose == "mask-test").expect("recorded");
-        let json = serde_json::to_string(&got).unwrap().to_lowercase();
-        assert!(!json.contains("masked.person@gmail.com"), "{json}");
-        assert!(got.account.as_deref().is_some_and(|a| a.starts_with("<gmail#")), "{:?}", got.account);
+        assert_eq!(got.account.as_deref(), Some("Masked.Person@gmail.com"));
+        assert!(!got.result.to_lowercase().contains("masked.person@gmail.com"), "{}", got.result);
         assert!(got.result.starts_with("Login failed for <gmail#"), "{}", got.result);
     }
 

@@ -1191,7 +1191,7 @@ mod tests {
         }
 
         /// Network Activity: one SMTP event per send, bytes up = the message,
-        /// the account masked, never the login address.
+        /// the account named by its address.
         #[tokio::test]
         async fn a_send_records_one_smtp_event_with_the_message_size() {
             let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
@@ -1213,9 +1213,7 @@ mod tests {
             assert_eq!(e.host, "127.0.0.1");
             assert_eq!(e.direction, crate::net_activity::Direction::Out);
             assert_eq!(e.bytes_up, result.raw_rfc2822.len() as u64);
-            assert!(e.account.is_some(), "the account is labelled");
-            let json = serde_json::to_string(e).unwrap();
-            assert!(!json.contains("luke@mock.test"), "raw login address in {json}");
+            assert_eq!(e.account.as_deref(), Some("luke@mock.test"), "the page names the account");
         }
 
         /// What the SMTP server takes in carries the id compose staged the
