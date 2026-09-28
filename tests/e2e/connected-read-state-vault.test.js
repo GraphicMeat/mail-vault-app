@@ -136,16 +136,31 @@ const storeRows = (prefix) => browser.execute((p) => {
     .map((e) => ({ uid: e.uid, subject: e.subject, archived: !!e.isArchived, seen: !!e.flags?.includes('\\Seen') }));
 }, prefix);
 
-const clickRowButton = (subject, title) => browser.execute((needle, t) => {
-  for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
-    if (!(row.innerText || '').split(/\s*\n\s*/).includes(needle)) continue;
-    const btn = row.querySelector(`button[title="${t}"]`);
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }
-  return false;
-}, subject, title);
+// A row mounts its quick actions only while it is live (hovered, focused,
+// right-clicked), so hover it first and poll until the action is there. The
+// harness seeds the row surface as `favorite-menu` with Archive as the
+// favourite (see tests/e2e/rowMenu.js), so Archive is an inline button on a
+// live row. Hover on every try: the list re-renders after an archive, and a
+// row woken earlier may no longer be live. Address the action by its id, not
+// its title, which is a translated label.
+const clickRowButton = async (subject, action) => {
+  let clicked = false;
+  await browser.waitUntil(async () => {
+    clicked = await browser.execute((needle, a) => {
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (!(row.innerText || '').split(/\s*\n\s*/).includes(needle)) continue;
+        row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+        const btn = row.querySelector(`[data-quick-action="${a}"]`);
+        if (!btn) return false;
+        btn.click();
+        return true;
+      }
+      return false;
+    }, subject, action);
+    return clicked;
+  }, { timeout: 5_000, interval: 100 }).catch(() => {});
+  return clicked;
+};
 
 const clickRowCheckbox = (subject) => browser.execute((needle) => {
   for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
@@ -209,7 +224,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     ({ subject: readSubject, uid: readUid } = read);
 
     for (const [subject, uid] of [[unreadSubject, unreadUid], [readSubject, readUid]]) {
-      expect(await clickRowButton(subject, 'Archive')).toBe(true);
+      expect(await clickRowButton(subject, 'archive')).toBe(true);
       await waitFor(() => nameOf(cur, uid) !== null, `"${subject}" (uid ${uid}) never reached the vault`);
     }
 
