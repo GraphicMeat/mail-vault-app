@@ -88,7 +88,9 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
 /// Header-cache meta key: rows the app's own writes took off a mailbox's list
 /// since the daemon last recorded `syncTotalEmails`. The listing is complete
 /// against `syncTotalEmails - appRemovedSinceSync` (`folder_listing`). The
-/// daemon's sync gate never reads it; its `write_meta` resets it to 0.
+/// daemon's expunge gate never counts with it; the sync reads it only as a
+/// reason to list the mailbox when EXISTS did not move with the app's removal
+/// (its hole heal), and its `write_meta` resets it to 0.
 pub const APP_REMOVED_SINCE_SYNC: &str = "appRemovedSinceSync";
 
 /// How `load_headers` orders the rows it hands back.
@@ -650,6 +652,31 @@ pub fn remove_headers(conn: &Connection, account: &str, mailbox: &str, uids: &[u
     Ok(removed)
 }
 
+/// Put back rows the cache lost while the server still lists their uids (the
+/// sync's hole heal). Writes only a uid that has no row: one the app or a sync
+/// wrote since this fetch is newer and stays. The meta is not touched, so the
+/// app's `appRemovedSinceSync` tally and every count stay as they are. Returns
+/// the uids actually written.
+pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, rows: &[Value]) -> Result<Vec<u32>, String> {
+    let tx = conn.unchecked_transaction().map_err(err)?;
+    let mut restored = Vec::new();
+    {
+        let mut stmt = tx.prepare_cached(
+            "INSERT OR IGNORE INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)"
+        ).map_err(err)?;
+        let written_at = now_ms();
+        for row in rows {
+            let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
+            let json = serde_json::to_string(row).map_err(|e| e.to_string())?;
+            if stmt.execute(params![account, mailbox, uid, sort_ms(row), written_at, json]).map_err(err)? == 1 {
+                restored.push(uid);
+            }
+        }
+    }
+    tx.commit().map_err(err)?;
+    Ok(restored)
+}
+
 pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) -> Result<(), String> {
     conn.execute("UPDATE OR REPLACE header_cache SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
     conn.execute("UPDATE OR REPLACE header_cache_meta SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
@@ -985,6 +1012,32 @@ mod tests {
         save_headers(&c, "a", "Sent", &json!({"syncTotalEmails": 2, "emails": rows(&[1, 2])}).to_string()).unwrap();
         save_headers(&c, "a", "Sent", &json!({"removedUids": [2]}).to_string()).unwrap();
         assert_eq!(meta_u64(&c, "Sent", APP_REMOVED_SINCE_SYNC), Some(1));
+    }
+
+    /// The hole heal writes only what is missing: a row written since the
+    /// heal's fetch (the app's, a sync's) is newer and stays, and the meta,
+    /// the app's tally included, is left exactly as it was.
+    #[test]
+    fn a_restore_fills_only_missing_rows_and_leaves_the_meta_alone() {
+        let (_t, c) = store();
+        let row = |uid: u32, subject: &str| json!({"uid": uid, "subject": subject});
+        save_headers(&c, "a", "INBOX", &json!({"syncTotalEmails": 3, "syncUidNext": 10, "emails": [row(1, "one"), row(2, "two"), row(3, "three")]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"removedUids": [2]}).to_string()).unwrap();
+        // The stored blob itself: `load_meta` adds the live row count.
+        let stored_meta = |c: &Connection| -> String {
+            c.query_row("SELECT meta_json FROM header_cache_meta WHERE account_id='a' AND mailbox_path='INBOX'", [], |r| r.get(0)).unwrap()
+        };
+        let meta_before = stored_meta(&c);
+
+        let restored = restore_missing_headers(&c, "a", "INBOX", &[row(2, "two again"), row(3, "stale three"), json!({"no": "uid"})]).unwrap();
+
+        assert_eq!(restored, vec![2]);
+        let rows = load_by_uids(&c, "a", "INBOX", &[2, 3]).unwrap();
+        let subject = |uid: u64| rows.iter().find(|r| r["uid"] == uid).map(|r| r["subject"].clone());
+        assert_eq!(subject(2), Some(json!("two again")));
+        assert_eq!(subject(3), Some(json!("three")), "an existing row is never overwritten");
+        assert_eq!(stored_meta(&c), meta_before, "no count, tally or stamp moves");
+        assert_eq!(meta_u64(&c, "INBOX", APP_REMOVED_SINCE_SYNC), Some(1));
     }
 
     /// The daemon's lookup takes the custody lock per chunk, so a big evicted

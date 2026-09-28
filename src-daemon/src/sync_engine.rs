@@ -858,8 +858,19 @@ impl SyncEngine {
         //    on a partly-cached mailbox — the cold path caches the newest 500 of
         //    15,000, which is fewer rows than EXISTS, not more — so it never
         //    turns into a UID listing on every sync.
+        //
+        //    The listing also heals the other direction (`heal_holes`): a uid
+        //    the server still lists but the cache lost. Nothing the count gate
+        //    reads can see such a hole — the server count did not move — so
+        //    the one extra reason to list is the app having taken rows off
+        //    since this daemon's last count while EXISTS stood still
+        //    (`holes_suspected`). A real delete moves the count and goes the
+        //    usual way, QRESYNC included; a partly cached mailbox is short of
+        //    EXISTS by design and never lists for that alone.
         let expected_total = cached_total + new_headers.len() as u32;
         let counts_disagree = total != expected_total || sidecar_count as u32 > total;
+        let app_removed = cached.as_ref().and_then(|c| c.app_removed_since_sync).unwrap_or(0);
+        let holes_suspected = !counts_disagree && app_removed > 0 && (sidecar_count as u32) < total;
         let reconcile_due = cached
             .as_ref()
             .and_then(|c| c.last_reconcile)
@@ -888,27 +899,41 @@ impl SyncEngine {
                 }
             }
         }
-        if (counts_disagree && !explained) || reconcile_due {
-            match imap::search_all_uids(session, mailbox, false).await {
-                Ok(uids) if uids.is_empty() && total > 0 => {
+        // A listing this sync needed and did not get keeps the baseline, and
+        // with it the app's tally, so the next sync asks again.
+        let listing_needed = counts_disagree || holes_suspected;
+        if (counts_disagree && !explained) || reconcile_due || holes_suspected {
+            match imap::search_all_uid_flags(session, mailbox).await {
+                Ok(listed) if listed.is_empty() && total > 0 => {
                     warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
-                    if counts_disagree {
+                    if listing_needed {
                         sync_total = None;
                     }
                 }
-                Ok(uids) => {
-                    let server_uid_count = uids.len();
+                Ok(listed) => {
+                    let server_uid_count = listed.len();
+                    let uids: Vec<u32> = listed.iter().map(|(uid, _)| *uid).collect();
                     let pruned = cache_io(&io, move |io| io.prune(&uids)).await?;
                     reconciled_at = Some(now_ms());
+                    let healed = match self.heal_holes(session, account, &io, mailbox, &listed, cached_uid_next).await {
+                        Ok(n) => n,
+                        Err(e) => {
+                            // Best-effort like the listing: the rows stay
+                            // missing until the next listing, nothing is lost.
+                            warn!("[sync] Hole heal failed for {} ({}): {}", account.email, mailbox, e);
+                            session_dirty = true;
+                            0
+                        }
+                    };
                     info!(
-                        "[sync] Reconciled {} ({}): {} server UIDs, {} pruned (counts_disagree={}, due={})",
-                        account.email, mailbox, server_uid_count, pruned, counts_disagree, reconcile_due
+                        "[sync] Reconciled {} ({}): {} server UIDs, {} pruned, {} restored (counts_disagree={}, due={}, holes_suspected={})",
+                        account.email, mailbox, server_uid_count, pruned, healed, counts_disagree, reconcile_due, holes_suspected
                     );
                 }
                 Err(e) => {
                     warn!("[sync] UID listing failed for {}: {}", account.email, e);
                     session_dirty = true;
-                    if counts_disagree {
+                    if listing_needed {
                         sync_total = None;
                     }
                 }
@@ -1000,6 +1025,101 @@ impl SyncEngine {
             account.email, mailbox, vanished_count, removed, explained
         );
         explained
+    }
+
+    /// Put back rows the header cache lost while the server still lists them:
+    /// the other half of the reconcile's prune. The prune only ever took rows
+    /// away, so a row the app removed on a wrong "gone" (its body pass prunes
+    /// on an empty fetch, `_pruneIfGone`) stayed missing for good, the cache
+    /// sat short of EXISTS, and the vault's generation repair, which waits for
+    /// a cache naming every message, never ran for that mailbox again.
+    ///
+    /// Candidates are uids in `listed` (this sync's listing, taken after the
+    /// app's removal) that the cache lacks, and only inside the span the cache
+    /// already holds: from its lowest cached uid up to `below` (the baseline
+    /// UIDNEXT; arrivals above it are step 1's). Below the span is a partly
+    /// cached mailbox's un-fetched past, which is the backfill's. Never put
+    /// back:
+    ///   - a uid the op journal still owes a move or a delete (an offline
+    ///     move, or a refused delete kept for the replay: the server holds the
+    ///     message only because the op has not run yet). Read twice, before
+    ///     the fetch and again before the write, so an op queued while the
+    ///     fetch ran counts too;
+    ///   - a uid the server flags `\Deleted`, listed only until an expunge.
+    /// At most `HEAL_MAX_PER_SYNC` per sync, newest first. The write fills only
+    /// uids that still have no row and moves no count, and nothing here is an
+    /// arrival: no announcement, no `new_emails`.
+    async fn heal_holes(
+        &self,
+        session: &mut imap::ImapSession,
+        account: &SyncAccount,
+        io: &CacheCtx,
+        mailbox: &str,
+        listed: &[(u32, Vec<String>)],
+        below: u32,
+    ) -> Result<usize, String> {
+        let have = cache_io(io, |io| Ok(io.cached_uids())).await?;
+        let Some(&lowest) = have.iter().min() else { return Ok(0) };
+        let mut holes: Vec<u32> = listed
+            .iter()
+            .filter(|(uid, flags)| {
+                *uid >= lowest
+                    && *uid < below
+                    && !have.contains(uid)
+                    && !flags.iter().any(|f| f.eq_ignore_ascii_case("\\Deleted"))
+            })
+            .map(|(uid, _)| *uid)
+            .collect();
+        if holes.is_empty() {
+            return Ok(0);
+        }
+        let owed = self.owed_uids(&account.id, mailbox).await?;
+        holes.retain(|uid| !owed.contains(uid));
+        holes.sort_unstable_by(|a, b| b.cmp(a));
+        holes.truncate(HEAL_MAX_PER_SYNC);
+        if holes.is_empty() {
+            return Ok(0);
+        }
+
+        let (headers, _total) = imap::fetch_headers_by_uids(session, mailbox, &holes).await?;
+        let owed = self.owed_uids(&account.id, mailbox).await?;
+        let wanted: HashSet<u32> = holes.iter().copied().filter(|uid| !owed.contains(uid)).collect();
+        let headers: Vec<ImapEmailHeader> = headers.into_iter().filter(|h| wanted.contains(&h.uid)).collect();
+        if headers.is_empty() {
+            return Ok(0);
+        }
+        let restored = cache_io(io, move |io| io.restore(&headers)).await?;
+        if !restored.is_empty() {
+            info!(
+                "[sync] Restored {} header rows the server still lists for {} ({}): {:?}",
+                restored.len(), account.email, mailbox, &restored[..restored.len().min(20)]
+            );
+        }
+        Ok(restored.len())
+    }
+
+    /// Uids of this mailbox the op journal (`pending_ops` in app.db) still
+    /// owes a server mutation that takes the message out: every op but a flag
+    /// change. An app.db that will not open fails the heal rather than reading
+    /// as "nothing owed": putting back a row the user removed is the one
+    /// outcome this must never have. (Past the open, `ops::read` still answers
+    /// empty on a query error and an entry's unparseable uid list reads as
+    /// no uids, the same as every other journal reader.)
+    async fn owed_uids(&self, account_id: &str, mailbox: &str) -> Result<HashSet<u32>, String> {
+        let (app_dir, account_id, mailbox) = (self.app_dir.clone(), account_id.to_string(), mailbox.to_string());
+        tokio::task::spawn_blocking(move || {
+            mailvault_core::app_db::with(&app_dir, |conn| Ok(mailvault_core::app_db::ops::read(conn)))
+                .map(|rows| {
+                    rows.into_iter()
+                        .filter(|(_, op, acc, mb, _, _, _)| op != "flag" && *acc == account_id && *mb == mailbox)
+                        .flat_map(|(_, _, _, _, uids_json, _, _)| {
+                            serde_json::from_str::<Vec<u32>>(&uids_json).unwrap_or_default()
+                        })
+                        .collect()
+                })
+        })
+        .await
+        .map_err(|e| format!("journal read task failed: {e}"))?
     }
 
     /// Get current sync state for all accounts.
@@ -1309,7 +1429,8 @@ impl CacheCtx {
             "syncTotalEmails": sync_total, "syncUidNext": uid_next,
             "syncHighestModseq": highest_modseq,
             // A fresh count already reflects the app's removals: its tally
-            // (read by the search index's listing, never by this gate) restarts.
+            // (read by the search index's listing, and by the hole heal's
+            // trigger, never by the expunge gate's arithmetic) restarts.
             mailvault_core::custody::cache::APP_REMOVED_SINCE_SYNC: sync_total.map(|_| 0),
         });
         self.require_db(|conn| {
@@ -1328,6 +1449,26 @@ impl CacheCtx {
         info!("[sync] Cache written: {} headers", headers.len());
         self.contacts.observe_headers(&self.account, &self.mailbox, headers);
         Ok(())
+    }
+
+    /// The hole heal's write: only uids with no row are written (a row written
+    /// since the fetch is newer), and the meta is left alone. Returns the uids
+    /// written.
+    fn restore(&self, headers: &[ImapEmailHeader]) -> Result<Vec<u32>, String> {
+        self.vault_open()?;
+        let rows = match serde_json::to_value(headers).map_err(|e| e.to_string())? {
+            serde_json::Value::Array(rows) => rows,
+            _ => return Ok(Vec::new()),
+        };
+        let restored = self.require_db(|conn| {
+            mailvault_core::custody::cache::restore_missing_headers(conn, &self.account, &self.mailbox, &rows)
+        })?;
+        if !restored.is_empty() {
+            let written: Vec<ImapEmailHeader> =
+                headers.iter().filter(|h| restored.contains(&h.uid)).cloned().collect();
+            self.contacts.observe_headers(&self.account, &self.mailbox, &written);
+        }
+        Ok(restored)
     }
 
     fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
@@ -1387,6 +1528,9 @@ fn cached_meta_from_json(text: &str) -> Option<CachedMeta> {
         sync_uid_next: meta.get("syncUidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
         sync_highest_modseq: meta.get("syncHighestModseq").and_then(|v| v.as_u64()),
         last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
+        app_removed_since_sync: meta
+            .get(mailvault_core::custody::cache::APP_REMOVED_SINCE_SYNC)
+            .and_then(|v| v.as_u64()),
     })
 }
 
@@ -1428,6 +1572,10 @@ struct CachedMeta {
     /// Epoch ms of the last UID SEARCH ALL reconcile. None = never reconciled,
     /// or the generation was dropped on a UIDVALIDITY change.
     last_reconcile: Option<u64>,
+    /// Rows the app took off since this daemon's last count
+    /// (`APP_REMOVED_SINCE_SYNC`). Read only to notice a removal the server
+    /// count did not follow — see the hole heal in `sync_mailbox`.
+    app_removed_since_sync: Option<u64>,
 }
 
 /// What one delta sync changed.
@@ -1459,6 +1607,11 @@ const FLAG_REFRESH_WINDOW: u32 = 1000;
 /// UIDs per backfill fetch. Sidecars are written after each chunk so the app's
 /// cache-drain can consume them while the rest is still downloading.
 const BACKFILL_CHUNK: usize = 1000;
+
+/// Most rows one sync puts back into holes in the header cache (see
+/// `heal_holes`), newest first; the rest wait for the next listing. One
+/// `fetch_headers_by_uids` chunk.
+const HEAL_MAX_PER_SYNC: usize = 200;
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -3574,6 +3727,245 @@ mod tests {
             "a cursor from a dead process must not park the poll: took {:?}",
             started.elapsed()
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── Holes: rows the cache lost while the server still lists them ─────
+    //
+    // The reconcile used to only prune. A row the app took off (its body pass
+    // reads an empty fetch as "gone", `_pruneIfGone`) while the server kept
+    // counting and listing the uid stayed missing for good: the cache sat one
+    // short of EXISTS, and the vault's generation repair, which waits for a
+    // cache naming every message, never ran for that mailbox again.
+
+    /// The app's own prune, the way it reaches the cache: `removedUids`, which
+    /// is also what bumps its `appRemovedSinceSync` tally.
+    fn app_pruned(engine: &SyncEngine, mailbox: &str, uids: &[u32]) {
+        app_wrote_meta(engine, mailbox, serde_json::json!({"removedUids": uids}));
+    }
+
+    /// A server mutation the user confirmed and the app has not finished
+    /// (`pending_ops` in the app dir, which `engine_for` shares with the vault).
+    fn journal(dir: &Path, op: &str, uids: &[u32], arg: serde_json::Value) {
+        mailvault_core::op_journal::queue(
+            dir,
+            mailvault_core::op_journal::OpEntry {
+                id: 0,
+                op: op.into(),
+                account_id: "acc1".into(),
+                mailbox: "INBOX".into(),
+                uids: uids.to_vec(),
+                arg,
+                at: 0,
+            },
+        )
+        .unwrap();
+    }
+
+    /// Header fetches only: not the UID listing, not a flag refresh.
+    fn header_fetches(server: &MockImap) -> Vec<String> {
+        server.commands().into_iter().filter(|l| l.contains("BODYSTRUCTURE")).collect()
+    }
+
+    /// The next sync's timed reconcile is due.
+    fn reconcile_overdue(engine: &SyncEngine) {
+        app_wrote_meta(engine, "INBOX", serde_json::json!({"lastReconcile": 1}));
+    }
+
+    #[tokio::test]
+    async fn a_listing_puts_back_a_row_the_server_still_lists() {
+        let dir = scratch_dir("heal_listed_hole");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        app_pruned(&engine, "INBOX", &[12]);
+        reconcile_overdue(&engine);
+        assert_eq!(cached_count(&engine, "INBOX"), 19, "precondition: one row short of EXISTS");
+        let (before, generation) = (header_fetches(&server).len(), engine.change_gen());
+
+        let result = engine.sync_account_announcing(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert!(cached_uid_set(&engine, "INBOX").contains(&12), "the server still lists uid 12");
+        assert_eq!(cached_count(&engine, "INBOX"), 20);
+        let fetched = header_fetches(&server)[before..].to_vec();
+        assert_eq!(fetched.len(), 1, "one header fetch, for the missing uid alone: {fetched:#?}");
+        assert!(fetched[0].contains("UID FETCH 12 ("), "{fetched:#?}");
+        // A row put back is not mail that arrived.
+        assert_eq!((result.arrivals, result.new_emails, result.announced), (0, 0, false));
+        assert_eq!(engine.change_gen(), generation, "nothing announced for a restored row");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The count gate cannot see this hole: the server count did not move, so
+    /// `syncTotalEmails` still agrees with EXISTS. What says "look" is the app
+    /// having taken rows off since the last sync while the count stood still.
+    #[tokio::test]
+    async fn an_app_prune_the_server_count_did_not_follow_is_listed_on_the_next_sync() {
+        let dir = scratch_dir("heal_trigger");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+
+        // Negative control: nothing removed, counts agree, reconcile not due.
+        let listings = full_listings(&server);
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(full_listings(&server), listings, "a quiet sync lists nothing");
+
+        app_pruned(&engine, "INBOX", &[12]);
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(full_listings(&server), listings + 1, "{:#?}", server.commands());
+        assert!(cached_uid_set(&engine, "INBOX").contains(&12));
+
+        // Once: the sync resets the tally, and a whole cache gives no reason.
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(full_listings(&server), listings + 1, "{:#?}", server.commands());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A queued move or delete took the row off on purpose, and the server
+    /// still holds the message only because the op has not run yet (offline,
+    /// or refused and kept for the replay). A flag op never removes a row.
+    #[tokio::test]
+    async fn a_uid_owed_a_queued_move_or_delete_is_never_put_back() {
+        let dir = scratch_dir("heal_journal");
+        let server = MockImap::start(
+            Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)).mailbox(Mailbox::new("Archive")),
+        );
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        app_pruned(&engine, "INBOX", &[5, 12, 14]);
+        journal(&dir, "move", &[5], serde_json::json!({"target": "Archive"}));
+        journal(&dir, "delete", &[12], serde_json::json!({}));
+        journal(&dir, "flag", &[14], serde_json::json!({"flags": ["\\Seen"], "action": "add"}));
+        reconcile_overdue(&engine);
+        let before = header_fetches(&server).len();
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert!(!cached.contains(&5), "uid 5 is owed a move");
+        assert!(!cached.contains(&12), "uid 12 is owed a delete");
+        assert!(cached.contains(&14), "a flag op removes nothing");
+        let fetched = header_fetches(&server)[before..].to_vec();
+        assert_eq!(fetched.len(), 1, "an owed uid is not even fetched: {fetched:#?}");
+        assert!(fetched[0].contains("UID FETCH 14 ("), "{fetched:#?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Another client flagged it `\Deleted` and has not expunged yet: listed,
+    /// but on its way out. Not a row to bring back.
+    #[tokio::test]
+    async fn a_uid_flagged_deleted_on_the_server_is_not_put_back() {
+        let dir = scratch_dir("heal_flagged_deleted");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        server.mutate(|st| {
+            st.find_mut("INBOX").unwrap().by_uid_mut(12).unwrap().flags.push("\\Deleted".into());
+        });
+        app_pruned(&engine, "INBOX", &[12]);
+        reconcile_overdue(&engine);
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert!(!cached_uid_set(&engine, "INBOX").contains(&12));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A partly cached mailbox (the cold path's newest page, an interrupted
+    /// backfill) is missing its older uids by design: filling those is the
+    /// backfill's job. Only a hole inside the span the cache holds is healed.
+    #[tokio::test]
+    async fn a_partial_cache_heals_a_hole_in_its_span_and_leaves_the_rest_to_the_backfill() {
+        let dir = scratch_dir("heal_partial");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        let keep: Vec<u32> = (10..=20).collect();
+        drop_cached(&engine, "INBOX", &keep);
+        app_pruned(&engine, "INBOX", &[15]);
+        reconcile_overdue(&engine);
+        let before = header_fetches(&server).len();
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert!(cached.contains(&15), "a hole inside the cached span is healed");
+        assert!((1..10).all(|u| !cached.contains(&u)), "below the span is the backfill's: {cached:?}");
+        assert_eq!(cached.len(), 11);
+        let fetched = header_fetches(&server)[before..].to_vec();
+        assert_eq!(fetched.len(), 1, "{fetched:#?}");
+        assert!(fetched[0].contains("UID FETCH 15 ("), "{fetched:#?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Bounded: one sync puts back at most `HEAL_MAX_PER_SYNC` rows, newest
+    /// first, so a cache that lost most of a large mailbox is refilled a slice
+    /// per listing rather than in one envelope fetch of everything.
+    #[tokio::test]
+    async fn one_sync_heals_at_most_the_cap_newest_first() {
+        let n = HEAL_MAX_PER_SYNC as u32 + 30;
+        let dir = scratch_dir("heal_cap");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", n)));
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        assert_eq!(cached_count(&engine, "INBOX"), n as usize);
+        // Everything but the oldest and newest ten.
+        let lost: Vec<u32> = (11..=n - 10).collect();
+        app_pruned(&engine, "INBOX", &lost);
+        reconcile_overdue(&engine);
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert_eq!(cached.len(), 20 + HEAL_MAX_PER_SYNC, "the cap, no more");
+        let newest_lost = n - 10;
+        let lowest_healed = newest_lost - HEAL_MAX_PER_SYNC as u32 + 1;
+        assert!((lowest_healed..=newest_lost).all(|u| cached.contains(&u)), "the newest first");
+        assert!((11..lowest_healed).all(|u| !cached.contains(&u)));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A real delete on a QRESYNC server with a partly cached mailbox: the
+    /// count moves, QRESYNC explains it, and the app's tally of that same
+    /// delete must not turn it into a listing of every uid.
+    #[tokio::test]
+    async fn an_app_delete_the_server_count_followed_stays_on_the_qresync_path() {
+        let dir = scratch_dir("heal_qresync");
+        let server = MockImap::start(
+            Scenario::new()
+                .with_cap("QRESYNC")
+                .mailbox(synthetic_mailbox("INBOX", 20))
+                .mailbox(Mailbox::new("Archive")),
+        );
+        let engine = engine_for(&dir);
+        warm(&engine, &server).await;
+        let keep: Vec<u32> = (10..=20).collect();
+        drop_cached(&engine, "INBOX", &keep);
+        server.mutate(|st| st.expunge("INBOX", &[15]));
+        app_pruned(&engine, "INBOX", &[15]);
+        let (listings, before) = (full_listings(&server), header_fetches(&server).len());
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(full_listings(&server), listings, "QRESYNC answered: {:#?}", server.commands());
+        assert_eq!(header_fetches(&server).len(), before, "nothing to put back");
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
 
         let _ = fs::remove_dir_all(&dir);
     }
