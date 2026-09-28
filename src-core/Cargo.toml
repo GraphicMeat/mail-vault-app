@@ -43,6 +43,14 @@ zeroize = "1"
 # OpenPGP decryption (src/pgp.rs): pure Rust, no gpg, so the sandboxed builds can use it.
 pgp = "0.20"
 
+
+# Snap keyring (src/snap_keyring.rs): the Secret portal through oo7, plugged
+# into keyring-rs as its backend inside a snap.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"

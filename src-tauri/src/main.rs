@@ -3506,6 +3506,8 @@ fn main() {
             // Set up logging to app log directory
             let log_dir = get_log_dir(&app.handle());
             let _guard = setup_logging(&log_dir);
+            #[cfg(target_os = "linux")]
+            mailvault_core::snap_keyring::install_if_snap();
 
             // Store the guard to keep logging alive
             std::mem::forget(_guard);
