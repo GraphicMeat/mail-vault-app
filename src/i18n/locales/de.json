@@ -3100,6 +3100,7 @@
   "notes.links": "Links",
   "notes.attachments": "Anhänge",
   "notes.deletePartial": "Vom Server gelöscht. Eine Kopie in einem noch nicht geladenen Ordner wurde behalten.",
+  "notes.accounts": "Notizen anzeigen von",
   "settings.tab.networkActivity": "Netzwerkaktivität",
   "netActivity.intro": "Verbindungen von MailVault und seinem Hintergrunddienst, neueste zuerst. Die Liste liegt nur im Arbeitsspeicher, wird nie gespeichert, behält die letzten 2.000 und beginnt nach einem Neustart des Dienstes leer.",
   "netActivity.hostsToday": "Kontaktierte Hosts in den heutigen Zeilen",

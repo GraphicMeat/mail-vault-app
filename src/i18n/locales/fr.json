@@ -3100,6 +3100,7 @@
   "notes.links": "Liens",
   "notes.attachments": "Pièces jointes",
   "notes.deletePartial": "Supprimée du serveur. Une copie dans un dossier que MailVault n'a pas encore chargé a été conservée.",
+  "notes.accounts": "Afficher les notes de",
   "settings.tab.networkActivity": "Activité réseau",
   "netActivity.intro": "Connexions établies par MailVault et son assistant en arrière-plan, les plus récentes en premier. La liste reste en mémoire, n'est jamais enregistrée, garde les 2 000 dernières et repart à zéro quand l'assistant redémarre.",
   "netActivity.hostsToday": "Hôtes contactés dans les lignes du jour",

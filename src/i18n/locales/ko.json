@@ -3100,6 +3100,7 @@
   "notes.links": "링크",
   "notes.attachments": "첨부파일",
   "notes.deletePartial": "서버에서 삭제했습니다. MailVault가 아직 불러오지 않은 폴더의 사본은 남아 있습니다.",
+  "notes.accounts": "표시할 계정",
   "settings.tab.networkActivity": "네트워크 활동",
   "netActivity.intro": "MailVault와 백그라운드 도우미가 만든 연결입니다. 최신 순으로 표시합니다. 목록은 메모리에만 있고 저장되지 않으며 최근 2,000개를 보관하고, 도우미가 다시 시작되면 비워집니다.",
   "netActivity.hostsToday": "오늘 행에서 연결한 호스트",

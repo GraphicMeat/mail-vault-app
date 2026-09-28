@@ -3100,6 +3100,7 @@
   "notes.links": "Links",
   "notes.attachments": "Attachments",
   "notes.deletePartial": "Deleted from the server. A copy in a folder MailVault has not loaded yet was kept.",
+  "notes.accounts": "Show notes from",
   "settings.tab.networkActivity": "Network Activity",
   "netActivity.intro": "Connections made by MailVault and its background helper, newest first. The list lives in memory only, is never saved, keeps the latest 2,000 and starts empty when the helper restarts.",
   "netActivity.hostsToday": "Hosts contacted in today's rows",

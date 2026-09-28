@@ -41,6 +41,7 @@ vi.mock('../../DeleteConfirmModal', () => ({
 const { default: NotesBoard } = await import('../NotesBoard');
 const { useNotesStore } = await import('../../../stores/notesStore');
 const { useMailStore } = await import('../../../stores/mailStore');
+const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { t } = await import('../../../i18n');
 
 const ACCOUNTS_PAYLOAD = [
@@ -91,6 +92,7 @@ beforeEach(() => {
   harness.send.mockResolvedValue('aGVsbG8=');
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => {}) }, configurable: true });
   useMailStore.setState({ accounts: [{ id: 'a', email: 'me@x.test' }, { id: 'b', email: 'work@y.test' }] });
+  useSettingsStore.setState({ notesHiddenAccounts: {}, displayNames: {} });
 });
 afterEach(cleanup);
 
@@ -263,5 +265,51 @@ describe('Notes to Self board', () => {
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByTestId('email-viewer')).toBeNull());
     expect(harness.cancelInsightsSelection).toHaveBeenCalled();
+  });
+});
+
+describe('Notes to Self account filter', () => {
+  const inB = (key, extra = {}) => card(key, { accountId: 'b', copies: [{ accountId: 'b', mailbox: 'INBOX', uid: 31, messageId: `<${key}@y.test>` }], ...extra });
+  const shown = () => screen.queryAllByTestId('note-card').map(el => el.dataset.key).sort();
+  const toggle = id => screen.getByTestId(`notes-account-${id}`);
+
+  it('offers one pressed toggle per account, named and coloured as in the sidebar', () => {
+    useSettingsStore.setState({ displayNames: { b: 'Work' } });
+    show([card('x'), inB('y')]);
+    const bar = screen.getByRole('group', { name: t('notes.accounts') });
+    expect(within(bar).getAllByRole('button').map(button => button.textContent)).toEqual(['me@x.test', 'Work']);
+    expect(toggle('a').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('b').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('b').querySelector('[data-testid="notes-account-dot"]').style.backgroundColor).toBeTruthy();
+    expect(shown()).toEqual(['x', 'y']);
+  });
+
+  it('hides an account\'s notes while it is off, and remembers that', () => {
+    show([card('x'), inB('y'), card('both', { copies: [...card('both').copies, ...inB('both').copies] })]);
+    fireEvent.click(toggle('b'));
+    expect(toggle('b').getAttribute('aria-pressed')).toBe('false');
+    expect(shown()).toEqual(['both', 'x']);
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({ b: true });
+    fireEvent.click(toggle('a'));
+    expect(shown()).toEqual([]);
+    expect(screen.getByTestId('notes-no-matches')).toBeTruthy();
+    fireEvent.click(toggle('b'));
+    expect(shown()).toEqual(['both', 'y']);
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({ a: true });
+  });
+
+  it('opens with the accounts that were off last time still off', () => {
+    useSettingsStore.setState({ notesHiddenAccounts: { a: true } });
+    show([card('x'), inB('y')]);
+    expect(toggle('a').getAttribute('aria-pressed')).toBe('false');
+    expect(shown()).toEqual(['y']);
+  });
+
+  // With no bar there is no way to turn an account back on, so nothing is off.
+  it('shows no bar, and hides nothing, with only one account', () => {
+    useSettingsStore.setState({ notesHiddenAccounts: { a: true } });
+    show([card('x')], { accounts: [ACCOUNTS_PAYLOAD[0]] });
+    expect(screen.queryByRole('group', { name: t('notes.accounts') })).toBeNull();
+    expect(shown()).toEqual(['x']);
   });
 });

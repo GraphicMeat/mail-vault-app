@@ -3100,6 +3100,7 @@
   "notes.links": "Link",
   "notes.attachments": "Allegati",
   "notes.deletePartial": "Eliminata dal server. Una copia in una cartella che MailVault non ha ancora caricato è stata mantenuta.",
+  "notes.accounts": "Mostra le note di",
   "settings.tab.networkActivity": "Attività di rete",
   "netActivity.intro": "Connessioni effettuate da MailVault e dal suo assistente in background, dalle più recenti. L'elenco resta solo in memoria, non viene mai salvato, tiene le ultime 2.000 e riparte vuoto quando l'assistente si riavvia.",
   "netActivity.hostsToday": "Host contattati nelle righe di oggi",

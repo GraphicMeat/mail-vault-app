@@ -12,6 +12,10 @@ import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import NoteCard from './NoteCard';
 import { useT } from '../../i18n';
 
+const NONE = {};
+/// The accounts a card's copies sit in: it shows while any of them is on.
+const cardAccounts = card => (card.copies?.length ? card.copies.map(copy => copy.accountId) : [card.accountId]);
+
 const typing = el => !!el?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
 // Same test the mail view's own `/` makes: a dialog over the board keeps it.
 const dialogOpen = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')]
@@ -29,11 +33,18 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const busy = useNotesStore(s => s.busy);
   const mailAccounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors) || {};
+  const displayNames = useSettingsStore(s => s.displayNames) || NONE;
+  const notesHiddenAccounts = useSettingsStore(s => s.notesHiddenAccounts) ?? NONE;
   const [active, setActive] = useState({ col: 0, row: 0 });
   const [error, setError] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const page = useRef(null), filterInput = useRef(null), board = useRef(null), returnFocus = useRef(null), request = useRef(0);
-  const columns = useMemo(() => boardColumns(cards, filter), [cards, filter]);
+  // One toggle per account the board asked about. With one account there is
+  // no bar, and so no way to turn it back on: nothing is off then.
+  const barAccounts = mailAccounts.filter(account => payload.some(entry => entry.accountId === account.id));
+  const off = barAccounts.length > 1 ? notesHiddenAccounts : NONE;
+  const shown = useMemo(() => cards.filter(card => cardAccounts(card).some(id => !off[id])), [cards, off]);
+  const columns = useMemo(() => boardColumns(shown, filter), [shown, filter]);
   const store = () => useNotesStore.getState();
 
   useEffect(() => { page.current?.focus(); return () => { ++request.current; }; }, []);
@@ -144,6 +155,17 @@ export default function NotesBoard({ onClose, onComposeReply }) {
         </Button>
       </div>
     </header>
+    {barAccounts.length > 1 && <div role="group" aria-label={t('notes.accounts')} data-testid="notes-accounts"
+      className="flex flex-wrap items-center gap-1.5 px-6 pt-3">
+      {barAccounts.map(account => <Button key={account.id} variant={off[account.id] ? 'ghost' : 'accentTint'} size="xs" pill
+        data-testid={`notes-account-${account.id}`} aria-pressed={!off[account.id]} title={account.email}
+        onClick={() => useSettingsStore.getState().toggleNotesAccount(account.id)}>
+        <span data-testid="notes-account-dot" aria-hidden="true"
+          className={`w-2 h-2 rounded-full shrink-0 ${off[account.id] ? 'opacity-40' : ''}`}
+          style={{ backgroundColor: getAccountColor(accountColors, account) }} />
+        {displayNames[account.id] || account.name || account.email}
+      </Button>)}
+    </div>}
     {error && <p role="alert" className="px-6 pt-3 text-sm text-mail-warning">{error}</p>}
     <div className="flex-1 min-h-0 flex">
       <div ref={board} onKeyDown={moveFocus} data-testid="notes-columns"

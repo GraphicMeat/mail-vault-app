@@ -368,6 +368,9 @@ export const useSettingsStore = create(
 
       // Hidden accounts { [accountId]: true } — hidden accounts don't sync and are invisible in sidebar
       hiddenAccounts: {},
+      // Accounts switched off on the Notes to Self board { [accountId]: true }.
+      // The off set, so an account added later starts on.
+      notesHiddenAccounts: {},
 
       // Last selected mailbox per account { [accountId]: string }
       lastMailboxPerAccount: {},
@@ -985,6 +988,10 @@ export const useSettingsStore = create(
         });
       },
       isAccountHidden: (accountId) => !!get().hiddenAccounts[accountId],
+      toggleNotesAccount: (accountId) => set(state => {
+        const { [accountId]: off, ...rest } = state.notesHiddenAccounts || {};
+        return { notesHiddenAccounts: off ? rest : { ...rest, [accountId]: true } };
+      }),
 
       // Undo send settings
       setUndoSendEnabled: (enabled) => set({ undoSendEnabled: enabled }),
@@ -1377,6 +1384,7 @@ export const useSettingsStore = create(
           customCategories: [],
           accountOrder: [],
           hiddenAccounts: {},
+          notesHiddenAccounts: {},
           lastMailboxPerAccount: {},
           signatures: {},
           displayNames: {},

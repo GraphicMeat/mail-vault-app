@@ -3100,6 +3100,7 @@
   "notes.links": "链接",
   "notes.attachments": "附件",
   "notes.deletePartial": "已从服务器删除。MailVault 尚未加载的文件夹中的副本已保留。",
+  "notes.accounts": "显示这些账户的笔记",
   "settings.tab.networkActivity": "网络活动",
   "netActivity.intro": "MailVault 及其后台助手建立的连接，最新的在前。列表只保存在内存中，从不写入磁盘，保留最近 2,000 条，后台助手重启后会清空。",
   "netActivity.hostsToday": "今天各行中联系的主机",
