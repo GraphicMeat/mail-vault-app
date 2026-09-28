@@ -11,6 +11,11 @@
 //! does (`idle_watch.rs`), which is what turns it into the app's new-mail
 //! notification and list refresh.
 //!
+//! A local snooze (`snoozed_mailbox` empty: the server would not host the
+//! folder) moved nothing, so its wake only clears `\Seen` where the message
+//! is. That sync sees no arrival, so the app raises the notification itself
+//! off the `snooze` event's `woke`.
+//!
 //! Graph accounts are not handled here: the daemon never refreshes an OAuth
 //! token (the app does), so a background Graph move cannot be relied on.
 //! The app does not offer Snooze on a Graph account.
@@ -54,21 +59,7 @@ async fn run(state: Arc<DaemonState>) {
     info!("[snooze] worker started");
     loop {
         let online = state.net.is_online();
-        let results = if online {
-            let _held = state.snooze.lock.lock().await;
-            let st = Arc::clone(&state);
-            let results = process_due_with(&state.app_dir, now_ms(), move |row| {
-                let st = Arc::clone(&st);
-                async move { wake_row(&st, &row, true).await }
-            })
-            .await;
-            for (id, _, row_state) in &results {
-                emit(&state, id, row_state);
-            }
-            results
-        } else {
-            Vec::new()
-        };
+        let results = if online { pass(&state).await } else { Vec::new() };
         // A `Wait` leaves its row due; without a floor the loop would spin on
         // it until the network or the keychain comes back.
         let waited = results.iter().any(|(_, outcome, _)| matches!(outcome, snooze::WakeOutcome::Wait(_)));
@@ -99,8 +90,27 @@ fn next_wait(state: &Arc<DaemonState>) -> Duration {
     }
 }
 
-pub(crate) fn emit(state: &Arc<DaemonState>, id: &str, row_state: &str) {
-    state.events.emit("snooze", json!({"id": id, "state": row_state}));
+/// One pass: wake every due row, record it, and tell the app.
+async fn pass(state: &Arc<DaemonState>) -> Vec<(String, snooze::WakeOutcome, String)> {
+    let _held = state.snooze.lock.lock().await;
+    let st = Arc::clone(state);
+    let results = process_due_with(&state.app_dir, now_ms(), move |row| {
+        let st = Arc::clone(&st);
+        async move { wake_row(&st, &row, true).await }
+    })
+    .await;
+    for (id, outcome, row_state) in &results {
+        emit(state, id, row_state, *outcome == snooze::WakeOutcome::Woken);
+    }
+    results
+}
+
+/// `woke`: this pass brought the message back at its time; not an unsnooze
+/// the user asked for, not a message that was gone. The app announces a local
+/// snooze's wake off it: that wake only clears `\Seen`, so no sync reports
+/// it as an arrival.
+pub(crate) fn emit(state: &Arc<DaemonState>, id: &str, row_state: &str, woke: bool) {
+    state.events.emit("snooze", json!({"id": id, "state": row_state, "woke": woke}));
 }
 
 /// Run every due row through `wake` and record what it came to. Returns
@@ -158,17 +168,24 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
     // Capabilities are cached when a session is created: read after checkout.
     let has_move = state.imap_pool.has_capability(&account, "MOVE").await;
     let has_uidplus = state.imap_pool.has_capability(&account, "UIDPLUS").await;
+    // A local snooze (no Snoozed folder on the server) never moved the
+    // message: it is marked unread where it is. No MOVE into its own folder,
+    // which real servers do not treat as a no-op.
+    let local = row.snoozed_mailbox.is_empty();
+    let holder = if local { &row.from_mailbox } else { &row.snoozed_mailbox };
     let moved = async {
-        let found = imap::message_id_uids_in(&mut session, &row.snoozed_mailbox, &row.message_id).await?;
+        let found = imap::message_id_uids_in(&mut session, holder, &row.message_id).await?;
         let Some(uid) = snooze::pick_uid(row.uid_in_snoozed, &found) else { return Ok(false) };
-        imap::set_flags(&mut session, &row.snoozed_mailbox, uid, &["\\Seen".to_string()], "remove").await?;
-        imap::move_uids(&mut session, &row.snoozed_mailbox, &row.from_mailbox, &[uid], has_move, has_uidplus).await?;
+        imap::set_flags(&mut session, holder, uid, &["\\Seen".to_string()], "remove").await?;
+        if !local {
+            imap::move_uids(&mut session, holder, &row.from_mailbox, &[uid], has_move, has_uidplus).await?;
+        }
         Ok::<bool, String>(true)
     }
     .await;
     let moved = match moved {
         Ok(m) => {
-            let guard = PooledSessionGuard { session, last_selected: Some(row.snoozed_mailbox.clone()), _permit };
+            let guard = PooledSessionGuard { session, last_selected: Some(holder.clone()), _permit };
             if background {
                 state.imap_pool.return_background(&account, guard).await;
             } else {
@@ -181,7 +198,7 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
         Err(e) => return if state.net.note_failure(&e).await { Transient(e) } else { Wait(e) },
     };
     if !moved {
-        info!("[snooze] {} is no longer in {}; nothing to wake", row.id, row.snoozed_mailbox);
+        info!("[snooze] {} is no longer in {}; nothing to wake", row.id, holder);
         return NotFound;
     }
     announce(state, account, row).await;
@@ -303,6 +320,66 @@ mod tests {
         assert_eq!(inbox.messages.len(), 1, "and land back in INBOX");
         assert!(!inbox.messages[0].has_flag("\\Seen"), "unread");
         assert_eq!(gone, WakeOutcome::NotFound, "a message no longer in Snoozed is not an error");
+    }
+
+    /// A local snooze (no Snoozed folder, `snoozed_mailbox` empty) never
+    /// moved the message: its wake marks it unread where it is and moves
+    /// nothing, since a MOVE into its own folder is not a no-op on a real
+    /// server. The event says which rows the pass woke: the app announces a
+    /// local wake off it, and a message that was gone is no news.
+    #[tokio::test]
+    async fn a_pass_wakes_a_local_snooze_unread_where_it_is() {
+        use mock_imap::state::{Mailbox, Message};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let raw = "Message-ID: <snz-local@example.com>\r\nFrom: a@example.com\r\nTo: user@example.com\r\nSubject: Later\r\nDate: Fri, 25 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
+        );
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let creds = dir.join("credentials.json");
+        let account = serde_json::json!({
+            "id": "acct", "email": "user@example.com", "password": "hunter2",
+            "imapHost": server.host(), "imapPort": server.port(),
+        })
+        .to_string();
+        std::fs::write(&creds, serde_json::json!({ "acct": account }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+
+        let uid = server.state().find("INBOX").unwrap().messages[0].uid;
+        app_db::with(&dir, |c| {
+            snooze::insert(c, "l", "acct", "INBOX", "", Some(uid), "<snz-local@example.com>", 1_000)?;
+            snooze::insert(c, "gone", "acct", "INBOX", "", None, "<gone@example.com>", 2_000)
+        })
+        .unwrap();
+        let mut events = state.events.subscribe();
+        let results = pass(&state).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let outcomes: Vec<_> = results.iter().map(|(id, outcome, _)| (id.as_str(), outcome.clone())).collect();
+        assert_eq!(outcomes, vec![("l", WakeOutcome::Woken), ("gone", WakeOutcome::NotFound)]);
+        let inbox = server.state().find("INBOX").unwrap().clone();
+        assert_eq!(inbox.messages.len(), 1, "still in INBOX");
+        assert_eq!(inbox.messages[0].uid, uid, "the same message, never moved");
+        assert!(!inbox.messages[0].has_flag("\\Seen"), "unread");
+        assert_eq!(server.count_commands("MOVE") + server.count_commands("COPY"), 0, "nothing is moved");
+
+        let mut sent = Vec::new();
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == "snooze" {
+                    sent.push(payload);
+                }
+            }
+        }
+        assert_eq!(
+            sent,
+            vec![
+                json!({"id": "l", "state": "woken", "woke": true}),
+                json!({"id": "gone", "state": "woken", "woke": false}),
+            ]
+        );
     }
 
     /// Locked keychain: the worker waits, the row is never marked failed.

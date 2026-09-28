@@ -212,6 +212,91 @@ async fn ensure_snoozed_mailbox_goes_under_inbox_when_the_server_refuses_the_roo
     assert_eq!(server.count_commands("CREATE"), 2);
 }
 
+/// The prefix the app snoozes locally on (src/services/workflows/snooze.js):
+/// the server answered, and will not host a Snoozed folder.
+const SNOOZE_REFUSED: &str = "E_SNOOZE_FOLDER_REFUSED:";
+
+async fn snoozed_folder_error(scenario: Scenario) -> (MockImap, String) {
+    let server = MockImap::start(scenario.without_cap("SPECIAL-USE").mailbox(inbox_with(1)));
+    let mut sess = session(&server).await;
+    let err = ensure_snoozed_mailbox(&mut sess).await.expect_err("no Snoozed folder to be had");
+    (server, err)
+}
+
+/// Neither the root nor INBOX is inside the personal namespace, so both
+/// CREATEs are refused and nothing is made.
+#[async_std::test]
+async fn ensure_snoozed_mailbox_reports_a_server_that_refuses_both_creates() {
+    let mut scenario = Scenario::new();
+    scenario.state.personal_namespace = Some("Mail/".into());
+    let (server, err) = snoozed_folder_error(scenario).await;
+    assert!(err.starts_with(SNOOZE_REFUSED), "{err}");
+    assert_eq!(server.count_commands("CREATE"), 2);
+    assert_eq!(server.state().mailboxes.len(), 1, "nothing was created");
+}
+
+/// A folder or label named Snoozed that LIST does not show: the retry under
+/// INBOX is skipped on purpose, so there is nothing else to try.
+#[async_std::test]
+async fn ensure_snoozed_mailbox_reports_an_already_exists_it_cannot_see() {
+    let (server, err) = snoozed_folder_error(Scenario::new().fault(
+        Trigger::on("CREATE"),
+        Action::Respond("NO".into(), "[ALREADYEXISTS] Mailbox already exists".into()),
+    ))
+    .await;
+    assert!(err.starts_with(SNOOZE_REFUSED), "{err}");
+    assert_eq!(server.count_commands("CREATE"), 1);
+}
+
+#[async_std::test]
+async fn ensure_snoozed_mailbox_reports_a_bad_reply_to_create() {
+    let (_server, err) = snoozed_folder_error(
+        Scenario::new().fault(Trigger::on("CREATE"), Action::Respond("BAD".into(), "Invalid mailbox name".into())),
+    )
+    .await;
+    assert!(err.starts_with(SNOOZE_REFUSED), "{err}");
+}
+
+/// A NIL delimiter is a namespace with no hierarchy: nothing goes under
+/// INBOX, so a refused root CREATE is the end of it.
+#[async_std::test]
+async fn ensure_snoozed_mailbox_reports_a_refusal_with_no_delimiter_to_nest_under() {
+    let mut scenario = Scenario::new().fault(
+        Trigger::on("LIST"),
+        Action::RespondRaw("* LIST (\\HasNoChildren) NIL \"INBOX\"\r\n{tag} OK LIST completed\r\n".into()),
+    );
+    scenario.state.personal_namespace = Some("Mail/".into());
+    let (server, err) = snoozed_folder_error(scenario).await;
+    assert!(err.starts_with(SNOOZE_REFUSED), "{err}");
+    assert_eq!(server.count_commands("CREATE"), 1);
+}
+
+/// A server that did not answer is not a server that refused: the app shows
+/// these as errors rather than snoozing locally.
+#[async_std::test]
+async fn ensure_snoozed_mailbox_does_not_type_a_failed_list_or_a_dropped_create() {
+    let (_server, err) = snoozed_folder_error(
+        Scenario::new().fault(Trigger::on("LIST"), Action::Respond("NO".into(), "LIST unavailable".into())),
+    )
+    .await;
+    assert!(!err.starts_with(SNOOZE_REFUSED), "{err}");
+
+    let (_server, err) =
+        snoozed_folder_error(Scenario::new().fault(Trigger::on("CREATE"), Action::DropConnection)).await;
+    assert!(!err.starts_with(SNOOZE_REFUSED), "{err}");
+}
+
+/// Trash and Sent keep their plain error text: only Snoozed has a fallback.
+#[async_std::test]
+async fn ensure_sent_mailbox_refusal_carries_no_snooze_code() {
+    let mut scenario = Scenario::new().without_cap("SPECIAL-USE").mailbox(inbox_with(1));
+    scenario.state.personal_namespace = Some("Mail/".into());
+    let server = MockImap::start(scenario);
+    let mut sess = session(&server).await;
+    let err = ensure_sent_mailbox(&mut sess).await.expect_err("refused");
+    assert!(err.starts_with("CREATE "), "{err}");
+}
+
 #[async_std::test]
 async fn ensure_sent_mailbox_goes_under_inbox_when_the_server_refuses_the_root() {
     let server = MockImap::start(

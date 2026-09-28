@@ -1908,13 +1908,37 @@ pub async fn delete_email(
     }
 }
 
+/// Why `ensure_role_mailbox` came back without a folder. `Refused`: the
+/// server answered CREATE with a tagged NO or BAD and will say the same again
+/// (another namespace, no permission, a hidden name, no hierarchy to nest
+/// under). `Failed`: it did not answer (LIST, a dropped connection).
+enum RoleMailboxError {
+    Refused(String),
+    Failed(String),
+}
+
+impl From<RoleMailboxError> for String {
+    fn from(e: RoleMailboxError) -> String {
+        match e {
+            RoleMailboxError::Refused(m) | RoleMailboxError::Failed(m) => m,
+        }
+    }
+}
+
+fn create_error(e: async_imap::error::Error, message: String) -> RoleMailboxError {
+    match e {
+        async_imap::error::Error::No(_) | async_imap::error::Error::Bad(_) => RoleMailboxError::Refused(message),
+        _ => RoleMailboxError::Failed(message),
+    }
+}
+
 async fn ensure_role_mailbox(
     session: &mut ImapSession,
     attr_substring: &str,
     create_name: &str,
     candidates: &[&str],
-) -> Result<String, String> {
-    let names = list_names(session).await?;
+) -> Result<String, RoleMailboxError> {
+    let names = list_names(session).await.map_err(RoleMailboxError::Failed)?;
 
     let entries: Vec<(String, Vec<String>)> = names
         .iter()
@@ -1958,13 +1982,16 @@ async fn ensure_role_mailbox(
         Err(async_imap::error::Error::No(msg)) if inbox_delimiter.is_some() && !msg.to_uppercase().contains("ALREADYEXISTS") => {
             let nested = format!("INBOX{}{}", inbox_delimiter.unwrap_or_default(), create_name);
             tracing::warn!("[ensure_role_mailbox] CREATE '{}' refused ({}); trying '{}'", create_name, msg, nested);
-            session
-                .create(&nested)
-                .await
-                .map_err(|e| format!("CREATE {} failed after CREATE {} was refused ({}): {}", nested, create_name, msg, e))?;
+            if let Err(e) = session.create(&nested).await {
+                let message = format!("CREATE {} failed after CREATE {} was refused ({}): {}", nested, create_name, msg, e);
+                return Err(create_error(e, message));
+            }
             nested
         }
-        Err(e) => return Err(format!("CREATE {} failed: {}", create_name, e)),
+        Err(e) => {
+            let message = format!("CREATE {} failed: {}", create_name, e);
+            return Err(create_error(e, message));
+        }
     };
     let _ = session.subscribe(&path).await;
     tracing::info!("[ensure_role_mailbox] Created '{}' (no existing match for attr '{}')", path, attr_substring);
@@ -2040,7 +2067,13 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
         ],
     )
     .await
+    .map_err(String::from)
 }
+
+/// The start of `ensure_snoozed_mailbox`'s error when the server answered and
+/// will not host a Snoozed folder: the app snoozes on this computer instead
+/// (src/services/workflows/snooze.js). Any other error is a real failure.
+pub const SNOOZE_FOLDER_REFUSED: &str = "E_SNOOZE_FOLDER_REFUSED:";
 
 /// Resolve or create the folder Snooze moves mail into
 /// (`app_db::snooze::SNOOZED_MAILBOX`). An existing "Snoozed" anywhere in the
@@ -2048,7 +2081,10 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
 /// server refuses a root-level folder. Callers use the path this returns.
 pub async fn ensure_snoozed_mailbox(session: &mut ImapSession) -> Result<String, String> {
     let name = crate::app_db::snooze::SNOOZED_MAILBOX;
-    ensure_role_mailbox(session, "snoozed", name, &[name]).await
+    ensure_role_mailbox(session, "snoozed", name, &[name]).await.map_err(|e| match e {
+        RoleMailboxError::Refused(m) => format!("{SNOOZE_FOLDER_REFUSED} {m}"),
+        RoleMailboxError::Failed(m) => m,
+    })
 }
 
 /// Where a folder goes when "deleted": under Trash, keeping its leaf name —

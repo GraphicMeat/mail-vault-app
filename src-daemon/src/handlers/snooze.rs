@@ -3,7 +3,9 @@
 //! `snooze.create` records a snooze; it does not move anything. The app moves
 //! the message into the folder `snooze.ensure_folder` resolved, through its
 //! own move workflow (journal, undo, list and cache rules), and then records
-//! each moved message here with the COPYUID the move reported.
+//! each moved message here with the COPYUID the move reported. A local
+//! snooze (the server would not host the folder) moves nothing and records
+//! an empty `snoozedMailbox`.
 //! `snooze.cancel` unsnoozes now through the worker's own `wake_row`.
 use crate::handlers::common::{blocking, done, opt_str_arg, opt_u32_arg, str_arg, u64_arg};
 use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
@@ -103,7 +105,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 }
 
 /// Resolve or create the Snoozed folder on the server; the app moves into
-/// whatever path this answers.
+/// whatever path this answers. An error starting `SNOOZE_FOLDER_REFUSED` is a
+/// server that will not host one, and the app snoozes locally instead.
 async fn ensure_folder(state: &Arc<DaemonState>, account: &ImapConfig) -> Result<String, String> {
     let PooledSessionGuard { mut session, last_selected: _, _permit } = state.imap_pool.get_priority(account).await?;
     let path = imap::ensure_snoozed_mailbox(&mut session).await?;
@@ -125,11 +128,17 @@ async fn cancel(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespons
     if row.state == "woken" {
         return done(id, json_of(row));
     }
-    let outcome = snooze_worker::wake_row(state, &row, false).await;
+    // A local snooze moved nothing: ending the row is the whole undo. The
+    // message is not marked unread, and nothing on the server changes.
+    let outcome = if row.snoozed_mailbox.is_empty() {
+        snooze::WakeOutcome::Woken
+    } else {
+        snooze_worker::wake_row(state, &row, false).await
+    };
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
     let recorded = app_db::with(&state.app_dir, |c| snooze::record_outcome(c, &row.id, &outcome, now));
     if let Ok(row_state) = &recorded {
-        snooze_worker::emit(state, &row.id, row_state);
+        snooze_worker::emit(state, &row.id, row_state, false);
     }
     match outcome {
         // The user asked for it back now: a failure is theirs to see, not a
@@ -216,6 +225,42 @@ mod tests {
         let updated = call(&s, "snooze.reschedule", json!({"id": row["id"], "wakeAt": 123_456})).await;
         assert_eq!(updated["wakeAt"], json!(123_456));
         assert_eq!(updated["state"], json!("snoozed"));
+    }
+
+    fn local_params() -> Value {
+        let mut params = create_params();
+        params["snoozedMailbox"] = json!("");
+        params
+    }
+
+    /// A local snooze (the server would not host a Snoozed folder) is marked
+    /// by an empty `snoozedMailbox`; the app hides the message off that.
+    #[tokio::test]
+    async fn create_keeps_the_empty_folder_of_a_local_snooze() {
+        let s = st();
+        let row = call(&s, "snooze.create", local_params()).await;
+        assert_eq!(row["snoozedMailbox"], json!(""));
+        assert_eq!(row["fromMailbox"], json!("INBOX"));
+        assert_eq!(call(&s, "snooze.list", json!({})).await[0]["snoozedMailbox"], json!(""));
+    }
+
+    /// Undoing a local snooze only ends the row: the message never moved, so
+    /// nothing on the server changes (this state has no credentials to reach
+    /// one) and it is not marked unread. The event says it was no wake, so
+    /// the app raises no new-mail banner for it.
+    #[tokio::test]
+    async fn cancel_of_a_local_row_only_ends_it() {
+        let s = st();
+        let row = call(&s, "snooze.create", local_params()).await;
+        let mut events = s.events.subscribe();
+        let ended = call(&s, "snooze.cancel", json!({"id": row["id"]})).await;
+        assert_eq!(ended["state"], json!("woken"));
+        let line = events.try_recv().expect("the row's end is announced");
+        assert_eq!(
+            mailvault_core::daemon_ipc::parse_event(&line),
+            Some(("snooze".to_string(), json!({"id": row["id"], "state": "woken", "woke": false})))
+        );
+        assert_eq!(call(&s, "snooze.list", json!({})).await, json!([]));
     }
 
     #[tokio::test]
