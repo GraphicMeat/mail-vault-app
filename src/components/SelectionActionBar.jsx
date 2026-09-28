@@ -4,22 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useSelectionStore } from "../stores/selectionStore";
 import { useMessageListStore } from "../stores/messageListStore";
 import { useSearchStore } from "../stores/searchStore";
-import {
-  AlarmClock,
-  Archive,
-  ArchiveRestore,
-  FolderSymlink,
-  ImageDown,
-  Mail,
-  MailOpen,
-  ShieldAlert,
-  ShieldX,
-  Star,
-  StarOff,
-  Tag,
-  Trash2,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { SnoozePicker } from "./SnoozePicker";
 import { canSnooze } from "../services/workflows/snooze";
@@ -37,6 +22,7 @@ import {
 import { getAccountCacheMailboxes } from "../services/cacheManager";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { resolveQuickActionSelectionTarget } from "../utils/quickActions";
+import { quickActionIcon } from "../utils/quickActionIcons";
 import { t, useT } from "../i18n/index.js";
 
 const EMPTY_ARRAY = Object.freeze([]);
@@ -419,23 +405,7 @@ export function SelectionActionBar() {
       entry.action === "tag" &&
         (!localLabels.some((item) => item.id === entry.params?.tagId) ||
           !resolved);
-    const Icon = {
-      archive: Archive,
-      unarchive: ArchiveRestore,
-      delete: Trash2,
-      deleteServer: Trash2,
-      deleteEverywhere: ShieldX,
-      export: ImageDown,
-      move: FolderSymlink,
-      toggleRead: hasUnread ? MailOpen : Mail,
-      markRead: MailOpen,
-      markUnread: Mail,
-      star: Star,
-      unstar: StarOff,
-      tag: Tag,
-      spam: ShieldAlert,
-      snooze: AlarmClock,
-    }[entry.action];
+    const Icon = quickActionIcon(entry.action, { read: !hasUnread });
     return {
       id: entry.id,
       action: entry.action,

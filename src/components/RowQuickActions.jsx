@@ -1,8 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Archive, ArchiveRestore, Forward, FolderInput, ImageDown, Mail, MailOpen,
-  MailPlus, MailX, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2, AlarmClock,
-} from 'lucide-react';
 import { useUnsubscribeStore, unsubscribeTarget } from '../stores/unsubscribeStore';
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
@@ -23,15 +19,9 @@ import { registerRowActions } from '../utils/rowActionRegistry';
 import { actionVisibility } from '../utils/actionVisibility';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
+import { quickActionIcon } from '../utils/quickActionIcons';
 import { useT } from '../i18n/index.js';
 
-const ICONS = {
-  archive: Archive, unarchive: ArchiveRestore, delete: Trash2, deleteServer: Trash2,
-  deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail,
-  star: Star, unstar: StarOff, tag: Tag, move: FolderInput, spam: ShieldAlert,
-  reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
-  export: ImageDown, newMessage: MailPlus, snooze: AlarmClock, unsubscribe: MailX,
-};
 const DESTRUCTIVE = new Set(['delete', 'deleteServer', 'deleteEverywhere']);
 const EMPTY_ARRAY = Object.freeze([]);
 const isLocalOnly = email => email?.source === 'local-only' || email?._origin === 'local-only';
@@ -50,9 +40,12 @@ function sameResolvedAccount(locations) {
 
 function folderPath(folder) { return folder?.path || folder?.name || null; }
 
-export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity, openAt, onBusyChange }) {
+// `configOverride` shows that set instead of the saved one; `preview` (Settings'
+// sample rows) makes every action a no-op and draws a wheel in place.
+export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity, openAt, onBusyChange, configOverride, preview = false }) {
   const t = useT();
-  const { config } = useQuickActionConfiguration('row');
+  const { config: savedConfig } = useQuickActionConfiguration('row');
+  const config = configOverride || savedConfig;
   const localLabels = useTagStore(state => state.tags) || EMPTY_ARRAY;
   const templates = useSettingsStore(state => state.emailTemplates) || EMPTY_ARRAY;
   const composeOpenMode = useSettingsStore(state => state.composeOpenMode);
@@ -230,7 +223,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     return {
       id: entry.id, action: entry.action, label: actionLabel(entry),
       // The toggle shows the envelope of the direction it will take, like its label.
-      Icon: ICONS[entry.action === 'toggleRead' ? (hasUnread ? 'markRead' : 'markUnread') : entry.action],
+      Icon: quickActionIcon(entry.action, { read: !hasUnread }),
       disabled: !!disabledAction,
       // No copy of our own, no purge: it would only repeat "Delete from server".
       // markRead/markUnread, star/unstar and archive/unarchive hide the side
@@ -241,7 +234,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
       isDestructive: DESTRUCTIVE.has(entry.action),
       restoreFocus: !['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
-      onActivate: async event => {
+      onActivate: preview ? () => {} : async event => {
         if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !email.isArchived))); onClose?.(); }
         else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
         else if (entry.action === 'delete') { onClose?.(); hasServerBacked ? requestServerDelete() : requestUnarchive(); }
@@ -289,7 +282,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
 
   return <>
     <span hidden data-row-actions ref={registerMarker} />
-    <QuickActions surface="row" config={menuConfig} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} />
+    <QuickActions surface="row" config={menuConfig} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} preview={preview} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
       currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}

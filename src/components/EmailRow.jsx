@@ -181,7 +181,9 @@ function openRow(email, onSelect) {
   onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
 }
 
-export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false }) {
+// `pinActions` shows the quick actions without a hover; `preview` and
+// `configOverride` pass through to them (Settings' sample rows).
+export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
@@ -229,6 +231,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       data-testid="email-row"
       data-uid={email.uid}
       data-landed={landed || undefined}
+      data-quick-actions-preview={preview || undefined}
       style={style}
       className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
@@ -293,15 +296,16 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       </div>
       </WithSnippet>
 
-      {(live || menuOpen) && <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+      {(live || menuOpen || pinActions) && <div className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 ${pinActions ? '' : 'invisible group-hover:visible group-focus-within:visible'} bg-mail-surface-hover rounded-md px-1`}>
         <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
-          onArchive={handleSave} disabled={isSaving} identity={scopeKey} openAt={menuAt} onBusyChange={holdMenu} />
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} openAt={menuAt} onBusyChange={holdMenu}
+          preview={preview} configOverride={configOverride} />
       </div>}
     </div>
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
@@ -343,6 +347,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       data-testid="email-row"
       data-uid={email.uid}
       data-landed={landed || undefined}
+      data-quick-actions-preview={preview || undefined}
       style={style}
       className={`virtual-row row-compact row-top group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
@@ -394,9 +399,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       </div>
 
       {/* Hover actions */}
-      {(live || menuOpen) && <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+      {(live || menuOpen || pinActions) && <div className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 ${pinActions ? '' : 'invisible group-hover:visible group-focus-within:visible'} bg-mail-surface-hover rounded-md px-1`}>
         <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
-          onArchive={handleSave} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} onBusyChange={holdMenu} />
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} display="icon-only" openAt={menuAt} onBusyChange={holdMenu}
+          preview={preview} configOverride={configOverride} />
       </div>}
     </div>
   );

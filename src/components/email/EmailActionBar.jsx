@@ -1,9 +1,5 @@
 import React, { memo, useState } from 'react';
 import { motion } from 'framer-motion';
-import {
-  Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink,
-  Code, Sun, Moon, ImageDown, Star, StarOff, ShieldAlert, ShieldX, Tag, MailPlus, AlarmClock, MailX,
-} from 'lucide-react';
 import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTagStore } from '../../stores/tagStore';
@@ -19,14 +15,8 @@ import { useQuickActionConfiguration } from '../../hooks/useQuickActionConfigura
 import { useT } from '../../i18n/index.js';
 import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
 import { actionVisibility } from '../../utils/actionVisibility';
+import { quickActionIcon } from '../../utils/quickActionIcons';
 
-const ICONS = {
-  reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
-  archive: Archive, unarchive: Archive, delete: Trash2, deleteServer: Trash2,
-  deleteEverywhere: ShieldX, move: FolderInput, toggleRead: MailOpen, markRead: MailOpen,
-  markUnread: Mail, star: Star, unstar: StarOff, spam: ShieldAlert, tag: Tag,
-  export: ImageDown, open: ExternalLink, source: Code, theme: Sun, newMessage: MailPlus, snooze: AlarmClock, unsubscribe: MailX,
-};
 const EMPTY_ARRAY = Object.freeze([]);
 
 function foldersFor(accountId, state) {
@@ -141,10 +131,11 @@ export const EmailActionBar = memo(function EmailActionBar({
       || entry.action === 'archive' && isArchived;
     return {
       id: entry.id, action: entry.action, label: labelFor(entry),
-      // The toggle shows the envelope of the direction it will take, like its label.
-      // A lone star button is a toggle too: starred, it offers Unstar.
-      Icon: ICONS[entry.action === 'toggleRead' ? (read ? 'markUnread' : 'markRead')
-        : entry.action === 'star' && !hasExplicitStarModes && flagged ? 'unstar' : entry.action],
+      // The toggle shows the envelope of the direction it will take, like its
+      // label. A lone star is a toggle too, drawn filled on a starred message
+      // (an explicit Star is hidden there), and a lone archive on an archived
+      // one offers Unarchive.
+      Icon: quickActionIcon(entry.action, { read, flagged, archived: !!isArchived, dark: !!emailThemeDark }),
       hidden,
       disabled: actionDisabled,
       tone: ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
@@ -192,18 +183,18 @@ export const EmailActionBar = memo(function EmailActionBar({
   const moreEntries = config.entries.filter(item => ['open', 'source'].includes(item.action));
   const groupedConfig = entries => ({ ...config, entries, favoriteId: null });
   if (variant === 'chat' && useReaderDefaultGroups) return <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: .15 }} className="email-action-bar email-action-chat">
-    <div className="email-action-group email-action-main"><QuickActions surface="reader" config={groupedConfig(mainEntries)} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onActionStart={onActionStart} /></div>
+    <div className="email-action-group email-action-main"><QuickActions surface="reader" config={groupedConfig(mainEntries)} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onActionStart={onActionStart} /></div>
     <div className="email-action-group email-action-tools">
-      <QuickActions surface="reader" config={groupedConfig(toolEntries)} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
-      <QuickActions surface="reader" config={{ ...groupedConfig(moreEntries), mode: 'menu' }} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} />
+      <QuickActions surface="reader" config={groupedConfig(toolEntries)} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
+      <QuickActions surface="reader" config={{ ...groupedConfig(moreEntries), mode: 'menu' }} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} />
     </div>
     {snoozePicker}
   </motion.div>;
   if (variant !== 'chat' && useReaderDefaultGroups) return <div className="email-action-bar">
-    <div className="email-action-group email-action-main"><QuickActions surface="reader" config={groupedConfig(mainEntries)} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onActionStart={onActionStart} /></div>
+    <div className="email-action-group email-action-main"><QuickActions surface="reader" config={groupedConfig(mainEntries)} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onActionStart={onActionStart} /></div>
     <div className="email-action-group email-action-tools">
-      <QuickActions surface="reader" config={groupedConfig(toolEntries)} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
-      <QuickActions surface="reader" config={{ ...groupedConfig(moreEntries), mode: 'menu' }} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
+      <QuickActions surface="reader" config={groupedConfig(toolEntries)} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
+      <QuickActions surface="reader" config={{ ...groupedConfig(moreEntries), mode: 'menu' }} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} />
     </div>
     {snoozePicker}
   </div>;

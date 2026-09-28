@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { Mail, MailOpen, Star, StarOff } from 'lucide-react';
+import { ArchiveRestore, Mail, MailOpen, Moon, Sun } from 'lucide-react';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -167,6 +167,19 @@ describe('EmailActionBar — labels name the next action', () => {
     renderBar({ emailThemeDark: true });
     expect(action('Light')).toBeTruthy();
   });
+
+  // The labels flipped; the glyphs did not: Unarchive sat under the Archive
+  // box and Light under a sun it was already showing.
+  it('draws the lone archive as restore on an archived email, and the theme toward where it goes', () => {
+    const glyph = Icon => render(<Icon size={15} />, { container: document.createElement('div') })
+      .container.querySelector('svg').innerHTML;
+    renderBar({ isArchived: true, emailThemeDark: true });
+    expect(action('Unarchive').querySelector('svg').innerHTML).toBe(glyph(ArchiveRestore));
+    expect(action('Light').querySelector('svg').innerHTML).toBe(glyph(Sun));
+    cleanup();
+    renderBar({ emailThemeDark: false });
+    expect(action('Dark').querySelector('svg').innerHTML).toBe(glyph(Moon));
+  });
 });
 
 describe('EmailActionBar — no button without a handler', () => {
@@ -278,16 +291,25 @@ describe('EmailActionBar — star', () => {
     expect(action('Remove star')).toBeTruthy();
   });
 
-  // The label flipped with the flag; the glyph stayed a plain star, so a
-  // starred message offered "Remove star" under the icon for starring.
-  it('flips the star icon with the flag', () => {
-    const glyph = Icon => render(<Icon size={15} />, { container: document.createElement('div') })
-      .container.querySelector('svg').innerHTML;
+  // The star shows the state the message is in, like the list row's own star:
+  // filled once starred, an outline until then. The label still names the
+  // action. Outline and filled share their paths; only the svg's fill differs.
+  it('draws the star filled on a starred message and outlined otherwise', () => {
+    const fill = label => action(label).querySelector('svg').getAttribute('fill');
     renderStar([]);
-    expect(action('Star').querySelector('svg').innerHTML).toBe(glyph(Star));
+    expect(fill('Star')).toBe('none');
     cleanup();
     renderStar(['\\Flagged']);
-    expect(action('Remove star').querySelector('svg').innerHTML).toBe(glyph(StarOff));
+    expect(fill('Remove star')).toBe('currentColor');
+  });
+
+  it('fills an explicit Unstar entry, which only a starred message offers', () => {
+    const configOverride = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: [
+      { id: 'star', action: 'star' }, { id: 'unstar', action: 'unstar' },
+    ] };
+    renderStar(['\\Flagged'], { configOverride });
+    expect(screen.queryByRole('button', { name: 'Star', exact: true })).toBeNull();
+    expect(action('Remove star').querySelector('svg').getAttribute('fill')).toBe('currentColor');
   });
 
   it('hands the open message to the handler', () => {

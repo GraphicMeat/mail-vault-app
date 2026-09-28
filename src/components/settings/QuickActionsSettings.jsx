@@ -1,28 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  AlarmClock,
-  Archive,
-  ArchiveRestore,
-  Code,
-  ExternalLink,
-  FileText,
-  FolderInput,
-  Forward,
-  ImageDown,
-  Mail,
-  MailOpen,
-  MailPlus,
-  MailX,
-  Moon,
-  Reply,
-  ReplyAll,
-  ShieldAlert,
-  ShieldX,
-  Star,
-  StarOff,
-  Tag,
-  Trash2,
-} from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { QuickActions } from "../QuickActions";
 import { AccountReorderList } from "./AccountReorderList";
 import { EmailActionBar } from "../email/EmailActionBar";
@@ -46,37 +23,12 @@ import {
   resolveQuickActions,
 } from "../../utils/quickActions";
 import { quickActionColorFor } from "../../utils/quickActionColors";
+import { QUICK_ACTION_ICONS as ICONS } from "../../utils/quickActionIcons";
 import { formatTime } from "../../utils/dateFormat";
 import { useT } from "../../i18n/index.js";
 import "../../styles/settings-usability.css";
 import "../../styles/account-settings-navigation.css";
 
-const ICONS = {
-  archive: Archive,
-  unarchive: ArchiveRestore,
-  delete: Trash2,
-  deleteServer: Trash2,
-  deleteEverywhere: ShieldX,
-  toggleRead: MailOpen,
-  markRead: MailOpen,
-  markUnread: Mail,
-  star: Star,
-  unstar: StarOff,
-  tag: Tag,
-  move: FolderInput,
-  spam: ShieldAlert,
-  reply: Reply,
-  replyAll: ReplyAll,
-  forward: Forward,
-  replyTemplate: FileText,
-  export: ImageDown,
-  newMessage: MailPlus,
-  open: ExternalLink,
-  source: Code,
-  theme: Moon,
-  snooze: AlarmClock,
-  unsubscribe: MailX,
-};
 const LABELS = {
   archive: "common.archive",
   unarchive: "rowMenu.unarchive",

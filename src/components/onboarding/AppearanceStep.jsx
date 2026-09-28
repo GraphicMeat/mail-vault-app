@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Archive, ArchiveRestore, ArrowRight, Code, ExternalLink, FileText, FolderInput, Forward, ImageDown, Mail, MailOpen, MailPlus, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Sun, Tag, Trash2 } from 'lucide-react';
+import { ArrowRight, Moon, Sun } from 'lucide-react';
 import { useTagStore } from '../../stores/tagStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -14,8 +14,8 @@ import { AppearancePreview } from './AppearancePreview';
 import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
 import { previewNotificationSound } from '../../services/api';
 import { DEFAULT_QUICK_ACTIONS, isQuickActionStyleLinked, normalizeQuickActions, QUICK_ACTION_MODES, QUICK_ACTION_SURFACES } from '../../utils/quickActions';
+import { QUICK_ACTION_ICONS } from '../../utils/quickActionIcons';
 
-const QUICK_ACTION_ICONS = { archive: Archive, unarchive: ArchiveRestore, delete: Trash2, deleteServer: Trash2, deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail, star: Star, unstar: StarOff, tag: Tag, move: FolderInput, spam: ShieldAlert, reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: FileText, export: ImageDown, newMessage: MailPlus, open: ExternalLink, source: Code, theme: Moon };
 const QUICK_ACTION_LABELS = { archive: 'common.archive', unarchive: 'rowMenu.unarchive', delete: 'common.delete', deleteServer: 'rowMenu.deleteServer', deleteEverywhere: 'rowMenu.deleteEverywhere', toggleRead: 'quickActions.action.toggleRead', markRead: 'rowMenu.markRead', markUnread: 'rowMenu.markUnread', star: 'rowMenu.star', unstar: 'rowMenu.unstar', tag: 'quickActions.action.tag', move: 'quickActions.action.move', spam: 'quickActions.action.spam', reply: 'emailActionBar.reply', replyAll: 'emailActionBar.replyAll', forward: 'emailActionBar.forward', replyTemplate: 'quickActions.action.replyTemplate', export: 'common.export', newMessage: 'quickActions.action.newMessage', open: 'common.open', source: 'emailActionBar.source', theme: 'emailActionBar.dark' };
 
 function Choice({ id, active, value, onPick, disabled, children }) {
@@ -53,7 +53,7 @@ export function AppearanceStep({ onContinue }) {
     id: entry.id,
     action: entry.action,
     label: quickActionLabel(entry),
-    Icon: QUICK_ACTION_ICONS[entry.action] || Archive,
+    Icon: QUICK_ACTION_ICONS[entry.action],
     onActivate: () => {},
   }));
   const groups = section === 'layout' ? [
