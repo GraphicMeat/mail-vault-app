@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ArrowRight, Download, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 import MailStorageLocation from '../settings/MailStorageLocation';
@@ -29,7 +29,8 @@ export function StorageStep({ onContinue, onBusyChange }) {
   // while the mail is between two folders.
   // The shell holds its Back and Skip tour on the same flag.
   const [moving, setMoving] = useState(false);
-  const busy = (value) => { setMoving(value); onBusyChange?.(value); };
+  // Stable: MailStorageLocation's effect lists it as a dependency.
+  const busy = useCallback((value) => { setMoving(value); onBusyChange?.(value); }, [onBusyChange]);
   const card = 'settings-section space-y-3';
   const heading = 'font-semibold text-mail-text flex items-center gap-2';
 
