@@ -507,6 +507,24 @@ describe('Reply entry points — header, thread message, row menu', function () 
 
   // ── the row's 3-dot menu ───────────────────────────────────────────
 
+  it('the row menu starts a new conversation with the sender', async function () {
+    await openRowMenu(SUBJECT);
+    expect(await menuLabels()).toContain(`New message to ${SENDER_NAME}`);
+    expect(await clickRowAction('newMessage')).toBe(true);
+
+    const compose = await prefilledCompose(
+      'the row menu\'s "New message to" opened no compose window addressed to the sender',
+    );
+
+    expect(compose.to).toBe(SENDER);
+    // A fresh conversation: no subject, and no original to read beside it.
+    expect(compose.subject).toBe('');
+    expect(await testidPresent('compose-context-toggle')).toBe(false);
+  });
+
+  // Last on purpose: the send below still runs the rest of composeSend (the
+  // staged Sent copy, \Answered), which can thread "Re: ..." into the row the
+  // other cases find by this subject.
   it('the row menu replies with the body loaded', async function () {
     await openRowMenu(SUBJECT);
     expect(await menuLabels()).toContain('Reply');
@@ -538,20 +556,5 @@ describe('Reply entry points — header, thread message, row menu', function () 
     } finally {
       await removeSendProbe();
     }
-  });
-
-  it('the row menu starts a new conversation with the sender', async function () {
-    await openRowMenu(SUBJECT);
-    expect(await menuLabels()).toContain(`New message to ${SENDER_NAME}`);
-    expect(await clickRowAction('newMessage')).toBe(true);
-
-    const compose = await prefilledCompose(
-      'the row menu\'s "New message to" opened no compose window addressed to the sender',
-    );
-
-    expect(compose.to).toBe(SENDER);
-    // A fresh conversation: no subject, and no original to read beside it.
-    expect(compose.subject).toBe('');
-    expect(await testidPresent('compose-context-toggle')).toBe(false);
   });
 });
