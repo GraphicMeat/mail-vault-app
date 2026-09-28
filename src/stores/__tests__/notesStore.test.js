@@ -4,8 +4,10 @@ const harness = vi.hoisted(() => ({
   daemonCall: vi.fn(),
   applyFlagToKeys: vi.fn(),
   deleteEmailFromServer: vi.fn(),
+  vaultApplyFlags: vi.fn(),
   mailState: null,
   cacheMailboxes: {},
+  savedMailboxes: {},
 }));
 
 vi.mock('../../services/daemonClient', () => ({
@@ -15,6 +17,13 @@ vi.mock('../../services/daemonClient', () => ({
 vi.mock('../mailStore', () => ({ useMailStore: { getState: () => harness.mailState } }));
 vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: id => harness.cacheMailboxes[id] || [],
+}));
+// The folder list a past session saved: what the sidebar restores from.
+vi.mock('../../services/db', () => ({
+  getCachedMailboxes: async id => harness.savedMailboxes[id] ?? null,
+}));
+vi.mock('../../services/api', () => ({
+  vaultApplyFlags: (...args) => harness.vaultApplyFlags(...args),
 }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   applyFlagToKeys: (...args) => harness.applyFlagToKeys(...args),
@@ -44,11 +53,13 @@ beforeEach(() => {
   harness.daemonCall.mockReset().mockResolvedValue({ cards: [] });
   harness.applyFlagToKeys.mockReset().mockResolvedValue(undefined);
   harness.deleteEmailFromServer.mockReset().mockResolvedValue(undefined);
+  harness.vaultApplyFlags.mockReset().mockResolvedValue({ renamed: 1 });
   harness.cacheMailboxes = {
     a: [{ path: 'INBOX', name: 'INBOX' }, { path: '[Gmail]/Sent Mail', name: 'Sent Mail', specialUse: '\\Sent' }],
     b: [{ path: 'INBOX', name: 'INBOX' }],
     c: [{ path: 'INBOX', name: 'INBOX' }],
   };
+  harness.savedMailboxes = {};
   harness.mailState = {
     accounts: [
       { id: 'a', email: 'me@x.test' },
@@ -117,6 +128,33 @@ describe('useNotesStore', () => {
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['x']);
   });
 
+  /// The report: star and delete did nothing on a second account's notes.
+  /// Its folders were only ever looked up in this session's memory, which
+  /// holds an account once it has been opened; the list saved last time is
+  /// on disk, and the daemon names a copy's folder from what it is given.
+  it('names the folders of an account not opened this session from the saved list, before asking', async () => {
+    harness.cacheMailboxes.b = null;
+    harness.savedMailboxes.b = [
+      { path: 'INBOX', name: 'INBOX' },
+      { path: 'Projects', name: 'Projects', children: [{ path: 'Projects/2026', name: '2026' }] },
+    ];
+    const note = card('b-note', { accountId: 'b', copies: [{ accountId: 'b', mailbox: 'Projects/2026', uid: 4 }] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    const [, params] = harness.daemonCall.mock.calls[0];
+    expect(params.accounts.find(account => account.accountId === 'b').knownMailboxes).toEqual(['INBOX', 'Projects', 'Projects/2026']);
+    const { accounts } = useNotesStore.getState();
+    expect(serverCopies(note, accounts).map(copy => copy.uid)).toEqual([4]);
+    expect(canToggleStar(note, accounts)).toBe(true);
+  });
+
+  it('never replaces a folder list this session already holds with the saved one', async () => {
+    harness.savedMailboxes.a = [{ path: 'Old', name: 'Old' }];
+    await useNotesStore.getState().open();
+    const [, params] = harness.daemonCall.mock.calls[0];
+    expect(params.accounts.find(account => account.accountId === 'a').knownMailboxes).toEqual(['INBOX', '[Gmail]/Sent Mail']);
+  });
+
   it('says it could not load rather than showing an empty board', async () => {
     harness.daemonCall.mockRejectedValue(new Error('index unavailable'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -145,6 +183,24 @@ describe('useNotesStore', () => {
     harness.daemonCall.mockResolvedValue({ count: 2 });
     await useNotesStore.getState().markDone(note);
     expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: true });
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
+  });
+
+  /// Refresh, then Done before the list answers: that list was read before
+  /// the Done landed and still holds the card.
+  it('a list already on its way when a note is finished does not bring it back', async () => {
+    const note = card('d');
+    harness.daemonCall.mockResolvedValue({ cards: [note, card('keep')] });
+    await useNotesStore.getState().open();
+    let answer;
+    harness.daemonCall.mockImplementation(method => (method === 'notes.list'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve(method === 'tags.list' ? [] : { count: 1 })));
+    const loading = useNotesStore.getState().load();
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
+    await useNotesStore.getState().markDone(note);
+    answer({ cards: [note, card('keep')] });
+    await loading;
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
   });
 
@@ -183,6 +239,40 @@ describe('useNotesStore', () => {
     await useNotesStore.getState().toggleStar(useNotesStore.getState().cards[0]);
     expect(harness.applyFlagToKeys).toHaveBeenLastCalledWith(['a:INBOX:3', 'a:[Gmail]/Sent Mail:9'], '\\Flagged', false);
     expect(useNotesStore.getState().cards[0].starred).toBe(false);
+  });
+
+  /// A board card is no list row, so the server write leaves the vault
+  /// copies as they were, and the next list reads the star from them.
+  it('writes the star to every vault copy it starred, keeping each copy\'s other flags', async () => {
+    const note = card('v', { copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Seen'] },
+      { accountId: 'b', mailbox: 'INBOX', uid: 7, flags: [] },
+    ] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    await useNotesStore.getState().toggleStar(note);
+    expect(harness.vaultApplyFlags.mock.calls).toEqual([
+      ['a', 'INBOX', 'me@x.test', [{ uid: 3, flags: ['\\Seen', '\\Flagged'] }]],
+      ['b', 'INBOX', 'work@y.test', [{ uid: 7, flags: ['\\Flagged'] }]],
+    ]);
+
+    harness.vaultApplyFlags.mockClear();
+    const starred = card('w', { starred: true, copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 5, flags: ['\\Seen', '\\Flagged'] }] });
+    useNotesStore.setState({ cards: [starred] });
+    await useNotesStore.getState().toggleStar(starred);
+    expect(harness.vaultApplyFlags).toHaveBeenCalledWith('a', 'INBOX', 'me@x.test', [{ uid: 5, flags: ['\\Seen'] }]);
+    expect(useNotesStore.getState().cards[0].starred).toBe(false);
+  });
+
+  it('keeps the star when only the vault copy could not be written', async () => {
+    const note = card('v');
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    harness.vaultApplyFlags.mockRejectedValue(new Error('vault gone'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await useNotesStore.getState().toggleStar(note);
+    warn.mockRestore();
+    expect(useNotesStore.getState().cards[0].starred).toBe(true);
   });
 
   /// A copy the server cannot be asked about may be the flagged one: a star

@@ -68,15 +68,16 @@ struct Card {
     links: Vec<String>,
     attachments: Vec<NoteAttachment>,
     starred: bool,
-    /// (accountId, mailbox, uid, messageId, msgKey) — `mailbox` is the real
-    /// IMAP path (resolved via `known_mailboxes`, like `views.rs`), the first
-    /// four ship in the reply, `msgKey` is only for the `Done` tag lookup
-    /// below. `msgKey`'s fallback form is keyed by the raw `vault_dir` slug
-    /// (`app_db::identity::msg_key`), and `MessageRef::msg_key()` re-derives
-    /// that same slug from this `mailbox` when a copy comes back through
-    /// `notes.set_done` (`vault_dir_name(real_path) == vault_dir`), so the
-    /// two never disagree.
-    copies: Vec<(String, String, u32, Option<String>, String)>,
+    /// (accountId, mailbox, uid, messageId, msgKey, flags): `mailbox` is the
+    /// real IMAP path (resolved via `known_mailboxes`, like `views.rs`); all
+    /// but `msgKey` ship in the reply, `msgKey` is only for the `Done` tag
+    /// lookup below. `msgKey`'s fallback form is keyed by the raw `vault_dir`
+    /// slug (`app_db::identity::msg_key`), and `MessageRef::msg_key()`
+    /// re-derives that same slug from this `mailbox` when a copy comes back
+    /// through `notes.set_done` (`vault_dir_name(real_path) == vault_dir`), so
+    /// the two never disagree. `flags` are the vault file's, as the server
+    /// names them: a star written to the vault copy needs its whole list.
+    copies: Vec<(String, String, u32, Option<String>, String, Vec<String>)>,
 }
 
 /// The dedupe key from the track spec's ruling: the Message-ID when the index
@@ -144,7 +145,9 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
             candidate.attachments.iter().map(|a| (a.filename.clone(), a.mime.clone())).collect();
         let (column, display_subject) = notes_to_self::classify(&candidate.subject, &snippet, &attachment_pairs);
         let links = notes_to_self::links(&candidate.subject, &snippet);
-        let starred = parse_flags_from_filename(&candidate.filename).iter().any(|f| f == "\\Flagged");
+        let flags: Vec<String> =
+            parse_flags_from_filename(&candidate.filename).into_iter().filter(|f| f.starts_with('\\')).collect();
+        let starred = flags.iter().any(|f| f == "\\Flagged");
         let msg_key = app_db::identity::msg_key(candidate.message_id.as_deref(), &candidate.vault_dir, candidate.uid);
         let key = dedupe_key(candidate.message_id.as_deref(), &candidate.from_addr_lc, &display_subject, candidate.date_utc);
         // Same resolution `views.rs` uses: a real server path when one maps
@@ -154,7 +157,7 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         let known = known_mailboxes.get(&candidate.account_id).unwrap_or(&empty);
         let (resolved, local_only, _) = crate::handlers::mail_search::mailbox_for_vault_dir(&candidate.vault_dir, known);
         let mailbox = if local_only { candidate.vault_dir.clone() } else { resolved };
-        let copy = (candidate.account_id.clone(), mailbox, candidate.uid, candidate.message_id.clone(), msg_key);
+        let copy = (candidate.account_id.clone(), mailbox, candidate.uid, candidate.message_id.clone(), msg_key, flags);
         let date_utc = candidate.date_utc;
         let is_new = !cards.contains_key(&key);
         let card = cards.entry(key.clone()).or_insert_with(|| Card {
@@ -179,7 +182,7 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     // in which case nothing is done and no app.db write happens just to look.
     let mut per_account_keys: HashMap<String, Vec<String>> = HashMap::new();
     for card in cards.values() {
-        for (account_id, _, _, _, msg_key) in &card.copies {
+        for (account_id, _, _, _, msg_key, _) in &card.copies {
             per_account_keys.entry(account_id.clone()).or_default().push(msg_key.clone());
         }
     }
@@ -203,15 +206,15 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         let is_done = card
             .copies
             .iter()
-            .any(|(account_id, _, _, _, msg_key)| done_of.get(&(account_id.clone(), msg_key.clone())).copied().unwrap_or(false));
+            .any(|(account_id, _, _, _, msg_key, _)| done_of.get(&(account_id.clone(), msg_key.clone())).copied().unwrap_or(false));
         if is_done && !include_done {
             continue;
         }
         let copies: Vec<Value> = card
             .copies
             .iter()
-            .map(|(account_id, vault_dir, uid, message_id, _)| {
-                serde_json::json!({ "accountId": account_id, "mailbox": vault_dir, "uid": uid, "messageId": message_id })
+            .map(|(account_id, vault_dir, uid, message_id, _, flags)| {
+                serde_json::json!({ "accountId": account_id, "mailbox": vault_dir, "uid": uid, "messageId": message_id, "flags": flags })
             })
             .collect();
         let attachments: Vec<Value> = card
@@ -439,6 +442,23 @@ mod tests {
         call(&s, "notes.set_done", json!({ "copies": copies, "done": false })).await;
         let restored = call(&s, "notes.list", json!({ "accounts": accts })).await;
         assert_eq!(restored["cards"].as_array().unwrap().len(), 1, "removing the tag brings it back");
+    }
+
+    /// A board card is no list row, so the app writes a star to the vault
+    /// copies itself, and a vault flag write takes the whole list: each copy
+    /// says what it has, as the server names it.
+    #[tokio::test]
+    async fn each_copy_carries_its_own_flags() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Sent", 1, "AS", Some("<n11@x.test>"), "me@x.test", "me@x.test", "Flags", 100);
+        note_row(&conn, "a", "INBOX", 9, "FS", Some("<n11@x.test>"), "me@x.test", "me@x.test", "Flags", 100);
+        install(&s, conn);
+        let out = call(&s, "notes.list", json!({ "accounts": accounts(&[("a", "me@x.test")]) })).await;
+        let copies = out["cards"][0]["copies"].as_array().unwrap();
+        let flags_of = |uid: u64| copies.iter().find(|c| c["uid"] == uid).unwrap()["flags"].clone();
+        assert_eq!(flags_of(1), json!(["\\Seen"]));
+        assert_eq!(flags_of(9), json!(["\\Seen", "\\Flagged"]));
     }
 
     #[tokio::test]

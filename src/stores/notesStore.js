@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
+import { getCachedMailboxes } from '../services/db';
 import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
 import { accountPayload } from './viewStore';
 import { useTagStore, tagRowKey } from './tagStore';
+import { flattenMailboxes } from './slices/unifiedHelpers';
 import { compareNames } from '../utils/collation';
 
 /// The columns the daemon files an untagged note into, in board order. A
@@ -54,13 +56,25 @@ export function canToggleStar(card, accounts) {
 }
 
 /// Every account the sidebar shows, in the shape `views.*` already sends.
-function visibleAccounts() {
+/// This session only holds the folders of an account it has opened; any
+/// other one's come from the list saved last time, the one the sidebar
+/// restores from. Without them no copy of its notes could be starred or
+/// deleted.
+async function visibleAccounts() {
   const mail = useMailStore.getState();
   const hidden = useSettingsStore.getState().hiddenAccounts || {};
-  return (mail.accounts || []).filter(account => !hidden[account.id]).map(account => accountPayload(account, mail));
+  return Promise.all((mail.accounts || []).filter(account => !hidden[account.id]).map(async account => {
+    const payload = accountPayload(account, mail);
+    if (payload.knownMailboxes.length) return payload;
+    const saved = await getCachedMailboxes(account.id).catch(() => null);
+    return { ...payload, knownMailboxes: flattenMailboxes(saved).map(box => box.path) };
+  }));
 }
 
 let generation = 0;
+/// Cards finished or deleted since the last list was asked for. A list
+/// already on its way was read before that and still holds them.
+let offBoard = new Set();
 
 export const useNotesStore = create((set, get) => ({
   isOpen: false,
@@ -71,29 +85,36 @@ export const useNotesStore = create((set, get) => ({
   accounts: [],
   filter: '',
   detailOpen: false,
+  /// The card the reader shows, for the reader's own star, done and delete.
+  openKey: null,
   /// Card key -> true while a star, done or delete for it is running: a
   /// second click on the same card waits for the first to finish.
   busy: {},
 
   open: async () => {
     if (get().isOpen) return;
-    set({ isOpen: true, filter: '', detailOpen: false });
+    set({ isOpen: true, filter: '', detailOpen: false, openKey: null });
     await get().load();
   },
 
   close: () => {
     generation += 1;
-    set({ isOpen: false, status: 'idle', cards: [], filter: '', detailOpen: false });
+    set({ isOpen: false, status: 'idle', cards: [], filter: '', detailOpen: false, openKey: null });
   },
 
   load: async () => {
     const mine = ++generation;
-    const accounts = visibleAccounts();
-    set({ status: 'loading', accounts });
+    offBoard = new Set();
+    set({ status: 'loading' });
     try {
+      // The daemon names each copy's folder from these lists, so they are
+      // complete before it is asked.
+      const accounts = await visibleAccounts();
+      if (mine !== generation) return;
+      set({ accounts });
       const reply = await daemonCall('notes.list', { accounts });
       if (mine !== generation) return;
-      set({ status: 'ready', cards: Array.isArray(reply?.cards) ? reply.cards : [] });
+      set({ status: 'ready', cards: (Array.isArray(reply?.cards) ? reply.cards : []).filter(card => !offBoard.has(card.key)) });
     } catch (error) {
       if (mine !== generation) return;
       console.warn('[notes] could not list notes:', error?.message || error);
@@ -102,13 +123,14 @@ export const useNotesStore = create((set, get) => ({
   },
 
   setFilter: filter => set({ filter }),
-  setDetailOpen: detailOpen => set({ detailOpen }),
+  setDetailOpen: (detailOpen, openKey = null) => set({ detailOpen, openKey }),
 
   /// Done tags every copy with the app tag `Done`; the server is not touched.
   /// The tag store is told: the tag may be new (its list and counts), and the
   /// copies' cached chips are dropped so any row showing them asks again.
   markDone: card => guarded(card, async () => {
     await daemonCall('notes.set_done', { copies: card.copies, done: true });
+    offBoard.add(card.key);
     set({ cards: get().cards.filter(other => other.key !== card.key) });
     const stale = new Set((card.copies || []).map(copy => tagRowKey(copy.accountId, copy.mailbox, copy.uid)));
     useTagStore.setState(state => ({
@@ -121,17 +143,26 @@ export const useNotesStore = create((set, get) => ({
   /// list row, so the one-row toggle (which reads the row) would always star.
   toggleStar: card => guarded(card, async () => {
     if (!canToggleStar(card, get().accounts)) return;
-    const keys = serverCopies(card, get().accounts).map(copyKey);
+    const copies = serverCopies(card, get().accounts);
     const starred = !card.starred;
     const flip = value => set({ cards: get().cards.map(other => (other.key === card.key ? { ...other, starred: value } : other)) });
     flip(starred);
     try {
       const { applyFlagToKeys } = await import('../services/workflows/messageMutations');
-      await applyFlagToKeys(keys, '\\Flagged', starred);
+      await applyFlagToKeys(copies.map(copyKey), '\\Flagged', starred);
     } catch (error) {
       flip(!starred);
       throw error;
     }
+    // That write takes a vault copy's flags from its list row, and a board
+    // card usually has none: the copies kept their old flags, and the board
+    // reads its stars from them.
+    const { vaultApplyFlags } = await import('../services/api');
+    const mailAccounts = useMailStore.getState().accounts || [];
+    await Promise.all(copies.map(copy => vaultApplyFlags(copy.accountId, copy.mailbox,
+      mailAccounts.find(account => account.id === copy.accountId)?.email || null,
+      [{ uid: copy.uid, flags: [...(copy.flags || []).filter(flag => flag !== '\\Flagged'), ...(starred ? ['\\Flagged'] : [])] }])
+      .catch(error => console.warn('[notes] vault copy not starred:', error?.message || error))));
   }),
 
   /// Every copy the server knows goes through the reader's own server delete.
@@ -146,6 +177,7 @@ export const useNotesStore = create((set, get) => ({
     const gone = new Set();
     const keep = () => {
       const left = (card.copies || []).filter(copy => !gone.has(copy));
+      if (!left.length) offBoard.add(card.key);
       set({ cards: left.length
         ? get().cards.map(other => (other.key === card.key ? { ...other, copies: left } : other))
         : get().cards.filter(other => other.key !== card.key) });

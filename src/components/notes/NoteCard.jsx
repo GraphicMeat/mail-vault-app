@@ -5,6 +5,8 @@ import { getCleanBase64 } from '../../services/attachmentUtils';
 import { useT, getLocale } from '../../i18n';
 
 const locale = () => (getLocale() === 'zh-Hans' ? 'zh-CN' : getLocale());
+/// A card action; one it cannot take reads as unusable, never as live.
+const ACTION = 'p-1 rounded hover:bg-mail-surface-hover disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent';
 
 /// A link's host without the `www.`, once per host. A string that is not a URL
 /// shows nothing rather than itself.
@@ -60,6 +62,7 @@ export default function NoteCard({
   // The card's own actions never open it.
   const act = handler => event => { event.stopPropagation(); handler?.(card); };
   const hasLink = card.links?.length > 0;
+  const starLabel = card.starred ? t('notes.unstar') : t('notes.star');
 
   return <article
     data-testid="note-card" data-note-card data-key={card.key} data-col={col} data-row={row}
@@ -74,10 +77,7 @@ export default function NoteCard({
     }}
     className="group flex flex-col gap-2 p-3 rounded-lg border border-mail-border bg-mail-surface cursor-pointer
       hover:border-mail-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mail-accent">
-    <div className="flex items-start gap-2">
-      <h3 className="flex-1 min-w-0 text-sm font-semibold text-mail-text break-words" data-testid="note-subject">{subject}</h3>
-      {card.starred && <Star size={14} className="shrink-0 text-mail-warning fill-current" aria-hidden="true" />}
-    </div>
+    <h3 className="text-sm font-semibold text-mail-text break-words" data-testid="note-subject">{subject}</h3>
     {card.snippet && <p className="text-xs text-mail-text-muted line-clamp-3 break-words" data-testid="note-snippet">{card.snippet}</p>}
     {photo && <PhotoThumb copy={card.copies[0]} attachment={photo} />}
     {domains.length > 0 && <ul className="flex flex-wrap gap-1" aria-label={t('notes.links')}>
@@ -95,18 +95,19 @@ export default function NoteCard({
         style={{ backgroundColor: color }} title={account?.email} aria-label={account?.email} role="img" />
       <time dateTime={card.date ? new Date(card.date * 1000).toISOString() : undefined} className="flex-1">{date}</time>
       <span className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 group-focus-within:opacity-100">
-        {hasLink && <button type="button" className="p-1 rounded hover:bg-mail-surface-hover" data-testid="note-copy-link"
+        {hasLink && <button type="button" className={ACTION} data-testid="note-copy-link"
           title={t('notes.copyLink')} aria-label={t('notes.copyLink')} onClick={act(onCopyLink)}><Copy size={13} /></button>}
-        {hasLink && <button type="button" className="p-1 rounded hover:bg-mail-surface-hover" data-testid="note-open-link"
+        {hasLink && <button type="button" className={ACTION} data-testid="note-open-link"
           title={t('notes.openLink')} aria-label={t('notes.openLink')} onClick={act(onOpenLink)}><ExternalLink size={13} /></button>}
-        <button type="button" className="p-1 rounded hover:bg-mail-surface-hover" data-testid="note-star"
+        <button type="button" className={ACTION} data-testid="note-star"
           disabled={!canStar || busy} aria-pressed={!!card.starred}
-          title={card.starred ? t('notes.unstar') : t('notes.star')} aria-label={card.starred ? t('notes.unstar') : t('notes.star')}
+          title={canStar ? starLabel : t('notes.folderNotLoaded')} aria-label={starLabel}
           onClick={act(onStar)}><Star size={13} className={card.starred ? 'fill-current text-mail-warning' : ''} /></button>
-        <button type="button" className="p-1 rounded hover:bg-mail-surface-hover" data-testid="note-done"
+        <button type="button" className={ACTION} data-testid="note-done"
           disabled={busy} title={t('notes.markDone')} aria-label={t('notes.markDone')} onClick={act(onDone)}><Check size={13} /></button>
-        <button type="button" className="p-1 rounded hover:bg-mail-surface-hover text-mail-danger" data-testid="note-delete"
-          disabled={!canDelete || busy} title={t('common.delete')} aria-label={t('common.delete')} onClick={act(onDelete)}><Trash2 size={13} /></button>
+        <button type="button" className={`${ACTION} text-mail-danger`} data-testid="note-delete"
+          disabled={!canDelete || busy} title={canDelete ? t('common.delete') : t('notes.folderNotLoaded')} aria-label={t('common.delete')}
+          onClick={act(onDelete)}><Trash2 size={13} /></button>
       </span>
     </div>
   </article>;
