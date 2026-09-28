@@ -23,23 +23,25 @@ export function unifiedSeed(state, folder, snapshot = null) {
   const { hiddenAccounts } = useSettingsStore.getState();
   const seen = new Set();
   const rows = [];
-  const push = (e) => {
-    const key = `${e._accountId}:${e.uid}`;
-    if (!seen.has(key)) { seen.add(key); rows.push(e); }
-  };
   for (const account of state.accounts || []) {
     if (hiddenAccounts[account.id]) continue;
     const path = _resolveMailboxPath(_getAccountMailboxes(account.id) || [], folder);
-    const tag = (e, mailbox = path) => ({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: mailbox });
-    for (const e of _getRestore(account.id, path, state.viewMode || 'all')?.firstWindow || []) push(tag(e));
-    if (snapshot?.activeAccountId === account.id) for (const e of snapshot.emails || []) push(tag(e, e._mailbox || path));
+    const push = (e, mailbox = path) => {
+      const key = `${account.id}:${e.uid}`;
+      if (!seen.has(key)) { seen.add(key); rows.push({ e, account, mailbox }); }
+    };
+    for (const e of _getRestore(account.id, path, state.viewMode || 'all')?.firstWindow || []) push(e);
+    if (snapshot?.activeAccountId === account.id) for (const e of snapshot.emails || []) push(e, e._mailbox || path);
   }
-  return rows.sort(byDateDesc).slice(0, CHUNK_SIZE);
+  // Tag only the rows that make the cut: the snapshot can be the whole
+  // window of the account just left.
+  return rows.sort((a, b) => byDateDesc(a.e, b.e)).slice(0, CHUNK_SIZE)
+    .map(({ e, account, mailbox }) => ({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: mailbox }));
 }
 
-// The seed's store write: rows up, the skeleton only when there are none.
-// The account being left's local rows carry no account and would draw
-// unscoped here; the load's last step puts every account's back.
+// The seed's store write. The account being left's local rows carry no
+// account and would draw unscoped here; the load's last step puts every
+// account's back.
 function paintSeed(seed) {
   return {
     emails: seed,
@@ -47,8 +49,15 @@ function paintSeed(seed) {
     serverUids: serverUids(new Set(seed.map(e => e.uid)), { complete: false }),
     totalEmails: seed.length,
     _sortedEmailsFingerprint: '',
-    loading: seed.length === 0,
   };
+}
+
+// The skeleton shows while the derived list is empty, not the raw rows: the
+// Vault view draws from localEmails, which only the load's last step fills,
+// and an empty list with loading off reads "no mail".
+function settleLoading(get, useMailStore) {
+  get().updateSortedEmails();
+  useMailStore.setState({ loading: get().sortedEmails.length === 0 });
 }
 
 
@@ -78,7 +87,7 @@ export async function setUnifiedInbox(enabled) {
       selectedEmailIds: new Set(),
       ...paintSeed(unifiedSeed(get(), 'INBOX', preUnifiedSnapshot)),
     });
-    get().updateSortedEmails();
+    settleLoading(get, useMailStore);
     get().loadUnifiedInbox(preUnifiedSnapshot, 'INBOX');
   } else {
     const _loadAbortController = getLoadAbortController();
@@ -130,7 +139,7 @@ export async function switchUnifiedFolder(mailbox) {
     selectedEmailIds: new Set(),
     ...paintSeed(unifiedSeed(get(), mailbox)),
   });
-  get().updateSortedEmails();
+  settleLoading(get, useMailStore);
   get().loadUnifiedInbox(null, mailbox);
 }
 
@@ -207,9 +216,8 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         serverUids: serverUids(new Set(rows.map(e => e.uid)), { complete: false }),
         totalEmails: Math.max(rows.length, live.totalEmails || 0),
         _sortedEmailsFingerprint: '',
-        loading: false,
       });
-      get().updateSortedEmails();
+      settleLoading(get, useMailStore);
     }, 0);
   };
 

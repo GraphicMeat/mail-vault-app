@@ -1662,6 +1662,18 @@ describe('All Inboxes paints before every account has read its disk', () => {
     expect(useMailStore.getState().loading).toBe(true);
   });
 
+  it('in the Vault view, which draws local rows only, the skeleton stays up instead of an empty list', async () => {
+    mockGetRestoreDescriptor.mockImplementation(id => (id === 'acct-a' ? { firstWindow: rowsOf('a', [1, 2], '20') } : null));
+    mockGetEmailHeadersPartial.mockReturnValue(new Promise(() => {}));
+    leaveSingleFolder();
+    useMailStore.setState({ viewMode: 'local' });
+
+    await useMailStore.getState().setUnifiedInbox(true);
+
+    expect(useMailStore.getState().sortedEmails).toEqual([]);
+    expect(useMailStore.getState().loading).toBe(true);
+  });
+
   it("paints one account's rows while another's read is still out, then merges both", async () => {
     let releaseB;
     mockGetEmailHeadersPartial.mockImplementation(id => (id === 'acct-a'

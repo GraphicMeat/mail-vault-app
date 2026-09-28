@@ -26,7 +26,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "app.release_commits" => {
             let Some(url) = compare_url(params) else { return Some(RpcResponse::success(id, Value::Null)) };
-            let fetched = if state.net.is_online() { fetch("release commits", &url).await } else { Err("offline".into()) };
+            let fetched = if state.net.is_online() { fetch("release notes", &url).await } else { Err("offline".into()) };
             Some(RpcResponse::success(id, commits_answer(fetched)))
         }
         _ => None,
