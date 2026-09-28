@@ -1435,7 +1435,13 @@ export async function applyServerRemoval(uid, {
   const targetIsInSpanningView = liveSpansMailboxes
     && [...currentEmails, ...currentSentEmails].some(sameMessage);
   // `counted`: a delete's optimistic paint (_hideDeleted) already took it off.
-  const totalIncludesTarget = !counted && (targetViewMatches || targetIsInSpanningView);
+  // A view that spans mailboxes counts only what it lists, so it drops one
+  // only when a row in it was the message. A branch listing's activeMailbox
+  // is its root, a real folder, so "the view is the target" is no proof there:
+  // the root's uid may name no row in the branch at all. A single folder's
+  // list is paged, so a row that is not loaded is still in its count.
+  const totalIncludesTarget = !counted
+    && (liveSpansMailboxes ? targetIsInSpanningView : targetViewMatches);
   const filteredEmails = currentEmails.filter(e => !isRemoved(e));
   const filteredSent = currentSentEmails.filter(e => !isRemoved(e));
   const newTotal = totalIncludesTarget
