@@ -50,7 +50,8 @@ pub struct MboxImportResult {
     #[serde(rename = "accountId")]
     pub account_id: String,
     pub mailbox: String,
-    /// Messages the folder already held (`import_rehome`'s same-message rule),
+    /// Messages the folder already held, in the vault or on the server
+    /// (`import_rehome`'s same-message rule),
     /// not written again.
     #[serde(rename = "skippedCount")]
     pub skipped_count: u32,

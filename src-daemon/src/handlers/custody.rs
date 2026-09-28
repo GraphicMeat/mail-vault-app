@@ -332,8 +332,12 @@ pub(crate) fn rehome_imports_for(state: &Arc<DaemonState>, account_id: &str, mai
     let protected = daemon_custody::with_conn(state, |c| entries::local_uids(c, account_id, mailbox))?;
     // The daemon holds no account list, and resolving the account's
     // credentials could raise the keychain prompt on a folder open: a Graph
-    // folder is told by its header rows, which Graph writes with this source.
-    let is_graph = rows.iter().any(|r| r.get("source").and_then(Value::as_str) == Some("graph"));
+    // folder is told by its header rows, the three marks
+    // `insights::is_graph_header` reads.
+    let is_graph = rows.iter().any(|r| {
+        ["source", "provider"].iter().any(|k| r.get(*k).and_then(Value::as_str) == Some("graph"))
+            || r.get("_graphId").and_then(Value::as_str).is_some_and(|id| !id.trim().is_empty())
+    });
     let plan = import_rehome::plan(&dir, &import_rehome::ServerView::from_headers(&rows), is_graph, &protected);
     if plan.suspicious {
         warn!(
@@ -588,6 +592,27 @@ mod tests {
         assert!(rehome_imports_for(&s, "acc", "INBOX").unwrap().is_none());
         assert!(!dir.join(import_rehome::DONE_FILE).exists());
         assert!(dir.join("cur").join(format!("5{}A.eml", maildir::INFO_PREFIX)).exists());
+    }
+
+    /// A Graph folder leaves a copy of server mail where it is, whichever
+    /// mark its rows carry: here `provider`, with `source` saying "server".
+    #[tokio::test]
+    async fn a_graph_folder_keeps_an_import_of_mail_the_server_lists_elsewhere() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let date = "Mon, 1 Jan 2024 10:00:00 +0000";
+        let name = format!("5{}A.eml", maildir::INFO_PREFIX);
+        fs::write(cur.join(&name), format!("Message-ID: <dup@x.test>\r\nSubject: hi\r\nDate: {date}\r\n\r\nbody")).unwrap();
+        maildir::write_generation(cur.parent().unwrap(), 2).unwrap();
+        let row = |uid: u32, id: &str, subject: &str| json!({"uid": uid, "messageId": id, "subject": subject, "messageDate": date, "source": "server", "provider": "graph"});
+        let headers = json!({"uidValidity": 2, "totalEmails": 2, "emails": [row(5, "<other@x.test>", "other"), row(9, "<dup@x.test>", "hi")]});
+        daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+
+        let report = rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("a pass ran");
+        assert!(report.set_aside.is_empty() && report.moved.is_empty(), "{report:?}");
+        assert!(cur.join(&name).exists());
     }
 
     #[tokio::test]

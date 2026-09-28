@@ -137,9 +137,9 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
   })]);
 });
 
-// Importing an MBOX twice skips what the vault already holds; the success
+// Importing an MBOX twice skips what the folder already holds; the success
 // message says how many were skipped.
-it('says how many MBOX messages were already in the vault', async () => {
+it('says how many MBOX messages the folder already had', async () => {
   useMailStore.setState({ accounts: [{ id: 'acct-1', email: 'me@test.com' }] });
   sendMock.mockImplementation((cmd) => (cmd === 'import_mbox'
     ? Promise.resolve({ emailCount: 2, skippedCount: 3, accountId: 'acct-1', mailbox: 'INBOX' })
@@ -151,5 +151,5 @@ it('says how many MBOX messages were already in the vault', async () => {
   await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
   const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
   expect(msg).toContain('2 email(s) are now in your vault');
-  expect(msg).toContain('3 email(s) were already in your vault and were skipped.');
+  expect(msg).toContain('3 email(s) were already in this folder and were skipped.');
 });

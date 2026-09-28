@@ -1726,7 +1726,7 @@
   "settings.backup.restore.importingMboxOnlyAvailableDesktop": "MBOX 가져오기는 데스크톱 앱에서만 가능합니다.",
   "settings.backup.restore.mboxFiles": "MBOX 파일",
   "settings.backup.restore.mboxImportedEmailSNow": "MBOX를 가져왔습니다. {{result}}건의 메일이 {{targetAccount}} / {{targetMailbox}} 보관함에 들어갔습니다.\\n\\n이 창을 닫으면 MailVault가 다시 불러옵니다.",
-  "settings.backup.restore.mboxSkippedAlreadyInVault": "{{skipped}}건의 메일은 이미 보관함에 있어 건너뛰었습니다.",
+  "settings.backup.restore.mboxSkippedAlreadyInFolder": "{{skipped}}건의 메일은 이미 이 폴더에 있어 건너뛰었습니다.",
   "settings.backup.restore.mboxWrittenEmailSAccount": "MBOX를 만들었습니다. {{result2}}개 계정의 메일 {{result}}건이 들어 있습니다. Thunderbird, Apple Mail 등 MBOX를 읽는 프로그램에서 열 수 있습니다.",
   "settings.backup.restore.pickWhereWriteBackupFile": "백업 파일을 저장할 위치 선택",
   "settings.backup.restore.writeEverythingVaultSingleZip": "보관함 전체를 하나의 .zip으로 저장합니다. 어디로든 복사할 수 있고 다시 읽어올 수도 있습니다.",

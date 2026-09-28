@@ -1726,7 +1726,7 @@
   "settings.backup.restore.importingMboxOnlyAvailableDesktop": "导入 MBOX 仅在桌面应用中可用。",
   "settings.backup.restore.mboxFiles": "MBOX 文件",
   "settings.backup.restore.mboxImportedEmailSNow": "MBOX 已导入。{{result}} 封邮件现已存入你的保险库，位于 {{targetAccount}} / {{targetMailbox}}。\\n\\n关闭此窗口后 MailVault 会重新加载。",
-  "settings.backup.restore.mboxSkippedAlreadyInVault": "{{skipped}} 封邮件已在你的保险库中，已跳过。",
+  "settings.backup.restore.mboxSkippedAlreadyInFolder": "{{skipped}} 封邮件已在此文件夹中，已跳过。",
   "settings.backup.restore.mboxWrittenEmailSAccount": "MBOX 已生成。文件中包含来自 {{result2}} 个账户的 {{result}} 封邮件——Thunderbird、Apple Mail 等支持 MBOX 的客户端都能打开。",
   "settings.backup.restore.pickWhereWriteBackupFile": "选择备份文件的写入位置",
   "settings.backup.restore.writeEverythingVaultSingleZip": "把保险库中的一切写入单个 .zip，可复制到任何地方，也可再读回来。",

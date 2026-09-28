@@ -1726,7 +1726,7 @@
   "settings.backup.restore.importingMboxOnlyAvailableDesktop": "Importar MBOX solo está disponible en la app de escritorio.",
   "settings.backup.restore.mboxFiles": "Archivos MBOX",
   "settings.backup.restore.mboxImportedEmailSNow": "MBOX importado. {{result}} correo(s) están ahora en tu bóveda bajo {{targetAccount}} / {{targetMailbox}}.\\n\\nMailVault se recargará al cerrar esto.",
-  "settings.backup.restore.mboxSkippedAlreadyInVault": "{{skipped}} correo(s) ya estaban en tu bóveda y se omitieron.",
+  "settings.backup.restore.mboxSkippedAlreadyInFolder": "{{skipped}} correo(s) ya estaban en esta carpeta y se omitieron.",
   "settings.backup.restore.mboxWrittenEmailSAccount": "MBOX escrito. El archivo contiene {{result}} correo(s) de {{result2}} cuenta(s): Thunderbird, Apple Mail y cualquier otro cliente que lea MBOX pueden abrirlo.",
   "settings.backup.restore.pickWhereWriteBackupFile": "Elige dónde escribir el archivo de copia",
   "settings.backup.restore.writeEverythingVaultSingleZip": "Escribe todo lo de tu bóveda en un único .zip que puedes copiar a cualquier sitio, o vuelve a leer uno.",
