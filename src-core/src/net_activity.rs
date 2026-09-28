@@ -5,9 +5,10 @@
 //! `Tracked::send` records one event per request. Events carry host and port
 //! only, never a URL path or query (those can hold tokens), and `account` is
 //! a masked label, never an address.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::{Mutex, RwLock};
+use std::future::Future;
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -17,7 +18,7 @@ pub enum Direction {
     In,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Protocol {
     Imap,
@@ -50,6 +51,58 @@ pub struct NetEvent {
     pub commands: Option<u32>,
 }
 
+impl NetEvent {
+    /// An outgoing helper event starting now. `result` starts as
+    /// "cancelled": a `Pending` dropped before its caller settled it (the
+    /// future was dropped mid-flight) still says what happened.
+    pub fn out(protocol: Protocol, host: &str, port: u16, purpose: &str) -> Self {
+        NetEvent {
+            at_ms: now_ms(),
+            direction: Direction::Out,
+            process: "helper",
+            protocol,
+            host: host.to_string(),
+            ip: None,
+            port,
+            purpose: purpose.to_string(),
+            account: None,
+            bytes_up: 0,
+            bytes_down: 0,
+            duration_ms: 0,
+            result: "cancelled".into(),
+            commands: None,
+        }
+    }
+}
+
+/// An event recorded when this is dropped, with the time since `new` as its
+/// duration: a connection or lookup is on the page however it ended,
+/// finished, failed or cancelled.
+pub struct Pending {
+    pub ev: NetEvent,
+    started: Instant,
+}
+
+impl Pending {
+    pub fn new(ev: NetEvent) -> Self {
+        Pending { ev, started: Instant::now() }
+    }
+}
+
+impl Drop for Pending {
+    fn drop(&mut self) {
+        let mut ev = self.ev.clone();
+        ev.duration_ms = self.started.elapsed().as_millis() as u64;
+        record(ev);
+    }
+}
+
+impl std::fmt::Debug for Pending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pending").field("ev", &self.ev).finish()
+    }
+}
+
 pub const CAPACITY: usize = 2000;
 
 /// The ring the global wraps; its own type so tests get a fresh one.
@@ -75,9 +128,15 @@ type Listener = Box<dyn Fn(&NetEvent) + Send + Sync>;
 static RING: Mutex<Ring> = Mutex::new(Ring::new());
 static LISTENER: RwLock<Option<Listener>> = RwLock::new(None);
 
-/// Record one event: into the ring (oldest dropped past `CAPACITY`), then to
-/// the listener.
-pub fn record(ev: NetEvent) {
+/// Record one event: addresses masked first, then to the listener, then into
+/// the ring (oldest dropped past `CAPACITY`).
+///
+/// The listener runs under the `LISTENER` read lock and before the push, so
+/// the event is not yet in `snapshot()` when it sees it, and it must never
+/// call `record` or `subscribe` (a deadlock on the lock).
+pub fn record(mut ev: NetEvent) {
+    ev.account = ev.account.map(|a| mask(&a));
+    ev.result = mask(&ev.result);
     if let Some(f) = LISTENER.read().unwrap_or_else(|p| p.into_inner()).as_ref() {
         f(&ev);
     }
@@ -95,12 +154,106 @@ pub fn subscribe(f: Listener) {
     *LISTENER.write().unwrap_or_else(|p| p.into_inner()) = Some(f);
 }
 
+/// Remove the listener, so a test's own does not outlive it.
+#[cfg(test)]
+fn unsubscribe() {
+    *LISTENER.write().unwrap_or_else(|p| p.into_inner()) = None;
+}
+
+static SALT: OnceLock<[u8; 16]> = OnceLock::new();
+
+/// The per-install log salt (`log_redact::load_or_create_salt`), so an
+/// account reads with the same token here as in the logs. Unset, a salt for
+/// this process is used.
+pub fn set_salt(salt: [u8; 16]) {
+    let _ = SALT.set(salt);
+}
+
+/// Every address in `s` masked exactly as the Standard logs mask it,
+/// whatever the log level: this page never shows a raw address.
+fn mask(s: &str) -> String {
+    if s.contains('@') {
+        crate::log_redact::redact(s, SALT.get_or_init(rand::random))
+    } else {
+        s.to_string()
+    }
+}
+
+/// An event the app shell measured itself (its own HTTP requests), sent to
+/// the daemon as `net.report { event }`. The same camelCase keys `NetEvent`
+/// serializes to; `direction`, `process`, `account` and `commands` are not
+/// taken from the sender.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Reported {
+    at_ms: u64,
+    protocol: Protocol,
+    host: String,
+    ip: Option<String>,
+    port: u16,
+    purpose: String,
+    bytes_up: u64,
+    bytes_down: u64,
+    duration_ms: u64,
+    result: String,
+}
+
+/// Record an event the app reported: always outgoing, always `process: "app"`.
+pub fn record_reported(event: serde_json::Value) -> Result<(), String> {
+    let r: Reported = serde_json::from_value(event).map_err(|e| format!("net.report: {e}"))?;
+    record(NetEvent {
+        at_ms: r.at_ms,
+        direction: Direction::Out,
+        process: "app",
+        protocol: r.protocol,
+        host: r.host,
+        ip: r.ip,
+        port: r.port,
+        purpose: r.purpose,
+        account: None,
+        bytes_up: r.bytes_up,
+        bytes_down: r.bytes_down,
+        duration_ms: r.duration_ms,
+        result: r.result,
+        commands: None,
+    });
+    Ok(())
+}
+
+tokio::task_local! {
+    /// What the mail connections opened inside `with_purpose` are for.
+    static PURPOSE: &'static str;
+}
+
+/// Run `fut` with `purpose` on every IMAP connection and DNS lookup it
+/// makes. A task-local, so it does not cross `spawn`: scope the spawned
+/// future too.
+pub async fn with_purpose<F: Future>(purpose: &'static str, fut: F) -> F::Output {
+    PURPOSE.scope(purpose, fut).await
+}
+
+/// `with_purpose`, unless an outer scope already set one: the pool's lane
+/// default must not relabel a backup's background reads as "sync".
+pub async fn with_default_purpose<F: Future>(purpose: &'static str, fut: F) -> F::Output {
+    match PURPOSE.try_with(|p| *p) {
+        Ok(_) => fut.await,
+        Err(_) => PURPOSE.scope(purpose, fut).await,
+    }
+}
+
+/// The purpose in scope; "sync" outside any.
+pub fn purpose() -> &'static str {
+    PURPOSE.try_with(|p| *p).unwrap_or("sync")
+}
+
 pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 /// A reqwest client that records every request sent through `send`.
-/// Derefs to the client so call sites build requests as before.
+/// Derefs to the client so call sites build requests as before, but the
+/// deref'd client's own `.send()` bypasses recording: always send through
+/// `Tracked::send(req)`.
 #[derive(Clone)]
 pub struct Tracked {
     client: reqwest::Client,
@@ -144,43 +297,60 @@ impl Tracked {
     /// known). A request that fails to build never reached the wire and is
     /// not recorded.
     pub async fn send(&self, req: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
-        // The builder's own client carries the site's timeout and policy.
-        let (client, request) = req.build_split();
-        let request = request?;
-        let url = request.url();
-        let host = url.host_str().unwrap_or_default().to_string();
-        let port = url.port_or_known_default().unwrap_or(0);
-        let protocol = if url.scheme() == "https" { Protocol::Https } else { Protocol::Http };
-        let bytes_up = request.body().and_then(|b| b.as_bytes()).map_or(0, |b| b.len() as u64);
-        let at_ms = now_ms();
-        let started = Instant::now();
-        let out = client.execute(request).await;
-        let (ip, bytes_down, result) = match &out {
-            Ok(r) => (
-                r.remote_addr().map(|a| a.ip().to_string()),
-                r.content_length().unwrap_or(0),
-                if r.status().as_u16() >= 400 { format!("HTTP {}", r.status().as_u16()) } else { "ok".into() },
-            ),
-            Err(e) => (None, 0, error_text(e, &host, port)),
-        };
-        record(NetEvent {
-            at_ms,
-            direction: Direction::Out,
-            process: "helper",
-            protocol,
-            host,
-            ip,
-            port,
-            purpose: self.purpose.clone(),
-            account: None,
-            bytes_up,
-            bytes_down,
-            duration_ms: started.elapsed().as_millis() as u64,
-            result,
-            commands: None,
-        });
+        let (out, ev) = measure(&self.purpose, req).await;
+        if let Some(ev) = ev {
+            record(ev);
+        }
         out
     }
+}
+
+/// Send `req` and return the event `Tracked::send` would record, without
+/// recording it: for the app shell, which reports it to the daemon instead.
+/// `None` when the request failed to build and never reached the wire.
+pub async fn measure(
+    purpose: &str,
+    req: reqwest::RequestBuilder,
+) -> (reqwest::Result<reqwest::Response>, Option<NetEvent>) {
+    // The builder's own client carries the site's timeout and policy.
+    let (client, request) = req.build_split();
+    let request = match request {
+        Ok(r) => r,
+        Err(e) => return (Err(e), None),
+    };
+    let url = request.url();
+    let host = url.host_str().unwrap_or_default().to_string();
+    let port = url.port_or_known_default().unwrap_or(0);
+    let protocol = if url.scheme() == "https" { Protocol::Https } else { Protocol::Http };
+    let bytes_up = request.body().and_then(|b| b.as_bytes()).map_or(0, |b| b.len() as u64);
+    let at_ms = now_ms();
+    let started = Instant::now();
+    let out = client.execute(request).await;
+    let (ip, bytes_down, result) = match &out {
+        Ok(r) => (
+            r.remote_addr().map(|a| a.ip().to_string()),
+            r.content_length().unwrap_or(0),
+            if r.status().as_u16() >= 400 { format!("HTTP {}", r.status().as_u16()) } else { "ok".into() },
+        ),
+        Err(e) => (None, 0, error_text(e, &host, port)),
+    };
+    let ev = NetEvent {
+        at_ms,
+        direction: Direction::Out,
+        process: "helper",
+        protocol,
+        host,
+        ip,
+        port,
+        purpose: purpose.to_string(),
+        account: None,
+        bytes_up,
+        bytes_down,
+        duration_ms: started.elapsed().as_millis() as u64,
+        result,
+        commands: None,
+    };
+    (out, Some(ev))
 }
 
 /// The error with its cause chain, the URL (path and query can carry
@@ -241,19 +411,81 @@ mod tests {
         assert_eq!(snap[CAPACITY - 1].purpose, "5");
     }
 
+    /// The only test that subscribes: the listener is global, and a second
+    /// one in parallel would replace this one.
     #[test]
     fn the_listener_sees_every_record() {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink = seen.clone();
-        subscribe(Box::new(move |e| sink.lock().unwrap().push(e.purpose.clone())));
+        subscribe(Box::new(move |e| sink.lock().unwrap().push(serde_json::to_string(e).unwrap())));
         for p in ["listener-a", "listener-b", "listener-c"] {
             record(ev(p, 1));
         }
+        // The listener forwards to the app, so it must get the masked event.
+        let mut addressed = ev("listener-address", 1);
+        addressed.account = Some("Listener.Person@gmail.com".into());
+        addressed.result = "Login failed for listener.person@gmail.com".into();
+        record(addressed);
+        unsubscribe();
         let seen = seen.lock().unwrap();
-        for p in ["listener-a", "listener-b", "listener-c"] {
-            assert!(seen.iter().any(|s| s == p), "{p} not seen: {seen:?}");
+        for p in ["listener-a", "listener-b", "listener-c", "listener-address"] {
+            assert!(seen.iter().any(|s| s.contains(&format!("\"{p}\""))), "{p} not seen: {seen:?}");
         }
+        assert!(
+            seen.iter().all(|s| !s.to_lowercase().contains("listener.person@gmail.com")),
+            "a raw address reached the listener: {seen:?}"
+        );
         assert!(snapshot().iter().any(|e| e.purpose == "listener-c"));
+    }
+
+    #[test]
+    fn an_address_is_masked_in_the_account_and_the_result() {
+        let mut e = ev("mask-test", 2);
+        e.account = Some("Masked.Person@gmail.com".into());
+        e.result = "Login failed for masked.person@gmail.com: NO".into();
+        record(e);
+        let got = snapshot().into_iter().find(|e| e.purpose == "mask-test").expect("recorded");
+        let json = serde_json::to_string(&got).unwrap().to_lowercase();
+        assert!(!json.contains("masked.person@gmail.com"), "{json}");
+        assert!(got.account.as_deref().is_some_and(|a| a.starts_with("<gmail#")), "{:?}", got.account);
+        assert!(got.result.starts_with("Login failed for <gmail#"), "{}", got.result);
+    }
+
+    #[test]
+    fn a_reported_event_is_always_the_apps_and_outgoing() {
+        let sent = serde_json::json!({
+            "atMs": 5, "direction": "in", "process": "helper", "protocol": "https",
+            "host": "github.com", "ip": null, "port": 443, "purpose": "report-test",
+            "account": "someone@example.com", "bytesUp": 10, "bytesDown": 20,
+            "durationMs": 30, "result": "ok", "commands": 4,
+        });
+        record_reported(sent).expect("a well-formed report");
+        let got = snapshot().into_iter().find(|e| e.purpose == "report-test").expect("recorded");
+        assert_eq!(got.process, "app");
+        assert_eq!(got.direction, Direction::Out);
+        assert_eq!(got.protocol, Protocol::Https);
+        assert_eq!((got.host.as_str(), got.port), ("github.com", 443));
+        assert_eq!((got.bytes_up, got.bytes_down, got.duration_ms), (10, 20, 30));
+        assert_eq!(got.account, None, "the app never names an account");
+        assert_eq!(got.commands, None);
+        assert!(record_reported(serde_json::json!({"host": "x"})).is_err(), "a malformed report is refused");
+    }
+
+    #[tokio::test]
+    async fn a_scoped_purpose_wins_over_the_lane_default() {
+        assert_eq!(purpose(), "sync", "outside any scope");
+        assert_eq!(with_default_purpose("open message", async { purpose() }).await, "open message");
+        let nested = with_purpose("backup", with_default_purpose("sync", async { purpose() })).await;
+        assert_eq!(nested, "backup", "a backup's background reads stay backup");
+    }
+
+    #[test]
+    fn a_pending_event_is_recorded_when_dropped() {
+        let p = Pending::new(NetEvent::out(Protocol::Dns, "pending.test", 53, "pending-test"));
+        drop(p);
+        let got = snapshot().into_iter().find(|e| e.purpose == "pending-test").expect("recorded on drop");
+        assert_eq!(got.result, "cancelled", "never settled");
+        assert_eq!(got.process, "helper");
     }
 
     #[tokio::test]

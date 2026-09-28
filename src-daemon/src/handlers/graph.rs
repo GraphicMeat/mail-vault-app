@@ -111,7 +111,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "graph_get_message" => {
             let access_token = req!(str_arg(&id, params, "accessToken"));
             let message_id = req!(str_arg(&id, params, "messageId"));
-            let client = GraphClient::new(&access_token);
+            let client = GraphClient::for_purpose(&access_token, "open message");
             match client.get_message(&message_id).await {
                 Ok(msg) => match serde_json::to_value(&msg) {
                     Ok(v) => RpcResponse::success(id, v),
@@ -128,7 +128,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
 
-            let client = GraphClient::new(&access_token);
+            let client = GraphClient::for_purpose(&access_token, "open message");
             let raw_bytes = match client.get_mime_content(&message_id).await {
                 Ok(b) => b,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),

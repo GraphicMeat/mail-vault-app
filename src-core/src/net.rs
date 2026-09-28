@@ -5,6 +5,7 @@
 //! timeout, and all three run concurrently, so a probe costs one timeout rather
 //! than three.
 
+use crate::net_activity::{NetEvent, Pending, Protocol};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpStream;
@@ -27,16 +28,25 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// A handshake, not a DNS lookup: a captive portal that resolves everything
 /// still refuses port 53 to an address it does not own. It is not proof of a
 /// working *mail* path — no probe is — only that packets leave the machine.
+///
+/// Every dial is a Network Activity event, the ones cut short by the first
+/// answer included ("cancelled").
 pub async fn probe_internet() -> bool {
     let dials = PROBE_HOSTS
         .iter()
         .map(|(host, port)| {
             Box::pin(async move {
                 let addr: SocketAddr = format!("{}:{}", host, port).parse().map_err(|_| ())?;
-                match timeout(PROBE_TIMEOUT, TcpStream::connect(addr)).await {
-                    Ok(Ok(_stream)) => Ok(()),
-                    _ => Err(()),
-                }
+                let mut ev = NetEvent::out(Protocol::TcpProbe, host, *port, "connectivity check");
+                ev.ip = Some(host.to_string());
+                let mut dial = Pending::new(ev);
+                let (result, out) = match timeout(PROBE_TIMEOUT, TcpStream::connect(addr)).await {
+                    Ok(Ok(_stream)) => ("ok".to_string(), Ok(())),
+                    Ok(Err(e)) => (e.to_string(), Err(())),
+                    Err(_) => (format!("timed out after {}ms", PROBE_TIMEOUT.as_millis()), Err(())),
+                };
+                dial.ev.result = result;
+                out
             })
         })
         .collect::<Vec<_>>();
@@ -75,6 +85,24 @@ pub fn looks_like_network_down(err: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every probe host shows on Network Activity, whichever answered first.
+    /// Other tests may probe too: this looks for each host since it started.
+    #[tokio::test]
+    async fn every_probe_dial_is_recorded() {
+        let since = crate::net_activity::now_ms();
+        let _ = probe_internet().await;
+        let events = crate::net_activity::snapshot();
+        for (host, port) in PROBE_HOSTS {
+            let e = events
+                .iter()
+                .find(|e| e.at_ms >= since && e.protocol == Protocol::TcpProbe && e.host == host)
+                .unwrap_or_else(|| panic!("no probe event for {host}: {events:?}"));
+            assert_eq!(e.port, port);
+            assert_eq!(e.purpose, "connectivity check");
+            assert_eq!(e.ip.as_deref(), Some(host));
+        }
+    }
 
     #[test]
     fn connect_time_failures_are_network_shaped() {

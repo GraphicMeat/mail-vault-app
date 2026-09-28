@@ -313,13 +313,20 @@ impl ImapPool {
         let permit_wait_ms = wait_start.elapsed().as_millis() as u64;
 
         let connect_start = Instant::now();
-        let (session, last_selected, reused, idle_secs_since_last_use, noop_ms) = if fresh {
-            info!("Creating new IMAP connection for {} (retry)", config.email);
-            (create_imap_session(config, self).await?, None, false, 0, 0)
-        } else {
-            let pool = if priority { &self.priority } else { &self.background };
-            self.get_from_pool(pool, config).await?
-        };
+        // What a connection opened here is for on the Network Activity page,
+        // unless the caller already said (a backup's background reads).
+        let lane = if priority { "open message" } else { "sync" };
+        let (session, last_selected, reused, idle_secs_since_last_use, noop_ms) =
+            crate::net_activity::with_default_purpose(lane, async {
+                if fresh {
+                    info!("Creating new IMAP connection for {} (retry)", config.email);
+                    Ok::<_, String>((create_imap_session(config, self).await?, None, false, 0, 0))
+                } else {
+                    let pool = if priority { &self.priority } else { &self.background };
+                    self.get_from_pool(pool, config).await
+                }
+            })
+            .await?;
         // `connect_start` also spans a failed/timed-out NOOP when the pooled
         // session turned out to be dead (get_from_pool falls through to a new
         // connection in that branch) — subtract it out so `connect_ms` is
@@ -1106,5 +1113,81 @@ mod connection_budget_tests {
         assert_eq!(idle_background, MAX_POOL_SIZE - 1, "exactly one idle background session made room");
         assert!(server.peak_connections() <= MAX_CONNECTIONS_PER_ACCOUNT, "peak {}", server.peak_connections());
         pool.return_priority(&config, click).await;
+    }
+}
+
+/// Network Activity: one IMAP event per connection, recorded when it closes,
+/// its purpose taken from the pool lane.
+#[cfg(test)]
+mod net_activity_tests {
+    use super::*;
+    use crate::imap::select_mailbox;
+    use crate::net_activity::{snapshot, Direction, NetEvent, Protocol};
+    use mock_imap::state::synthetic_mailbox;
+    use mock_imap::{MockImap, Scenario};
+
+    /// Its own account: the transfer-stats tests in this binary read other
+    /// accounts' global counters.
+    const ADDRESS: &str = "net-activity@example.com";
+
+    fn config_for(server: &MockImap) -> ImapConfig {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(serde_json::json!({
+            "email": ADDRESS,
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "imapSecure": true,
+        }))
+        .expect("build ImapConfig")
+    }
+
+    /// One read on a fresh pool and mock, then the pool closed: the
+    /// connection's event exists only once its socket is gone. Each mock has
+    /// its own port, so parallel tests never see each other's events.
+    async fn one_read(priority: bool) -> (MockImap, Vec<NetEvent>) {
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let config = config_for(&server);
+        let pool = ImapPool::new();
+        pool.run_read(&config, priority, |mut session| async move {
+            select_mailbox(&mut session, "INBOX").await?;
+            Ok(((), session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect("a read against the mock");
+        pool.shutdown().await;
+        let events = snapshot()
+            .into_iter()
+            .filter(|e| e.protocol == Protocol::Imap && e.port == server.port())
+            .collect();
+        (server, events)
+    }
+
+    fn assert_one_connection(server: &MockImap, events: &[NetEvent], purpose: &str) {
+        assert_eq!(events.len(), 1, "one connection, one event: {events:?}");
+        let e = &events[0];
+        assert_eq!(e.purpose, purpose);
+        assert_eq!(e.host, server.host());
+        assert_eq!(e.ip.as_deref(), Some("127.0.0.1"));
+        assert_eq!(e.direction, Direction::Out);
+        assert_eq!(e.process, "helper");
+        assert_eq!(e.result, "ok");
+        assert!(e.bytes_down > 0, "greeting and replies count down: {e:?}");
+        assert!(e.bytes_up > 0, "LOGIN and SELECT count up: {e:?}");
+        assert!(e.account.as_deref().is_some_and(|a| a.starts_with("<imap#")), "{:?}", e.account);
+        let json = serde_json::to_string(e).unwrap();
+        assert!(!json.contains(ADDRESS), "raw address in {json}");
+    }
+
+    #[tokio::test]
+    async fn a_click_read_is_one_open_message_connection() {
+        let (server, events) = one_read(true).await;
+        assert_one_connection(&server, &events, "open message");
+    }
+
+    #[tokio::test]
+    async fn a_background_read_is_one_sync_connection() {
+        let (server, events) = one_read(false).await;
+        assert_one_connection(&server, &events, "sync");
     }
 }

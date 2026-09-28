@@ -27,20 +27,32 @@ fn repo() -> String {
     std::env::var("MV_GITHUB_REPO").unwrap_or_else(|_| GITHUB_REPO.to_string())
 }
 
+/// Send `req` and report it to the daemon's Network Activity page (the only
+/// HTTP this shell makes itself). Fire and forget: a daemon that is not
+/// there loses the row, never the request.
+async fn send(req: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
+    let (out, event) = mailvault_core::net_activity::measure("sign-in", req).await;
+    if let Some(event) = event {
+        crate::daemon_channel::notify("net.report", json!({ "event": event }));
+    }
+    out
+}
+
 /// Begin the device flow. Returns the user code + verification URL the user
 /// must visit, plus the device code used for polling.
 #[tauri::command]
 pub async fn github_device_start() -> Result<Value, String> {
     let client = reqwest::Client::new();
-    let resp = client
-        .post("https://github.com/login/device/code")
-        .header("Accept", "application/json")
-        .header("User-Agent", USER_AGENT)
-        // Empty scope: a default token can still read the authed user's public
-        // stars, which is all we need to verify the star.
-        .form(&[("client_id", client_id()), ("scope", String::new())])
-        .send()
-        .await
+    let resp = send(
+        client
+            .post("https://github.com/login/device/code")
+            .header("Accept", "application/json")
+            .header("User-Agent", USER_AGENT)
+            // Empty scope: a default token can still read the authed user's public
+            // stars, which is all we need to verify the star.
+            .form(&[("client_id", client_id()), ("scope", String::new())]),
+    )
+    .await
         .map_err(|e| format!("device code request failed: {e}"))?;
     let data: Value = resp
         .json()
@@ -63,20 +75,21 @@ pub async fn github_device_start() -> Result<Value, String> {
 #[tauri::command]
 pub async fn github_device_poll(device_code: String) -> Result<Value, String> {
     let client = reqwest::Client::new();
-    let resp = client
-        .post("https://github.com/login/oauth/access_token")
-        .header("Accept", "application/json")
-        .header("User-Agent", USER_AGENT)
-        .form(&[
-            ("client_id", client_id()),
-            ("device_code", device_code),
-            (
-                "grant_type",
-                "urn:ietf:params:oauth:grant-type:device_code".to_string(),
-            ),
-        ])
-        .send()
-        .await
+    let resp = send(
+        client
+            .post("https://github.com/login/oauth/access_token")
+            .header("Accept", "application/json")
+            .header("User-Agent", USER_AGENT)
+            .form(&[
+                ("client_id", client_id()),
+                ("device_code", device_code),
+                (
+                    "grant_type",
+                    "urn:ietf:params:oauth:grant-type:device_code".to_string(),
+                ),
+            ]),
+    )
+    .await
         .map_err(|e| format!("device poll failed: {e}"))?;
     let data: Value = resp
         .json()
@@ -106,14 +119,15 @@ pub async fn github_device_poll(device_code: String) -> Result<Value, String> {
 pub async fn github_check_star(access_token: String) -> Result<bool, String> {
     let url = format!("https://api.github.com/user/starred/{}", repo());
     let client = reqwest::Client::new();
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {access_token}"))
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("User-Agent", USER_AGENT)
-        .send()
-        .await
+    let resp = send(
+        client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", USER_AGENT),
+    )
+    .await
         .map_err(|e| format!("star check failed: {e}"))?;
     Ok(resp.status().as_u16() == 204)
 }

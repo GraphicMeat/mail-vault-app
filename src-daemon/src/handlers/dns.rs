@@ -36,7 +36,7 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
                 Ok(d) => d,
                 Err(resp) => return Some(resp),
             };
-            match dns::resolve_email_settings(&domain).await {
+            match mailvault_core::net_activity::with_purpose("account setup", dns::resolve_email_settings(&domain)).await {
                 Ok(settings) => match serde_json::to_value(settings) {
                     Ok(v) => RpcResponse::success(id, v),
                     Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Serialization error: {}", e)),
@@ -51,7 +51,8 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
                 Err(resp) => return Some(resp),
             };
             let new_imap_host = params.get("newImapHost").and_then(Value::as_str).map(str::to_owned);
-            match dns::mail_dns_health(&domain, new_imap_host.as_deref()).await {
+            let health = dns::mail_dns_health(&domain, new_imap_host.as_deref());
+            match mailvault_core::net_activity::with_purpose("account setup", health).await {
                 Ok(health) => match serde_json::to_value(health) {
                     Ok(v) => RpcResponse::success(id, v),
                     Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Serialization error: {}", e)),

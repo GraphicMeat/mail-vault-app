@@ -3,6 +3,23 @@ use hickory_resolver::proto::rr::RData;
 use serde::Serialize;
 use tracing::info;
 
+use crate::net_activity::{self, NetEvent, Pending, Protocol};
+
+/// `lookup` as one Network Activity DNS event: host is the name asked
+/// about, purpose whatever the caller scoped (`net_activity::with_purpose`).
+async fn traced<T, E: std::fmt::Display>(
+    name: &str,
+    lookup: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, E> {
+    let mut query = Pending::new(NetEvent::out(Protocol::Dns, name, 53, net_activity::purpose()));
+    let out = lookup.await;
+    query.ev.result = match &out {
+        Ok(_) => "ok".into(),
+        Err(e) => e.to_string(),
+    };
+    out
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct EmailServerSettings {
     #[serde(rename = "imapHost")]
@@ -95,7 +112,7 @@ pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings,
 
     // 3. Try MX record -> known provider mapping
     info!("[dns] Checking MX records for {}", domain);
-    if let Ok(mx_response) = resolver.mx_lookup(domain).await {
+    if let Ok(mx_response) = traced(domain, resolver.mx_lookup(domain)).await {
         let mut first_mx_host: Option<String> = None;
 
         for record in mx_response.answers() {
@@ -125,7 +142,7 @@ async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<Email
     let imap_srv = format!("_imaps._tcp.{}", domain);
     let smtp_srv = format!("_submission._tcp.{}", domain);
 
-    let imap = resolver.srv_lookup(&imap_srv).await
+    let imap = traced(&imap_srv, resolver.srv_lookup(&imap_srv)).await
         .map_err(|e| format!("SRV lookup failed: {}", e))?;
 
     let imap_record = imap.answers().iter()
@@ -135,7 +152,7 @@ async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<Email
     let imap_host = imap_record.target.to_ascii().trim_end_matches('.').to_string();
     let imap_port = imap_record.port;
 
-    let (smtp_host, smtp_port) = if let Ok(smtp) = resolver.srv_lookup(&smtp_srv).await {
+    let (smtp_host, smtp_port) = if let Ok(smtp) = traced(&smtp_srv, resolver.srv_lookup(&smtp_srv)).await {
         if let Some(r) = smtp.answers().iter()
             .find_map(|r| match &r.data { RData::SRV(srv) => Some(srv.clone()), _ => None })
         {
@@ -370,7 +387,7 @@ async fn txt_records(resolver: &TokioResolver, name: &str) -> Vec<String> {
 /// NODATA) is an empty answer; a timeout or SERVFAIL is an `Err`, since it
 /// says nothing about the name and must not be cached as "none".
 async fn txt_records_strict(resolver: &TokioResolver, name: &str) -> Result<Vec<String>, String> {
-    let resp = match resolver.txt_lookup(name).await {
+    let resp = match traced(name, resolver.txt_lookup(name)).await {
         Ok(resp) => resp,
         Err(e) if e.is_no_records_found() => return Ok(Vec::new()),
         Err(e) => return Err(format!("TXT lookup for {name} failed: {e}")),
@@ -402,7 +419,7 @@ pub async fn mail_dns_health(
 
     // MX, sorted by preference (lowest first).
     let mut mx: Vec<(u16, String)> = Vec::new();
-    if let Ok(resp) = resolver.mx_lookup(domain).await {
+    if let Ok(resp) = traced(domain, resolver.mx_lookup(domain)).await {
         for record in resp.answers() {
             if let RData::MX(m) = &record.data {
                 mx.push((m.preference, m.exchange.to_ascii().trim_end_matches('.').to_string()));

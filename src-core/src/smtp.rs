@@ -9,6 +9,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 use crate::imap::ImapConfig;
+use crate::net_activity::{NetEvent, Pending, Protocol};
 
 #[derive(Debug, Deserialize)]
 pub struct OutgoingAttachment {
@@ -530,6 +531,22 @@ fn build_transport(
     Ok(transport)
 }
 
+/// One Network Activity event for one SMTP conversation (lettre connects
+/// per send), recorded when dropped: set its result once the send settles.
+fn smtp_event(account: &ImapConfig, host: &str, port: u16, purpose: &str, bytes_up: u64) -> Pending {
+    let mut ev = NetEvent::out(Protocol::Smtp, host, port, purpose);
+    ev.account = Some(account.email.clone());
+    ev.bytes_up = bytes_up;
+    Pending::new(ev)
+}
+
+fn settle<T, E: std::fmt::Display>(mut conn: Pending, out: &Result<T, E>) {
+    conn.ev.result = match out {
+        Ok(_) => "ok".into(),
+        Err(e) => e.to_string(),
+    };
+}
+
 /// Verify SMTP connectivity + auth handshake without sending mail. Uses
 /// lettre's `test_connection` (EHLO + handshake) on the built transport.
 pub async fn test_connection(account: &ImapConfig) -> Result<(), String> {
@@ -542,7 +559,10 @@ pub async fn test_connection(account: &ImapConfig) -> Result<(), String> {
 
     let transport = build_transport(account, Duration::from_secs(15))?;
 
-    match transport.test_connection().await {
+    let conn = smtp_event(account, &smtp_host, smtp_port, "account setup", 0);
+    let tested = transport.test_connection().await;
+    settle(conn, &tested);
+    match tested {
         Ok(true) => Ok(()),
         Ok(false) => Err(format!(
             "SMTP server {}:{} did not accept the connection.",
@@ -585,10 +605,11 @@ pub async fn send_built(
 
     let BuiltMime { message, raw_rfc2822 } = built;
 
-    let response = transport
-        .send(message)
-        .await
-        .map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
+    let conn = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
+    let sent = transport.send(message).await;
+    settle(conn, &sent);
+    let response =
+        sent.map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
 
     let message_id = response
         .message()
@@ -672,10 +693,11 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
         account.is_oauth2()
     );
 
-    let response = transport
-        .send_raw(&lettre_envelope, &raw_rfc2822)
-        .await
-        .map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
+    let conn = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
+    let sent = transport.send_raw(&lettre_envelope, &raw_rfc2822).await;
+    settle(conn, &sent);
+    let response =
+        sent.map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
 
     let message_id = response.message().collect::<Vec<_>>().join("");
     info!("Frozen email sent via SMTP: {}", message_id);
@@ -1146,6 +1168,34 @@ mod tests {
         /// What the SMTP server takes in carries the id compose staged the
         /// local copy under — `send_email` builds its own MIME, and used to
         /// mint a second id for it.
+        /// Network Activity: one SMTP event per send, bytes up = the message,
+        /// the account masked, never the login address.
+        #[tokio::test]
+        async fn a_send_records_one_smtp_event_with_the_message_size() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+
+            let result = send_to(&server, "partner@example.com").await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            let result = result.expect("send against the mock SMTP server");
+
+            let events: Vec<_> = crate::net_activity::snapshot()
+                .into_iter()
+                .filter(|e| e.protocol == Protocol::Smtp && e.port == server.smtp_port())
+                .collect();
+            assert_eq!(events.len(), 1, "{events:?}");
+            let e = &events[0];
+            assert_eq!(e.purpose, "send");
+            assert_eq!(e.result, "ok");
+            assert_eq!(e.host, "127.0.0.1");
+            assert_eq!(e.direction, crate::net_activity::Direction::Out);
+            assert_eq!(e.bytes_up, result.raw_rfc2822.len() as u64);
+            assert!(e.account.is_some(), "the account is labelled");
+            let json = serde_json::to_string(e).unwrap();
+            assert!(!json.contains("luke@mock.test"), "raw login address in {json}");
+        }
+
         #[tokio::test]
         async fn send_email_delivers_the_caller_message_id() {
             let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());

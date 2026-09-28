@@ -8,6 +8,8 @@ use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 use tracing::{info, error};
 
+use crate::net_activity::{Direction, NetEvent, Pending, Protocol};
+
 // ── OAuth2 Provider Configuration ──────────────────────────────────────────
 
 const REDIRECT_URI: &str = "http://localhost:19876/callback";
@@ -561,9 +563,14 @@ async fn run_callback_server(senders: SenderMap) -> Result<(), String> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", CALLBACK_PORT))
         .await
         .map_err(|e| format!("Failed to bind callback server: {}", e))?;
+    serve_callbacks(listener, senders).await
+}
 
+/// The accept loop, split from the bind so a test can serve on a free port.
+async fn serve_callbacks(listener: TcpListener, senders: SenderMap) -> Result<(), String> {
+    let port = listener.local_addr().map(|a| a.port()).unwrap_or(CALLBACK_PORT);
     loop {
-        let (mut stream, _) = listener
+        let (mut stream, peer) = listener
             .accept()
             .await
             .map_err(|e| format!("Accept failed: {}", e))?;
@@ -571,72 +578,134 @@ async fn run_callback_server(senders: SenderMap) -> Result<(), String> {
         let senders = Arc::clone(&senders);
 
         tokio::spawn(async move {
-            let mut buf = vec![0u8; 4096];
-            let n = match stream.read(&mut buf).await {
-                Ok(n) => n,
-                Err(_) => return,
-            };
-
-            let request = String::from_utf8_lossy(&buf[..n]);
-            let first_line = request.lines().next().unwrap_or("");
-
-            if !first_line.contains("/callback") {
-                let resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-                let _ = stream.write_all(resp.as_bytes()).await;
-                return;
-            }
-
-            let path = first_line
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("/callback");
-
-            let query_str = path.split('?').nth(1).unwrap_or("");
-            let params: HashMap<String, String> = url::form_urlencoded::parse(query_str.as_bytes())
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
-
-            let state = params.get("state").cloned().unwrap_or_default();
-            let code = params.get("code").cloned();
-            let error_param = params.get("error").cloned();
-            let error_desc = params.get("error_description").cloned();
-
-            let html = if let Some(err) = error_param {
-                let desc = error_desc.as_deref().unwrap_or(&err);
-                if let Some(tx) = senders.lock().await.remove(&state) {
-                    let _ = tx.send(Err(desc.to_string()));
-                }
-                // `desc` is attacker-controllable (any process/tab that can
-                // reach `127.0.0.1:19876/callback` supplies the query string).
-                // Escape before it enters the HTML body.
-                format!(
-                    "<html><body style=\"font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0\">\
-                    <div style=\"text-align:center\"><h2>Authentication Failed</h2><p>{}</p><p>You can close this window.</p></div></body></html>",
-                    html_escape(desc)
-                )
-            } else if let Some(code) = code {
-                if let Some(tx) = senders.lock().await.remove(&state) {
-                    let _ = tx.send(Ok(code));
-                }
-                "<html><body style=\"font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0\">\
-                <div style=\"text-align:center\"><h2>Sign-in Successful</h2><p>You can close this window and return to MailVault.</p></div></body></html>".to_string()
-            } else {
-                "<html><body>Invalid request</body></html>".to_string()
-            };
-
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
-                html.len(),
-                html
-            );
-            let _ = stream.write_all(response.as_bytes()).await;
+            // The one inbound connection on Network Activity: the browser
+            // coming back with the sign-in code. Host is the peer; the path
+            // and query (code, state) are never copied into the event.
+            let peer_ip = peer.ip().to_string();
+            let mut ev = NetEvent::out(Protocol::Http, &peer_ip, port, "sign-in");
+            ev.direction = Direction::In;
+            ev.ip = Some(peer_ip);
+            let mut hit = Pending::new(ev);
+            handle_callback(&mut stream, &senders, &mut hit.ev).await;
         });
     }
+}
+
+/// Answer one loopback request, noting its bytes and result in `ev`.
+async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap, ev: &mut NetEvent) {
+    let mut buf = vec![0u8; 4096];
+    let n = match stream.read(&mut buf).await {
+        Ok(n) => n,
+        Err(e) => {
+            ev.result = e.to_string();
+            return;
+        }
+    };
+    ev.bytes_down = n as u64;
+
+    let request = String::from_utf8_lossy(&buf[..n]);
+    let first_line = request.lines().next().unwrap_or("");
+
+    if !first_line.contains("/callback") {
+        let resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        ev.bytes_up = resp.len() as u64;
+        ev.result = "HTTP 404".into();
+        let _ = stream.write_all(resp.as_bytes()).await;
+        return;
+    }
+
+    let path = first_line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/callback");
+
+    let query_str = path.split('?').nth(1).unwrap_or("");
+    let params: HashMap<String, String> = url::form_urlencoded::parse(query_str.as_bytes())
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+
+    let state = params.get("state").cloned().unwrap_or_default();
+    let code = params.get("code").cloned();
+    let error_param = params.get("error").cloned();
+    let error_desc = params.get("error_description").cloned();
+
+    let html = if let Some(err) = error_param {
+        let desc = error_desc.as_deref().unwrap_or(&err);
+        if let Some(tx) = senders.lock().await.remove(&state) {
+            let _ = tx.send(Err(desc.to_string()));
+        }
+        // `desc` is attacker-controllable (any process/tab that can
+        // reach `127.0.0.1:19876/callback` supplies the query string).
+        // Escape before it enters the HTML body.
+        format!(
+            "<html><body style=\"font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0\">\
+            <div style=\"text-align:center\"><h2>Authentication Failed</h2><p>{}</p><p>You can close this window.</p></div></body></html>",
+            html_escape(desc)
+        )
+    } else if let Some(code) = code {
+        if let Some(tx) = senders.lock().await.remove(&state) {
+            let _ = tx.send(Ok(code));
+        }
+        "<html><body style=\"font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0\">\
+        <div style=\"text-align:center\"><h2>Sign-in Successful</h2><p>You can close this window and return to MailVault.</p></div></body></html>".to_string()
+    } else {
+        "<html><body>Invalid request</body></html>".to_string()
+    };
+
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+        html.len(),
+        html
+    );
+    ev.bytes_up = response.len() as u64;
+    ev.result = match stream.write_all(response.as_bytes()).await {
+        Ok(()) => "ok".into(),
+        Err(e) => e.to_string(),
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::{html_escape, id_token_email};
+
+    /// Network Activity: a hit on the sign-in loopback is an inbound event,
+    /// and the code and state in its query never reach it.
+    #[tokio::test]
+    async fn a_hit_on_the_sign_in_loopback_is_recorded_inbound() {
+        use crate::net_activity::{snapshot, Direction, Protocol};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(super::serve_callbacks(listener, Default::default()));
+
+        let mut browser = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        browser
+            .write_all(b"GET /callback?state=st4te-x&code=s3cret-code HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        browser.read_to_end(&mut reply).await.unwrap();
+        assert!(reply.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&reply));
+
+        // Recorded as the handler's task ends, which may trail the reply.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let e = loop {
+            if let Some(e) = snapshot().into_iter().find(|e| e.port == port && e.direction == Direction::In) {
+                break e;
+            }
+            assert!(std::time::Instant::now() < deadline, "no inbound event on port {port}");
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        };
+        assert_eq!(e.protocol, Protocol::Http);
+        assert_eq!(e.purpose, "sign-in");
+        assert_eq!(e.host, "127.0.0.1");
+        assert_eq!(e.result, "ok");
+        assert!(e.bytes_down > 0);
+        assert_eq!(e.bytes_up, reply.len() as u64);
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(!json.contains("s3cret-code") && !json.contains("st4te-x"), "{json}");
+    }
 
     /// Build a fake (unsigned) id_token: two base64url segments joined by
     /// dots, matching what `id_token_email` reads — it never checks the

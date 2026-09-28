@@ -612,6 +612,16 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
             RpcResponse::success(id, state.net.status())
         }
 
+        // ── Network Activity ────────────────────────────────────────
+        // Every connection held (newest first); new ones arrive as
+        // `net-activity` events. `net.report` records one the app shell made
+        // itself (it normally comes as a channel notification instead).
+        "net.activity" => RpcResponse::success(id, serde_json::json!({"events": mailvault_core::net_activity::snapshot()})),
+        "net.report" => match mailvault_core::net_activity::record_reported(req.params["event"].clone()) {
+            Ok(()) => RpcResponse::success(id, serde_json::json!({"ok": true})),
+            Err(e) => RpcResponse::error(id, ipc::INVALID_PARAMS, e),
+        },
+
         // ── Keychain gate ───────────────────────────────────────────
         "keychain.status" => RpcResponse::success(id, crate::credentials::GATE.status()),
         "keychain.retry" => {

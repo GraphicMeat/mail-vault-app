@@ -214,7 +214,8 @@ fn svg_ok(content_type: &str, len: usize) -> bool {
 /// The logo for a domain: `Ok(None)` is a definitive "no logo" worth caching,
 /// `Err` a failure that says nothing about the domain.
 async fn fetch_bimi(domain: &str) -> Result<Option<Vec<u8>>, String> {
-    let Some(url) = mailvault_core::dns::bimi_logo_url_for(domain).await? else {
+    let lookup = mailvault_core::dns::bimi_logo_url_for(domain);
+    let Some(url) = mailvault_core::net_activity::with_purpose("open message", lookup).await? else {
         return Ok(None);
     };
     let mut response = send_guarded(&url, "open message", BIMI_TIMEOUT, true, |c, u| c.get(u)).await?;

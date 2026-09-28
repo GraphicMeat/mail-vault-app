@@ -36,6 +36,12 @@ pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Val
                 crate::search_index::sweep_soon(&state.search_index);
             }
         }
+        // The app shell's own HTTP (GitHub sign-in), fire and forget.
+        "net.report" => {
+            if let Err(e) = mailvault_core::net_activity::record_reported(params["event"].clone()) {
+                tracing::debug!("channel: {e}");
+            }
+        }
         other => tracing::debug!("channel: ignoring notification {other}"),
     }
 }
@@ -107,6 +113,35 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tokio::sync::broadcast::error::RecvError;
+
+    /// The app shell reports its own HTTP as a channel notification; the
+    /// `net.activity` RPC then lists it as the app's, whatever it claimed.
+    #[tokio::test]
+    async fn a_net_report_from_the_app_is_listed_by_net_activity() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        let event = json!({
+            "atMs": 1, "direction": "in", "process": "helper", "protocol": "https",
+            "host": "github.com", "ip": null, "port": 443, "purpose": "channel-report-test",
+            "bytesUp": 1, "bytesDown": 2, "durationMs": 3, "result": "ok",
+        });
+        dispatch(&state, "net.report", json!({"event": event})).await;
+
+        let resp = crate::server::handle_request_for_test(&state, "net.activity", json!({})).await;
+        let result = resp.result.expect("net.activity answers");
+        let e = result["events"]
+            .as_array()
+            .expect("an events array")
+            .iter()
+            .find(|e| e["purpose"] == "channel-report-test")
+            .cloned()
+            .expect("the reported event is listed");
+        assert_eq!(e["process"], "app");
+        assert_eq!(e["direction"], "out");
+        assert_eq!(e["protocol"], "https");
+        assert_eq!(e["host"], "github.com");
+        assert_eq!(e["bytesDown"], 2);
+    }
 
     #[test]
     fn a_forwarded_event_is_sent_as_is() {

@@ -94,11 +94,32 @@ pub struct CountingStream<S> {
     /// The account's connection slot (`ImapPool::connection_slot`), freed
     /// when the socket is: this wrapper lives exactly as long as it does.
     _slot: Option<tokio::sync::OwnedSemaphorePermit>,
+    /// This connection's Network Activity event, recorded when the socket
+    /// closes: its own byte counts beside the account's, and the last I/O
+    /// error as its result.
+    net: Option<crate::net_activity::Pending>,
 }
 
 impl<S> CountingStream<S> {
     pub fn new(inner: S, counters: Arc<Counters>, stall: std::time::Duration) -> Self {
-        Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None, _slot: None }
+        Self { inner, counters, stall, active_at: None, timer: async_io::Timer::never(), timer_at: None, _slot: None, net: None }
+    }
+
+    /// Record this connection as `conn` when it closes. A read or write
+    /// that fails sets its result.
+    pub fn recording(mut self, conn: crate::net_activity::Pending) -> Self {
+        self.net = Some(conn);
+        self
+    }
+
+    fn note(&mut self, down: u64, up: u64, err: Option<&std::io::Error>) {
+        if let Some(p) = self.net.as_mut() {
+            p.ev.bytes_down += down;
+            p.ev.bytes_up += up;
+            if let Some(e) = err {
+                p.ev.result = e.to_string();
+            }
+        }
     }
 
     /// Hold `slot` until this stream is dropped.
@@ -155,9 +176,10 @@ impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
         buf: &mut [u8],
     ) -> Poll<std::io::Result<usize>> {
         let polled = Pin::new(&mut self.inner).poll_read(cx, buf);
-        match polled {
+        let polled = match polled {
             Poll::Ready(Ok(n)) if n > 0 => {
                 self.counters.down.fetch_add(n as u64, Ordering::Relaxed);
+                self.note(n as u64, 0, None);
                 if self.active_at.is_some() {
                     self.active_at = Some(std::time::Instant::now());
                 }
@@ -165,7 +187,11 @@ impl<S: async_std::io::Read + Unpin> async_std::io::Read for CountingStream<S> {
             }
             Poll::Pending => self.check_deadline(cx),
             _ => polled,
+        };
+        if let Poll::Ready(Err(e)) = &polled {
+            self.note(0, 0, Some(e));
         }
+        polled
     }
 }
 
@@ -176,11 +202,17 @@ impl<S: async_std::io::Write + Unpin> async_std::io::Write for CountingStream<S>
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
         let polled = Pin::new(&mut self.inner).poll_write(cx, buf);
-        if let Poll::Ready(Ok(n)) = polled {
-            self.counters.up.fetch_add(n as u64, Ordering::Relaxed);
-            if n > 0 {
-                self.active_at = Some(std::time::Instant::now());
+        match &polled {
+            Poll::Ready(Ok(n)) => {
+                let n = *n;
+                self.counters.up.fetch_add(n as u64, Ordering::Relaxed);
+                self.note(0, n as u64, None);
+                if n > 0 {
+                    self.active_at = Some(std::time::Instant::now());
+                }
             }
+            Poll::Ready(Err(e)) => self.note(0, 0, Some(e)),
+            Poll::Pending => {}
         }
         polled
     }

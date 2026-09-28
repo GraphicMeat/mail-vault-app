@@ -59,6 +59,7 @@ use tracing::{info, warn};
 
 use crate::archive::{self, ArchiveCtx};
 use crate::imap::{self, ImapConfig, ImapPool};
+use crate::net_activity;
 use crate::vault_flags::{Applied, FlagChange};
 use crate::vault_registry::VaultRegistry;
 
@@ -251,7 +252,9 @@ pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
         drain_purge_queue(&ctx.app_dir, Path::new(root));
     }
 
-    run_imap_backup_inner(ctx, start).await
+    // Every IMAP connection this run opens shows as "backup" on Network
+    // Activity (the folder workers below are spawned: scoped again there).
+    net_activity::with_purpose("backup", run_imap_backup_inner(ctx, start)).await
 }
 
 async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant) -> Result<BackupResult, String> {
@@ -299,7 +302,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         let mut tasks = tokio::task::JoinSet::new();
         for (index, mailbox) in batch.iter().cloned() {
             let ctx = ctx.clone();
-            tasks.spawn(async move { backup_imap_folder(ctx, index, mailbox).await });
+            tasks.spawn(net_activity::with_purpose("backup", async move { backup_imap_folder(ctx, index, mailbox).await }));
         }
         while let Some(result) = tasks.join_next().await {
             let outcome = result.map_err(|e| format!("backup folder worker panicked: {e}"))??;
@@ -1360,7 +1363,7 @@ pub async fn get_backup_status(
     let mut status = if account.oauth2_transport.as_deref() == Some("graph") {
         get_graph_backup_status(account_id, account, vault_root, mirror_root).await?
     } else {
-        get_imap_backup_status(pool, account_id, account, vault_root, mirror_root).await?
+        net_activity::with_purpose("backup", get_imap_backup_status(pool, account_id, account, vault_root, mirror_root)).await?
     };
 
     status.external_status = external_status;
@@ -1986,7 +1989,7 @@ mod tests {
     // ── Terminal progress frame (Task 7a) ────────────────────────────────────
     //
     // `run_graph_account` cannot be driven end-to-end in a unit test: it
-    // calls `GraphClient::new(access_token)` directly and makes real HTTP
+    // builds its own `GraphClient::for_purpose(.., "backup")` and makes real HTTP
     // calls — no injected trait seam, the same real-code constraint the
     // "Graph resume checkpoint" tests below already ran into for Task 2 (see
     // that section's own comment). What both twins actually share, and what

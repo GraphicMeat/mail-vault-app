@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{info, warn};
 
+use crate::net_activity::{NetEvent, Protocol};
 use crate::transfer_stats::CountingStream;
 
 pub use pool::{ImapPool, ImapSession, ImapTransport};
@@ -304,19 +305,34 @@ pub const AUTH_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Resolve the config's host:port to IPv4 addresses.
 /// IPv4-only avoids IPv6 connect hangs (especially with Outlook).
+///
+/// Recorded as one Network Activity DNS event, unless the host is already an
+/// IP (a local bridge on 127.0.0.1): nothing is looked up then.
 async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>, String> {
     use async_std::net::ToSocketAddrs;
+    let mut lookup = config.host.parse::<std::net::IpAddr>().is_err().then(|| {
+        let mut ev = NetEvent::out(Protocol::Dns, &config.host, 53, crate::net_activity::purpose());
+        ev.account = Some(config.email.clone());
+        crate::net_activity::Pending::new(ev)
+    });
     let addr = format!("{}:{}", config.host, config.effective_port());
-    let addrs: Vec<std::net::SocketAddr> = async_std::io::timeout(DNS_TIMEOUT, addr.to_socket_addrs())
-        .await
-        .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
-        .filter(|a| a.is_ipv4())
-        .collect();
-
-    if addrs.is_empty() {
-        return Err(format!("No IPv4 address found for {}", config.host));
+    let resolved: Result<Vec<std::net::SocketAddr>, String> =
+        match async_std::io::timeout(DNS_TIMEOUT, addr.to_socket_addrs()).await {
+            Ok(found) => Ok(found.filter(|a| a.is_ipv4()).collect()),
+            Err(e) => Err(format!("DNS resolve failed for {}: {}", addr, e)),
+        };
+    let resolved = resolved.and_then(|addrs| match addrs.is_empty() {
+        true => Err(format!("No IPv4 address found for {}", config.host)),
+        false => Ok(addrs),
+    });
+    if let Some(p) = lookup.as_mut() {
+        p.ev.ip = resolved.as_ref().ok().and_then(|a| a.first()).map(|a| a.ip().to_string());
+        p.ev.result = match &resolved {
+            Ok(_) => "ok".into(),
+            Err(e) => e.clone(),
+        };
     }
-    Ok(addrs)
+    resolved
 }
 
 /// TCP connect + TLS wrap, returning a type-erased transport.
@@ -335,15 +351,26 @@ async fn connect_transport(
     addrs: &[std::net::SocketAddr],
     slot: tokio::sync::OwnedSemaphorePermit,
 ) -> Result<(Box<dyn ImapTransport>, bool), String> {
-    let tcp = async_std::io::timeout(TCP_CONNECT_TIMEOUT, TcpStream::connect(addrs))
-        .await
-        .map_err(|e| format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e))?;
+    // One Network Activity event per connection, recorded when it closes
+    // (a failed connect is recorded here, as it fails).
+    let mut ev = NetEvent::out(Protocol::Imap, &config.host, config.effective_port(), crate::net_activity::purpose());
+    ev.account = Some(config.email.clone());
+    let mut conn = crate::net_activity::Pending::new(ev);
+    let tcp = match async_std::io::timeout(TCP_CONNECT_TIMEOUT, TcpStream::connect(addrs)).await {
+        Ok(tcp) => tcp,
+        Err(e) => {
+            conn.ev.result = format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e);
+            return Err(conn.ev.result.clone());
+        }
+    };
+    conn.ev.ip = tcp.peer_addr().ok().map(|a| a.ip().to_string());
+    conn.ev.result = "ok".into();
 
     // Byte counting sits on the raw stream: COMPRESS=DEFLATE wraps the boxed
     // transport later, so what we count here is what crossed the wire.
     let counters = crate::transfer_stats::global().counters(&config.email);
 
-    let stream = CountingStream::new(tcp, counters, CMD_STALL).holding(slot);
+    let stream = CountingStream::new(tcp, counters, CMD_STALL).holding(slot).recording(conn);
 
     let plaintext_requested = std::env::var("MAILVAULT_IMAP_PLAINTEXT").as_deref() == Ok("1");
     let all_loopback = addrs.iter().all(|a| a.ip().is_loopback());
@@ -2104,7 +2131,8 @@ pub async fn create_imap_session_no_compress(config: &ImapConfig, pool: &ImapPoo
         config.effective_port(),
         config.is_oauth2()
     );
-    let session = connect_and_auth(config, pool).await?;
+    // Only the Sent copy of a send opens one of these.
+    let session = crate::net_activity::with_default_purpose("send", connect_and_auth(config, pool)).await?;
     tracing::info!("[imap_no_compress:session_established] account={}", config.email);
     Ok(session)
 }
@@ -2617,6 +2645,10 @@ async fn test_connection_attempt(config: &ImapConfig, pool: &ImapPool) -> Result
 /// the attempt itself stalled (a throttled server, a dropped SYN, a silent
 /// greeting) — never on an auth rejection, which a retry cannot fix.
 pub async fn test_connection(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
+    crate::net_activity::with_purpose("account setup", test_connection_inner(config, pool)).await
+}
+
+async fn test_connection_inner(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
     let mut session = match test_connection_attempt(config, pool).await {
         Ok(session) => session,
         Err(e) if is_timeout_error(&e) => match test_connection_attempt(config, pool).await {
@@ -3772,5 +3804,47 @@ mod test_connection_budget_tests {
             "the slot must really have been held past the attempt budget: {:?}",
             started.elapsed()
         );
+    }
+}
+
+/// Network Activity hooks on the connect path: the DNS lookup here, the
+/// per-connection event in `pool.rs`'s `net_activity_tests`.
+#[cfg(test)]
+mod net_activity_tests {
+    use super::*;
+    use crate::net_activity::{self, snapshot};
+
+    fn config(host: &str, email: &str) -> ImapConfig {
+        serde_json::from_value(serde_json::json!({"email": email, "imapHost": host, "imapPort": 993}))
+            .expect("build ImapConfig")
+    }
+
+    /// Other tests resolve in parallel: pick ours by a purpose only this test uses.
+    #[tokio::test]
+    async fn resolving_a_host_records_one_dns_lookup() {
+        let address = "dns-lookup@example.com";
+        let config = config("localhost", address);
+        let addrs = net_activity::with_purpose("test: dns lookup", resolve_addrs(&config)).await;
+        assert!(addrs.is_ok(), "{addrs:?}");
+
+        let events: Vec<_> = snapshot().into_iter().filter(|e| e.purpose == "test: dns lookup").collect();
+        assert_eq!(events.len(), 1, "{events:?}");
+        let e = &events[0];
+        assert_eq!(e.protocol, Protocol::Dns);
+        assert_eq!(e.host, "localhost");
+        assert_eq!(e.port, 53);
+        assert_eq!(e.result, "ok");
+        assert_eq!(e.ip.as_deref(), Some("127.0.0.1"));
+        assert!(e.account.is_some(), "the account is labelled");
+        assert!(!serde_json::to_string(e).unwrap().contains(address), "raw address in {e:?}");
+    }
+
+    /// A local bridge on 127.0.0.1: nothing is looked up, so nothing is shown.
+    #[tokio::test]
+    async fn an_ip_host_is_not_a_dns_lookup() {
+        let config = config("127.0.0.1", "dns-literal@example.com");
+        let addrs = net_activity::with_purpose("test: ip literal", resolve_addrs(&config)).await;
+        assert!(addrs.is_ok(), "{addrs:?}");
+        assert!(snapshot().iter().all(|e| e.purpose != "test: ip literal"));
     }
 }

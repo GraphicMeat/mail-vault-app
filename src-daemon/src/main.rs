@@ -173,6 +173,8 @@ fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGu
     let settings = std::fs::read_to_string(data_dir.join("frontend-settings.json")).unwrap_or_default();
     log_redact::set_verbose(log_redact::verbose_from_settings(&settings));
     let salt = log_redact::load_or_create_salt(data_dir);
+    // Network Activity labels an account with the same token the logs use.
+    mailvault_core::net_activity::set_salt(salt);
     let tee = non_blocking.and(std::io::stderr);
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
@@ -436,6 +438,15 @@ async fn daemon_main() {
 
     let events = events::EventBus::new(events::CAPACITY);
     credentials::install_events(events.clone());
+    // Network Activity, live: each recorded event goes to the app as it
+    // happens. The listener runs under the ring's lock, so it only sends on
+    // the broadcast bus (never `record` or `subscribe`).
+    let net_events = events.clone();
+    mailvault_core::net_activity::subscribe(Box::new(move |ev| {
+        if let Ok(v) = serde_json::to_value(ev) {
+            net_events.emit("net-activity", v);
+        }
+    }));
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
     // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls
