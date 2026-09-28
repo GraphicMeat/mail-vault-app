@@ -134,7 +134,7 @@ describe('Connected Compose Reply Modes', function () {
 
   /** Whether the reply's reading context is open, by its toggle's own state. */
   const contextShown = () => browser.execute(() =>
-    document.querySelector('[data-testid="compose-context-toggle"]')?.getAttribute('aria-expanded') ?? null);
+    document.querySelector('[data-testid="compose-context-toggle"]')?.getAttribute('aria-pressed') ?? null);
 
   it('prefills a Reply and keeps the original beside it behind a toggle', async function () {
     await openMode(EMAIL, 'r');
