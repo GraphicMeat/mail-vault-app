@@ -28,7 +28,7 @@ const LOCALES = ['de', 'fr', 'es', 'it', 'pt-br', 'ja', 'ko', 'zh'];
 const SKIP_DIRS = new Set(['api', 'node_modules', 'src', 'i18n', 'assets', 'screenshots', 'oauth', ...LOCALES]);
 const SKIP_FILES = new Set([
   'faq.html', 'docs.html', 'blog.html', 'index.html', 'mentioned-in.html',
-  'billing-cancel.html', 'billing-success.html', 'download-stats.html', 'changelog.html',
+  'billing-cancel.html', 'billing-success.html', 'changelog.html',
   '404.html',
 ]);
 
