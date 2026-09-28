@@ -3159,6 +3159,7 @@
   "netActivity.allPurposes": "Todos los propósitos",
   "netActivity.account": "Cuenta",
   "netActivity.allAccounts": "Todas las cuentas",
+  "netActivity.noAccount": "No vinculada a ninguna cuenta",
   "netActivity.pause": "Pausar",
   "netActivity.copy": "Copiar como texto",
   "netActivity.copied": "Copiado",

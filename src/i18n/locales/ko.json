@@ -3159,6 +3159,7 @@
   "netActivity.allPurposes": "모든 목적",
   "netActivity.account": "계정",
   "netActivity.allAccounts": "모든 계정",
+  "netActivity.noAccount": "계정과 연결되지 않음",
   "netActivity.pause": "일시 정지",
   "netActivity.copy": "텍스트로 복사",
   "netActivity.copied": "복사됨",

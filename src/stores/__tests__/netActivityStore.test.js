@@ -271,6 +271,12 @@ describe('copyText', () => {
     expect(lines[1]).toContain('HTTP 503');
   });
 
+  it('names the account, or says what the page says for a connection no account made', () => {
+    const [named, none] = copyText([ev({ account: 'a@x.test' }), ev({ account: null })], 'Not tied to an account').split('\n');
+    expect(named.split('\t')).toContain('a@x.test');
+    expect(none.split('\t')).toContain('Not tied to an account');
+  });
+
   it('writes a lookup as name and answer, not as a connection to port 53', () => {
     const line = copyText([ev({ protocol: 'dns', host: 'imap.a.test', ip: '192.0.2.9', port: 53 })]);
     expect(line).toContain('imap.a.test -> 192.0.2.9');

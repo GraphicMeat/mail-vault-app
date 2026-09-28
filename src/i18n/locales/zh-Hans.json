@@ -3159,6 +3159,7 @@
   "netActivity.allPurposes": "所有用途",
   "netActivity.account": "账户",
   "netActivity.allAccounts": "所有账户",
+  "netActivity.noAccount": "未关联任何账户",
   "netActivity.pause": "暂停",
   "netActivity.copy": "复制为文本",
   "netActivity.copied": "已复制",

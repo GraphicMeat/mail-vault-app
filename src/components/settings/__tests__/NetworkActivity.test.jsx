@@ -78,6 +78,14 @@ describe('Network Activity', () => {
     expect(screen.getByTestId('net-row').textContent).toContain('person@example.test');
   });
 
+  // An update check or a model download is no account's: said, not left blank.
+  it('says a connection is not tied to an account, on screen and in Copy as text', async () => {
+    await mount([ev({ host: 'app.test', protocol: 'https', purpose: 'AI model', account: null })]);
+    expect(within(screen.getByTestId('net-row')).getByTestId('net-account').textContent).toBe('Not tied to an account');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy as text' })); });
+    expect(writeText.mock.calls[0][0].split('\t')).toContain('Not tied to an account');
+  });
+
   it('puts a net-activity event on top as it arrives', async () => {
     await mount([ev({ host: 'older.test' })]);
     await push(ev({ host: 'live.test' }));

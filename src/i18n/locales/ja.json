@@ -3159,6 +3159,7 @@
   "netActivity.allPurposes": "すべての目的",
   "netActivity.account": "アカウント",
   "netActivity.allAccounts": "すべてのアカウント",
+  "netActivity.noAccount": "アカウントに関連付けられていません",
   "netActivity.pause": "一時停止",
   "netActivity.copy": "テキストとしてコピー",
   "netActivity.copied": "コピーしました",

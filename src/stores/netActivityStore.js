@@ -193,10 +193,13 @@ export const filterEvents = (events, { protocol, purpose, account } = {}) => eve
 /** Where a row went: `host:port`, or `name -> answer` for a lookup. */
 export const target = (e, arrow = '->') => (e.protocol === 'dns' ? `${e.host} ${arrow} ${e.ip || '?'}` : `${e.host}:${e.port}`);
 
-/** Plain, untranslated text for a bug report or a support thread. */
-export const copyText = rows => rows.map(e => [
+/**
+ * Plain, untranslated text for a bug report or a support thread. `noAccount`
+ * is what the page shows for a connection no account made.
+ */
+export const copyText = (rows, noAccount = '-') => rows.map(e => [
   new Date(e.atMs).toISOString(), e.direction, PROTOCOL_LABELS[e.protocol] || e.protocol, target(e), e.purpose,
-  e.account || '-', `up ${e.bytesUp} B`, `down ${e.bytesDown} B`, `${e.durationMs} ms`, e.result,
+  e.account || noAccount, `up ${e.bytesUp} B`, `down ${e.bytesDown} B`, `${e.durationMs} ms`, e.result,
 ].join('\t')).join('\n');
 
 // ponytail: one small entry per message rendered this session; cap it if a

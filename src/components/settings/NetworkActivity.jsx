@@ -63,7 +63,9 @@ const Row = React.memo(function Row({ e }) {
       </td>
       <td className={`${CELL} tabular-nums`} data-testid="net-port">{dns ? '' : e.port}</td>
       <td className={CELL}>{purposeLabel(t, e.purpose)}</td>
-      <td className={`${CELL} text-mail-text-muted`}>{e.account || ''}</td>
+      <td className={`${CELL} ${e.account ? 'text-mail-text-muted' : 'text-mail-text-muted/70 italic'}`} data-testid="net-account">
+        {e.account || t('netActivity.noAccount')}
+      </td>
       <td className={`${CELL} tabular-nums text-right`}>{formatBytes(e.bytesUp)}</td>
       <td className={`${CELL} tabular-nums text-right`}>{formatBytes(e.bytesDown)}</td>
       <td className={`${CELL} tabular-nums text-right`}>{formatDuration(e.durationMs)}</td>
@@ -100,7 +102,7 @@ export function NetworkActivity() {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(copyText(shown));
+      await navigator.clipboard.writeText(copyText(shown, t('netActivity.noAccount')));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
