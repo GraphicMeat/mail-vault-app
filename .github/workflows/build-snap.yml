@@ -20,10 +20,21 @@ jobs:
     timeout-minutes: 90
     env:
       TAURI_TARGET: ${{ inputs.arch }}-unknown-linux-gnu
+      MAILVAULT_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.MAILVAULT_GOOGLE_OAUTH_CLIENT_ID }}
+      MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      # A shipped build without our Google client would quietly sign new Gmail
+      # accounts in with Thunderbird's, so fail before compiling anything.
+      - name: Require MailVault's Google OAuth client
+        run: |
+          if [ -z "$MAILVAULT_GOOGLE_OAUTH_CLIENT_ID" ] || [ -z "$MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET" ]; then
+            echo "::error::MAILVAULT_GOOGLE_OAUTH_CLIENT_ID and MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET must both be set, or this build would fall back to Thunderbird's Google client"
+            exit 1
+          fi
 
       - name: Install system dependencies
         run: |

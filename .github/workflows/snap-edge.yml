@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/build-snap.yml
+    secrets: inherit
     with:
       arch: x86_64
 
