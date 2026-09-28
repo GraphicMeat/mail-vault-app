@@ -74,30 +74,69 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
 /// UID of the message carrying `message_id` (brackets stripped) in the Sent
 /// `mailbox`, asked on a fresh session: the one the APPEND ran on may be the
 /// thing that hung. Bounded, because it runs after the APPEND's own 60 s.
+///
+/// It keeps looking for the whole budget rather than asking once. A server
+/// slow to file an APPEND is slow for the reason the client gave up on it, and
+/// the timed-out session's LOGOUT is no measure of when it is done: it gives
+/// up after `CMD_STALL` of silence, which can be before the server has stored
+/// the message. A single look taken then found nothing, so the staged local
+/// copy stayed beside the server's for good.
 async fn sent_copy_uid(pool: &imap::ImapPool, account: &ImapConfig, mailbox: &str, message_id: &str) -> Option<u32> {
-    let check = async {
-        let mut session = imap::create_imap_session_no_compress(account, pool).await?;
-        imap::select_mailbox(&mut session, mailbox).await.map(|_| ())?;
-        let found = imap::uid_of_message_id(&mut session, message_id).await;
-        let _ = session.logout().await;
-        found
-    };
-    match tokio::time::timeout(std::time::Duration::from_secs(SENT_RECHECK_SECS), check).await {
-        Ok(Ok(uid)) => uid,
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SENT_RECHECK_SECS);
+    let mut session = match tokio::time::timeout_at(deadline, imap::create_imap_session_no_compress(account, pool)).await {
+        Ok(Ok(session)) => session,
         Ok(Err(e)) => {
             tracing::warn!("[send:server_append_recheck_fail] mailbox={} error={}", mailbox, e);
-            None
+            return None;
         }
         Err(_) => {
             tracing::warn!("[send:server_append_recheck_timeout] mailbox={} timeout={}s", mailbox, SENT_RECHECK_SECS);
+            return None;
+        }
+    };
+    let mut looks = 0u32;
+    let look = async {
+        loop {
+            looks += 1;
+            // SELECT again each time: some servers show a message another
+            // session filed only to a mailbox opened after it landed.
+            imap::select_mailbox(&mut session, mailbox).await.map(|_| ())?;
+            if let Some(uid) = imap::uid_of_message_id(&mut session, message_id).await? {
+                return Ok::<_, String>(Some(uid));
+            }
+            if tokio::time::Instant::now() + SENT_RECHECK_INTERVAL >= deadline {
+                return Ok(None);
+            }
+            tokio::time::sleep(SENT_RECHECK_INTERVAL).await;
+        }
+    };
+    let found = match tokio::time::timeout_at(deadline, look).await {
+        Ok(Ok(Some(uid))) => Some(uid),
+        Ok(Ok(None)) => {
+            tracing::warn!("[send:server_append_recheck_miss] mailbox={} looks={} the server does not hold the message", mailbox, looks);
             None
         }
-    }
+        Ok(Err(e)) => {
+            tracing::warn!("[send:server_append_recheck_fail] mailbox={} looks={} error={}", mailbox, looks, e);
+            None
+        }
+        Err(_) => {
+            tracing::warn!("[send:server_append_recheck_timeout] mailbox={} looks={} timeout={}s", mailbox, looks, SENT_RECHECK_SECS);
+            None
+        }
+    };
+    // Outside the budget and bounded on its own: what the looks found stands
+    // whatever the goodbye does.
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), session.logout()).await;
+    found
 }
 
 /// The re-check's budget. With the APPEND's 60 s it bounds when the completion
 /// event can arrive; compose listens for 90 s (`APPEND_LISTEN_MS`).
 const SENT_RECHECK_SECS: u64 = 15;
+
+/// The wait between two of the re-check's looks.
+const SENT_RECHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
@@ -558,6 +597,32 @@ mod tests {
         assert_eq!(payload["messageIdHeader"], json!("staged.5@mock.test"));
         assert_eq!(payload["verify"]["recovered"], json!(true), "{payload}");
         assert!(payload["verify"]["foundUid"].as_u64().is_some(), "{payload}");
+    }
+
+    /// A slow server files the APPEND after the client gave up on it, and
+    /// after the re-check's first look too: the timed-out session's LOGOUT can
+    /// come back (a read timeout) before the server has stored the message.
+    /// One look then found nothing and the staged local copy stayed beside the
+    /// server's for good; the re-check has to keep looking for its budget.
+    #[tokio::test]
+    async fn the_recheck_finds_a_copy_the_server_files_after_its_first_look() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let account: ImapConfig = serde_json::from_value(account_json(&server)).unwrap();
+        let raw = b"From: luke@mock.test\r\nTo: partner@example.com\r\nSubject: late\r\nMessage-ID: <late.1@mock.test>\r\n\r\nbody\r\n".to_vec();
+
+        let (found, ()) = tokio::join!(
+            sent_copy_uid(&s.imap_pool, &account, "Sent", "late.1@mock.test"),
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                server.mutate(|st| {
+                    st.find_mut("Sent").unwrap().add(mock_imap::state::Message::new(7, raw));
+                });
+            },
+        );
+
+        assert_eq!(found, Some(7), "commands: {:?}", server.commands());
     }
 
     /// And an APPEND that really never landed stays a failure.

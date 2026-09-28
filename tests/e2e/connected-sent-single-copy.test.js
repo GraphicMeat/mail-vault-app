@@ -20,9 +20,10 @@
  *    daemon times out at 20 s, the mock stores the message at 40 s, and the
  *    daemon's re-check finds it there. After the next Sent refresh the
  *    conversation and the Sent folder hold one copy, not an "Only copy" too.
- *    This leans on the timed-out session's LOGOUT blocking until the mock
- *    wakes (so the re-check runs after the store): if that ever returns
- *    early, this case goes red with no product regression.
+ *    The timed-out session's LOGOUT gives up after 15 s of silence
+ *    (`CMD_STALL`), about 5 s before the mock files the message, so the
+ *    re-check has to keep looking for its 15 s budget: one look at LOGOUT
+ *    time found nothing, and the staged copy stayed.
  *
  * The SMTP side is read from the daemon's own log (`[send:raw_headers]` and
  * the `[send:messageid_header]` line after it): the spec cannot reach what the
