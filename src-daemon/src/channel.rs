@@ -126,6 +126,15 @@ mod tests {
             "bytesUp": 1, "bytesDown": 2, "durationMs": 3, "result": "ok",
         });
         dispatch(&state, "net.report", json!({"event": event})).await;
+        // The store is fed by the daemon's listener, which only main.rs
+        // subscribes (a test's own would race `the_listener_sees_every_record`):
+        // hand the recorded event to it the way the subscription would.
+        let recorded = mailvault_core::net_activity::snapshot()
+            .into_iter()
+            .find(|e| e.purpose == "channel-report-test")
+            .expect("net.report recorded the event");
+        crate::handlers::net_activity::listener(state.events.clone(), std::sync::Arc::clone(&state.net_log))(&recorded);
+        state.net_log.flush();
 
         let resp = crate::server::handle_request_for_test(&state, "net.activity", json!({})).await;
         let result = resp.result.expect("net.activity answers");

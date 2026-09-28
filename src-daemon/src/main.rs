@@ -438,22 +438,10 @@ async fn daemon_main() {
 
     let events = events::EventBus::new(events::CAPACITY);
     credentials::install_events(events.clone());
-    // Network Activity: each recorded event is placed on the map (in memory,
-    // the bundled database), goes to the app as it happens, and is queued for
-    // the store. The listener runs under the ring's lock on the connection's
-    // own task, so it only sends (never `record`, `subscribe`, nor SQLite).
+    // Network Activity: each recorded event goes to the app live and to the
+    // store in app.db (`handlers::net_activity::listener`).
     let net_log = Arc::new(mailvault_core::net_log::NetLog::start(&data_dir));
-    let net_events = events.clone();
-    let kept = Arc::clone(&net_log);
-    let locator = mailvault_core::geo_ip::Locator::default();
-    mailvault_core::net_activity::subscribe(Box::new(move |ev| {
-        let country = locator.locate(ev);
-        if let Ok(mut v) = serde_json::to_value(ev) {
-            v["country"] = country.clone().into();
-            net_events.emit("net-activity", v);
-        }
-        kept.push(ev, country);
-    }));
+    mailvault_core::net_activity::subscribe(Box::new(handlers::net_activity::listener(events.clone(), Arc::clone(&net_log))));
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
     // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls

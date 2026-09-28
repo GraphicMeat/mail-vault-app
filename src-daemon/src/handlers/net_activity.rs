@@ -54,6 +54,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// The daemon's one `net_activity` listener: each recorded event is placed
+/// on the map (in memory, the bundled database), goes to the app as it
+/// happens, and is queued for the store. It runs under the ring's lock on
+/// the connection's own task, so it only sends: never `record`, `subscribe`,
+/// nor SQLite.
+pub(crate) fn listener(
+    events: crate::events::EventBus,
+    log: Arc<net_log::NetLog>,
+) -> impl Fn(&mailvault_core::net_activity::NetEvent) + Send + Sync + 'static {
+    let locator = mailvault_core::geo_ip::Locator::default();
+    move |ev| {
+        let country = locator.locate(ev);
+        if let Ok(mut v) = serde_json::to_value(ev) {
+            v["country"] = country.clone().into();
+            events.emit("net-activity", v);
+        }
+        log.push(ev, country);
+    }
+}
+
 fn to_json<T: serde::Serialize>(v: T) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
@@ -91,6 +111,26 @@ mod tests {
         assert_eq!(call(&state, "net.retention", json!({})).await["result"]["retention"], "twoWeeks");
         let bad = call(&state, "net.set_retention", json!({"retention": "forever"})).await;
         assert!(bad.get("error").is_some(), "{bad}");
+    }
+
+    /// Called directly, never through `subscribe`: the listener is global and
+    /// `the_listener_sees_every_record` owns it.
+    #[tokio::test]
+    async fn the_listener_sends_the_event_live_with_its_country_and_keeps_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
+        let mut live = state.events.subscribe();
+        let listen = super::listener(state.events.clone(), std::sync::Arc::clone(&state.net_log));
+        let mut e = mailvault_core::net_activity::NetEvent::out(mailvault_core::net_activity::Protocol::Https, "dns.google", 443, "listener-test");
+        e.ip = Some("8.8.8.8".into());
+        listen(&e);
+        let line = live.try_recv().expect("sent live");
+        assert!(line.contains("\"net-activity\""), "{line}");
+        assert!(line.contains("\"country\":\"US\""), "{line}");
+        state.net_log.flush();
+        let table = call(&state, "net.activity", json!({})).await;
+        assert_eq!(table["result"]["events"][0]["purpose"], "listener-test");
+        assert_eq!(table["result"]["events"][0]["country"], "US");
     }
 
     #[tokio::test]
