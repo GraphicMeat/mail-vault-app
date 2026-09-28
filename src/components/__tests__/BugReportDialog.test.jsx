@@ -131,11 +131,13 @@ describe('BugReportDialog', () => {
     expect(screen.getByTestId('bug-report-dialog').textContent).toContain('Cooked over an');
   });
 
-  it('stamps the cooldown when a report is filed on GitHub', () => {
+  it('does not stamp the cooldown when a report is filed on GitHub', () => {
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
     click('bug-option-github');
-    expect(setLastBugReportAt).toHaveBeenCalledTimes(1);
-    expect(Math.abs(setLastBugReportAt.mock.calls[0][0] - Date.now())).toBeLessThan(1000);
+    expect(openInBrowser).toHaveBeenCalledWith(
+      'https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=bug-reports'
+    );
+    expect(setLastBugReportAt).not.toHaveBeenCalled();
   });
 
   it('does not stamp the cooldown just from opening the email compose window', () => {
@@ -146,16 +148,16 @@ describe('BugReportDialog', () => {
     expect(setLastBugReportAt).not.toHaveBeenCalled();
   });
 
-  it('disables GitHub and email with a countdown once a report was just filed, but leaves FAQ, Discussions and the idea row open', () => {
+  it('disables only email with a countdown once a report was just filed, leaving GitHub, FAQ, Discussions and the idea row open', () => {
     settingsState.lastBugReportAt = Date.now() - 175_000; // 125s of the 300s left
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
 
     const githubButton = screen.getByTestId('bug-option-github').querySelector('button');
     const emailButton = screen.getByTestId('bug-option-email').querySelector('button');
     const ideaButton = screen.getByTestId('bug-option-idea').querySelector('button');
-    expect(githubButton.disabled).toBe(true);
+    expect(githubButton.disabled).toBe(false);
     expect(emailButton.disabled).toBe(true);
-    expect(screen.getByTestId('bug-option-github').textContent).toContain('Available again in 2:05');
+    expect(screen.getByTestId('bug-option-github').textContent).not.toContain('Available again in');
     expect(screen.getByTestId('bug-option-email').textContent).toContain('Available again in 2:05');
 
     // A feature idea is not a bug report: it is never gated by the cooldown.
@@ -184,15 +186,17 @@ describe('BugReportDialog', () => {
     // COOLDOWN_MS - elapsed subtraction would overshoot past 300s.
     settingsState.lastBugReportAt = Date.now() + 3_600_000;
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
-    expect(screen.getByTestId('bug-option-github').textContent).toContain('Available again in 5:00');
-    expect(screen.getByTestId('bug-option-github').querySelector('button').disabled).toBe(true);
+    expect(screen.getByTestId('bug-option-email').textContent).toContain('Available again in 5:00');
+    expect(screen.getByTestId('bug-option-email').querySelector('button').disabled).toBe(true);
   });
 
-  it('ignores clicks on the disabled GitHub button while the cooldown is armed', () => {
+  it('opens GitHub even while the email cooldown is armed', () => {
     settingsState.lastBugReportAt = Date.now() - 10_000; // just filed, 290s left
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
     click('bug-option-github');
-    expect(openInBrowser).not.toHaveBeenCalled();
+    expect(openInBrowser).toHaveBeenCalledWith(
+      'https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=bug-reports'
+    );
     expect(setLastBugReportAt).not.toHaveBeenCalled();
   });
 

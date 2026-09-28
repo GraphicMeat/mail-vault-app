@@ -13,8 +13,9 @@ const GH_NEW_IDEA = `${GH_DISCUSSIONS}/new?category=ideas`;
 const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
 
-// One report every five minutes: filing a report is not reading help, so FAQ
-// and Discussions stay open even while this is armed.
+// One emailed report every five minutes (stamped when the report is sent):
+// only the developer's inbox is gated. FAQ, Discussions, GitHub and ideas stay
+// open while this is armed.
 const COOLDOWN_MS = 300_000;
 
 function formatCountdown(ms) {
@@ -41,7 +42,6 @@ export function BugReportDialog({ open, onClose, onEmail }) {
   const t = useT();
   const language = useSettingsStore(s => s.language) || 'en';
   const lastBugReportAt = useSettingsStore(s => s.lastBugReportAt);
-  const setLastBugReportAt = useSettingsStore(s => s.setLastBugReportAt);
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
   const FAQ = faqUrl(language);
 
@@ -65,8 +65,6 @@ export function BugReportDialog({ open, onClose, onEmail }) {
   }, [open, inCooldown]);
 
   const cooldownSubtitle = tr('bugReport.availableAgainIn', { time: formatCountdown(cooldownRemaining) });
-
-  const reportGithub = () => { setLastBugReportAt(Date.now()); openAndClose(GH_NEW_BUG)(); };
 
   const options = [
     {
@@ -93,12 +91,13 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       testid: 'bug-option-github',
       icon: Github,
       title: tr('bugReport.reportGithub'),
-      subtitle: inCooldown ? cooldownSubtitle : tr('bugReport.publicThreadSearchableGetNotified'),
+      // Never gated: a public thread is GitHub's to rate-limit, and a stamp
+      // here would lock the email row for someone who only opened GitHub.
+      subtitle: tr('bugReport.publicThreadSearchableGetNotified'),
       action: tr('common.open'),
       variant: 'primary',
       url: GH_NEW_BUG,
-      onClick: reportGithub,
-      disabled: inCooldown,
+      onClick: openAndClose(GH_NEW_BUG),
     },
     {
       testid: 'bug-option-email',
