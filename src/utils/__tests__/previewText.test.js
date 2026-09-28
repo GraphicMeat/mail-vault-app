@@ -21,4 +21,14 @@ describe('cleanPreviewText', () => {
     expect(cleanPreviewText('')).toBe('');
     expect(cleanPreviewText(undefined)).toBe('');
   });
+
+  it('drops an entity the snippet cap cut in half, but not an ending the cap never cut', () => {
+    const head = 'Mokėtina suma 40,25 EUR Būsime dėkingi, jeigu sąskaitą apmokėsite iki ';
+    expect(cleanPreviewText(`${head.repeat(3)}&scar`)).toBe(head.repeat(3).trim());
+    expect(cleanPreviewText(`${'x'.repeat(200)} &#82`)).toBe('x'.repeat(200));
+    // short: nothing was cut, so an ampersand word at the end is the text
+    expect(cleanPreviewText('Meet me at AT&T')).toBe('Meet me at AT&T');
+    // a whole entity still decodes
+    expect(cleanPreviewText(`${'x'.repeat(200)} &scaron;`)).toBe(`${'x'.repeat(200)} š`);
+  });
 });

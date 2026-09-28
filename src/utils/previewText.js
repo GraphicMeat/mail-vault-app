@@ -14,7 +14,16 @@ function decodeEntities(text) {
   return new DOMParser().parseFromString(text.replace(/</g, '&lt;'), 'text/html').body.textContent;
 }
 
+// The daemon cuts a preview at 150 (vault row) or 200 (search index) characters
+// whatever is there, so `&scaron;` can arrive as `&scar`. No decoder knows that
+// one, and it would print raw. A tail like that is dropped, but only from a text
+// long enough to have been cut: "Meet me at AT&T" is whole.
+const MIN_CUT_LENGTH = 150;
+const HALF_ENTITY = /&#?[a-z0-9]{1,31}$/i;
+
 export function cleanPreviewText(value) {
   if (!value) return '';
-  return decodeEntities(String(value)).replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+  let text = String(value);
+  if (text.length >= MIN_CUT_LENGTH) text = text.replace(HALF_ENTITY, '');
+  return decodeEntities(text).replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
 }

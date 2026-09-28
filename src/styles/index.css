@@ -139,6 +139,14 @@
 /* The two-line layout: its text block carries py-1.5 of its own, and its
    first line is the 17px sender line. */
 .row-compact { --row-top: 2px; --row-gutter-top: 6px; --row-first-line: 17px; }
+/* The two-line layout's sender and subject end above the preview, and so does
+   the gutter once its chip slot is 15px (checkbox 17 + gap 4 + chip 15 = 36):
+   the preview hangs out under the checkbox instead of leaving that column
+   empty. 28px = the 20px gutter cell + the row's gap-2 (8px). The default
+   layout keeps its gutter beside the preview: its chip runs past the first
+   preview line. */
+.row-compact .row-gutter-cell .row-gutter-slot { height: 15px; }
+.row-compact .row-snippet { margin-left: -28px; }
 
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:

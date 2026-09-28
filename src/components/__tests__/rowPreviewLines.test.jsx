@@ -132,3 +132,33 @@ describe('row height', () => {
     expect(listRowHeight(false, 3)).toBe(56 + 3 * SNIPPET_LINE_PX);
   });
 });
+
+describe('the preview in a row', () => {
+  it('never prints an entity the snippet cap cut in half', () => {
+    act(() => useSettingsStore.setState({ listPreviewLines: 2 }));
+    const head = 'Mokėtina suma 40,25 EUR Būsime dėkingi, jeigu sąskaitą apmokėsite iki ';
+    for (const renderRow of Object.values(rows)) {
+      const { container } = render(renderRow(email({ previewText: `${head.repeat(3)}&scar` })));
+      expect(container.querySelector('[data-testid="row-snippet"]').textContent).toBe(head.repeat(3).trim());
+      cleanup();
+    }
+  });
+
+  // The two-line layout hangs the preview out under the checkbox. The pull is
+  // the gutter cell (20px) plus the row's gap: change either and it must move.
+  it('hangs out over the two-line layout gutter by exactly the gutter cell and the row gap', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'), 'utf8');
+    act(() => useSettingsStore.setState({ listPreviewLines: 2 }));
+    for (const renderRow of [rows.CompactEmailRow, rows.CompactThreadRow]) {
+      const row = render(renderRow(email())).container.querySelector('[data-testid="email-row"]');
+      expect(row.className).toMatch(/\bgap-2\b/);
+      expect(row.className).toContain('row-compact');
+      cleanup();
+    }
+    expect(css).toMatch(/\.row-compact \.row-snippet\s*\{\s*margin-left:\s*-28px;/);
+    expect(css).toMatch(/\.row-gutter-slot\s*\{[^}]*width:\s*20px/);
+  });
+});
