@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { send } from '../transport';
+import { daemonCall } from '../daemonClient';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
@@ -951,7 +952,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   if (isLocalOnly) {
     if (invoke) {
       try {
-        await send('maildir_delete', { accountId, mailbox, uid: realUid });
+        // `bin`: the only copy goes into the deleted-mail bin first.
+        await send('maildir_delete', { accountId, mailbox, uid: realUid, bin: true });
         await send('local_index_remove', { accountId, mailbox, uid: realUid });
         console.log(`[deleteEmail] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
       } catch (err) {
@@ -979,7 +981,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
           row: candidate, token: account.oauth2AccessToken,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
-        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId), { delayMs: SERVER_RETRY_MS });
+        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
       } else {
         const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         // Where it went, so a caller can offer an undo instead of a SEARCH:
@@ -988,6 +990,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
         outcome = {
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+          // Its copy in the daemon's deleted-mail bin, when it kept one.
+          binId: res?.binId ?? null,
           // The only handle left when the server reports no COPYUID — same
           // fallback the move undo uses. See setDeleteUndo.
           messageId: candidate?.messageId ?? null,
@@ -1067,11 +1071,25 @@ export async function setDeleteUndo(outcomes) {
   // (see _resolveDestinationUids). Only a delete that resolved NO trash folder
   // is truly permanent.
   const restorable = (outcomes || []).filter(o => o?.trashUid != null || (o?.trash && o?.messageId));
+  // What only the daemon's deleted-mail bin still holds: a permanent delete
+  // it kept a copy of. Recovered from there, back to the folder it left.
+  const binned = (outcomes || []).filter(o => o?.binId && !restorable.includes(o)).map(o => o.binId);
+  _lastBinned = (outcomes || []).map(o => o?.binId).filter(Boolean);
   if (restorable.length) {
     useMailStore.getState().setUndo({
-      labelKey: 'undo.deleted',
-      labelParams: { count: restorable.length },
-      run: () => _restoreFromTrash(restorable),
+      // "Moved to Trash" only when all of it went there.
+      labelKey: binned.length ? 'undo.deletedKept' : 'undo.deleted',
+      labelParams: { count: restorable.length + binned.length },
+      run: async () => {
+        await _restoreFromTrash(restorable);
+        if (binned.length) await recoverFromBin(binned);
+      },
+    });
+  } else if (binned.length) {
+    useMailStore.getState().setUndo({
+      labelKey: 'undo.deletedKept',
+      labelParams: { count: binned.length },
+      run: () => recoverFromBin(binned),
     });
   } else if (outcomes?.length) {
     useMailStore.getState().setUndo({
@@ -1171,7 +1189,64 @@ async function _restoreFromTrash(outcomes) {
       get().updateSortedEmails();
       settle();
       _restoreInFlight = null;
+      // Back on the server: its bin copy would put a second one there.
+      _discardBinned(outcomes.filter(o => moved.has(_targetId(o))).map(o => o.binId).filter(Boolean));
     }
+  }
+}
+
+// ── The deleted-mail bin (daemon `deleted.*`) ──
+//
+// Every delete leaves a whole copy in the daemon's bin beside app.db. The
+// undo slot reaches it for a delete the server cannot take back, and Cmd+Z
+// reaches the last delete's copies after the slot is gone (replaced by a
+// later action, or already spent on something else).
+
+// The bin copies of the last delete. Only the last, like the undo slot.
+let _lastBinned = [];
+
+function _discardBinned(ids) {
+  if (!ids.length) return;
+  _lastBinned = _lastBinned.filter(id => !ids.includes(id));
+  daemonCall('deleted.discard', { ids }).catch(e => console.warn('[undo] Could not drop the bin copy:', e));
+}
+
+/**
+ * Put bin copies back: on the server (moved back out of Trash when it still
+ * holds them, else uploaded to the folder they left), or `local` into the
+ * vault. The list reloads rather than repainting rows optimistically: the
+ * message comes back under a uid only the reload learns, so nothing here
+ * addresses a row `keyAfterUndo` would have to wait for.
+ */
+export async function recoverFromBin(ids, target = 'server') {
+  _lastBinned = _lastBinned.filter(id => !ids.includes(id));
+  const res = await daemonCall('deleted.recover', { ids, target });
+  if (res?.recovered?.length) {
+    const { useMailStore } = await import('../../stores/mailStore');
+    if (useMailStore.getState().accounts?.length) await reloadListInView();
+  }
+  if (res?.failed?.length && !res?.recovered?.length) {
+    const key = res.failed[0]?.error;
+    throw new Error(tr(typeof key === 'string' && key.startsWith('deletedBin.') ? key : 'deletedBin.recoverFailed'));
+  }
+  return res;
+}
+
+/**
+ * Cmd+Z: the undo slot while it holds something to undo; past it, the last
+ * delete's bin copies, back on the server. False when there was nothing.
+ */
+export async function undoLastAction() {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const state = useMailStore.getState();
+  if (state.undo?.canUndo) return state.runUndo();
+  if (!_lastBinned.length) return false;
+  try {
+    await recoverFromBin(_lastBinned);
+    return true;
+  } catch (e) {
+    useMailStore.setState({ error: tr('undo.failed', { err: e?.message || String(e) }) });
+    return false;
   }
 }
 
@@ -2181,7 +2256,7 @@ export async function deleteSelectedFromServer() {
       if (isLocalOnly) {
         if (invoke) {
           try {
-            await send('maildir_delete', { accountId, mailbox, uid: realUid });
+            await send('maildir_delete', { accountId, mailbox, uid: realUid, bin: true });
             await send('local_index_remove', { accountId, mailbox, uid: realUid });
             console.log(`[deleteSelectedFromServer] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
           } catch (err) {
@@ -2213,13 +2288,14 @@ export async function deleteSelectedFromServer() {
           row: emailObj, token: account.oauth2AccessToken,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: realUid }));
-        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId), { delayMs: SERVER_RETRY_MS });
+        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
       } else {
         const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         const shown = hidden.removed.find(r => _targetId(r) === tombstone);
         deleted.push({
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+          binId: res?.binId ?? null,
           messageId: emailObj?.messageId ?? null,
           row: shown?.row ?? null, view: shown?.view ?? null,
         });
@@ -2521,7 +2597,8 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
           if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: t.uid }));
           await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
         } else {
-          await api.deleteEmail(account, t.uid, t.mailbox);
+          // Every copy, by request: none kept in the deleted-mail bin either.
+          await api.deleteEmail(account, t.uid, t.mailbox, null, { bin: false });
         }
         purgeable.push(t);
       } catch (e) {

@@ -39,6 +39,7 @@ import { AppearanceSettings } from './settings/AppearanceSettings';
 import { AccountSettings } from './settings/AccountSettings';
 import { TemplateSettings } from './settings/TemplateSettings';
 import { StorageSettings } from './settings/StorageSettings';
+import { DeletedEmailsSettings } from './settings/DeletedEmailsSettings';
 import DataUsageSettings from './settings/DataUsageSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
 import { LogsSettings } from './settings/LogsSettings';
@@ -259,6 +260,8 @@ export const settingSearchGroups = [
     ['settings.storage.addCleanupRule', 'cleanup rule automatic delete archive old emails age folder schedule'],
     ['settings.storage.storageStatus', 'storage usage space used disk size'],
     ['settings.storage.dangerZone', 'empty vault delete everything reset erase all mail'],
+    ['deletedBin.title', 'deleted emails recover restore undelete bin trash'],
+    ['deletedBin.retention', 'deleted emails keep how long days retention purge'],
   ] },
   { id: 'security', settings: [
     ['settings.security.linkSafetyScanning', 'security link safety scanning phishing malicious url check'],
@@ -614,9 +617,10 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
         <UnsubscribeSettings onMinimize={onMinimize} />
       )}
 
-      {activeTab === 'storage' && (
+      {activeTab === 'storage' && (<>
         <StorageSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} />
-      )}
+        <DeletedEmailsSettings />
+      </>)}
 
       {activeTab === 'data-usage' && (
         <DataUsageSettings initialAccountId={initialAccountId} />

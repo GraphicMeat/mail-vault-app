@@ -456,6 +456,8 @@ export const useSettingsStore = create(
       // 'none' closes it — the safe default, because the next message opens
       // itself the moment it is selected and that marks it read.
       afterDeleteSelect: 'none', // 'none' | 'next'
+      // Days the daemon's deleted-mail bin keeps a deleted message: 1, 3, 7, 14 or 30.
+      deletedRetentionDays: 1,
 
       // Two-finger trackpad swipes on message rows (SWIPE_ACTIONS per side).
       trackpadSwipeEnabled: true,
@@ -1117,6 +1119,7 @@ export const useSettingsStore = create(
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
+      setDeletedRetentionDays: (days) => set({ deletedRetentionDays: days }),
       setTrackpadSwipeEnabled: (enabled) => set({ trackpadSwipeEnabled: !!enabled }),
       setSwipeAction: (side, action) => {
         if (!SWIPE_ACTIONS.includes(action)) return;
@@ -1421,6 +1424,7 @@ export const useSettingsStore = create(
           markAsReadDelay: 3,
           confirmBeforeDelete: true,
           afterDeleteSelect: 'none',
+          deletedRetentionDays: 1,
           trackpadSwipeEnabled: true,
           swipeLeftAction: 'archive',
           swipeRightAction: 'toggleRead',

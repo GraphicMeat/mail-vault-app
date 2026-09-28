@@ -290,14 +290,16 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
   });
 }
 
-export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = null) {
+// `bin: false` skips the daemon's copy into the deleted-mail bin (a purge of
+// every copy, a cleanup rule over mail the vault already holds).
+export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = null, { bin = true } = {}) {
   // Default: permanent delete for non-INBOX folders (Sent, Spam, Trash, etc.)
   // INBOX emails get moved to Trash first (non-permanent)
   if (permanent === null) {
     permanent = mailbox !== 'INBOX';
   }
   if (IS_TAURI) {
-    return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent });
+    return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent, bin });
   }
   return httpRequest(`/email/${uid}/delete`, {
     method: 'POST',
@@ -527,8 +529,10 @@ export async function graphSetFlagged(accessToken, messageId, flagged) {
   return await tauriInvoke('graph_set_flagged', { accessToken, messageId, flagged });
 }
 
-export async function graphDeleteMessage(accessToken, messageId) {
-  return await tauriInvoke('graph_delete_message', { accessToken, messageId });
+// `where` ({ accountId, mailbox, uid }) lets the daemon keep a copy in the
+// deleted-mail bin first; without it nothing is kept.
+export async function graphDeleteMessage(accessToken, messageId, where = {}) {
+  return await tauriInvoke('graph_delete_message', { accessToken, messageId, ...where });
 }
 
 export async function graphMoveEmails(accessToken, messageIds, targetFolderId) {

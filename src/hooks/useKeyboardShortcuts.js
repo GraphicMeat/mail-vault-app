@@ -41,6 +41,19 @@ function eventToKeyString(e) {
   return parts.join('+');
 }
 
+const isMac = () => typeof navigator !== 'undefined'
+  && (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac'));
+
+/**
+ * `keyStr` with Ctrl read as Meta, off a Mac only; null where that changes
+ * nothing.
+ */
+function ctrlAsMeta(e, keyStr) {
+  if (!e.ctrlKey || e.metaKey || isMac()) return null;
+  const ctrl = t('hook.useKeyboardShortcuts.ctrl');
+  return keyStr.replace(`${ctrl}+`, `${t('hook.useKeyboardShortcuts.meta')}+`);
+}
+
 /**
  * Build a lookup table from keybinding string -> action name.
  * Supports both single keys ("j") and multi-key sequences ("g i").
@@ -131,8 +144,10 @@ export function useKeyboardShortcuts(actionHandlers, { allowedActions = null } =
         return;
       }
 
-      // Check for an exact match (full sequence or single key)
-      const action = shortcutMap[candidate];
+      // Check for an exact match (full sequence or single key). Off a Mac a
+      // `Meta+` binding (Cmd+Z, Cmd+,) is reached with Ctrl, as every app there
+      // does; a binding made with Ctrl itself still wins.
+      const action = shortcutMap[candidate] ?? (!sequenceRef.current ? shortcutMap[ctrlAsMeta(e, keyStr)] : undefined);
       if (action && typeof action === 'string') {
         resetSequence();
 

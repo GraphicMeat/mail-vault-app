@@ -9,6 +9,7 @@ import { useNotesStore } from './stores/notesStore';
 import { useNetActivityStore } from './stores/netActivityStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
 import * as selectionWorkflow from './services/workflows/selectEmail';
+import { undoLastAction } from './services/workflows/messageMutations';
 import { useAccountStore } from './stores/accountStore';
 import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
@@ -699,8 +700,9 @@ function App() {
     // One slot, not a stack: whatever the last mutation left there. The slot
     // outlives its toast, so this still works long after the toast has gone.
     // useKeyboardShortcuts ignores typing targets, so a text field's own Cmd+Z
-    // never reaches here.
-    undo: () => { useMailStore.getState().runUndo(); },
+    // never reaches here. Past the slot, the last delete comes back from the
+    // deleted-mail bin. Never over an open compose: its Cmd+Z is the editor's.
+    undo: () => { if (!composeState) undoLastAction(); },
     // j/k walk the list the user can actually see: with the unread filter on,
     // the store still holds every loaded message, so navigating the raw
     // sortedEmails would select rows that aren't on screen.

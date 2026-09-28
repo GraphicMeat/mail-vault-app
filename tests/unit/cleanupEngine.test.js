@@ -139,7 +139,7 @@ describe('a rule saved by the form is a rule the engine runs', () => {
 
     expect(deleteEmail).toHaveBeenCalledTimes(1);
     expect(deleteEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'acc-1' }), STALE_UID, 'INBOX', false,
+      expect.objectContaining({ id: 'acc-1' }), STALE_UID, 'INBOX', false, { bin: false },
     );
     expect(result).toMatchObject({ archived: 0, deleted: 1, skipped: 0 });
   });
@@ -213,7 +213,7 @@ describe('nothing leaves the server without a copy that is proven to be here', (
     const result = await runCleanupRules();
 
     expect(deleteEmail).toHaveBeenCalledTimes(1);
-    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX', false);
+    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX', false, { bin: false });
     expect(result).toMatchObject({ deleted: 1, skipped: 1 });
   });
 
@@ -263,7 +263,7 @@ describe('a configured external mirror is a second copy the rule must see', () =
     saveRule();
 
     expect(await runCleanupRules()).toMatchObject({ deleted: 1, skipped: 1 });
-    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX', false);
+    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX', false, { bin: false });
   });
 
   it('deletes nothing while the mirror cannot be read - an unplugged drive is not an empty one', async () => {
@@ -289,7 +289,7 @@ describe('the picker\'s word is resolved against the account\'s own folder list'
     saveRule({ folder: 'Sent' });
 
     expect((await runCleanupRules()).deleted).toBe(1);
-    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX.Sent', false);
+    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX.Sent', false, { bin: false });
   });
 
   it("'all' walks every selectable folder except Drafts", async () => {
@@ -305,7 +305,7 @@ describe('the picker\'s word is resolved against the account\'s own folder list'
     saveRule({ folder: 'Trash' });
 
     await runCleanupRules();
-    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX.Trash', true);
+    expect(deleteEmail).toHaveBeenCalledWith(expect.anything(), STALE_UID, 'INBOX.Trash', true, { bin: false });
   });
 
   it('skips an account whose folder list was never cached', async () => {

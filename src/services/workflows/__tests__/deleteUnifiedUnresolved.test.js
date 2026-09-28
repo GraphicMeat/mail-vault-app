@@ -210,7 +210,7 @@ describe('deleting from a unified list', () => {
     } finally {
       delete globalThis.window.__TAURI__;
     }
-    expect(mockSend).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7 });
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7, bin: true });
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     expect(mockQueueOp).not.toHaveBeenCalled();
   });

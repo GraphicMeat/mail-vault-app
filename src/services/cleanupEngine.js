@@ -171,7 +171,9 @@ async function cleanFolder(rule, account, freshAccount, box, stale, mailboxes) {
   for (const uid of uids) {
     if (!deletable.has(uid)) { counts.skipped++; continue; }
     try {
-      await api.deleteEmail(freshAccount, uid, folder, permanent);
+      // No deleted-mail bin copy: the vault copy verified above is the keep,
+      // and a rule can run over tens of thousands of messages.
+      await api.deleteEmail(freshAccount, uid, folder, permanent, { bin: false });
       counts.deleted++;
       await stampServerDeleted(account.id, folder, uid);
     } catch (e) {

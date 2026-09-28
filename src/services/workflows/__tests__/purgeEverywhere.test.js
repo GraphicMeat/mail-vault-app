@@ -170,6 +170,8 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
     expect(mockDeleteEmail.mock.calls[0][1]).toBe(1);
     expect(mockDeleteEmail.mock.calls[0][2]).toBe('INBOX.Spam');
+    // Every copy, by request: the deleted-mail bin keeps none either.
+    expect(mockDeleteEmail.mock.calls[0][4]).toEqual({ bin: false });
     expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
     expect(res.deleted).toBe(1);
     expect(res.failed).toBe(0);

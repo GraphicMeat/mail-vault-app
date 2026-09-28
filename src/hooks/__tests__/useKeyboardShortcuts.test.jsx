@@ -88,6 +88,63 @@ describe('useKeyboardShortcuts — typing targets', () => {
 
 // A locked window is the whole point of a focus session. Compose behind the
 // overlay would open a window nobody can see, under a dialog that traps Tab.
+describe('useKeyboardShortcuts — undo (Cmd+Z, Ctrl+Z off a Mac)', () => {
+  let handlers;
+  const platform = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+  const onPlatform = (value) => Object.defineProperty(navigator, 'platform', { value, configurable: true });
+  const pressUndo = (target, mod) => target.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'z', bubbles: true, cancelable: true, metaKey: mod === 'meta', ctrlKey: mod === 'ctrl',
+  }));
+
+  beforeEach(() => {
+    useSettingsStore.setState({ keyboardShortcuts: { ...DEFAULT_SHORTCUTS }, keyboardShortcutsEnabled: true });
+    handlers = { undo: vi.fn() };
+    renderHook(() => useKeyboardShortcuts(handlers));
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = '';
+    delete navigator.platform;
+    if (platform) Object.defineProperty(Navigator.prototype, 'platform', platform);
+  });
+
+  it('Cmd+Z on the list undoes', () => {
+    onPlatform('MacIntel');
+    pressUndo(document.body, 'meta');
+    expect(handlers.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('Ctrl+Z undoes on Windows and Linux, where there is no Cmd', () => {
+    onPlatform('Win32');
+    pressUndo(document.body, 'ctrl');
+    onPlatform('Linux x86_64');
+    pressUndo(document.body, 'ctrl');
+    expect(handlers.undo).toHaveBeenCalledTimes(2);
+  });
+
+  it('Ctrl+Z on a Mac is not Cmd+Z', () => {
+    onPlatform('MacIntel');
+    pressUndo(document.body, 'ctrl');
+    expect(handlers.undo).not.toHaveBeenCalled();
+  });
+
+  it('leaves the text undo of an input, a textarea and a contenteditable (the compose editor) alone', () => {
+    onPlatform('Win32');
+    const input = document.createElement('input');
+    const area = document.createElement('textarea');
+    const editor = document.createElement('div');
+    editor.contentEditable = 'true';
+    Object.defineProperty(editor, 'isContentEditable', { value: true });
+    document.body.append(input, area, editor);
+    for (const el of [input, area, editor]) {
+      pressUndo(el, 'meta');
+      pressUndo(el, 'ctrl');
+    }
+    expect(handlers.undo).not.toHaveBeenCalled();
+  });
+});
+
 describe('useKeyboardShortcuts — focus lock', () => {
   let handlers;
 

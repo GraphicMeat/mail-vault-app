@@ -71,6 +71,13 @@ vi.mock('../../api', () => ({
   vaultRebindUids: (...a) => mockVaultRebindUids(...a),
 }));
 
+// The daemon's deleted-mail bin.
+const mockDaemonCall = vi.fn();
+vi.mock('../../daemonClient', async (importOriginal) => ({
+  ...(await importOriginal()),
+  daemonCall: (...a) => mockDaemonCall(...a),
+}));
+
 // The unified view's reload verb. Real, it refetches every account — here it
 // only has to prove which reload the undo chose.
 vi.mock('../refreshAccounts', () => ({
@@ -127,7 +134,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { markAnswered, setDeleteUndo } = await import('../messageMutations');
+const { markAnswered, setDeleteUndo, undoLastAction } = await import('../messageMutations');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -176,6 +183,8 @@ beforeEach(() => {
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, subject: 'm7' });
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
   mockVaultRebindUids.mockResolvedValue({ rebound: [] });
+  mockDaemonCall.mockImplementation(async (method, { ids } = {}) => (method === 'deleted.recover'
+    ? { recovered: ids.map(id => ({ id })), failed: [] } : {}));
   mockFetchEmailLight.mockImplementation(async (_a, uid) => (uid === 7 ? Promise.reject(gone())
     : { uid, subject: `m${uid}`, html: '<p>body</p>', text: 'body', flags: [] }));
   for (const id of Object.keys(unreadPerAccount)) delete unreadPerAccount[id];
@@ -363,6 +372,52 @@ describe('undo after a delete', () => {
     expect(undo).toMatchObject({ labelKey: 'undo.deletedPermanently', canUndo: false });
     expect(undo.run).toBeUndefined();
     await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
+  });
+
+  it('undoes a permanent delete from the copy the deleted-mail bin kept', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: null, trashUid: null, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deletedKept', labelParams: { count: 1 }, canUndo: true });
+    useMailStore.getState().loadEmails.mockClear();
+
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'server' });
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
+    // Spent: Cmd+Z has nothing more to bring back.
+    mockDaemonCall.mockClear();
+    await expect(undoLastAction()).resolves.toBe(false);
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  it('Cmd+Z after the slot is gone brings the last delete back from the bin, once', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    // A later action took the slot, and was undone itself.
+    useMailStore.getState().clearUndo();
+
+    await expect(undoLastAction()).resolves.toBe(true);
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'server' });
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    mockDaemonCall.mockClear();
+    await expect(undoLastAction()).resolves.toBe(false);
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  it('Cmd+Z runs the slot while it holds the delete, and the restored message leaves the bin', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    await expect(undoLastAction()).resolves.toBe(true);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    // Back on the server from Trash: its bin copy would put a second one there.
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.discard', { ids: ['b7'] });
+    expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
+    await expect(undoLastAction()).resolves.toBe(false);
   });
 
   it('a bulk delete restores every message that reached Trash, one move per folder', async () => {
