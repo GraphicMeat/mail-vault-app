@@ -12,6 +12,7 @@ import { saveRestoreDescriptor } from '../services/cacheManager';
 import { useTagStore } from '../stores/tagStore';
 import { useAutoTagStore } from '../stores/autoTagStore';
 import { useFieldStore } from '../stores/fieldStore';
+import { useNetActivityStore } from '../stores/netActivityStore';
 import { pinQuickActionScope } from '../hooks/useQuickActionConfiguration';
 
 const token = new URLSearchParams(window.location.search).get('settings');
@@ -62,6 +63,7 @@ export function SettingsWindow() {
           }
           if (event.payload.accounts) useMailStore.setState({ accounts: event.payload.accounts,
             activeAccountId: event.payload.activeAccountId });
+          if (event.payload.remoteImages) useNetActivityStore.setState({ remoteImages: event.payload.remoteImages });
         } finally { suppressRelay = false; }
       });
       unlisten = await listen('settings-window-payload', async event => {
@@ -74,6 +76,8 @@ export function SettingsWindow() {
           if (mailboxes?.length) saveRestoreDescriptor({ accountId, mailbox: 'INBOX', viewMode: 'live', mailboxes });
         });
         useSettingsStore.setState(payload.settings);
+        // The main window renders the mail, so it holds the remote-image count.
+        if (payload.remoteImages) useNetActivityStore.setState({ remoteImages: payload.remoteImages });
         // Quick actions edit the view the main window shows, not this window's INBOX.
         if (payload.quickActionScope) pinQuickActionScope(payload.quickActionScope);
         useThemeStore.setState(payload.theme);

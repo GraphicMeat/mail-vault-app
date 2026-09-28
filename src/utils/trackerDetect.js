@@ -92,10 +92,10 @@ const MARKER_STYLE = 'display:inline-block;margin:2px 0;padding:0 6px;border-rad
  * @param {string|null} key - scoped message key from `emailScopeKey`. null =
  *   don't cache; never fall back to a bare UID, that is how one message's
  *   verdict lands on another's row.
- * @returns {{ trackers: Array, cleanedBodyHtml: string, count: number }}
+ * @returns {{ trackers: Array, cleanedBodyHtml: string, count: number, https: number }}
  */
 export function scanTrackers(bodyHtml, key) {
-  if (!bodyHtml) return { trackers: [], cleanedBodyHtml: bodyHtml, count: 0 };
+  if (!bodyHtml) return { trackers: [], cleanedBodyHtml: bodyHtml, count: 0, https: 0 };
 
   const stamp = key ? bodyStamp(bodyHtml) : null;
   if (stamp) {
@@ -108,10 +108,14 @@ export function scanTrackers(bodyHtml, key) {
   );
 
   const trackers = [];
+  // Every image the frame may fetch (the app's CSP allows https only), for
+  // Network Activity's remote-images line.
+  let https = 0;
   for (const img of doc.querySelectorAll('img[src]')) {
     const url = img.getAttribute('src') || '';
     // Inline and embedded images never leave the machine.
     if (!url || url.startsWith('cid:') || url.startsWith('data:') || url.startsWith('blob:')) continue;
+    if (/^https:/i.test(url)) https += 1;
 
     const domain = hostOf(url);
     let vendor = null;
@@ -166,6 +170,7 @@ export function scanTrackers(bodyHtml, key) {
     // byte-identical so the iframe's srcDoc doesn't churn.
     cleanedBodyHtml: trackers.length > 0 ? doc.body.innerHTML : bodyHtml,
     count: trackers.length,
+    https,
   };
 
   if (stamp) {

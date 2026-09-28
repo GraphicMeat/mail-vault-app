@@ -42,7 +42,7 @@ it('opens Privacy & security on its first tab and switches pages through its tab
   fireEvent.click(within(nav()).getByRole('button', { name: 'Privacy & security' }));
   expect(screen.getByRole('tablist', { name: 'Privacy & security' })).toBeTruthy();
   expect(within(screen.getByRole('tablist', { name: 'Privacy & security' })).getAllByRole('tab').map(tab => tab.textContent))
-    .toEqual(['Security', 'Tracker Blocking', 'Encryption']);
+    .toEqual(['Security', 'Tracker Blocking', 'Encryption', 'Network Activity']);
   expect(page()).toBe('security');
   expect(screen.getByRole('heading', { name: 'Privacy & security' })).toBeTruthy();
   fireEvent.click(screen.getByRole('tab', { name: 'Encryption' }));

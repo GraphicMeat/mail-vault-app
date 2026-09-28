@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
-import { scanTrackers } from '../../utils/trackerDetect';
+import { frameBody } from '../../stores/netActivityStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 
 // Read-only email body for the side surfaces (Cleanup preview, Time Capsule).
@@ -13,7 +13,7 @@ import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settings
 export function buildEmailPreviewHtml(html, trackerBlocking) {
   const body = getEmailBodyContent(html);
   return buildEmailIframeHtml({
-    bodyHtml: trackerBlocking ? scanTrackers(body, null).cleanedBodyHtml : body,
+    bodyHtml: frameBody(body, null, trackerBlocking).body,
   });
 }
 

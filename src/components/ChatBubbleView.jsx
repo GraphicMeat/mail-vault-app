@@ -37,7 +37,8 @@ import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsSto
 import { useThemeStore } from '../stores/themeStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { linkifyHtml } from '../utils/linkify';
-import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
+import { summarizeTrackers } from '../utils/trackerDetect';
+import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors } from '../utils/mailChrome';
@@ -501,8 +502,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     // here too, or switching to Chat view undoes it.
     // Scan either way — the verdict below is what paints the row's glyph, and
     // a free user reading in chat view deserves the same warning.
-    const trackerScan = scanTrackers(rawBody, chatScopeKey);
-    let scannedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : rawBody;
+    const { scan: trackerScan, body: framed } = frameBody(rawBody, chatScopeKey, trackerBlocking);
+    let scannedBody = framed;
     let indicatorStyle = '';
     let chatAlertLevel = null;
     if (linkSafetyEnabled) {

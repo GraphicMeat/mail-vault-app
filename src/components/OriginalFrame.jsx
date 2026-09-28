@@ -3,6 +3,7 @@ import { Sun, Moon } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
+import { frameBody } from '../stores/netActivityStore';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
 import { useT } from '../i18n/index.js';
@@ -41,7 +42,8 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   const srcDoc = useMemo(() => {
     const nonce = emailScriptNonce();
     return buildEmailIframeHtml({
-      bodyHtml: html,
+      // Counted for Network Activity only: this frame never strips beacons.
+      bodyHtml: frameBody(html, null, false).body,
       themeTag: dark ? 'dark' : 'light',
       extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}<style>body { padding: ${padding}; }</style>`,
       nonce,

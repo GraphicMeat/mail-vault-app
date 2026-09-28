@@ -35,7 +35,8 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
+import { getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
+import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
@@ -402,8 +403,8 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     // scan cache or strip Dark Reader scripts from a cached modifiedHtml.
     // Tracker detection runs for everyone — the glyph tells a free user their
     // mail phoned home. Only the SWAP to the cleaned body is premium.
-    const trackerScan = scanTrackers(bodyHtml, scopeKey);
-    let renderedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : bodyHtml;
+    const { scan: trackerScan, body: framed } = frameBody(bodyHtml, scopeKey, trackerBlocking);
+    let renderedBody = framed;
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
@@ -731,7 +732,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
               const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
               // The popup is a second renderer of the same mail — a beacon
               // stripped in the pane but left in the window still fires.
-              const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
+              const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
               // The popup loads from file:// and inherits no CSP, so its meta
               // (script-src 'nonce-…') is the ONLY policy — Dark Reader has to
               // carry the same nonce to run there.

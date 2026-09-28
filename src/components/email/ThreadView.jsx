@@ -32,7 +32,8 @@ import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
-import { scanTrackers, summarizeTrackers } from '../../utils/trackerDetect';
+import { summarizeTrackers } from '../../utils/trackerDetect';
+import { frameBody } from '../../stores/netActivityStore';
 import { recordTrackerSummary } from '../../services/trackerVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName, threadRowMembers } from '../../utils/emailParser';
@@ -109,8 +110,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
     // Detection runs for everyone; only the swap to the cleaned body is
     // premium. Scanning only when blocking was on left a free user's row with
     // no glyph for a message they had read right here.
-    const trackerScan = scanTrackers(bodyHtml, scopeKey);
-    let renderedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : bodyHtml;
+    const { scan: trackerScan, body: framed } = frameBody(bodyHtml, scopeKey, trackerBlocking);
+    let renderedBody = framed;
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
@@ -504,7 +505,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               if (!rawHtml) return;
               const bodyHtml = getEmailBodyContent(rawHtml);
               // Same body, second window — strip there too.
-              const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
+              const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
               // file:// popup inherits no CSP; DR needs the meta's nonce to run.
               const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({

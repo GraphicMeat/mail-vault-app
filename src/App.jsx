@@ -6,6 +6,7 @@ import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
 import { useNotesStore } from './stores/notesStore';
+import { useNetActivityStore } from './stores/netActivityStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
 import * as selectionWorkflow from './services/workflows/selectEmail';
 import { useAccountStore } from './stores/accountStore';
@@ -835,6 +836,8 @@ function App() {
           settings: Object.fromEntries(Object.entries(useSettingsStore.getState()).filter(([, value]) => typeof value !== 'function')),
           theme: { theme: useThemeStore.getState().theme, palette: useThemeStore.getState().palette },
           quickActionScope: currentQuickActionScopeSnapshot(),
+          // Mail renders here: Network Activity's remote-images line reads this window's count.
+          remoteImages: useNetActivityStore.getState().remoteImages,
         });
         stopReady?.();
       });
@@ -909,7 +912,10 @@ function App() {
         forward({ accounts: state.accounts, activeAccountId: state.activeAccountId });
       }
     });
-    return () => { disposed = true; stops.forEach(stop => stop()); stopSettings(); stopTheme(); stopMail(); };
+    const stopRemoteImages = useNetActivityStore.subscribe((state, previous) => {
+      if (state.remoteImages !== previous.remoteImages) forward({ remoteImages: state.remoteImages });
+    });
+    return () => { disposed = true; stops.forEach(stop => stop()); stopSettings(); stopTheme(); stopMail(); stopRemoteImages(); };
   }, [closeSettings, handleReportBug]);
 
   const handleReferFriend = useCallback(() => {

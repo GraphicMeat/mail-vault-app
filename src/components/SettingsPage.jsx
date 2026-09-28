@@ -32,6 +32,7 @@ import {
   KeyRound,
   MailX,
   Activity,
+  Network,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -56,6 +57,7 @@ import { ViewsSettings } from './settings/ViewsSettings';
 import { UnsubscribeSettings } from './settings/UnsubscribeSettings';
 import { PortableSettings } from './settings/PortableSettings';
 import { EncryptionSettings } from './settings/EncryptionSettings';
+import { NetworkActivity } from './settings/NetworkActivity';
 import { SettingsTabs } from './ui/SettingsTabs';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
@@ -87,6 +89,7 @@ const settingsTabs = [
   { id: 'data-usage', labelKey: 'settings.tab.dataUsage', icon: Gauge },
   { id: 'security', labelKey: 'settings.tab.security', icon: Shield },
   { id: 'encryption', labelKey: 'pgp.tab', icon: KeyRound },
+  { id: 'network-activity', labelKey: 'settings.tab.networkActivity', icon: Network },
   { id: 'billing', labelKey: 'settings.tab.billing', icon: CreditCard },
   { id: 'language', labelKey: 'settings.tab.language', icon: Languages },
 ];
@@ -106,7 +109,7 @@ const tabsById = Object.fromEntries(allTabs.map(tab => [tab.id, tab]));
 // destination: it opens the host with that tab selected.
 export const settingsHosts = {
   storage: { labelKey: 'settings.tab.storage', icon: HardDrive, pages: ['storage', 'data-usage'] },
-  privacy: { labelKey: 'settings.tab.privacySecurity', icon: Shield, pages: ['security', 'tracking', 'encryption'] },
+  privacy: { labelKey: 'settings.tab.privacySecurity', icon: Shield, pages: ['security', 'tracking', 'encryption', 'network-activity'] },
   diagnostics: { labelKey: 'settings.tab.diagnostics', icon: Activity, pages: ['daemon', 'logs'] },
 };
 const hostOf = Object.fromEntries(Object.entries(settingsHosts)
@@ -341,6 +344,11 @@ export const settingSearchGroups = [
   ] },
   { id: 'tracking', settings: [
     ['settings.tracking.blockTrackingPixels', 'block tracking pixels privacy read receipts spy'],
+  ] },
+  { id: 'network-activity', settings: [
+    ['netActivity.protocol', 'network activity connections traffic hosts servers requests privacy protocol filter imap smtp https dns'],
+    ['netActivity.purpose', 'network activity connections purpose filter sync send sign-in backup'],
+    ['netActivity.account', 'network activity connections account filter'],
   ] },
   { id: 'migration', settings: [
     ['settings.migration.selectSourceAccount', 'migrate mailbox move emails between accounts servers'],
@@ -641,6 +649,10 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
 
       {activeTab === 'encryption' && (
         <EncryptionSettings />
+      )}
+
+      {activeTab === 'network-activity' && (
+        <NetworkActivity />
       )}
 
       {activeTab === 'logs' && (

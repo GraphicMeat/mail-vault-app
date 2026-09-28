@@ -16,6 +16,7 @@ import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers } from '../../utils/trackerDetect';
+import { frameBody } from '../../stores/netActivityStore';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
@@ -209,9 +210,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
     // Full-view is a fourth renderer of the same body; blocking holds here too.
     const cidResolved = replaceCidUrls(htmlBody, email.attachments);
-    const scannedForFrame = trackerBlocking
-      ? scanTrackers(cidResolved, emailScopeKey(email, useMailStore.getState())).cleanedBodyHtml
-      : cidResolved;
+    const scannedForFrame = frameBody(cidResolved, emailScopeKey(email, useMailStore.getState()), trackerBlocking).body;
     // One nonce per render: the frame's CSP runs only our nonced DR script, not
     // anything the mail carries.
     const nonce = emailScriptNonce();
