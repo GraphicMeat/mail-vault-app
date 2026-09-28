@@ -1121,6 +1121,8 @@
   "premium.exportImage.title": "Als Bild oder HTML sichern",
   "premium.fastMultiFolderSearch.blurb": "Durchsuchen Sie bis zu fünf Server-Postfächer und nicht indexierte lokale Ordner gleichzeitig, mit einer von Ihnen festgelegten Parallelität.",
   "premium.fastMultiFolderSearch.title": "Schnellere Suche in mehreren Ordnern",
+  "premium.hoarder.blurb": "Alle Ordner und der gesamte Verlauf werden im Hintergrund geladen und auf diesem Computer behalten.",
+  "premium.hoarder.title": "Sammler",
   "premium.portable.blurb": "MailVault unter Windows von einem USB-Stick oder einer externen Festplatte starten, mit Ihren E-Mails und Konten darauf.",
   "premium.portable.title": "MailVault zum Mitnehmen",
   "premium.focusSession.blurb": "Ein Timer, der MailVault für die von dir gewählten Minuten abdeckt, per Voreinstellung oder eigener Zahl, und jede Mitteilung zurückhält, bis er endet. Beenden und neu starten: der Countdown läuft weiter.",

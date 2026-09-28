@@ -1121,6 +1121,8 @@
   "premium.exportImage.title": "画像または HTML で書き出し",
   "premium.fastMultiFolderSearch.blurb": "サーバー上のメールボックスと未インデックスのローカルフォルダーを最大5件まで、指定した並列数で同時に検索します。",
   "premium.fastMultiFolderSearch.title": "複数フォルダーをより高速に検索",
+  "premium.hoarder.blurb": "すべてのフォルダと全期間のメールをバックグラウンドでダウンロードし、このコンピュータに保存します。",
+  "premium.hoarder.title": "すべて保存",
   "premium.portable.blurb": "USB メモリや外付けドライブから、メールとアカウントごと Windows で MailVault を実行できます。",
   "premium.portable.title": "ポータブル版 MailVault",
   "premium.focusSession.blurb": "指定した分数のあいだ MailVault を覆うタイマーです。プリセットでも自分で決めた数値でも使え、終わるまですべての通知を保留します。アプリを終了して再起動してもカウントダウンは続きます。",

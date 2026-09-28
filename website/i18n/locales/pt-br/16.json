@@ -30,5 +30,21 @@
   "3ea6e5dd055c": "Obrigado por baixar o MailVault: envelopes felizes andando numa esteira até uma caixa de correio",
   "1a88113e53ee": "Baixando o MailVault {release}. Se não começar, use o botão acima.",
   "93c3e0b8c5fb": "O botão abre a página da versão mais recente. Escolha lá o arquivo para o seu computador.",
-  "757da7c8028f": "O download não conseguiu começar sozinho. O botão abre a página da versão mais recente; escolha lá o arquivo para o seu computador."
+  "757da7c8028f": "O download não conseguiu começar sozinho. O botão abre a página da versão mais recente; escolha lá o arquivo para o seu computador.",
+  "af2a175acc52": "Onde o MailVault guarda sua correspondência no disco, quanto dela fica neste computador, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.",
+  "384095550461": "Quanto do meu e-mail fica neste computador?",
+  "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Acumulador</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: um modo de download que busca cada pasta e todo o histórico em segundo plano e os mantém neste computador, em vez de apenas um período recente</span>",
+  "7f9bb36583b5": "Ver todos os 14 recursos",
+  "fc7a64a4b0b9": "Tudo o que há no Grátis, mais estes 16 recursos. Selecione um para ver como funciona.",
+  "0fed852ca4ff": "Acumulador",
+  "a2b2b116f08b": "Os mesmos 16 recursos que você encontra na introdução do app. Abra um recurso para explorá-lo.",
+  "243d708b71a7": "Todas as pastas e todo o histórico são baixados em segundo plano e guardados neste computador.",
+  "45472e5ac7ea": "O Premium acrescenta backups agendados, instantâneos, migração, limpeza, exportação, bloqueio de rastreadores e Acumulador, um modo de download que mantém todo o histórico de cada pasta em vez de apenas um período recente. Sua assinatura também apoia o desenvolvimento e a manutenção contínuos feitos por nossa pequena equipe. O cliente de e-mail completo e o arquivamento manual continuam grátis.",
+  "9e30d2ebdfa2": "<strong>Configurações &rarr; Armazenamento &rarr; Modo de download</strong> controla isso, e, <strong>Configurações &rarr; Contas &rarr; Avançado</strong> pode dar a uma conta um modo próprio.",
+  "02fb6df8c96f": "<strong>Sob demanda</strong> busca uma mensagem quando você a abre e não a mantém. A busca em texto completo cobre só o que já está neste computador.",
+  "dcb7b0f44415": "<strong>Manter recentes</strong>, o padrão, mantém os últimos 1, 3, 6 ou 12 meses e remove deste computador as cópias em cache mais antigas, enquanto o servidor mantém a dele.",
+  "90c295f9d82d": "<strong>Só índice</strong> baixa o mesmo período, indexa para busca e depois remove, então abrir uma mensagem mostra uma prévia na hora enquanto a mensagem completa é baixada.",
+  "a80eb578bf52": "<strong>Acumulador</strong> <em class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 not-italic\">Premium</em> baixa cada pasta e todo o histórico em segundo plano e os mantém.",
+  "441c9d845eac": "Nenhum modo remove backups ou e-mails arquivados, e uma assinatura Premium vencida nunca apaga nada.",
+  "1d744195691f": "Configurações, Armazenamento, Modo de download controla isso, e Configurações, Contas, Avançado pode dar a uma conta um modo próprio. Sob demanda busca uma mensagem quando você a abre e não a mantém, e a busca em texto completo cobre só o que já está neste computador. Manter recentes, o padrão, mantém os últimos 1, 3, 6 ou 12 meses e remove deste computador as cópias em cache mais antigas, enquanto o servidor mantém a dele. Só índice baixa o mesmo período, indexa para busca e depois remove, então abrir uma mensagem mostra uma prévia na hora enquanto a mensagem completa é baixada. Acumulador, um modo Premium, baixa cada pasta e todo o histórico em segundo plano e os mantém. Nenhum modo remove backups ou e-mails arquivados, e uma assinatura Premium vencida nunca apaga nada."
 }

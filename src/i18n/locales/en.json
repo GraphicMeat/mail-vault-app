@@ -1121,6 +1121,8 @@
   "premium.exportImage.title": "Export as image or HTML",
   "premium.fastMultiFolderSearch.blurb": "Search up to five server mailboxes and unindexed local folders at once, with a concurrency level you control.",
   "premium.fastMultiFolderSearch.title": "Faster multi-folder search",
+  "premium.hoarder.blurb": "Every folder and all history are downloaded in the background and kept on this computer.",
+  "premium.hoarder.title": "Hoarder",
   "premium.portable.blurb": "Run MailVault on Windows from a USB stick or external drive, with your mail and accounts on it.",
   "premium.portable.title": "Portable MailVault",
   "premium.focusSession.blurb": "A timer that covers MailVault for the minutes you choose, presets or your own number, and holds every notification until it ends. Quit and relaunch and the countdown is still there.",

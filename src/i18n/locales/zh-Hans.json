@@ -1121,6 +1121,8 @@
   "premium.exportImage.title": "导出为图片或 HTML",
   "premium.fastMultiFolderSearch.blurb": "可按您选择的并发级别，同时搜索最多五个服务器邮箱和未编入索引的本地文件夹。",
   "premium.fastMultiFolderSearch.title": "更快的多文件夹搜索",
+  "premium.hoarder.blurb": "在后台下载所有文件夹和全部历史邮件，并保存在这台电脑上。",
+  "premium.hoarder.title": "全部保存",
   "premium.portable.blurb": "在 Windows 上从 U 盘或外置硬盘运行 MailVault，邮件和账户都随身携带。",
   "premium.portable.title": "便携版 MailVault",
   "premium.focusSession.blurb": "一个计时器，在你选择的分钟数内覆盖 MailVault，可用预设时长或自己填的数字，并在结束前保留所有通知。退出后重新打开，倒计时依然在。",

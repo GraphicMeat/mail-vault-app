@@ -1121,6 +1121,8 @@
   "premium.exportImage.title": "Exportar como imagen o HTML",
   "premium.fastMultiFolderSearch.blurb": "Busca hasta cinco buzones del servidor y carpetas locales sin indexar a la vez, con el nivel de concurrencia que elijas.",
   "premium.fastMultiFolderSearch.title": "Búsqueda más rápida en varias carpetas",
+  "premium.hoarder.blurb": "Todas las carpetas y todo el historial se descargan en segundo plano y se guardan en este equipo.",
+  "premium.hoarder.title": "Acumulador",
   "premium.portable.blurb": "Ejecuta MailVault en Windows desde una memoria USB o un disco externo, con tu correo y tus cuentas en él.",
   "premium.portable.title": "MailVault portátil",
   "premium.focusSession.blurb": "Un temporizador que cubre MailVault durante los minutos que elijas, con duraciones listas o tu propio número, y retiene todas las notificaciones hasta que termina. Cierra y vuelve a abrir: la cuenta atrás sigue ahí.",
