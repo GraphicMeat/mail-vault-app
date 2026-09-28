@@ -11,6 +11,7 @@ import {
   DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
   resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
 } from '../utils/quickActions';
+import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
 
 // Palette of visually distinct avatar colors
@@ -1224,6 +1225,9 @@ export const useSettingsStore = create(
         quickActions: resetQuickActionScope(state.quickActions, scope, surface),
       })),
       resetQuickActions: () => set({ quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS) }),
+      applyQuickActionPreset: (presetId, scope = null) => set(state => ({
+        quickActions: applyQuickActionPreset(state.quickActions, scope, presetId),
+      })),
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setListPaneHeight: (size) => set({ listPaneHeight: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),

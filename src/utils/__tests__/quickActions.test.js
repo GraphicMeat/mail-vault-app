@@ -15,7 +15,10 @@ import {
   resetQuickActionScope,
   setQuickActionStyle,
   setQuickActionStyleLink,
+  QUICK_ACTION_SURFACES,
+  QUICK_ACTION_SURFACE_ACTIONS,
 } from '../quickActions';
+import { QUICK_ACTION_PRESETS, activeQuickActionPreset, applyQuickActionPreset } from '../quickActionPresets';
 
 describe('quick action settings', () => {
   it('recovers malformed defaults and removes invalid entries and colors', () => {
@@ -272,5 +275,115 @@ describe('radial categories', () => {
       { id: 'move:Home', action: 'move', params: { mailbox: 'Home' } },
     ];
     expect(shape(groupRadialEntries(list))).toEqual([['organize', ['move:Work', 'tag:t1', 'move:Home']]]);
+  });
+});
+
+describe('quick action presets', () => {
+  const SCOPE = { kind: 'mailbox', accountId: 'a', mailbox: 'INBOX' };
+  const OTHER = { kind: 'mailbox', accountId: 'b', mailbox: 'INBOX' };
+  const preset = id => QUICK_ACTION_PRESETS.find(item => item.id === id);
+
+  it('offers MailVault first, exactly as its defaults, then the other apps', () => {
+    expect(QUICK_ACTION_PRESETS[0].id).toBe('mailvault');
+    expect(preset('mailvault').surfaces).toEqual(DEFAULT_QUICK_ACTIONS.defaults);
+    expect(QUICK_ACTION_PRESETS.map(item => item.id)).toEqual(expect.arrayContaining(['gmail', 'outlook', 'thunderbird']));
+    expect(new Set(QUICK_ACTION_PRESETS.map(item => item.id)).size).toBe(QUICK_ACTION_PRESETS.length);
+    for (const item of QUICK_ACTION_PRESETS) expect(item.labelKey).toBe(`quickActions.preset.${item.id}`);
+  });
+
+  // Against the raw preset: normalizing drops an entry it cannot use (a tag
+  // with no tag) and swaps a favorite it cannot find, so comparing two
+  // normalized copies would pass over exactly that.
+  it.each(QUICK_ACTION_PRESETS.map(item => [item.id, item]))('%s normalizes to itself', (_id, item) => {
+    expect(normalizeQuickActions({ defaults: item.surfaces }).defaults).toEqual(item.surfaces);
+  });
+
+  it.each(QUICK_ACTION_PRESETS.map(item => [item.id, item]))('%s uses only actions each surface offers', (_id, item) => {
+    expect(Object.keys(item.surfaces)).toEqual(QUICK_ACTION_SURFACES);
+    for (const surface of QUICK_ACTION_SURFACES) {
+      const { entries, favoriteId, selectionActionLimit } = item.surfaces[surface];
+      expect(entries.length, surface).toBeGreaterThan(0);
+      expect(entries.filter(entry => !QUICK_ACTION_SURFACE_ACTIONS[surface].includes(entry.action)), surface).toEqual([]);
+      expect(entries.map(entry => entry.id)).toContain(favoriteId);
+      if (surface === 'selection') expect(selectionActionLimit).toBeGreaterThanOrEqual(1);
+      if (surface === 'selection') expect(selectionActionLimit).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('keeps the per-surface action lists within the known actions', () => {
+    for (const surface of QUICK_ACTION_SURFACES) {
+      expect(QUICK_ACTION_SURFACE_ACTIONS[surface].filter(action => !QUICK_ACTION_TYPES.includes(action))).toEqual([]);
+    }
+    expect(QUICK_ACTION_SURFACE_ACTIONS.row).not.toContain('theme');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.reader).not.toContain('newMessage');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.selection).not.toContain('reply');
+  });
+
+  it('applied to All views, replaces the defaults of every surface and unlinks their style', () => {
+    const before = setQuickActionStyleLink(
+      setQuickActionStyle(normalizeQuickActions({}), 'row', SCOPE, { mode: 'menu' }), null, true, 'row');
+    expect(before.styleLinks.global).toBe(true);
+    const after = applyQuickActionPreset(before, null, 'gmail');
+    expect(after.defaults).toEqual(preset('gmail').surfaces);
+    expect(after.overrides).toEqual(before.overrides);
+    expect(after.styleLinks.global).toBe(false);
+  });
+
+  it('applied to one view, writes only that view and unlinks only its style', () => {
+    let before = setQuickActionStyleLink(normalizeQuickActions({}), SCOPE, true, 'row');
+    before = setQuickActionStyle(before, 'row', OTHER, { mode: 'menu' });
+    const after = applyQuickActionPreset(before, SCOPE, 'thunderbird');
+    const key = quickActionScopeKey(SCOPE);
+    expect(after.overrides[key]).toEqual(preset('thunderbird').surfaces);
+    expect(after.overrides[quickActionScopeKey(OTHER)]).toEqual(before.overrides[quickActionScopeKey(OTHER)]);
+    expect(after.defaults).toEqual(before.defaults);
+    expect(after.styleLinks.overrides[key]).toBe(false);
+    expect(after.styleLinks.global).toBe(before.styleLinks.global);
+  });
+
+  it('leaves the settings alone for a preset it does not know', () => {
+    const before = setQuickActionStyle(normalizeQuickActions({}), 'row', null, { mode: 'menu' });
+    expect(applyQuickActionPreset(before, null, 'nope')).toEqual(before);
+  });
+
+  it('gives the same result as the onboarding "Recommended" choice', () => {
+    // Onboarding's applyRecommended, over the same util calls its setters make.
+    let styled = setQuickActionStyleLink(normalizeQuickActions({}), null, true, 'row');
+    styled = setQuickActionStyle(styled, 'row', null, { mode: 'inline', palette: 'neutral', radialLayout: 'categories' });
+    let recommended = setQuickActionStyleLink(styled, null, false, 'row');
+    for (const surface of QUICK_ACTION_SURFACES) {
+      const { mode, palette, radialPagination, radialLayout } = DEFAULT_QUICK_ACTIONS.defaults[surface];
+      recommended = setQuickActionStyle(recommended, surface, null, { mode, palette, radialPagination, radialLayout });
+    }
+    expect(applyQuickActionPreset(styled, null, 'mailvault')).toEqual(recommended);
+  });
+
+  it('names the preset a scope shows, and none once anything in it is changed', () => {
+    const fresh = normalizeQuickActions({});
+    expect(activeQuickActionPreset(fresh)).toBe('mailvault');
+    expect(activeQuickActionPreset(fresh, SCOPE)).toBe('mailvault');
+
+    const gmail = applyQuickActionPreset(fresh, null, 'gmail');
+    expect(activeQuickActionPreset(gmail)).toBe('gmail');
+    // A view with no override of its own shows the All-views set.
+    expect(activeQuickActionPreset(gmail, SCOPE)).toBe('gmail');
+
+    const scoped = applyQuickActionPreset(gmail, SCOPE, 'outlook');
+    expect(activeQuickActionPreset(scoped, SCOPE)).toBe('outlook');
+    expect(activeQuickActionPreset(scoped)).toBe('gmail');
+
+    expect(activeQuickActionPreset(setQuickActionStyle(scoped, 'reader', SCOPE, { palette: 'semantic' }), SCOPE)).toBeNull();
+    const fewer = { ...preset('gmail').surfaces.row, entries: preset('gmail').surfaces.row.entries.slice(1) };
+    expect(activeQuickActionPreset({ ...gmail, defaults: { ...gmail.defaults, row: fewer } })).toBeNull();
+  });
+
+  it('compares a view that overrides one surface against its own set of three', () => {
+    const gmail = applyQuickActionPreset(normalizeQuickActions({}), null, 'gmail');
+    // The row alone is overridden, with the preset's own row: still Gmail.
+    const rowOnly = normalizeQuickActions({
+      ...gmail,
+      overrides: { [quickActionScopeKey(SCOPE)]: { row: preset('gmail').surfaces.row } },
+    });
+    expect(activeQuickActionPreset(rowOnly, SCOPE)).toBe('gmail');
   });
 });

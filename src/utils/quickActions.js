@@ -12,6 +12,17 @@ export const QUICK_ACTION_TYPES = [
   'unsubscribe',
 ];
 
+// The actions each surface can offer: a row has no reader tools, the reader
+// no New message, and the selection bar only what acts on many at once.
+export const QUICK_ACTION_SURFACE_ACTIONS = {
+  row: QUICK_ACTION_TYPES.filter(action => !['open', 'source', 'theme'].includes(action)),
+  selection: [
+    'archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere', 'toggleRead', 'markRead',
+    'markUnread', 'star', 'unstar', 'tag', 'move', 'spam', 'export', 'snooze',
+  ],
+  reader: QUICK_ACTION_TYPES.filter(action => action !== 'newMessage'),
+};
+
 export const RADIAL_LAYOUTS = ['flat', 'categories'];
 // The wheel's categories, in wheel order. Every action type sits in exactly
 // one; a radial surface with `radialLayout: 'categories'` shows one wedge per

@@ -17,7 +17,7 @@ import {
   isQuickActionStyleLinked,
   QUICK_ACTION_MODES,
   QUICK_ACTION_SURFACES,
-  QUICK_ACTION_TYPES,
+  QUICK_ACTION_SURFACE_ACTIONS as SURFACE_ACTIONS,
   quickActionScopeKey,
   RADIAL_CATEGORIES,
   resolveQuickActions,
@@ -57,29 +57,6 @@ const LABELS = {
 };
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const EMPTY_ARRAY = Object.freeze([]);
-const SURFACE_ACTIONS = {
-  row: QUICK_ACTION_TYPES.filter((action) =>
-    !["open", "source", "theme"].includes(action)
-  ),
-  selection: [
-    "archive",
-    "unarchive",
-    "delete",
-    "deleteServer",
-    "deleteEverywhere",
-    "toggleRead",
-    "markRead",
-    "markUnread",
-    "star",
-    "unstar",
-    "tag",
-    "move",
-    "spam",
-    "export",
-    "snooze",
-  ],
-  reader: QUICK_ACTION_TYPES.filter((action) => action !== "newMessage"),
-};
 const newEntry = (action, params = {}) => ({
   id: action === "tag"
     ? `tag:${params.tagId}`
