@@ -27,6 +27,9 @@
  *
  * Plain data crosses into the page, never a function: the app's CSP has no
  * `unsafe-eval`, so a rebuilt callback is refused.
+ *
+ * Settings and onboarding draw sample rows with the same testid inside a
+ * `[data-quick-actions-preview]` marker; those are never the list's rows.
  */
 
 const MENU = '[role="menu"][data-surface="row"]';
@@ -35,10 +38,12 @@ const MENU = '[role="menu"][data-surface="row"]';
 export async function wakeRows() {
   await browser.execute(() => {
     for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+      if (row.closest('[data-quick-actions-preview]')) continue;
       row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     }
   });
   await browser.waitUntil(() => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
+    .filter((row) => !row.closest('[data-quick-actions-preview]'))
     .every((row) => row.querySelector('[data-row-actions]'))),
   { timeout: 5_000, interval: 50, timeoutMsg: 'a hovered row never mounted its quick actions' });
 }
@@ -57,7 +62,8 @@ export const rowMenuIsOpen = () =>
  * Returns null when no row matched or it has no trigger (yet).
  */
 export const clickRowMenuTrigger = (match) => browser.execute((m) => {
-  const rows = [...document.querySelectorAll('[data-testid="email-row"]')].filter(r => r.offsetHeight > 0);
+  const rows = [...document.querySelectorAll('[data-testid="email-row"]')]
+    .filter(r => r.offsetHeight > 0 && !r.closest('[data-quick-actions-preview]'));
   let row = null;
   if (typeof m.index === 'number') row = rows[m.index];
   else if (m.withinOfBottom) {

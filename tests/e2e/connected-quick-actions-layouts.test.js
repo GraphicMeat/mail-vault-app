@@ -14,6 +14,8 @@
  *
  * Assertions are on the main window's DOM only: the Settings preview renders
  * the same `.quick-actions` markup and must never answer for the real surface.
+ * Sample rows and bars (Settings, onboarding) sit inside a
+ * `[data-quick-actions-preview]` marker and are skipped the same way.
  */
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
@@ -32,10 +34,10 @@ describe('Quick action layouts', function () {
 
   /** The surface as the main window renders it; never the Settings preview. */
   const surfaceState = (surface) => browser.execute((wanted) => {
-    const outside = (el) => !el.closest('[data-testid="settings-page"]');
+    const outside = (el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]');
     // A row mounts its quick actions once hovered: hover the first, and a
     // caller's next poll finds them.
-    if (wanted === 'row') document.querySelector('[data-testid="email-row"]')?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    if (wanted === 'row') [...document.querySelectorAll('[data-testid="email-row"]')].find(outside)?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     const selector = wanted === 'reader' ? '.email-action-bar .quick-actions[data-surface="reader"]'
       : wanted === 'selection' ? '[data-testid="selection-action-bar"] .quick-actions[data-surface="selection"]'
         : '.quick-actions[data-surface="row"]';
@@ -65,7 +67,7 @@ describe('Quick action layouts', function () {
       const selector = wanted === 'reader' ? '.email-action-bar .quick-actions[data-surface="reader"]'
         : wanted === 'selection' ? '[data-testid="selection-action-bar"] .quick-actions[data-surface="selection"]'
           : '.quick-actions[data-surface="row"]';
-      const root = [...document.querySelectorAll(selector)].find((el) => !el.closest('[data-testid="settings-page"]'));
+      const root = [...document.querySelectorAll(selector)].find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]'));
       const trigger = root?.querySelector('.quick-actions-trigger');
       if (!trigger) return false;
       trigger.click();
@@ -107,24 +109,28 @@ describe('Quick action layouts', function () {
   }
 
   // ── selection ─────────────────────────────────────────────────────────────
+  // The list's own checkboxes and bar, never a sample's.
   const toggleFirstRow = () => browser.execute(() => {
-    const box = document.querySelector('[data-testid="email-row"] input[type="checkbox"]');
+    const box = [...document.querySelectorAll('[data-testid="email-row"] input[type="checkbox"]')]
+      .find((el) => !el.closest('[data-quick-actions-preview]'));
     if (!box) return false;
     box.click();
     return true;
   });
-  const selectionShown = () => browser.execute(() => !!document.querySelector('[data-testid="selection-action-bar"]'));
+  const rowChecked = () => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"] input[type="checkbox"]:checked')]
+    .some((el) => !el.closest('[data-quick-actions-preview]')));
+  const selectionShown = () => browser.execute(() => [...document.querySelectorAll('[data-testid="selection-action-bar"]')]
+    .some((el) => !el.closest('[data-quick-actions-preview]')));
   async function selectRow() {
-    if (await browser.execute(() => !!document.querySelector('[data-testid="email-row"] input[type="checkbox"]:checked'))) return;
+    if (await rowChecked()) return;
     expect(await toggleFirstRow()).toBe(true);
     await browser.waitUntil(selectionShown, { timeout: 10_000, interval: 200, timeoutMsg: 'selecting a row showed no selection bar' });
   }
   async function clearSelection() {
-    if (!(await browser.execute(() => !!document.querySelector('[data-testid="email-row"] input[type="checkbox"]:checked')))) return;
+    if (!(await rowChecked())) return;
     await toggleFirstRow();
-    await browser.waitUntil(async () => browser.execute(() =>
-      !document.querySelector('[data-testid="email-row"] input[type="checkbox"]:checked')),
-    { timeout: 10_000, interval: 200, timeoutMsg: 'the row stayed selected' });
+    await browser.waitUntil(async () => !(await rowChecked()),
+      { timeout: 10_000, interval: 200, timeoutMsg: 'the row stayed selected' });
   }
 
   // ── Settings UI ──────────────────────────────────────────────────────────
@@ -189,7 +195,8 @@ describe('Quick action layouts', function () {
     expect(size[0] >= 420 && size[1] >= 430).toBe(true);
 
     const opened = await browser.execute(() => {
-      const row = document.querySelector('[data-testid="email-row"]');
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((el) => !el.closest('[data-quick-actions-preview]'));
       if (!row) return false;
       row.click();
       return true;
@@ -306,4 +313,67 @@ describe('Quick action layouts', function () {
       }
     }
   }
+
+  // The star shows the message's state, like the one beside the sender:
+  // starred, the row's Unstar and the reader's Star are drawn filled; not
+  // starred, the row's Star and the reader's Star are outlines. Filled and
+  // outline stars share their paths; only the svg's fill tells them apart.
+  it('a starred message shows the filled star, an unstarred one the outline', async function () {
+    const starState = () => browser.execute(() => {
+      const real = (el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]');
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')].find(real);
+      if (!row) return null;
+      row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+      const fill = (root, action) => root?.querySelector(`[data-quick-action="${action}"] svg`)?.getAttribute('fill') ?? null;
+      const rowActions = row.querySelector('.quick-actions[data-surface="row"]');
+      const reader = [...document.querySelectorAll('.email-action-bar')].find(real);
+      return {
+        starred: row.querySelector('[data-testid="star-toggle"]')?.getAttribute('aria-pressed') === 'true',
+        rowStar: fill(rowActions, 'star'),
+        rowUnstar: fill(rowActions, 'unstar'),
+        readerStar: fill(reader, 'star'),
+      };
+    });
+    const clickStar = () => browser.execute(() => {
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]'));
+      const star = row?.querySelector('[data-testid="star-toggle"]');
+      if (!star) return false;
+      star.click();
+      return true;
+    });
+    const waitForStar = (want, why) => browser.waitUntil(async () => {
+      const state = await starState();
+      return !!state && Object.entries(want).every(([key, value]) => state[key] === value);
+    }, { timeout: 10_000, interval: 200, timeoutMsg: why }).catch(async (error) => {
+      throw new Error(`${error.message}: ${JSON.stringify(await starState())}`);
+    });
+
+    // Every row action inline, so Star and Unstar are buttons on the row.
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setQuickActionStyle('row', null, { mode: 'inline' }));
+    // The reader shows the same message as the first row.
+    expect(await browser.execute(() => {
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]'));
+      row?.click();
+      return !!row;
+    })).toBe(true);
+    await waitForLayout('reader', 'inline');
+    if ((await starState())?.starred) {
+      expect(await clickStar()).toBe(true);
+      await waitForStar({ starred: false }, 'the first message never lost its star');
+    }
+    try {
+      await waitForStar({ rowStar: 'none', rowUnstar: null, readerStar: 'none' },
+        'an unstarred message did not show outline stars');
+      expect(await clickStar()).toBe(true);
+      await waitForStar({ starred: true, rowStar: null, rowUnstar: 'currentColor', readerStar: 'currentColor' },
+        'a starred message did not show filled stars');
+    } finally {
+      if ((await starState())?.starred) {
+        await clickStar();
+        await waitForStar({ starred: false }, 'the message kept the star this test gave it').catch(() => {});
+      }
+    }
+  });
 });

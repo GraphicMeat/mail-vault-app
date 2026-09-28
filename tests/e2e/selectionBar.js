@@ -12,13 +12,17 @@
  * Address the action instead: `data-quick-action` on the button, scoped to
  * `data-surface="selection"` so a row's Archive can never answer for the
  * bar's. Open the overflow menu only when the action is not already inline.
+ *
+ * Settings and onboarding draw a sample bar inside a
+ * `[data-quick-actions-preview]` marker; it is never the live bar.
  */
 
 /** One pass: click it inline, click it in the open menu, or open the menu. */
 const attempt = (action) =>
   browser.execute((wanted) => {
     const usable = (btn) => !!btn && btn.offsetHeight > 0 && !btn.disabled;
-    const bar = document.querySelector('[data-testid="selection-action-bar"]');
+    const bar = [...document.querySelectorAll('[data-testid="selection-action-bar"]')]
+      .find((el) => !el.closest('[data-quick-actions-preview]'));
     if (!bar) return 'no-bar';
     const menu = document.querySelector('[data-surface="selection"].quick-actions-menu');
     const inline = bar.querySelector(`[data-quick-action="${wanted}"]`);
@@ -74,7 +78,8 @@ export async function clickSelectionAction(action) {
 /** Is the bar on screen with this action available? Clicks nothing. */
 export const selectionActionReady = (action) =>
   browser.execute((wanted) => {
-    const bar = document.querySelector('[data-testid="selection-action-bar"]');
+    const bar = [...document.querySelectorAll('[data-testid="selection-action-bar"]')]
+      .find((el) => !el.closest('[data-quick-actions-preview]'));
     if (!bar) return false;
     const btn = bar.querySelector(`[data-quick-action="${wanted}"]`)
       || bar.querySelector('.quick-actions-trigger');
@@ -83,8 +88,8 @@ export const selectionActionReady = (action) =>
 
 /** Is the selection bar gone? The inverse assertion several specs make. */
 export const selectionBarGone = () =>
-  browser.execute(() =>
-    document.querySelector('[data-testid="selection-action-bar"]') === null);
+  browser.execute(() => ![...document.querySelectorAll('[data-testid="selection-action-bar"]')]
+    .some((el) => !el.closest('[data-quick-actions-preview]')));
 
 /**
  * The bar's confirmation dialog. Bulk unarchive and every delete route through
