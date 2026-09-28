@@ -81,13 +81,20 @@ export function UpdateModal({ updateInfo, onClose }) {
   // The feed's own notes are often empty (Sparkle's appcast carries none), so
   // the daemon reads every release since this version from GitHub. Until it
   // answers, or if it cannot, the feed's notes stay.
+  // The commits between the two builds. A nightly's release says only which
+  // commit it is ("Nightly build of <sha>."), so for nightlies they are the notes.
+  const [commitLog, setCommitLog] = useState(null);
+  const feedNotes = commitLog?.commits?.length && /^Nightly build of /.test(updateInfo?.notes || '') ? '' : updateInfo?.notes;
   const notes = releases.map(r => (releases.length > 1 ? `## v${r.version}\n` : '') + r.body).join('\n')
-    || updateInfo?.notes || '';
+    || feedNotes || '';
   const includePrereleases = (updateTrack ?? (currentVersion.includes('-nightly') ? 'nightly' : 'stable')) === 'nightly';
   useEffect(() => {
     let alive = true;
     daemonCall('app.release_notes', { from: currentVersion, to: newVersion, includePrereleases })
       .then(list => { if (alive && Array.isArray(list)) setReleases(list); })
+      .catch(() => {});
+    daemonCall('app.release_commits', { from: currentVersion, to: newVersion })
+      .then(log => { if (alive && log?.commits) setCommitLog(log); })
       .catch(() => {});
     return () => { alive = false; };
   }, [newVersion, includePrereleases]);
@@ -200,6 +207,29 @@ export function UpdateModal({ updateInfo, onClose }) {
               {notes && (
                 <div data-testid="update-release-notes" className="px-5 py-4 max-h-80 overflow-y-auto border-b border-mail-border">
                   {renderChangelogMarkdown(notes)}
+                </div>
+              )}
+              {commitLog?.commits?.length > 0 && (
+                <div className="px-5 py-3 border-b border-mail-border">
+                  <h3 className="text-sm font-semibold text-mail-text mb-1.5">
+                    {t('update.commits', { count: commitLog.total })}
+                  </h3>
+                  <ul data-testid="update-commits" className="max-h-60 overflow-y-auto space-y-1">
+                    {commitLog.commits.map(c => (
+                      <li key={c.sha} className="flex gap-2 text-sm text-mail-text-muted">
+                        <a href={c.url} target="_blank" rel="noopener noreferrer"
+                          className="font-mono text-xs text-mail-accent-text hover:underline shrink-0 pt-0.5">{c.sha}</a>
+                        <span className="min-w-0">{c.subject}</span>
+                      </li>
+                    ))}
+                    {commitLog.total > commitLog.commits.length && (
+                      <li className="text-xs">
+                        <a href={commitLog.url} target="_blank" rel="noopener noreferrer" className="text-mail-accent-text hover:underline">
+                          {t('update.moreCommits', { count: commitLog.total - commitLog.commits.length })}
+                        </a>
+                      </li>
+                    )}
+                  </ul>
                 </div>
               )}
 

@@ -97,3 +97,47 @@ describe('UpdateModal release notes', () => {
     expect(screen.queryByTestId('update-release-notes')).toBeNull();
   });
 });
+
+describe('UpdateModal commits', () => {
+  const NIGHTLY = '2.16.0-nightly.202609280647.gabc1234';
+  const LOG = {
+    total: 3, url: 'https://github.com/GraphicMeat/mail-vault-app/compare/v2.16.0...abc1234',
+    commits: [
+      { sha: 'abc1234', subject: 'fix(send): look for a late Sent copy', author: 'R', date: '', url: 'u1' },
+      { sha: 'def5678', subject: 'feat(list): shift-click selects a range', author: 'R', date: '', url: 'u2' },
+    ],
+  };
+  const answer = (commits) => (method) => Promise.resolve(method === 'app.release_commits' ? commits : []);
+
+  it('asks the daemon for the commits between the installed and the offered build', async () => {
+    daemonCall.mockImplementation(answer(null));
+    openModal({ version: NIGHTLY, notes: '' });
+    await waitFor(() => expect(daemonCall).toHaveBeenCalledWith('app.release_commits', { from: currentVersion, to: NIGHTLY }));
+  });
+
+  it('lists every commit in its own scrolling box, with a link to the rest', async () => {
+    daemonCall.mockImplementation(answer(LOG));
+    openModal({ version: NIGHTLY, notes: '' });
+    const box = await screen.findByTestId('update-commits');
+    expect(box.className).toContain('overflow-y-auto');
+    expect(box.textContent).toContain('fix(send): look for a late Sent copy');
+    expect(box.textContent).toContain('shift-click selects a range');
+    expect(screen.getByRole('heading', { name: 'Commits (3)' })).toBeTruthy();
+    expect(within(box).getByRole('link', { name: '1 more on GitHub' }).getAttribute('href')).toBe(LOG.url);
+  });
+
+  it("drops the nightly feed's bare 'Nightly build of <sha>' once the commits are in", async () => {
+    daemonCall.mockImplementation(answer(LOG));
+    openModal({ version: NIGHTLY, notes: 'Nightly build of abc1234def.' });
+    await screen.findByTestId('update-commits');
+    expect(screen.queryByTestId('update-release-notes')).toBeNull();
+  });
+
+  it('shows no commits box when the daemon has none', async () => {
+    daemonCall.mockImplementation(answer(null));
+    openModal({ version: NIGHTLY, notes: 'Nightly build of abc1234def.' });
+    await waitFor(() => expect(daemonCall).toHaveBeenCalledWith('app.release_commits', expect.anything()));
+    expect(screen.queryByTestId('update-commits')).toBeNull();
+    expect(screen.getByTestId('update-release-notes').textContent).toContain('Nightly build of');
+  });
+});

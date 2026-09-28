@@ -82,6 +82,100 @@ pub fn release_notes_between(releases: Vec<GithubRelease>, from: &str, to: &str,
     kept.into_iter().map(|(_, note)| note).collect()
 }
 
+/// The git ref a version was built from, for GitHub's compare API: a nightly
+/// names its commit (`x.y.z-nightly.<stamp>.g<sha>`, or `x.y.z-nightly.<sha>`
+/// from before the stamp), a release its `v` tag. Anything else has none.
+pub fn git_ref(version: &str) -> Option<String> {
+    rank(version)?;
+    let version = version.split('+').next()?;
+    match version.split_once("-nightly.") {
+        Some((_, rest)) => rest
+            .rsplit('.')
+            .next()
+            .map(|s| s.trim_start_matches('g'))
+            .filter(|s| s.len() >= 7 && s.chars().all(|c| c.is_ascii_hexdigit()))
+            .map(str::to_string),
+        None if !version.contains('-') => Some(format!("v{version}")),
+        None => None,
+    }
+}
+
+/// GitHub's `GET /repos/{owner}/{repo}/compare/{base}...{head}`, the fields
+/// the update dialog reads. `commits` is oldest first and capped at 250.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubCompare {
+    #[serde(default)]
+    pub html_url: String,
+    #[serde(default)]
+    pub total_commits: usize,
+    #[serde(default)]
+    pub commits: Vec<GithubCommit>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubCommit {
+    pub sha: String,
+    #[serde(default)]
+    pub html_url: String,
+    pub commit: GithubCommitDetail,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubCommitDetail {
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub author: Option<GithubCommitAuthor>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct GithubCommitAuthor {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub date: String,
+}
+
+/// What the update dialog lists for one commit: its subject line only.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitNote {
+    pub sha: String,
+    pub subject: String,
+    pub author: String,
+    pub date: String,
+    pub url: String,
+}
+
+/// The commits an update brings in, newest first. `total` can exceed the list
+/// (GitHub stops at 250); `url` is the full comparison on github.com.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitLog {
+    pub total: usize,
+    pub url: String,
+    pub commits: Vec<CommitNote>,
+}
+
+pub fn commit_log(compare: GithubCompare) -> CommitLog {
+    let commits = compare
+        .commits
+        .into_iter()
+        .rev()
+        .map(|c| {
+            let author = c.commit.author.unwrap_or(GithubCommitAuthor { name: String::new(), date: String::new() });
+            CommitNote {
+                sha: c.sha.chars().take(7).collect(),
+                subject: c.commit.message.lines().next().unwrap_or_default().to_string(),
+                author: author.name,
+                date: author.date,
+                url: c.html_url,
+            }
+        })
+        .collect::<Vec<_>>();
+    CommitLog { total: compare.total_commits.max(commits.len()), url: compare.html_url, commits }
+}
+
 fn rank(version: &str) -> Option<(u64, u64, u64, u64)> {
     let version = version.split('+').next()?;
     let (core, pre) = match version.split_once('-') {
@@ -239,5 +333,39 @@ mod tests {
         assert!(!is_newer("2.15.0", "garbage"));
         assert!(!is_newer("garbage", "2.15.0"));
         assert!(!is_newer("2.15", "2.16.0"));
+    }
+
+    #[test]
+    fn a_nightly_names_its_commit_and_a_release_its_tag() {
+        assert_eq!(git_ref("2.16.0-nightly.202609240647.gabc1234").as_deref(), Some("abc1234"));
+        assert_eq!(git_ref("2.16.0-nightly.0835eb4").as_deref(), Some("0835eb4"));
+        assert_eq!(git_ref("2.16.0").as_deref(), Some("v2.16.0"));
+        assert_eq!(git_ref("2.16.1-beta.1"), None);
+        assert_eq!(git_ref("unknown"), None);
+        assert_eq!(git_ref(""), None);
+    }
+
+    #[test]
+    fn a_commit_log_lists_subjects_newest_first() {
+        let compare: GithubCompare = serde_json::from_value(serde_json::json!({
+            "html_url": "https://github.com/o/r/compare/v2.15.0...v2.16.0",
+            "total_commits": 300,
+            "commits": [
+                { "sha": "1111111aaaa", "html_url": "u1",
+                  "commit": { "message": "fix: older\n\nbody", "author": { "name": "A", "date": "2026-09-01T00:00:00Z" } } },
+                { "sha": "2222222bbbb", "html_url": "u2", "commit": { "message": "feat: newer", "author": null } },
+            ],
+        }))
+        .unwrap();
+        let log = commit_log(compare);
+        assert_eq!(log.total, 300);
+        assert_eq!(log.url, "https://github.com/o/r/compare/v2.15.0...v2.16.0");
+        assert_eq!(
+            serde_json::to_value(&log.commits).unwrap(),
+            serde_json::json!([
+                { "sha": "2222222", "subject": "feat: newer", "author": "", "date": "", "url": "u2" },
+                { "sha": "1111111", "subject": "fix: older", "author": "A", "date": "2026-09-01T00:00:00Z", "url": "u1" },
+            ])
+        );
     }
 }

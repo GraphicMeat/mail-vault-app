@@ -2,35 +2,63 @@
 //! offered version say, for the update dialog. Sparkle's appcast carries no
 //! notes, so on macOS these are the only ones the dialog has.
 //!
+//! `app.release_commits`: the commits between the two builds, from GitHub's
+//! compare API. A nightly's release body says only which commit it was built
+//! from, so for nightlies these are the only real notes.
+//!
 //! Best effort by design: offline, rate-limited or slow, the answer is `[]`
-//! and the dialog keeps whatever notes the update feed carried.
+//! (`null` for commits) and the dialog keeps whatever notes the feed carried.
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
-use mailvault_core::update_track::{release_notes_between, GithubRelease};
+use mailvault_core::update_track::{commit_log, git_ref, release_notes_between, GithubCompare, GithubRelease};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 
-const RELEASES_URL: &str = "https://api.github.com/repos/GraphicMeat/mail-vault-app/releases?per_page=30";
+const REPO_API: &str = "https://api.github.com/repos/GraphicMeat/mail-vault-app";
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
-    if method != "app.release_notes" {
-        return None;
+    match method {
+        "app.release_notes" => {
+            let url = format!("{REPO_API}/releases?per_page=30");
+            let fetched = if state.net.is_online() { fetch("release notes", &url).await } else { Err("offline".into()) };
+            Some(RpcResponse::success(id, answer(params, fetched)))
+        }
+        "app.release_commits" => {
+            let Some(url) = compare_url(params) else { return Some(RpcResponse::success(id, Value::Null)) };
+            let fetched = if state.net.is_online() { fetch("release commits", &url).await } else { Err("offline".into()) };
+            Some(RpcResponse::success(id, commits_answer(fetched)))
+        }
+        _ => None,
     }
-    let fetched = if state.net.is_online() { fetch().await } else { Err("offline".into()) };
-    Some(RpcResponse::success(id, answer(params, fetched)))
 }
 
-async fn fetch() -> Result<Vec<GithubRelease>, String> {
+fn compare_url(params: &Value) -> Option<String> {
+    let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+    let (base, head) = (git_ref(text("from"))?, git_ref(text("to"))?);
+    Some(format!("{REPO_API}/compare/{base}...{head}"))
+}
+
+fn commits_answer(fetched: Result<GithubCompare, String>) -> Value {
+    match fetched {
+        Ok(compare) => serde_json::to_value(commit_log(compare)).unwrap_or(Value::Null),
+        Err(e) => {
+            tracing::warn!("[release-commits] {e}");
+            Value::Null
+        }
+    }
+}
+
+async fn fetch<T: serde::de::DeserializeOwned>(label: &'static str, url: &str) -> Result<T, String> {
     let client = mailvault_core::net_activity::http_client_with(
-        "release notes",
+        label,
         reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             // GitHub refuses API requests without a User-Agent.
             .user_agent(concat!("MailVault/", env!("CARGO_PKG_VERSION"))),
     );
     client
-        .send(client.get(RELEASES_URL).header(reqwest::header::ACCEPT, "application/vnd.github+json"))
+        .send(client.get(url).header(reqwest::header::ACCEPT, "application/vnd.github+json"))
         .await
         .and_then(|r| r.error_for_status())
         .map_err(|e| e.to_string())?
@@ -86,6 +114,20 @@ mod tests {
     #[test]
     fn missing_versions_answer_an_empty_list() {
         assert_eq!(super::answer(&json!({}), Ok(vec![release("v2.16.0")])), json!([]));
+    }
+
+    #[test]
+    fn compares_the_installed_build_with_the_offered_one() {
+        assert_eq!(
+            super::compare_url(&json!({ "from": "2.16.0", "to": "2.16.0-nightly.202609280647.gabc1234" })).as_deref(),
+            Some("https://api.github.com/repos/GraphicMeat/mail-vault-app/compare/v2.16.0...abc1234")
+        );
+        assert_eq!(super::compare_url(&json!({ "from": "2.16.0", "to": "unknown" })), None);
+    }
+
+    #[test]
+    fn a_failed_compare_answers_null() {
+        assert_eq!(super::commits_answer(Err("rate limited".into())), json!(null));
     }
 
     #[tokio::test]

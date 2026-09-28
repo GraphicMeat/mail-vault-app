@@ -170,6 +170,7 @@
   "timeCapsule.mb",
   "timeCapsule.snapshot",
   "timeCapsule.uid",
+  "update.commits",
   "util.escapeAction.appJsx",
   "util.exportSampleData.brisketSansLicenceRenews4",
   "util.exportSampleData.pressSlotFriday0600",
