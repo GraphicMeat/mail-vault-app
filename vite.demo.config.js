@@ -8,6 +8,11 @@ export default defineConfig({
   root: resolve(process.cwd(), 'src/demo'),
   base: '/demo/',
   plugins: [react()],
+  // Same as vite.config.js: the Insights worker's graph holds a dynamic
+  // import that rollup splits into a chunk, which an IIFE worker cannot.
+  worker: {
+    format: 'es',
+  },
   resolve: {
     alias: {
       [resolve(process.cwd(), 'src/services/billingApi.js')]: demo('billingApi.js'),
