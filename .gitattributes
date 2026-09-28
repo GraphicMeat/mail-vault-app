@@ -1,2 +1,5 @@
 # Shell scripts run under Git Bash on Windows CI; CRLF breaks them.
 *.sh text eol=lf
+
+# Bundled DB-IP country database (vendor/dbip): never diffed or line-converted.
+*.mmdb binary

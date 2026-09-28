@@ -42,6 +42,8 @@ chacha20poly1305 = "0.10"
 zeroize = "1"
 # OpenPGP decryption (src/pgp.rs): pure Rust, no gpg, so the sandboxed builds can use it.
 pgp = "0.20"
+# Network Activity's map (src/geo_ip.rs): reads the bundled DB-IP country database.
+maxminddb = "0.32"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }

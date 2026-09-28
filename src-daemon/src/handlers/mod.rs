@@ -37,6 +37,7 @@ pub(crate) mod journal;
 pub(crate) mod mail_search;
 pub(crate) mod mbox;
 pub(crate) mod migration;
+pub(crate) mod net_activity;
 pub(crate) mod notes;
 pub(crate) mod oauth2;
 pub(crate) mod pgp;

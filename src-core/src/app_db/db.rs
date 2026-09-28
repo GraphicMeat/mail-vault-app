@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -265,6 +265,32 @@ CREATE INDEX deleted_messages_at ON deleted_messages(deleted_at);
 CREATE INDEX deleted_messages_uid ON deleted_messages(account_id, mailbox, uid);
 ";
 
+/// Network Activity, kept for the period the user chose (`net_log`). `id` is
+/// arrival order, the only order the page lists in: `at_ms` is when a
+/// connection STARTED, and a long IMAP session is recorded last. `country` is
+/// ISO alpha-2, `'local'`, or NULL when unplaced; looked up as each row lands.
+const SCHEMA_V8: &str = "
+CREATE TABLE net_events (
+  id          INTEGER PRIMARY KEY,
+  at_ms       INTEGER NOT NULL,
+  direction   TEXT NOT NULL,
+  process     TEXT NOT NULL,
+  protocol    TEXT NOT NULL,
+  host        TEXT NOT NULL,
+  ip          TEXT,
+  port        INTEGER NOT NULL,
+  purpose     TEXT NOT NULL,
+  account     TEXT,
+  bytes_up    INTEGER NOT NULL,
+  bytes_down  INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  result      TEXT NOT NULL,
+  commands    INTEGER,
+  country     TEXT
+);
+CREATE INDEX net_events_at ON net_events(at_ms);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -420,6 +446,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         if version < 7 {
             conn.execute_batch(&format!(
                 "{SCHEMA_V7} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7');"
+            ))
+            .map_err(sql)?;
+        }
+        if version < 8 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V8} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '8');"
             ))
             .map_err(sql)?;
         }
@@ -676,6 +708,38 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// v8 adds Network Activity's kept events on top of a v7 store without
+    /// losing what v7 already held.
+    #[test]
+    fn a_v7_store_gains_net_events_and_keeps_its_rows() {
+        let dir = scratch("v7");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 {SCHEMA_V4}
+                 {SCHEMA_V5}
+                 {SCHEMA_V6}
+                 {SCHEMA_V7}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '7');
+                 INSERT INTO deleted_messages(id, account_id, mailbox, uid, flags, row_json, deleted_at) VALUES ('d1', 'a', 'INBOX', 1, '[]', '{{}}', 1);"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("8"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM deleted_messages", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v7 row must survive the v8 migration");
+        let found: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='net_events'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(found, 1, "net_events is missing after the migration");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// v7 adds the deleted-mail bin on top of a v6 store without losing what
     /// v6 held, and a second open changes nothing.
     #[test]
@@ -697,7 +761,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("7"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM bimi_cache", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v6 row must survive the v7 migration");
         conn.execute(

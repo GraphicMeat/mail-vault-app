@@ -40,6 +40,8 @@ pub mod transfer_stats;
 pub mod transfer;
 pub mod net;
 pub mod net_activity;
+pub mod net_log;
+pub mod geo_ip;
 pub mod daemon_ipc;
 pub mod transport;
 pub mod paths;

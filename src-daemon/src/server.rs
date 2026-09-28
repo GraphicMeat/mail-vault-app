@@ -198,6 +198,9 @@ pub struct DaemonState {
     /// Server fallback for a message the vault has no copy of, and the
     /// in-memory copies On Demand keeps (`raw_message`, Track H3c).
     pub(crate) raw_messages: crate::raw_message::RawMessages,
+    /// Network Activity's kept events in `app.db`: the listener in main.rs
+    /// feeds its writer, `handlers::net_activity` reads it.
+    pub net_log: Arc<mailvault_core::net_log::NetLog>,
 }
 
 /// Opens the vault registry for the vault at `root` and points its change
@@ -604,6 +607,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::release_notes::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::net_activity::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -617,10 +623,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         }
 
         // ── Network Activity ────────────────────────────────────────
-        // Every connection held (newest first); new ones arrive as
-        // `net-activity` events. `net.report` records one the app shell made
-        // itself (it normally comes as a channel notification instead).
-        "net.activity" => RpcResponse::success(id, serde_json::json!({"events": mailvault_core::net_activity::snapshot()})),
+        // The reads and the retention setting are `handlers::net_activity`.
+        // `net.report` records one the app shell made itself (it normally
+        // comes as a channel notification instead).
         "net.report" => match mailvault_core::net_activity::record_reported(req.params["event"].clone()) {
             Ok(()) => RpcResponse::success(id, serde_json::json!({"ok": true})),
             Err(e) => RpcResponse::error(id, ipc::INVALID_PARAMS, e),
@@ -794,6 +799,7 @@ impl DaemonState {
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
             hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),
             raw_messages: Default::default(),
+            net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
         });
         state.idle.set_daemon(&state);
         state
