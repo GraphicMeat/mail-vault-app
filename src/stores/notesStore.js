@@ -4,6 +4,7 @@ import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
 import { accountPayload } from './viewStore';
 import { useTagStore, tagRowKey } from './tagStore';
+import { compareNames } from '../utils/collation';
 
 /// The columns the daemon files an untagged note into, in board order. A
 /// `#tag` column comes before them, A to Z.
@@ -22,7 +23,7 @@ export function boardColumns(cards, filter = '') {
     if (!byColumn.has(name)) byColumn.set(name, []);
     byColumn.get(name).push(card);
   }
-  const tags = [...byColumn.keys()].filter(name => !AUTO_COLUMNS.includes(name)).sort((a, b) => a.localeCompare(b));
+  const tags = [...byColumn.keys()].filter(name => !AUTO_COLUMNS.includes(name)).sort(compareNames);
   return [...tags, ...AUTO_COLUMNS.filter(name => byColumn.has(name))].map(name => ({
     name,
     auto: AUTO_COLUMNS.includes(name),

@@ -3110,7 +3110,6 @@
   "netActivity.account": "Konto",
   "netActivity.allAccounts": "Alle Konten",
   "netActivity.pause": "Pausieren",
-  "netActivity.resume": "Fortsetzen",
   "netActivity.copy": "Als Text kopieren",
   "netActivity.copied": "Kopiert",
   "netActivity.loadFailed": "Die Liste konnte nicht vom Hintergrunddienst geladen werden.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Versionshinweise",
   "netActivity.purposes.connectivityCheck": "Verbindungsprüfung",
   "netActivity.purposes.accountSetup": "Konto einrichten",
-  "netActivity.purposes.export": "Export",
   "netActivity.notShown.title": "Was diese Liste nicht zeigt",
   "netActivity.notShown.webContent": "Externe Bilder und andere Webinhalte in E-Mails. Bilder werden oben gezählt.",
   "netActivity.notShown.appWindow": "Anfragen, die das App-Fenster selbst stellt, etwa Kaufprüfungen.",
   "netActivity.notShown.updates": "Downloads von App-Updates und unter macOS auch die Update-Prüfung.",
   "netActivity.notShown.innerDns": "DNS-Abfragen innerhalb von Webanfragen und beim Senden von E-Mails.",
   "netActivity.notShown.openConnections": "Noch offene Mailverbindungen. Eine Verbindung erscheint, wenn sie endet; eine, die auf neue Mail wartet, also erst später.",
-  "netActivity.notShown.signIn": "Ob eine Anmeldung geklappt hat. OK heißt, dass die Verbindung zustande kam."
+  "netActivity.notShown.signIn": "Ob eine Web-Anmeldung, etwa das Erneuern eines Konto-Tokens, angenommen wurde. OK heißt dort, dass die Anfrage durchging. Lehnt ein Mailserver eine Anmeldung ab, wird sein Fehler angezeigt."
 }

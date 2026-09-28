@@ -3110,7 +3110,6 @@
   "netActivity.account": "Cuenta",
   "netActivity.allAccounts": "Todas las cuentas",
   "netActivity.pause": "Pausar",
-  "netActivity.resume": "Reanudar",
   "netActivity.copy": "Copiar como texto",
   "netActivity.copied": "Copiado",
   "netActivity.loadFailed": "No se pudo cargar la lista desde el asistente en segundo plano.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Notas de la versión",
   "netActivity.purposes.connectivityCheck": "Comprobación de conexión",
   "netActivity.purposes.accountSetup": "Configurar cuenta",
-  "netActivity.purposes.export": "Exportar",
   "netActivity.notShown.title": "Lo que esta lista no muestra",
   "netActivity.notShown.webContent": "Imágenes remotas y otro contenido web dentro de los correos. Las imágenes se cuentan arriba.",
   "netActivity.notShown.appWindow": "Solicitudes que hace la propia ventana de la app, como las comprobaciones de compra.",
   "netActivity.notShown.updates": "Descargas de actualizaciones de la app y, en macOS, también la búsqueda de actualizaciones.",
   "netActivity.notShown.innerDns": "Búsquedas DNS hechas dentro de solicitudes web y del correo saliente.",
   "netActivity.notShown.openConnections": "Conexiones de correo aún abiertas. Una conexión aparece cuando se cierra, así que la que espera correo nuevo aparece más tarde.",
-  "netActivity.notShown.signIn": "Si un inicio de sesión funcionó. Correcto significa que la conexión funcionó."
+  "netActivity.notShown.signIn": "Si un inicio de sesión web, como renovar un token de la cuenta, fue aceptado. Correcto significa ahí que la solicitud se completó. Un servidor de correo que rechaza un inicio de sesión muestra su error."
 }

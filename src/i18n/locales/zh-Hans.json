@@ -3110,7 +3110,6 @@
   "netActivity.account": "账户",
   "netActivity.allAccounts": "所有账户",
   "netActivity.pause": "暂停",
-  "netActivity.resume": "继续",
   "netActivity.copy": "复制为文本",
   "netActivity.copied": "已复制",
   "netActivity.loadFailed": "无法从后台助手加载列表。",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "发行说明",
   "netActivity.purposes.connectivityCheck": "连接检查",
   "netActivity.purposes.accountSetup": "账户设置",
-  "netActivity.purposes.export": "导出",
   "netActivity.notShown.title": "此列表不显示的内容",
   "netActivity.notShown.webContent": "邮件中的远程图片和其他网页内容。图片在上方计数。",
   "netActivity.notShown.appWindow": "应用窗口自己发出的请求，例如购买验证。",
   "netActivity.notShown.updates": "应用更新的下载，在 macOS 上还包括检查更新。",
   "netActivity.notShown.innerDns": "网页请求和发送邮件内部进行的 DNS 查询。",
   "netActivity.notShown.openConnections": "仍处于打开状态的邮件连接。连接在关闭时才会显示，因此等待新邮件的连接会稍后出现。",
-  "netActivity.notShown.signIn": "登录是否成功。成功表示连接已建立。"
+  "netActivity.notShown.signIn": "网页登录（例如续期账户令牌）是否被接受。此处的成功仅表示请求已完成。邮件服务器拒绝登录时会显示其错误。"
 }

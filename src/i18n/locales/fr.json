@@ -3110,7 +3110,6 @@
   "netActivity.account": "Compte",
   "netActivity.allAccounts": "Tous les comptes",
   "netActivity.pause": "Pause",
-  "netActivity.resume": "Reprendre",
   "netActivity.copy": "Copier en texte",
   "netActivity.copied": "Copié",
   "netActivity.loadFailed": "Impossible de charger la liste depuis l'assistant en arrière-plan.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Notes de version",
   "netActivity.purposes.connectivityCheck": "Test de connexion",
   "netActivity.purposes.accountSetup": "Configuration du compte",
-  "netActivity.purposes.export": "Exportation",
   "netActivity.notShown.title": "Ce que cette liste ne montre pas",
   "netActivity.notShown.webContent": "Les images distantes et autres contenus web des e-mails. Les images sont comptées plus haut.",
   "netActivity.notShown.appWindow": "Les requêtes que la fenêtre de l'app fait elle-même, comme les vérifications d'achat.",
   "netActivity.notShown.updates": "Les téléchargements des mises à jour de l'app et, sur macOS, la recherche de mises à jour aussi.",
   "netActivity.notShown.innerDns": "Les requêtes DNS faites au sein des requêtes web et de l'envoi d'e-mails.",
   "netActivity.notShown.openConnections": "Les connexions mail encore ouvertes. Une connexion apparaît à sa fermeture ; celle qui attend du nouveau courrier apparaît donc plus tard.",
-  "netActivity.notShown.signIn": "Si une connexion au compte a abouti. Réussi signifie que la connexion réseau a fonctionné."
+  "netActivity.notShown.signIn": "Si une connexion web, comme le renouvellement d'un jeton de compte, a été acceptée. Réussi signifie alors que la requête est passée. Un serveur mail qui refuse une connexion affiche son erreur."
 }

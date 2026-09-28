@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { SettingsPageLayout, SettingsSection } from '../ui/SettingsForm';
 import { useT, getLocale } from '../../i18n/index.js';
 import { formatBytes } from '../../utils/formatBytes';
+import { compareNames } from '../../utils/collation';
 import { formatTime, formatDateTime } from '../../utils/dateFormat';
 import {
   useNetActivityStore, visibleEvents, filterEvents, summarize, copyText, target, PROTOCOL_LABELS,
@@ -22,7 +23,7 @@ const PURPOSE_KEYS = {
   'release notes': 'netActivity.purposes.releaseNotes',
   'connectivity check': 'netActivity.purposes.connectivityCheck',
   'account setup': 'netActivity.purposes.accountSetup',
-  export: 'netActivity.purposes.export',
+  export: 'common.export',
 };
 const RESULT_KEYS = { ok: 'netActivity.ok', cancelled: 'netActivity.cancelled' };
 const CELL = 'py-1 px-2 text-left align-top whitespace-nowrap';
@@ -38,7 +39,7 @@ function formatDuration(ms) {
 }
 
 const purposeLabel = (t, purpose) => (PURPOSE_KEYS[purpose] ? t(PURPOSE_KEYS[purpose]) : purpose);
-const distinct = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const distinct = values => [...new Set(values.filter(Boolean))].sort(compareNames);
 
 const Row = React.memo(function Row({ e }) {
   const t = useT();
@@ -134,7 +135,7 @@ export function NetworkActivity() {
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={() => (paused ? useNetActivityStore.getState().resume() : useNetActivityStore.getState().pause())}>
             {paused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
-            {paused ? t('netActivity.resume') : t('netActivity.pause')}
+            {paused ? t('common.resume') : t('netActivity.pause')}
           </Button>
           <Button variant="ghost" size="sm" onClick={copy} disabled={shown.length === 0}>
             {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}

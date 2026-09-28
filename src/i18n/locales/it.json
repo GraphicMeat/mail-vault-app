@@ -3110,7 +3110,6 @@
   "netActivity.account": "Account",
   "netActivity.allAccounts": "Tutti gli account",
   "netActivity.pause": "Pausa",
-  "netActivity.resume": "Riprendi",
   "netActivity.copy": "Copia come testo",
   "netActivity.copied": "Copiato",
   "netActivity.loadFailed": "Impossibile caricare l'elenco dall'assistente in background.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Note di rilascio",
   "netActivity.purposes.connectivityCheck": "Verifica connessione",
   "netActivity.purposes.accountSetup": "Configurazione account",
-  "netActivity.purposes.export": "Esportazione",
   "netActivity.notShown.title": "Cosa questo elenco non mostra",
   "netActivity.notShown.webContent": "Immagini remote e altri contenuti web nelle email. Le immagini sono contate sopra.",
   "netActivity.notShown.appWindow": "Richieste fatte dalla finestra dell'app stessa, come le verifiche degli acquisti.",
   "netActivity.notShown.updates": "Download degli aggiornamenti dell'app e, su macOS, anche il controllo aggiornamenti.",
   "netActivity.notShown.innerDns": "Ricerche DNS fatte all'interno delle richieste web e della posta in uscita.",
   "netActivity.notShown.openConnections": "Connessioni di posta ancora aperte. Una connessione compare quando si chiude, quindi quella in attesa di nuova posta compare più tardi.",
-  "netActivity.notShown.signIn": "Se un accesso è riuscito. Riuscita significa che la connessione ha funzionato."
+  "netActivity.notShown.signIn": "Se un accesso web, come il rinnovo di un token dell'account, è stato accettato. Riuscita significa che la richiesta è andata a buon fine. Un server di posta che rifiuta un accesso mostra il suo errore."
 }

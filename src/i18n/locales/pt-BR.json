@@ -3110,7 +3110,6 @@
   "netActivity.account": "Conta",
   "netActivity.allAccounts": "Todas as contas",
   "netActivity.pause": "Pausar",
-  "netActivity.resume": "Retomar",
   "netActivity.copy": "Copiar como texto",
   "netActivity.copied": "Copiado",
   "netActivity.loadFailed": "Não foi possível carregar a lista do assistente em segundo plano.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Notas da versão",
   "netActivity.purposes.connectivityCheck": "Teste de conexão",
   "netActivity.purposes.accountSetup": "Configurar conta",
-  "netActivity.purposes.export": "Exportar",
   "netActivity.notShown.title": "O que esta lista não mostra",
   "netActivity.notShown.webContent": "Imagens remotas e outros conteúdos da web dentro dos e-mails. As imagens são contadas acima.",
   "netActivity.notShown.appWindow": "Solicitações que a própria janela do app faz, como verificações de compra.",
   "netActivity.notShown.updates": "Downloads de atualizações do app e, no macOS, também a verificação de atualizações.",
   "netActivity.notShown.innerDns": "Consultas DNS feitas dentro de solicitações web e do envio de e-mails.",
   "netActivity.notShown.openConnections": "Conexões de e-mail ainda abertas. Uma conexão aparece quando termina, então a que espera novos e-mails aparece depois.",
-  "netActivity.notShown.signIn": "Se um login deu certo. Sucesso significa que a conexão funcionou."
+  "netActivity.notShown.signIn": "Se um login na web, como a renovação de um token da conta, foi aceito. Sucesso ali significa que a solicitação foi concluída. Um servidor de e-mail que recusa um login mostra o erro."
 }

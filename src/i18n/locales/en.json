@@ -3110,7 +3110,6 @@
   "netActivity.account": "Account",
   "netActivity.allAccounts": "All accounts",
   "netActivity.pause": "Pause",
-  "netActivity.resume": "Resume",
   "netActivity.copy": "Copy as text",
   "netActivity.copied": "Copied",
   "netActivity.loadFailed": "The list could not be loaded from the background helper.",
@@ -3138,12 +3137,11 @@
   "netActivity.purposes.releaseNotes": "Release notes",
   "netActivity.purposes.connectivityCheck": "Connectivity check",
   "netActivity.purposes.accountSetup": "Account setup",
-  "netActivity.purposes.export": "Export",
   "netActivity.notShown.title": "What this list does not show",
   "netActivity.notShown.webContent": "Remote images and other web content inside emails. Images are counted above.",
   "netActivity.notShown.appWindow": "Requests the app window makes itself, such as purchase checks.",
   "netActivity.notShown.updates": "App update downloads, and on macOS the update check too.",
   "netActivity.notShown.innerDns": "DNS lookups made inside web requests and outgoing mail.",
   "netActivity.notShown.openConnections": "Mail connections that are still open. A connection appears when it closes, so one waiting for new mail shows up later.",
-  "netActivity.notShown.signIn": "Whether a sign-in worked. OK means the connection worked."
+  "netActivity.notShown.signIn": "Whether a web sign-in, such as renewing an account token, was accepted. OK there means the request went through. A mail server that refuses a sign-in shows its error."
 }

@@ -105,6 +105,9 @@ import { formatCount } from './utils/formatCount';
 const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const NotesBoard = lazy(() => import('./components/notes/NotesBoard'));
 const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
+// Leaving Insights or Notes for the mail the user picked: never bring the
+// earlier selection back over it.
+const KEEP_NO_SELECTION = { restoreSelection: false };
 
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
 const ExportModal = lazy(() => import('./components/transfer/ExportModal').then(m => ({ default: m.ExportModal })));
@@ -218,7 +221,7 @@ function App() {
     if (!insights && !notes) return;
     if (insights) useInsightsStore.getState().closeInsights();
     if (notes) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
-    void insightsReaderScope.current.exit({restoreSelection:false});
+    void insightsReaderScope.current.exit(KEEP_NO_SELECTION);
   }, []);
   useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); }, []);
   const init = useAccountStore(s => s.init);

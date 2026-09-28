@@ -141,7 +141,7 @@ Pick a year or a custom range, then archive, delete, or archive-and-delete thous
 - **Tracker blocking** *(Premium)* - the hidden pixels that report when you opened a message are found on every mail, named on the row, and stripped out of the HTML before it renders. Detection is free; removal comes with a subscription.
 - **Credentials in the OS store** - macOS Keychain, Windows Credential Manager, Linux Secret Service. Never in a config file.
 - **Sandboxed on macOS**, no cloud service, no tracking, no telemetry.
-- **Network Activity** - Settings > Privacy & security lists the connections MailVault and its background helper make, newest first: mail sync and sending, sign-ins, DNS lookups, backups and more, with host, purpose, account, and data sent and received. It does not list web content inside emails, requests the app window makes itself, or app update downloads, and it is kept in memory only, never saved.
+- **Network Activity** - Settings > Privacy & security lists the connections MailVault and its background helper make, newest first: mail sync and sending, sign-ins, DNS lookups, backups and more, with host, purpose, account, and data sent and received. It does not list web content inside emails, requests the app window makes itself, or app update downloads and on macOS the update check, and it is kept in memory only, never saved.
 
 ### Multi-account
 
