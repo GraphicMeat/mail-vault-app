@@ -168,6 +168,34 @@ describe('the Notes to Self entry', () => {
     expect(screen.getByTestId('open-notes').getAttribute('aria-current')).toBe('page');
   });
 
+  /// Notes to Self is the one selection on screen: the view open behind it
+  /// loses its highlight, wide or collapsed.
+  it('leaves no view marked while the board is open', () => {
+    useViewStoreMock.setState({ activeViewId: 'v1', unavailableReason: 'building' });
+    const { unmount } = render(<SidebarViews notesOpen />);
+    expect(screen.getByTestId('view-row-v1').getAttribute('aria-current')).toBeNull();
+    expect(screen.getByTestId('view-row-v1').className).not.toContain('is-active');
+    expect(screen.queryByTestId('views-unavailable')).toBeNull();
+    unmount();
+    render(<SidebarViews collapsed notesOpen />);
+    expect(screen.getByTestId('view-row-v1').getAttribute('aria-current')).toBeNull();
+  });
+
+  /// The way out of the board is the same one every mail entry takes. The
+  /// view that was open behind it opens again rather than toggling off.
+  it.each([
+    ['the view that was open behind it', 'v1'],
+    ['another view', null],
+  ])('leaves the board for %s', (_label, activeViewId) => {
+    useViewStoreMock.setState({ activeViewId });
+    const onOpenMail = vi.fn();
+    render(<SidebarViews notesOpen onOpenMail={onOpenMail} />);
+    fireEvent.click(screen.getByTestId('view-row-v1'));
+    expect(onOpenMail).toHaveBeenCalledOnce();
+    expect(useViewStoreMock.getState().openView).toHaveBeenCalledWith(MINE);
+    expect(useViewStoreMock.getState().closeView).not.toHaveBeenCalled();
+  });
+
   it('stays when the views are folded away or there are none, collapsed too', () => {
     useSettingsStoreMock.setState({ viewsSectionCollapsed: true });
     const { unmount } = render(<SidebarViews />);

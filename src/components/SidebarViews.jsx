@@ -14,7 +14,11 @@ import { ViewIcon } from './ViewIcon';
 ///
 /// Notes to Self sits above them as a fixed entry: it is not a saved view and
 /// cannot be edited, folded away or deleted.
-export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, notesOpen = false }) {
+///
+/// While a full page (Notes to Self, Insights) hides the mail view, no view is
+/// marked: the page is the one selection on screen. A view click leaves that
+/// page through `onOpenMail`, the exit every other mail entry takes.
+export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, onOpenMail, notesOpen = false, mailHidden = notesOpen }) {
   const t = useT();
   const views = useViewStore(state => state.views);
   const counts = useViewStore(state => state.counts);
@@ -34,12 +38,12 @@ export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, n
   const row = (view) => {
     const label = viewLabel(view, t);
     const count = counts?.[view.id];
-    const active = activeViewId === view.id;
+    const active = activeViewId === view.id && !mailHidden;
     return <button key={view.id} type="button" data-testid={`view-row-${view.id}`}
       className={`sidebar-view-row${active ? ' is-active' : ''}`}
       aria-current={active ? 'true' : undefined}
       title={label}
-      onClick={() => (active ? closeView() : openView(view))}>
+      onClick={() => { onOpenMail?.(); return active ? closeView() : openView(view); }}>
       <ViewIcon icon={view.icon} size={collapsed ? 18 : 14} />
       {!collapsed && <>
         <span className="sidebar-view-name">{label}</span>
@@ -89,7 +93,7 @@ export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, n
       <div className="sidebar-view-list">
         {views.map(row)}
       </div>
-      {activeViewId && unavailableReason && <p className="sidebar-views-unavailable" role="status" data-testid="views-unavailable">
+      {activeViewId && !mailHidden && unavailableReason && <p className="sidebar-views-unavailable" role="status" data-testid="views-unavailable">
         {t(`views.unavailable.${unavailableReason}`)}
       </p>}
     </>}

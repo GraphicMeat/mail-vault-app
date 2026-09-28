@@ -71,8 +71,10 @@ const UNIFIED_FOLDERS = () => ([
   { id: tr('common.archive'), name: tr('common.archive'), icon: Archive, specialUse: '\\Archive' },
 ]);
 
-function UnifiedFolderList({ tagCloud = false, compact = false, onOpenMail }) {
-  const unifiedFolder = useAccountStore(s => s.unifiedFolder);
+function UnifiedFolderList({ tagCloud = false, compact = false, onOpenMail, mailHidden = false }) {
+  // A full page over the mail view leaves no folder looking selected.
+  const current = useAccountStore(s => s.unifiedFolder);
+  const unifiedFolder = mailHidden ? null : current;
   const activateUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
   const switchUnifiedFolder = folder => { onOpenMail?.(); return activateUnifiedFolder(folder); };
 
@@ -976,7 +978,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Account icons */}
-        <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} notesOpen={notesOpen} />
+        <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenMail={onOpenMail} notesOpen={notesOpen} mailHidden={mailHidden} />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
@@ -1017,12 +1019,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Folder icons with expandable children — hidden in unified inbox mode */}
-        {unifiedInbox && <UnifiedFolderList compact onOpenMail={onOpenMail} />}
+        {unifiedInbox && <UnifiedFolderList compact onOpenMail={onOpenMail} mailHidden={mailHidden} />}
         {!unifiedInbox && <div className="sidebar-collapsed-folders flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
             mailboxes={mailboxes}
-            activeMailbox={activeViewId ? null : activeMailbox}
+            activeMailbox={activeViewId || mailHidden ? null : activeMailbox}
             expanded={expandedFolders}
             onToggle={toggleFolder}
             onSelect={selectFolder}
@@ -1215,7 +1217,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
           )}
         </button>
-        <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} notesOpen={notesOpen} />
+        <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenMail={onOpenMail} notesOpen={notesOpen} mailHidden={mailHidden} />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>
@@ -1287,8 +1289,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
           </label>}
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
-            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} /> : (
-              <Folders mailboxes={mailboxes} activeMailbox={activeViewId ? null : activeMailbox} expanded={expandedFolders}
+            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
+              <Folders mailboxes={mailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
             )}

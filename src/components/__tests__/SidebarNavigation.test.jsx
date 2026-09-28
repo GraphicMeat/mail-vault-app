@@ -7,6 +7,7 @@ import { Sidebar } from '../Sidebar';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
+import { useViewStore } from '../../stores/viewStore';
 import { t } from '../../i18n';
 
 vi.mock('../../services/db', async importOriginal => ({
@@ -19,6 +20,8 @@ const accounts = [
   { id: 'studio', name: 'Old studio name', email: 'studio@example.com', authType: 'password' },
   { id: 'personal', name: 'Personal', email: 'personal@example.com', authType: 'oauth2' },
 ];
+const viewStoreInitial = useViewStore.getState();
+const VIEW = { id: 'v1', name: 'Receipts', icon: 'tag', position: 0, builtin: null, def: {} };
 
 beforeEach(() => {
   useSettingsStore.setState({
@@ -28,6 +31,7 @@ beforeEach(() => {
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null,
   });
   useBackupStore.setState({ activeBackup: null });
+  useViewStore.setState(viewStoreInitial, true);
   useMailStore.setState({
     accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false,
     mailboxes: [{ name: 'INBOX', path: 'INBOX' }, { name: 'Archive', path: 'Archive', specialUse: '\\Archive' }],
@@ -54,6 +58,25 @@ describe('Sidebar navigation', () => {
     expect(screen.getByRole('button', { name: 'Design studio, studio@example.com' }).getAttribute('aria-current')).toBeNull();
     fireEvent.click(screen.getByTestId('open-notes'));
     expect(onOpenNotes).toHaveBeenCalledTimes(1);
+  });
+  it.each([false, true])('leaves no folder or view selected under Notes to Self (collapsed %s)', collapsed => {
+    useSettingsStore.setState({ sidebarCollapsed: collapsed });
+    const openView = vi.fn(async () => true);
+    useViewStore.setState({ views: [VIEW], activeViewId: 'v1', openView, closeView: vi.fn() });
+    const onOpenMail = vi.fn();
+    render(<Sidebar notesOpen onOpenMail={onOpenMail} />);
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
+    act(() => useViewStore.setState({ activeViewId: null }));
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
+    // A view click is a way out of the board like any mail entry.
+    fireEvent.click(screen.getByTestId('view-row-v1'));
+    expect(onOpenMail).toHaveBeenCalledOnce();
+    expect(openView).toHaveBeenCalledWith(VIEW);
+  });
+  it('leaves no All Inboxes folder selected under Notes to Self', () => {
+    useMailStore.setState({ unifiedInbox: true, unifiedFolder: 'INBOX' });
+    render(<Sidebar notesOpen />);
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
   });
   it('does not visually select collapsed All Inboxes while Insights is open', () => {
     useSettingsStore.setState({ sidebarCollapsed: true });
