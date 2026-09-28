@@ -9,32 +9,15 @@ import { status, onProgress, onDaemonReconnected } from '../services/searchIndex
 import { wantsProgressUi, buildFinished, progressPercent, OPEN_DELAY_MS } from '../utils/searchIndexProgress';
 import { formatCount } from '../utils/formatCount';
 
-// input types that accept typed text (a bare `type` attribute defaults the
-// DOM's `.type` to 'text', so "no type" is covered without a special case).
-const TEXT_ENTRY_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number']);
-
 /**
- * True while focus is in something the user is typing into. `useDialogA11y`
- * moves focus into a dialog the instant it opens, so opening unprompted here
- * would steal keystrokes from Compose (native inputs) or the rich-text body
- * (TipTap/ProseMirror render a `contenteditable` root, not an <input>).
- * Checkbox/radio/button inputs (e.g. a row's selection checkbox) are not
- * text entry and must not start minimized (review 1.10 N1).
+ * Progress of a big index pass (first build, rebuild, backlog >= 500): a corner chip that never blocks or
+ * steals focus (background work must not disturb the UI). Clicking it opens the details modal.
  */
-function isEditableFocused() {
-  const el = typeof document !== 'undefined' ? document.activeElement : null;
-  if (!el) return false;
-  if (el.tagName === 'TEXTAREA') return true;
-  if (el.tagName === 'INPUT') return TEXT_ENTRY_INPUT_TYPES.has((el.type || 'text').toLowerCase());
-  return el.isContentEditable === true || !!el.closest?.('[contenteditable]:not([contenteditable="false"])');
-}
-
-/** Progress of a big index pass (first build, rebuild, backlog >= 500): a dismissable modal, minimized to a chip. */
 export function SearchIndexProgress() {
   const t = useT();
   const [info, setInfo] = useState(null);
   const [shown, setShown] = useState(false);
-  const [hidden, setHidden] = useState(false); // in memory only: a relaunch mid-build shows the modal again
+  const [hidden, setHidden] = useState(true); // the chip is the default; only a click opens the modal
 
   useEffect(() => {
     let alive = true;
@@ -66,16 +49,11 @@ export function SearchIndexProgress() {
       if (!stillIndexing) setShown(false);
       return undefined;
     }
-    const timer = setTimeout(() => {
-      setShown(true);
-      // Never pop the modal open under someone's cursor mid-sentence: start
-      // minimized instead, same as a manual Hide.
-      if (isEditableFocused()) setHidden(true);
-    }, OPEN_DELAY_MS);
+    const timer = setTimeout(() => setShown(true), OPEN_DELAY_MS);
     return () => clearTimeout(timer);
   }, [wanted, stillIndexing]);
 
-  useEffect(() => { if (finished) setHidden(false); }, [finished]);
+  useEffect(() => { if (finished) setHidden(true); }, [finished]);
 
   if (!shown || (!wanted && !stillIndexing)) return null;
   const percent = progressPercent(info);

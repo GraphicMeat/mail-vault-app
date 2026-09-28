@@ -23,6 +23,55 @@ use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+/// The index never competes with the user: after a click, a delete or a flag
+/// change the worker holds off until the UI has been quiet this long...
+const FOREGROUND_QUIET: Duration = Duration::from_millis(400);
+/// ...but never longer than this per step, so steady activity slows the build instead of stalling it.
+const FOREGROUND_MAX_WAIT: Duration = Duration::from_millis(2000);
+const FOREGROUND_POLL: Duration = Duration::from_millis(25);
+
+/// RPCs a person waits on. Sync, prefetch and index calls are not: they must not hold the index back.
+pub fn is_foreground_method(method: &str) -> bool {
+    matches!(
+        method,
+        "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_raw_source"
+            | "maildir_read_attachment" | "maildir_read_attachments" | "maildir_set_flags" | "maildir_delete"
+            | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_by_uids" | "vault_rows"
+            | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "imap_move_emails"
+            | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
+            | "archive_emails" | "bulk_delete_emails"
+    )
+}
+
+/// Called for every foreground RPC.
+pub fn note_foreground(st: &SearchIndexState) {
+    st.last_foreground.store(st.epoch.elapsed().as_millis() as u64 + 1, SeqCst);
+}
+
+/// Time since the last foreground RPC; `None` when there never was one.
+fn since_foreground(st: &SearchIndexState) -> Option<Duration> {
+    match st.last_foreground.load(SeqCst) {
+        0 => None,
+        stamp => Some(st.epoch.elapsed().saturating_sub(Duration::from_millis(stamp - 1))),
+    }
+}
+
+/// How long the worker should sleep now given the quiet time so far and how long it has waited already.
+fn foreground_pause(quiet_for: Option<Duration>, waited: Duration) -> Option<Duration> {
+    let quiet_for = quiet_for?;
+    (quiet_for < FOREGROUND_QUIET && waited < FOREGROUND_MAX_WAIT).then_some(FOREGROUND_POLL)
+}
+
+/// Called between batches and attachment parts on the index thread only: returns once the user has stopped
+/// (or the wait cap passed, or a configure/rebuild asked the pass to end).
+pub(crate) fn yield_to_foreground(st: &SearchIndexState) {
+    let start = Instant::now();
+    while !st.interrupt.load(SeqCst) {
+        let Some(pause) = foreground_pause(since_foreground(st), start.elapsed()) else { return };
+        std::thread::sleep(pause);
+    }
+}
+
 const RETRY_DELAYS: [Duration; 3] = [Duration::from_secs(5), Duration::from_secs(10), Duration::from_secs(30)];
 
 pub struct SearchIndexState {
@@ -49,6 +98,9 @@ pub struct SearchIndexState {
     pub(crate) destroy_generation: AtomicU64,
     pub(crate) rebuild_pending: AtomicBool,
     pub(crate) interrupt: AtomicBool,
+    /// When the user last acted (`is_foreground_method`), as ms since `epoch` + 1; 0 = never.
+    pub(crate) last_foreground: AtomicU64,
+    epoch: Instant,
     pub(crate) switch: SwitchGuard,
     pub(crate) destroy_reply: Mutex<Vec<mpsc::Sender<Result<(), &'static str>>>>,
     /// Test-only: counts actual `read_dir` calls `prescan_folder_counts` makes
@@ -91,6 +143,8 @@ impl SearchIndexState {
             destroy_generation: AtomicU64::new(0),
             rebuild_pending: AtomicBool::new(false),
             interrupt: AtomicBool::new(false),
+            last_foreground: AtomicU64::new(0),
+            epoch: Instant::now(),
             switch: SwitchGuard::default(),
             destroy_reply: Mutex::new(Vec::new()),
             #[cfg(test)]
@@ -913,7 +967,7 @@ pub fn start(st: Arc<SearchIndexState>) {
     let spawned = std::thread::Builder::new().name("search-index".into()).spawn(move || {
         #[cfg(target_os = "macos")]
         unsafe {
-            libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
+            libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
         }
         info!("search index worker started");
         worker(&st, rx);
@@ -1135,7 +1189,10 @@ fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, recover: bool, o
                 config.image_text,
                 config.bodies,
                 &extractor,
-                |account_id, vault_dir, uid, filename, part_index| read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index),
+                |account_id, vault_dir, uid, filename, part_index| {
+                    yield_to_foreground(st);
+                    read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index)
+                },
                 &|| !st.interrupt.load(SeqCst)
                     && st.operation_generation.load(SeqCst) == operation_gen
                     && st.switch.current() == switch_gen
@@ -1365,7 +1422,7 @@ pub(crate) fn sweep(
             completed = false;
             return SweepOutcome { parsed, completed, success: false, error: None };
         }
-        let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); };
+        let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); yield_to_foreground(st); };
         let listing = |uids: &[u32]| {
             server_listing(st, &account, &dir, uids).inspect_err(|e| {
                 // A folder the header cache has no row for stays so until it is
@@ -1513,6 +1570,49 @@ mod tests {
         assert_eq!(batch_pause(500, None), None);
         assert_eq!(batch_pause(500, Some("soon")), None);
         assert_eq!(batch_pause(500, Some("999999")), Some(Duration::from_secs(30)), "capped");
+    }
+
+    #[test]
+    fn only_what_a_person_waits_on_counts_as_foreground() {
+        use crate::search_index::is_foreground_method as fg;
+        for m in ["maildir_read_light", "maildir_set_flags", "maildir_delete_many", "imap_delete_email", "load_email_cache_by_uids", "vault_rows"] {
+            assert!(fg(m), "{m}");
+        }
+        for m in ["search_index_status", "search_index_configure", "ping", "save_email_cache", "sync.watch", "prefetch_attachments"] {
+            assert!(!fg(m), "{m} must not hold the index back");
+        }
+    }
+
+    #[test]
+    fn the_worker_pauses_while_the_ui_is_busy_and_never_past_the_cap() {
+        use crate::search_index::{foreground_pause, FOREGROUND_MAX_WAIT, FOREGROUND_QUIET};
+        use std::time::Duration;
+        let ms = Duration::from_millis;
+        assert!(foreground_pause(None, ms(0)).is_none(), "no user activity yet: full speed");
+        assert!(foreground_pause(Some(ms(10)), ms(0)).is_some(), "a click just landed: hold off");
+        assert!(foreground_pause(Some(FOREGROUND_QUIET), ms(0)).is_none(), "quiet long enough: go");
+        assert!(foreground_pause(Some(ms(10)), FOREGROUND_MAX_WAIT).is_none(), "steady activity slows the build, never stalls it");
+    }
+
+    #[test]
+    fn yield_to_foreground_waits_for_a_quiet_ui_and_returns_at_once_when_idle_or_interrupted() {
+        use std::sync::atomic::Ordering::SeqCst;
+        use std::time::{Duration, Instant};
+        let tmp = tempfile::tempdir().unwrap();
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let t = Instant::now();
+        crate::search_index::yield_to_foreground(&st);
+        assert!(t.elapsed() < Duration::from_millis(100), "idle UI: no wait");
+        crate::search_index::note_foreground(&st);
+        let t = Instant::now();
+        crate::search_index::yield_to_foreground(&st);
+        assert!(t.elapsed() >= Duration::from_millis(350), "a click just landed: the worker holds off for the quiet window");
+        assert!(t.elapsed() < Duration::from_millis(1500));
+        crate::search_index::note_foreground(&st);
+        st.interrupt.store(true, SeqCst);
+        let t = Instant::now();
+        crate::search_index::yield_to_foreground(&st);
+        assert!(t.elapsed() < Duration::from_millis(100), "a configure/rebuild ends the wait");
     }
 
     fn eml_html() -> Vec<u8> {

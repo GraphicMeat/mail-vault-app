@@ -105,10 +105,10 @@ describe('Search index destroy', function () {
 
   before(async function () {
     await waitForApp();
-    // The seeded build first: its progress modal would cover the rows the archive clicks.
+    // The seeded build first: its progress chip would sit over the rows the archive clicks.
     await browser.waitUntil(async () => { const s = await status(); return s.firstPassDone === true && s.complete === true; },
       { timeout: 150_000, interval: 1000, timeoutMsg: 'the seeded build never completed' });
-    await browser.waitUntil(async () => !(await visible('search-index-progress-modal')), { timeout: 10_000, timeoutMsg: 'progress modal stayed open' });
+    await browser.waitUntil(async () => !(await visible('search-index-chip')), { timeout: 10_000, timeoutMsg: 'progress chip stayed' });
     await waitForEmails();
     await switchToFolder(LUKE, 'INBOX');
     lukeSubject = await pickFresh(/Luke message \d+/);
@@ -159,13 +159,13 @@ describe('Search index destroy', function () {
     expect(indexFiles()).toEqual([]); // a search must not recreate the index
   });
 
-  it('Build turns indexing back on and the progress modal returns', async function () {
+  it('Build turns indexing back on and the progress chip returns', async function () {
     await openSettings();
     expect(await clickSettingsNav('Storage')).toBe(true);
     await browser.waitUntil(() => visible('search-index-build'), { timeout: 10_000, timeoutMsg: 'Build button never rendered' });
     await browser.execute(() => document.querySelector('[data-testid="search-index-build"]').click());
     await closeSettings();
-    await browser.waitUntil(() => visible('search-index-progress-modal'), { timeout: 60_000, interval: 250, timeoutMsg: 'Build did not bring the progress modal back' });
+    await browser.waitUntil(() => visible('search-index-chip'), { timeout: 60_000, interval: 250, timeoutMsg: 'Build did not bring the progress chip back' });
     expect((await status()).firstPassDone).toBe(false);
   });
 });

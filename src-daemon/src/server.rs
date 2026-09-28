@@ -467,6 +467,10 @@ where
 async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
     let id = req.id.unwrap_or(Value::Null);
 
+    if crate::search_index::is_foreground_method(&req.method) {
+        crate::search_index::note_foreground(&state.search_index);
+    }
+
     // The user moved the mail off the app data dir and that folder is not
     // reachable. Anything that touches mail must fail loudly — writing into the
     // app data dir instead would silently start a second, divergent archive.
@@ -846,6 +850,21 @@ mod tests {
 
     fn err_message(resp: RpcResponse) -> String {
         resp.error.map(|e| e.message).unwrap_or_default()
+    }
+
+    // ── The index yields to the user ───────────────────────────────────
+
+    #[tokio::test]
+    async fn a_click_marks_foreground_activity_and_a_status_poll_does_not() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let dir = scratch("foreground");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        handle_request(&state, req("search_index_status", json!({}))).await;
+        handle_request(&state, req("ping", json!({}))).await;
+        assert_eq!(state.search_index.last_foreground.load(SeqCst), 0, "index and health calls never hold the index back");
+        handle_request(&state, req("maildir_read_light", json!({"accountId": "a", "mailbox": "INBOX", "uid": 1}))).await;
+        assert_ne!(state.search_index.last_foreground.load(SeqCst), 0, "opening a message does");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // ── The mail-dir gate ──────────────────────────────────────────────

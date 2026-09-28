@@ -22,6 +22,7 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 - All heavy logic and actions (IMAP/Graph sync, fetch, delete, backup, archive, indexing, import/export, vault and cache writes) live in the daemon, each long-running job on its own thread/worker so it never blocks RPC handling or other jobs.
 - New features go straight into the daemon (logic in `src-core/` where testable). Do not add work to `src-tauri` commands; when touching an existing one that does real work, move it to the daemon rather than extending it.
 - The daemon reports progress back via events; the app renders state and never computes it.
+- Background work never degrades the UI. Selecting, opening, deleting or flagging a message must feel instant while indexing, sync, backup or extraction runs; a lagging click is a defect. Background threads run at background QoS in small units, yield to foreground RPCs, and never hold a lock a foreground read waits on for more than one unit. Progress is a non-blocking chip, never a modal. Details in `architecture.md` (Process and Thread Model).
 
 ## Canonical Commands
 
