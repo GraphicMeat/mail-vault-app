@@ -477,13 +477,21 @@ async fn store_credentials(app_handle: tauri::AppHandle, credentials: std::colle
 
         write_credentials_blob(&json).map_err(|e| {
             warn!("store_credentials: {}", e);
-            e
+            with_snap_keyring_hint(e)
         })?;
 
         info!("Credentials stored successfully");
         info!("=== STORE CREDENTIALS END ===");
         Ok(())
     }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
+}
+
+/// A keyring error, led by the `snap connect` command when that is the fix.
+fn with_snap_keyring_hint(err: String) -> String {
+    match mailvault_core::keychain::snap_keyring_hint(std::env::var_os("SNAP").is_some(), &err) {
+        Some(hint) => format!("{hint} ({err})"),
+        None => err,
+    }
 }
 
 fn keyring_entry(name: &str) -> Result<Entry, String> {
@@ -608,7 +616,7 @@ async fn get_credentials(app_handle: tauri::AppHandle) -> Result<serde_json::Val
                     "unavailable" // Platform error (D-Bus down, keyring locked, etc.)
                 };
 
-                Err(format!("{}:{}", status, err_str))
+                Err(format!("{}:{}", status, with_snap_keyring_hint(err_str)))
             }
         }
     });
@@ -3521,6 +3529,8 @@ fn main() {
             // Set up logging to app log directory
             let log_dir = get_log_dir(&app.handle());
             let _guard = setup_logging(&log_dir);
+            #[cfg(target_os = "linux")]
+            mailvault_core::snap_keyring::install_if_snap();
 
             // Store the guard to keep logging alive
             std::mem::forget(_guard);
@@ -3799,12 +3809,12 @@ fn main() {
             app.manage(TrayMenu(tray_menu.clone()));
 
             // The black template glyph suits the macOS menu bar only; on a dark
-            // Windows taskbar it all but disappears. Windows gets the app icon
-            // (the first, 32px entry of icon.ico).
-            #[cfg(not(windows))]
+            // Windows taskbar or GNOME top bar it all but disappears. Everything
+            // else gets the app icon (on Windows the first, 32px entry of icon.ico).
+            #[cfg(target_os = "macos")]
             let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
                 .expect("Failed to load tray icon");
-            #[cfg(windows)]
+            #[cfg(not(target_os = "macos"))]
             let tray_icon_image = app.default_window_icon().cloned().expect("bundle has an icon");
 
             TrayIconBuilder::new()

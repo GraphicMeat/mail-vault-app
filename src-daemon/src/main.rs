@@ -317,6 +317,8 @@ async fn daemon_main() {
     let data_dir = get_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let _log_guard = setup_logging(&data_dir);
+    #[cfg(target_os = "linux")]
+    mailvault_core::snap_keyring::install_if_snap();
     // Mail may live outside the app data dir; bookkeeping never does.
     let vault_location = resolve_vault_location(&data_dir);
     let (mail_dir, mail_dir_ok) = (vault_location.dir.clone(), vault_location.ok);

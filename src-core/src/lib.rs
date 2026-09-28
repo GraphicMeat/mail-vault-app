@@ -32,6 +32,8 @@ pub mod imap;
 pub mod graph;
 pub mod graph_ledger;
 pub mod keychain;
+#[cfg(target_os = "linux")]
+pub mod snap_keyring;
 pub mod oauth2;
 pub mod dns;
 pub mod unsubscribe;

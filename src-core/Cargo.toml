@@ -45,6 +45,14 @@ pgp = "0.20"
 # Network Activity's map (src/geo_ip.rs): reads the bundled DB-IP country database.
 maxminddb = "0.32"
 
+
+# Snap keyring (src/snap_keyring.rs): the Secret portal through oo7, plugged
+# into keyring-rs as its backend inside a snap.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"
