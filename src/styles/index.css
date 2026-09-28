@@ -1496,9 +1496,10 @@ input[type="range"]::-moz-range-thumb:hover {
 }
 .mail-arrival-content {
   width: min(100%, 720px);
-  min-height: min(720px, calc(100dvh - 72px));
-  /* Envelopes start off-screen: clip their flight so it never adds scroll
-   * height, which made the whole page jump while they landed. */
+  /* The full window, not a capped band: envelopes start off-screen and are
+   * clipped here so their flight never adds scroll height (the page jumped
+   * while they landed). A short window still scrolls to Continue. */
+  min-height: calc(100dvh - 72px);
   overflow-y: clip;
   display: flex;
   flex-direction: column;

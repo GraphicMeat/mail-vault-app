@@ -38,6 +38,8 @@ describe('onboarding layout stability', () => {
 
   it('clips the arrival envelopes vertically and keeps its gutter', () => {
     expect(decls('.mail-arrival-content')['overflow-y']).toBe('clip');
+    // A capped band clipped the envelopes well inside a tall window.
+    expect(decls('.mail-arrival-content')['min-height']).toBe('calc(100dvh - 72px)');
     expect(decls('.mail-arrival')['scrollbar-gutter']).toBe('stable');
   });
 });
