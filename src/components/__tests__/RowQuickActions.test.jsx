@@ -309,6 +309,27 @@ describe('RowQuickActions', () => {
     expect(mocks.openCompose).toHaveBeenCalledTimes(1);
   });
 
+  // A compose window of its own takes the draft as it stands when it opens
+  // and never gets the later fill-in (utils/sameReply.js), so with Compose set
+  // to open in one a reply waits for the body the way a forward does.
+  it.each(['reply', 'replyAll'])('waits for the body before opening a %s in a window of its own', async mode => {
+    useSettingsStoreMock.setState({ composeOpenMode: 'window' });
+    const target = email({ uid: 17, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
+    const resolved = { uid: 17, accountId: ACCOUNT_B.id, html: '<p>Body</p>' };
+    let resolveBody;
+    mocks.replyTarget.mockReturnValue(new Promise(resolve => { resolveBody = resolve; }));
+    setActions(action(mode));
+    renderActions({ emails: [target] });
+
+    fireEvent.click(screen.getByTestId(`quick-action-${mode}`));
+    expect(mocks.openCompose).not.toHaveBeenCalled();
+
+    resolveBody(resolved);
+    await waitFor(() => expect(mocks.openCompose).toHaveBeenCalled());
+    expect(mocks.openCompose).toHaveBeenCalledTimes(1);
+    expect(mocks.openCompose).toHaveBeenCalledWith({ mode, replyTo: resolved });
+  });
+
   it('waits for the body before opening a forward, which inlines it into the message', async () => {
     const target = email({ uid: 15, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
     const resolved = { uid: 15, accountId: ACCOUNT_B.id };

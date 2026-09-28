@@ -55,6 +55,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const { config } = useQuickActionConfiguration('row');
   const localLabels = useTagStore(state => state.tags) || EMPTY_ARRAY;
   const templates = useSettingsStore(state => state.emailTemplates) || EMPTY_ARRAY;
+  const composeOpenMode = useSettingsStore(state => state.composeOpenMode);
   const applyTagToRows = useTagStore(state => state.applyTagToRows);
   const markRead = useMailStore(state => state.markSelectedAsRead);
   const markUnread = useMailStore(state => state.markSelectedAsUnread);
@@ -168,8 +169,10 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   // header instead of possibly reopening one the user already sent, closed
   // or minimized while the fetch was in flight. Forward inlines the body
   // into the message itself, so it still waits for the fetch before opening.
+  // So does any reply when compose opens in a window of its own: that window
+  // takes the draft as it stands and never gets the fill (utils/sameReply.js).
   const openReply = async mode => {
-    if (mode === 'forward') {
+    if (mode === 'forward' || composeOpenMode === 'window') {
       openCompose({ mode, replyTo: await replyTarget(newest, null, useMailStore.getState()) });
       return;
     }
