@@ -469,7 +469,7 @@ fn verify_listed(
 
 /// The header section of an RFC 5322 message — everything before the first
 /// blank line, or the whole slice when there isn't one.
-fn header_section(bytes: &[u8]) -> &[u8] {
+pub(crate) fn header_section(bytes: &[u8]) -> &[u8] {
     let end = bytes
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -535,7 +535,7 @@ pub fn read_message_id_and_date(path: &Path) -> (Option<String>, Option<i64>) {
 }
 
 /// The header section of the file's first 128 KiB, lossily decoded.
-fn read_header_text(path: &Path) -> Option<String> {
+pub(crate) fn read_header_text(path: &Path) -> Option<String> {
     let mut buf = Vec::new();
     fs::File::open(path).ok()?.take(128 * 1024).read_to_end(&mut buf).ok()?;
     Some(String::from_utf8_lossy(header_section(&buf)).into_owned())
@@ -598,7 +598,7 @@ pub fn write_generation(mailbox_dir: &Path, uid_validity: u32) -> Result<(), Str
 /// `.eml` — exactly as it was. Both shipped filename formats (`{uid}:2,{flags}`
 /// and `{uid}:{flags}:{ts}`) put the uid first and an info separator right
 /// after it (`:`, or `;` on Windows).
-fn with_uid(name: &str, new_uid: u32) -> String {
+pub(crate) fn with_uid(name: &str, new_uid: u32) -> String {
     match name.find(is_info_sep) {
         Some(i) => format!("{}{}", new_uid, &name[i..]),
         None => new_uid.to_string(),
@@ -646,7 +646,7 @@ fn strip_orphan_suffix(name: &str) -> String {
 }
 
 /// A free name in `orphaned/` — repeated repairs can orphan the same uid twice.
-fn free_orphan_path(orphan_dir: &Path, name: &str) -> PathBuf {
+pub(crate) fn free_orphan_path(orphan_dir: &Path, name: &str) -> PathBuf {
     let direct = orphan_dir.join(name);
     if !direct.exists() {
         return direct;

@@ -1392,8 +1392,15 @@ fn vault_uids_after_presync(
     mirror_dir: Option<&Path>,
 ) -> Result<HashSet<u32>, String> {
     if let Some(mirror_dir) = mirror_dir {
+        // An old import the vault moved out of the server's uid range is
+        // still at U in the backup folder, and the copy by uid below would
+        // bring it straight back: the vault's ledger goes to both sides first.
+        let replayed = match (vault_cur_dir.parent(), mirror_dir.parent()) {
+            (Some(vault), Some(mirror)) => crate::import_rehome::replay(vault, mirror),
+            _ => false,
+        };
         let (synced, vault_touched) = sync_locations(vault_cur_dir, mirror_dir);
-        if vault_touched {
+        if replayed || vault_touched {
             reg.invalidate(account_id, mailbox);
         }
         if synced > 0 {
@@ -1874,6 +1881,29 @@ mod tests {
         let uids = vault_uids_after_presync(&reg, "acct", "INBOX", vault.path(), Some(mirror.path())).unwrap();
 
         assert!(uids.contains(&42), "the pre-sync must restore the mirror-only uid into the vault before scanning");
+    }
+
+    /// An old import the vault moved out of the server's uid range is still
+    /// at U in the backup folder: the pre-sync must not copy it back.
+    #[test]
+    fn vault_uids_after_presync_keeps_a_rehomed_import_out_of_the_server_uid() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let (vault_cur, mirror_cur) = (vault.path().join("INBOX").join("cur"), mirror.path().join("INBOX").join("cur"));
+        for cur in [&vault_cur, &mirror_cur] {
+            std::fs::create_dir_all(cur).unwrap();
+            std::fs::write(cur.join(crate::vault_files::build_maildir_filename(5, &["archived".to_string()])), eml("import@x")).unwrap();
+        }
+        let server = crate::import_rehome::ServerView::from_headers(&[serde_json::json!({"uid": 5, "messageId": "<real@x>"})]);
+        let plan = crate::import_rehome::plan(vault_cur.parent().unwrap(), &server, false, &HashSet::new());
+        crate::import_rehome::apply(vault_cur.parent().unwrap(), &plan).unwrap();
+
+        let (_app, reg) = test_registry(vault.path());
+        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &vault_cur, Some(&mirror_cur)).unwrap();
+
+        let b = crate::maildir::IMPORT_UID_BASE;
+        assert_eq!(uids, HashSet::from([b]), "U stays free for the server's own message");
+        assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([b]));
     }
 
     // ── purge queue ──────────────────────────────────────────────────────────

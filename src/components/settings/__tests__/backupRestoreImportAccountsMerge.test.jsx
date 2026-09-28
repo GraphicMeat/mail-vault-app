@@ -136,3 +136,20 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
     id: 'restored-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test',
   })]);
 });
+
+// Importing an MBOX twice skips what the vault already holds; the success
+// message says how many were skipped.
+it('says how many MBOX messages were already in the vault', async () => {
+  useMailStore.setState({ accounts: [{ id: 'acct-1', email: 'me@test.com' }] });
+  sendMock.mockImplementation((cmd) => (cmd === 'import_mbox'
+    ? Promise.resolve({ emailCount: 2, skippedCount: 3, accountId: 'acct-1', mailbox: 'INBOX' })
+    : sendDefault(cmd)));
+
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Import MBOX/i }));
+
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
+  expect(msg).toContain('2 email(s) are now in your vault');
+  expect(msg).toContain('3 email(s) were already in your vault and were skipped.');
+});

@@ -267,7 +267,8 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        const message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox });
+        let message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox });
+        if (result.skippedCount > 0) message += `\n\n${t('settings.backup.restore.mboxSkippedAlreadyInVault', { skipped: result.skippedCount })}`;
         if (isDemo) alert(`${message}\n\nThis browser demo keeps the sample in this session; no native file was read.`);
         else { alert(message); window.location.reload(); }
       }, 1500);

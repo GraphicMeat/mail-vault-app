@@ -198,6 +198,9 @@ pub struct DaemonState {
     /// Server fallback for a message the vault has no copy of, and the
     /// in-memory copies On Demand keeps (`raw_message`, Track H3c).
     pub(crate) raw_messages: crate::raw_message::RawMessages,
+    /// Folders whose old-import pass (`handlers::custody::rehome_imports_soon`)
+    /// is running, so a folder opened twice runs it once.
+    pub(crate) import_rehome_running: std::sync::Mutex<std::collections::HashSet<(String, String)>>,
     /// Network Activity's kept events in `app.db`: the listener in main.rs
     /// feeds its writer, `handlers::net_activity` reads it.
     pub net_log: Arc<mailvault_core::net_log::NetLog>,
@@ -799,6 +802,7 @@ impl DaemonState {
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
             hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),
             raw_messages: Default::default(),
+            import_rehome_running: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
         });
         state.idle.set_daemon(&state);

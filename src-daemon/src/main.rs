@@ -492,6 +492,7 @@ async fn daemon_main() {
         eviction_worker: eviction_worker::EvictionWorkerState::default(),
         hoarder_worker: hoarder_worker::HoarderWorkerState::default(),
         raw_messages: raw_message::RawMessages::default(),
+        import_rehome_running: Default::default(),
         net_log,
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.

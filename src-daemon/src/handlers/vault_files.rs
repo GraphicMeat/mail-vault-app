@@ -599,12 +599,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// the generation repair runs (it takes and releases the mailbox lock), and
 /// only then `read`, outside every lock, may verify. `None` for each failure:
 /// the routes answer `null`, never an error the caller could read as empty.
+/// The folder's old-import pass starts beside the read, never before it.
 fn registry_read<T>(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
     let root = vault_root(state).ok()?;
     if let Err(e) = crate::handlers::custody::repair_generation_for(state, account_id, mailbox) {
         tracing::warn!("vault read {account_id}/{mailbox}: generation repair failed: {e}");
         return None;
     }
+    crate::handlers::custody::rehome_imports_soon(state, account_id, mailbox);
     read(&root)
 }
 
@@ -1040,6 +1042,38 @@ mod tests {
             }
             assert_eq!(maildir::read_generation(cur.parent().unwrap()), Some(2));
         }
+    }
+
+    /// A folder read starts the old-import pass beside itself and answers
+    /// without it; a pass already running for the folder is not started twice.
+    #[tokio::test]
+    async fn a_folder_read_starts_the_import_rehome_without_waiting_for_it() {
+        let (t, s) = st(true);
+        let _ = crate::custody::open_into(&s);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}A.eml")), b"Message-ID: <import@x.test>\r\nSubject: old\r\n\r\nbody").unwrap();
+        maildir::write_generation(cur.parent().unwrap(), 2).unwrap();
+        let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<real@x.test>"}]});
+        crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+        let params = json!({"accountId": "acc", "mailbox": "INBOX"});
+        let stamp = cur.parent().unwrap().join(mailvault_core::import_rehome::DONE_FILE);
+
+        let key = ("acc".to_string(), "INBOX".to_string());
+        s.import_rehome_running.lock().unwrap().insert(key.clone());
+        assert_eq!(call(&s, "vault_uid_sets", params.clone()).await.result, Some(json!({"saved": [5], "archived": [5]})));
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!stamp.exists(), "a pass in flight is not started again");
+
+        s.import_rehome_running.lock().unwrap().remove(&key);
+        assert!(call(&s, "vault_uid_sets", params.clone()).await.result.is_some());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !stamp.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(stamp.exists(), "the pass ran in the background");
+        let b = maildir::IMPORT_UID_BASE;
+        assert_eq!(call(&s, "vault_uid_sets", params).await.result, Some(json!({"saved": [b], "archived": [b]})));
     }
 
     /// Once its mailbox is verified, a single-message question never lists

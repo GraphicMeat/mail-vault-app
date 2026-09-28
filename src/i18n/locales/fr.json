@@ -1726,6 +1726,7 @@
   "settings.backup.restore.importingMboxOnlyAvailableDesktop": "L'import MBOX n'est disponible que dans l'app de bureau.",
   "settings.backup.restore.mboxFiles": "Fichiers MBOX",
   "settings.backup.restore.mboxImportedEmailSNow": "MBOX importé. {{result}} e-mail(s) sont maintenant dans votre coffre sous {{targetAccount}} / {{targetMailbox}}.\\n\\nMailVault se recharge à la fermeture.",
+  "settings.backup.restore.mboxSkippedAlreadyInVault": "{{skipped}} e-mail(s) étaient déjà dans votre coffre et ont été ignorés.",
   "settings.backup.restore.mboxWrittenEmailSAccount": "MBOX écrit. Le fichier contient {{result}} e-mail(s) de {{result2}} compte(s) — Thunderbird, Apple Mail et tout autre client MBOX peuvent l'ouvrir.",
   "settings.backup.restore.pickWhereWriteBackupFile": "Choisissez où écrire le fichier de sauvegarde",
   "settings.backup.restore.writeEverythingVaultSingleZip": "Écrivez tout le contenu de votre coffre dans un seul .zip copiable n'importe où, ou relisez-en un.",

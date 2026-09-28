@@ -22,12 +22,14 @@
 
 use crate::handlers::common;
 use crate::server::DaemonState;
+use mailvault_core::import_rehome;
 use mailvault_core::maildir::{has_info, info_flags, is_info_sep, IMPORT_UID_BASE};
 use mailvault_core::vault_files::build_maildir_filename;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -48,6 +50,10 @@ pub struct MboxImportResult {
     #[serde(rename = "accountId")]
     pub account_id: String,
     pub mailbox: String,
+    /// Messages the folder already held (`import_rehome`'s same-message rule),
+    /// not written again.
+    #[serde(rename = "skippedCount")]
+    pub skipped_count: u32,
 }
 
 /// Escape "From " at the start of lines in an email body for mbox format.
@@ -307,14 +313,43 @@ fn import_from(
         }
     }
 
+    // A message the folder already holds is not written twice: not the same
+    // file imported again, not a duplicate inside the file, not mail the
+    // server lists here. Read once, before the loop, so custody is never
+    // taken under the mailbox lock; the folder's Message-IDs are read on the
+    // first message that has one.
+    let server = crate::custody::with_conn(state, |c| mailvault_core::custody::cache::all_headers(c, &account_id, &mailbox))
+        .map(|rows| import_rehome::ServerView::from_headers(&rows))
+        .unwrap_or_default();
+    let mut known: Option<HashMap<String, Vec<PathBuf>>> = None;
+
     // The message count is unknown until the stream ends: `total` stays 0
     // while active (as export does) and progress runs on bytes.
     emit("mbox-import-progress", json!({"total": 0, "completed": 0, "active": true, "bytesDone": 0, "bytesTotal": bytes_total}));
 
     let mut email_count: u32 = 0;
+    let mut skipped_count: u32 = 0;
 
     let streamed = for_each_mbox_message(reader, |msg_raw, bytes_done| {
         let unescaped = mbox_unescape_from(msg_raw);
+        let head = import_rehome::head_of(&unescaped);
+        if let Some(id) = &head.id {
+            let copies = known.get_or_insert_with(|| folder_message_ids(&cur_dir));
+            let body = import_rehome::body_of(&unescaped);
+            // A copy in the folder decides by its content; with none, the
+            // server's header decides by Subject and Date.
+            let same = match copies.get(id) {
+                Some(paths) => paths.iter().any(|p| import_rehome::same_as_copy(&head, &body, p)),
+                None => server.lists_same(&head),
+            };
+            if same {
+                skipped_count += 1;
+                if (email_count + skipped_count) % 50 == 0 {
+                    emit("mbox-import-progress", json!({"total": 0, "completed": email_count, "active": true, "bytesDone": bytes_done, "bytesTotal": bytes_total, "skippedCount": skipped_count}));
+                }
+                return true;
+            }
+        }
 
         // Decision 10: the gate is re-acquired here, inside the loop, once
         // per message, never once around the whole import. A refusal (e.g.
@@ -325,7 +360,7 @@ fn import_from(
         // Under the vault registry's lock for the folder (keyed by the
         // sanitized names, the directory itself), and each file lands as a
         // row right after its write.
-        let write_result = common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<(), String> {
+        let write_result = common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<PathBuf, String> {
             let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
@@ -346,14 +381,17 @@ fn import_from(
                 return Err(format!("Failed to write .eml: {}", e));
             }
             state.vault_registry.upsert(&safe_account_id, &safe_mailbox, max_uid, &dest);
-            Ok(())
+            Ok(dest)
         });
 
         match write_result {
-            Ok(()) => {
+            Ok(dest) => {
                 email_count += 1;
-                if email_count % 50 == 0 {
-                    emit("mbox-import-progress", json!({"total": 0, "completed": email_count, "active": true, "bytesDone": bytes_done, "bytesTotal": bytes_total}));
+                if let (Some(id), Some(known)) = (head.id, known.as_mut()) {
+                    known.entry(id).or_default().push(dest);
+                }
+                if (email_count + skipped_count) % 50 == 0 {
+                    emit("mbox-import-progress", json!({"total": 0, "completed": email_count, "active": true, "bytesDone": bytes_done, "bytesTotal": bytes_total, "skippedCount": skipped_count}));
                 }
                 true
             }
@@ -365,23 +403,38 @@ fn import_from(
     });
     if let Err(e) = streamed {
         // What already landed stays landed: an error here would tell the user
-        // nothing changed. Only a read that wrote nothing is a failure.
-        if email_count == 0 {
+        // nothing changed. Only a read that got through no message is a failure.
+        if email_count + skipped_count == 0 {
             return Err(format!("Failed to read mbox file: {}", e));
         }
         warn!("import_mbox: read failed after {} messages, keeping them: {}", email_count, e);
     }
 
-    emit("mbox-import-progress", json!({"total": email_count, "completed": email_count, "active": false, "bytesDone": bytes_total, "bytesTotal": bytes_total}));
+    emit("mbox-import-progress", json!({"total": email_count, "completed": email_count, "active": false, "bytesDone": bytes_total, "bytesTotal": bytes_total, "skippedCount": skipped_count}));
 
-    info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
+    info!("MBOX imported: {} emails into {}/{}, {} already there skipped", email_count, account_id, mailbox, skipped_count);
     if email_count > 0 {
         // Decision 9: a whole mailbox of new files, the in-process
         // equivalent of the app's own sweep_index_soon() full pass.
         crate::search_index::sweep_soon(&state.search_index);
     }
 
-    Ok(MboxImportResult { email_count, account_id, mailbox })
+    Ok(MboxImportResult { email_count, account_id, mailbox, skipped_count })
+}
+
+/// Message-ID -> every vault file in `cur_dir` carrying it, one bounded
+/// header read per file.
+fn folder_message_ids(cur_dir: &Path) -> HashMap<String, Vec<PathBuf>> {
+    let mut ids: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    for entry in std::fs::read_dir(cur_dir).into_iter().flatten().flatten() {
+        if !has_info(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
+            ids.entry(id).or_default().push(entry.path());
+        }
+    }
+    ids
 }
 
 #[cfg(test)]
@@ -755,6 +808,68 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         assert_eq!(result.email_count, 2);
         let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
         assert_eq!(std::fs::read_dir(&cur).unwrap().count(), 2);
+    }
+
+    const DATE: &str = "Mon, 1 Jan 2024 10:00:00 +0000";
+
+    fn msg(id: &str, subject: &str, body: &str) -> String {
+        format!("Message-ID: <{id}>\r\nSubject: {subject}\r\nDate: {DATE}\r\n\r\n{body}")
+    }
+
+    fn import(s: &Arc<DaemonState>, dir: &std::path::Path, name: &str, messages: &[&str]) -> MboxImportResult {
+        import_mbox(s, write_mbox(dir, name, messages), "acct1".into(), "INBOX".into(), |_, _| {}).unwrap()
+    }
+
+    fn cur_count(root: &std::path::Path) -> usize {
+        std::fs::read_dir(mailvault_core::vault_files::cur_path(root, "acct1", "INBOX")).unwrap().count()
+    }
+
+    #[test]
+    fn importing_the_same_mbox_twice_skips_every_message_the_second_time() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b, c) = (msg("a@x", "one", "body a"), msg("b@x", "two", "body b"), msg("c@x", "three", "body c"));
+        let first = import(&s, dir.path(), "a.mbox", &[&a, &b, &c]);
+        assert_eq!((first.email_count, first.skipped_count), (3, 0));
+
+        let events = std::sync::Mutex::new(Vec::new());
+        let again = import_mbox(&s, write_mbox(dir.path(), "b.mbox", &[&a, &b, &c]), "acct1".into(), "INBOX".into(), |n, p| events.lock().unwrap().push((n.to_string(), p))).unwrap();
+        assert_eq!((again.email_count, again.skipped_count), (0, 3));
+        assert_eq!(cur_count(v.path()), 3, "no new files");
+        let last = events.into_inner().unwrap().pop().unwrap();
+        assert_eq!(last.1["skippedCount"], 3, "the final progress event carries the skipped count");
+    }
+
+    #[test]
+    fn the_same_id_with_another_body_is_imported_under_a_new_import_uid() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        import(&s, dir.path(), "a.mbox", &[&msg("a@x", "one", "first body")]);
+        let r = import(&s, dir.path(), "b.mbox", &[&msg("a@x", "one", "a different body")]);
+        assert_eq!((r.email_count, r.skipped_count), (1, 0));
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
+        assert!(mailvault_core::maildir::find_by_uid(&cur, IMPORT_UID_BASE + 1).is_some());
+    }
+
+    #[test]
+    fn a_message_the_server_lists_with_the_same_subject_and_date_is_skipped() {
+        let (v, s) = state(true);
+        let headers = json!({"uidValidity": 1, "totalEmails": 1, "emails": [{"uid": 7, "messageId": "<a@x>", "subject": "one", "messageDate": DATE}]});
+        crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acct1", "INBOX", &headers.to_string())).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let r = import(&s, dir.path(), "a.mbox", &[&msg("a@x", "one", "body"), &msg("b@x", "one", "body")]);
+        assert_eq!((r.email_count, r.skipped_count), (1, 1));
+        assert_eq!(cur_count(v.path()), 1);
+    }
+
+    #[test]
+    fn a_duplicate_inside_one_mbox_is_written_once() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let a = msg("a@x", "one", "body");
+        let r = import(&s, dir.path(), "a.mbox", &[&a, &a]);
+        assert_eq!((r.email_count, r.skipped_count), (1, 1));
+        assert_eq!(cur_count(v.path()), 1);
     }
 
     /// Decision 10: the gate is re-acquired per message, inside the loop, not
