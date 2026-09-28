@@ -10,6 +10,10 @@ on:
 
 jobs:
   build-snap:
+    # The environment gives the run graph its "Deploying to …" step progress bar.
+    # Its own unrestricted environment: Snap Edge dispatches from any ref,
+    # and `release` only admits main.
+    environment: snap
     permissions:
       contents: read
     runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}

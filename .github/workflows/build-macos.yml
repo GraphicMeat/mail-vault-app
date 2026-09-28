@@ -21,6 +21,9 @@ on:
 
 jobs:
   build-macos:
+    # The environment gives the run graph its "Deploying to …" step progress bar.
+    # `release` is main-only, like the Windows build.
+    environment: release
     permissions:
       contents: write
     runs-on: macos-latest

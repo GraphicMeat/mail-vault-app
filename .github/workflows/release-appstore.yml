@@ -30,6 +30,8 @@ on:
 
 jobs:
   build-mas:
+    # The environment gives the run graph its "Deploying to …" step progress bar.
+    environment: release
     permissions:
       contents: read
     runs-on: macos-latest

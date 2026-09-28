@@ -63,6 +63,8 @@ jobs:
     secrets: inherit
 
   build-linux-x86_64:
+    # The environment gives the run graph its "Deploying to …" step progress bar.
+    environment: release
     permissions:
       contents: write
     runs-on: ubuntu-22.04
@@ -136,6 +138,8 @@ jobs:
           retention-days: 1
 
   build-linux-aarch64:
+    # The environment gives the run graph its "Deploying to …" step progress bar.
+    environment: release
     permissions:
       contents: write
     runs-on: ubuntu-22.04-arm
