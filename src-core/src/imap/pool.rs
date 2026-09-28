@@ -1189,6 +1189,14 @@ mod net_activity_tests {
         assert_one_connection(&server, &events, "sync");
     }
 
+    /// A connection names the account it signs in as, even inside a scope
+    /// that names another (`net_activity::with_account`).
+    #[tokio::test]
+    async fn a_connection_keeps_its_own_account_inside_another_accounts_scope() {
+        let (server, events) = crate::net_activity::with_account("someone-else@example.test".into(), one_read(true)).await;
+        assert_one_connection(&server, &events, "open message");
+    }
+
     /// A wrong password is the case this page is opened for: the connection
     /// happened, and its result must say the sign-in failed, not "ok".
     #[tokio::test]

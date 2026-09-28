@@ -705,6 +705,43 @@ mod tests {
         assert_eq!(resp.result, Some(Value::Null));
     }
 
+    /// Network Activity: a Graph call is the account the app says it is for
+    /// (`accountEmail`, scoped once in `server::handle_request`), and every
+    /// "open message" request such a call makes carries it. A call that names
+    /// no account is shown as none's. The mock's port is this module's alone
+    /// and `TEST_LOCK` is held, so its newest event is the call just made.
+    #[tokio::test]
+    async fn a_graph_call_is_shown_as_the_account_it_names() {
+        let raw = "From: a@b.com\r\nSubject: hi\r\n\r\nBody";
+        let message = graph_message_json("m1").to_string();
+        let _g = mock_graph(vec![(200, message.clone()), (200, raw.to_string()), (200, message)]);
+        let s = st();
+        let newest = || {
+            mailvault_core::net_activity::snapshot()
+                .into_iter()
+                .find(|e| e.host == "127.0.0.1" && e.port == mock_server_port())
+                .expect("the call was recorded")
+        };
+        let named = "outlook.person@example.test";
+        for (method, params) in [
+            ("graph_get_message", json!({"accessToken": "tok", "messageId": "m1", "accountEmail": named})),
+            (
+                "graph_cache_mime",
+                json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7, "accountEmail": named}),
+            ),
+        ] {
+            let resp = crate::server::handle_request_for_test(&s, method, params).await;
+            assert!(resp.result.is_some(), "{method}: {:?}", resp.error);
+            let e = newest();
+            assert_eq!(e.purpose, "open message", "{method}");
+            assert_eq!(e.account.as_deref(), Some(named), "{method}");
+        }
+
+        let resp = crate::server::handle_request_for_test(&s, "graph_get_message", json!({"accessToken": "tok", "messageId": "m1"})).await;
+        assert!(resp.result.is_some());
+        assert_eq!(newest().account, None, "no account named, none shown");
+    }
+
     #[tokio::test]
     async fn graph_get_mime_is_no_longer_routed_here() {
         let s = st();

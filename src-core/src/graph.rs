@@ -435,6 +435,12 @@ impl GraphClient {
         }
     }
 
+    /// Its requests shown as `email`'s (`Tracked::for_account`).
+    pub fn for_account(mut self, email: &str) -> Self {
+        self.client = self.client.for_account(email);
+        self
+    }
+
     /// List all mail folders for the authenticated user, each stamped with
     /// its well-known name (when it has one) and its storage key.
     pub async fn list_folders(&self) -> Result<Vec<GraphMailFolder>, String> {

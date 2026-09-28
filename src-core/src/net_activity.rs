@@ -67,7 +67,7 @@ impl NetEvent {
             ip: None,
             port,
             purpose: purpose.to_string(),
-            account: None,
+            account: account(),
             bytes_up: 0,
             bytes_down: 0,
             duration_ms: 0,
@@ -244,6 +244,21 @@ pub fn record_reported(event: serde_json::Value) -> Result<(), String> {
 tokio::task_local! {
     /// What the mail connections opened inside `with_purpose` are for.
     static PURPOSE: &'static str;
+    /// Whose connections the ones opened inside `with_account` are.
+    static ACCOUNT: String;
+}
+
+/// Run `fut` with every event it records shown as `email`'s: the account an
+/// RPC names (`accountEmail`). A task-local like `with_purpose`, so a spawned
+/// future needs its own scope. An event that names its account itself (IMAP,
+/// SMTP, a `Tracked::for_account` client) keeps its own.
+pub async fn with_account<F: Future>(email: String, fut: F) -> F::Output {
+    ACCOUNT.scope(email, fut).await
+}
+
+/// The account in scope, if any.
+fn account() -> Option<String> {
+    ACCOUNT.try_with(String::clone).ok()
 }
 
 /// Run `fut` with `purpose` on every IMAP connection and DNS lookup it
@@ -279,6 +294,7 @@ pub fn now_ms() -> u64 {
 pub struct Tracked {
     client: reqwest::Client,
     purpose: String,
+    account: Option<String>,
 }
 
 impl std::ops::Deref for Tracked {
@@ -305,6 +321,7 @@ pub fn http_client_with(purpose: &str, builder: reqwest::ClientBuilder) -> Track
         // init); with rustls and no proxy config it does not happen.
         client: builder.build().expect("HTTP client build failed"),
         purpose: purpose.to_string(),
+        account: None,
     }
 }
 
@@ -313,13 +330,23 @@ impl Tracked {
         &self.purpose
     }
 
+    /// Every request shown as `email`'s, whatever scope sends it: for a run
+    /// that knows its account (backup) or holds two at once (migration).
+    pub fn for_account(mut self, email: &str) -> Self {
+        self.account = Some(email.to_string());
+        self
+    }
+
     /// Send `req` and record it: host, port, resolved IP, status, duration,
     /// bytes up (body length when known), bytes down (content-length when
     /// known). A request that fails to build never reached the wire and is
     /// not recorded.
     pub async fn send(&self, req: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
         let (out, ev) = measure(&self.purpose, req).await;
-        if let Some(ev) = ev {
+        if let Some(mut ev) = ev {
+            if self.account.is_some() {
+                ev.account = self.account.clone();
+            }
             record(ev);
         }
         out
@@ -364,7 +391,7 @@ pub async fn measure(
         ip,
         port,
         purpose: purpose.to_string(),
-        account: None,
+        account: account(),
         bytes_up,
         bytes_down,
         duration_ms: started.elapsed().as_millis() as u64,
@@ -537,6 +564,65 @@ mod tests {
         assert_eq!(e.ip.as_deref(), Some("127.0.0.1"));
         assert_eq!(e.bytes_up, 8);
         assert_eq!(e.bytes_down, 5);
+    }
+
+    /// A loopback server answering one request with an empty 200.
+    async fn serve_once() -> u16 {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = sock.read(&mut buf).await;
+            sock.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n").await.unwrap();
+        });
+        port
+    }
+
+    /// The account an RPC names reaches every event recorded under it: a
+    /// request, one the shell measures, and a lookup built in scope.
+    #[tokio::test]
+    async fn an_account_scope_names_the_account_on_requests_and_lookups() {
+        let port = serve_once().await;
+        let client = http_client("open message", Some(Duration::from_secs(5)));
+        let sent = client.send(client.get(format!("http://127.0.0.1:{port}/")));
+        with_account("scoped@example.test".into(), sent).await.unwrap();
+        let events = events_on(port);
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].account.as_deref(), Some("scoped@example.test"));
+
+        let port = serve_once().await;
+        let measured = measure("export", reqwest::Client::new().get(format!("http://127.0.0.1:{port}/")));
+        let (_, ev) = with_account("measured@example.test".into(), measured).await;
+        assert_eq!(ev.expect("sent").account.as_deref(), Some("measured@example.test"));
+
+        let lookup = with_account("dns@example.test".into(), async { NetEvent::out(Protocol::Dns, "bimi.test", 53, "open message") }).await;
+        assert_eq!(lookup.account.as_deref(), Some("dns@example.test"));
+        assert_eq!(NetEvent::out(Protocol::Dns, "bimi.test", 53, "sync").account, None, "no scope, no account");
+    }
+
+    /// A migration holds the source's and the destination's clients in one
+    /// future: each client's own account wins over whatever scope sends it.
+    #[tokio::test]
+    async fn a_clients_own_account_wins_over_the_scope() {
+        let port = serve_once().await;
+        let client = http_client("sync", Some(Duration::from_secs(5))).for_account("source@example.test");
+        let sent = client.send(client.get(format!("http://127.0.0.1:{port}/")));
+        with_account("dest@example.test".into(), sent).await.unwrap();
+        assert_eq!(events_on(port)[0].account.as_deref(), Some("source@example.test"));
+    }
+
+    /// The shell's own requests are never an account's, whatever scope the
+    /// report arrives in.
+    #[tokio::test]
+    async fn a_reported_event_names_no_account_even_inside_a_scope() {
+        let sent = serde_json::json!({
+            "atMs": 5, "protocol": "https", "host": "github.com", "ip": null, "port": 443,
+            "purpose": "report-scope-test", "bytesUp": 1, "bytesDown": 2, "durationMs": 3, "result": "ok",
+        });
+        with_account("scope@example.test".into(), async move { record_reported(sent).unwrap() }).await;
+        let got = snapshot().into_iter().find(|e| e.purpose == "report-scope-test").expect("recorded");
+        assert_eq!(got.account, None);
     }
 
     #[tokio::test]

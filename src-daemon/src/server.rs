@@ -463,8 +463,18 @@ where
     Ok(())
 }
 
-/// Route a parsed RPC request to the appropriate handler.
+/// Route a parsed RPC request, every connection it makes shown on Network
+/// Activity as the account it names (`accountEmail`): Graph, a token refresh,
+/// an unsubscribe, a sender logo, an export's remote content.
 async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
+    match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
+        Some(email) => mailvault_core::net_activity::with_account(email, route_request(state, req)).await,
+        None => route_request(state, req).await,
+    }
+}
+
+/// Route a parsed RPC request to the appropriate handler.
+async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
     let id = req.id.unwrap_or(Value::Null);
 
     if crate::search_index::is_foreground_method(&req.method) {

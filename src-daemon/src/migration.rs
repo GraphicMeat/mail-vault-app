@@ -605,7 +605,7 @@ pub async fn run_migration(
     // Pre-populate Graph folder cache from existing destination folders
     if dest_transport == "graph" {
         if let Some(ref token) = dest_config.access_token {
-            let client = GraphClient::new(token);
+            let client = GraphClient::new(token).for_account(&dest_email);
             if let Ok(folders) = client.list_folders().await {
                 for f in folders {
                     graph_folder_cache.insert(f.display_name.clone(), f.id.clone());
@@ -718,7 +718,7 @@ pub async fn run_migration(
             pool.return_priority(&dest_config, guard).await;
         } else if dest_transport == "graph" {
             if let Some(ref token) = dest_config.access_token {
-                let client = GraphClient::new(token);
+                let client = GraphClient::new(token).for_account(&dest_email);
                 match ensure_dest_folder_graph(&client, &dst_path, "/", &mut graph_folder_cache)
                     .await
                 {
@@ -753,7 +753,7 @@ pub async fn run_migration(
         } else if dest_transport == "graph" {
             if let Some(ref dest_folder_id) = folder_mappings[folder_idx].dest_folder_id {
                 if let Some(ref token) = dest_config.access_token {
-                    let client = GraphClient::new(token);
+                    let client = GraphClient::new(token).for_account(&dest_email);
                     match fetch_dest_message_ids_graph(&client, dest_folder_id).await {
                         Ok(ids) => ids,
                         Err(e) => {
@@ -789,7 +789,7 @@ pub async fn run_migration(
         } else {
             // Graph source, collect internetMessageId for dedup
             if let Some(ref token) = source_config.access_token {
-                let client = GraphClient::new(token);
+                let client = GraphClient::new(token).for_account(&source_email);
                 let folders = client.list_folders().await?;
                 let folder = folders
                     .iter()
@@ -984,7 +984,7 @@ pub async fn run_migration(
                                 .access_token
                                 .as_deref()
                                 .ok_or("No source access token")?;
-                            let client = GraphClient::new(src_token);
+                            let client = GraphClient::new(src_token).for_account(&source_email);
                             let mut dst_guard = pool.get_priority(&dest_config).await?;
                             let r = migrate_email_graph_to_imap(
                                 &client,
@@ -1010,7 +1010,7 @@ pub async fn run_migration(
                             .access_token
                             .as_deref()
                             .ok_or("No dest access token")?;
-                        let client = GraphClient::new(dst_token);
+                        let client = GraphClient::new(dst_token).for_account(&dest_email);
 
                         // Fetch MIME from IMAP source
                         let mut src_guard = pool.get_priority(&source_config).await?;
@@ -1091,7 +1091,7 @@ pub async fn run_migration(
                                 .access_token
                                 .as_deref()
                                 .ok_or("No source access token")?;
-                            let src_client = GraphClient::new(src_token);
+                            let src_client = GraphClient::new(src_token).for_account(&source_email);
                             let mime_bytes = src_client.get_mime_content(gid).await?;
 
                             let dest_folder_id = folder_mappings[folder_idx]
@@ -1102,7 +1102,7 @@ pub async fn run_migration(
                                 .access_token
                                 .as_deref()
                                 .ok_or("No dest access token")?;
-                            let dst_client = GraphClient::new(dst_token);
+                            let dst_client = GraphClient::new(dst_token).for_account(&dest_email);
 
                             let mut retries = 0;
                             loop {
@@ -1187,7 +1187,7 @@ pub async fn run_migration(
                             ("graph", "imap") => {
                                 if let Some(ref gid) = graph_id {
                                     let t = source_config.access_token.as_deref().ok_or("No source access token")?;
-                                    let c = GraphClient::new(t);
+                                    let c = GraphClient::new(t).for_account(&source_email);
                                     let mut dg = pool.get_priority(&dest_config).await?;
                                     let r = migrate_email_graph_to_imap(&c, &mut dg.session, gid, &dst_path, is_read).await;
                                     dg.last_selected = Some(dst_path.clone());
@@ -1198,7 +1198,7 @@ pub async fn run_migration(
                             ("imap", "graph") => {
                                 let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
                                 let t = dest_config.access_token.as_deref().ok_or("No dest access token")?;
-                                let c = GraphClient::new(t);
+                                let c = GraphClient::new(t).for_account(&dest_email);
                                 let mut sg = pool.get_priority(&source_config).await?;
                                 let mr = fetch_raw_mime(&mut sg.session, &src_path, uid).await;
                                 sg.last_selected = Some(src_path.clone());
@@ -1211,11 +1211,11 @@ pub async fn run_migration(
                             ("graph", "graph") => {
                                 if let Some(ref gid) = graph_id {
                                     let st = source_config.access_token.as_deref().ok_or("No source access token")?;
-                                    let sc = GraphClient::new(st);
+                                    let sc = GraphClient::new(st).for_account(&source_email);
                                     let mb = sc.get_mime_content(gid).await?;
                                     let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
                                     let dt = dest_config.access_token.as_deref().ok_or("No dest access token")?;
-                                    let dc = GraphClient::new(dt);
+                                    let dc = GraphClient::new(dt).for_account(&dest_email);
                                     migrate_email_to_graph(&mb, &dc, dfid, is_read).await
                                 } else { Err("No Graph message ID".to_string()) }
                             }
@@ -1447,7 +1447,7 @@ pub async fn count_migration_folders(
         } else {
             // Graph source -- paginated counting
             if let Some(ref token) = source_config.access_token {
-                let client = GraphClient::new(token);
+                let client = GraphClient::new(token).for_account(&source_config.email);
                 let folders = client.list_folders().await?;
                 let folder = folders.iter()
                     .find(|f| f.display_name == mapping.source_path || f.display_name == normalize_graph_folder(&mapping.source_path));
@@ -1493,7 +1493,7 @@ async fn list_transport_mailboxes(
 ) -> Result<Vec<MailboxInfo>, String> {
     if transport == "graph" {
         let token = config.access_token.as_deref().ok_or("No access token for Graph")?;
-        let client = GraphClient::new(token);
+        let client = GraphClient::new(token).for_account(&config.email);
         let graph_folders = client.list_folders().await?;
         Ok(graph_folders
             .into_iter()

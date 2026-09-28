@@ -504,6 +504,29 @@ mod tests {
         }
     }
 
+    /// The "open message" rows a sender logo adds are the account's whose
+    /// message asked (`accountEmail`), none when it named none. A live lookup
+    /// of a `.test` name: it fails, and is recorded either way.
+    #[tokio::test]
+    async fn a_logo_lookup_is_shown_as_the_account_whose_message_asked() {
+        let (_dir, s) = st();
+        for account in [Some("reader@example.test"), None] {
+            let domain = format!("mv-{}.test", uuid::Uuid::new_v4().simple());
+            let mut params = json!({"domain": domain, "authenticationResults": format!("mx.test; dmarc=pass header.from={domain}")});
+            if let Some(a) = account {
+                params["accountEmail"] = json!(a);
+            }
+            let v = handle_request_for_test(&s, "bimi_logo", params).await.result.unwrap();
+            assert_eq!(v, json!({"logo": null}));
+            let events: Vec<_> = mailvault_core::net_activity::snapshot().into_iter().filter(|e| e.host.ends_with(&domain)).collect();
+            assert!(!events.is_empty(), "the DMARC lookup for {domain} was recorded");
+            for e in events {
+                assert_eq!(e.purpose, "open message", "{e:?}");
+                assert_eq!(e.account.as_deref(), account, "{e:?}");
+            }
+        }
+    }
+
     #[tokio::test]
     async fn a_cached_logo_is_answered_without_a_lookup() {
         let (_dir, s) = st();

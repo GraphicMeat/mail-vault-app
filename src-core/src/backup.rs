@@ -508,7 +508,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         .access_token
         .as_deref()
         .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
-    let client = crate::graph::GraphClient::for_purpose(access_token, "backup");
+    let client = crate::graph::GraphClient::for_purpose(access_token, "backup").for_account(&account.email);
 
     // List folders
     let folders = client.list_folders().await?;
@@ -923,7 +923,7 @@ async fn backup_graph_folder(
 ) -> Result<GraphFolderOutcome, String> {
     use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
     let token = ctx.account.access_token.as_deref().ok_or("Missing OAuth2 access token for Graph account")?;
-    let client = crate::graph::GraphClient::for_purpose(token, "backup");
+    let client = crate::graph::GraphClient::for_purpose(token, "backup").for_account(&ctx.account.email);
     let mailbox = folder.storage_key;
     let mirror_dir = ctx.mirror_root.as_ref().map(|root| PathBuf::from(root).join(&ctx.account.email).join(&mailbox).join("cur"));
     let mut listed = Vec::new();
@@ -1280,7 +1280,7 @@ async fn get_graph_backup_status(
         .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
     let email = account.email.clone();
 
-    let client = crate::graph::GraphClient::for_purpose(access_token, "backup");
+    let client = crate::graph::GraphClient::for_purpose(access_token, "backup").for_account(&email);
     let graph_folders = client.list_folders().await?;
 
     // One `read_dir` per folder on the vault and on the backup drive, and no
