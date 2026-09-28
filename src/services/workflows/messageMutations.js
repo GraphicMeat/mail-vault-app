@@ -1710,8 +1710,8 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
 // back repainted the old state until the next delta sync corrected it.
 //
 // Best-effort, and silent for a message the vault does not hold: Rust finds
-// nothing to rename or patch and says so in its counts. The rows' flags are
-// read after the caller mapped them, so `mapFlags` here is a no-op that keeps
+// nothing to rename or patch and says so in its counts. A list row's flags are
+// read after the caller mapped them, so `mapFlags` is a no-op on it that keeps
 // the call honest if the order ever changes.
 //
 // One call for all of `uids`: the writer rewrites the whole index file, so a
@@ -1723,14 +1723,26 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
 // is a different file — the one restore uploads. So the row read here is the
 // one of THIS folder, and no row at all (a flag list rebuilt from nothing
 // would strip \Flagged and \Answered) is skipped rather than guessed at.
+//
+// A saved view's or a search's row lives only in `searchResults`, so it is
+// looked up there after a miss, and only when it names its account and
+// folder, as patchResultFlags matches it. That repaint may not have landed
+// yet, which is why the row's flags go through `mapFlags` rather than being
+// read as they are. Only a miss awaits the import: a list row's write stays
+// in the caller's tick.
 async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFlags) {
   try {
     const s = useMailStore.getState();
     const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
+    let searchRows = null;
     const changes = [];
     for (const uid of uids) {
       const isRow = _rowOf(s, accountId, mailbox, uid);
-      const row = pool.find(e => e && isRow(e));
+      let row = pool.find(e => e && isRow(e));
+      if (!row) {
+        searchRows ??= await _searchRows();
+        row = searchRows.find(e => e.uid === uid && e._accountId === accountId && e._mailbox === mailbox);
+      }
       if (!row) {
         console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
         continue;

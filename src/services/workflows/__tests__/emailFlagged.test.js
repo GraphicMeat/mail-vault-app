@@ -120,7 +120,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { toggleFlagged, markAnswered, markForwarded } = await import('../messageMutations');
+const { toggleFlagged, markAnswered, markForwarded, applyFlagToTargets, applySeenLocally } = await import('../messageMutations');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -263,6 +263,39 @@ describe('toggleFlagged', () => {
       expect(useSearchStore.getState().searchResults).toHaveLength(1);
       expect(useSearchStore.getState().searchResults[0].flags).not.toContain('\\Flagged');
     });
+  });
+
+  // The vault half of the same miss: _persistVaultFlags looked for the row in
+  // the mail store's lists only, so a star taken off in a view reached the
+  // server and the screen but never the vault copy's file name or custody
+  // entry, and the vault showed it starred until a later sync.
+  it('writes the vault copy of a row found only in a view/search result list', async () => {
+    primeStore({ emails: [] });
+    useSearchStore.setState({
+      searchResults: [
+        { uid: 7, messageId: 'a@mock', subject: 'General', flags: ['\\Seen', '\\Flagged'], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', _accountId: 'a1', _mailbox: 'INBOX' },
+      ],
+    });
+
+    await toggleFlagged(7);
+
+    await vi.waitFor(() => {
+      expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Seen'] }]);
+    });
+  });
+
+  it('never takes a search row that names no folder for the vault write', async () => {
+    primeStore({ emails: [] });
+    useSearchStore.setState({
+      searchResults: [
+        { uid: 7, messageId: 'a@mock', subject: 'General', flags: ['\\Flagged'], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', _accountId: 'a1' },
+      ],
+    });
+
+    await applyFlagToTargets([{ accountId: 'a1', mailbox: 'INBOX', uid: 7 }], '\\Flagged', false);
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(mockVaultApplyFlags).not.toHaveBeenCalled();
   });
 
   it('offline: the row and vault change, the op stays journalled, the server is not called', async () => {
@@ -415,5 +448,22 @@ describe('mark read, through the same core', () => {
     });
     expect(mockSetUnreadForAccount).toHaveBeenCalledWith('a1', 0);
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
+  });
+
+  it('marks the vault copy of a row found only in a view/search result list read', async () => {
+    primeStore({ emails: [] });
+    useSearchStore.setState({
+      searchResults: [
+        { uid: 7, messageId: 'a@mock', subject: 'General', flags: ['\\Flagged'], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', _accountId: 'a1', _mailbox: 'INBOX' },
+      ],
+    });
+
+    applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 7, read: true });
+
+    await vi.waitFor(() => {
+      expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [
+        { uid: 7, flags: expect.arrayContaining(['\\Flagged', '\\Seen']) },
+      ]);
+    });
   });
 });
