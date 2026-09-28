@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Configura el comportamiento de la búsqueda y el historial.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Configura el envío y las opciones para deshacer.",
   "settings.behavior.composeOpen.title": "Abrir Redactar",
-  "settings.behavior.composeOpen.description": "Escribe mensajes nuevos sobre tu correo o siempre en una ventana propia.",
+  "settings.behavior.composeOpen.description": "Escribe mensajes nuevos sobre tu correo o siempre en una ventana propia. Si abres uno en una ventana nueva, los siguientes también se abren así; puedes cambiarlo aquí.",
   "settings.behavior.composeOpen.app": "En la app",
   "settings.behavior.composeOpen.window": "En una ventana nueva",
   "settings.behavior.composeOpen.resetLayout": "Restablecer el diseño de Redactar",

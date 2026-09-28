@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Suchverhalten und Verlauf einrichten.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Sendeverhalten und Rückgängig-Optionen einrichten.",
   "settings.behavior.composeOpen.title": "Verfassen öffnen",
-  "settings.behavior.composeOpen.description": "Neue Nachrichten über deiner Mail schreiben oder immer in einem eigenen Fenster.",
+  "settings.behavior.composeOpen.description": "Neue Nachrichten über deiner Mail schreiben oder immer in einem eigenen Fenster. Öffnest du eine in einem neuen Fenster, öffnen sich die nächsten auch dort; hier stellst du es zurück.",
   "settings.behavior.composeOpen.app": "In der App",
   "settings.behavior.composeOpen.window": "In einem neuen Fenster",
   "settings.behavior.composeOpen.resetLayout": "Verfassen-Layout zurücksetzen",

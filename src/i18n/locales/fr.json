@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Configurez le comportement de la recherche et l'historique.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Configurez l'envoi et les options d'annulation.",
   "settings.behavior.composeOpen.title": "Ouvrir Rédiger",
-  "settings.behavior.composeOpen.description": "Rédigez les nouveaux messages par-dessus votre courrier, ou toujours dans une fenêtre dédiée.",
+  "settings.behavior.composeOpen.description": "Rédigez les nouveaux messages par-dessus votre courrier, ou toujours dans une fenêtre dédiée. Ouvrez-en un dans une nouvelle fenêtre et les suivants s’y ouvriront aussi ; modifiez ce choix ici.",
   "settings.behavior.composeOpen.app": "Dans l’app",
   "settings.behavior.composeOpen.window": "Dans une nouvelle fenêtre",
   "settings.behavior.composeOpen.resetLayout": "Réinitialiser la disposition de Rédiger",

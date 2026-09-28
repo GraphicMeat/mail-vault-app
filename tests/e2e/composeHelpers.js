@@ -532,6 +532,45 @@ export async function openComposeFresh() {
   await browser.pause(300);
 }
 
+/** Wait for a compose window of its own next to main; resolves with its handle. */
+export async function waitForNativeCompose(mainHandle, timeoutMsg) {
+  await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 2, {
+    timeout: 15_000, interval: 200, timeoutMsg,
+  });
+  return (await browser.getWindowHandles()).find((handle) => handle !== mainHandle);
+}
+
+/**
+ * openComposeFresh once Compose opens in a window of its own: `c` opens a
+ * second native window. Waits on the window handle, never on `modalOpen`: the
+ * hidden modal that hands the draft over still has a height.
+ */
+export async function openComposeFreshNative(mainHandle) {
+  await closeComposeHard();
+  await pressKey('c');
+  return waitForNativeCompose(mainHandle, 'compose did not open a window of its own on "c"');
+}
+
+/** True while main shows a compose over the mail; one handing its draft to a window is hidden. */
+export const inlineComposeShown = () => browser.execute((sel) =>
+  [...document.querySelectorAll(sel)].some((m) => getComputedStyle(m).visibility !== 'hidden'), MODAL);
+
+/**
+ * Close the native compose window in focus (its draft returns to main as a
+ * bubble), then wait until main takes a shortcut again: one window left, and
+ * no modal still handing a draft over, which swallows every key while mounted.
+ */
+export async function closeNativeCompose(mainHandle) {
+  await browser.closeWindow();
+  await browser.switchToWindow(mainHandle);
+  await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 1, {
+    timeout: 15_000, interval: 200, timeoutMsg: 'the native compose window did not close',
+  });
+  await browser.waitUntil(() => browser.execute((sel) => !document.querySelector(`${sel}[aria-busy="true"]`), MODAL), {
+    timeout: 10_000, interval: 200, timeoutMsg: 'main still holds the modal that handed its draft to a window',
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The staged .eml on disk — what compose actually hands to the wire
 // ---------------------------------------------------------------------------

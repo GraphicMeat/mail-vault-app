@@ -111,6 +111,7 @@ const settings = {
   sendAsAddresses: {}, sendDelay: 0, emailTemplates: [], spellcheckEnabled: true,
   addEmailTemplate: vi.fn(), lastComposeIdentity: null, setLastComposeIdentity: vi.fn(),
   setComposeContextSplit: vi.fn(), composeSize: null, setComposeSize: vi.fn(),
+  setComposeOpenMode: vi.fn(),
 };
 vi.mock('../../stores/mailStore', () => {
   const hook = vi.fn((selector) => selector(mail));
@@ -177,6 +178,7 @@ beforeEach(() => {
   settings.emailViewerTheme = 'light';
   settings.setComposeContextSplit.mockClear();
   settings.setComposeSize.mockClear();
+  settings.setComposeOpenMode.mockClear();
   delete mail.getChatEmails;
   delete mail.sortedEmails;
   delete mail.selectedThread;
@@ -241,6 +243,54 @@ describe('the quoted original in a reply', () => {
 
     await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
     expect(document.querySelector('[data-auto-detach]')).toBeNull();
+    expect(onDetach).toHaveBeenCalledTimes(1);
+  });
+
+  // Open in new window is remembered: every compose after it opens in a
+  // window of its own, until Settings switches it back.
+  it('remembers a pop-out as where every compose after it opens', async () => {
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    fireEvent.click(await screen.findByTestId('compose-detach'));
+    await waitFor(() => expect(settings.setComposeOpenMode).toHaveBeenCalledWith('window'));
+    expect(settings.setComposeOpenMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers nothing from a pop-out that failed', async () => {
+    const onDetach = vi.fn().mockRejectedValue(new Error('Native window unavailable'));
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    fireEvent.click(await screen.findByTestId('compose-detach'));
+    await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
+    expect(settings.setComposeOpenMode).not.toHaveBeenCalled();
+  });
+
+  it('never writes the setting when it only follows it', async () => {
+    settings.composeOpenMode = 'window';
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(settings.setComposeOpenMode).not.toHaveBeenCalled();
+  });
+
+  // Why a radial reply waits for its body when compose opens in its own
+  // window (RowQuickActions.jsx): the handoff carries the draft as it stands,
+  // once, and a native window never gets the later fill (utils/sameReply.js).
+  it('hands a header-only reply to its window without the body, and never hands it again', async () => {
+    settings.composeOpenMode = 'window';
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    const header = { ...original, html: '', text: '' };
+    const view = render(<ComposeModal mode="reply" replyTo={header} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+
+    await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
+    expect(onDetach.mock.calls[0][0]._quotedHtml).toContain('Quote request');
+    expect(onDetach.mock.calls[0][0]._quotedHtml).not.toContain('much');
+
+    view.rerender(<ComposeModal mode="reply" replyTo={original} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
+    await act(async () => {});
     expect(onDetach).toHaveBeenCalledTimes(1);
   });
 

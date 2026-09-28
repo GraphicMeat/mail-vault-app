@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Configure search behavior and history settings.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Configure send behavior and undo options.",
   "settings.behavior.composeOpen.title": "Open Compose",
-  "settings.behavior.composeOpen.description": "Write new messages over your mail, or always in a window of their own.",
+  "settings.behavior.composeOpen.description": "Write new messages over your mail, or always in a window of their own. Open one in a new window and the ones after it open there too; change it back here.",
   "settings.behavior.composeOpen.app": "In the app",
   "settings.behavior.composeOpen.window": "In a new window",
   "settings.behavior.composeOpen.resetLayout": "Reset compose layout",

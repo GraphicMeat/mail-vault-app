@@ -1145,6 +1145,13 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return transferred;
   };
 
+  // A pop-out is remembered: every compose after it opens in a window of its
+  // own, until Settings switches back. Auto-detach calls handleDetach alone,
+  // so following the setting never writes it.
+  const popOut = async () => {
+    if (await handleDetach()) useSettingsStore.getState().setComposeOpenMode('window');
+  };
+
   // Tick first: that update renders in the same batch as the init effect's
   // form state, so the handoff below snapshots the initialized draft.
   useEffect(() => { if (autoDetach) setAutoDetachTick(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1274,7 +1281,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             )}
             {onDetach && !detached && (
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
-                onClick={handleDetach} title={t('chat.bubble.openNewWindow')} data-testid="compose-detach">
+                onClick={popOut} title={t('chat.bubble.openNewWindow')} data-testid="compose-detach">
                 <Maximize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}

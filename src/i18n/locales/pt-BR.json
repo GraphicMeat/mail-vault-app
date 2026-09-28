@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Configure o comportamento da busca e o histórico.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Configure o envio e as opções de desfazer.",
   "settings.behavior.composeOpen.title": "Abrir Escrever",
-  "settings.behavior.composeOpen.description": "Escreva novas mensagens sobre o seu e-mail ou sempre em uma janela própria.",
+  "settings.behavior.composeOpen.description": "Escreva novas mensagens sobre o seu e-mail ou sempre em uma janela própria. Se você abrir uma em uma nova janela, as próximas também abrem assim; altere aqui.",
   "settings.behavior.composeOpen.app": "No app",
   "settings.behavior.composeOpen.window": "Em uma nova janela",
   "settings.behavior.composeOpen.resetLayout": "Redefinir o layout de Escrever",

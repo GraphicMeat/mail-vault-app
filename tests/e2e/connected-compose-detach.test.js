@@ -1,6 +1,9 @@
 /** Native compose handoff: use real Tauri window handles, never browser tabs. */
 import { waitForApp, waitForEmails } from './helpers.js';
-import { openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen, settingsCall } from './composeHelpers.js';
+import {
+  openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen, settingsCall,
+  waitForNativeCompose, openComposeFreshNative, inlineComposeShown, closeNativeCompose,
+} from './composeHelpers.js';
 
 describe('Connected Compose Detach', function () {
   this.timeout(120_000);
@@ -32,6 +35,8 @@ describe('Connected Compose Detach', function () {
     }
     await browser.switchToWindow(mainHandle);
     await settingsCall('setSendDelay', 0);
+    // A pop-out makes every later compose open in its own window.
+    await settingsCall('setComposeOpenMode', 'app');
   });
 
   it('keeps the embedded size stable and lets the keyboard resize corner change both axes', async () => {
@@ -89,6 +94,8 @@ describe('Connected Compose Detach', function () {
     await browser.closeWindow();
     await browser.switchToWindow(mainHandle);
     await browser.waitUntil(() => testidPresent('compose-bubble'), { timeout: 15_000 });
+    // The pop-out is remembered; this case pins the restore over the mail.
+    await settingsCall('setComposeOpenMode', 'app');
     await clickBubble();
     expect(await fieldValue('compose-subject')).toBe('Typed in detached window');
   });
@@ -199,9 +206,58 @@ describe('Connected Compose Detach', function () {
       const pending = window.__MAIL_STORE__?.getState?.().pendingSend;
       return pending?.composeState?.initialData?.subject === 'Detached delayed send';
     }), { timeout: 15_000, timeoutMsg: 'Main did not retain the detached send in its undo queue' });
+    // The pop-out is remembered; this case pins Undo restoring over the mail.
+    await settingsCall('setComposeOpenMode', 'app');
     await browser.$('[data-testid="undo-send-btn"]').click();
     await browser.waitUntil(modalOpen, { timeout: 15_000, timeoutMsg: 'Undo did not restore the detached draft' });
     expect(await fieldValue('compose-subject')).toBe('Detached delayed send');
     expect(await fieldValue('compose-to')).toBe('undo-detach@example.test');
+  });
+
+  it('remembers a pop-out: the next compose and the next reply open in a window of their own', async () => {
+    await openComposeFresh();
+    await browser.$('[data-testid="compose-detach"]').click();
+    await browser.switchToWindow(await waitForNativeCompose(mainHandle, 'Compose did not open a second native window'));
+    await browser.waitUntil(() => testidPresent('compose-subject'), {
+      timeout: 15_000, timeoutMsg: 'Detached compose did not finish initialization',
+    });
+    await closeNativeCompose(mainHandle);
+
+    const fresh = await openComposeFreshNative(mainHandle);
+    expect(await inlineComposeShown()).toBe(false);
+    await browser.switchToWindow(fresh);
+    await browser.waitUntil(() => testidPresent('compose-subject'), {
+      timeout: 15_000, timeoutMsg: 'The next compose did not initialize in its own window',
+    });
+    await closeNativeCompose(mainHandle);
+
+    const account = browser.mockAccounts[0];
+    const source = {
+      uid: 636363,
+      subject: 'Remembered window',
+      from: { name: 'Window sender', address: 'window@example.test' },
+      to: [{ address: account.email }],
+      cc: [],
+      replyTo: [],
+      date: '2026-09-29T08:00:00.000Z',
+      messageId: '<remembered-window@example.test>',
+      text: 'The reply follows the window.',
+      html: '<p>The reply follows the window.</p>',
+      flags: ['\\Seen'],
+      _accountId: account.id,
+    };
+    await closeComposeHard();
+    const selection = { selectedEmail: source, selectedEmailId: source.uid, selectedThread: null };
+    await mailStoreSet(selection);
+    await browser.execute(() => document.activeElement?.blur());
+    await mailStoreSet(selection);
+    await browser.keys('r');
+    const reply = await waitForNativeCompose(mainHandle, 'Reply did not open in a window of its own');
+    expect(await inlineComposeShown()).toBe(false);
+    await browser.switchToWindow(reply);
+    await browser.waitUntil(() => testidPresent('compose-context-panel'), {
+      timeout: 15_000, timeoutMsg: 'The reply window did not show the message it answers',
+    });
+    expect(await fieldValue('compose-subject')).toBe('Re: Remembered window');
   });
 });

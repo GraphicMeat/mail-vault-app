@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "検索の動作と履歴を設定します。",
   "settings.behavior.configureSendBehaviorUndoOptions": "送信の動作と取り消しの設定を行います。",
   "settings.behavior.composeOpen.title": "作成画面の開き方",
-  "settings.behavior.composeOpen.description": "新規メッセージをメールの上に開くか、常に専用ウインドウで開くかを選びます。",
+  "settings.behavior.composeOpen.description": "新規メッセージをメールの上に開くか、常に専用ウインドウで開くかを選びます。1通を新しいウインドウで開くと、以降も新しいウインドウで開きます。ここで元に戻せます。",
   "settings.behavior.composeOpen.app": "アプリ内",
   "settings.behavior.composeOpen.window": "新しいウインドウ",
   "settings.behavior.composeOpen.resetLayout": "作成画面のレイアウトをリセット",

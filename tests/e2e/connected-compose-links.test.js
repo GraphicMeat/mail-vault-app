@@ -24,6 +24,7 @@ import {
   pressEscape,
   closeComposeHard,
   openComposeFresh,
+  settingsCall,
 } from './composeHelpers.js';
 
 const URL_PASTED = 'https://example.com/pasted';
@@ -143,6 +144,8 @@ describe('Connected Compose Links', function () {
       await browser.closeWindow();
     }
     await browser.switchToWindow(mainHandle);
+    // A pop-out makes every later compose open in its own window.
+    await settingsCall('setComposeOpenMode', 'app');
     await closeComposeHard();
   });
 

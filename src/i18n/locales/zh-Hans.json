@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "配置搜索行为与历史记录。",
   "settings.behavior.configureSendBehaviorUndoOptions": "配置发送行为与撤销选项。",
   "settings.behavior.composeOpen.title": "撰写打开方式",
-  "settings.behavior.composeOpen.description": "在邮件上方撰写新邮件，或始终在单独窗口中撰写。",
+  "settings.behavior.composeOpen.description": "在邮件上方撰写新邮件，或始终在单独窗口中撰写。在新窗口中打开一封邮件后，之后的邮件也会在新窗口中打开；可在此处改回。",
   "settings.behavior.composeOpen.app": "在应用内",
   "settings.behavior.composeOpen.window": "在新窗口中",
   "settings.behavior.composeOpen.resetLayout": "重置撰写布局",

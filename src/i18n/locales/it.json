@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "Configura il comportamento della ricerca e la cronologia.",
   "settings.behavior.configureSendBehaviorUndoOptions": "Configura l'invio e le opzioni di annullamento.",
   "settings.behavior.composeOpen.title": "Apri Scrivi",
-  "settings.behavior.composeOpen.description": "Scrivi i nuovi messaggi sopra la posta o sempre in una finestra dedicata.",
+  "settings.behavior.composeOpen.description": "Scrivi i nuovi messaggi sopra la posta o sempre in una finestra dedicata. Se ne apri uno in una nuova finestra, anche i successivi si aprono lì; puoi cambiarlo qui.",
   "settings.behavior.composeOpen.app": "Nell’app",
   "settings.behavior.composeOpen.window": "In una nuova finestra",
   "settings.behavior.composeOpen.resetLayout": "Ripristina il layout di Scrivi",

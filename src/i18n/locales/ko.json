@@ -1782,7 +1782,7 @@
   "settings.behavior.configureSearchBehaviorHistorySettings": "검색 동작과 기록을 설정합니다.",
   "settings.behavior.configureSendBehaviorUndoOptions": "보내기 동작과 실행 취소 옵션을 설정합니다.",
   "settings.behavior.composeOpen.title": "작성 창 열기",
-  "settings.behavior.composeOpen.description": "새 메시지를 메일 위에서 쓰거나 항상 별도 창에서 씁니다.",
+  "settings.behavior.composeOpen.description": "새 메시지를 메일 위에서 쓰거나 항상 별도 창에서 씁니다. 메시지 하나를 새 창에서 열면 이후 메시지도 새 창에서 열립니다. 여기에서 되돌릴 수 있습니다.",
   "settings.behavior.composeOpen.app": "앱 안에서",
   "settings.behavior.composeOpen.window": "새 창에서",
   "settings.behavior.composeOpen.resetLayout": "작성 창 레이아웃 초기화",
