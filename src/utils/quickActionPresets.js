@@ -21,18 +21,18 @@ const selection = (selectionDisplay, selectionActionLimit, actions, favoriteId) 
 
 export const QUICK_ACTION_PRESETS = [
   { id: 'mailvault', labelKey: 'quickActions.preset.mailvault', surfaces: DEFAULT_QUICK_ACTIONS.defaults },
-  // Gmail on the web, read 2026-09-29. Hovering a row offers archive, delete,
-  // mark as read and snooze; the toolbar over selected messages and an open
-  // one is Archive, Report spam, Delete, Mark as unread and Move to, with
-  // Snooze under More (https://support.google.com/mail/answer/2473038). Reply
-  // and Reply all are below an open message
-  // (https://support.google.com/mail/answer/6585), Forward at its bottom
-  // (https://support.google.com/mail/answer/15162918).
+  // Gmail on the web, read 2026-09-29. Hovering a row, "you can archive,
+  // delete, snooze, or mark a message as read" (in that order here); the
+  // toolbar over selected messages and an open one is Archive, Report spam,
+  // Delete, Mark as unread and Move to, with Snooze under More
+  // (https://support.google.com/mail/answer/2473038). Reply and Reply all are
+  // below an open message (https://support.google.com/mail/answer/6585),
+  // Forward at its bottom (https://support.google.com/mail/answer/15162918).
   {
     id: 'gmail',
     labelKey: 'quickActions.preset.gmail',
     surfaces: {
-      row: surface('inline', ['archive', 'delete', 'toggleRead', 'snooze'], 'archive'),
+      row: surface('inline', ['archive', 'delete', 'snooze', 'toggleRead'], 'archive'),
       selection: selection('icon-only', 5, ['archive', 'spam', 'delete', 'toggleRead', 'move', 'snooze'], 'archive'),
       reader: surface('inline', ['archive', 'spam', 'delete', 'toggleRead', 'move', 'snooze', 'reply', 'replyAll', 'forward'], 'reply'),
     },
@@ -45,6 +45,9 @@ export const QUICK_ACTION_PRESETS = [
   // For selected messages the ribbon has Archive, Move to, Read/Unread, Pin,
   // Flag and Snooze
   // (https://support.microsoft.com/en-us/outlook/organize-your-inbox-with-archive-sweep-and-other-tools-in-outlook-on-the-web).
+  // No page lists the reading pane's defaults beyond the three replies, nor
+  // Delete for a selection: those come from the row's Delete and the same
+  // ribbon, which acts on an open message too.
   {
     id: 'outlook',
     labelKey: 'quickActions.preset.outlook',
@@ -55,8 +58,9 @@ export const QUICK_ACTION_PRESETS = [
     },
   },
   // Thunderbird, read 2026-09-29 from its own source, since its help page
-  // renders only with JavaScript. An open message's header shows Reply, Reply
-  // All, Forward, Archive, Junk, Delete and the star
+  // renders only with JavaScript. An open message's header shows Reply, a
+  // smart reply (Reply All where there are several recipients), Forward,
+  // Archive, Junk, Delete and the star
   // (https://hg-edge.mozilla.org/comm-central/raw-file/tip/mail/base/content/msgHdrView.inc.xhtml);
   // several selected messages get Archive, Delete and the star
   // (https://hg-edge.mozilla.org/comm-central/raw-file/tip/mail/base/content/multimessageview.xhtml).
