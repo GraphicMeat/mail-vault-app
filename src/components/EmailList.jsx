@@ -15,7 +15,7 @@ import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
-import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
+import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers, emailsInRowRange } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -77,6 +77,8 @@ const THREAD_MODE_LABEL = {
 // One identity for "no siblings", so the memo below keeps a stable result
 // while nothing is open and the rows it feeds do not all repaint.
 const EMPTY_SET = Object.freeze(new Set());
+// The row-appear fade in index.css, plus a frame.
+const ROW_APPEAR_MS = 300;
 
 const ROW_HEIGHT_DEFAULT = listRowHeight(false);
 
@@ -222,7 +224,6 @@ function EmailListComponent({ stacked = false }) {
   const selectThread = useSelectionStore(s => s.selectThread);
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
   const selectedThread = useSelectionStore(s => s.selectedThread);
-  const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
   const setEmailsSelected = useSelectionStore(s => s.setEmailsSelected);
   const clearSelection = useSelectionStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
@@ -781,11 +782,63 @@ function EmailListComponent({ stacked = false }) {
     return rows;
   }, [displayEmails, searchActive, deferredThreads, emailKey, expandedThreads, threadMode, threadSortOrder]);
 
+  // Rows that joined the list since the last paint fade in: a batch landing
+  // while All Inboxes fills, new mail, the first rows after a skeleton. A list
+  // replaced wholesale (a folder switch with rows on both sides) does not
+  // animate, nor does the first paint. A row stays marked for the length of
+  // its animation, whatever re-derives meanwhile (threads land right after the
+  // flat pass), so the fade is never cut short. Keys are committed after
+  // render so a StrictMode double render cannot swallow them.
+  // A thread row goes by its newest message, the row that stood for it in the
+  // flat pass before the threads were built, so threading does not fade it.
+  const rowKeyOf = useCallback(r => emailKey(r.type === 'thread' ? r.thread.lastEmail : r.email), [emailKey]);
+  const committedRowKeys = useRef(null);
+  const appearedAt = useRef(new Map());
+  useMemo(() => {
+    const prev = committedRowKeys.current;
+    const now = performance.now();
+    for (const [k, t] of appearedAt.current) if (now - t > ROW_APPEAR_MS) appearedAt.current.delete(k);
+    if (!prev) return;
+    const fresh = [];
+    let overlap = prev.size === 0;
+    for (const r of threadedDisplay) {
+      const k = rowKeyOf(r);
+      if (prev.has(k)) overlap = true;
+      else fresh.push(k);
+    }
+    if (overlap) for (const k of fresh) if (!appearedAt.current.has(k)) appearedAt.current.set(k, now);
+  }, [threadedDisplay, rowKeyOf]);
+  useEffect(() => { committedRowKeys.current = new Set(threadedDisplay.map(rowKeyOf)); }, [threadedDisplay, rowKeyOf]);
+  const isFreshRow = (item) => {
+    const t = appearedAt.current.get(rowKeyOf(item));
+    return t !== undefined && performance.now() - t < ROW_APPEAR_MS;
+  };
+
   // Through the helper: a uid is unique only inside one mailbox of one account,
   // and a key built here by hand is a key the store cannot read back.
   // Stable: it reads the store at call time, and the explorer's Unread cut
   // memoizes on it.
   const selKey = useCallback((email) => selectionKey(email, useMailStore.getState()), []);
+
+  // Checkbox ticks. Shift held ticks every row between the last box ticked
+  // (or, before any, the open message) and this one. Refs keep the callbacks
+  // stable: the rows are memoized.
+  const rowsRef = useRef(threadedDisplay);
+  rowsRef.current = threadedDisplay;
+  const selectionAnchorRef = useRef(null);
+  const checkRows = useCallback((emails, selected, shiftKey) => {
+    const target = selKey(emails[0]);
+    const anchor = selectionAnchorRef.current ?? useMailStore.getState().selectedEmailId;
+    const range = shiftKey && anchor ? emailsInRowRange(rowsRef.current, anchor, target, selKey) : null;
+    setEmailsSelected(range || emails, range ? true : selected);
+    selectionAnchorRef.current = target;
+  }, [selKey, setEmailsSelected]);
+  const checkEmailRow = useCallback((uid, accountId, mailbox, shiftKey) => {
+    const email = { uid, _accountId: accountId || undefined, _mailbox: mailbox || undefined };
+    checkRows([email], !useMailStore.getState().selectedEmailIds.has(selKey(email)), shiftKey);
+  }, [checkRows, selKey]);
+  useEffect(() => { if (selectedEmailIds.size === 0) selectionAnchorRef.current = null; }, [selectedEmailIds]);
+  useEffect(() => { selectionAnchorRef.current = null; }, [activeAccountId, activeMailbox]);
 
   // The rest of the open message's conversation, as selection keys. A merged
   // Sent copy shares its uid with an INBOX message, so the set is keyed the way
@@ -1633,7 +1686,7 @@ function EmailListComponent({ stacked = false }) {
                       height: vr.size + 'px',
                       transform: `translateY(${vr.start}px)`,
                     }}
-                    className={monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
+                    className={[monthHeaders.has(vr.index) && 'has-month-header', isFreshRow(item) && 'row-appear'].filter(Boolean).join(' ') || undefined}
                   >
                     {monthHeaders.has(vr.index) && monthHeaderAt(vr.index)}
                     {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
@@ -1643,7 +1696,7 @@ function EmailListComponent({ stacked = false }) {
                       thread={item.thread}
                       isSelected={item.thread.emails.some(e => selectedEmailId === selKey(e))}
                       onSelectThread={selectThread}
-                      onSetSelection={setEmailsSelected}
+                      onSetSelection={checkRows}
                       anyChecked={anyChecked}
                       style={rowStyle}
                       actions={rowActions}
@@ -1676,7 +1729,7 @@ function EmailListComponent({ stacked = false }) {
                     transform: `translateY(${vr.start}px)`,
                   }}
                   data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
-                  className={item.type === 'thread-member' ? 'thread-member' : monthHeaders.has(vr.index) ? 'has-month-header' : undefined}
+                  className={[item.type === 'thread-member' ? 'thread-member' : monthHeaders.has(vr.index) && 'has-month-header', isFreshRow(item) && 'row-appear'].filter(Boolean).join(' ') || undefined}
                 >
                   {monthHeaders.has(vr.index) && monthHeaderAt(vr.index)}
                   {swipe?.index === vr.index && <SwipeBackdrop side={swipe.side} action={swipe.action} height={ROW_HEIGHT} />}
@@ -1688,7 +1741,7 @@ function EmailListComponent({ stacked = false }) {
                     isRelated={relatedKeys.has(selKey(item.email))}
                     isChecked={selectedEmailIds.has(selKey(item.email))}
                     onSelect={(key, source, mailbox) => selectEmailRow(key, item.email, mailbox, source)}
-                    onToggleSelection={toggleEmailSelection}
+                    onToggleSelection={checkEmailRow}
                     style={rowStyle}
                     actions={rowActions}
                     unifiedInbox={unifiedInbox}

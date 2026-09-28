@@ -86,6 +86,18 @@
   left: 1.5rem;
 }
 
+/* A row that joined the list since the last paint (EmailList freshRowKeys):
+   All Inboxes filling batch by batch, new mail. The row inside moves, never
+   the virtualizer's positioned wrapper, whose inline transform places it. */
+.row-appear > .virtual-row {
+  animation: row-appear 240ms var(--mv-ease) backwards;
+}
+
+@keyframes row-appear {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* A month's first row carries the date scrubber's header band above it
    (MONTH_HEADER_H in email/DateScrubber.jsx); same anchor rule as above. */
 .has-month-header > .virtual-row {

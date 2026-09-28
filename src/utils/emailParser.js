@@ -833,6 +833,24 @@ export function threadRowMembers(emails) {
 }
 
 /**
+ * The messages a shift-click ticks: every row from the anchor's to the
+ * clicked one's, both included, in the order the list draws them. A thread
+ * row stands for its threadRowMembers. Null when either end is not in `rows`.
+ *
+ * @param {Array} rows - the list's display rows ({ type, email } / { type: 'thread', thread })
+ * @param {string} anchorKey - selection key of the last ticked (or open) message
+ * @param {string} targetKey - selection key of the message just clicked
+ * @param {Function} keyOf - email => selection key
+ */
+export function emailsInRowRange(rows, anchorKey, targetKey, keyOf) {
+  const members = r => (r.type === 'thread' ? threadRowMembers(r.thread.emails) : [r.email]);
+  const at = key => rows.findIndex(r => members(r).some(e => keyOf(e) === key));
+  const a = at(anchorKey), b = at(targetKey);
+  if (a < 0 || b < 0) return null;
+  return rows.slice(Math.min(a, b), Math.max(a, b) + 1).flatMap(members);
+}
+
+/**
  * Signature patterns to detect and strip
  */
 const SIGNATURE_PATTERNS = [

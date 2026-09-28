@@ -147,7 +147,10 @@ export function RowGutter({ stacked, threadSlot, disclosure = null, checked, onT
     <div data-testid="row-gutter" className={`row-gutter${stacked ? ' row-gutter-stacked' : ''}`}>
       {threadSlot && <div data-testid="row-disclosure-slot" className="row-gutter-slot">{disclosure}</div>}
       <div className="row-gutter-cell">
-        <div className="row-gutter-check" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+        {/* Shift held: the click ticks a range (onToggle reads e.shiftKey), and
+            mousedown must not also drag a text selection across the rows. */}
+        <div className="row-gutter-check" onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
+          onClick={(e) => { e.stopPropagation(); onToggle(e); }}>
           <input type="checkbox" checked={checked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
         </div>
         <div data-testid="row-state-slot" className="row-gutter-slot">{state}</div>
@@ -234,7 +237,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       {...pointerMenuHandlers}
     >
       <RowGutter stacked={stacked} threadSlot={threadSlot} checked={isChecked}
-        onToggle={() => onToggleSelection(email.uid, email._accountId, email._mailbox)}
+        onToggle={(e) => onToggleSelection(email.uid, email._accountId, email._mailbox, e?.shiftKey)}
         state={<ConnectedStateIcon email={email} size={14} />} />
 
       <WithSnippet email={email}>
@@ -349,7 +352,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={threadSlot} checked={isChecked}
-        onToggle={() => onToggleSelection(email.uid, email._accountId, email._mailbox)}
+        onToggle={(e) => onToggleSelection(email.uid, email._accountId, email._mailbox, e?.shiftKey)}
         state={<ConnectedStateIcon email={email} size={13} />} />
 
       {/* Two-line content */}

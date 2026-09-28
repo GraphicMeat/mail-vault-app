@@ -2064,3 +2064,110 @@ describe('a view\'s timeline downloads a month or a year', () => {
     expect(container.textContent).toContain('No attachments in 2024-12');
   });
 });
+
+describe('shift-click range selection', () => {
+  const ten = Array.from({ length: 10 }, (_, i) => ({
+    uid: i + 1,
+    subject: `Email ${i + 1}`,
+    from: [{ address: `sender${i}@test.com`, name: `Sender ${i}` }],
+    to: [{ address: 'me@test.com' }],
+    date: new Date(2024, 0, 1, 0, 0, i).toISOString(),
+    flags: ['\\Seen'],
+    source: 'server',
+    snippet: 'test snippet',
+    has_attachments: false,
+    isArchived: false,
+  }));
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, selectedEmailId: null, setEmailsSelected: vi.fn() });
+  });
+
+  const setup = async (state = {}) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const setEmailsSelected = vi.fn();
+    useMailStore.setState({ sortedEmails: ten, totalEmails: 10, setEmailsSelected, ...state });
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+    // The flat test list draws in store order: the boxes run uid 1, 2, 3, ...
+    return { boxes: screen.getAllByLabelText('Select message'), setEmailsSelected };
+  };
+  const uids = call => call[0].map(e => e.uid);
+
+  it('ticks every row from the last ticked box to the shift-clicked one', async () => {
+    const { boxes, setEmailsSelected } = await setup();
+    fireEvent.click(boxes[1]);
+    expect(uids(setEmailsSelected.mock.calls[0])).toEqual([2]);
+    fireEvent.click(boxes[5], { shiftKey: true });
+    expect(uids(setEmailsSelected.mock.calls[1])).toEqual([2, 3, 4, 5, 6]);
+    expect(setEmailsSelected.mock.calls[1][1]).toBe(true);
+  });
+
+  it('ticks upward too', async () => {
+    const { boxes, setEmailsSelected } = await setup();
+    fireEvent.click(boxes[6]);
+    fireEvent.click(boxes[2], { shiftKey: true });
+    expect(uids(setEmailsSelected.mock.calls[1])).toEqual([3, 4, 5, 6, 7]);
+  });
+
+  it('with no box ticked yet, ranges from the open message', async () => {
+    const { boxes, setEmailsSelected } = await setup({ selectedEmailId: 1 });
+    fireEvent.click(boxes[3], { shiftKey: true });
+    expect(uids(setEmailsSelected.mock.calls[0])).toEqual([1, 2, 3, 4]);
+  });
+
+  it('a plain click still ticks just its own row', async () => {
+    const { boxes, setEmailsSelected } = await setup();
+    fireEvent.click(boxes[1]);
+    fireEvent.click(boxes[4]);
+    expect(uids(setEmailsSelected.mock.calls[1])).toEqual([5]);
+  });
+});
+
+describe('rows that join the list fade in', () => {
+  const mail = (uid) => ({
+    uid, subject: `Fresh ${uid}!`, from: [{ address: `s${uid}@test.com`, name: `S ${uid}` }], to: [{ address: 'me@test.com' }],
+    date: new Date(2024, 0, 1, 0, 0, uid).toISOString(), flags: ['\\Seen'], source: 'server', snippet: '', has_attachments: false, isArchived: false,
+  });
+  const list = (...uids) => uids.map(mail);
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500 });
+  });
+
+  const paint = async (uids, rerender) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: list(...uids), totalEmails: uids.length });
+    const { EmailList } = await import('../EmailList.jsx');
+    // EmailList is memo'd and takes no props: a changing throwaway prop is
+    // what re-renders it the way a store write does in the app.
+    const el = React.createElement(EmailList, { 'data-render': uids.join(',') });
+    const out = rerender ? (rerender(el), null) : render(el);
+    await act(async () => {});
+    return out;
+  };
+  const appearing = (container) => [...container.querySelectorAll('.row-appear')].map(el => el.textContent.match(/Fresh (\d+)!/)?.[1]);
+
+  it('marks only the rows that arrived, never the first paint', async () => {
+    const { container, rerender } = await paint([1, 2, 3]);
+    expect(appearing(container)).toEqual([]);
+    await paint([1, 2, 3, 4, 5], rerender);
+    expect(appearing(container).sort()).toEqual(['4', '5']);
+  });
+
+  it('a list replaced wholesale does not animate', async () => {
+    const { container, rerender } = await paint([1, 2, 3]);
+    await paint([7, 8, 9], rerender);
+    expect(appearing(container)).toEqual([]);
+  });
+
+  it('rows arriving into an empty list (after the skeleton) fade in', async () => {
+    const { container, rerender } = await paint([]);
+    await paint([1, 2], rerender);
+    expect(appearing(container).sort()).toEqual(['1', '2']);
+  });
+});

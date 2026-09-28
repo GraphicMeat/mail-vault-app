@@ -124,7 +124,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       {...pointerMenuHandlers}
     >
       <RowGutter stacked={stacked} threadSlot={expandable} checked={anyChecked}
-        onToggle={() => onSetSelection(members, !anyChecked)}
+        onToggle={(e) => onSetSelection(members, !anyChecked, e?.shiftKey)}
         disclosure={<ThreadDisclosure expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />}
         state={<ConnectedStateIcon email={latestEmail} size={14} />} />
 
@@ -243,7 +243,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={expandable} checked={anyChecked}
-        onToggle={() => onSetSelection(members, !anyChecked)}
+        onToggle={(e) => onSetSelection(members, !anyChecked, e?.shiftKey)}
         disclosure={<ThreadDisclosure expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />}
         state={<ConnectedStateIcon email={latestEmail} size={13} />} />
 

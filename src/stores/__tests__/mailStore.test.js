@@ -1606,3 +1606,78 @@ describe('closeEmail — the way out of the reading pane', () => {
     expect(s.selectedEmailIds).toEqual(new Set([8]));
   });
 });
+
+// Switching to All Inboxes used to show nothing new until every account's
+// disk read had come back. It now paints what memory holds at once, then each
+// account's rows as its own read lands, newest first.
+describe('All Inboxes paints before every account has read its disk', () => {
+  const A = { id: 'acct-a', email: 'a@example.com' };
+  const B = { id: 'acct-b', email: 'b@example.com' };
+  const rowsOf = (tag, uids, day) => uids.map(u => ({ uid: u, subject: `${tag} ${u}`, date: `2026-09-${day}T0${u}:00:00Z` }));
+  const keys = rows => rows.map(e => `${e._accountId}:${e.uid}`);
+  let sentLoads;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sentLoads = stubSentLoads();
+    mockGetCachedMailboxes.mockResolvedValue([]);
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+    mockGetArchivedEmailIds.mockResolvedValue(new Set());
+    mockReadLocalEmailIndex.mockResolvedValue(null);
+    mockGetLocalEmails.mockResolvedValue([]);
+    mockGetRestoreDescriptor.mockReturnValue(null);
+  });
+  afterEach(() => {
+    sentLoads.restore();
+    mockGetRestoreDescriptor.mockReset().mockReturnValue(null);
+    mockGetEmailHeadersPartial.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
+  });
+
+  const leaveSingleFolder = () => useMailStore.setState({
+    accounts: [A, B], activeAccountId: 'acct-a', activeMailbox: 'Archive', unifiedInbox: false,
+    emails: [], localEmails: [], sortedEmails: [], viewMode: 'all', _sortedEmailsFingerprint: '',
+  });
+
+  it('entering shows the windows memory already holds, with no skeleton', async () => {
+    mockGetRestoreDescriptor.mockImplementation(id => (id === 'acct-a' ? { firstWindow: rowsOf('a', [1, 2], '20') } : null));
+    mockGetEmailHeadersPartial.mockReturnValue(new Promise(() => {}));
+    leaveSingleFolder();
+
+    await useMailStore.getState().setUnifiedInbox(true);
+
+    const s = useMailStore.getState();
+    expect(s.activeMailbox).toBe('UNIFIED');
+    expect(keys(s.emails)).toEqual(['acct-a:2', 'acct-a:1']);
+    expect(s.loading).toBe(false);
+  });
+
+  it('with nothing in memory it shows the skeleton, not the folder it left', async () => {
+    mockGetEmailHeadersPartial.mockReturnValue(new Promise(() => {}));
+    leaveSingleFolder();
+    useMailStore.setState({ emails: rowsOf('archive', [7], '01') });
+
+    await useMailStore.getState().setUnifiedInbox(true);
+
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(useMailStore.getState().loading).toBe(true);
+  });
+
+  it("paints one account's rows while another's read is still out, then merges both", async () => {
+    let releaseB;
+    mockGetEmailHeadersPartial.mockImplementation(id => (id === 'acct-a'
+      ? Promise.resolve({ emails: rowsOf('a', [1, 2], '20') })
+      : new Promise(r => { releaseB = r; })));
+    useMailStore.setState({
+      accounts: [A, B], unifiedInbox: true, unifiedFolder: 'INBOX', activeMailbox: 'UNIFIED',
+      emails: [], localEmails: [], sortedEmails: [], viewMode: 'all', loading: true, _sortedEmailsFingerprint: '',
+    });
+
+    const done = useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
+    await vi.waitFor(() => expect(keys(useMailStore.getState().emails)).toEqual(['acct-a:2', 'acct-a:1']));
+    expect(useMailStore.getState().loading).toBe(false);
+
+    releaseB({ emails: rowsOf('b', [1], '21') });
+    await done;
+    expect(keys(useMailStore.getState().emails)).toEqual(['acct-b:1', 'acct-a:2', 'acct-a:1']);
+  });
+});

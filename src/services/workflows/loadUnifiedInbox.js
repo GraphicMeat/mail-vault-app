@@ -12,6 +12,46 @@ import {
 import { _unifiedFolderCache } from './activateAccount';
 
 
+const CHUNK_SIZE = 50;
+const byDateDesc = (a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0);
+
+// What All Inboxes can draw before any disk read: each visible account's
+// restore window (in memory since the prewarm) and, for the account being
+// left, the rows already on screen. Newest first, the load's own dedupe key.
+// Entering the view paints this at once; the disk reads widen it after.
+export function unifiedSeed(state, folder, snapshot = null) {
+  const { hiddenAccounts } = useSettingsStore.getState();
+  const seen = new Set();
+  const rows = [];
+  const push = (e) => {
+    const key = `${e._accountId}:${e.uid}`;
+    if (!seen.has(key)) { seen.add(key); rows.push(e); }
+  };
+  for (const account of state.accounts || []) {
+    if (hiddenAccounts[account.id]) continue;
+    const path = _resolveMailboxPath(_getAccountMailboxes(account.id) || [], folder);
+    const tag = (e, mailbox = path) => ({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: mailbox });
+    for (const e of _getRestore(account.id, path, state.viewMode || 'all')?.firstWindow || []) push(tag(e));
+    if (snapshot?.activeAccountId === account.id) for (const e of snapshot.emails || []) push(tag(e, e._mailbox || path));
+  }
+  return rows.sort(byDateDesc).slice(0, CHUNK_SIZE);
+}
+
+// The seed's store write: rows up, the skeleton only when there are none.
+// The account being left's local rows carry no account and would draw
+// unscoped here; the load's last step puts every account's back.
+function paintSeed(seed) {
+  return {
+    emails: seed,
+    localEmails: [],
+    serverUids: serverUids(new Set(seed.map(e => e.uid)), { complete: false }),
+    totalEmails: seed.length,
+    _sortedEmailsFingerprint: '',
+    loading: seed.length === 0,
+  };
+}
+
+
 // ── setUnifiedInbox workflow ──
 
 export async function setUnifiedInbox(enabled) {
@@ -36,7 +76,9 @@ export async function setUnifiedInbox(enabled) {
       selectedEmailSource: null,
       selectedThread: null,
       selectedEmailIds: new Set(),
+      ...paintSeed(unifiedSeed(get(), 'INBOX', preUnifiedSnapshot)),
     });
+    get().updateSortedEmails();
     get().loadUnifiedInbox(preUnifiedSnapshot, 'INBOX');
   } else {
     const _loadAbortController = getLoadAbortController();
@@ -81,13 +123,14 @@ export async function switchUnifiedFolder(mailbox) {
 
   useMailStore.setState({
     unifiedFolder: mailbox,
-    loading: true,
     selectedEmailId: null,
     selectedEmail: null,
     selectedEmailSource: null,
     selectedThread: null,
     selectedEmailIds: new Set(),
+    ...paintSeed(unifiedSeed(get(), mailbox)),
   });
+  get().updateSortedEmails();
   get().loadUnifiedInbox(null, mailbox);
 }
 
@@ -107,8 +150,6 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   _loadAbortController = new AbortController();
   setLoadAbortController(_loadAbortController);
   const signal = _loadAbortController.signal;
-
-  const CHUNK_SIZE = 50;
 
   const mailboxesByAccount = new Map();
   await Promise.all(
@@ -142,6 +183,35 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   };
   const diskFetchPromises = [];
   const resolvedPathsByAccount = new Map();
+  // Each account's disk read paints as it lands instead of the list waiting
+  // for the slowest one. Only while the view still shows its opening window:
+  // a refresh of a list already widened past it is left alone until the end.
+  const diskSoFar = [];
+  let paintQueued = false;
+  let settled = false;
+  const paintSoFar = () => {
+    if (paintQueued) return;
+    paintQueued = true;
+    setTimeout(() => {
+      paintQueued = false;
+      const live = get();
+      if (settled || signal.aborted || live.activeMailbox !== 'UNIFIED' || live.emails.length > CHUNK_SIZE) return;
+      const seen = new Set();
+      // The seed on screen stays (it holds the rows of the account just left).
+      const rows = [...allEmails, ...diskSoFar.flat(), ...live.emails].filter(e => {
+        const key = `${e._accountId}:${e.uid}`;
+        return !seen.has(key) && seen.add(key);
+      }).sort(byDateDesc).slice(0, CHUNK_SIZE);
+      useMailStore.setState({
+        emails: rows,
+        serverUids: serverUids(new Set(rows.map(e => e.uid)), { complete: false }),
+        totalEmails: Math.max(rows.length, live.totalEmails || 0),
+        _sortedEmailsFingerprint: '',
+        loading: false,
+      });
+      get().updateSortedEmails();
+    }, 0);
+  };
 
   for (const account of accounts) {
     if (hiddenAccounts[account.id]) continue;
@@ -155,16 +225,22 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         pushUnique({ ...email, _accountEmail: account.email, _accountId: account.id, _mailbox: resolvedPath });
       }
     }
+    const slot = diskFetchPromises.length;
     diskFetchPromises.push(
       db.getEmailHeadersPartial(account.id, resolvedPath, 500).then(diskData => {
         if (!diskData || !diskData.emails) return [];
         return diskData.emails.map(email => ({ ...email, _accountEmail: account.email, _accountId: account.id, _mailbox: resolvedPath }));
-      }).catch(() => [])
+      }).catch(() => []).then(rows => {
+        diskSoFar[slot] = rows;
+        if (rows.length) paintSoFar();
+        return rows;
+      })
     );
   }
 
   if (diskFetchPromises.length > 0) {
     const diskResults = await Promise.all(diskFetchPromises);
+    settled = true;
     for (const emails of diskResults) {
       for (const email of emails) pushUnique(email);
     }
@@ -190,11 +266,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     }
   }
 
-  allEmails.sort((a, b) => {
-    const dateA = a.date ? new Date(a.date).getTime() : 0;
-    const dateB = b.date ? new Date(b.date).getTime() : 0;
-    return dateB - dateA;
-  });
+  allEmails.sort(byDateDesc);
 
   // Cap unified folder cache at 3 entries (LRU eviction)
   const UNIFIED_FOLDER_CACHE_MAX = 3;
