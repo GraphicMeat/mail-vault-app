@@ -27,6 +27,91 @@ import { t, useT } from "../i18n/index.js";
 
 const EMPTY_ARRAY = Object.freeze([]);
 
+// Parse a selection key (may be "accountId:uid" in unified mode) to extract raw uid
+const parseKey = (key) => {
+  const s = String(key);
+  const i = s.indexOf(":");
+  if (i > 0) {
+    const raw = s.slice(i + 1);
+    return /^\d+$/.test(raw) ? Number(raw) : raw;
+  }
+  return key;
+};
+
+// What the ticked messages are, as the bar's buttons and its confirmation read
+// them: `selectedEmailIds` the selection (a Set of keys), `selectedRows` its
+// messages the loaded lists resolve, `allSelectionRows` every loaded row, and
+// `archivedEmailIds` the uids the vault holds.
+function selectionFacts(selectedEmailIds, selectedRows, allSelectionRows, archivedEmailIds) {
+  // Determine archive state of selected emails. The counts, not just the
+  // booleans: the delete confirmation says how many of them the vault
+  // actually holds, and it must agree with what gates Archive/Unarchive.
+  let archived = 0;
+  let unarchived = 0;
+  for (const key of selectedEmailIds) {
+    if (archivedEmailIds.has(parseKey(key))) archived++;
+    else unarchived++;
+  }
+  const selectionTarget = resolveQuickActionSelectionTarget(
+    [...selectedEmailIds],
+    allSelectionRows,
+    useMailStore.getState(),
+  );
+  const selectedRowKeys = new Set(
+    selectedRows.map((email) => selectionKey(email, useMailStore.getState())),
+  );
+  const selectionIsFullyResolved =
+    selectedRowKeys.size === selectedEmailIds.size &&
+    [...selectedEmailIds].every((key) => selectedRowKeys.has(key));
+  const hasUnread = selectedRows.some((email) =>
+    !email.flags?.includes("\\Seen")
+  );
+  const hasRead = selectedRows.some((email) => email.flags?.includes("\\Seen"));
+  const locations = selectedRows.map((email) =>
+    resolveEmailLocation(email, useMailStore.getState())
+  );
+  const resolved = selectionIsFullyResolved && locations.length > 0 &&
+    locations.every(Boolean);
+  const singleAccount = !!selectionTarget;
+  const oneMailbox = !!selectionTarget?.mailbox;
+  const allServerBacked = selectionIsFullyResolved && selectedRows.length > 0 &&
+    selectedRows.every((email) =>
+      email.source !== "local-only" && !email._insightsReadOnly &&
+      !email._insightsNoServerActions
+    );
+  const junkPaths = [
+    ...new Set(locations.map((location) => {
+      if (!location) return null;
+      const state = useMailStore.getState();
+      const mailboxes = location.accountId === state.activeAccountId
+        ? state.mailboxes
+        : getAccountCacheMailboxes(location.accountId);
+      return mailboxes?.find((folder) =>
+        String(folder.specialUse || "").toLowerCase() === "\\junk"
+      )?.path || null;
+    })),
+  ];
+  const selectionJunkPath = singleAccount && junkPaths.length === 1
+    ? junkPaths[0]
+    : null;
+  return {
+    hasArchived: archived > 0,
+    hasUnarchived: unarchived > 0,
+    archivedCount: archived,
+    totalCount: archived + unarchived,
+    selectionTarget,
+    selectionIsFullyResolved,
+    hasUnread,
+    hasRead,
+    locations,
+    resolved,
+    singleAccount,
+    oneMailbox,
+    allServerBacked,
+    selectionJunkPath,
+  };
+}
+
 export function SelectionActionBar() {
   const t = useT();
   const { config } = useQuickActionConfiguration("selection");
@@ -44,7 +129,6 @@ export function SelectionActionBar() {
   );
   const removeLocalEmails = useSelectionStore((s) => s.removeLocalEmails);
   const getSelectionSummary = useSelectionStore((s) => s.getSelectionSummary);
-  const localLabels = useTagStore((s) => s.tags) || EMPTY_ARRAY;
   const applyTagToRows = useTagStore((s) => s.applyTagToRows);
   const sortedEmails = useMailStore((s) => s.sortedEmails);
   const serverEmails = useMailStore((s) => s.emails);
@@ -82,17 +166,6 @@ export function SelectionActionBar() {
     return getSelectionSummary();
   }, [hasSelection, selectedEmailIds, getSelectionSummary]);
 
-  // Parse a selection key (may be "accountId:uid" in unified mode) to extract raw uid
-  const parseKey = (key) => {
-    const s = String(key);
-    const i = s.indexOf(":");
-    if (i > 0) {
-      const raw = s.slice(i + 1);
-      return /^\d+$/.test(raw) ? Number(raw) : raw;
-    }
-    return key;
-  };
-
   // The bar holds selection KEYS, not messages, so the rows are resolved back
   // out of the store — by the same key the checkbox wrote. Matching on uid
   // alone would pull a second account's message into a unified selection.
@@ -106,27 +179,6 @@ export function SelectionActionBar() {
     );
     if (messages.length) useExportStore.getState().openExport({ messages });
   };
-
-  // Determine archive state of selected emails. The counts, not just the
-  // booleans: the delete confirmation says how many of them the vault
-  // actually holds, and it must agree with what gates Archive/Unarchive.
-  const { hasArchived, hasUnarchived, archivedCount, totalCount } = useMemo(
-    () => {
-      let archived = 0;
-      let unarchived = 0;
-      for (const key of selectedEmailIds) {
-        if (archivedEmailIds.has(parseKey(key))) archived++;
-        else unarchived++;
-      }
-      return {
-        hasArchived: archived > 0,
-        hasUnarchived: unarchived > 0,
-        archivedCount: archived,
-        totalCount: archived + unarchived,
-      };
-    },
-    [selectedEmailIds, archivedEmailIds],
-  );
 
   // `report` for the actions that destroy a message: those refuse a row they
   // cannot place (which account, which folder) rather than guess, and the
@@ -275,49 +327,218 @@ export function SelectionActionBar() {
     ],
     [sortedEmails, serverEmails, localEmails, sentEmails, searchResults],
   );
-  const selectionTarget = resolveQuickActionSelectionTarget(
-    [...selectedEmailIds],
+  const facts = selectionFacts(
+    selectedEmailIds,
+    selectedRows,
     allSelectionRows,
-    useMailStore.getState(),
+    archivedEmailIds,
   );
-  const selectedRowKeys = new Set(
+  const {
+    archivedCount,
+    totalCount,
+    hasUnread,
+    locations,
+    singleAccount,
+    oneMailbox,
+    allServerBacked,
+    selectionJunkPath,
+  } = facts;
+  const selectionKeys = [...selectedEmailIds];
+  // What a button does. Which buttons are on offer is the view's.
+  const runAction = async (entry, event) => {
+    if (entry.action === "snooze") {
+      setSnoozeRect(event.currentTarget.getBoundingClientRect());
+    } else if (entry.action === "markRead") await handleAction(markSelectedAsRead);
+    else if (entry.action === "markUnread") {
+      await handleAction(markSelectedAsUnread);
+    } else if (entry.action === "toggleRead") {
+      await handleAction(
+        hasUnread ? markSelectedAsRead : markSelectedAsUnread,
+      );
+    } else if (entry.action === "archive") {
+      await handleAction(saveSelectedLocally);
+    } else if (entry.action === "unarchive") handleDeleteUnarchive();
+    else if (entry.action === "delete" || entry.action === "deleteServer") {
+      handleDelete();
+    } else if (entry.action === "deleteEverywhere") {
+      handleDeleteEverywhere();
+    } else if (entry.action === "export") exportSelected();
+    else if (entry.action === "move" && entry.params?.mailbox) {
+      await handleAction(
+        () =>
+          useMailStore.getState().moveEmails(
+            selectionKeys,
+            entry.params.mailbox,
+          ),
+        { report: true },
+      );
+    } else if (entry.action === "move") toggleMoveDropdown();
+    else if (entry.action === "spam") {
+      await handleAction(() =>
+        useMailStore.getState().moveEmails(
+          selectionKeys,
+          selectionJunkPath,
+        ), { report: true });
+    } else if (entry.action === "star" || entry.action === "unstar") {
+      await handleAction(() =>
+        useMailStore.getState().setSelectedFlagged(entry.action === "star")
+      );
+    } else if (entry.action === "tag") {
+      await applyTagToRows(
+        selectedRows.map((email, index) => ({ email, location: locations[index] })),
+        entry.params.tagId,
+      );
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {hasSelection && (
+        <motion.div
+          key="selection-bar"
+          ref={barRef}
+          data-testid="selection-action-bar"
+          initial={{ y: 80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 80, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          className="fixed inset-x-0 bottom-4 sm:bottom-6 z-40 flex justify-center px-3 pointer-events-none"
+        >
+          <SelectionActionBarView
+            rows={selectedRows}
+            keys={selectedEmailIds}
+            config={config}
+            label={selectionLabel}
+            facts={facts}
+            labelRef={selectionLabelRef}
+            inlineAvailableWidth={inlineAvailableWidth}
+            moveButtonRef={moveButtonRef}
+            moveOpen={showMoveDropdown}
+            onAction={runAction}
+            onActionStart={(event, trigger, entry) => {
+              if (
+                ["delete", "deleteServer", "deleteEverywhere", "unarchive"]
+                  .includes(entry.action)
+              ) {
+                confirmationReturnRef.current = trigger ||
+                  event.currentTarget;
+              }
+            }}
+            onClear={clearSelection}
+          />
+
+          {/* Move dropdown: a sibling of the scrolling bar, not a child of it */}
+          {showMoveDropdown && (
+            <div
+              className="absolute bottom-full mb-2 pointer-events-auto"
+              style={{ left: moveLeft }}
+            >
+              <MoveToFolderDropdown
+                uids={[...selectedEmailIds]}
+                accountId={singleAccount ? locations[0]?.accountId : null}
+                currentMailbox={oneMailbox ? locations[0]?.mailbox : null}
+                onClose={() => setShowMoveDropdown(false)}
+              />
+            </div>
+          )}
+          {snoozeRect && (
+            <SnoozePicker
+              keys={selectionKeys}
+              anchorRect={{ left: snoozeRect.left, bottom: Math.max(8, snoozeRect.top - 300) }}
+              onClose={() => setSnoozeRect(null)}
+            />
+          )}
+        </motion.div>
+      )}
+      <DeleteConfirmModal
+        pending={deleteMode === null ? null : {
+          // Skippable only when every ticked row is a server copy the delete
+          // journals an undo for. One local-only row in the selection and the
+          // same button destroys the only copy there is, which is the line
+          // this preference does not cross — `allServerBacked` is the same
+          // test the bar already uses to decide the action is offered at all.
+          confirmOptional: deleteMode === "server" && allServerBacked,
+          executor: confirmDelete,
+          copy: {
+            title: deleteMode === "unarchive"
+              ? t("viewer.unarchiveEmail")
+              : deleteMode === "everywhere"
+              ? t("rowMenu.deleteEverywhere")
+              : t("rowMenu.deleteServer"),
+            description: deleteMode === "unarchive"
+              ? selectedRows.some((email) =>
+                  email.isArchived &&
+                  (email.source === "local-only" ||
+                    email._origin === "local-only")
+                )
+                ? t("viewer.emailOnlyExistsLocalArchive")
+                : t("viewer.cachedCopyRemovedEmailStill")
+              : deleteMode === "everywhere"
+              ? t("selection.deleteServerVaultBackupDrive", { deleteScope })
+              : t("selection.deleteServer2", {
+                deleteScope,
+                vaultClause: vaultClause(totalCount, archivedCount),
+              }),
+            confirmLabel: deleteMode === "unarchive"
+              ? t("rowMenu.unarchive")
+              : deleteMode === "everywhere"
+              ? t("rowMenu.deleteEverywhere")
+              : t("rowMenu.deleteServer"),
+          },
+        }}
+        onClose={() => {
+          setDeleteMode(null);
+          requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+        }}
+      />
+    </AnimatePresence>
+  );
+}
+
+// The bar itself: the count, the configured actions and Clear, over the
+// selected `rows`. SelectionActionBar floats it over the list and hands in the
+// selection's `keys`, `facts` and what each button does (`onAction`).
+// Settings' sample bar passes rows and `preview`: it sits in the page and
+// every action is a no-op. Rows need `_accountId`, `_mailbox` and `source` for
+// their actions to read as available.
+export function SelectionActionBarView({
+  rows: selectedRows,
+  keys,
+  config,
+  label,
+  facts,
+  preview = false,
+  onAction,
+  onActionStart,
+  onClear,
+  labelRef,
+  inlineAvailableWidth,
+  moveButtonRef,
+  moveOpen: showMoveDropdown = false,
+}) {
+  const t = useT();
+  const localLabels = useTagStore((s) => s.tags) || EMPTY_ARRAY;
+  const selectedEmailIds = keys || new Set(
     selectedRows.map((email) => selectionKey(email, useMailStore.getState())),
   );
-  const selectionIsFullyResolved =
-    selectedRowKeys.size === selectedEmailIds.size &&
-    [...selectedEmailIds].every((key) => selectedRowKeys.has(key));
-  const hasUnread = selectedRows.some((email) =>
-    !email.flags?.includes("\\Seen")
+  const {
+    hasArchived,
+    hasUnarchived,
+    selectionTarget,
+    selectionIsFullyResolved,
+    hasUnread,
+    hasRead,
+    locations,
+    resolved,
+    singleAccount,
+    allServerBacked,
+    selectionJunkPath,
+  } = facts || selectionFacts(
+    selectedEmailIds,
+    selectedRows,
+    selectedRows,
+    new Set(selectedRows.filter((email) => email.isArchived).map((email) => email.uid)),
   );
-  const hasRead = selectedRows.some((email) => email.flags?.includes("\\Seen"));
-  const locations = selectedRows.map((email) =>
-    resolveEmailLocation(email, useMailStore.getState())
-  );
-  const resolved = selectionIsFullyResolved && locations.length > 0 &&
-    locations.every(Boolean);
-  const singleAccount = !!selectionTarget;
-  const oneMailbox = !!selectionTarget?.mailbox;
-  const allServerBacked = selectionIsFullyResolved && selectedRows.length > 0 &&
-    selectedRows.every((email) =>
-      email.source !== "local-only" && !email._insightsReadOnly &&
-      !email._insightsNoServerActions
-    );
-  const junkPaths = [
-    ...new Set(locations.map((location) => {
-      if (!location) return null;
-      const state = useMailStore.getState();
-      const mailboxes = location.accountId === state.activeAccountId
-        ? state.mailboxes
-        : getAccountCacheMailboxes(location.accountId);
-      return mailboxes?.find((folder) =>
-        String(folder.specialUse || "").toLowerCase() === "\\junk"
-      )?.path || null;
-    })),
-  ];
-  const selectionJunkPath = singleAccount && junkPaths.length === 1
-    ? junkPaths[0]
-    : null;
-  const selectionKeys = [...selectedEmailIds];
   const selectionDescriptors = config.entries.map((entry) => {
     const label = entry.action === "tag"
       ? localLabels.find((item) => item.id === entry.params?.tagId)?.name ||
@@ -436,178 +657,52 @@ export function SelectionActionBar() {
         "deleteEverywhere",
         "unarchive",
       ].includes(entry.action),
-      onActivate: async (event) => {
-        if (entry.action === "snooze") {
-          setSnoozeRect(event.currentTarget.getBoundingClientRect());
-        } else if (entry.action === "markRead") await handleAction(markSelectedAsRead);
-        else if (entry.action === "markUnread") {
-          await handleAction(markSelectedAsUnread);
-        } else if (entry.action === "toggleRead") {
-          await handleAction(
-            hasUnread ? markSelectedAsRead : markSelectedAsUnread,
-          );
-        } else if (entry.action === "archive") {
-          await handleAction(saveSelectedLocally);
-        } else if (entry.action === "unarchive") handleDeleteUnarchive();
-        else if (entry.action === "delete" || entry.action === "deleteServer") {
-          handleDelete();
-        } else if (entry.action === "deleteEverywhere") {
-          handleDeleteEverywhere();
-        } else if (entry.action === "export") exportSelected();
-        else if (entry.action === "move" && entry.params?.mailbox) {
-          await handleAction(
-            () =>
-              useMailStore.getState().moveEmails(
-                selectionKeys,
-                entry.params.mailbox,
-              ),
-            { report: true },
-          );
-        } else if (entry.action === "move") toggleMoveDropdown();
-        else if (entry.action === "spam") {
-          await handleAction(() =>
-            useMailStore.getState().moveEmails(
-              selectionKeys,
-              selectionJunkPath,
-            ), { report: true });
-        } else if (entry.action === "star" || entry.action === "unstar") {
-          await handleAction(() =>
-            useMailStore.getState().setSelectedFlagged(entry.action === "star")
-          );
-        } else if (entry.action === "tag") {
-          await applyTagToRows(
-            selectedRows.map((email, index) => ({ email, location: locations[index] })),
-            entry.params.tagId,
-          );
-        }
-      },
+      onActivate: preview ? () => {} : (event) => onAction(entry, event),
     };
   });
 
   return (
-    <AnimatePresence>
-      {hasSelection && (
-        <motion.div
-          key="selection-bar"
-          ref={barRef}
-          data-testid="selection-action-bar"
-          initial={{ y: 80, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 80, opacity: 0 }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="fixed inset-x-0 bottom-4 sm:bottom-6 z-40 flex justify-center px-3 pointer-events-none"
-        >
-          <div className="flex items-center gap-1 px-2 py-1.5 bg-mail-surface border border-mail-strong
+    <div
+      className="flex items-center gap-1 px-2 py-1.5 bg-mail-surface border border-mail-strong
                          rounded-xl
-                         max-w-[calc(100vw-1.5rem)] min-w-0 pointer-events-auto">
-            {/* Selection count */}
-            <span
-              ref={selectionLabelRef}
-              className="text-sm font-medium text-mail-text px-3 whitespace-nowrap"
-            >
-              {selectionLabel}
-            </span>
+                         max-w-[calc(100vw-1.5rem)] min-w-0 pointer-events-auto"
+      data-quick-actions-preview={preview || undefined}
+    >
+      {/* Selection count */}
+      <span
+        ref={labelRef}
+        className="text-sm font-medium text-mail-text px-3 whitespace-nowrap"
+      >
+        {label ?? t("selection.selected", { summary: selectedRows.length })}
+      </span>
 
-            <QuickActions
-              surface="selection"
-              config={config}
-              descriptors={selectionDescriptors}
-              display={config.selectionDisplay || "icon-label"}
-              inlineLimit={config.selectionDisplay === "icon-only"
-                ? undefined
-                : config.selectionActionLimit || 3}
-              inlineAvailableWidth={inlineAvailableWidth}
-              className="quick-actions-selection min-w-0"
-              identity={[...selectedEmailIds].join("|")}
-              onActionStart={(event, trigger, entry) => {
-                if (
-                  ["delete", "deleteServer", "deleteEverywhere", "unarchive"]
-                    .includes(entry.action)
-                ) {
-                  confirmationReturnRef.current = trigger ||
-                    event.currentTarget;
-                }
-              }}
-            />
-
-            <div className="w-px h-6 bg-mail-border" />
-
-            {/* Clear */}
-            <Button
-              variant="ghost"
-              icon
-              size="md"
-              onClick={clearSelection}
-              title={t("selection.clearSelection")}
-            >
-              <X size={16} className="text-mail-text-muted" />
-            </Button>
-          </div>
-
-          {/* Move dropdown: a sibling of the scrolling bar, not a child of it */}
-          {showMoveDropdown && (
-            <div
-              className="absolute bottom-full mb-2 pointer-events-auto"
-              style={{ left: moveLeft }}
-            >
-              <MoveToFolderDropdown
-                uids={[...selectedEmailIds]}
-                accountId={singleAccount ? locations[0]?.accountId : null}
-                currentMailbox={oneMailbox ? locations[0]?.mailbox : null}
-                onClose={() => setShowMoveDropdown(false)}
-              />
-            </div>
-          )}
-          {snoozeRect && (
-            <SnoozePicker
-              keys={selectionKeys}
-              anchorRect={{ left: snoozeRect.left, bottom: Math.max(8, snoozeRect.top - 300) }}
-              onClose={() => setSnoozeRect(null)}
-            />
-          )}
-        </motion.div>
-      )}
-      <DeleteConfirmModal
-        pending={deleteMode === null ? null : {
-          // Skippable only when every ticked row is a server copy the delete
-          // journals an undo for. One local-only row in the selection and the
-          // same button destroys the only copy there is, which is the line
-          // this preference does not cross — `allServerBacked` is the same
-          // test the bar already uses to decide the action is offered at all.
-          confirmOptional: deleteMode === "server" && allServerBacked,
-          executor: confirmDelete,
-          copy: {
-            title: deleteMode === "unarchive"
-              ? t("viewer.unarchiveEmail")
-              : deleteMode === "everywhere"
-              ? t("rowMenu.deleteEverywhere")
-              : t("rowMenu.deleteServer"),
-            description: deleteMode === "unarchive"
-              ? selectedRows.some((email) =>
-                  email.isArchived &&
-                  (email.source === "local-only" ||
-                    email._origin === "local-only")
-                )
-                ? t("viewer.emailOnlyExistsLocalArchive")
-                : t("viewer.cachedCopyRemovedEmailStill")
-              : deleteMode === "everywhere"
-              ? t("selection.deleteServerVaultBackupDrive", { deleteScope })
-              : t("selection.deleteServer2", {
-                deleteScope,
-                vaultClause: vaultClause(totalCount, archivedCount),
-              }),
-            confirmLabel: deleteMode === "unarchive"
-              ? t("rowMenu.unarchive")
-              : deleteMode === "everywhere"
-              ? t("rowMenu.deleteEverywhere")
-              : t("rowMenu.deleteServer"),
-          },
-        }}
-        onClose={() => {
-          setDeleteMode(null);
-          requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
-        }}
+      <QuickActions
+        surface="selection"
+        config={config}
+        descriptors={selectionDescriptors}
+        display={config.selectionDisplay || "icon-label"}
+        inlineLimit={config.selectionDisplay === "icon-only"
+          ? undefined
+          : config.selectionActionLimit || 3}
+        inlineAvailableWidth={inlineAvailableWidth}
+        className="quick-actions-selection min-w-0"
+        identity={[...selectedEmailIds].join("|")}
+        onActionStart={onActionStart}
+        preview={preview}
       />
-    </AnimatePresence>
+
+      <div className="w-px h-6 bg-mail-border" />
+
+      {/* Clear */}
+      <Button
+        variant="ghost"
+        icon
+        size="md"
+        onClick={onClear}
+        title={t("selection.clearSelection")}
+      >
+        <X size={16} className="text-mail-text-muted" />
+      </Button>
+    </div>
   );
 }
