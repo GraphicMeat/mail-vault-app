@@ -33,7 +33,7 @@
   "757da7c8028f": "下载未能自动开始。该按钮会打开最新版本页面；请在那里选择适合你电脑的文件。",
   "af2a175acc52": "MailVault 把邮件放在磁盘的什么位置、其中多少会留在这台电脑上、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。",
   "384095550461": "我的邮件有多少会留在这台电脑上？",
-  "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>全部保存</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>： 一种下载模式，会在后台获取每个文件夹和全部历史邮件并保存在这台电脑上，而不只是最近一段时间</span>",
+  "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>全部保存</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>：一种下载模式，会在后台获取每个文件夹和全部历史邮件并保存在这台电脑上，而不只是最近一段时间</span>",
   "7f9bb36583b5": "查看全部 14 项功能",
   "fc7a64a4b0b9": "免费版的一切，再加上这 16 项功能。选择其中一项，看看它怎么运作。",
   "0fed852ca4ff": "全部保存",

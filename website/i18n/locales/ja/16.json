@@ -33,7 +33,7 @@
   "757da7c8028f": "ダウンロードを自動で開始できませんでした。ボタンを押すと最新リリースのページが開きます。そこでお使いのコンピューター用のファイルを選んでください。",
   "af2a175acc52": "MailVaultがメールをディスクのどこに置くのか、そのうちどれだけがこのコンピュータに残るのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。",
   "384095550461": "自分のメールのうち、どれだけがこのコンピュータに残りますか？",
-  "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>すべて保存</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>： 直近の期間だけでなく、すべてのフォルダとすべての履歴をバックグラウンドでダウンロードしてこのコンピュータに保持するダウンロードモードです</span>",
+  "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>すべて保存</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>：直近の期間だけでなく、すべてのフォルダとすべての履歴をバックグラウンドでダウンロードしてこのコンピュータに保持するダウンロードモードです</span>",
   "7f9bb36583b5": "すべての14機能を見る",
   "fc7a64a4b0b9": "無料版のすべてに、この 16 の機能が加わります。ひとつ選ぶと、その仕組みが見られます。",
   "0fed852ca4ff": "すべて保存",
