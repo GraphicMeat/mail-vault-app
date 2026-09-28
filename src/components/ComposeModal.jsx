@@ -32,6 +32,14 @@ import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
+import { clampComposeSize } from '../utils/composeSize';
+
+// The embedded modal and the detached window both clamp a restored/resized
+// size to whatever space is actually available right now, so a size saved on
+// a bigger monitor never reopens off-screen. `window.innerWidth/Height` is
+// the Tauri webview's own viewport either way — the detached window's is the
+// OS window's client area.
+const viewportBounds = () => ({ width: window.innerWidth - 32, height: window.innerHeight - 32 });
 
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
@@ -138,6 +146,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const setComposeContextVisible = useSettingsStore(s => s.setComposeContextVisible);
   const composeContextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
   const setComposeContextSplit = useSettingsStore(s => s.setComposeContextSplit);
+  // The remembered compose size (see composeSize state below): same store,
+  // same pattern as the split above, and — in a detached window — the same
+  // relay to main that setComposeContextSplit already gets (ComposeWindow.jsx).
+  const composeSizeSetting = useSettingsStore(s => s.composeSize ?? null);
+  const setComposeSizeSetting = useSettingsStore(s => s.setComposeSize);
   const accounts = getOrderedAccounts(rawAccounts);
   // Replies and forwards leave from the mailbox the message is in (falling back
   // to the one being read); a restored draft keeps its saved identity; a fresh
@@ -197,7 +210,14 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const originalCloseStopRef = useRef(null);
   const contextDragRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(Infinity);
-  const [composeSize, setComposeSize] = useState(() => initialData?._composeSize || null);
+  // A restored/minimized draft keeps the size it was at; a fresh embedded
+  // compose opens at the last size chosen (mirrors contextSplit above). The
+  // detached window's own size is set natively at creation (App.jsx passes
+  // the remembered size to open_compose_window), so it needs no seed here.
+  const [composeSize, setComposeSize] = useState(() => {
+    const seed = initialData?._composeSize || (!detached && composeSizeSetting) || null;
+    return seed ? clampComposeSize(seed, viewportBounds()) : null;
+  });
   // WebKit reports a null relatedTarget on dragleave, so the old
   // `contains(relatedTarget)` check never worked — count enter/leave instead.
   const dragDepth = useRef(0);
@@ -308,6 +328,46 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     observer.observe(shellRef.current);
     return () => observer.disconnect();
   }, [detached]);
+
+  // Every new compose opens at the last size chosen — same write-through as
+  // chooseContextSplit, debounced so a drag writes once it settles rather
+  // than on every frame. `setComposeSizeSetting` is the relayed setter in a
+  // detached window (ComposeWindow.jsx), so this is correct there too, should
+  // this component ever observe its own resize; today only the embedded
+  // ResizeObserver above feeds it (the effect below covers the detached case).
+  useEffect(() => {
+    if (detached || !composeSize) return undefined;
+    const timer = setTimeout(() => {
+      Promise.resolve(setComposeSizeSetting?.(composeSize)).catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [detached, composeSize, setComposeSizeSetting]);
+
+  // The detached window is a real OS window: its resize never touches
+  // shellRef, so it gets its own listener straight from Tauri instead of the
+  // ResizeObserver above. Debounced the same way.
+  useEffect(() => {
+    if (!detached || typeof window === 'undefined' || !window.__TAURI__) return undefined;
+    const win = getCurrentWebviewWindow();
+    // Every other spec's WebviewWindow stub is shaped for what it tests (most
+    // only ever read `.label`) — a real one always has this, so skip quietly
+    // rather than widen every mock in the suite for a method it never uses.
+    if (typeof win?.onResized !== 'function') return undefined;
+    let disposed = false;
+    let timer;
+    let stop;
+    win.onResized(({ payload }) => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try {
+          const scale = await win.scaleFactor();
+          if (disposed || !payload?.width || !payload?.height) return;
+          Promise.resolve(setComposeSizeSetting?.({ width: payload.width / scale, height: payload.height / scale })).catch(() => {});
+        } catch { /* window gone mid-resize */ }
+      }, 300);
+    }).then(fn => { if (disposed) fn(); else stop = fn; }).catch(() => {});
+    return () => { disposed = true; clearTimeout(timer); stop?.(); };
+  }, [detached, setComposeSizeSetting]);
 
   // ── Autosaved draft (see services/localDrafts.js) ──
   // The vault draft this window owns. The uid is allocated on the first save
@@ -1105,6 +1165,19 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     setContextSplit(ratio);
     Promise.resolve(setComposeContextSplit?.(ratio)).catch(() => {});
   };
+  // The header's on/off toggle for the reading context. A failed relay (the
+  // detached window's onContextVisibleChange) reverts the optimistic flip.
+  const toggleShowContext = async () => {
+    const next = !showContext;
+    setShowContext(next);
+    try {
+      if (onContextVisibleChange) await onContextVisibleChange(next);
+      else setComposeContextVisible?.(next);
+    } catch (err) {
+      setShowContext(!next);
+      setError(err?.message || String(err));
+    }
+  };
   const composeWindowStyle = {
     ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
     ...(detaching ? { pointerEvents: 'none' } : {}),
@@ -1120,10 +1193,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         width: shellRef.current?.clientWidth || 640,
         height: shellRef.current?.clientHeight || 520,
       };
-      return {
-        width: Math.max(320, Math.min(window.innerWidth - 32, current.width + widthDelta)),
-        height: Math.max(320, Math.min(window.innerHeight - 32, current.height + heightDelta)),
-      };
+      return clampComposeSize(
+        { width: current.width + widthDelta, height: current.height + heightDelta },
+        viewportBounds(),
+      );
     });
   };
 
@@ -1156,7 +1229,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         data-dragging={dragging ? 'true' : 'false'}
         aria-busy={detaching || undefined}
         className={`compose-window bg-mail-surface border rounded-2xl
-                   ${detached ? 'compose-window-detached h-screen w-screen border-0 rounded-none' : 'w-[min(100%,56rem)] max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] relative'} flex flex-col overflow-hidden
+                   ${detached ? 'compose-window-detached h-screen w-screen border-0 rounded-none' : 'w-[min(100%,56rem)] max-h-[90vh] h-[min(80vh,700px)] min-h-[200px] relative'} flex flex-col overflow-hidden
                    ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
         onDragEnter={(e) => { if (detaching || !hasFiles(e)) return; dragDepth.current += 1; setDragging(true); }}
@@ -1179,6 +1252,18 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border shrink-0">
           <h2 id={titleId} className="font-semibold text-mail-text">{getTitle()}</h2>
           <div className="flex items-center gap-1">
+            {contextHtml && (
+              <Button variant="ghost" icon size="sm"
+                className={showContext ? 'bg-mail-accent/15 text-mail-accent-text hover:bg-mail-accent/20' : 'hover:bg-mail-border'}
+                onClick={toggleShowContext}
+                aria-pressed={showContext}
+                title={t('compose.showHideOriginalMessage', { action: showContext ? t('settings.backup.verify.hide') : t('compose.show') })}
+                aria-label={t('compose.showHideOriginalMessage', { action: showContext ? t('settings.backup.verify.hide') : t('compose.show') })}
+                data-testid="compose-context-toggle"
+              >
+                <PanelRight size={16} className={showContext ? '' : 'text-mail-text-muted'} />
+              </Button>
+            )}
             {onMinimize && (
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
                 onClick={handleMinimize}
@@ -1703,7 +1788,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           </form>
           </div>
 
-          {contextHtml && <>
+          {contextHtml && showContext && <>
             <button
               type="button"
               data-testid="compose-resize"
@@ -1736,47 +1821,23 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 event.preventDefault();
                 chooseContextSplit(clampSplit((effectiveContextWidth + (event.key === 'ArrowLeft' ? -20 : 20)) / layoutWidth));
               }}
-              className={`w-1.5 shrink-0 cursor-col-resize touch-none bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent ${showContext ? '' : 'hidden'}`}
+              className="w-1.5 shrink-0 cursor-col-resize touch-none bg-mail-border hover:bg-mail-accent focus:outline-none focus:bg-mail-accent"
             />
             <aside
               data-testid="compose-context"
-              style={showContext && !contextCollapsed ? { width: effectiveContextWidth } : undefined}
-              className={`shrink-0 flex flex-col min-h-0 overflow-hidden ${showContext && !contextCollapsed ? 'border-l border-mail-border compose-context-aside' : 'w-12'}`}
+              style={!contextCollapsed ? { width: effectiveContextWidth } : undefined}
+              className={`shrink-0 flex flex-col min-h-0 overflow-hidden ${!contextCollapsed ? 'border-l border-mail-border compose-context-aside' : 'w-12'}`}
             >
-              <div className="flex shrink-0 items-center">
-                <button
-                  type="button"
-                  data-testid="compose-context-toggle"
-                  aria-pressed={showContext}
-                  aria-expanded={showContext && !contextCollapsed}
-                  aria-label={t('compose.showHideOriginalMessage', { action: showContext && !contextCollapsed ? t('settings.backup.verify.hide') : t('compose.show') })}
-                  onClick={async () => {
-                    const next = !showContext;
-                    setShowContext(next);
-                    try {
-                      if (onContextVisibleChange) await onContextVisibleChange(next);
-                      else setComposeContextVisible?.(next);
-                    } catch (err) {
-                      setShowContext(!next);
-                      setError(err?.message || String(err));
-                    }
-                  }}
-                  className="min-w-0 flex-1 flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted hover:bg-mail-surface-hover transition-colors"
-                >
-                  <ChevronRight size={14} className={`shrink-0 transition-transform ${showContext ? 'rotate-90' : ''}`} />
-                  {showContext && !contextCollapsed && <span className="truncate">{t('compose.showHideOriginalMessage', { action: t('settings.backup.verify.hide') })}</span>}
-                </button>
-                {showContext && !contextCollapsed && (
+              {!contextCollapsed && (
+                <div className="flex shrink-0 items-center justify-end">
                   <OriginalThemeToggle dark={originalDark} onToggle={() => setOriginalDarkOverride(!originalDark)} />
-                )}
-                {showContext && !contextCollapsed && (
                   <Button variant="ghost" icon size="sm" onClick={openOriginalWindow}
                     title={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
                     aria-label={originalDetached ? t('compose.focusOriginalWindow') : t('compose.detachOriginal')}
                     data-testid="compose-original-detach"><ExternalLink size={16} className="text-mail-text-muted" /></Button>
-                )}
-              </div>
-              {showContext && !contextCollapsed && (
+                </div>
+              )}
+              {!contextCollapsed && (
                 <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
                   {[{ ratio: 0.5, label: '50/50', testid: 'compose-split-half', Icon: Columns }, { ratio: 0.25, label: '75/25', testid: 'compose-split-quarter', Icon: PanelRight }].map(({ ratio, label, testid, Icon }) => (
                     <button key={label} type="button" data-testid={testid}
@@ -1789,7 +1850,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                   ))}
                 </div>
               )}
-              {showContext && !contextCollapsed && (
+              {!contextCollapsed && (
                 originalThread ? (
                   // ThreadView scrolls itself: its list is the virtualizer's scroll element.
                   <div data-testid="compose-context-panel" className="flex-1 min-h-0 flex flex-col overflow-hidden">

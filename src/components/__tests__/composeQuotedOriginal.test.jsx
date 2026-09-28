@@ -110,7 +110,7 @@ const settings = {
   getSignature: () => '', getDisplayName: () => 'Me', getOrderedAccounts: (accounts) => accounts,
   sendAsAddresses: {}, sendDelay: 0, emailTemplates: [], spellcheckEnabled: true,
   addEmailTemplate: vi.fn(), lastComposeIdentity: null, setLastComposeIdentity: vi.fn(),
-  setComposeContextSplit: vi.fn(),
+  setComposeContextSplit: vi.fn(), composeSize: null, setComposeSize: vi.fn(),
 };
 vi.mock('../../stores/mailStore', () => {
   const hook = vi.fn((selector) => selector(mail));
@@ -173,8 +173,10 @@ beforeEach(() => {
   settings.composeContextVisible = true;
   settings.composeOpenMode = undefined;
   settings.composeContextSplit = null;
+  settings.composeSize = null;
   settings.emailViewerTheme = 'light';
   settings.setComposeContextSplit.mockClear();
+  settings.setComposeSize.mockClear();
   delete mail.getChatEmails;
   delete mail.sortedEmails;
   delete mail.selectedThread;
@@ -354,6 +356,34 @@ describe('the quoted original in a reply', () => {
     expect(screen.queryByTestId('compose-context-panel')).toBeNull();
   });
 
+  it('puts the show/hide-original toggle in the header, immediately left of minimize, with no reserved space when off', async () => {
+    openReply(original);
+    const toggle = await screen.findByTestId('compose-context-toggle');
+    const minimize = screen.getByTitle('Minimize');
+    // Immediately left, in DOM/reading order, of the minimize button — not
+    // buried inside the (removed) original-message panel.
+    expect(toggle.nextElementSibling).toBe(minimize);
+    expect(toggle.closest('[data-testid="compose-context"]')).toBeNull();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('Hide original message');
+
+    fireEvent.click(toggle);
+    // Re-read: the motion mock is a new component type per render (see the
+    // resize-drag tests above), so a stale node never reflects the update.
+    const toggled = await screen.findByTestId('compose-context-toggle');
+    expect(toggled.getAttribute('aria-pressed')).toBe('false');
+    expect(toggled.getAttribute('aria-label')).toBe('Show original message');
+    // Nothing left reserved for the old arrow strip.
+    expect(screen.queryByTestId('compose-context')).toBeNull();
+    expect(screen.queryByTestId('compose-resize')).toBeNull();
+  });
+
+  it('offers no original-message toggle for a fresh compose with nothing to show', async () => {
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    await screen.findByTestId('compose-to');
+    expect(screen.queryByTestId('compose-context-toggle')).toBeNull();
+  });
+
   it('does not reinitialize a typed reply when the global context default changes', async () => {
     const view = openReply(original);
     fireEvent.click(screen.getByTestId('editor-stub'));
@@ -505,6 +535,50 @@ describe('the quoted original in a reply', () => {
     });
     expect(screen.getByTestId('compose-modal').style.width).toBe('664px');
     expect(screen.getByTestId('compose-modal').style.height).toBe('496px');
+  });
+
+  describe('the remembered compose size', () => {
+    it('reopens the embedded composer at the last size it was resized to', async () => {
+      settings.composeSize = { width: 700, height: 650 };
+      render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      const modal = await screen.findByTestId('compose-modal');
+      expect(modal.style.width).toBe('700px');
+      expect(modal.style.height).toBe('650px');
+    });
+
+    it('floors a remembered size below 200x200 on reopen', async () => {
+      settings.composeSize = { width: 50, height: 90 };
+      render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      const modal = await screen.findByTestId('compose-modal');
+      expect(modal.style.width).toBe('200px');
+      expect(modal.style.height).toBe('200px');
+    });
+
+    it('clamps a size saved on a bigger screen down to the current viewport on reopen', async () => {
+      settings.composeSize = { width: 5000, height: 4000 };
+      render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      const modal = await screen.findByTestId('compose-modal');
+      expect(modal.style.width).toBe(`${window.innerWidth - 32}px`);
+      expect(modal.style.height).toBe(`${window.innerHeight - 32}px`);
+    });
+
+    it('lets a restored draft\'s own size win over the remembered global size', async () => {
+      settings.composeSize = { width: 700, height: 650 };
+      render(<ComposeModal mode="new" initialData={{
+        to: 'saved@example.test', subject: '', body: '<p>Draft</p>',
+        _composeSize: { width: 500, height: 420 }, _baseline: null,
+      }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      const modal = await screen.findByTestId('compose-modal');
+      expect(modal.style.width).toBe('500px');
+      expect(modal.style.height).toBe('420px');
+    });
+
+    it('has no remembered size to apply by default, so a fresh install opens at the CSS default', async () => {
+      render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+      const modal = await screen.findByTestId('compose-modal');
+      expect(modal.style.width).toBe('');
+      expect(modal.style.height).toBe('');
+    });
   });
 
   it('moves forward Tab from Subject into the editor but leaves Shift-Tab native', async () => {

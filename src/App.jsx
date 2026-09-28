@@ -403,7 +403,11 @@ function App() {
   if (!composeWindowOwnerRef.current) {
     composeWindowOwnerRef.current = createComposeWindowOwner({
       open: async ({ composeId, token }) => {
-        const label = await invoke('open_compose_window', { composeId, token });
+        // The size the user last resized a detached compose window to
+        // (setComposeSize, relayed from any window through installSettingRelays
+        // below). Rust clamps it to its own floor and the primary monitor.
+        const size = useSettingsStore.getState().composeSize;
+        const label = await invoke('open_compose_window', { composeId, token, width: size?.width, height: size?.height });
         const native = await WebviewWindow.getByLabel(label);
         if (!native) throw new Error(tr('errors.composeWindowClosed'));
         await native.once('tauri://destroyed', () => composeWindowOwnerRef.current?.recoverLabel(label, token));
@@ -438,6 +442,10 @@ function App() {
         composeContextSplit: value => {
           useSettingsStore.getState().setComposeContextSplit(value);
           return { composeContextSplit: useSettingsStore.getState().composeContextSplit };
+        },
+        composeSize: value => {
+          useSettingsStore.getState().setComposeSize(value);
+          return { composeSize: useSettingsStore.getState().composeSize };
         },
         addEmailTemplate: value => {
           const store = useSettingsStore.getState();

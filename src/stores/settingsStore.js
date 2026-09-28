@@ -11,6 +11,7 @@ import {
   DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
   resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
 } from '../utils/quickActions';
+import { clampComposeSize } from '../utils/composeSize';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -409,6 +410,11 @@ export const useSettingsStore = create(
       // Width of that reading context as a ratio of the compose layout, set by
       // the last drag, arrow key or split button. null = the 400px default.
       composeContextSplit: null,
+      // The compose surface's own size (px), set by the last drag of its
+      // resize handle — embedded modal or detached window alike. null = each
+      // surface's own default. Restored sizes are clamped to floor and
+      // viewport/screen at the point they are applied, not here.
+      composeSize: null,
       // Windows/Linux: the main window's close button hides to the tray instead
       // of quitting. Rust reads it from the settings file at close time.
       closeToTray: false,
@@ -961,6 +967,7 @@ export const useSettingsStore = create(
       },
       setComposeContextVisible: (visible) => set({ composeContextVisible: Boolean(visible) }),
       setComposeContextSplit: (ratio) => set({ composeContextSplit: Number.isFinite(ratio) ? Math.min(0.9, Math.max(0.1, ratio)) : null }),
+      setComposeSize: (size) => set({ composeSize: clampComposeSize(size) }),
       setCloseToTray: (enabled) => set({ closeToTray: Boolean(enabled) }),
       setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 

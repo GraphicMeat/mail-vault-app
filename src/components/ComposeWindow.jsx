@@ -85,6 +85,7 @@ export function ComposeWindow() {
       originalSettingsActions.current = {
         setComposeContextVisible: current.setComposeContextVisible,
         setComposeContextSplit: current.setComposeContextSplit,
+        setComposeSize: current.setComposeSize,
         addEmailTemplate: current.addEmailTemplate,
         setSpellcheckEnabled: current.setSpellcheckEnabled,
         setAiSettings: current.setAiSettings,
@@ -93,6 +94,7 @@ export function ComposeWindow() {
     useSettingsStore.setState({
       setComposeContextVisible: value => relaySetting('composeContextVisible', value),
       setComposeContextSplit: value => relaySetting('composeContextSplit', value),
+      setComposeSize: value => relaySetting('composeSize', value),
       addEmailTemplate: (name, body) => relaySetting('addEmailTemplate', { name, body }),
       setSpellcheckEnabled: value => relaySetting('spellcheckEnabled', value),
       setAiSettings: value => relaySetting('aiSettings', value),
