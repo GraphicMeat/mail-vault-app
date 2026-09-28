@@ -461,6 +461,39 @@ describe('daemon-backed search lifecycle', () => {
   });
 });
 
+// The Starred built-in view is a saved view like any other: its rows arrive
+// through `showRows` (see its own doc comment) and sit in `searchResults`
+// until the view is reopened. A flag change reaches them only through
+// `patchResultFlags` — nothing here re-filters the list by `\Flagged` — so an
+// unstarred row stays on screen, just repainted, until the next `showRows`
+// (the sidebar's reload of the view) leaves it out.
+describe('a view keeps a row it no longer matches until it is reloaded', () => {
+  beforeEach(resetHarness);
+
+  it('an unstarred row stays visible, shown unstarred, until the view reloads', () => {
+    useSearchStore.getState().showRows([
+      result(7, 'Starred message', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<7@x.test>', flags: ['\\Flagged'] }),
+    ]);
+    expect(useSearchStore.getState().searchResults).toHaveLength(1);
+
+    // The flag core's repaint of search rows (patchSearchFlags in
+    // messageMutations.js), not a re-run of the view.
+    useSearchStore.getState().patchResultFlags(
+      [{ accountId: 'acct-1', mailbox: 'INBOX', uid: 7 }],
+      flags => flags.filter(f => f !== '\\Flagged'),
+    );
+
+    const stillThere = useSearchStore.getState().searchResults;
+    expect(stillThere).toHaveLength(1);
+    expect(stillThere[0].flags).not.toContain('\\Flagged');
+
+    // The view is reopened (or the sidebar's reload) and the daemon no longer
+    // hands back a message that stopped matching — only now does it drop out.
+    useSearchStore.getState().showRows([]);
+    expect(useSearchStore.getState().searchResults).toHaveLength(0);
+  });
+});
+
 describe('narrowing a search by tag', () => {
   const tagged = (uid, extra = {}) => result(uid, `subject ${uid}`, {
     _accountId: 'acct-1', _mailbox: 'INBOX', messageId: `<${uid}@example.test>`, ...extra,

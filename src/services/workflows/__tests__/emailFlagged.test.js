@@ -118,6 +118,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { useSearchStore } = await import('../../../stores/searchStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { toggleFlagged, markAnswered, markForwarded } = await import('../messageMutations');
 
@@ -176,6 +177,7 @@ beforeEach(() => {
   netOnline = true;
   graphId = null;
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
+  useSearchStore.setState({ searchResults: [] });
 });
 
 describe('toggleFlagged', () => {
@@ -225,6 +227,42 @@ describe('toggleFlagged', () => {
     });
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'remove', 'INBOX');
     expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Seen'] }]);
+    // The toast has to name the direction that actually happened — a star
+    // removed offering "Starred 1 message" back told the user the opposite
+    // of what their click just did.
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.unstarred', labelParams: { count: 1 } });
+  });
+
+  // The Starred view's rows come from the daemon (views.evaluate) and are
+  // shown through searchStore's searchResults, never mailStore's `emails`,
+  // `localEmails` or `sentEmails`. toggleFlagged's row lookup used to check
+  // only those three plus the open copy — a miss there defaulted `on` to
+  // true (star), so unstarring an already-flagged row found in no list
+  // re-added the flag it already had and told the user it had been starred.
+  it('unstars a row found only in a view/search result list', async () => {
+    primeStore({ emails: [] });
+    useSearchStore.setState({
+      searchResults: [
+        { uid: 7, messageId: 'a@mock', subject: 'General', flags: ['\\Flagged'], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z', _accountId: 'a1', _mailbox: 'INBOX' },
+      ],
+    });
+
+    await toggleFlagged(7);
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'remove', 'INBOX');
+    expect(mockQueueOp).toHaveBeenCalledWith({
+      op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
+      arg: { flags: ['\\Flagged'], action: 'remove' },
+    });
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.unstarred', labelParams: { count: 1 } });
+    // The row is repainted unstarred, not dropped — the view itself decides
+    // what belongs in it on its next reload, not this toggle. The repaint
+    // (patchSearchFlags) is fire-and-forget, so give its dynamic import a
+    // tick to land.
+    await vi.waitFor(() => {
+      expect(useSearchStore.getState().searchResults).toHaveLength(1);
+      expect(useSearchStore.getState().searchResults[0].flags).not.toContain('\\Flagged');
+    });
   });
 
   it('offline: the row and vault change, the op stays journalled, the server is not called', async () => {

@@ -1986,12 +1986,23 @@ export async function setSelectedFlagged(on) {
  * row has scrolled out of the loaded window), and compared as a string: a bare
  * uid key arrives as a number from the row and as a string from a data
  * attribute, and `7 === '7'` is false.
+ *
+ * A saved view's rows (the Starred view among them) come from the daemon and
+ * live in searchStore's `searchResults`, never in any of the three lists
+ * above — so a click there used to find no row at all. `row` fell back to
+ * `undefined`, and `!undefined?.flags?.includes(...)` is `true` whatever the
+ * message's real state, so the toggle always tried to ADD the star: an
+ * already-starred row got the no-op "add" it already had, and the toast
+ * announced it had been starred rather than removed. `_searchRows()` is the
+ * same pool `applyFlagToKeys` already reads to resolve the target's account
+ * and folder, just consulted here too so the two agree on which way this
+ * message is going.
  */
 export async function toggleFlagged(key) {
   const { useMailStore } = await import('../../stores/mailStore');
   const state = useMailStore.getState();
   const sameKey = (e) => String(selectionKey(e, state)) === String(key);
-  const row = [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])].find(sameKey)
+  const row = [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), ...(await _searchRows())].find(sameKey)
     || (state.selectedEmail && sameKey(state.selectedEmail) ? state.selectedEmail : null);
   const on = !row?.flags?.includes('\\Flagged');
   return applyFlagToKeys([key], '\\Flagged', on);

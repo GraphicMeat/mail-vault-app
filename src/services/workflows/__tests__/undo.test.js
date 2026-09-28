@@ -770,6 +770,22 @@ describe('undo after a flag change', () => {
     expect(useMailStore.getState().undo).toBeNull();
   });
 
+  it('offers the star back after an UNstar, and taking it re-adds the flag', async () => {
+    primeStore({ emails: [row(7, { flags: ['\\Flagged'] })] });
+
+    await useMailStore.getState().toggleFlagged(7);
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.unstarred', labelParams: { count: 1 }, canUndo: true,
+    });
+    expect(useMailStore.getState().sortedEmails.find(e => e.uid === 7).flags).not.toContain('\\Flagged');
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockUpdateEmailFlags).toHaveBeenLastCalledWith(ACCOUNT, 7, ['\\Flagged'], 'add', 'INBOX');
+    expect(useMailStore.getState().sortedEmails.find(e => e.uid === 7).flags).toContain('\\Flagged');
+    expect(useMailStore.getState().undo).toBeNull();
+  });
+
   it('offers a read-state change back', async () => {
     primeStore({ emails: [row(7)] });
 
