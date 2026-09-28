@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, RefreshCw, Search, X } from 'lucide-react';
+import { ArrowLeft, Check, RefreshCw, Search, Star, Trash2 } from 'lucide-react';
 import { useNotesStore, boardColumns, serverCopies, canToggleStar } from '../../stores/notesStore';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore, getAccountColor } from '../../stores/settingsStore';
@@ -10,9 +10,13 @@ import { Button } from '../ui/Button';
 import { EmailViewer } from '../EmailViewer';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import NoteCard from './NoteCard';
+import AccountChipMenu from './AccountChipMenu';
 import { useT } from '../../i18n';
 
 const NONE = {};
+/// A reader action it cannot take reads as unusable, never as live (the
+/// Button already dims it).
+const UNUSABLE = 'disabled:cursor-not-allowed disabled:hover:bg-transparent';
 /// The accounts a card's copies sit in: it shows while any of them is on.
 const cardAccounts = card => (card.copies?.length ? card.copies.map(copy => copy.accountId) : [card.accountId]);
 
@@ -30,6 +34,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const filter = useNotesStore(s => s.filter);
   const payload = useNotesStore(s => s.accounts);
   const detailOpen = useNotesStore(s => s.detailOpen);
+  const openKey = useNotesStore(s => s.openKey);
   const busy = useNotesStore(s => s.busy);
   const mailAccounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors) || {};
@@ -38,6 +43,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const [active, setActive] = useState({ col: 0, row: 0 });
   const [error, setError] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [chipMenu, setChipMenu] = useState(null);
   const page = useRef(null), filterInput = useRef(null), board = useRef(null), returnFocus = useRef(null), request = useRef(0);
   // One toggle per account the board asked about. With one account there is
   // no bar, and so no way to turn it back on: nothing is off then.
@@ -45,7 +51,22 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const off = barAccounts.length > 1 ? notesHiddenAccounts : NONE;
   const shown = useMemo(() => cards.filter(card => cardAccounts(card).some(id => !off[id])), [cards, off]);
   const columns = useMemo(() => boardColumns(shown, filter), [shown, filter]);
+  const openCard = cards.find(card => card.key === openKey);
+  const openBusy = !!(openCard && busy?.[openCard.key]);
+  const openCanStar = !!openCard && canToggleStar(openCard, payload);
+  const openCanDelete = !!openCard && serverCopies(openCard, payload).length > 0;
+  const openStarLabel = openCard?.starred ? t('notes.unstar') : t('notes.star');
   const store = () => useNotesStore.getState();
+  /// Each bar account off where `isOff` says so and on elsewhere. An account
+  /// the bar does not show keeps its setting.
+  const setOff = isOff => {
+    const next = { ...notesHiddenAccounts };
+    for (const account of barAccounts) {
+      if (isOff(account.id)) next[account.id] = true;
+      else delete next[account.id];
+    }
+    useSettingsStore.getState().setNotesHiddenAccounts(next);
+  };
 
   useEffect(() => { page.current?.focus(); return () => { ++request.current; }; }, []);
   // `/` from anywhere on the board, never out of a field someone is typing in.
@@ -80,7 +101,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
     if (serverCopies({ copies: [first] }, payload).length) copies.push({ ...first, source: 'server' });
     try {
       const opened = await openInsightsMessage({ key: card.key, copies });
-      if (id === request.current && opened !== false) store().setDetailOpen(true);
+      if (id === request.current && opened !== false) store().setDetailOpen(true, card.key);
     } catch (err) {
       if (id === request.current && err?.name !== 'AbortError') setError(t('notes.openFailed'));
     }
@@ -101,6 +122,11 @@ export default function NotesBoard({ onClose, onComposeReply }) {
       if (result?.kept) setError(t('notes.deletePartial'));
     },
     copy: { title: t('notes.deleteTitle'), description: t('notes.deleteDescription'), confirmLabel: t('common.delete') },
+  });
+  // The note on show was finished or deleted, here or on its card: nothing
+  // is left to read.
+  useEffect(() => {
+    if (detailOpen && openKey && !openCard) closeReader();
   });
 
   const moveFocus = event => {
@@ -159,13 +185,23 @@ export default function NotesBoard({ onClose, onComposeReply }) {
       className="flex flex-wrap items-center gap-1.5 px-6 pt-3">
       {barAccounts.map(account => <Button key={account.id} variant={off[account.id] ? 'ghost' : 'accentTint'} size="xs" pill
         data-testid={`notes-account-${account.id}`} aria-pressed={!off[account.id]} title={account.email}
-        onClick={() => useSettingsStore.getState().toggleNotesAccount(account.id)}>
+        onClick={() => useSettingsStore.getState().toggleNotesAccount(account.id)}
+        onContextMenu={event => {
+          event.preventDefault();
+          event.stopPropagation();
+          setChipMenu({ id: account.id, x: event.clientX, y: event.clientY });
+        }}>
         <span data-testid="notes-account-dot" aria-hidden="true"
           className={`w-2 h-2 rounded-full shrink-0 ${off[account.id] ? 'opacity-40' : ''}`}
           style={{ backgroundColor: getAccountColor(accountColors, account) }} />
         {displayNames[account.id] || account.name || account.email}
       </Button>)}
+      <Button variant="ghost" size="xs" data-testid="notes-select-all" disabled={!barAccounts.some(({ id }) => off[id])}
+        onClick={() => setOff(() => false)}>{t('notes.selectAll')}</Button>
+      <Button variant="ghost" size="xs" data-testid="notes-deselect-all" disabled={barAccounts.every(({ id }) => off[id])}
+        onClick={() => setOff(() => true)}>{t('notes.deselectAll')}</Button>
     </div>}
+    <AccountChipMenu menu={chipMenu} onClose={() => setChipMenu(null)} onApply={setOff} />
     {error && <p role="alert" className="px-6 pt-3 text-sm text-mail-warning">{error}</p>}
     <div className="flex-1 min-h-0 flex">
       <div ref={board} onKeyDown={moveFocus} data-testid="notes-columns"
@@ -198,10 +234,23 @@ export default function NotesBoard({ onClose, onComposeReply }) {
         </section>)}
       </div>
       {detailOpen && <div className="flex-1 min-w-0 min-h-0 flex flex-col border-l border-mail-border" data-testid="notes-reader">
-        <div className="flex justify-end px-2 py-1 border-b border-mail-border">
-          <Button variant="ghost" size="sm" onClick={closeReader} data-testid="notes-close-reader"><X size={14} />{t('common.close')}</Button>
-        </div>
-        <EmailViewer onComposeReply={onComposeReply} onClose={closeReader} />
+        {openCard && <div className="flex justify-end gap-1 px-2 py-1 border-b border-mail-border">
+          <Button variant="ghost" icon size="sm" className={UNUSABLE} data-testid="notes-reader-star"
+            disabled={!openCanStar || openBusy} aria-pressed={!!openCard.starred} aria-label={openStarLabel}
+            title={openCanStar ? openStarLabel : t('notes.folderNotLoaded')} onClick={() => star(openCard)}>
+            <Star size={16} className={openCard.starred ? 'fill-current text-mail-warning' : ''} />
+          </Button>
+          <Button variant="ghost" icon size="sm" className={UNUSABLE} data-testid="notes-reader-done"
+            disabled={openBusy} aria-label={t('notes.markDone')} title={t('notes.markDone')} onClick={() => done(openCard)}>
+            <Check size={16} />
+          </Button>
+          <Button variant="ghost" icon size="sm" className={UNUSABLE} data-testid="notes-reader-delete"
+            disabled={!openCanDelete || openBusy} aria-label={t('common.delete')}
+            title={openCanDelete ? t('common.delete') : t('notes.folderNotLoaded')} onClick={() => remove(openCard)}>
+            <Trash2 size={16} />
+          </Button>
+        </div>}
+        <EmailViewer onComposeReply={onComposeReply} onClose={closeReader} showOpenInWindow />
       </div>}
     </div>
     <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />

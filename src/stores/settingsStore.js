@@ -1001,6 +1001,7 @@ export const useSettingsStore = create(
         const { [accountId]: off, ...rest } = state.notesHiddenAccounts || {};
         return { notesHiddenAccounts: off ? rest : { ...rest, [accountId]: true } };
       }),
+      setNotesHiddenAccounts: (notesHiddenAccounts) => set({ notesHiddenAccounts }),
 
       // Undo send settings
       setUndoSendEnabled: (enabled) => set({ undoSendEnabled: enabled }),

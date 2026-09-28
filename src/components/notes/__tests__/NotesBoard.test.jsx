@@ -28,7 +28,13 @@ vi.mock('../../../services/transport', async importOriginal => ({
   ...await importOriginal(),
   send: (...args) => harness.send(...args),
 }));
-vi.mock('../../EmailViewer', () => ({ EmailViewer: () => React.createElement('div', { 'data-testid': 'email-viewer' }) }));
+// The viewer's own close control stands in for the real one, so a count of
+// close controls in the reader means something here.
+vi.mock('../../EmailViewer', () => ({
+  EmailViewer: ({ onClose, showOpenInWindow }) => React.createElement('div', {
+    'data-testid': 'email-viewer', 'data-open-in-window': showOpenInWindow ? 'true' : 'false',
+  }, React.createElement('button', { 'data-testid': 'close-viewer', 'aria-label': 'Close', onClick: onClose })),
+}));
 // The real confirm is its own component with its own tests; here it only has
 // to prove a delete waits for it.
 vi.mock('../../DeleteConfirmModal', () => ({
@@ -75,7 +81,7 @@ const actions = {
 };
 
 function show(cards, extra = {}) {
-  useNotesStore.setState({ isOpen: true, status: 'ready', cards, filter: '', detailOpen: false, busy: {}, accounts: ACCOUNTS_PAYLOAD, ...actions, ...extra });
+  useNotesStore.setState({ isOpen: true, status: 'ready', cards, filter: '', detailOpen: false, openKey: null, busy: {}, accounts: ACCOUNTS_PAYLOAD, ...actions, ...extra });
   const onClose = vi.fn();
   render(<NotesBoard onClose={onClose} />);
   return { onClose };
@@ -212,6 +218,88 @@ describe('Notes to Self board', () => {
     expect(screen.getByTestId('note-done').disabled).toBe(false);
   });
 
+  // The report: the buttons looked live and did nothing.
+  it('shows a control it cannot use as unusable, and says why', () => {
+    show([card('local', { copies: [{ accountId: 'a', mailbox: 'vault-only', uid: 5 }] })]);
+    for (const id of ['note-star', 'note-delete']) {
+      const button = screen.getByTestId(id);
+      expect(button.className).toContain('disabled:opacity-40');
+      expect(button.className).toContain('disabled:cursor-not-allowed');
+      expect(button.title).toBe(t('notes.folderNotLoaded'));
+    }
+    expect(screen.getByTestId('note-done').className).toContain('disabled:opacity-40');
+  });
+
+  it('reads a note with one close control, the viewer\'s own, and offers it a new window', async () => {
+    show([card('r')]);
+    await act(async () => { fireEvent.click(screen.getByTestId('note-card')); });
+    const reader = screen.getByTestId('notes-reader');
+    expect(screen.queryByTestId('notes-close-reader')).toBeNull();
+    expect(within(reader).getAllByRole('button', { name: t('common.close') })).toHaveLength(1);
+    expect(within(reader).getByTestId('email-viewer').dataset.openInWindow).toBe('true');
+    fireEvent.click(within(reader).getByTestId('close-viewer'));
+    await waitFor(() => expect(screen.queryByTestId('notes-reader')).toBeNull());
+    expect(useNotesStore.getState().openKey).toBeNull();
+  });
+
+  it('stars the open note from the reader, the icon following its state', async () => {
+    const note = card('s');
+    show([note]);
+    await act(async () => { fireEvent.click(screen.getByTestId('note-card')); });
+    expect(useNotesStore.getState().openKey).toBe('s');
+    const star = () => screen.getByTestId('notes-reader-star');
+    const filled = () => star().querySelector('svg').getAttribute('class').includes('fill-current');
+    expect(star().getAttribute('aria-pressed')).toBe('false');
+    expect(star().getAttribute('aria-label')).toBe(t('notes.star'));
+    expect(filled()).toBe(false);
+    await act(async () => { fireEvent.click(star()); });
+    expect(actions.toggleStar).toHaveBeenCalledWith(note);
+    act(() => useNotesStore.setState({ cards: [{ ...note, starred: true }] }));
+    expect(star().getAttribute('aria-pressed')).toBe('true');
+    expect(star().getAttribute('aria-label')).toBe(t('notes.unstar'));
+    expect(filled()).toBe(true);
+  });
+
+  it('offers no reader star for a note whose folders the server does not have, and says why', async () => {
+    show([card('local', { copies: [{ accountId: 'a', mailbox: 'vault-only', uid: 5 }] })]);
+    await act(async () => { fireEvent.click(screen.getByTestId('note-card')); });
+    expect(screen.getByTestId('notes-reader-star').disabled).toBe(true);
+    expect(screen.getByTestId('notes-reader-star').title).toBe(t('notes.folderNotLoaded'));
+    expect(screen.getByTestId('notes-reader-delete').disabled).toBe(true);
+    expect(screen.getByTestId('notes-reader-done').disabled).toBe(false);
+  });
+
+  it('finishes and deletes the open note from the reader, which closes once the note is gone', async () => {
+    const drop = async c => useNotesStore.setState(s => ({ cards: s.cards.filter(other => other.key !== c.key) }));
+    actions.markDone.mockImplementationOnce(drop);
+    actions.deleteCard.mockImplementationOnce(drop);
+    const [done, gone] = [card('done'), card('gone')];
+    show([done, gone]);
+    const open = async key => act(async () => {
+      fireEvent.click(screen.getAllByTestId('note-card').find(el => el.dataset.key === key));
+    });
+
+    await open('done');
+    await act(async () => { fireEvent.click(screen.getByTestId('notes-reader-done')); });
+    expect(actions.markDone).toHaveBeenCalledWith(done);
+    await waitFor(() => expect(screen.queryByTestId('notes-reader')).toBeNull());
+    expect(useNotesStore.getState().openKey).toBeNull();
+
+    await open('gone');
+    fireEvent.click(screen.getByTestId('notes-reader-delete'));
+    expect(actions.deleteCard).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByTestId('confirm-delete')); });
+    expect(actions.deleteCard).toHaveBeenCalledWith(gone);
+    await waitFor(() => expect(screen.queryByTestId('notes-reader')).toBeNull());
+  });
+
+  it('keeps the reader open when an action leaves the note on the board', async () => {
+    show([card('stay')]);
+    await act(async () => { fireEvent.click(screen.getByTestId('note-card')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('notes-reader-done')); });
+    expect(screen.getByTestId('notes-reader')).toBeTruthy();
+  });
+
   it('narrows the board as the filter is typed', () => {
     show([
       card('a', { subject: 'Pasta recipe', column: 'Recipes' }),
@@ -277,7 +365,8 @@ describe('Notes to Self account filter', () => {
     useSettingsStore.setState({ displayNames: { b: 'Work' } });
     show([card('x'), inB('y')]);
     const bar = screen.getByRole('group', { name: t('notes.accounts') });
-    expect(within(bar).getAllByRole('button').map(button => button.textContent)).toEqual(['me@x.test', 'Work']);
+    expect(within(bar).getAllByRole('button').filter(button => button.hasAttribute('aria-pressed'))
+      .map(button => button.textContent)).toEqual(['me@x.test', 'Work']);
     expect(toggle('a').getAttribute('aria-pressed')).toBe('true');
     expect(toggle('b').getAttribute('aria-pressed')).toBe('true');
     expect(toggle('b').querySelector('[data-testid="notes-account-dot"]').style.backgroundColor).toBeTruthy();
@@ -303,6 +392,56 @@ describe('Notes to Self account filter', () => {
     show([card('x'), inB('y')]);
     expect(toggle('a').getAttribute('aria-pressed')).toBe('false');
     expect(shown()).toEqual(['y']);
+  });
+
+  it('turns every account on or off at once, each button unusable when it would change nothing', () => {
+    show([card('x'), inB('y')]);
+    const selectAll = () => screen.getByTestId('notes-select-all');
+    const deselectAll = () => screen.getByTestId('notes-deselect-all');
+    expect(selectAll().textContent).toBe(t('notes.selectAll'));
+    expect(deselectAll().textContent).toBe(t('notes.deselectAll'));
+    expect(selectAll().disabled).toBe(true);
+    expect(deselectAll().disabled).toBe(false);
+    fireEvent.click(deselectAll());
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({ a: true, b: true });
+    expect(shown()).toEqual([]);
+    expect(deselectAll().disabled).toBe(true);
+    expect(selectAll().disabled).toBe(false);
+    fireEvent.click(selectAll());
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({});
+    expect(shown()).toEqual(['x', 'y']);
+  });
+
+  it('leaves the setting of an account the bar does not show alone', () => {
+    useSettingsStore.setState({ notesHiddenAccounts: { gone: true } });
+    show([card('x'), inB('y')]);
+    expect(screen.getByTestId('notes-select-all').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('notes-deselect-all'));
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({ gone: true, a: true, b: true });
+    fireEvent.click(screen.getByTestId('notes-select-all'));
+    expect(useSettingsStore.getState().notesHiddenAccounts).toEqual({ gone: true });
+  });
+
+  it('right-click on an account keeps just it, or drops just it, and leaves an unlisted account alone', async () => {
+    useMailStore.setState({ accounts: [{ id: 'a', email: 'me@x.test' }, { id: 'b', email: 'work@y.test' }, { id: 'c', email: 'c@z.test' }] });
+    useSettingsStore.setState({ notesHiddenAccounts: { gone: true, a: true } });
+    show([card('x'), inB('y')], { accounts: [...ACCOUNTS_PAYLOAD, { accountId: 'c', address: 'c@z.test', knownMailboxes: [] }] });
+    const hidden = () => useSettingsStore.getState().notesHiddenAccounts;
+    const pick = async (id, item) => {
+      fireEvent.contextMenu(toggle(id));
+      fireEvent.click(screen.getAllByTestId(item).at(-1));
+      await waitFor(() => expect(screen.queryByTestId('notes-account-menu')).toBeNull());
+    };
+    await pick('b', 'notes-menu-deselect-all-except');
+    expect(hidden()).toEqual({ gone: true, a: true, c: true });
+    expect(shown()).toEqual(['y']);
+    await pick('b', 'notes-menu-select-all-except');
+    expect(hidden()).toEqual({ gone: true, b: true });
+    expect(shown()).toEqual(['x']);
+    await pick('a', 'notes-menu-deselect-all');
+    expect(hidden()).toEqual({ gone: true, a: true, b: true, c: true });
+    await pick('a', 'notes-menu-select-all');
+    expect(hidden()).toEqual({ gone: true });
   });
 
   // With no bar there is no way to turn an account back on, so nothing is off.
