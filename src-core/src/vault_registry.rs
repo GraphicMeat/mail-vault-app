@@ -461,6 +461,19 @@ impl VaultRegistry {
         self.changed(Scope::All);
     }
 
+    /// Drops every stored parse, so each file is parsed again on its next
+    /// read: rows an older `light_row_json` wrote lack the fields it has since
+    /// gained (sender auth and list headers, which the list's BIMI logo and
+    /// Unsubscribe read). The file rows, seqs and verification stay, so
+    /// nothing is listed again. The search index rebuild runs it.
+    pub fn reparse_all(&self) {
+        let conn_guard = guard(&self.conn);
+        let Some(conn) = conn_guard.as_ref() else { return };
+        if let Err(e) = conn.execute("UPDATE files SET light_row = NULL WHERE light_row IS NOT NULL", []) {
+            warn!("vault_registry: drop stored parses: {e}");
+        }
+    }
+
     // ── internals ────────────────────────────────────────────────────────────
 
     fn next_seq(&self) -> i64 {
@@ -1064,5 +1077,41 @@ mod tests {
         assert_eq!(second.len(), 1);
         assert_eq!(reg.parse_count(), 2, "the bad file is not parsed again");
         assert_eq!(saved(&reg, &f, MB), vec![1, 2], "still a saved uid");
+    }
+
+    #[test]
+    fn reparse_all_gives_an_older_parse_the_fields_it_lacked() {
+        const AUTH: &str = "mx.test; dkim=pass; dmarc=pass header.from=brand.test";
+        let f = fixture();
+        let dir = cur(&f, MB);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(format!("1{}AS.eml", crate::maildir::INFO_PREFIX)),
+            format!("From: Brand <news@brand.test>\r\nAuthentication-Results: {AUTH}\r\nSubject: hi\r\n\r\nbody\r\n"),
+        )
+        .unwrap();
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap()[0]["authenticationResults"], AUTH);
+
+        // What a build before the field was added stored: the same row without it.
+        {
+            let g = guard(&reg.conn);
+            let conn = g.as_ref().unwrap();
+            let stored: String = conn.query_row("SELECT light_row FROM files WHERE uid = 1", [], |r| r.get(0)).unwrap();
+            let mut old: Value = serde_json::from_str(&stored).unwrap();
+            old.as_object_mut().unwrap().remove("authenticationResults");
+            conn.execute("UPDATE files SET light_row = ?1 WHERE uid = 1", [old.to_string()]).unwrap();
+        }
+        assert!(
+            reg.light_rows(&f.root, ACCT, MB, None).unwrap()[0].get("authenticationResults").is_none(),
+            "a stored parse is served as stored"
+        );
+
+        reg.reparse_all();
+        assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap()[0]["authenticationResults"], AUTH);
+        assert_eq!(reg.parse_count(), 2);
+        assert_eq!(reg.listing_count(), 1, "the file set is not listed again");
+        reg.light_rows(&f.root, ACCT, MB, None).unwrap();
+        assert_eq!(reg.parse_count(), 2, "the new parse is stored");
     }
 }

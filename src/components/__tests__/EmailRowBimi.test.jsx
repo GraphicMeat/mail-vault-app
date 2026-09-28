@@ -89,8 +89,48 @@ for (const [name, renderRow] of variants) {
       expect(daemonCall).not.toHaveBeenCalled();
       expect(screen.queryByTestId('bimi-logo')).toBeNull();
     });
+
+    // An archived row the list read from the vault (the registry's stored
+    // parse) draws the logo like a server row: it carries the same header.
+    it('draws the logo on an archived row read from the vault', async () => {
+      daemonCall.mockResolvedValue({ logo: LOGO });
+      render(renderRow(email({ source: 'local', isArchived: true, flags: ['\\Seen', 'archived'] })));
+      expect((await screen.findByTestId('bimi-logo')).getAttribute('src')).toBe(LOGO);
+      expect(daemonCall).toHaveBeenCalledWith('bimi_logo', {
+        domain: 'blurb.test', authenticationResults: 'mx.test; dkim=pass; dmarc=pass header.from=blurb.test',
+      });
+    });
+
+    // What a row parsed by an older build looks like: no header at all.
+    it('asks nothing for a row without Authentication-Results', () => {
+      render(renderRow(email({ authenticationResults: undefined, source: 'local', isArchived: true })));
+      expect(daemonCall).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('bimi-logo')).toBeNull();
+    });
+
+    it('draws nothing but an SVG data URI', async () => {
+      daemonCall.mockResolvedValue({ logo: 'data:text/html;base64,PHNjcmlwdD4=' });
+      render(renderRow(email()));
+      await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledTimes(1));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(screen.queryByTestId('bimi-logo')).toBeNull();
+    });
   });
 }
+
+// A failed lookup is not an answer: the next mount asks again and draws it.
+it('asks again after a failed lookup', async () => {
+  daemonCall.mockRejectedValueOnce(new Error('daemon down')).mockResolvedValue({ logo: LOGO });
+  const e = email();
+  render(<EmailRow email={e} {...rowProps()} />);
+  await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledTimes(1));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(screen.queryByTestId('bimi-logo')).toBeNull();
+  cleanup();
+  render(<EmailRow email={e} {...rowProps()} />);
+  expect((await screen.findByTestId('bimi-logo')).getAttribute('src')).toBe(LOGO);
+  expect(daemonCall).toHaveBeenCalledTimes(2);
+});
 
 // A virtualized list remounts every row it scrolls back to. A domain with no
 // logo is the common answer, and asking again on every scroll is a daemon

@@ -1329,7 +1329,7 @@
   "search.dateRange": "Zeitraum",
   "search.emailName": "E-Mail oder Name …",
   "searchIndex.reindexOffer.title": "Suchindex neu aufbauen?",
-  "searchIndex.reindexOffer.why": "Mit diesem Update speichert der Suchindex für jede Nachricht die Absenderprüfung (SPF, DKIM und DMARC) und Angaben zur Mailingliste. Mit der vorherigen Version indizierte Mails haben diese noch nicht, daher können diese Nachrichten in Suchergebnissen weder das Sicherheitsschild noch das Absenderlogo oder Abmelden zeigen.",
+  "searchIndex.reindexOffer.why": "Mit diesem Update speichert der Suchindex für jede Nachricht die Absenderprüfung (SPF, DKIM und DMARC) und Angaben zur Mailingliste. Mit der vorherigen Version indizierte Mails haben diese noch nicht, daher können diese Nachrichten in der Nachrichtenliste und in Suchergebnissen weder das Sicherheitsschild noch das Absenderlogo oder Abmelden zeigen.",
   "searchIndex.reindexOffer.how": "Beim Neuaufbau werden die Mails in Ihrem Tresor erneut gelesen, auf diesem Gerät und im Hintergrund. Es wird nichts heruntergeladen und keine Mail verändert. Die Suche funktioniert weiter und liest Ihre Ordner direkt, bis der neue Index fertig ist. Sie können den Index auch später unter Suchindex in den Einstellungen neu aufbauen.",
   "searchIndex.reindexOffer.confirm": "Jetzt neu aufbauen",
   "searchIndex.reindexOffer.later": "Nicht jetzt",

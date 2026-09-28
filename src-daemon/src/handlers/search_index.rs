@@ -25,7 +25,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             done(id, blocking(move || { si::configure(&st, args); Value::Null }).await)
         }
-        "search_index_rebuild" => done(id, blocking(move || { si::rebuild(&st); Value::Null }).await),
+        // A rebuild also drops the vault registry's stored parses: the list's
+        // archived rows come from there, and a row an older build parsed
+        // lacks what the index rebuild is for (sender auth, list headers).
+        "search_index_rebuild" => {
+            let reg = Arc::clone(&state.vault_registry);
+            done(id, blocking(move || { reg.reparse_all(); si::rebuild(&st); Value::Null }).await)
+        }
+        // The same for an install with the index off, which has no rebuild to ask about.
+        "vault_reparse_rows" => {
+            let reg = Arc::clone(&state.vault_registry);
+            done(id, blocking(move || { reg.reparse_all(); Value::Null }).await)
+        }
         // Two minutes: the worker finishes its current batch or compaction first.
         "search_index_destroy" => done(id, blocking(move || si::destroy(&st, Duration::from_secs(120))).await),
         // Set the flag before closing: a request racing in right now must see
@@ -309,6 +320,34 @@ mod tests {
     async fn rebuild_answers_null() {
         let (_t, s) = st();
         assert_eq!(call(&s, "search_index_rebuild", json!({})).await.result, Some(serde_json::Value::Null));
+    }
+
+    /// The reindex offer's Yes (and the index-off reparse) must reach the
+    /// list's archived rows too: those come from the registry's stored
+    /// parses, which the index rebuild alone never touched.
+    #[tokio::test]
+    async fn rebuild_and_reparse_rows_parse_the_registry_rows_again() {
+        let (t, s) = st();
+        let cur = mailvault_core::vault_files::cur_path(t.path(), "acct", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(
+            cur.join(format!("1{}AS.eml", mailvault_core::maildir::INFO_PREFIX)),
+            "From: a@brand.test\r\nSubject: hi\r\n\r\nbody\r\n",
+        )
+        .unwrap();
+        let read = || s.vault_registry.light_rows(t.path(), "acct", "INBOX", None).unwrap();
+        assert_eq!(read().len(), 1);
+        assert_eq!(s.vault_registry.parse_count(), 1);
+        read();
+        assert_eq!(s.vault_registry.parse_count(), 1, "stored after the first read");
+
+        assert_eq!(call(&s, "search_index_rebuild", json!({})).await.result, Some(serde_json::Value::Null));
+        read();
+        assert_eq!(s.vault_registry.parse_count(), 2, "the rebuild dropped the stored parse");
+
+        assert_eq!(call(&s, "vault_reparse_rows", json!({})).await.result, Some(serde_json::Value::Null));
+        read();
+        assert_eq!(s.vault_registry.parse_count(), 3, "so does the index-off reparse");
     }
 
     #[tokio::test]

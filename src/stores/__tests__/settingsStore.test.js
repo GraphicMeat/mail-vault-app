@@ -539,8 +539,20 @@ describe('search index reindex offer', () => {
   it('is never raised by a new install or once answered', async () => {
     const { migrateSettings } = await import('../settingsStore');
     expect(useSettingsStore.getState().searchIndexReindexOffer).toBe(false);
-    expect(migrateSettings({ searchIndexReindexOffer: false }, 11).searchIndexReindexOffer).toBe(false);
+    expect(migrateSettings({ searchIndexReindexOffer: false }, 13).searchIndexReindexOffer).toBe(false);
     // A seeded profile (e2e harness, website demo) says so explicitly.
     expect(migrateSettings({ onboardingComplete: true, searchIndexReindexOffer: false }, 4).searchIndexReindexOffer).toBe(false);
+  });
+
+  // The v11 rebuild left the list's archived rows (the vault registry's
+  // stored parses) without the sender-auth headers, so the list drew no BIMI
+  // logo for them. A rebuild now refreshes both, and whoever answered the v11
+  // offer is asked once more.
+  it('is raised again for settings saved at v11 or v12, answered or not', async () => {
+    const { migrateSettings } = await import('../settingsStore');
+    for (const version of [11, 12]) {
+      expect(migrateSettings({ searchIndexReindexOffer: false }, version).searchIndexReindexOffer).toBe(true);
+      expect(migrateSettings({}, version).searchIndexReindexOffer).toBe(true);
+    }
   });
 });

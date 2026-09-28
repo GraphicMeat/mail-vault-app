@@ -1329,7 +1329,7 @@
   "search.dateRange": "Date range",
   "search.emailName": "Email or name...",
   "searchIndex.reindexOffer.title": "Rebuild your search index?",
-  "searchIndex.reindexOffer.why": "This update lets the search index keep each message's sender verification (SPF, DKIM and DMARC) and mailing-list details. Mail indexed by the previous version doesn't have them yet, so in search results those messages can't show the security shield, the sender's logo or Unsubscribe.",
+  "searchIndex.reindexOffer.why": "This update lets the search index keep each message's sender verification (SPF, DKIM and DMARC) and mailing-list details. Mail indexed by the previous version doesn't have them yet, so in the message list and in search results those messages can't show the security shield, the sender's logo or Unsubscribe.",
   "searchIndex.reindexOffer.how": "Rebuilding reads the mail already in your vault again, on this device, in the background. Nothing is downloaded and no mail is changed. Search keeps working meanwhile, reading your folders directly until the new index is ready. You can also rebuild later from Search index in Settings.",
   "searchIndex.reindexOffer.confirm": "Rebuild now",
   "searchIndex.reindexOffer.later": "Not now",

@@ -1329,7 +1329,7 @@
   "search.dateRange": "Período",
   "search.emailName": "E-mail ou nome…",
   "searchIndex.reindexOffer.title": "Reconstruir o índice de busca?",
-  "searchIndex.reindexOffer.why": "Com esta atualização, o índice de busca guarda a verificação do remetente de cada mensagem (SPF, DKIM e DMARC) e os dados da lista de e-mail. Os e-mails indexados pela versão anterior ainda não têm essas informações, então nos resultados de busca essas mensagens não podem mostrar o escudo de segurança, o logotipo do remetente nem Cancelar inscrição.",
+  "searchIndex.reindexOffer.why": "Com esta atualização, o índice de busca guarda a verificação do remetente de cada mensagem (SPF, DKIM e DMARC) e os dados da lista de e-mail. Os e-mails indexados pela versão anterior ainda não têm essas informações, então na lista de mensagens e nos resultados de busca essas mensagens não podem mostrar o escudo de segurança, o logotipo do remetente nem Cancelar inscrição.",
   "searchIndex.reindexOffer.how": "A reconstrução lê de novo os e-mails que já estão no seu cofre, neste dispositivo e em segundo plano. Nada é baixado e nenhum e-mail é alterado. A busca continua funcionando, lendo suas pastas diretamente até o novo índice ficar pronto. Você também pode reconstruir depois em Índice de busca nas Configurações.",
   "searchIndex.reindexOffer.confirm": "Reconstruir agora",
   "searchIndex.reindexOffer.later": "Agora não",

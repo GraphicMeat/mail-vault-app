@@ -326,6 +326,12 @@ export function migrateSettings(persisted, version) {
       ? { ...next, fetchMode: 'hoarder', localCacheDurationMonths: 12 }
       : { ...next, fetchMode: 'keepRecent' };
   }
+  // v12 -> v13: the v11 rebuild refreshed the search index but not the list's
+  // archived rows (the vault registry's stored parses), so those still lack
+  // the sender-auth and list headers. A rebuild now does both; ask again,
+  // including whoever already answered at v11 or v12. Older settings got the
+  // offer from v11 above, and a seed (version 4, false) stays unasked.
+  if (version >= 11 && version < 13) next = { ...next, searchIndexReindexOffer: true };
   return next;
 }
 
@@ -1480,7 +1486,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 12,
+      version: 13,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

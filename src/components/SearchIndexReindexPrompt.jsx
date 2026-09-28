@@ -3,13 +3,15 @@ import { Search } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useSettingsStore } from '../stores/settingsStore';
 import { rebuild } from '../services/searchIndex';
+import { daemonCall } from '../services/daemonClient';
 import { useT } from '../i18n/index.js';
 
 /**
- * Asked once after an update from a build whose search index lacked the
- * sender-auth and list headers (settings migration v11 raises the offer; a new
- * install never has it). Yes rebuilds the index in the daemon, no leaves it as
- * it is. Either answer is final: the offer is dropped.
+ * Asked once after an update from a build whose search index and list rows
+ * lacked the sender-auth and list headers (settings migrations v11 and v13
+ * raise the offer; a new install never has it). Yes rebuilds the index in the
+ * daemon, which also parses the list's archived rows again; no leaves both as
+ * they are. Either answer is final: the offer is dropped.
  */
 export function SearchIndexReindexPrompt() {
   const t = useT();
@@ -19,7 +21,13 @@ export function SearchIndexReindexPrompt() {
   const drop = () => useSettingsStore.setState({ searchIndexReindexOffer: false });
 
   // An index that is off has nothing stale: turning it on builds it fresh.
-  useEffect(() => { if (offer && !indexOn) drop(); }, [offer, indexOn]);
+  // The list's archived rows are parsed again without asking: that is cheap,
+  // lazy, and there is no rebuild to offer.
+  useEffect(() => {
+    if (!offer || indexOn) return;
+    drop();
+    daemonCall('vault_reparse_rows', {}).catch(e => console.warn('[searchIndex] row reparse after update failed:', e));
+  }, [offer, indexOn]);
 
   if (!offer || !indexOn || !onboarded) return null;
   return (
