@@ -103,6 +103,20 @@ pub fn capture(conn: &Connection, app_dir: &Path, c: &Capture, raw: &[u8]) -> Re
     Ok((id, true))
 }
 
+/// The newest copy kept of (account, mailbox, uid), whatever its Message-ID:
+/// for a retried delete whose message the server no longer holds.
+pub fn find(conn: &Connection, app_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<String>, String> {
+    let id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 ORDER BY deleted_at DESC LIMIT 1",
+            params![account_id, mailbox, uid],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(id.filter(|id| eml_path(app_dir, id).exists()))
+}
+
 /// Where the delete put the message, once it landed.
 pub fn set_trash(conn: &Connection, id: &str, trash: Option<&str>, trash_uid: Option<u32>) -> Result<(), String> {
     conn.execute("UPDATE deleted_messages SET trash = ?2, trash_uid = ?3 WHERE id = ?1", params![id, trash, trash_uid])

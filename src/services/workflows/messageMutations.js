@@ -1223,6 +1223,13 @@ export async function recoverFromBin(ids, target = 'server') {
   const res = await daemonCall('deleted.recover', { ids, target });
   if (res?.recovered?.length) {
     const { useMailStore } = await import('../../stores/mailStore');
+    // A local recover keeps the uid the delete tombstoned; the server's
+    // gives a new one, and the retired uid stays hidden.
+    if (target === 'local') {
+      const ts = new Set(useMailStore.getState().deleteTombstones);
+      for (const r of res.recovered) ts.delete(_targetId(r));
+      useMailStore.setState({ deleteTombstones: ts });
+    }
     if (useMailStore.getState().accounts?.length) await reloadListInView();
   }
   if (res?.failed?.length && !res?.recovered?.length) {

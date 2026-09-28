@@ -62,7 +62,9 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
                 });
                 match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetch).await {
                     Ok(Ok(Some(email))) if email.uid == uid => (email.raw_source_bytes, Some(email.flags)),
-                    Ok(Ok(_)) => return Ok(None),
+                    // Gone already: a retry of a delete that landed finds the
+                    // copy its first attempt kept.
+                    Ok(Ok(_)) => return kept_already(state, account_id, mailbox, uid).await,
                     Ok(Err(e)) => return Err(e),
                     Err(_) => return Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
                 }
@@ -91,6 +93,16 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
     .await
     .and_then(|r| r)
     .map(Some)
+}
+
+/// The bin copy an earlier attempt of this delete kept, if any.
+async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, bool)>, String> {
+    let state = Arc::clone(state);
+    let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
+    blocking(move || app_db::with(&state.app_dir, |c| bin::find(c, &state.app_dir, &account_id, &mailbox, uid)))
+        .await
+        .and_then(|r| r)
+        .map(|id| id.map(|id| (id, false)))
 }
 
 /// The delete it was captured for did not happen: a failed delete is
@@ -397,11 +409,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_delete_the_server_refuses_leaves_nothing_in_the_bin() {
+    async fn a_permanent_delete_that_errors_keeps_its_copy_for_the_retry() {
+        // The mock still runs a command it answers NO to: the EXPUNGE lands
+        // and its reply says it failed, the case a lost reply produces.
         let server = server(Scenario::new().fault(Trigger::on("EXPUNGE"), Action::Respond("NO".into(), "no".into())));
         let s = state(&server);
         assert!(delete(&s, &server, true).await.error.is_some());
-        assert!(binned(&s).is_empty(), "a failed delete is retried, and the retry captures again");
+        assert!(uids(&server, "INBOX").is_empty());
+        let kept = binned(&s);
+        assert_eq!(kept.len(), 1, "the only copy left");
+        // The retry finds nothing on the server and reuses the copy.
+        let _ = delete(&s, &server, true).await;
+        assert_eq!(binned(&s).into_iter().map(|d| d.id).collect::<Vec<_>>(), vec![kept[0].id.clone()]);
+    }
+
+    #[tokio::test]
+    async fn a_move_to_trash_that_errors_drops_its_copy() {
+        let server = server(Scenario::new().fault(Trigger::on("MOVE"), Action::Respond("NO".into(), "no".into())).fault(Trigger::on("COPY"), Action::Respond("NO".into(), "no".into())));
+        let s = state(&server);
+        assert!(delete(&s, &server, false).await.error.is_some());
+        assert!(binned(&s).is_empty(), "Trash or the folder still holds it, and the retry captures again");
     }
 
     #[tokio::test]

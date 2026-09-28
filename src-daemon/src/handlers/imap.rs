@@ -702,7 +702,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 }
                 Err(e) => {
                     tracing::error!("[delete_email] uid={} failed: {}", uid, e);
-                    if let Some((bin_id, true)) = binned {
+                    // A permanent delete keeps its capture: the EXPUNGE may
+                    // have landed with its reply lost, and then the retry
+                    // finds nothing left to capture. The retry reuses this row.
+                    if let Some((bin_id, true)) = binned.filter(|_| !permanent) {
                         crate::handlers::deleted::forget(state, bin_id).await;
                     }
                     RpcResponse::error(id, ipc::INTERNAL_ERROR, e)

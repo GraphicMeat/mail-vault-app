@@ -134,7 +134,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { markAnswered, setDeleteUndo, undoLastAction } = await import('../messageMutations');
+const { markAnswered, setDeleteUndo, undoLastAction, recoverFromBin } = await import('../messageMutations');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -389,6 +389,19 @@ describe('undo after a delete', () => {
     mockDaemonCall.mockClear();
     await expect(undoLastAction()).resolves.toBe(false);
     expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  it('recovering locally shows the message again under the uid the delete hid', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: null, trashUid: null, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+    mockDaemonCall.mockResolvedValueOnce({ recovered: [{ id: 'b7', accountId: 'a1', mailbox: 'INBOX', uid: 7 }], failed: [] });
+
+    await recoverFromBin(['b7'], 'local');
+
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'local' });
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
   });
 
   it('Cmd+Z after the slot is gone brings the last delete back from the bin, once', async () => {
