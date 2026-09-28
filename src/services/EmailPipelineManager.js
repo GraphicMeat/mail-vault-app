@@ -68,6 +68,17 @@ class EmailPipelineManager {
       ? (ownRows.find(e => e._mailbox)?._mailbox || 'INBOX')
       : activeMailbox;
 
+    // What the account already keeps, read before the pipeline is picked:
+    // everything from the reuse check to `startContentCaching` must run
+    // without a yield (see below). Only Index Only asks the index.
+    const policy = fetchPolicy(useSettingsStore.getState(), accountId);
+    let kept = savedEmailIds;
+    if (policy?.mode === 'indexOnly') {
+      kept = await this._keptUids(accountId, pipelineMailbox, savedEmailIds, policy);
+      // The read yielded: a newer activation owns the pipelines now.
+      if (this._activeAccountId !== accountId || this._destroyed) return;
+    }
+
     // Reuse a live pipeline for this account — switching away and back used to
     // destroy it and rebuild from scratch, throwing away its queue and the
     // headers it had already loaded. Callbacks are plain fields, so a pipeline
@@ -104,8 +115,7 @@ class EmailPipelineManager {
     this._startBackgroundHeadersOnly();
 
     // Filter UIDs that need caching
-    const policy = fetchPolicy(useSettingsStore.getState(), accountId);
-    const uidsToFetch = this._getUncachedUids(ownRows, savedEmailIds, policy);
+    const uidsToFetch = this._getUncachedUids(ownRows, kept, policy);
 
     // An empty list still runs the after-bodies step (attachment prefetch)
     // and completes at once, which cascades to the background accounts.
@@ -236,7 +246,8 @@ class EmailPipelineManager {
         // cached body. Skip this account unmarked; the next cascade retries.
         // `continue`, never `return`: _backgroundContentRunning must reset.
         if (!vault) continue;
-        const uids = this._getUncachedUids(emails, vault.saved, policy);
+        const kept = await this._keptUids(account.id, 'INBOX', vault.saved, policy);
+        const uids = this._getUncachedUids(emails, kept, policy);
         // Start caching first, THEN await completion — avoids race where
         // synchronous onComplete fires before waitForComplete sets up its promise.
         // Empty list: nothing to fetch, but the attachment prefetch still runs.
@@ -426,9 +437,23 @@ class EmailPipelineManager {
       const vault = await db.getVaultUidSets(account.id, 'INBOX');
       // Unknown: fetch nothing rather than re-fetch every cached body.
       if (!vault || pipeline._destroyed || this._destroyed) return;
-      const uids = this._getUncachedUids(emails, vault.saved, policy);
+      const kept = await this._keptUids(account.id, 'INBOX', vault.saved, policy);
+      if (pipeline._destroyed || this._destroyed) return;
+      const uids = this._getUncachedUids(emails, kept, policy);
       if (uids.length > 0) pipeline.startContentCaching(uids, 'INBOX');
     }
+  }
+
+  /**
+   * The uids whose body the account already keeps: the vault's, plus, under
+   * Index Only, those whose body the search index holds. Index Only evicts
+   * those files on purpose, so counting the vault alone downloaded them again
+   * at every launch. The index unknown (`null`): the vault's alone.
+   */
+  async _keptUids(accountId, mailbox, saved, policy) {
+    if (policy?.mode !== 'indexOnly') return saved;
+    const indexed = await db.getBodyIndexedUids(accountId, mailbox);
+    return indexed?.size ? new Set([...saved, ...indexed]) : saved;
   }
 
   /**

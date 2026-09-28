@@ -39,6 +39,7 @@ export {
   deleteLocalEmail,
   isEmailSaved,
   getVaultUidSets,
+  getBodyIndexedUids,
   getVerifiedRawSource,
   ensureVaultGeneration,
   getVaultOrphanStats,

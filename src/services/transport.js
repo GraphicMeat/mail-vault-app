@@ -161,6 +161,9 @@ export const DAEMON_OWNED = new Set([
   // Track H: the app saved a new download mode or window; the daemon's
   // eviction (and, with Premium, Hoarder) worker re-derives its work now.
   'storage.fetch_mode_changed',
+  // Index Only: the uids whose body the search index holds, which the app's
+  // download-ahead counts as kept (else eviction and backfill loop daily).
+  'storage.body_indexed_uids',
   // Task 4.4: backup ZIP export/import. accounts.json stays app-only
   // (decision 2): the daemon route only reads it and returns new-account
   // descriptors for `db/accounts.js` to merge itself.

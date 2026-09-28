@@ -35,8 +35,10 @@ vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => store.settings },
 }));
 
+const bodyIndexed = vi.hoisted(() => ({ uids: null }));
 vi.mock('../db', () => ({
   getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
+  getBodyIndexedUids: vi.fn(async () => bodyIndexed.uids),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getCachedMailboxes: vi.fn().mockResolvedValue(null),
@@ -92,6 +94,7 @@ describe('_getUncachedUids by download mode', () => {
 describe('the active account pipeline reads the account\'s own mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    bodyIndexed.uids = null;
     pipelineManager.pipelines.clear();
     pipelineManager._activeAccountId = null;
     pipelineManager._contentCascadeDone.clear();
@@ -109,6 +112,29 @@ describe('the active account pipeline reads the account\'s own mode', () => {
     store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'onDemand', localCacheDurationMonths: 3 };
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([], 'INBOX');
+  });
+
+  // Index Only evicts every copy whose body the search index holds; counting
+  // only the vault would download them again at every launch (review I2).
+  it('Index Only counts a body the search index holds as kept', async () => {
+    bodyIndexed.uids = new Set([11]);
+    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'indexOnly', localCacheDurationMonths: 3 };
+    await pipelineManager.startActiveAccountPipeline('luke');
+    expect(startContentCaching).toHaveBeenCalledWith([], 'INBOX');
+  });
+
+  it('Index Only downloads the body when the index cannot say (null)', async () => {
+    bodyIndexed.uids = null;
+    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'indexOnly', localCacheDurationMonths: 3 };
+    await pipelineManager.startActiveAccountPipeline('luke');
+    expect(startContentCaching).toHaveBeenCalledWith([11], 'INBOX');
+  });
+
+  it('Keep Recent never treats an indexed body as kept', async () => {
+    bodyIndexed.uids = new Set([11]);
+    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'keepRecent', localCacheDurationMonths: 3 };
+    await pipelineManager.startActiveAccountPipeline('luke');
+    expect(startContentCaching).toHaveBeenCalledWith([11], 'INBOX');
   });
 
   it('a per-account override wins over the global mode', async () => {

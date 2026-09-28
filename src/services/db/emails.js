@@ -578,6 +578,23 @@ export async function getVaultUidSets(accountId, mailbox) {
   }
 }
 
+/**
+ * The uids of one mailbox whose body the search index holds (Index Only keeps
+ * a body there once eviction removed its file). `null`: unknown (the index is
+ * off, closed, not indexing bodies, or the call failed).
+ */
+export async function getBodyIndexedUids(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return null;
+  try {
+    const reply = await invoke('storage.body_indexed_uids', { accountId, mailbox });
+    return Array.isArray(reply) ? new Set(reply) : null;
+  } catch (e) {
+    console.warn('[db] storage.body_indexed_uids failed:', e);
+    return null;
+  }
+}
+
 // `subject`: the row's, for the file name when the vault holds no light row
 // (a message it has no copy of: the raw source then comes from the server).
 export async function exportEmail(localId, subject) {

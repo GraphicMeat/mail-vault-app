@@ -124,6 +124,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             done(id, blocking(move || Value::Array(si::rows_reply(&st, &account, &mailbox, &uids))).await)
         }
+        // Index Only: the uids of one mailbox whose body the index holds. The
+        // app's download-ahead counts them as kept, or it would fetch every
+        // body eviction removed again. `null`: the index cannot say (off,
+        // closed, or not indexing bodies).
+        "storage.body_indexed_uids" => {
+            let account = params.get("accountId").and_then(Value::as_str).map(str::to_owned);
+            let mailbox = params.get("mailbox").and_then(Value::as_str).map(str::to_owned);
+            let (Some(account), Some(mailbox)) = (account, mailbox) else {
+                return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId or mailbox"));
+            };
+            done(id, blocking(move || si::body_indexed_uids(&st, &account, &mailbox).map_or(Value::Null, |uids| serde_json::json!(uids))).await)
+        }
         _ => return None,
     })
 }
@@ -144,6 +156,18 @@ mod tests {
 
     async fn call(s: &std::sync::Arc<DaemonState>, method: &str, params: serde_json::Value) -> ipc::RpcResponse {
         super::route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    /// Index Only's download-ahead reads this: an index that cannot say
+    /// answers `null` (the app then counts the vault alone), never `[]`.
+    #[tokio::test]
+    async fn body_indexed_uids_is_null_while_the_index_is_not_indexing_bodies() {
+        let (_t, s) = st();
+        let params = json!({"accountId": "a", "mailbox": "INBOX"});
+        assert_eq!(call(&s, "storage.body_indexed_uids", params.clone()).await.result, Some(Value::Null));
+        call(&s, "search_index_configure", json!({"config": {"enabled": false, "bodies": true, "attachments": false, "imageText": false}})).await;
+        assert_eq!(call(&s, "storage.body_indexed_uids", params).await.result, Some(Value::Null));
+        assert!(call(&s, "storage.body_indexed_uids", json!({"accountId": "a"})).await.error.is_some());
     }
 
     #[tokio::test]
