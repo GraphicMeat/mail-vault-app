@@ -25,22 +25,52 @@ export const RADIAL_CATEGORIES = {
 };
 const CATEGORY_OF = new Map(Object.entries(RADIAL_CATEGORIES)
   .flatMap(([category, actions]) => actions.map(action => [action, category])));
+const CATEGORY_IDS = Object.keys(RADIAL_CATEGORIES);
+// The one canonical order of every action: category by category, as the wheel
+// lists them. A newly added action joins its category here (see
+// insertQuickActionEntry), and Settings shows it as the reference list.
+export const QUICK_ACTION_ORDER = Object.values(RADIAL_CATEGORIES).flat();
+export const quickActionCategory = action => CATEGORY_OF.get(action) || 'more';
 
-// The inner ring of a categorized wheel: the favorite first as a direct wedge,
-// then one wedge per category in RADIAL_CATEGORIES order, each holding its
-// entries in their configured order. `visibility[action] === false` drops an
-// entry (actionVisibility's shape); a category left empty is gone and one left
-// with a single entry becomes that entry's direct wedge.
-export function groupRadialEntries(entries, visibility = {}, favoriteId = null) {
+// The inner ring of a categorized wheel: one wedge per category in
+// RADIAL_CATEGORIES order, each holding its entries in their configured order.
+// The favorite is not pulled out of its category: it belongs to the
+// favorite-plus-menu layout, never to the wheel. `visibility[action] === false`
+// drops an entry (actionVisibility's shape); a category left empty is gone and
+// one left with a single entry becomes that entry's direct wedge.
+export function groupRadialEntries(entries, visibility = {}) {
   const shown = (entries || []).filter(item => visibility?.[item.action] !== false);
-  const favorite = favoriteId ? shown.find(item => item.id === favoriteId) : null;
-  const groups = favorite ? [{ type: 'action', entry: favorite }] : [];
-  for (const id of Object.keys(RADIAL_CATEGORIES)) {
-    const members = shown.filter(item => item !== favorite && (CATEGORY_OF.get(item.action) || 'more') === id);
+  const groups = [];
+  for (const id of CATEGORY_IDS) {
+    const members = shown.filter(item => quickActionCategory(item.action) === id);
     if (members.length === 1) groups.push({ type: 'action', entry: members[0] });
     else if (members.length) groups.push({ type: 'category', id, entries: members });
   }
   return groups;
+}
+
+// Adds `item` at its designated place rather than at the bottom: among the
+// entries of its own category, before the first one that comes after it in
+// QUICK_ACTION_ORDER (after the last of them otherwise). With none of its
+// category configured, it goes before the first entry of a later category.
+// The person's own order of everything else is kept.
+export function insertQuickActionEntry(entries, item) {
+  const list = [...(entries || [])];
+  const rank = action => QUICK_ACTION_ORDER.indexOf(action);
+  const category = CATEGORY_IDS.indexOf(quickActionCategory(item.action));
+  const categoryOf = entry => CATEGORY_IDS.indexOf(quickActionCategory(entry.action));
+  const same = list.map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => categoryOf(entry) === category);
+  let at;
+  if (same.length) {
+    const next = same.find(({ entry }) => rank(entry.action) > rank(item.action));
+    at = next ? next.index : same.at(-1).index + 1;
+  } else {
+    at = list.findIndex(entry => categoryOf(entry) > category);
+    if (at < 0) at = list.length;
+  }
+  list.splice(at, 0, item);
+  return list;
 }
 
 const entry = (action, extra = {}) => ({ id: action, action, ...extra });

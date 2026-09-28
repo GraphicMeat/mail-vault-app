@@ -9,7 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { QuickActions } from "../QuickActions";
+import { CATEGORY_WHEEL, QuickActions } from "../QuickActions";
 
 const icon = () => <span aria-hidden="true">•</span>;
 const descriptors = [
@@ -468,15 +468,16 @@ describe("QuickActions radial categories", () => {
     expect(innerRing(menu)).toEqual(list.map((item) => item.id));
     expect(document.querySelector("[data-radial-category]")).toBeNull();
     expect(menu.getAttribute("data-radial-layout")).not.toBe("categories");
+    expect(centerLabel()).toBe("");
     fireEvent.click(menu, { clientX: 2, clientY: 2 });
     expect(trigger().getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("draws the favorite and one wedge per non-empty category, single ones as direct wedges", () => {
+  it("draws one wedge per non-empty category, single ones as direct wedges", () => {
     const menu = openWheel(actions());
-    // Organize held only the favorite (archive), so it is gone; More held
-    // only export, so export is a direct wedge in More's slot.
-    expect(innerRing(menu)).toEqual(["archive", "category:send", "category:mark", "category:delete", "export"]);
+    // Organize and More hold only archive and export, so each is a direct
+    // wedge in its category's slot.
+    expect(innerRing(menu)).toEqual(["category:send", "category:mark", "archive", "category:delete", "export"]);
     expect(category("send").getAttribute("aria-label")).toBe("Send");
     expect(category("send").hasAttribute("data-quick-action")).toBe(false);
     expect(arcActions()).toEqual([]);
@@ -487,6 +488,42 @@ describe("QuickActions radial categories", () => {
     expect(innerRing(menu)[0]).toBe("category:send");
     expect(document.activeElement).toBe(category("send"));
     expect(arcActions()).toEqual([]);
+  });
+
+  it("keeps the favorite out of the wheel, also once a category is open", () => {
+    // Organize holds archive (the favorite) and unarchive: both stay in its arc.
+    const list = [...actions(), make("unarchive", "Unarchive")];
+    const menu = openWheel(list);
+    expect(innerRing(menu)).toEqual(["category:send", "category:mark", "category:organize", "category:delete", "export"]);
+    expect([...menu.children].some((element) => element.dataset.quickAction === "archive")).toBe(false);
+    fireEvent.mouseEnter(category("send"));
+    expect(innerRing(menu)).toEqual(["category:send", "category:mark", "category:organize", "category:delete", "export"]);
+    expect(menu.querySelector('[data-quick-action="archive"]')).toBeNull();
+    fireEvent.click(category("organize"));
+    expect(arcActions()).toEqual(["Archive", "Unarchive"]);
+  });
+
+  it("names nothing in the center until a wedge is hovered or focused", () => {
+    const menu = openWheel(actions());
+    // The opening focus lands on the first wedge, but the pointer is on the
+    // center: no label, no icon.
+    expect(centerLabel()).toBe("");
+    expect(document.querySelector(".quick-actions-radial-center svg, .quick-actions-radial-center [aria-hidden]")).toBeNull();
+    fireEvent.mouseEnter(category("mark"));
+    expect(centerLabel()).toBe("Mark");
+    fireEvent.mouseLeave(category("mark"));
+    expect(centerLabel()).toBe("");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(centerLabel()).toBe("Mark");
+  });
+
+  it("makes every category and arc wedge nearly a whole band deep", () => {
+    const px = (ring) => (ring.outer - ring.inner) * CATEGORY_WHEEL.size / 100;
+    expect(px(CATEGORY_WHEEL.inner)).toBeGreaterThanOrEqual(58);
+    expect(px(CATEGORY_WHEEL.arc)).toBeGreaterThanOrEqual(58);
+    // The inner band starts right outside the 126px center disc.
+    expect(CATEGORY_WHEEL.inner.inner * CATEGORY_WHEEL.size / 100).toBeGreaterThanOrEqual(63);
+    expect(CATEGORY_WHEEL.arc.inner - CATEGORY_WHEEL.inner.outer).toBeLessThanOrEqual(2);
   });
 
   it("fans a category out on hover, swaps on another after a short hover, keeps it while in the arc, closes on leave", () => {
@@ -579,8 +616,6 @@ describe("QuickActions radial categories", () => {
 
   it("walks the inner ring with arrows, enters an arc with Right or Enter and leaves it with Left or Escape", () => {
     const menu = openWheel(actions());
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Archive" }));
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect(document.activeElement).toBe(category("send"));
     // Arrows stay on the inner ring, even with an arc open beside it.
     fireEvent.keyDown(menu, { key: "ArrowDown" });

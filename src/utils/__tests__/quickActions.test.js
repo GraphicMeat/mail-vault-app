@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_QUICK_ACTIONS,
   QUICK_ACTION_TYPES,
+  QUICK_ACTION_ORDER,
   RADIAL_CATEGORIES,
   currentQuickActionScope,
   groupRadialEntries,
+  insertQuickActionEntry,
   normalizeQuickActions,
   quickActionScopeKey,
   resolveQuickActionSelectionTarget,
@@ -224,21 +226,43 @@ describe('radial categories', () => {
     ]);
   });
 
-  it('puts the favorite first as a direct wedge and out of its category', () => {
+  it('never pulls the favorite into the wheel: it stays in its own category', () => {
     const groups = groupRadialEntries(entries('reply', 'forward', 'archive', 'move', 'snooze'), {}, 'archive');
-    expect(shape(groups)).toEqual(['archive', ['send', ['reply', 'forward']], ['organize', ['move', 'snooze']]]);
+    expect(shape(groups)).toEqual([['send', ['reply', 'forward']], ['organize', ['archive', 'move', 'snooze']]]);
   });
 
   it('turns a one-action category into a direct wedge in that category slot and hides empty ones', () => {
-    const groups = groupRadialEntries(entries('export', 'reply', 'forward', 'deleteServer'), {}, null);
+    const groups = groupRadialEntries(entries('export', 'reply', 'forward', 'deleteServer'));
     expect(shape(groups)).toEqual([['send', ['reply', 'forward']], 'deleteServer', 'export']);
   });
 
   it('drops the actions the target state hides, then collapses or hides what is left', () => {
     const visibility = { markRead: false, markUnread: true, star: false, unstar: false, archive: false };
-    const groups = groupRadialEntries(entries('archive', 'markRead', 'markUnread', 'star', 'unstar', 'reply', 'forward'), visibility, 'archive');
-    // The hidden favorite is not replaced; mark keeps only markUnread.
+    const groups = groupRadialEntries(entries('archive', 'markRead', 'markUnread', 'star', 'unstar', 'reply', 'forward'), visibility);
+    // Organize held only the hidden archive; mark keeps only markUnread.
     expect(shape(groups)).toEqual([['send', ['reply', 'forward']], 'markUnread']);
+  });
+
+  it('keeps one canonical order of every action, category by category', () => {
+    expect(QUICK_ACTION_ORDER).toEqual(Object.values(RADIAL_CATEGORIES).flat());
+    expect(new Set(QUICK_ACTION_ORDER).size).toBe(QUICK_ACTION_TYPES.length);
+    expect([...QUICK_ACTION_ORDER].sort()).toEqual([...QUICK_ACTION_TYPES].sort());
+  });
+
+  it('inserts a new action in its category slot, not at the bottom', () => {
+    const ids = list => list.map(item => item.id);
+    const add = (list, action) => ids(insertQuickActionEntry(entries(...list), { id: action, action }));
+    // Among its own category, in the default order.
+    expect(add(['reply', 'forward', 'archive', 'export'], 'replyAll')).toEqual(['reply', 'replyAll', 'forward', 'archive', 'export']);
+    expect(add(['reply', 'archive', 'move', 'export'], 'snooze')).toEqual(['reply', 'archive', 'move', 'snooze', 'export']);
+    expect(add(['reply', 'toggleRead', 'star', 'export'], 'markRead')).toEqual(['reply', 'toggleRead', 'markRead', 'star', 'export']);
+    // No action of its category yet: before the first later category.
+    expect(add(['reply', 'archive', 'export'], 'star')).toEqual(['reply', 'star', 'archive', 'export']);
+    expect(add(['archive', 'export'], 'reply')).toEqual(['reply', 'archive', 'export']);
+    expect(add(['reply', 'archive'], 'export')).toEqual(['reply', 'archive', 'export']);
+    // The person's own order of the rest is kept.
+    expect(add(['export', 'archive', 'reply'], 'forward')).toEqual(['export', 'archive', 'reply', 'forward']);
+    expect(add([], 'archive')).toEqual(['archive']);
   });
 
   it('keeps several entries of one action (folders, tags) inside the same category', () => {

@@ -36,8 +36,12 @@ const CATEGORY_ICONS = {
 };
 // Radii, in % of the wheel box. A categorized wheel keeps its inner ring
 // inside INNER_RING and fans a category's actions out in the ARC_RING band.
-const INNER_RING = { outer: 36, inner: 21, content: 28.5 };
-const ARC_RING = { outer: 50, inner: 38, content: 44 };
+// Both bands are about as thick as each other (64px and 62px on the 400px
+// wheel), and the inner one starts right outside the 126px center disc, so a
+// category and its actions are each a wedge nearly a whole band deep. The
+// categorized wheel's CSS (rim stops, backdrop inset) follows INNER_RING.outer.
+const INNER_RING = { outer: 33, inner: 17, content: 25 };
+const ARC_RING = { outer: 50, inner: 34.5, content: 42.25 };
 const ARC_SLOT = 34;
 // Hover intent: with an arc open, a move onto another category (or a direct
 // wedge) waits this long before swapping, and reaching the open arc cancels
@@ -45,7 +49,10 @@ const ARC_SLOT = 34;
 // neighbours' wedges.
 const ARC_SWAP_DELAY = 100;
 const WHEEL_SIZE = 304;
-const CATEGORY_WHEEL_SIZE = 360;
+const CATEGORY_WHEEL_SIZE = 400;
+export const CATEGORY_WHEEL = {
+  size: CATEGORY_WHEEL_SIZE, inner: INNER_RING, arc: ARC_RING,
+};
 // A wedge's clip-path depends only on its position, count and ring, all
 // bounded: cache it at module level so hovering never re-walks the trig and
 // rebuilds the polygon string.
@@ -221,8 +228,11 @@ const RadialCenter = React.memo(function RadialCenter({
       hoverRef.current = null;
     };
   }, [hoverRef]);
-  const active = menuEntries.find((item) => item.entry.id === activeId) ||
-    menuEntries[0];
+  // Only what is actually hovered or focused: a wheel opened with the pointer
+  // on its center (not clickable) names nothing.
+  const active = activeId === null
+    ? null
+    : menuEntries.find((item) => item.entry.id === activeId);
   const ActiveIcon = active?.descriptor.Icon;
   // An arc action names its category above itself, small, as in the
   // reference wheel.
@@ -356,20 +366,14 @@ function QuickActionsConfigured({
   const menuEntries = radial ? visibleRadial : remaining;
   // The categorized inner ring: direct wedges hold an item, category wedges
   // the items their arc fans out. Visibility already applied (hidden
-  // descriptors never reach `remaining`). The saved favorite gets a direct
-  // wedge first, by design: normalizeSurface always fills `favoriteId` with a
-  // safe action when none was picked, so there is no "no favorite" case short
-  // of the favorite being hidden for this message. Built only while the wheel
-  // shows (a closed row menu renders on every live row).
+  // descriptors never reach `remaining`). The favorite stays in its category:
+  // it belongs to the favorite-plus-menu layout, not the wheel. Built only
+  // while the wheel shows (a closed row menu renders on every live row).
   let inner = [];
   let centerEntries = menuEntries;
   if (categories && (opened || preview)) {
     const byId = new Map(remaining.map((item) => [item.entry.id, item]));
-    inner = groupRadialEntries(
-      remaining.map((item) => item.entry),
-      {},
-      requestedFavorite?.entry.id,
-    ).map((group) =>
+    inner = groupRadialEntries(remaining.map((item) => item.entry)).map((group) =>
       group.type === "action" ? { item: byId.get(group.entry.id) } : {
         category: group.id,
         label: t(`quickActions.category.${group.id}`),
@@ -673,10 +677,13 @@ function QuickActionsConfigured({
       if (inArc) arc()?.hold();
       else arc()?.open(null, { intent: true });
     };
+    // The focus the menu hands its first wedge on opening names nothing: the
+    // pointer is still on the center.
     const focus = () => {
-      radialHoverRef.current?.(saved.id);
+      if (!openingFocusRef.current) radialHoverRef.current?.(saved.id);
       if (!inArc) arc()?.open(null);
     };
+    const leave = () => radialHoverRef.current?.(null);
     return (
       <button
         key={saved.id}
@@ -693,6 +700,7 @@ function QuickActionsConfigured({
           ...(color ? { "--quick-action-color": color } : {}),
         }}
         onMouseEnter={enter}
+        onMouseLeave={leave}
         onFocus={focus}
         onClick={(event) => activate(item, event)}
       >
@@ -700,7 +708,7 @@ function QuickActionsConfigured({
           className="quick-action-radial-content"
           style={position}
         >
-          {Icon && <Icon size={19} aria-hidden="true" />}
+          {Icon && <Icon size={categories ? 22 : 19} aria-hidden="true" />}
         </span>
       </button>
     );
@@ -723,9 +731,11 @@ function QuickActionsConfigured({
           radialHoverRef.current?.(`category:${wedge.category}`);
           fanOut(true);
         }}
+        onMouseLeave={() => radialHoverRef.current?.(null)}
         onFocus={() => {
+          if (openingFocusRef.current) return;
           radialHoverRef.current?.(`category:${wedge.category}`);
-          if (!openingFocusRef.current) fanOut();
+          fanOut();
         }}
         onClick={(event) => {
           event.stopPropagation();
@@ -736,7 +746,7 @@ function QuickActionsConfigured({
           className="quick-action-radial-content"
           style={radialContentPosition(index, count, INNER_RING.content)}
         >
-          {Icon && <Icon size={19} aria-hidden="true" />}
+          {Icon && <Icon size={22} aria-hidden="true" />}
         </span>
       </button>
     );

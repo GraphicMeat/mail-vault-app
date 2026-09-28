@@ -24,6 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { QuickActions } from "../QuickActions";
+import { AccountReorderList } from "./AccountReorderList";
 import { EmailActionBar } from "../email/EmailActionBar";
 import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
@@ -34,18 +35,21 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useQuickActionConfiguration } from "../../hooks/useQuickActionConfiguration";
 import {
   DEFAULT_QUICK_ACTIONS,
+  insertQuickActionEntry,
   normalizeQuickActions,
   isQuickActionStyleLinked,
   QUICK_ACTION_MODES,
   QUICK_ACTION_SURFACES,
   QUICK_ACTION_TYPES,
   quickActionScopeKey,
+  RADIAL_CATEGORIES,
   resolveQuickActions,
 } from "../../utils/quickActions";
 import { quickActionColorFor } from "../../utils/quickActionColors";
 import { formatTime } from "../../utils/dateFormat";
 import { useT } from "../../i18n/index.js";
 import "../../styles/settings-usability.css";
+import "../../styles/account-settings-navigation.css";
 
 const ICONS = {
   archive: Archive,
@@ -259,15 +263,9 @@ export function QuickActionsSettings() {
       ...config,
       entries: config.entries.filter((_, i) => i !== index),
     });
-  const reorderEntry = (index, delta) => {
-    const nextIndex = Math.max(
-      0,
-      Math.min(config.entries.length - 1, index + delta),
-    );
-    if (nextIndex === index) return;
-    const entries = [...config.entries];
-    [entries[index], entries[nextIndex]] = [entries[nextIndex], entries[index]];
-    persist({ ...config, entries });
+  const reorderEntries = (ids) => {
+    const byId = new Map(config.entries.map((entry) => [entry.id, entry]));
+    persist({ ...config, entries: ids.map((id) => byId.get(id)).filter(Boolean) });
   };
 
   const addAction = async () => {
@@ -287,7 +285,7 @@ export function QuickActionsSettings() {
     }
     const item = newEntry(addType, params);
     if (config.entries.some((entry) => entry.id === item.id)) return;
-    persist({ ...config, entries: [...config.entries, item] });
+    persist({ ...config, entries: insertQuickActionEntry(config.entries, item) });
   };
 
   const getLabel = (entry) => {
@@ -410,20 +408,6 @@ export function QuickActionsSettings() {
               ]}
             />
           </div>
-          {(config.mode === "favorite-menu" ||
-            config.mode === "radial" && config.radialLayout === "categories") && (
-            <label>
-              {t("quickActions.favorite")}
-              <TomSelectField
-                label={t("quickActions.favorite")}
-                value={config.favoriteId || ""}
-                placeholder={t("quickActions.param.autoFavorite")}
-                options={favoriteOptions}
-                onChange={(favoriteId) =>
-                  persist({ ...config, favoriteId: favoriteId || null })}
-              />
-            </label>
-          )}
           {config.mode === "radial" && (
             <div className="quick-actions-choice-field">
               <span>{t("quickActions.radialLayout")}</span>
@@ -489,6 +473,25 @@ export function QuickActionsSettings() {
           )}
         </div>
 
+        {/* A row of its own, only for the layout it drives: the wheel never
+            shows the favorite, and the field opening or growing never moves
+            the controls above. */}
+        {config.mode === "favorite-menu" && (
+          <div className="quick-actions-editor-controls quick-actions-favorite-row">
+            <label>
+              {t("quickActions.favorite")}
+              <TomSelectField
+                label={t("quickActions.favorite")}
+                value={config.favoriteId || ""}
+                placeholder={t("quickActions.param.autoFavorite")}
+                options={favoriteOptions}
+                onChange={(favoriteId) =>
+                  persist({ ...config, favoriteId: favoriteId || null })}
+              />
+            </label>
+          </div>
+        )}
+
         <div className="quick-actions-scope-status text-xs text-mail-text-muted">
           {!isGlobal && <>
             <span role="status">{resolved.inherited ? t("quickActions.scope.inherited") : t("quickActions.scope.current")}</span>
@@ -512,59 +515,54 @@ export function QuickActionsSettings() {
           status={previewStatus}
         />
 
-        <ol className="quick-actions-entry-list">
-          {config.entries.map((entry, index) => {
-            const entryColor = quickActionColorFor(entry, config.palette);
-            return <li key={entry.id} data-colored={!!entryColor}
-              style={entryColor ? { "--quick-action-editor-color": entryColor } : undefined}>
-              <span className="quick-actions-entry-name">
-                {getLabel(entry)}
-              </span>
-              <button
-                type="button"
-                aria-label={`${t("quickActions.moveUp")} ${getLabel(entry)}`}
-                disabled={index === 0}
-                onClick={() => reorderEntry(index, -1)}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                aria-label={`${t("quickActions.moveDown")} ${getLabel(entry)}`}
-                disabled={index === config.entries.length - 1}
-                onClick={() => reorderEntry(index, 1)}
-              >
-                ↓
-              </button>
-              <button
-                type="button"
-                aria-label={`${t("quickActions.removeAction")} ${
-                  getLabel(entry)
-                }`}
-                onClick={() => removeEntry(index)}
-              >
-                {t("quickActions.removeAction")}
-              </button>
-              {config.palette === "custom" && (
-                <label className="quick-actions-color-control">
-                  {t("quickActions.color")}
-                  <input
-                    type="color"
-                    aria-label={`${t("quickActions.color")} ${getLabel(entry)}`}
-                    value={entry.color || "#a0a0b6"}
-                    onChange={(event) => updateEntry(index, { color: event.target.value })}
-                  />
-                  {!entry.color && <span>{t("quickActions.colorDefault")}</span>}
-                  {entry.color && <button
-                    type="button"
-                    aria-label={`${t("quickActions.resetColor")} ${getLabel(entry)}`}
-                    onClick={() => updateEntry(index, { color: undefined })}
-                  >{t("quickActions.resetColor")}</button>}
-                </label>
-              )}
-            </li>;
-          })}
-        </ol>
+        <div className="quick-actions-entry-list">
+          <AccountReorderList
+            accounts={config.entries.map((entry) => ({ ...entry, email: getLabel(entry) }))}
+            onReorder={reorderEntries}
+            labels={{
+              list: t("quickActions.actionList"),
+              instructions: t("quickActions.reorderInstructions"),
+              reorder: (name) => t("quickActions.reorder", { name }),
+            }}
+          >
+            {(entry) => {
+              const index = config.entries.findIndex((item) => item.id === entry.id);
+              const entryColor = quickActionColorFor(entry, config.palette);
+              return <div className="quick-actions-entry" data-colored={!!entryColor}
+                style={entryColor ? { "--quick-action-editor-color": entryColor } : undefined}>
+                <span className="quick-actions-entry-name">
+                  {entry.email}
+                </span>
+                <button
+                  type="button"
+                  className="quick-actions-remove"
+                  aria-label={`${t("quickActions.removeAction")} ${entry.email}`}
+                  title={t("quickActions.removeAction")}
+                  onClick={() => removeEntry(index)}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                </button>
+                {config.palette === "custom" && (
+                  <label className="quick-actions-color-control">
+                    {t("quickActions.color")}
+                    <input
+                      type="color"
+                      aria-label={`${t("quickActions.color")} ${entry.email}`}
+                      value={entry.color || "#a0a0b6"}
+                      onChange={(event) => updateEntry(index, { color: event.target.value })}
+                    />
+                    {!entry.color && <span>{t("quickActions.colorDefault")}</span>}
+                    {entry.color && <button
+                      type="button"
+                      aria-label={`${t("quickActions.resetColor")} ${entry.email}`}
+                      onClick={() => updateEntry(index, { color: undefined })}
+                    >{t("quickActions.resetColor")}</button>}
+                  </label>
+                )}
+              </div>;
+            }}
+          </AccountReorderList>
+        </div>
 
         <div className="quick-actions-add-row" data-colored={!!quickActionColorFor(newEntry(addType), config.palette)}
           style={quickActionColorFor(newEntry(addType), config.palette) ? { "--quick-action-editor-color": quickActionColorFor(newEntry(addType), config.palette) } : undefined}>
@@ -655,6 +653,29 @@ export function QuickActionsSettings() {
             {t("quickActions.addAction")}
           </button>
         </div>
+
+        <details className="quick-actions-default-order">
+          <summary>{t("quickActions.defaultOrder")}</summary>
+          <p className="text-xs text-mail-text-muted">{t("quickActions.defaultOrderDescription")}</p>
+          <ol aria-label={t("quickActions.defaultOrder")}>
+            {Object.entries(RADIAL_CATEGORIES).map(([category, actions]) => {
+              const shown = actions.filter((action) => SURFACE_ACTIONS[surface].includes(action));
+              if (!shown.length) return null;
+              return <li key={category} data-category={category}>
+                <strong>{t(`quickActions.category.${category}`)}</strong>
+                <ol aria-label={t(`quickActions.category.${category}`)}>
+                  {shown.map((action) => {
+                    const Icon = ICONS[action];
+                    return <li key={action} data-action={action}>
+                      {Icon && <Icon size={13} aria-hidden="true" />}
+                      {t(LABELS[action] || "quickActions.title")}
+                    </li>;
+                  })}
+                </ol>
+              </li>;
+            })}
+          </ol>
+        </details>
 
         <section
           className="quick-actions-label-list"

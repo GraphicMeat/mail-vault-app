@@ -151,9 +151,10 @@
   cursor: not-allowed;
 }
 
-/* A categorized wheel: the inner ring ends at 36% of the box and a hovered
-   category fans its actions out in the band beyond it, so the panel itself is
-   see-through and only the inner disc is filled. */
+/* A categorized wheel: the inner ring ends at 33% of the box (INNER_RING in
+   QuickActions.jsx) and a hovered category fans its actions out in the band
+   beyond it, so the panel itself is see-through and only the inner disc is
+   filled. */
 .quick-actions-radial[data-radial-layout="categories"] {
   border-color: transparent;
   background: transparent;
@@ -161,17 +162,31 @@
 
 .quick-actions-radial[data-radial-layout="categories"]::before {
   position: absolute;
-  inset: 14%;
+  inset: 17%;
   border-radius: 50%;
   background: var(--mail-bg);
   content: "";
 }
 
 .quick-actions-radial[data-radial-layout="categories"] > .quick-action-radial-item {
-  --radial-rim-from: 47%;
-  --radial-rim-start: 48%;
-  --radial-rim-end: 50.5%;
-  --radial-rim-to: 51.5%;
+  --radial-rim-from: 42.8%;
+  --radial-rim-start: 43.8%;
+  --radial-rim-end: 46.3%;
+  --radial-rim-to: 47.3%;
+}
+
+/* Each wedge is nearly a whole band deep, and so is what it draws. */
+.quick-actions-radial[data-radial-layout="categories"] .quick-action-radial-content {
+  width: 44px;
+  height: 44px;
+}
+
+/* The center disc keeps clear of the inner ring when the wheel is drawn
+   smaller than its 400px (the Settings preview). */
+.quick-actions-radial[data-radial-layout="categories"] .quick-actions-radial-center {
+  width: min(126px, 31.5%);
+  min-height: min(126px, 31.5%);
+  padding: 10px;
 }
 
 /* The category whose arc is open stays lit while the pointer is in its arc
@@ -353,7 +368,7 @@
 .quick-actions-add-row > button,
 .quick-actions-settings > button,
 .quick-actions-editor-controls > button,
-.quick-actions-entry-list > li > button,
+.quick-actions-entry > button,
 .quick-actions-label-list button {
   min-height: 30px;
   padding: 5px 9px;
@@ -382,26 +397,51 @@
 
 
 .quick-actions-entry-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
   border-top: 1px solid var(--mail-border);
+  padding-top: 4px;
 }
 
-.quick-actions-entry-list li {
+/* Rows come from AccountReorderList (grip + this entry), which owns the li. */
+.quick-actions-entry {
   display: flex;
+  flex: 1;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
   min-height: 42px;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--mail-border);
+  padding: 5px 6px 5px 0;
 }
 
-.quick-actions-entry-list li[data-colored="true"],
+.quick-actions-entry[data-colored="true"],
 .quick-actions-add-row[data-colored="true"] { border-radius: 6px; background: color-mix(in srgb, var(--quick-action-editor-color) 11%, var(--mail-bg)); }
-.quick-actions-entry-list li[data-colored="true"] { padding-inline: 6px; }
-.quick-actions-entry-list li[data-colored="true"] .quick-actions-entry-name { color: var(--mail-text); }
+.quick-actions-entry[data-colored="true"] { padding-inline: 6px; }
+.quick-actions-entry[data-colored="true"] .quick-actions-entry-name { color: var(--mail-text); }
+
+.quick-actions-entry > .quick-actions-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  padding: 0;
+  color: var(--mail-danger);
+}
+
+.quick-actions-entry > .quick-actions-remove:hover {
+  background: color-mix(in srgb, var(--mail-danger) 14%, transparent);
+}
+
+/* Its own row, at a fixed width: Tom Select growing its input as it opens
+   never reflows anything beside it. */
+.quick-actions-favorite-row > label { width: min(320px, 100%); }
+.quick-actions-favorite-row .ts-wrapper { width: 100%; }
+
+.quick-actions-default-order { color: var(--mail-text-muted); font-size: 12px; }
+.quick-actions-default-order > summary { cursor: pointer; color: var(--mail-text); font-size: 13px; }
+.quick-actions-default-order > p { margin: 6px 0; }
+.quick-actions-default-order > ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 16px; margin: 0; padding: 0; list-style: none; }
+.quick-actions-default-order > ol > li > strong { display: block; margin-bottom: 4px; color: var(--mail-text); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.quick-actions-default-order ol ol { margin: 0; padding: 0; list-style: none; }
+.quick-actions-default-order ol ol li { display: flex; align-items: center; gap: 6px; min-height: 22px; }
 .quick-actions-add-row[data-colored="true"] { padding: 8px; }
 
 .quick-actions-entry-name {
@@ -495,6 +535,10 @@
   height: auto;
   margin: 12px auto 2px;
   flex-shrink: 0;
+}
+
+.quick-actions-preview-surface .quick-actions-radial-preview[data-radial-layout="categories"] {
+  width: 400px;
 }
 
 .quick-actions-preview-copy small,
