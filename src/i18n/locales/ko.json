@@ -3093,5 +3093,6 @@
   "notes.openFailed": "이 메모를 열 수 없습니다.",
   "notes.actionFailed": "실패했습니다. 다시 시도해 주세요.",
   "notes.links": "링크",
-  "notes.attachments": "첨부파일"
+  "notes.attachments": "첨부파일",
+  "notes.deletePartial": "서버에서 삭제했습니다. MailVault가 아직 불러오지 않은 폴더의 사본은 남아 있습니다."
 }

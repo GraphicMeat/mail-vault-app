@@ -3093,5 +3093,6 @@
   "notes.openFailed": "Impossible d'ouvrir cette note.",
   "notes.actionFailed": "Cela n'a pas fonctionné. Veuillez réessayer.",
   "notes.links": "Liens",
-  "notes.attachments": "Pièces jointes"
+  "notes.attachments": "Pièces jointes",
+  "notes.deletePartial": "Supprimée du serveur. Une copie dans un dossier que MailVault n'a pas encore chargé a été conservée."
 }

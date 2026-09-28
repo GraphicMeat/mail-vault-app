@@ -21,7 +21,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   deleteEmailFromServer: (...args) => harness.deleteEmailFromServer(...args),
 }));
 
-const { useNotesStore, boardColumns, serverCopies, AUTO_COLUMNS } = await import('../notesStore');
+const { useNotesStore, boardColumns, serverCopies, canToggleStar, AUTO_COLUMNS } = await import('../notesStore');
+const { useTagStore } = await import('../tagStore');
 const { useSettingsStore } = await import('../settingsStore');
 
 const card = (key, extra = {}) => ({
@@ -143,16 +144,35 @@ describe('useNotesStore', () => {
     await useNotesStore.getState().open();
     harness.daemonCall.mockResolvedValue({ count: 2 });
     await useNotesStore.getState().markDone(note);
-    expect(harness.daemonCall).toHaveBeenLastCalledWith('notes.set_done', { copies: note.copies, done: true });
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: true });
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
+  });
+
+  /// The first Done creates the tag: the tag list, its counts and any chips
+  /// already cached for these copies must learn about it, or the user can
+  /// neither see nor remove it.
+  it('tells the tag store: reloads the tag list and drops the copies cached chips', async () => {
+    const note = card('d', { copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3 },
+      { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 },
+    ] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    useTagStore.setState({ tags: [], byRow: { 'a|INBOX|3': [], 'a|[Gmail]/Sent Mail|9': ['t1'], 'b|INBOX|1': ['t1'] } });
+    const done = { id: 'done-id', name: 'Done', color: '' };
+    harness.daemonCall.mockImplementation(async method => (method === 'tags.list' ? [done] : method === 'notes.set_done' ? { count: 2 } : {}));
+
+    await useNotesStore.getState().markDone(note);
+
+    expect(harness.daemonCall).toHaveBeenCalledWith('tags.list', {});
+    expect(useTagStore.getState().tags).toEqual([done]);
+    expect(useTagStore.getState().byRow).toEqual({ 'b|INBOX|1': ['t1'] });
   });
 
   it('stars every server copy by its full key, and unstars a starred card', async () => {
     const note = card('s', { copies: [
       { accountId: 'a', mailbox: 'INBOX', uid: 3 },
       { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 },
-      // A vault folder the server does not have: never addressed.
-      { accountId: 'a', mailbox: 'Local-Only', uid: 4 },
     ] });
     harness.daemonCall.mockResolvedValue({ cards: [note] });
     await useNotesStore.getState().open();
@@ -163,6 +183,29 @@ describe('useNotesStore', () => {
     await useNotesStore.getState().toggleStar(useNotesStore.getState().cards[0]);
     expect(harness.applyFlagToKeys).toHaveBeenLastCalledWith(['a:INBOX:3', 'a:[Gmail]/Sent Mail:9'], '\\Flagged', false);
     expect(useNotesStore.getState().cards[0].starred).toBe(false);
+  });
+
+  /// A copy the server cannot be asked about may be the flagged one: a star
+  /// can go on through the others, but never come off while it is skipped.
+  it('stars through the reachable copies but never unstars past a skipped one', async () => {
+    const note = card('s', { copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3 },
+      // A vault folder the server does not have: never addressed.
+      { accountId: 'a', mailbox: 'Local-Only', uid: 4 },
+    ] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    const accounts = useNotesStore.getState().accounts;
+    expect(canToggleStar(note, accounts)).toBe(true);
+    await useNotesStore.getState().toggleStar(note);
+    expect(harness.applyFlagToKeys).toHaveBeenCalledWith(['a:INBOX:3'], '\\Flagged', true);
+
+    const starred = useNotesStore.getState().cards[0];
+    expect(canToggleStar(starred, accounts)).toBe(false);
+    harness.applyFlagToKeys.mockClear();
+    await useNotesStore.getState().toggleStar(starred);
+    expect(harness.applyFlagToKeys).not.toHaveBeenCalled();
+    expect(useNotesStore.getState().cards[0].starred).toBe(true);
   });
 
   it('puts the star back when the flag write fails', async () => {
@@ -181,10 +224,47 @@ describe('useNotesStore', () => {
     ] });
     harness.daemonCall.mockResolvedValue({ cards: [note, card('keep')] });
     await useNotesStore.getState().open();
-    await useNotesStore.getState().deleteCard(note);
+    await expect(useNotesStore.getState().deleteCard(note)).resolves.toEqual({ deleted: 2, kept: 0 });
     expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(3, { accountId: 'a', mailboxOverride: 'INBOX' });
     expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(7, { accountId: 'b', mailboxOverride: 'INBOX' });
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
+  });
+
+  it('keeps the card, with the copy it could not address, and says how many stayed', async () => {
+    const skipped = { accountId: 'a', mailbox: 'Local-Only', uid: 4 };
+    const note = card('part', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, skipped] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    await expect(useNotesStore.getState().deleteCard(note)).resolves.toEqual({ deleted: 1, kept: 1 });
+    expect(harness.deleteEmailFromServer).toHaveBeenCalledTimes(1);
+    expect(useNotesStore.getState().cards).toHaveLength(1);
+    expect(useNotesStore.getState().cards[0].copies).toEqual([skipped]);
+  });
+
+  it('keeps only the copies not yet deleted when the server refuses one part way', async () => {
+    const second = { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 };
+    const note = card('mid', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, second] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    harness.deleteEmailFromServer.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('refused'));
+    await expect(useNotesStore.getState().deleteCard(note)).rejects.toThrow('refused');
+    expect(useNotesStore.getState().cards[0].copies).toEqual([second]);
+  });
+
+  it('runs one delete per card at a time: a second click while it runs does nothing', async () => {
+    const note = card('twice');
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    let finish;
+    harness.deleteEmailFromServer.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const first = useNotesStore.getState().deleteCard(note);
+    expect(useNotesStore.getState().busy).toEqual({ twice: true });
+    await expect(useNotesStore.getState().deleteCard(note)).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(harness.deleteEmailFromServer).toHaveBeenCalledTimes(1));
+    finish();
+    await first;
+    expect(harness.deleteEmailFromServer).toHaveBeenCalledTimes(1);
+    expect(useNotesStore.getState().busy).toEqual({});
   });
 
   it('keeps the card when the server refuses a delete, and says so', async () => {

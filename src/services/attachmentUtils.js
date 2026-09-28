@@ -9,6 +9,19 @@
 import { send } from './transport';
 import { avoidReserved, isWindowsPlatform } from '../stores/slices/unifiedHelpers.js';
 
+/** Bare base64 from a daemon read or a `data:` URI: the prefix and any line breaks dropped. */
+export function getCleanBase64(content) {
+  let base64Content = content;
+  if (typeof base64Content === 'string' && base64Content.startsWith('data:')) {
+    const matches = base64Content.match(/^data:([^;]+);base64,(.+)$/);
+    if (matches) base64Content = matches[2];
+  }
+  if (typeof base64Content === 'string') {
+    base64Content = base64Content.replace(/[\s\n\r]/g, '');
+  }
+  return base64Content;
+}
+
 // Win32-invalid characters and controls. `:` is the dangerous one: on NTFS
 // `a.pdf:x.exe` addresses a hidden stream of `a.pdf`.
 // eslint-disable-next-line no-control-regex

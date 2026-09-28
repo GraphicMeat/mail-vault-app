@@ -3093,5 +3093,6 @@
   "notes.openFailed": "This note could not be opened.",
   "notes.actionFailed": "That did not work. Please try again.",
   "notes.links": "Links",
-  "notes.attachments": "Attachments"
+  "notes.attachments": "Attachments",
+  "notes.deletePartial": "Deleted from the server. A copy in a folder MailVault has not loaded yet was kept."
 }

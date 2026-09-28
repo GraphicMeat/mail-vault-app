@@ -3093,5 +3093,6 @@
   "notes.openFailed": "No se pudo abrir esta nota.",
   "notes.actionFailed": "No ha funcionado. Inténtalo de nuevo.",
   "notes.links": "Enlaces",
-  "notes.attachments": "Adjuntos"
+  "notes.attachments": "Adjuntos",
+  "notes.deletePartial": "Eliminada del servidor. Se ha conservado una copia en una carpeta que MailVault aún no ha cargado."
 }

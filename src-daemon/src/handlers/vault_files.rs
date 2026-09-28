@@ -38,6 +38,23 @@ async fn with_message<T: Send + 'static>(
     blocking(move || f(raw)).await.and_then(|r| r)
 }
 
+/// `with_message` with no server fallback: the vault file or the in-memory
+/// copy, else the usual not-found error. For a read the user did not ask for
+/// (a board's photo preview), which must never download a whole message.
+async fn with_local_message<T: Send + 'static>(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    readable: bool,
+    f: impl FnOnce(Arc<[u8]>) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let raw = crate::raw_message::local_message(state, account_id, mailbox, uid, readable)
+        .await?
+        .ok_or_else(|| format!("Email UID {} not found", uid))?;
+    blocking(move || f(raw)).await.and_then(|r| r)
+}
+
 /// A bulk attachment save is a job: its RPC answers `{ jobId }` at once, and
 /// the app draws a progress bar from `attachment-export-progress` frames, one
 /// per step and then a last one (`finished`) carrying the result or the
@@ -180,10 +197,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
-            done(
-                id,
-                with_message(state, &account_id, &mailbox, uid, true, move |raw| vault_files::attachment_of(&raw, index).map(Value::String)).await,
-            )
+            let read = move |raw: Arc<[u8]>| vault_files::attachment_of(&raw, index).map(Value::String);
+            // `localOnly`: only what this computer already holds, never the server.
+            let result = if params.get("localOnly").and_then(Value::as_bool).unwrap_or(false) {
+                with_local_message(state, &account_id, &mailbox, uid, true, read).await
+            } else {
+                with_message(state, &account_id, &mailbox, uid, true, read).await
+            };
+            done(id, result)
         }
         // One call per message for its inline images (`hydrateInlineImages`):
         // the .eml is found and parsed once, one base64-or-null slot per index.

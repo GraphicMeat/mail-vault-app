@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw, Search, X } from 'lucide-react';
-import { useNotesStore, boardColumns, serverCopies } from '../../stores/notesStore';
+import { useNotesStore, boardColumns, serverCopies, canToggleStar } from '../../stores/notesStore';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore, getAccountColor } from '../../stores/settingsStore';
 import { openInsightsMessage } from '../../services/workflows/openInsightsMessage';
@@ -26,6 +26,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const filter = useNotesStore(s => s.filter);
   const payload = useNotesStore(s => s.accounts);
   const detailOpen = useNotesStore(s => s.detailOpen);
+  const busy = useNotesStore(s => s.busy);
   const mailAccounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors) || {};
   const [active, setActive] = useState({ col: 0, row: 0 });
@@ -82,7 +83,12 @@ export default function NotesBoard({ onClose, onComposeReply }) {
   const star = card => run(store().toggleStar(card));
   const done = card => run(store().markDone(card));
   const remove = card => setPendingDelete({
-    executor: () => store().deleteCard(card),
+    // A copy in a folder not loaded yet is kept, and the card with it: say so
+    // rather than let the dialog's "every copy" stand.
+    executor: async () => {
+      const result = await store().deleteCard(card);
+      if (result?.kept) setError(t('notes.deletePartial'));
+    },
     copy: { title: t('notes.deleteTitle'), description: t('notes.deleteDescription'), confirmLabel: t('common.delete') },
   });
 
@@ -161,7 +167,9 @@ export default function NotesBoard({ onClose, onComposeReply }) {
             return <NoteCard key={card.key} card={card} account={account}
               color={account ? getAccountColor(accountColors, account) : undefined}
               col={col} row={row} active={current.col === col && current.row === row}
-              canServer={serverCopies(card, payload).length > 0}
+              canStar={canToggleStar(card, payload)}
+              canDelete={serverCopies(card, payload).length > 0}
+              busy={!!busy?.[card.key]}
               onFocus={() => setActive({ col, row })} onOpen={open}
               onCopyLink={copyLink} onOpenLink={openFirstLink} onStar={star} onDone={done} onDelete={remove} />;
           })}

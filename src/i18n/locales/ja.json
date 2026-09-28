@@ -3093,5 +3093,6 @@
   "notes.openFailed": "このメモを開けませんでした。",
   "notes.actionFailed": "うまくいきませんでした。もう一度お試しください。",
   "notes.links": "リンク",
-  "notes.attachments": "添付ファイル"
+  "notes.attachments": "添付ファイル",
+  "notes.deletePartial": "サーバーから削除しました。MailVault がまだ読み込んでいないフォルダーのコピーは残っています。"
 }

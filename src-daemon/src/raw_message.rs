@@ -514,6 +514,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// `localOnly` (the Notes to Self photo preview): a message the vault does
+    /// not hold is not found, and the server is never dialled for it; one the
+    /// vault holds reads as usual.
+    #[tokio::test]
+    async fn a_local_only_attachment_read_never_dials_the_server() {
+        let server = server_with(1, &raw_with_attachment("<r1@example.com>"));
+        // Keep Recent: a server read here would leave a vault file behind.
+        let (dir, s) = state("keepRecent", Some(&server), "<r1@example.com>");
+        let mut params = attachment(1);
+        params["localOnly"] = json!(true);
+
+        let r = call(&s, "maildir_read_attachment", params.clone()).await;
+        assert_eq!(r.error.expect("no local copy").message, "Email UID 1 not found");
+        assert_eq!(server.connection_count(), 0, "the server was never dialled");
+        assert!(vault_files_of(&dir).is_empty(), "nothing was downloaded into the vault");
+
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(raw_with_attachment("<r1@example.com>"));
+        call(&s, "maildir_store", json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "rawSourceBase64": raw_b64, "flags": []}))
+            .await
+            .result
+            .expect("stored");
+        let r = call(&s, "maildir_read_attachment", params).await;
+        assert_eq!(r.result, Some(b64(PDF)), "{:?}", r.error);
+        assert_eq!(server.connection_count(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// An attachment bar asks for every attachment's path and the inline
     /// images at once: one download serves them all.
     #[tokio::test]

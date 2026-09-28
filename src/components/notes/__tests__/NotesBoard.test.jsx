@@ -72,7 +72,7 @@ const actions = {
 };
 
 function show(cards, extra = {}) {
-  useNotesStore.setState({ isOpen: true, status: 'ready', cards, filter: '', detailOpen: false, accounts: ACCOUNTS_PAYLOAD, ...actions, ...extra });
+  useNotesStore.setState({ isOpen: true, status: 'ready', cards, filter: '', detailOpen: false, busy: {}, accounts: ACCOUNTS_PAYLOAD, ...actions, ...extra });
   const onClose = vi.fn();
   render(<NotesBoard onClose={onClose} />);
   return { onClose };
@@ -120,7 +120,8 @@ describe('Notes to Self board', () => {
     expect(within(el).getAllByTestId('note-attachment').map(item => item.textContent)).toEqual(['plan.pdf', 'dish.png']);
     const thumb = await within(el).findByTestId('note-thumb');
     expect(thumb.getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=');
-    expect(harness.send).toHaveBeenCalledWith('maildir_read_attachment', { accountId: 'a', mailbox: 'INBOX', uid: 11, attachmentIndex: 1 });
+    // Local only: a preview never downloads a message from the server.
+    expect(harness.send).toHaveBeenCalledWith('maildir_read_attachment', { accountId: 'a', mailbox: 'INBOX', uid: 11, attachmentIndex: 1, localOnly: true });
     expect(el.querySelector('time').getAttribute('datetime')).toBe(new Date(1_790_000_000 * 1000).toISOString());
     expect(within(el).getByTestId('note-account-dot').getAttribute('aria-label')).toBe('me@x.test');
   });
@@ -168,6 +169,38 @@ describe('Notes to Self board', () => {
     expect(harness.openInsightsMessage).not.toHaveBeenCalled();
   });
 
+  it('shows no preview when this computer holds no copy, only the file name', async () => {
+    harness.send.mockRejectedValue(new Error('Email UID 11 not found'));
+    show([card('p', { column: 'Photos', attachments: [{ name: 'dish.png', mime: 'image/png', partIndex: 0 }] })]);
+    await waitFor(() => expect(harness.send).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('note-thumb')).toBeNull();
+    expect(screen.getByTestId('note-attachment').textContent).toBe('dish.png');
+  });
+
+  it('holds a card\'s buttons while one of its actions runs', () => {
+    show([card('busy')], { busy: { busy: true } });
+    expect(screen.getByTestId('note-star').disabled).toBe(true);
+    expect(screen.getByTestId('note-done').disabled).toBe(true);
+    expect(screen.getByTestId('note-delete').disabled).toBe(true);
+  });
+
+  it('says a copy was kept when a delete could not reach every copy', async () => {
+    actions.deleteCard.mockResolvedValueOnce({ deleted: 1, kept: 1 });
+    show([card('part')]);
+    fireEvent.click(screen.getByTestId('note-delete'));
+    await act(async () => { fireEvent.click(screen.getByTestId('confirm-delete')); });
+    expect(screen.getByRole('alert').textContent).toBe(t('notes.deletePartial'));
+  });
+
+  it('cannot unstar a starred note while one of its copies is out of reach', () => {
+    show([card('half', { starred: true, copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 11 },
+      { accountId: 'a', mailbox: 'vault-only', uid: 12 },
+    ] })]);
+    expect(screen.getByTestId('note-star').disabled).toBe(true);
+    expect(screen.getByTestId('note-delete').disabled).toBe(false);
+  });
+
   it('offers no star or delete for a note whose folders the server does not have', () => {
     show([card('local', { copies: [{ accountId: 'a', mailbox: 'vault-only', uid: 5 }] })]);
     expect(screen.getByTestId('note-star').disabled).toBe(true);
@@ -197,7 +230,7 @@ describe('Notes to Self board', () => {
     expect(document.activeElement).toBe(screen.getByTestId('notes-filter'));
 
     const [r1, r2, n1] = ['r1', 'r2', 'n1'].map(key => screen.getAllByTestId('note-card').find(el => el.dataset.key === key));
-    r1.focus();
+    act(() => r1.focus());
     fireEvent.keyDown(r1, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(r2);
     fireEvent.keyDown(r2, { key: 'ArrowRight' });

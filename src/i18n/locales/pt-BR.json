@@ -3093,5 +3093,6 @@
   "notes.openFailed": "Não foi possível abrir esta nota.",
   "notes.actionFailed": "Não deu certo. Tente novamente.",
   "notes.links": "Links",
-  "notes.attachments": "Anexos"
+  "notes.attachments": "Anexos",
+  "notes.deletePartial": "Excluída do servidor. Uma cópia em uma pasta que o MailVault ainda não carregou foi mantida."
 }

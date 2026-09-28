@@ -3093,5 +3093,6 @@
   "notes.openFailed": "Diese Notiz konnte nicht geöffnet werden.",
   "notes.actionFailed": "Das hat nicht geklappt. Bitte versuche es erneut.",
   "notes.links": "Links",
-  "notes.attachments": "Anhänge"
+  "notes.attachments": "Anhänge",
+  "notes.deletePartial": "Vom Server gelöscht. Eine Kopie in einem noch nicht geladenen Ordner wurde behalten."
 }

@@ -3093,5 +3093,6 @@
   "notes.openFailed": "无法打开这条笔记。",
   "notes.actionFailed": "操作未成功，请重试。",
   "notes.links": "链接",
-  "notes.attachments": "附件"
+  "notes.attachments": "附件",
+  "notes.deletePartial": "已从服务器删除。MailVault 尚未加载的文件夹中的副本已保留。"
 }

@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import { Popover, MenuItem } from '../ui/Popover';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { previewKind, safeLeaf } from '../../services/attachmentUtils';
+import { previewKind, safeLeaf, getCleanBase64 } from '../../services/attachmentUtils';
 import {
   Download,
   Save,
@@ -25,18 +25,6 @@ import {
 import { useT } from '../../i18n/index.js';
 import { send } from '../../services/transport';
 import { useAttachmentExports, messageExportKey, runAttachmentExport, startExportJob, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
-
-function getCleanBase64(content) {
-  let base64Content = content;
-  if (typeof base64Content === 'string' && base64Content.startsWith('data:')) {
-    const matches = base64Content.match(/^data:([^;]+);base64,(.+)$/);
-    if (matches) base64Content = matches[2];
-  }
-  if (typeof base64Content === 'string') {
-    base64Content = base64Content.replace(/[\s\n\r]/g, '');
-  }
-  return base64Content;
-}
 
 function base64ToBytes(base64) {
   const binary = atob(getCleanBase64(base64));
