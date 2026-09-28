@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { Mail, MailOpen } from 'lucide-react';
+import { Mail, MailOpen, Star, StarOff } from 'lucide-react';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -276,6 +276,18 @@ describe('EmailActionBar — star', () => {
   it('offers "Remove star" once it is flagged', () => {
     renderStar(['\\Seen', '\\Flagged']);
     expect(action('Remove star')).toBeTruthy();
+  });
+
+  // The label flipped with the flag; the glyph stayed a plain star, so a
+  // starred message offered "Remove star" under the icon for starring.
+  it('flips the star icon with the flag', () => {
+    const glyph = Icon => render(<Icon size={15} />, { container: document.createElement('div') })
+      .container.querySelector('svg').innerHTML;
+    renderStar([]);
+    expect(action('Star').querySelector('svg').innerHTML).toBe(glyph(Star));
+    cleanup();
+    renderStar(['\\Flagged']);
+    expect(action('Remove star').querySelector('svg').innerHTML).toBe(glyph(StarOff));
   });
 
   it('hands the open message to the handler', () => {

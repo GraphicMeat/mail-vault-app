@@ -2,7 +2,7 @@ import React, { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink,
-  Code, Sun, Moon, ImageDown, Star, ShieldAlert, ShieldX, Tag, MailPlus, AlarmClock, MailX,
+  Code, Sun, Moon, ImageDown, Star, StarOff, ShieldAlert, ShieldX, Tag, MailPlus, AlarmClock, MailX,
 } from 'lucide-react';
 import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -24,7 +24,7 @@ const ICONS = {
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: Reply,
   archive: Archive, unarchive: Archive, delete: Trash2, deleteServer: Trash2,
   deleteEverywhere: ShieldX, move: FolderInput, toggleRead: MailOpen, markRead: MailOpen,
-  markUnread: Mail, star: Star, unstar: Star, spam: ShieldAlert, tag: Tag,
+  markUnread: Mail, star: Star, unstar: StarOff, spam: ShieldAlert, tag: Tag,
   export: ImageDown, open: ExternalLink, source: Code, theme: Sun, newMessage: MailPlus, snooze: AlarmClock, unsubscribe: MailX,
 };
 const EMPTY_ARRAY = Object.freeze([]);
@@ -142,7 +142,9 @@ export const EmailActionBar = memo(function EmailActionBar({
     return {
       id: entry.id, action: entry.action, label: labelFor(entry),
       // The toggle shows the envelope of the direction it will take, like its label.
-      Icon: ICONS[entry.action === 'toggleRead' ? (read ? 'markUnread' : 'markRead') : entry.action],
+      // A lone star button is a toggle too: starred, it offers Unstar.
+      Icon: ICONS[entry.action === 'toggleRead' ? (read ? 'markUnread' : 'markRead')
+        : entry.action === 'star' && !hasExplicitStarModes && flagged ? 'unstar' : entry.action],
       hidden,
       disabled: actionDisabled,
       tone: ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
