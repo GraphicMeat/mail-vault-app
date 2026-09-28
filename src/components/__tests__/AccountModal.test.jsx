@@ -82,6 +82,7 @@ describe('AccountModal — OAuth callback finishes the add', () => {
       refreshToken: 'refresh-token',
       expiresAt: 1234567890,
       email: TYPED_EMAIL, // Google's id_token claim, matches what was typed
+      clientId: 'own.apps.googleusercontent.com', // the OAuth client that issued the tokens
     });
     mockAddAccount.mockResolvedValue({ id: 'acct-1', email: TYPED_EMAIL });
 
@@ -98,6 +99,9 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     expect(submitted.email).toBe(TYPED_EMAIL);
     expect(submitted.authType).toBe('oauth2');
     expect(submitted.oauth2AccessToken).toBe('access-token');
+    // Saved with the refresh token, so a later refresh goes out as this client.
+    expect(submitted.oauth2RefreshToken).toBe('refresh-token');
+    expect(submitted.oauth2ClientId).toBe('own.apps.googleusercontent.com');
   });
 
   it('blocks the add when the signed-in account does not match the typed address', async () => {

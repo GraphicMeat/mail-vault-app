@@ -77,6 +77,17 @@ describe('saveAccounts', () => {
     expect(file).not.toMatch(/password|oauth2AccessToken|oauth2RefreshToken/);
   });
 
+  // A transferred Google account keeps refreshing with the client that issued
+  // its token: the stamp travels in the same keychain blob as the token.
+  it('keeps oauth2ClientId in the keychain blob next to the refresh token', async () => {
+    h.status = 'granted';
+    h.cache = {};
+    await saveAccounts([{ ...incoming[1], oauth2ClientId: 'own.apps.googleusercontent.com' }]);
+    const blob = JSON.parse(mockSaveKeychain.mock.calls[0][0].b);
+    expect(blob.oauth2RefreshToken).toBe('rt');
+    expect(blob.oauth2ClientId).toBe('own.apps.googleusercontent.com');
+  });
+
   it('accepts an empty keychain (fresh machine)', async () => {
     h.status = 'empty';
     h.cache = {};
