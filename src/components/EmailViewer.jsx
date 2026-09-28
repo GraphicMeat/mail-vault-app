@@ -13,6 +13,7 @@ import {
   FileText,
   AlertTriangle,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
@@ -29,6 +30,7 @@ import { useExportStore } from '../stores/exportStore';
 import { useSearchStore } from '../stores/searchStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
+import { Button } from './ui/Button';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -61,7 +63,7 @@ import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { replyTarget } from '../utils/replyTarget';
-import { htmlToText } from './RichTextEditor';
+import { htmlToText, textToHtml } from './RichTextEditor';
 import { openCompose } from '../utils/composeOpener';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 
@@ -71,7 +73,9 @@ import { t, tErr, useT  } from '../i18n/index.js';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
-function EmailViewerComponent({ onComposeReply, onClose }) {
+/// `showOpenInWindow`: a reader with no action bar of its own (Notes to Self)
+/// puts "Open in new window" beside the close control.
+function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = false }) {
   const t = useT();
   const navigationShortcuts = useSettingsStore(s => s.keyboardShortcuts);
   const shortcutsEnabled = useSettingsStore(s => s.keyboardShortcutsEnabled);
@@ -592,6 +596,31 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     // that srcDoc changes trigger.
   }, [selectedEmail?.html]);
 
+  const openInWindow = () => {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (!invoke || !(selectedEmail?.html || selectedEmail?.text)) return;
+    // Build a standalone document so the popup matches the in-app
+    // view: charset declared, plus inline Dark Reader when dark. A plain-text
+    // message (a note to self, often) goes as escaped paragraphs.
+    const bodyHtml = selectedEmail.html
+      ? getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))
+      : textToHtml(selectedEmail.text);
+    // The popup is a second renderer of the same mail: a beacon
+    // stripped in the pane but left in the window still fires.
+    const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
+    // The popup loads from file:// and inherits no CSP, so its meta
+    // (script-src 'nonce-…') is the ONLY policy: Dark Reader has to
+    // carry the same nonce to run there.
+    const popupNonce = emailScriptNonce();
+    const popupHtml = buildEmailIframeHtml({
+      bodyHtml: popupBody,
+      themeTag: effectiveEmailTheme,
+      extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
+      nonce: popupNonce,
+    });
+    invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
+  };
+
   // Thread view — show all emails in the thread
   if (selectedThread) {
     return <ThreadView thread={selectedThread} onComposeReply={onComposeReply} />;
@@ -665,7 +694,13 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
           />
           <span className="min-w-0 break-words">{selectedEmail.subject}</span>
         </h1>
-        <CloseViewerButton onClose={onClose} />
+        <div className="flex items-center flex-shrink-0">
+          {showOpenInWindow && <Button variant="ghost" icon size="sm" data-testid="open-in-window" onClick={openInWindow}
+            aria-label={t('chat.bubble.openNewWindow')} title={t('chat.bubble.openNewWindow')}>
+            <ExternalLink size={16} />
+          </Button>}
+          <CloseViewerButton onClose={onClose} />
+        </div>
       </div>
 
       {/* Custody band — the reading pane opens under the claim about where this
@@ -724,27 +759,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             onToggleRead={handleToggleReadStatus}
             onToggleFlag={handleToggleFlag}
             onDeleteEverywhere={handleDeleteEverywhere}
-            onOpenInWindow={() => {
-              const invoke = window.__TAURI__?.core?.invoke;
-              if (!invoke || !selectedEmail?.html) return;
-              // Build a standalone document so the popup matches the in-app
-              // view: charset declared, plus inline Dark Reader when dark.
-              const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
-              // The popup is a second renderer of the same mail — a beacon
-              // stripped in the pane but left in the window still fires.
-              const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
-              // The popup loads from file:// and inherits no CSP, so its meta
-              // (script-src 'nonce-…') is the ONLY policy — Dark Reader has to
-              // carry the same nonce to run there.
-              const popupNonce = emailScriptNonce();
-              const popupHtml = buildEmailIframeHtml({
-                bodyHtml: popupBody,
-                themeTag: effectiveEmailTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
-                nonce: popupNonce,
-              });
-              invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
-            }}
+            onOpenInWindow={openInWindow}
             onViewSource={toggleRawSource}
             onExport={(email) => useExportStore.getState().openExport({ messages: [email] })}
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
