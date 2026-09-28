@@ -254,6 +254,9 @@ pub(crate) fn create_with(
         let conn = crate::app_db::db::open(&data).map_err(|e| e.to_string())?;
         crate::app_db::locations::clear(&conn, "vault")?;
         crate::app_db::locations::clear(&conn, "external-backup")?;
+        // Network Activity is this computer's history, promised never to
+        // leave it: the copy starts its own.
+        conn.execute("DELETE FROM net_events", []).map_err(|e| format!("clear network activity: {e}"))?;
         let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         if check != "ok" {
             return Err(format!("the copied app.db failed its integrity check: {check}"));
@@ -370,6 +373,11 @@ mod tests {
         std::fs::write(app.join("Contents/MacOS/MailVault"), b"binary").unwrap();
         let app_dir = tmp.path().join("host-data");
         crate::app_db::with(&app_dir, |c| crate::app_db::locations::save_meta(c, "vault", "/Volumes/Old/mail", "macos", 1, false)).unwrap();
+        crate::app_db::with(&app_dir, |c| {
+            let ev = crate::net_activity::NetEvent::out(crate::net_activity::Protocol::Imap, "imap.host.test", 993, "sync");
+            crate::net_log::insert(c, &[(ev, Some("DE".into()))])
+        })
+        .unwrap();
         std::fs::write(app_dir.join("frontend-settings.json"), b"{\"theme\":\"dark\"}").unwrap();
         std::fs::write(app_dir.join("daemon.pid"), b"123").unwrap();
         std::fs::create_dir_all(app_dir.join("logs")).unwrap();
@@ -417,6 +425,8 @@ mod tests {
         // the vault at a folder on the host.
         let conn = crate::app_db::db::open(&data).unwrap();
         assert_eq!(crate::app_db::locations::display_path(&conn, "vault"), None);
+        let net: i64 = conn.query_row("SELECT COUNT(*) FROM net_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(net, 0, "the host's Network Activity stays on the host");
         let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
         assert_eq!(check, "ok");
         assert!(created.mail_dirs.contains(&"Maildir"), "{:?}", created.mail_dirs);
