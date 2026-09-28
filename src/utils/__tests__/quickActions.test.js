@@ -282,6 +282,14 @@ describe('quick action presets', () => {
   const SCOPE = { kind: 'mailbox', accountId: 'a', mailbox: 'INBOX' };
   const OTHER = { kind: 'mailbox', accountId: 'b', mailbox: 'INBOX' };
   const preset = id => QUICK_ACTION_PRESETS.find(item => item.id === id);
+  // What the settings hold once a preset is written: normalized.
+  const stored = id => normalizeQuickActions({ defaults: preset(id).surfaces }).defaults;
+  // Normalizing gives every `move` entry `params: {}`, the defaults' too; the
+  // one difference from a raw preset it may make.
+  const withoutEmptyParams = surfaces => Object.fromEntries(Object.entries(surfaces).map(([name, config]) => [name, {
+    ...config,
+    entries: config.entries.map(({ params, ...rest }) => (params && Object.keys(params).length ? { ...rest, params } : rest)),
+  }]));
 
   it('offers MailVault first, exactly as its defaults, then the other apps', () => {
     expect(QUICK_ACTION_PRESETS[0].id).toBe('mailvault');
@@ -295,7 +303,7 @@ describe('quick action presets', () => {
   // with no tag) and swaps a favorite it cannot find, so comparing two
   // normalized copies would pass over exactly that.
   it.each(QUICK_ACTION_PRESETS.map(item => [item.id, item]))('%s normalizes to itself', (_id, item) => {
-    expect(normalizeQuickActions({ defaults: item.surfaces }).defaults).toEqual(item.surfaces);
+    expect(withoutEmptyParams(normalizeQuickActions({ defaults: item.surfaces }).defaults)).toEqual(item.surfaces);
   });
 
   it.each(QUICK_ACTION_PRESETS.map(item => [item.id, item]))('%s uses only actions each surface offers', (_id, item) => {
@@ -324,7 +332,7 @@ describe('quick action presets', () => {
       setQuickActionStyle(normalizeQuickActions({}), 'row', SCOPE, { mode: 'menu' }), null, true, 'row');
     expect(before.styleLinks.global).toBe(true);
     const after = applyQuickActionPreset(before, null, 'gmail');
-    expect(after.defaults).toEqual(preset('gmail').surfaces);
+    expect(after.defaults).toEqual(stored('gmail'));
     expect(after.overrides).toEqual(before.overrides);
     expect(after.styleLinks.global).toBe(false);
   });
@@ -334,7 +342,7 @@ describe('quick action presets', () => {
     before = setQuickActionStyle(before, 'row', OTHER, { mode: 'menu' });
     const after = applyQuickActionPreset(before, SCOPE, 'thunderbird');
     const key = quickActionScopeKey(SCOPE);
-    expect(after.overrides[key]).toEqual(preset('thunderbird').surfaces);
+    expect(after.overrides[key]).toEqual(stored('thunderbird'));
     expect(after.overrides[quickActionScopeKey(OTHER)]).toEqual(before.overrides[quickActionScopeKey(OTHER)]);
     expect(after.defaults).toEqual(before.defaults);
     expect(after.styleLinks.overrides[key]).toBe(false);

@@ -6,10 +6,10 @@ vi.mock('../safeStorage', () => ({
 
 const { useSettingsStore } = await import('../settingsStore');
 const { QUICK_ACTION_PRESETS, activeQuickActionPreset } = await import('../../utils/quickActionPresets');
-const { quickActionScopeKey } = await import('../../utils/quickActions');
+const { normalizeQuickActions, quickActionScopeKey } = await import('../../utils/quickActions');
 
 describe('applyQuickActionPreset (settings store)', () => {
-  const surfaces = id => QUICK_ACTION_PRESETS.find(item => item.id === id).surfaces;
+  const surfaces = id => normalizeQuickActions({ defaults: QUICK_ACTION_PRESETS.find(item => item.id === id).surfaces }).defaults;
 
   it('starts on the MailVault set', () => {
     expect(activeQuickActionPreset(useSettingsStore.getState().quickActions)).toBe('mailvault');
