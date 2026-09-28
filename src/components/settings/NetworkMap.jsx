@@ -29,6 +29,20 @@ const shade = (n, max) => {
   return `color-mix(in srgb, var(--mail-accent) ${Math.round(25 + 75 * share)}%, var(--mail-surface-hover))`;
 };
 
+/**
+ * Where the tooltip sits: a list row's in the map's corner, a country's off
+ * the pointer toward the middle, since the map clips what overflows it.
+ */
+function tipAt({ fromList, x, y, w, h }) {
+  if (fromList) return { top: 8, left: 8 };
+  const below = y < h / 2;
+  const right = x < w / 2;
+  return {
+    ...(below ? { top: y + 12 } : { bottom: h - y + 12 }),
+    ...(right ? { left: x + 12 } : { right: w - x + 12 }),
+  };
+}
+
 function Details({ place, name }) {
   const t = useT();
   return (
@@ -104,13 +118,7 @@ export function NetworkMap({ places, selected, onSelect }) {
               role="tooltip"
               data-testid="net-map-tooltip"
               className="pointer-events-none absolute z-10 max-w-[16rem] rounded-md border border-mail-border bg-mail-surface px-2 py-1 text-xs shadow-lg"
-              style={hover.fromList
-                ? { top: 8, left: 8 }
-                // Away from the pointer, toward the middle: the map clips.
-                : {
-                  ...(hover.y > hover.h / 2 ? { bottom: hover.h - hover.y + 12 } : { top: hover.y + 12 }),
-                  ...(hover.x > hover.w / 2 ? { right: hover.w - hover.x + 12 } : { left: hover.x + 12 }),
-                }}
+              style={tipAt(hover)}
             >
               <Details place={active} name={hover.code === LOCAL ? t('netActivity.map.localNetwork') : names.get(hover.code)} />
             </div>
