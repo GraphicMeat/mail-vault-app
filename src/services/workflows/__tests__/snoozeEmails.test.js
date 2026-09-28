@@ -102,6 +102,7 @@ describe('snoozeEmails', () => {
       throw new Error(`unexpected ${method}`);
     });
     const err = await snoozeEmails([key(state.emails[0])], WAKE).catch(e => e);
+    expect(err.message).toContain(reason);
     expect(err.message).toBe(en['snooze.error.createFolder'].replace('{{reason}}', reason));
     expect(mockMove).not.toHaveBeenCalled();
     expect(mockDaemon).not.toHaveBeenCalledWith('snooze.create', expect.anything());

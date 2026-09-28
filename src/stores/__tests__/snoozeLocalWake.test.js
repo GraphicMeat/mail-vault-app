@@ -60,7 +60,8 @@ vi.mock('../settingsStore', () => ({
 
 const { initSnooze, useSnoozeStore } = await import('../snoozeStore');
 
-const fire = (payload) => listeners.snooze(payload);
+// What Tauri hands the callback: the event, its payload inside.
+const fire = (payload) => listeners.snooze({ payload });
 
 describe('the wake of a local snooze', () => {
   beforeAll(async () => {
@@ -101,5 +102,7 @@ describe('the wake of a local snooze', () => {
 
     expect(mockNotify).not.toHaveBeenCalled();
     expect(mockGetEmailHeaders).not.toHaveBeenCalled();
+    // The event did land: the row is gone.
+    expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['local']);
   });
 });
