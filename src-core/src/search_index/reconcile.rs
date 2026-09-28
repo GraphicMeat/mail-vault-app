@@ -840,7 +840,7 @@ fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
     addrs.extend(to_addrs.iter().cloned());
     addrs.extend(list("replyTo"));
     // The Date header, then the arrival time, then now: never 1970.
-    let parse = |d: &str| mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|d| d.timestamp()));
+    let parse = crate::maildir::header_date_secs;
     let date_utc = parse(&text("date")).or_else(|| parse(&text("internalDate"))).or_else(|| Some(chrono::Utc::now().timestamp()));
     // The server's flags, never archived: no local archived copy exists.
     let imap: Vec<String> = header

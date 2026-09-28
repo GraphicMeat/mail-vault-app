@@ -2105,7 +2105,7 @@ pub fn internal_date_from_raw(raw: &[u8]) -> Option<String> {
     use mailparse::MailHeaderMap;
     let parsed = mailparse::parse_mail(raw).ok()?;
     let date = parsed.headers.get_first_value("Date");
-    let Some(secs) = date.as_deref().and_then(|d| mailparse::dateparse(d).ok()) else {
+    let Some(secs) = date.as_deref().and_then(crate::maildir::header_date_secs) else {
         // Never fail an append over a date, but a restore that silently keeps
         // "now" here reproduces the exact bug this function exists to fix.
         tracing::debug!("internal_date_from_raw: no usable Date header ({:?})", date);

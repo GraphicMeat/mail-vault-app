@@ -500,6 +500,18 @@ pub fn message_id_in(raw: &[u8]) -> Option<String> {
     message_id_of(&header_value(&String::from_utf8_lossy(header_section(raw)), "message-id:")?)
 }
 
+/// A header date as epoch seconds: RFC 2822 (`Date:`), else RFC 3339 (an
+/// IMAP INTERNALDATE as the app stores it). `None` when neither reads.
+/// mailparse's `dateparse` answers `Ok(0)` for any text it never finds a year
+/// in ("", "sometime"), so 0 counts as unknown: a real 1970-01-01 date reads
+/// as unknown too, which is harmless and never mistaken for "ancient".
+pub fn header_date_secs(d: &str) -> Option<i64> {
+    mailparse::dateparse(d)
+        .ok()
+        .filter(|&t| t != 0)
+        .or_else(|| chrono::DateTime::parse_from_rfc3339(d.trim()).ok().map(|t| t.timestamp()))
+}
+
 /// `read_message_id` plus the `Date:` header as epoch milliseconds, from one
 /// bounded read. What the eviction worker needs of a cache copy: the id that
 /// ties it to the server's message, and the age a window judges. Either is
@@ -509,7 +521,7 @@ pub fn read_message_id_and_date(path: &Path) -> (Option<String>, Option<i64>) {
     let Some(text) = read_header_text(path) else { return (None, None) };
     let id = header_value(&text, "message-id:").and_then(|v| message_id_of(&v));
     let date = header_value(&text, "date:")
-        .and_then(|v| mailparse::dateparse(&v).ok())
+        .and_then(|v| header_date_secs(&v))
         .and_then(|secs| secs.checked_mul(1000));
     (id, date)
 }
@@ -892,6 +904,26 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `dateparse` answers `Ok(0)` for text with no year: that is unknown, not 1970.
+    #[test]
+    fn an_unreadable_header_date_is_unknown_not_1970() {
+        assert_eq!(header_date_secs(""), None);
+        assert_eq!(header_date_secs("sometime"), None);
+        assert_eq!(header_date_secs("Sat, 12 Sep 2026 10:00:00 +0000"), Some(1_789_207_200));
+        assert_eq!(header_date_secs("2026-09-12T10:00:00+00:00"), Some(1_789_207_200));
+    }
+
+    /// Keep Recent never judges a copy by a Date it cannot read.
+    #[test]
+    fn a_cache_copy_with_a_garbage_date_has_no_age() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("1:2,S.eml");
+        fs::write(&path, "Message-ID: <a@x.test>\r\nDate: sometime\r\n\r\nbody\r\n").unwrap();
+        let (id, date) = read_message_id_and_date(&path);
+        assert!(id.is_some());
+        assert_eq!(date, None);
+    }
 
     #[test]
     fn both_info_separators_parse_on_every_platform() {

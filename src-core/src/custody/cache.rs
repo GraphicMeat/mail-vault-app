@@ -394,8 +394,11 @@ impl FolderListing {
 /// against `syncTotalEmails` (the server's count only the daemon's sync
 /// writes, and `clear_headers` deletes with the rows) less
 /// `APP_REMOVED_SINCE_SYNC` (what the app's own deletes and moves took off
-/// since). No recorded count (a Graph folder, a cache the app wrote): the
-/// rows are the listing, as before.
+/// since). Only rows below the daemon's `syncUidNext` are judged, when it is
+/// recorded: an arrival the app fetched past it was never in the count, so it
+/// cannot stand in for an old row a backfill has not reached. No recorded
+/// count (a Graph folder, a cache the app wrote): the rows are the listing,
+/// as before.
 fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<FolderListing, String> {
     use rusqlite::OptionalExtension;
     let mut stmt = conn
@@ -413,21 +416,33 @@ fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<F
     for mailbox in mailboxes.into_iter().filter(|m| crate::search_index::text::vault_dir_name(m) == vault_dir) {
         let rows = count(conn, account, &mailbox)? as u64;
         // The daemon's count less what the app has taken off since it.
-        let server: Option<i64> = conn
+        let (server, uid_next): (Option<i64>, Option<i64>) = conn
             .query_row(
                 "SELECT CASE WHEN json_valid(meta_json) AND json_extract(meta_json, '$.syncTotalEmails') IS NOT NULL
                              THEN max(0, json_extract(meta_json, '$.syncTotalEmails')
-                                         - coalesce(json_extract(meta_json, '$.appRemovedSinceSync'), 0)) END
+                                         - coalesce(json_extract(meta_json, '$.appRemovedSinceSync'), 0)) END,
+                        CASE WHEN json_valid(meta_json) THEN json_extract(meta_json, '$.syncUidNext') END
                  FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
                 params![account, mailbox],
-                |r| r.get::<_, Option<i64>>(0),
+                |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<i64>>(1)?)),
             )
             .optional()
             .map_err(err)?
-            .flatten();
+            .unwrap_or((None, None));
+        // The rows the daemon's count covers: those below its `syncUidNext`.
+        let judged = match (server, uid_next) {
+            (Some(_), Some(next)) => conn
+                .query_row(
+                    "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid < ?3",
+                    params![account, mailbox, next],
+                    |r| r.get::<_, i64>(0),
+                )
+                .map_err(err)?,
+            _ => rows as i64,
+        };
         match (rows, server) {
-            (rows, Some(total)) if (rows as i64) < total => {
-                return Ok(FolderListing::Partial(format!("{mailbox} holds {rows} of {total} headers")));
+            (_, Some(total)) if judged < total => {
+                return Ok(FolderListing::Partial(format!("{mailbox} holds {judged} of {total} headers")));
             }
             (0, Some(_)) => counted_empty = true,
             (0, None) => {}
@@ -886,6 +901,25 @@ mod tests {
 
         put(&c, "a", "Archive", 1, 1, row(1));
         assert_eq!(listed_message_ids(&c, "a", "Archive", &[1, 2]).unwrap().len(), 1, "no recorded count: the rows decide");
+    }
+
+    /// I3: the app fetches arrivals past the daemon's `syncUidNext`, which its
+    /// `syncTotalEmails` never counted. Those rows must not make up for old
+    /// rows a backfill has not reached yet: only uids below `syncUidNext` are
+    /// judged against the count, as the app's own tally does.
+    #[test]
+    fn app_fetched_arrivals_do_not_complete_a_partial_backfill() {
+        let (_t, c) = store();
+        let rows = |uids: &[u32]| json!(uids.iter().map(|u| json!({"uid": u, "messageId": format!("<{u}@x.test>")})).collect::<Vec<_>>());
+        save_headers(&c, "a", "INBOX", &json!({"syncTotalEmails": 3, "syncUidNext": 10, "emails": rows(&[2, 3])}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"emails": rows(&[10, 11])}).to_string()).unwrap();
+        let partial = listed_message_ids(&c, "a", "INBOX", &[1, 2]).unwrap_err();
+        assert!(partial.starts_with(FOLDER_NOT_LISTED), "4 rows, but 2 of the 3 the daemon counted: {partial}");
+        assert!(folder_headers(&c, "a", "INBOX").unwrap_err().starts_with(FOLDER_NOT_LISTED));
+
+        save_headers(&c, "a", "INBOX", &json!({"emails": rows(&[1])}).to_string()).unwrap();
+        assert_eq!(listed_message_ids(&c, "a", "INBOX", &[1, 2, 4]).unwrap().len(), 2, "complete: 4 is not on the server");
+        assert_eq!(folder_headers(&c, "a", "INBOX").unwrap().len(), 5, "arrivals are still read");
     }
 
     /// H3b fix 2: a folder the server says is empty (the daemon recorded a

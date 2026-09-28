@@ -734,9 +734,19 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
     let mut evicted: Vec<u32> = Vec::new();
     let mut gone: Vec<u32> = Vec::new();
     let mut duplicate_left = false;
+    // The uids with a file left, from one listing: a listing per uid would
+    // hold the mailbox lock for removed x files. Unlistable: every uid counts
+    // as left (relist, keep its attachments), never as gone.
+    let left: Option<HashSet<u32>> = if removed.is_empty() {
+        None
+    } else {
+        fs::read_dir(&cur_dir)
+            .ok()
+            .map(|rd| rd.flatten().filter_map(|e| vault_filename_uid(&e.file_name().to_string_lossy())).collect())
+    };
     for (uid, attachments) in removed {
         evicted.push(uid);
-        if find_by_uid(&cur_dir, uid).is_some() {
+        if left.as_ref().map_or(true, |l| l.contains(&uid)) {
             duplicate_left = true;
             continue;
         }
@@ -2241,6 +2251,34 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert!(!cached[0].exists(), "the evicted message's extracted attachment goes");
         assert!(cached[1].exists(), "an archived message's stays");
         assert!(cached[2].exists(), "another message's stays");
+    }
+
+    /// One pass over many uids judges each on its own: a uid with an
+    /// archived duplicate left keeps its extracted attachment, a uid whose
+    /// last file went loses it (one listing after the removals, I4).
+    #[test]
+    fn evict_files_judges_each_uid_left_behind_on_its_own() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let raw = |id: u32| {
+            format!(
+                "Message-ID: <m{id}@x>\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"a.txt\"\r\n\r\nattached\r\n--b--\r\n"
+            )
+        };
+        for (uid, flags) in [(5, "S"), (5, "AS"), (6, "S"), (7, "S")] {
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}{flags}.eml")), raw(uid)).unwrap();
+        }
+        let cached: Vec<PathBuf> =
+            [5u32, 6, 7].iter().map(|uid| PathBuf::from(cache_attachment(root, raw(*uid).as_bytes(), "acct", "INBOX", *uid, 0).unwrap())).collect();
+
+        let uids: HashSet<u32> = [5, 6, 7].into_iter().collect();
+        assert_eq!(evict_files(&reg, root, "acct", "INBOX", &uids).unwrap(), vec![5, 6, 7]);
+        assert!(cached[0].exists(), "uid 5 still has its archived copy");
+        assert!(!cached[1].exists() && !cached[2].exists(), "uids 6 and 7 are gone");
+        assert!(cur.join(format!("5{INFO_PREFIX}AS.eml")).exists());
     }
 
     #[test]

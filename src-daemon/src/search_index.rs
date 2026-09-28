@@ -181,7 +181,7 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
         .unwrap_or_default();
     Some(IndexDoc {
         message_id: obj.get("messageId").and_then(|v| v.as_str()).map(String::from),
-        date_utc: obj.get("date").and_then(|v| v.as_str()).and_then(|d| mailparse::dateparse(d).ok()),
+        date_utc: obj.get("date").and_then(|v| v.as_str()).and_then(mailvault_core::maildir::header_date_secs),
         from_addr: from.get("address").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         from_name: from.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         addrs: addrs.into_iter().filter(|a| !a.is_empty()).collect(),
@@ -1898,9 +1898,11 @@ mod tests {
     }
 
     /// H3b fix 2 + round 2 (N1): the app's delete and Empty Trash send only
-    /// `removedUids` (no daemon sync follows). The recorded server count drops
-    /// with the rows, so the list stays complete: one deleted message leaves
-    /// search at once, and an emptied Trash is a verified empty listing.
+    /// `removedUids` (no daemon sync follows). The daemon's recorded server
+    /// count stays as it is, and the app's removals are tallied apart
+    /// (`appRemovedSinceSync`, round 3), so the list stays complete: one
+    /// deleted message leaves search at once, and an emptied Trash is a
+    /// verified empty listing.
     #[test]
     fn a_folder_the_server_counts_empty_drops_its_fileless_rows() {
         let tmp = tempfile::tempdir().unwrap();
@@ -1964,7 +1966,7 @@ mod tests {
             stmt.query_map([dir], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
         };
         let records = || -> i64 {
-            lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM meta WHERE key LIKE 'listed_rows_pending_%'", [], |r| r.get(0)).unwrap()
+            lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM meta WHERE substr(key, 1, length(?1)) = ?1", [format!("{}:", db::LISTED_ROWS_PENDING)], |r| r.get(0)).unwrap()
         };
         save_listing(&custody, "acct", "Projects/2026", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1, 2, 3])}));
         save_listing(&custody, "acct", "Other", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[1])}));

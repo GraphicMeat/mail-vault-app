@@ -107,7 +107,7 @@ fn mbox_from_line(raw: &[u8]) -> String {
                 .headers
                 .iter()
                 .find(|h| h.get_key().eq_ignore_ascii_case("date"))
-                .and_then(|h| mailparse::dateparse(&h.get_value()).ok())
+                .and_then(|h| mailvault_core::maildir::header_date_secs(&h.get_value()))
         })
         .map(|ts| {
             chrono::DateTime::from_timestamp(ts, 0)

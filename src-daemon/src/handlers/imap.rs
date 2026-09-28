@@ -137,11 +137,13 @@ pub(crate) fn now_ms() -> i64 {
 }
 
 /// A message's date in epoch ms from its `Date:` header, else its
-/// INTERNALDATE (RFC 3339 once `LightFullEmail` carries it). `None`: neither
+/// INTERNALDATE (RFC 3339 once `LightFullEmail` carries it): a Date that is
+/// present but unreadable falls through to INTERNALDATE too. `None`: neither
 /// parses, which every mode but On Demand keeps.
 pub(crate) fn email_date_ms(date: Option<&str>, internal_date: Option<&str>) -> Option<i64> {
-    date.or(internal_date)
-        .and_then(|d| mailparse::dateparse(d).ok().or_else(|| chrono::DateTime::parse_from_rfc3339(d).ok().map(|t| t.timestamp())))
+    use mailvault_core::maildir::header_date_secs;
+    date.and_then(header_date_secs)
+        .or_else(|| internal_date.and_then(header_date_secs))
         .and_then(|secs| secs.checked_mul(1000))
 }
 
@@ -1340,6 +1342,18 @@ mod tests {
         assert_eq!(result["success"], json!(true));
         assert_eq!(result["moved"], json!(1));
         assert!(server.state().find("Archive").unwrap().by_uid(1).is_some(), "message must have actually landed in Archive");
+    }
+
+    /// A Date header `dateparse` cannot read is unknown: INTERNALDATE, then
+    /// `None`, never 1970 (which Keep Recent would call ancient).
+    #[test]
+    fn an_unreadable_date_falls_back_to_internal_date_then_unknown() {
+        let internal = "2026-09-01T08:00:00+00:00";
+        let internal_ms = chrono::DateTime::parse_from_rfc3339(internal).unwrap().timestamp_millis();
+        assert_eq!(email_date_ms(Some("sometime"), Some(internal)), Some(internal_ms));
+        assert_eq!(email_date_ms(Some(""), None), None);
+        assert_eq!(email_date_ms(Some("sometime"), None), None);
+        assert_eq!(email_date_ms(Some("Sat, 12 Sep 2026 10:00:00 +0000"), Some(internal)), Some(1_789_207_200_000));
     }
 
     #[tokio::test]

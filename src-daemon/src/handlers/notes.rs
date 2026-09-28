@@ -8,7 +8,7 @@
 //! A card's `date` is `date_utc` as a raw Unix-seconds integer (`NoteCandidate`
 //! never carries a parsed/ISO date), not a formatted string.
 use crate::handlers::common::{blocking, done, MessageRef};
-use crate::ipc::{self, RpcResponse};
+use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, tags};
 use mailvault_core::notes_to_self::{self, normalize_identity, Column};

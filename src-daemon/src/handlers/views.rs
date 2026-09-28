@@ -6,7 +6,7 @@
 //! the same shape `mail_search` returns, so the list renders them unchanged.
 use crate::handlers::common::{blocking, done};
 use crate::handlers::vault_files::ExportJob;
-use crate::ipc::{self, RpcResponse};
+use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::app_db;
 use serde_json::Value;
