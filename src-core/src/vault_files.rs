@@ -616,27 +616,38 @@ pub fn clear_cache(
 /// (backup/archive/restore) or `D` (draft): those are never cache, whatever
 /// a caller decided from an older listing.
 ///
-/// `registry`: the mailbox (`reg`, account, mailbox) whose row for the uid is
-/// tombstoned right after the delete, as every vault writer keeps the
-/// registry current. A uid with a duplicate left (an `A` copy) is the
-/// caller's to relist (`evict_files` invalidates). `None` only for a
+/// `registry`: the mailbox (`reg`, account, mailbox) the file is in, and
+/// whether another file of the same uid stays in `cur/` (the caller's own
+/// listing says, so no rescan per file). The uid's row is tombstoned right
+/// after the delete only when this was its last file, as every vault writer
+/// keeps the registry current; with a duplicate left (an `A` copy) the row
+/// stays, so a reader never sees a message the vault still holds as gone
+/// (`evict_files` relists such a mailbox after its pass). `None` only for a
 /// whole-vault walk that ends with `invalidate_all` (`clear_cache`).
-fn remove_cache_copy(path: &Path, name: &str, registry: Option<(&VaultRegistry, &str, &str)>) -> std::io::Result<bool> {
+fn remove_cache_copy(path: &Path, name: &str, registry: Option<(&VaultRegistry, &str, &str, bool)>) -> std::io::Result<bool> {
     let flags = parse_flags_from_filename(name);
     if flags.iter().any(|f| f == "archived" || f == "draft") {
         return Ok(false);
     }
     fs::remove_file(path)?;
-    if let (Some((reg, account_id, mailbox)), Some(uid)) = (registry, vault_filename_uid(name)) {
+    let Some(uid) = vault_filename_uid(name) else { return Ok(true) };
+    if let Some((reg, account_id, mailbox, false)) = registry {
         reg.remove(account_id, mailbox, &[uid]);
     }
-    if let (Some(cur), Some(uid)) = (path.parent(), vault_filename_uid(name)) {
+    if let Some(cur) = path.parent() {
         // The sidecar serves whatever file of this uid is left (an `A`
         // duplicate reads through it), so it goes only with the last one.
-        // Checked only when a sidecar exists: a whole-vault walk never
-        // rescans `cur/` per file for the common, unencrypted case.
-        if crate::pgp::copy_path(cur, uid).exists() && find_by_uid(cur, uid).is_none() {
-            crate::pgp::remove_copy(cur, uid);
+        // Without the caller's answer it is looked up, and only when a
+        // sidecar exists: a whole-vault walk never rescans `cur/` per file
+        // for the common, unencrypted case.
+        if crate::pgp::copy_path(cur, uid).exists() {
+            let others_left = match registry {
+                Some((.., others_left)) => others_left,
+                None => find_by_uid(cur, uid).is_some(),
+            };
+            if !others_left {
+                crate::pgp::remove_copy(cur, uid);
+            }
         }
     }
     Ok(true)
@@ -719,9 +730,22 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
 
     let mut removed: Vec<(u32, Vec<PathBuf>)> = Vec::new();
     let mut failed = false;
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(uid) = vault_filename_uid(&name) else { continue };
+    // How many files each uid has in `cur/`, from this one listing, less
+    // those removed below: what `remove_cache_copy` needs to know whether it
+    // removes a uid's last file.
+    let entries: Vec<(fs::DirEntry, String, u32)> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let uid = vault_filename_uid(&name)?;
+            Some((e, name, uid))
+        })
+        .collect();
+    let mut files_of: HashMap<u32, usize> = HashMap::new();
+    for (_, _, uid) in &entries {
+        *files_of.entry(*uid).or_default() += 1;
+    }
+    for (entry, name, uid) in entries {
         if !uids.contains(&uid) {
             continue;
         }
@@ -731,8 +755,12 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         } else {
             Vec::new()
         };
-        match remove_cache_copy(&entry.path(), &name, Some((reg, account_id, mailbox))) {
-            Ok(true) => removed.push((uid, attachments)),
+        let files = files_of.entry(uid).or_default();
+        match remove_cache_copy(&entry.path(), &name, Some((reg, account_id, mailbox, *files > 1))) {
+            Ok(true) => {
+                *files -= 1;
+                removed.push((uid, attachments));
+            }
             Ok(false) => {}
             Err(e) => {
                 failed = true;
@@ -2300,8 +2328,27 @@ R0lGODlhAQABAAAAACw=\r\n\
         fs::write(cur.join(format!("9{INFO_PREFIX}S.eml")), b"Message-ID: <nine@x>\r\n\r\nb").unwrap();
         assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![8, 9], "listed once: verified");
 
-        assert!(remove_cache_copy(&cur.join(&name), &name, Some((&reg, "acct", "INBOX"))).unwrap());
+        assert!(remove_cache_copy(&cur.join(&name), &name, Some((&reg, "acct", "INBOX", false))).unwrap());
         assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![9]);
+    }
+
+    /// The cache copy of a uid whose archived copy stays: the registry keeps
+    /// the uid, so no reader sees a message the vault still holds as gone.
+    #[test]
+    fn remove_cache_copy_keeps_a_uid_whose_archived_duplicate_stays() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (_app, reg) = registry(root);
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let cache = format!("5{INFO_PREFIX}S.eml");
+        fs::write(cur.join(&cache), b"Message-ID: <five@x>\r\n\r\nc").unwrap();
+        fs::write(cur.join(format!("5{INFO_PREFIX}AS.eml")), b"Message-ID: <five@x>\r\n\r\na").unwrap();
+        assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![5], "listed once: verified");
+
+        assert!(remove_cache_copy(&cur.join(&cache), &cache, Some((&reg, "acct", "INBOX", true))).unwrap());
+        assert!(!cur.join(&cache).exists());
+        assert_eq!(reg.uid_sets(root, "acct", "INBOX").unwrap().0, vec![5], "the archived copy keeps it");
     }
 
     #[test]
