@@ -1352,13 +1352,15 @@ input[type="range"]::-moz-range-thumb:hover {
 .onboarding-appearance-controls legend { margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--mail-text); }
 .onboarding-section-hint { font-size: 13px; line-height: 1.5; color: var(--mail-text-muted); }
 .onboarding-choice-hint { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--mail-text-muted); }
-.onboarding-choices { display: flex; gap: 6px; }
-.onboarding-choices button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 6px; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+/* A choice never shrinks below its longest word ("Expandab|le", "展開|可能"):
+ * one that does not fit moves to the next row instead. max-width caps that
+ * minimum, so only a word wider than the whole column still breaks. */
+.onboarding-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.onboarding-choices button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 6px; max-width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: break-word; word-break: keep-all; }
 .onboarding-choices button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .onboarding-choices button:hover:not(:disabled) { border-color: var(--mail-accent); }
 .onboarding-choices button:disabled { opacity: 0.5; cursor: default; }
 .onboarding-choices button svg { flex-shrink: 0; }
-.onboarding-sound-choices { flex-wrap: wrap; }
 .onboarding-sound-choices button { flex: 1 0 28%; }
 .onboarding-appearance-example { min-width: 0; }
 .onboarding-quick-actions-preview { display: flex; flex-direction: column; gap: 16px; min-height: 208px; padding: 20px; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }

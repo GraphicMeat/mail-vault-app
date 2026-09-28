@@ -43,3 +43,17 @@ describe('onboarding layout stability', () => {
     expect(decls('.mail-arrival')['scrollbar-gutter']).toBe('stable');
   });
 });
+
+// "Expandable" rendered as "Expandab / le" in a narrow column, and the same in
+// es, it, pt-BR, fr, de and ja (2026-09-28): a button could shrink below its
+// longest word. Now a choice that does not fit moves to the next row.
+describe('onboarding choice labels', () => {
+  it('wraps choices to a new row instead of breaking a word', () => {
+    expect(decls('.onboarding-choices')['flex-wrap']).toBe('wrap');
+    const button = decls('.onboarding-choices button');
+    expect(button['min-width']).toBeUndefined();
+    expect(button['max-width']).toBe('100%');
+    expect(button['overflow-wrap']).toBe('break-word');
+    expect(button['word-break']).toBe('keep-all');
+  });
+});
