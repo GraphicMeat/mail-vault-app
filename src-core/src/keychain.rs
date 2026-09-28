@@ -47,6 +47,18 @@ pub fn keychain_banner_text(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// The fix to show when a snap build is refused the keyring. snapd does not
+/// connect `password-manager-service` on its own, so until the user does,
+/// AppArmor rejects every Secret Service call and the raw D-Bus error says
+/// nothing about how to get past it.
+pub fn snap_keyring_hint(in_snap: bool, err: &str) -> Option<&'static str> {
+    (in_snap && err.contains("AppArmor") && err.contains("org.freedesktop.Secret")).then_some(
+        "MailVault cannot reach the system keyring because the snap's password-manager-service \
+         connection is off. Run `sudo snap connect mailvault:password-manager-service` in a \
+         terminal, then try again.",
+    )
+}
+
 // ── Split secrets ───────────────────────────────────────────────────────────
 //
 // Windows Credential Manager holds at most 2560 bytes of UTF-16 per secret,
@@ -151,6 +163,16 @@ mod tests {
     fn a_timeout_gates_whatever_the_status() {
         assert_eq!(keychain_block_reason(None, true), Some("timeout"));
         assert_eq!(keychain_block_reason(Some(-25300), true), Some("timeout"));
+    }
+
+    #[test]
+    fn a_snap_refused_by_apparmor_gets_the_connect_command() {
+        let err = "Platform secure storage failure: DBus error: An AppArmor policy prevents this sender \
+                   from sending this message to this recipient; type=\"method_call\", \
+                   interface=\"org.freedesktop.Secret.Service\" member=\"OpenSession\"";
+        assert!(snap_keyring_hint(true, err).unwrap().contains("snap connect mailvault:password-manager-service"));
+        assert_eq!(snap_keyring_hint(false, err), None);
+        assert_eq!(snap_keyring_hint(true, "Platform secure storage failure: no keyring daemon"), None);
     }
 
     #[test]

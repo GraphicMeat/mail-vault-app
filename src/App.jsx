@@ -1244,6 +1244,32 @@ function App() {
     && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
     && !pendingOperation && !exportTarget && !showExportSamples;
 
+  // Settings opens from the native menu on every screen, including onboarding
+  // and the no-accounts welcome screen, so each of them renders it.
+  const settingsLayer = (
+    <ChunkErrorBoundary name="Settings">
+    <Suspense fallback={null}>
+      <AnimatePresence>
+        {settingsMounted && (
+          <SettingsPage key={settingsWindowRequest.id}
+            minimized={settingsMinimized}
+            onMinimize={minimizeSettings}
+            onDetach={detachSettings}
+            onClose={closeSettings}
+            onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
+            onExportAccounts={() => { closeSettings(); setShowExportModal(true); }}
+            onImportAccounts={() => { closeSettings(); setShowImportModal(true); }}
+            onReportBug={handleReportBug}
+            onNavigationLabelChange={setSettingsLocation}
+            initialTab={settingsWindowRequest.tab}
+            initialAccountId={settingsWindowRequest.accountId}
+            initialSection={settingsWindowRequest.section} />
+        )}
+      </AnimatePresence>
+    </Suspense>
+    </ChunkErrorBoundary>
+  );
+
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
     return (
@@ -1253,6 +1279,7 @@ function App() {
           onOpenBilling={() => openSettings({ tab: 'billing' })}
           onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
         />
+        {settingsLayer}
         {mailArrival}
       </>
     );
@@ -1321,6 +1348,7 @@ function App() {
           </ChunkErrorBoundary>
         </motion.div>
       </div>
+      {settingsLayer}
       {mailArrival}
       </>
     );
@@ -1514,27 +1542,7 @@ function App() {
         </div>
       )}
 
-      <ChunkErrorBoundary name="Settings">
-      <Suspense fallback={null}>
-        <AnimatePresence>
-          {settingsMounted && (
-            <SettingsPage key={settingsWindowRequest.id}
-              minimized={settingsMinimized}
-              onMinimize={minimizeSettings}
-              onDetach={detachSettings}
-              onClose={closeSettings}
-              onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
-              onExportAccounts={() => { closeSettings(); setShowExportModal(true); }}
-              onImportAccounts={() => { closeSettings(); setShowImportModal(true); }}
-              onReportBug={handleReportBug}
-              onNavigationLabelChange={setSettingsLocation}
-              initialTab={settingsWindowRequest.tab}
-              initialAccountId={settingsWindowRequest.accountId}
-              initialSection={settingsWindowRequest.section} />
-          )}
-        </AnimatePresence>
-      </Suspense>
-      </ChunkErrorBoundary>
+      {settingsLayer}
 
       <AnimatePresence>
         {error && (
