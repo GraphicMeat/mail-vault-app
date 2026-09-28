@@ -320,6 +320,31 @@ describe('useNotesStore', () => {
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
   });
 
+  it('tags a note Done once its last copy is deleted, so the vault copy that stays does not bring it back', async () => {
+    const note = card('gone', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    await useNotesStore.getState().deleteCard(note);
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: true });
+  });
+
+  it('still deletes when tagging Done fails, and leaves a partly deleted note untagged', async () => {
+    const skipped = { accountId: 'a', mailbox: 'Local-Only', uid: 4 };
+    const part = card('part2', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, skipped] });
+    harness.daemonCall.mockResolvedValue({ cards: [part] });
+    await useNotesStore.getState().open();
+    await useNotesStore.getState().deleteCard(part);
+    expect(harness.daemonCall).not.toHaveBeenCalledWith('notes.set_done', expect.anything());
+
+    const whole = card('whole');
+    harness.daemonCall.mockImplementation(async method => {
+      if (method === 'notes.set_done') throw new Error('db busy');
+      return { cards: [whole] };
+    });
+    await useNotesStore.getState().open();
+    await expect(useNotesStore.getState().deleteCard(whole)).resolves.toEqual({ deleted: 1, kept: 0 });
+  });
+
   it('keeps the card, with the copy it could not address, and says how many stayed', async () => {
     const skipped = { accountId: 'a', mailbox: 'Local-Only', uid: 4 };
     const note = card('part', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, skipped] });

@@ -192,7 +192,11 @@ export const useNotesStore = create((set, get) => ({
       if (gone.size) keep();
       throw error;
     }
-    return { deleted: gone.size, kept: keep() };
+    const kept = keep();
+    // The board lists the vault's copies, and a server delete leaves those:
+    // tag the note Done so it does not come back with the next list.
+    if (!kept) await daemonCall('notes.set_done', { copies: card.copies, done: true }).catch(() => {});
+    return { deleted: gone.size, kept };
   }),
 }));
 
