@@ -24,7 +24,7 @@
 //! under the new message's uid, so the new message is not backed up.
 
 use crate::fsx;
-use crate::maildir::{mirror_filename_uid, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
+use crate::maildir::{mirror_filename_uid, IMPORT_UID_BASE, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
@@ -201,7 +201,7 @@ fn scan(cur_dir: &Path) -> Result<DiskView, String> {
             let entry = entry
                 .map_err(|e| format!("Outlook uid allocation could not list {}: {}", dir.display(), e))?;
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(uid) = mirror_filename_uid(&name) {
+            if let Some(uid) = mirror_filename_uid(&name).filter(|u| *u < IMPORT_UID_BASE) {
                 view.highest = view.highest.max(uid);
             }
             if is_cur {
@@ -279,7 +279,7 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
             }
         }
 
-        let mut next = ledger.keys().next_back().copied().unwrap_or(0).max(disk.highest);
+        let mut next = ledger.range(..IMPORT_UID_BASE).next_back().map(|(uid, _)| *uid).unwrap_or(0).max(disk.highest);
         for (id, message_id) in unseen {
             let adopted = message_id.map(normalize_message_id).and_then(|m| adoptable.remove(&m));
             let uid = match adopted {
@@ -288,8 +288,9 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
                 // u32, so the floor can already sit at u32::MAX. Wrapping
                 // would hand out a uid a file on disk carries; panicking
                 // would take the whole process down for one mailbox.
+                // Imports own `IMPORT_UID_BASE` and up, so that is the ceiling.
                 None => {
-                    next = next.checked_add(1).ok_or_else(|| {
+                    next = next.checked_add(1).filter(|u| *u < IMPORT_UID_BASE).ok_or_else(|| {
                         format!("Outlook uid ledger {} has no uids left to allocate", ledger_path.display())
                     })?;
                     next
@@ -509,6 +510,16 @@ mod tests {
         for (uid, n) in [(1, "a"), (2, "b"), (3, "c")] { file(&m, uid, n); }
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["z", "a", "b", "c"])).unwrap(), vec![4, 1, 2, 3]);
         assert_eq!(on_disk(&m).get(&4).map(String::as_str), Some("g-z"));
+    }
+
+    /// An mbox import (`IMPORT_UID_BASE` and up) is not an Outlook uid:
+    /// counting it would number every new arrival past the import range.
+    #[test]
+    fn an_mbox_import_on_disk_does_not_lift_the_next_uid() {
+        let m = mailbox();
+        seed(&m, &[(1, "a"), (2, "b")]);
+        for (uid, n) in [(1, "a"), (2, "b"), (IMPORT_UID_BASE, "imported")] { file(&m, uid, n); }
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["z"])).unwrap(), vec![3]);
     }
 
     #[test]
@@ -925,7 +936,7 @@ mod tests {
     #[test]
     fn uid_space_exhausted_is_an_error_and_writes_nothing() {
         let m = mailbox();
-        fs::write(m.cur.join("4294967295.eml"), eml("legacy@outlook.test")).unwrap();
+        fs::write(m.cur.join(format!("{}.eml", IMPORT_UID_BASE - 1)), eml("legacy@outlook.test")).unwrap();
         assert!(allocate(&m.ledger, &m.cur, &[("g-n".to_string(), None)]).is_err());
         assert!(!m.ledger.exists());
     }

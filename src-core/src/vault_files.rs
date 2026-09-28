@@ -1311,9 +1311,9 @@ fn prefetch_attachments_in(
     cur_dir: &Path,
     account_id: &str,
     mailbox: &str,
-    above_uid: u32,
+    above: Marks,
     gate: VaultGate<'_>,
-) -> Result<(Vec<PathBuf>, u32), String> {
+) -> Result<(Vec<PathBuf>, Marks), String> {
     let entries = fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
     let mut files: Vec<(u32, PathBuf)> = entries.flatten()
         .filter_map(|entry| {
@@ -1323,11 +1323,20 @@ fn prefetch_attachments_in(
         })
         .collect();
     files.sort_unstable_by(|a, b| b.0.cmp(&a.0));
-    let max_uid = files.first().map(|f| f.0).unwrap_or(0);
+    let marks = Marks {
+        server: files.iter().map(|f| f.0).find(|u| *u < maildir::IMPORT_UID_BASE).unwrap_or(0),
+        import: files.first().map(|f| f.0).filter(|u| *u >= maildir::IMPORT_UID_BASE).unwrap_or(0),
+    };
 
     let mut written = Vec::new();
     for (uid, path) in files {
-        if uid <= above_uid { break; }
+        // Imports sort first and keep their own mark, so one import never
+        // lifts the mark over the server's uids below it.
+        if uid >= maildir::IMPORT_UID_BASE {
+            if uid <= above.import { continue; }
+        } else if uid <= above.server {
+            break;
+        }
         gate(&mut || {
             let Ok(raw) = fs::read(&path) else { return Ok(()) };
             let raw = crate::pgp::readable(cur_dir, uid, raw);
@@ -1349,7 +1358,15 @@ fn prefetch_attachments_in(
             Ok(())
         })?;
     }
-    Ok((written, max_uid))
+    Ok((written, marks))
+}
+
+/// A mailbox's prefetch high-water marks: server uids and mbox imports
+/// (`maildir::IMPORT_UID_BASE` and up) are numbered apart, so each has one.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Marks {
+    server: u32,
+    import: u32,
 }
 
 /// One sweep at a time is the caller's job (a lock around this call); the
@@ -1368,15 +1385,19 @@ pub fn prefetch_attachments(
     let cache_dir = root.join("attachment_cache");
     let cur_dir = cur_path(root, account_id, mailbox);
     let key = format!("{}/{}", account_id, mailbox);
-    let above = high_water.lock().unwrap_or_else(|p| p.into_inner())
-        .iter().find(|(k, _)| *k == key).map(|(_, uid)| *uid).unwrap_or(0);
-    let (written, max_uid) = prefetch_attachments_in(&cache_dir, &cur_dir, account_id, mailbox, above, gate)?;
+    let import_key = format!("{}#import", key);
+    let mark = |k: &str| high_water.lock().unwrap_or_else(|p| p.into_inner())
+        .iter().find(|(m, _)| m == k).map(|(_, uid)| *uid).unwrap_or(0);
+    let above = Marks { server: mark(&key), import: mark(&import_key) };
+    let (written, seen) = prefetch_attachments_in(&cache_dir, &cur_dir, account_id, mailbox, above, gate)?;
     let mut marks = high_water.lock().unwrap_or_else(|p| p.into_inner());
-    match marks.iter_mut().find(|(k, _)| *k == key) {
-        Some(entry) => entry.1 = max_uid,
-        None => marks.push((key, max_uid)),
+    for (k, uid) in [(key, seen.server), (import_key, seen.import)] {
+        match marks.iter_mut().find(|(m, _)| *m == k) {
+            Some(entry) => entry.1 = uid,
+            None => marks.push((k, uid)),
+        }
     }
-    info!("Attachment prefetch {}/{}: {} written above uid {}", account_id, mailbox, written.len(), above);
+    info!("Attachment prefetch {}/{}: {} written above uid {}", account_id, mailbox, written.len(), above.server);
     Ok(written.len())
 }
 
@@ -2093,15 +2114,15 @@ R0lGODlhAQABAAAAACw=\r\n\
             (3, PLAIN_EMAIL),
         ]);
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &noop_gate).unwrap();
+        let (written, seen) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks::default(), &noop_gate).unwrap();
         let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
         // The photo only: the cid: logo is part of the HTML and the unnamed
         // 1x1 gif is a tracking pixel — neither is something the user attached.
         assert_eq!(names, vec!["acct_INBOX_9_0_photo.png", "acct_INBOX_5_0_report.pdf"]);
-        assert_eq!(max_uid, 9);
+        assert_eq!(seen, Marks { server: 9, import: 0 });
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
 
-        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &noop_gate).unwrap();
+        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks::default(), &noop_gate).unwrap();
         assert!(again.is_empty());
     }
 
@@ -2112,8 +2133,30 @@ R0lGODlhAQABAAAAACw=\r\n\
             (9, &photo_with_inline_and_pixel()),
         ]);
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
-        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5, &noop_gate).unwrap();
+        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks { server: 5, import: 0 }, &noop_gate).unwrap();
         assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
+    }
+
+    /// An mbox import numbers from `IMPORT_UID_BASE`. Its uid sorting first
+    /// must not become the mark that hides newer server mail below it.
+    #[test]
+    fn prefetch_keeps_imports_from_hiding_newer_server_mail() {
+        let base = maildir::IMPORT_UID_BASE;
+        let (_d, cur, cache) = maildir_with(&[
+            (base, &multipart_with_attachment()),
+            (9, &photo_with_inline_and_pixel()),
+        ]);
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let (written, seen) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks { server: 5, import: 0 }, &noop_gate).unwrap();
+        assert_eq!(written.len(), 2, "the import and server uid 9 above the server mark");
+        assert_eq!(seen, Marks { server: 9, import: base });
+
+        let (_d2, cur2, cache2) = maildir_with(&[
+            (base, &multipart_with_attachment()),
+            (12, &photo_with_inline_and_pixel()),
+        ]);
+        let (written, _) = prefetch_attachments_in(&cache2, &cur2, "acct", "INBOX", seen, &noop_gate).unwrap();
+        assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_12_0_photo.png"], "new server mail is swept; the seen import is not");
     }
 
     // Task 2.6 fix round 1, I1: the per-file gate must hold each file's

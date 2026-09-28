@@ -22,11 +22,11 @@
 
 use crate::handlers::common;
 use crate::server::DaemonState;
-use mailvault_core::maildir::{has_info, info_flags, is_info_sep};
+use mailvault_core::maildir::{has_info, info_flags, is_info_sep, IMPORT_UID_BASE};
 use mailvault_core::vault_files::build_maildir_filename;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -120,55 +120,50 @@ fn mbox_from_line(raw: &[u8]) -> String {
     format!("From {} {}", sender, date)
 }
 
-/// Split raw mbox data into individual email messages. Each message starts
-/// with a line matching "From " after a blank line (or at file start).
-fn split_mbox(data: &[u8]) -> Vec<&[u8]> {
-    let mut messages: Vec<&[u8]> = Vec::new();
-    let mut start: Option<usize> = None;
-
-    let mut i = 0;
-    let len = data.len();
-
-    while i < len {
-        let is_from_line = if i + 5 <= len && &data[i..i + 5] == b"From " {
-            i == 0
-                || (i >= 1
-                    && data[i - 1] == b'\n'
-                    && (i >= 2 && data[i - 2] == b'\n' || (i >= 3 && data[i - 2] == b'\r' && data[i - 3] == b'\n')))
-        } else {
-            false
-        };
-
-        if is_from_line {
-            if let Some(msg_start) = start {
-                let mut end = i;
-                while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
-                    end -= 1;
-                }
-                if end > msg_start {
-                    messages.push(&data[msg_start..end]);
-                }
+/// Stream an mbox one message at a time, so peak memory is one message and
+/// never the file (a 55 GB Google Takeout mbox used to be read whole and
+/// run the machine out of memory). A message starts at a "From " line at
+/// file start or right after a blank line (`\n` or `\r\n`); its trailing
+/// CR/LF is trimmed. `f` gets each message and the bytes read so far, and
+/// returns `false` to stop early.
+fn for_each_mbox_message(mut r: impl BufRead, mut f: impl FnMut(&[u8], u64) -> bool) -> std::io::Result<()> {
+    let mut line = Vec::new();
+    let mut msg = Vec::new();
+    let mut in_msg = false;
+    let mut prev_blank = true;
+    let mut read: u64 = 0;
+    let mut flush = |msg: &mut Vec<u8>, read: u64| -> bool {
+        while matches!(msg.last(), Some(b'\n' | b'\r')) {
+            msg.pop();
+        }
+        let go_on = msg.is_empty() || f(msg, read);
+        msg.clear();
+        go_on
+    };
+    loop {
+        line.clear();
+        let n = r.read_until(b'\n', &mut line)?;
+        if n == 0 {
+            break;
+        }
+        read += n as u64;
+        if prev_blank && line.starts_with(b"From ") {
+            if in_msg && !flush(&mut msg, read) {
+                return Ok(());
             }
-
-            let line_end = data[i..].iter().position(|&b| b == b'\n').map(|p| i + p + 1).unwrap_or(len);
-            start = Some(line_end);
-            i = line_end;
-        } else {
-            i += 1;
+            in_msg = true;
+            prev_blank = false;
+            continue;
+        }
+        prev_blank = line == b"\n" || line == b"\r\n";
+        if in_msg {
+            msg.extend_from_slice(&line);
         }
     }
-
-    if let Some(msg_start) = start {
-        let mut end = len;
-        while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
-            end -= 1;
-        }
-        if end > msg_start {
-            messages.push(&data[msg_start..end]);
-        }
+    if in_msg {
+        flush(&mut msg, read);
     }
-
-    messages
+    Ok(())
 }
 
 pub fn export_mbox_all(
@@ -271,8 +266,19 @@ pub fn import_mbox(
 ) -> Result<MboxImportResult, String> {
     info!("import_mbox called: source={}, account={}, mailbox={}", source_path.display(), account_id, mailbox);
 
-    let data = std::fs::read(&source_path).map_err(|e| format!("Failed to read mbox file: {}", e))?;
+    let file = std::fs::File::open(&source_path).map_err(|e| format!("Failed to read mbox file: {}", e))?;
+    let bytes_total = file.metadata().map(|m| m.len()).unwrap_or(0);
+    import_from(state, std::io::BufReader::with_capacity(1 << 20, file), bytes_total, account_id, mailbox, emit)
+}
 
+fn import_from(
+    state: &Arc<DaemonState>,
+    reader: impl BufRead,
+    bytes_total: u64,
+    account_id: String,
+    mailbox: String,
+    emit: impl Fn(&str, Value),
+) -> Result<MboxImportResult, String> {
     // Decision 10: a single up-front read-only resolution to find the
     // mailbox's current max uid; the actual per-message write is gated
     // below, inside the loop.
@@ -285,7 +291,9 @@ pub fn import_mbox(
     let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
     std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
-    let mut max_uid: u32 = 0;
+    // Imports take their own range, past any uid a server hands out, and
+    // continue after the last import already in this folder.
+    let mut max_uid: u32 = IMPORT_UID_BASE - 1;
     if let Ok(files) = std::fs::read_dir(&cur_dir) {
         for f in files.flatten() {
             let fname = f.file_name().to_string_lossy().to_string();
@@ -299,13 +307,13 @@ pub fn import_mbox(
         }
     }
 
-    let messages = split_mbox(&data);
-    let total = messages.len() as u32;
-    emit("mbox-import-progress", json!({"total": total, "completed": 0, "active": true}));
+    // The message count is unknown until the stream ends: `total` stays 0
+    // while active (as export does) and progress runs on bytes.
+    emit("mbox-import-progress", json!({"total": 0, "completed": 0, "active": true, "bytesDone": 0, "bytesTotal": bytes_total}));
 
     let mut email_count: u32 = 0;
 
-    for msg_raw in &messages {
+    let streamed = for_each_mbox_message(reader, |msg_raw, bytes_done| {
         let unescaped = mbox_unescape_from(msg_raw);
 
         // Decision 10: the gate is re-acquired here, inside the loop, once
@@ -321,14 +329,14 @@ pub fn import_mbox(
             let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
-            max_uid += 1;
+            max_uid = max_uid.checked_add(1).ok_or("The import uid range is full")?;
             // Decision 3, the fix this task exists for: seed "archived" so
             // vault_files::clear_cache does not treat mbox-imported mail as
             // disposable cache (was `&[] as &[String]`, zero flags).
             let filename = build_maildir_filename(max_uid, &["archived".to_string()]);
             let mut dest = cur_dir.join(&filename);
             if dest.exists() {
-                max_uid += 1;
+                max_uid = max_uid.checked_add(1).ok_or("The import uid range is full")?;
                 let filename2 = build_maildir_filename(max_uid, &["archived".to_string()]);
                 dest = cur_dir.join(&filename2);
             }
@@ -344,18 +352,27 @@ pub fn import_mbox(
         match write_result {
             Ok(()) => {
                 email_count += 1;
-                if email_count % 50 == 0 || email_count == total {
-                    emit("mbox-import-progress", json!({"total": total, "completed": email_count, "active": true}));
+                if email_count % 50 == 0 {
+                    emit("mbox-import-progress", json!({"total": 0, "completed": email_count, "active": true, "bytesDone": bytes_done, "bytesTotal": bytes_total}));
                 }
+                true
             }
             Err(e) => {
                 warn!("import_mbox: vault gate refused a write, stopping the import early: {}", e);
-                break;
+                false
             }
         }
+    });
+    if let Err(e) = streamed {
+        // What already landed stays landed: an error here would tell the user
+        // nothing changed. Only a read that wrote nothing is a failure.
+        if email_count == 0 {
+            return Err(format!("Failed to read mbox file: {}", e));
+        }
+        warn!("import_mbox: read failed after {} messages, keeping them: {}", email_count, e);
     }
 
-    emit("mbox-import-progress", json!({"total": total, "completed": email_count, "active": false}));
+    emit("mbox-import-progress", json!({"total": email_count, "completed": email_count, "active": false, "bytesDone": bytes_total, "bytesTotal": bytes_total}));
 
     info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
     if email_count > 0 {
@@ -415,7 +432,95 @@ mod tests {
         write_mbox(dir, name, &refs)
     }
 
-    // -- split_mbox / escape roundtrip -----------------------------------
+    // -- streaming split / escape roundtrip -------------------------------
+
+    fn split_mbox(data: &[u8]) -> Vec<Vec<u8>> {
+        split_from(std::io::Cursor::new(data.to_vec()))
+    }
+
+    fn split_from(r: impl BufRead) -> Vec<Vec<u8>> {
+        let mut out = Vec::new();
+        for_each_mbox_message(r, |m, _| {
+            out.push(m.to_vec());
+            true
+        })
+        .unwrap();
+        out
+    }
+
+    /// Hands out at most `step` bytes per read, so every boundary, blank
+    /// line and CRLF pair also lands across a buffer refill.
+    struct Trickle {
+        data: Vec<u8>,
+        pos: usize,
+        step: usize,
+        fail_at: Option<usize>,
+    }
+
+    impl std::io::Read for Trickle {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.fail_at.is_some_and(|at| self.pos >= at) {
+                return Err(std::io::Error::other("disk went away"));
+            }
+            let n = self.step.min(buf.len()).min(self.data.len() - self.pos);
+            buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+            self.pos += n;
+            Ok(n)
+        }
+    }
+
+    fn trickle(data: &[u8], step: usize, fail_at: Option<usize>) -> std::io::BufReader<Trickle> {
+        std::io::BufReader::with_capacity(step, Trickle { data: data.to_vec(), pos: 0, step, fail_at })
+    }
+
+    #[test]
+    fn split_keeps_the_boundary_rules_across_tiny_reads() {
+        let data: &[u8] = b"junk before any envelope\n\n\
+From a@b Mon Jan  1 00:00:00 2026\r\nSubject: one\r\n\r\n>From the team\r\nnot From here\r\n\r\n\
+From c@d Mon Jan  1 00:00:00 2026\nSubject: two\n\nline\nFrom mid-body, no blank before\n\n\n\
+From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
+        let want: Vec<Vec<u8>> = vec![
+            b"Subject: one\r\n\r\n>From the team\r\nnot From here".to_vec(),
+            b"Subject: two\n\nline\nFrom mid-body, no blank before".to_vec(),
+            b"Subject: three\n\nno trailing newline".to_vec(),
+        ];
+        assert_eq!(split_mbox(data), want);
+        for step in [1, 2, 5, 7] {
+            assert_eq!(split_from(trickle(data, step, None)), want, "step {step}");
+        }
+    }
+
+    #[test]
+    fn split_reports_bytes_read_and_stops_when_told() {
+        let data = b"From a\nm1\n\nFrom b\nm2\n\nFrom c\nm3\n";
+        let mut seen = Vec::new();
+        for_each_mbox_message(std::io::Cursor::new(&data[..]), |m, read| {
+            seen.push((m.to_vec(), read));
+            seen.len() < 2
+        })
+        .unwrap();
+        assert_eq!(seen.len(), 2, "must stop after the callback says so");
+        assert_eq!(seen[0].0, b"m1");
+        assert!(seen[0].1 > 0 && seen[1].1 > seen[0].1 && seen[1].1 <= data.len() as u64);
+    }
+
+    #[test]
+    fn import_keeps_what_landed_when_the_read_fails_mid_file() {
+        let (v, s) = state(true);
+        let data = b"From a\nSubject: 1\n\nb1\n\nFrom a\nSubject: 2\n\nb2\n\nFrom a\nSubject: 3\n\nb3\n".to_vec();
+        let fail_at = data.len() - 4;
+        let result = import_from(&s, trickle(&data, 4, Some(fail_at)), data.len() as u64, "acct1".into(), "INBOX".into(), |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 2, "the two whole messages before the failure are kept, not reported as an error");
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
+        assert_eq!(std::fs::read_dir(&cur).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn import_that_writes_nothing_before_a_read_failure_is_an_error() {
+        let (_v, s) = state(true);
+        let data = b"From a\nSubject: 1\n\nb1\n".to_vec();
+        assert!(import_from(&s, trickle(&data, 4, Some(8)), data.len() as u64, "acct1".into(), "INBOX".into(), |_, _| {}).is_err());
+    }
 
     #[test]
     fn split_mbox_separates_two_messages() {
@@ -484,7 +589,7 @@ mod tests {
     #[test]
     fn import_continues_the_uid_sequence_past_semicolon_named_files() {
         let (v, s) = state(true);
-        seed_file_named(v.path(), "acct1", "INBOX", "50;2,S.eml", b"existing, semicolon");
+        seed_file_named(v.path(), "acct1", "INBOX", &format!("{};2,S.eml", IMPORT_UID_BASE + 50), b"existing, semicolon");
         let dir = tempfile::tempdir().unwrap();
         let mbox_path = write_mbox(dir.path(), "in.mbox", &["Subject: new\r\n\r\nbody"]);
 
@@ -492,7 +597,32 @@ mod tests {
 
         let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
         let names: Vec<String> = std::fs::read_dir(&cur).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
-        assert!(names.iter().any(|n| n.starts_with("51")), "expected uid 51 (past the existing 50), got {:?}", names);
+        let want = (IMPORT_UID_BASE + 51).to_string();
+        assert!(names.iter().any(|n| n.starts_with(&want)), "expected uid {want} (past the existing import), got {:?}", names);
+    }
+
+    /// A Takeout import used to number from `max local + 1`, which is a uid
+    /// the server has or will give its own mail: the server row then hid the
+    /// import, and that server message opened the imported body.
+    #[test]
+    fn import_numbers_past_every_server_uid_and_continues_its_own_range() {
+        let (v, s) = state(true);
+        seed_file(v.path(), "acct1", "INBOX", 5, &["S"], b"a server message");
+        let dir = tempfile::tempdir().unwrap();
+
+        let first = write_mbox(dir.path(), "a.mbox", &["Subject: one\r\n\r\nb1"]);
+        import_mbox(&s, first, "acct1".into(), "INBOX".into(), |_, _| {}).unwrap();
+        let second = write_mbox(dir.path(), "b.mbox", &["Subject: two\r\n\r\nb2"]);
+        import_mbox(&s, second, "acct1".into(), "INBOX".into(), |_, _| {}).unwrap();
+
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
+        let mut uids: Vec<u32> = std::fs::read_dir(&cur)
+            .unwrap()
+            .filter_map(|e| mailvault_core::maildir::vault_filename_uid(&e.unwrap().file_name().to_string_lossy()))
+            .collect();
+        uids.sort_unstable();
+        assert_eq!(uids, vec![5, IMPORT_UID_BASE, IMPORT_UID_BASE + 1]);
+        assert_eq!(std::fs::read(mailvault_core::maildir::find_by_uid(&cur, 5).unwrap()).unwrap(), b"a server message");
     }
 
     /// Decision 10: the export walk performs zero gate acquisitions. Holding
@@ -591,7 +721,8 @@ mod tests {
         let result = import_mbox(&s, mbox_path, "acct1".to_string(), "INBOX".to_string(), |_, _| {}).unwrap();
         assert_eq!(result.email_count, 2);
 
-        assert_eq!(reg.uid_sets(v.path(), "acct1", "INBOX"), Some((vec![3, 4, 5], vec![3, 4, 5])));
+        let b = IMPORT_UID_BASE;
+        assert_eq!(reg.uid_sets(v.path(), "acct1", "INBOX"), Some((vec![3, b, b + 1], vec![3, b, b + 1])));
         assert_eq!(reg.listing_count(), 1, "the rows came from the import, not a relisting");
     }
 

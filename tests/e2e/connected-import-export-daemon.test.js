@@ -326,7 +326,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     await browser.waitUntil(() => {
       const names = existsSync(cur) ? readdirSync(cur) : [];
       written = names.find((n) => n.includes('archived-flag-regression') || false);
-      // The mbox importer assigns its own local uid (max local uid + 1), not
+      // The mbox importer assigns its own uid (from IMPORT_UID_BASE up), not
       // a value this test controls -- find the newest file instead.
       if (!written && names.length) {
         written = names.map((n) => ({ n, t: statSync(join(cur, n)).mtimeMs })).sort((a, b) => b.t - a.t)[0]?.n;

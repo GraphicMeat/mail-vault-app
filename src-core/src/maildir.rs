@@ -85,6 +85,14 @@ pub fn respell_for_platform(name: &str) -> String {
     }
 }
 
+/// First uid of the range mbox import numbers its messages from. An IMAP
+/// server hands out uids from 1 up and never gets near here, so an imported
+/// message cannot take a number a real server message will have (it did at
+/// `max local + 1`: the server row then hid the import, and that server
+/// message opened the imported body). Watermarks and allocators over vault
+/// files skip this range.
+pub const IMPORT_UID_BASE: u32 = 0xC000_0000;
+
 /// The uid a vault filename carries, by `find_by_uid`'s exact rule: the name
 /// starts with the canonical decimal uid and an info separator (`:`, or `;`
 /// on Windows — either spelling parses on every platform). `u32::parse` alone
@@ -739,7 +747,9 @@ pub fn repair_generation(
             Some(u) => u,
             None => continue,
         };
-        if protected.contains(&old_uid) {
+        // An import is local mail, never the server's: a new UIDVALIDITY says
+        // nothing about it.
+        if protected.contains(&old_uid) || old_uid >= IMPORT_UID_BASE {
             report.kept += 1;
             continue;
         }
@@ -1294,6 +1304,24 @@ mod tests {
         assert_eq!(read_message_id(&cur.join(format!("11{INFO_PREFIX}S.eml"))), Some("later@host.test".into()));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_repair_generation_keeps_an_mbox_import_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let mailbox = dir.path().join("Maildir").join("acc1").join("INBOX");
+        let cur = mailbox.join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        let name = format!("{}{INFO_PREFIX}A.eml", IMPORT_UID_BASE);
+        fs::write(cur.join(&name), eml("takeout@gmail.test", "imported")).unwrap();
+        write_generation(&mailbox, 7).unwrap();
+
+        // The server knows nothing of the import: no protected set, no uid.
+        let r = repair_generation(&mailbox, 8, &HashMap::new(), &HashSet::new());
+
+        assert!(cur.join(&name).exists(), "a new UIDVALIDITY must not set an import aside");
+        assert!(r.orphaned.is_empty());
+        assert_eq!(r.errors, 0);
     }
 
     #[test]

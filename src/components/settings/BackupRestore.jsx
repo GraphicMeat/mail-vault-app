@@ -234,7 +234,10 @@ export default function BackupRestore() {
       });
       if (!sourcePath) return;
 
-      const targetAccount = visibleAccounts[0];
+      // The account on screen, not whichever sorts first: that is where the
+      // user goes looking for what they imported.
+      const { activeAccountId } = useMailStore.getState();
+      const targetAccount = visibleAccounts.find(a => a.id === activeAccountId) || visibleAccounts[0];
       const targetMailbox = 'INBOX';
 
       const store = useMailStore.getState();
@@ -244,7 +247,8 @@ export default function BackupRestore() {
       const unlisten = await listen('mbox-import-progress', (event) => {
         const p = event.payload;
         useMailStore.getState().setExportProgress({
-          total: p.total, completed: p.completed, active: p.active, mode: 'import'
+          total: p.total, completed: p.completed, active: p.active, mode: 'import',
+          bytesDone: p.bytesDone, bytesTotal: p.bytesTotal,
         });
       });
 

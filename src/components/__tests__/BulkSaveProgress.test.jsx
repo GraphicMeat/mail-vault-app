@@ -127,3 +127,23 @@ describe('BulkSaveProgress move mode', () => {
     expect(screen.queryByText('Moving...')).toBe(null);
   });
 });
+
+// A streamed mbox import cannot count its messages until the file ends, so
+// the bar runs on bytes read and the label gives the count alone.
+describe('BulkSaveProgress mbox import', () => {
+  beforeEach(() => {
+    useUiStoreMock.setState({ bulkSaveProgress: null, exportProgress: null, moveProgress: null });
+  });
+  afterEach(() => cleanup());
+
+  it('runs on bytes while the message count is unknown', () => {
+    useUiStoreMock.setState({
+      exportProgress: { total: 0, completed: 1250, active: true, mode: 'import', bytesDone: 250, bytesTotal: 1000 },
+    });
+    render(<BulkSaveProgress />);
+
+    expect(screen.getByText('1250 emails')).toBeTruthy();
+    expect(screen.getByText('25%')).toBeTruthy();
+    expect(screen.queryByText(/of 0/)).toBe(null);
+  });
+});

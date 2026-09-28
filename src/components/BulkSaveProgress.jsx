@@ -82,7 +82,11 @@ const MODE_CONFIG = () => ({
 function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive' }) {
   const t = useT();
   const { total, completed, errors = 0, active } = progress;
-  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const { bytesDone = 0, bytesTotal = 0 } = progress;
+  // A streamed import learns its message count at the end: until then the
+  // bar runs on bytes read and the label shows the count alone.
+  const percentage = total > 0 ? Math.round((completed / total) * 100)
+    : bytesTotal > 0 ? Math.min(100, Math.round((bytesDone / bytesTotal) * 100)) : 0;
   // Treat as complete when all emails are processed, even if active flag is stale
   const isComplete = total > 0 && completed + errors >= total;
   const base = MODE_CONFIG()[mode] || MODE_CONFIG().archive;
@@ -99,7 +103,10 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
     ? (errors > 0 ? t('bulk.save.messages', { config: config.errorLabel(errors), of }) : t('bulk.save.messages', { config: config.successLabel, of }))
     // activeLabel ends in an ellipsis for the eye; a screen reader would
     // read it out as "dot dot dot".
-    : t('bulk.save.messages2', { config: config.activeLabel.replace(/\.\.\.$/, ''), milestone, total: formatCount(total) });
+    : total > 0
+      ? t('bulk.save.messages2', { config: config.activeLabel.replace(/\.\.\.$/, ''), milestone, total: formatCount(total) })
+      // No count yet (a streamed import): the byte milestone, then the count so far.
+      : t('bulk.save.messages', { config: `${config.activeLabel.replace(/\.\.\.$/, '')} ${milestone}%`, of: formatCount(completed) });
 
   useEffect(() => {
     if (isComplete && errors === 0) {
@@ -169,7 +176,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-mail-text-muted">
-              {t('bulk.progress.completedOfTotalEmails', { completed, total })}
+              {total > 0 ? t('bulk.progress.completedOfTotalEmails', { completed, total }) : t('common.emailCount', { count: completed })}
             </span>
             <span className="text-sm font-medium text-mail-accent-text">
               {percentage}%
