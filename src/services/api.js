@@ -471,7 +471,9 @@ export async function exchangeOAuth2Code(state) {
 }
 
 // `accountEmail`: Network Activity shows the refresh as that account's.
-export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId, useGraph, accountEmail) {
+// `clientId` is the account's `oauth2ClientId`: the Google client that issued
+// its refresh token. Absent means a legacy account (Thunderbird's client).
+export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId, useGraph, accountEmail, clientId) {
   if (IS_TAURI) {
     return tauriInvoke('oauth2_refresh', {
       refreshToken,
@@ -480,11 +482,12 @@ export async function refreshOAuth2Token(refreshToken, provider, customClientId,
       tenantId: tenantId || null,
       useGraph: useGraph || false,
       accountEmail,
+      clientId: clientId || null,
     });
   }
   return httpRequest('/oauth2/refresh', {
     method: 'POST',
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify({ refreshToken, clientId: clientId || null }),
   });
 }
 

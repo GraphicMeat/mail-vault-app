@@ -3,6 +3,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
+import { withOAuth2Exchange } from '../services/authUtils';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
@@ -458,16 +459,15 @@ export function AccountModal({ onClose, onSuccess }) {
       // ourselves — no extra click needed. `next` is handed straight to
       // submitAccount instead of being read back out of `formData`, which
       // React has not applied yet at this point in the same tick.
-      const next = {
+      // The tokens travel with the OAuth client that issued them
+      // (oauth2ClientId), so a later refresh goes out as the same client.
+      const next = withOAuth2Exchange({
         ...formData,
         authType: 'oauth2',
         oauth2Provider: currentProvider,
-        oauth2AccessToken: tokenData.accessToken,
-        oauth2RefreshToken: tokenData.refreshToken,
-        oauth2ExpiresAt: tokenData.expiresAt,
         oauth2Transport: isPersonalMs ? 'graph' : 'imap',
         password: '' // Clear password — not needed for OAuth2
-      };
+      }, tokenData);
       setFormData(next);
       setOauthConnected(true);
 

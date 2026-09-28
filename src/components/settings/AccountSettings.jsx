@@ -5,6 +5,7 @@ import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
+import { withOAuth2Exchange } from '../../services/authUtils';
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { isFastmailAccount } from '../AccountModal.jsx';
 import { AliasesSection } from './AliasesSection';
@@ -331,13 +332,12 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       const { saveAccount } = await import('../../services/db');
       if (account) {
         // Spread all existing account fields to preserve oauth2Transport,
-        // oauth2Provider, oauth2CustomClientId, oauth2TenantId, etc.
-        await saveAccount({
-          ...account,
-          oauth2AccessToken: tokenData.accessToken,
-          oauth2RefreshToken: tokenData.refreshToken,
-          oauth2ExpiresAt: tokenData.expiresAt,
-        });
+        // oauth2Provider, oauth2CustomClientId, oauth2TenantId, etc. The new
+        // tokens come from the client this sign-in used, so oauth2ClientId is
+        // replaced with it in the same write: an account that still carried
+        // Thunderbird's (or no) stamp would otherwise refresh the new tokens
+        // with the wrong client.
+        await saveAccount(withOAuth2Exchange(account, tokenData));
       }
 
       const { init } = useMailStore.getState();

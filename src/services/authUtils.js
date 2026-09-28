@@ -13,6 +13,26 @@ function isJwtShaped(token) {
 }
 
 /**
+ * The account fields a finished OAuth2 sign-in sets, laid over `base`.
+ *
+ * A refresh token only works with the client that issued it, so the client
+ * (`tokenData.clientId`, reported by the exchange) is recorded in the SAME
+ * object as the refresh token. It is always assigned, even when absent, so an
+ * account that already carries a stamp cannot keep the old client's id next
+ * to a new client's token. Absent means the daemon reported no client, i.e.
+ * Thunderbird's, which is what an unstamped account already means.
+ */
+export function withOAuth2Exchange(base, tokenData) {
+  return {
+    ...base,
+    oauth2AccessToken: tokenData.accessToken,
+    oauth2RefreshToken: tokenData.refreshToken,
+    oauth2ExpiresAt: tokenData.expiresAt,
+    oauth2ClientId: tokenData.clientId || undefined,
+  };
+}
+
+/**
  * Check if a Graph account has a usable access token.
  * For Graph, a truthy string is not enough — the token must be JWT-shaped.
  */
@@ -187,7 +207,8 @@ async function _forceRefreshToken(account) {
     account.oauth2CustomClientId,
     account.oauth2TenantId,
     account.oauth2Transport === 'graph',
-    account.email
+    account.email,
+    account.oauth2ClientId
   );
   rememberTokenOwner(tokens.accessToken, account.email);
 
@@ -273,7 +294,8 @@ export async function ensureFreshToken(account) {
         account.oauth2CustomClientId,
         account.oauth2TenantId,
         account.oauth2Transport === 'graph',
-        account.email
+        account.email,
+        account.oauth2ClientId
       );
       rememberTokenOwner(tokens.accessToken, account.email);
 
