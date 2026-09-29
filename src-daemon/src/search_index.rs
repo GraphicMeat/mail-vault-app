@@ -72,6 +72,16 @@ pub(crate) fn yield_to_foreground(st: &SearchIndexState) {
     }
 }
 
+/// `yield_to_foreground` for an async caller (the Archive & delete job's
+/// worker): the same quiet time and per-call cap, but the pause is a tokio
+/// sleep, so the runtime it runs on keeps polling its other tasks.
+pub(crate) async fn wait_foreground_quiet(st: &SearchIndexState) {
+    let start = Instant::now();
+    while let Some(pause) = foreground_pause(since_foreground(st), start.elapsed()) {
+        tokio::time::sleep(pause).await;
+    }
+}
+
 const RETRY_DELAYS: [Duration; 3] = [Duration::from_secs(5), Duration::from_secs(10), Duration::from_secs(30)];
 
 pub struct SearchIndexState {

@@ -211,6 +211,11 @@ pub struct DaemonState {
     /// Network Activity's kept events in `app.db`: the listener in main.rs
     /// feeds its writer, `handlers::net_activity` reads it.
     pub net_log: Arc<mailvault_core::net_log::NetLog>,
+    /// Archive & delete jobs: the job registry, the dry-run listings, the
+    /// access tokens the app pushed (memory only) and the attached backup
+    /// folders. The work runs on the `abd-worker` thread
+    /// (`abd_worker::start`), never on this runtime.
+    pub abd: crate::abd_worker::AbdState,
 }
 
 /// Opens the vault registry for the vault at `root` and points its change
@@ -531,6 +536,10 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::abd::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::insights::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -830,6 +839,7 @@ impl DaemonState {
             import_rehome_running: Default::default(),
             mbox_uploads: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
+            abd: Default::default(),
         });
         state.idle.set_daemon(&state);
         state

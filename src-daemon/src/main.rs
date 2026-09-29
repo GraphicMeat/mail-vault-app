@@ -3,6 +3,8 @@
 // Manager. Piped stdio (the `--extract-pdf` child) still works without it.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod abd_local;
+mod abd_worker;
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;
@@ -501,6 +503,7 @@ async fn daemon_main() {
         import_rehome_running: Default::default(),
         mbox_uploads: Default::default(),
         net_log,
+        abd: Default::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
     state.idle.set_daemon(&state);
@@ -590,6 +593,11 @@ async fn daemon_main() {
     // the background for Hoarder accounts with `fetchModePremium`. Paced,
     // one message at a time on the background lane; see its module doc.
     hoarder_worker::start(Arc::clone(&state));
+
+    // Archive & delete jobs (Premium): one dedicated OS thread at background
+    // priority, its own runtime; resumes whatever the last daemon left
+    // unfinished. See `abd_worker`.
+    abd_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));
