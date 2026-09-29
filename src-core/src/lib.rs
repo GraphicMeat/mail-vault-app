@@ -18,6 +18,7 @@ pub mod import_rehome;
 pub mod maildir;
 pub mod notes_to_self;
 pub mod search_index;
+pub mod takeout;
 pub mod vault_eml;
 pub mod vault_files;
 pub mod vault_flags;
