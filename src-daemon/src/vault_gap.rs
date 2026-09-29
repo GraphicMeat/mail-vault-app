@@ -444,6 +444,9 @@ impl Tally {
             external_copy_ok: true,
             external_copy_error: None,
             external_copy_failed_count: 0,
+            stop_reason: None,
+            limit_bytes: None,
+            resume_after_ms: None,
         }
     }
 }
@@ -479,6 +482,8 @@ impl Save {
         archive::run_with_backup(
             Arc::clone(&self.archive_ctx), self.account_id.clone(), self.account_json.clone(), mailbox.to_string(), uids,
             Arc::clone(&self.cancel), None, None, false, "backup", true,
+            // "Save them now" is the person's own action, not a background download: no daily limit.
+            None,
         )
         .await
     }
@@ -562,6 +567,7 @@ impl Save {
                     total_emails: tally.saved + tally.errors, completed_emails: tally.saved, errors: tally.errors, active: true,
                     last_error: None, missing_in_folder: missing.len(), cancelled: false, success: true, external_copy_ok: true,
                     external_copy_error: None, external_copy_failed_count: 0,
+                    stop_reason: None, limit_bytes: None, resume_after_ms: None,
                 });
                 self.folder(&mailbox, missing, &mut tally).await?;
             }

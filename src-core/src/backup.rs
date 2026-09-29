@@ -494,10 +494,13 @@ pub async fn run_imap_uids(ctx: BackupRunContext, plan: Vec<(String, Vec<u32>)>)
                 total_emails: backed_up + errors, completed_emails: backed_up, errors, active: true, last_error: None,
                 missing_in_folder: uids.len(), cancelled: false, success: true, external_copy_ok: ext_failures == 0,
                 external_copy_error: None, external_copy_failed_count: ext_failures,
+                stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
             let archived = archive::run_with_backup(
                 Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox, uids,
                 Arc::clone(&ctx.cancel), None, None, false, "backup", true,
+                // Graph traffic is not wire-counted, so the daily limit does not govern it.
+                None,
             ).await?;
             backed_up += archived.completed;
             errors += archived.errors;
@@ -1793,6 +1796,9 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
             external_copy_ok: true,
             external_copy_error: None,
             external_copy_failed_count: 0,
+            stop_reason: None,
+            limit_bytes: None,
+            resume_after_ms: None,
         };
         (ctx.on_progress)(frame());
         let backup_dir = Path::new(mirror_root).join(&ctx.account.email).join(local_mirror_name(&dir, &marker)).join("cur");
