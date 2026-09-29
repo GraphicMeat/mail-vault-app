@@ -15,7 +15,8 @@ import { AccountTransfer } from './AccountTransfer';
 import { DownloadModeControl } from './DownloadModeControl';
 import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
-import { classifySignatureImageSize, signatureHasContent, signatureImageBytes, signatureImageKb } from '../../utils/signatureImages';
+import { signatureHasContent } from '../../utils/signatureImages';
+import { SignatureImageSize } from './SignatureImageSize';
 import { Toast } from '../Toast';
 import {
   User,
@@ -28,7 +29,6 @@ import {
   RefreshCw,
   Key,
   AlertCircle,
-  AlertTriangle,
   Plus,
   Eye,
   EyeOff,
@@ -56,29 +56,6 @@ function SavedBadge({ visible }) {
         </motion.span>
       )}
     </AnimatePresence>
-  );
-}
-
-// A logo in the signature goes out with every email, so its size is graded
-// where it is added. Warning only: the picture is never resized.
-const SIGNATURE_IMAGE_TIERS = {
-  good: { labelKey: 'settings.accounts.signatureImageGood', Icon: Check, className: 'text-mail-success' },
-  warn: { labelKey: 'settings.accounts.signatureImageWarn', Icon: AlertTriangle, className: 'text-mail-warning' },
-  alert: { labelKey: 'settings.accounts.signatureImageAlert', Icon: AlertCircle, className: 'text-mail-danger' },
-};
-
-function SignatureImageSize({ html }) {
-  const t = useT();
-  const bytes = React.useMemo(() => signatureImageBytes(html), [html]);
-  const tier = classifySignatureImageSize(bytes);
-  if (!tier) return null;
-  const { labelKey, Icon, className } = SIGNATURE_IMAGE_TIERS[tier];
-  return (
-    <p role="status" aria-live="polite" data-signature-image-size="" data-tier={tier}
-      className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${className}`}>
-      <Icon size={13} aria-hidden="true" className="flex-shrink-0" />
-      {t(labelKey, { size: signatureImageKb(bytes) })}
-    </p>
   );
 }
 

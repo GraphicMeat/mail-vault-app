@@ -4,6 +4,9 @@ import { Button } from '../ui/Button';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { refreshAliases } from '../../services/aliasDiscovery';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
+import { SignatureImageSize } from './SignatureImageSize';
+import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
+import { signatureHasContent } from '../../utils/signatureImages';
 import { useT } from '../../i18n/index.js';
 
 // Settings > Accounts > Aliases: every address one account sends from. The
@@ -11,7 +14,8 @@ import { useT } from '../../i18n/index.js';
 // store's list (services/aliasDiscovery.js fills it from the provider and
 // from the account's own mail, the user adds the rest). The radio column is
 // the default From (`sendAsAddresses`, '' = the login); compose can still
-// pick any of them per message.
+// pick any of them per message. An alias signs with the account's signature
+// unless it holds one of its own (`alias.signature`, see AliasSignature).
 
 const NO_ALIASES = [];
 const SOURCE_KEYS = {
@@ -287,6 +291,7 @@ function AliasRow({ accountId, alias, radioName, isDefault, placeholder, onDefau
           <label htmlFor={nameId} className="text-xs text-mail-text-muted">{t('settings.accounts.aliases.nameLabel')}</label>
           <AliasNameField id={nameId} accountId={accountId} alias={alias} placeholder={placeholder} />
         </div>
+        <AliasSignature accountId={accountId} alias={alias} />
       </div>
       <div className="alias-row-actions">
         <Button variant="ghost" size="sm" onClick={onVerify} data-testid="alias-verify-btn"
@@ -340,5 +345,81 @@ function AliasNameField({ id, accountId, alias, placeholder }) {
       onBlur={save}
       data-testid="alias-name-input"
       className="alias-name-input w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all" />
+  );
+}
+
+const signatureHtmlOf = signature => signature?.html || textToHtml(signature?.text || '');
+
+/**
+ * Which signature mail from one alias carries: the account's, or its own.
+ * Own starts as a copy of the account's, since an alias usually differs from
+ * it by a line. The editor is only mounted for an alias that has its own, so a
+ * long alias list does not run one editor per row.
+ */
+function AliasSignature({ accountId, alias }) {
+  const t = useT();
+  const own = !!alias.signature;
+  const useOwn = () => {
+    const account = useSettingsStore.getState().getSignature(accountId);
+    useSettingsStore.getState().updateAlias(accountId, alias.address, { signature: { html: account.html || '', text: account.text || '' } });
+  };
+  const useAccount = () => useSettingsStore.getState().updateAlias(accountId, alias.address, { signature: null });
+  return (
+    <div className="alias-signature mt-3" data-testid="alias-signature">
+      <div className="account-settings-choice-row">
+        <span className="text-xs text-mail-text-muted">{t('settings.accounts.aliases.signatureLabel')}</span>
+        <div className="account-settings-choice-group" role="group" aria-label={t('settings.accounts.aliases.signatureFor', { address: alias.address })}>
+          <button type="button" aria-pressed={!own} data-testid="alias-signature-account" onClick={useAccount}>
+            {t('settings.accounts.aliases.signatureAccount')}
+          </button>
+          <button type="button" aria-pressed={own} data-testid="alias-signature-own" onClick={useOwn}>
+            {t('settings.accounts.aliases.signatureOwn')}
+          </button>
+        </div>
+      </div>
+      {own && <AliasSignatureEditor accountId={accountId} alias={alias} />}
+    </div>
+  );
+}
+
+/** The alias's own signature. Saved a moment after typing stops and when the editor goes away. */
+function AliasSignatureEditor({ accountId, alias }) {
+  const t = useT();
+  const [html, setHtml] = useState(() => signatureHtmlOf(alias.signature));
+  const latest = useRef(html);
+  const timer = useRef(null);
+
+  const save = useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = null;
+    const store = useSettingsStore.getState();
+    // Handed back to the account, or the alias is gone: nothing to write.
+    const current = (store.aliases?.[accountId] || []).find(a => key(a?.address) === key(alias.address))?.signature;
+    if (!current) return;
+    const text = htmlToText(latest.current);
+    const kept = signatureHasContent(latest.current, text) ? latest.current : '';
+    if (kept === (current.html || '') && text === (current.text || '')) return;
+    store.updateAlias(accountId, alias.address, { signature: { html: kept, text } });
+  }, [accountId, alias.address]);
+
+  useEffect(() => () => { if (timer.current) save(); }, [save]);
+
+  return (
+    <div className="mt-2">
+      <div className="flex h-40 rounded-lg border border-mail-border overflow-hidden" data-testid="alias-signature-editor">
+        <RichTextEditor
+          content={html}
+          onUpdate={next => {
+            latest.current = next;
+            setHtml(next);
+            clearTimeout(timer.current);
+            timer.current = setTimeout(save, NAME_SAVE_DELAY_MS);
+          }}
+          placeholder={t('settings.accounts.bestRegardsJohnDoe')}
+        />
+      </div>
+      <p className="text-xs text-mail-text-muted mt-2">{t('settings.accounts.aliases.signatureOwnHint')}</p>
+      <SignatureImageSize html={html} />
+    </div>
   );
 }

@@ -14,7 +14,7 @@ import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { withoutSnippet } from '../utils/withoutSnippet';
-import { composeIdentities, composeSenderName, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
+import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -420,10 +420,17 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => { aliveRef.current = false; };
   }, []);
 
-  // The signature block the body carries for an account: a blank line, the
+  // The signature block the body carries for an identity: a blank line, the
   // standard "--" separator, then the signature. Empty when it signs nothing.
-  const signatureBlock = (accountId) => {
-    const signature = getSignature(accountId);
+  // An alias may hold its own signature; otherwise the account's applies.
+  const signatureBlock = (accountId, fromAddress = '') => {
+    const signature = composeSignature({
+      account: accounts.find(a => a.id === accountId),
+      fromAddress,
+      aliases: aliasesByAccount?.[accountId],
+      sendAsAddress: sendAsAddresses?.[accountId],
+      accountSignature: getSignature(accountId),
+    });
     const sigBody = signature.html || textToHtml(signature.text || '');
     return signature.enabled && sigBody ? '<p></p><p>--</p>' + sigBody : '';
   };
@@ -439,7 +446,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       if (replyTemplateApplied.current) replyTemplateCurrentBody.current = next.body;
       setFormData(next);
     };
-    const signatureHtml = signatureBlock(selectedAccountId);
+    const signatureHtml = signatureBlock(selectedAccountId, composeFrom);
 
     if (!replyTo) {
       if (initialData) {
@@ -568,14 +575,15 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   // The initializer runs once, so a draft being written is never rebuilt.
   // Changing From swaps the signature in place instead, and an untouched body
-  // stays untouched: its baseline moves with it.
-  const signedAccountRef = useRef(selectedAccountId);
+  // stays untouched: its baseline moves with it. From is the address, not just
+  // the account: an alias can sign differently from its own login.
+  const signedAsRef = useRef({ accountId: selectedAccountId, from: composeFrom });
   useEffect(() => {
-    const previous = signedAccountRef.current;
-    signedAccountRef.current = selectedAccountId;
-    if (previous === selectedAccountId) return;
-    const from = signatureBlock(previous);
-    const to = signatureBlock(selectedAccountId);
+    const previous = signedAsRef.current;
+    signedAsRef.current = { accountId: selectedAccountId, from: composeFrom };
+    if (previous.accountId === selectedAccountId && previous.from === composeFrom) return;
+    const from = signatureBlock(previous.accountId, previous.from);
+    const to = signatureBlock(selectedAccountId, composeFrom);
     if (from === to) return;
     setFormData(prev => {
       const body = swapSignature(prev.body || '', from, to, { above: mode === 'forward' });
@@ -584,7 +592,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       }
       return { ...prev, body };
     });
-  }, [selectedAccountId]);
+  }, [selectedAccountId, composeFrom]);
 
   const handleChange = (e) => {
     if (detaching) return;

@@ -84,6 +84,7 @@
   "search.location.server",
   "selection.emailCount_one",
   "settings.accounts.aliases.addPlaceholder",
+  "settings.accounts.aliases.signatureLabel",
   "settings.accounts.imap",
   "settings.accounts.password",
   "settings.accounts.smtp",

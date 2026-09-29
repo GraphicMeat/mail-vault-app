@@ -59,6 +59,30 @@ export function composeSenderName({ account, fromAddress, displayName, aliases, 
 }
 
 /**
+ * The signature a message signs with: the one the alias it leaves from holds,
+ * else the account's. An alias with no `signature` of its own follows the
+ * account (and its Enable switch); one with its own signs with exactly that,
+ * and an empty one signs nothing. `fromAddress` '' means the account's
+ * default From, resolved as composeSenderName does.
+ *
+ * @returns {{ html: string, text: string, enabled: boolean }}
+ */
+export function composeSignature({ account, fromAddress, aliases, sendAsAddress, accountSignature }) {
+  const from = (fromAddress || sendAsAddress || account?.email || '').trim();
+  const own = aliasSignature(aliases, from);
+  if (own) return { html: own.html || '', text: own.text || '', enabled: true };
+  return accountSignature || { html: '', text: '', enabled: false };
+}
+
+/** The `signature` an alias holds of its own, or null when it follows the account. */
+export function aliasSignature(aliases, address) {
+  const k = (address || '').trim().toLowerCase();
+  const alias = k && (aliases || []).find(a => (a?.address || '').trim().toLowerCase() === k);
+  const own = alias?.signature;
+  return own && typeof own === 'object' ? own : null;
+}
+
+/**
  * Which identity a compose window opens with. Precedence:
  * restored draft's saved identity → the replied-to message's account →
  * the mailbox being read → the active account.

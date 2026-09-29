@@ -47,6 +47,40 @@ describe('aliases', () => {
     expect(store().updateAlias('a1', 'missing@example.test', { name: 'x' })).toBe(false);
   });
 
+  it('keep an alias signature of its own, hand it back to the account, and never store a stray shape', () => {
+    store().addAlias('a1', { address: 'desk@example.test', name: 'Desk' }, LOGIN);
+    expect(store().getAliases('a1')[0].signature).toBeUndefined();
+
+    expect(store().updateAlias('a1', 'DESK@example.test', { signature: { html: '<p>Desk</p>', text: 'Desk', enabled: false, junk: 1 } })).toBe(true);
+    expect(store().getAliases('a1')).toEqual([
+      { address: 'desk@example.test', name: 'Desk', source: 'manual', signature: { html: '<p>Desk</p>', text: 'Desk' } },
+    ]);
+
+    // A rename leaves the signature alone, and the other way round.
+    store().updateAlias('a1', 'desk@example.test', { name: 'Front' });
+    expect(store().getAliases('a1')[0]).toMatchObject({ name: 'Front', signature: { html: '<p>Desk</p>' } });
+    store().updateAlias('a1', 'desk@example.test', { signature: { html: '', text: '' } });
+    expect(store().getAliases('a1')[0]).toMatchObject({ name: 'Front', signature: { html: '', text: '' } });
+
+    expect(store().updateAlias('a1', 'desk@example.test', { signature: null })).toBe(true);
+    expect('signature' in store().getAliases('a1')[0]).toBe(false);
+    expect(store().getAliases('a1')[0]).toEqual({ address: 'desk@example.test', name: 'Front', source: 'manual' });
+  });
+
+  it('keep an alias signature through discovery, and lose it with the alias', () => {
+    store().addAlias('a1', { address: 'desk@example.test' }, LOGIN);
+    store().updateAlias('a1', 'desk@example.test', { signature: { html: '<p>Desk</p>', text: 'Desk' } });
+    store().applyDiscovery('a1', LOGIN, {
+      provider: { status: 'ok', aliases: [{ address: 'desk@example.test', name: 'Front Desk', isPrimary: false, verified: true }] },
+      detected: [],
+    });
+    expect(store().getAliases('a1')[0]).toMatchObject({ name: 'Front Desk', signature: { html: '<p>Desk</p>' } });
+
+    store().removeAlias('a1', 'desk@example.test');
+    store().addAlias('a1', { address: 'desk@example.test' }, LOGIN);
+    expect(store().getAliases('a1')[0].signature).toBeUndefined();
+  });
+
   it('remember a removed alias so discovery never brings it back', () => {
     store().addAlias('a1', { address: 'Desk@example.test' }, LOGIN);
     store().removeAlias('a1', 'desk@example.test');

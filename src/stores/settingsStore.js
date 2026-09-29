@@ -1048,7 +1048,7 @@ export const useSettingsStore = create(
         return { ok: true, alias: result.alias };
       },
 
-      // Only the name can change: an alias with another address is another alias.
+      // Only the name and the signature can change: an alias with another address is another alias.
       updateAlias: (accountId, address, patch = {}) => {
         const k = (address || '').trim().toLowerCase();
         const list = get().aliases?.[accountId] || [];
@@ -1056,6 +1056,15 @@ export const useSettingsStore = create(
         if (!k || index < 0) return false;
         const next = [...list];
         if (typeof patch.name === 'string') next[index] = { ...next[index], name: patch.name.trim() };
+        // `signature` is the alias's own ({ html, text }); null hands it back
+        // to the account's. An own signature always signs, so it carries no
+        // Enable switch of its own: an empty one signs nothing.
+        if (patch.signature === null) {
+          const { signature: _dropped, ...rest } = next[index];
+          next[index] = rest;
+        } else if (patch.signature && typeof patch.signature === 'object') {
+          next[index] = { ...next[index], signature: { html: patch.signature.html || '', text: patch.signature.text || '' } };
+        }
         set(state => ({ aliases: { ...state.aliases, [accountId]: next } }));
         return true;
       },
