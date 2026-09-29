@@ -596,6 +596,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           return { account_id: sync.accountId, mailbox: sync.mailbox, new_emails: 0, total_emails: visible(sync.accountId, sync.mailbox).length, success: true };
         }
         if (method === 'sync.status') return { status: 'idle', simulated: true };
+        // Archive & delete jobs: the demo removes nothing from a server, so no job ever exists.
+        if (method === 'abd.status') return { jobs: [], simulated: true };
+        if (method === 'abd.set_token' || method === 'abd.pause' || method === 'abd.resume' || method === 'abd.cancel' || method === 'abd.dismiss') return { simulated: true };
+        if (method.startsWith('abd.')) throw new DemoUnsupportedError(`daemon:${method}`);
         // Compose asks when its schedule panel opens; nothing is known here.
         if (method === 'scheduled.suggest_tz') return { headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null };
         // Settings > Unsubscribe: the demo sends nothing anywhere, so nothing to list.
@@ -1081,6 +1085,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         return accountMailboxes(sourceId).map(folder => ({ source_path: folder.path, dest_path: folder.path, email_count: messages.filter(row => row.accountId === sourceId && row.mailbox === folder.path && row.serverPresent).length }));
       }
       case 'backup_purge_uids': return { removed: 0, queued: 0, simulated: true };
+      case 'abd_summarize': case 'abd_start': return unsupported(command);
+      case 'abd_attach': return { attached: false, simulated: true };
       case 'backup_copy_uids': return { copied: [...(args.uids || [])], verified: [...(args.uids || [])], missing: [], mismatched: [], failed: [], simulated: true };
       case 'start_migration': {
         const source = typeof args.sourceAccount === 'string' ? JSON.parse(args.sourceAccount) : (args.sourceAccount || {});

@@ -707,6 +707,37 @@ export async function backupCopyUids(accountId, email, mailbox, uids) {
   return { copied: [], verified: [], missing: [], mismatched: [], failed: uids };
 }
 
+// ── Archive (& back up) & delete jobs ────────────────────────────────────────
+// The three that go through the shell because the backup drive's
+// security-scoped bookmark lives there (`abd_*` in src-tauri/src/abd.rs): the
+// shell resolves and holds the drive for the job and forwards to the daemon
+// with the resolved `mirrorRoot`. Every other `abd.*` call is a plain daemon
+// RPC and goes through `services/abd.js` -> `daemonCall`.
+
+/** The dry-run summary for a scope (`abd.summarize`, with the drive resolved for the backup mode). */
+export async function abdSummarize(params) {
+  if (IS_TAURI) {
+    return tauriInvoke('abd_summarize', { params });
+  }
+  throw new ApiError('E_ABD_UNAVAILABLE: needs the desktop app', 0);
+}
+
+/** Start the job (`abd.start`). Rejects with an `E_ABD_*: ` coded message the catalog translates. */
+export async function abdStart(params) {
+  if (IS_TAURI) {
+    return tauriInvoke('abd_start', { params });
+  }
+  throw new ApiError('E_ABD_UNAVAILABLE: needs the desktop app', 0);
+}
+
+/** Hand the daemon the backup drive again for a backup-mode job (`{ attached }`). */
+export async function abdAttach(accountId) {
+  if (IS_TAURI) {
+    return tauriInvoke('abd_attach', { accountId });
+  }
+  return { attached: false };
+}
+
 /**
  * Uids of this mailbox present in the external backup mirror, or null when we
  * cannot tell (no location configured, or the drive is not connected). Null is

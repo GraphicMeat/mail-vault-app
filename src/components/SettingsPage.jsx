@@ -343,6 +343,10 @@ export const settingSearchGroups = [
     ['settings.backup.schedule.pickHours', 'backup hours pick specific times set hours schedule'],
     ['settings.backup.schedule.mailboxConcurrency', 'backup mailboxes processed at once concurrency speed performance'],
   ] },
+  { id: 'backup', section: 'abd', sectionKey: 'settings.backup.abd.tab', settings: [
+    ['settings.backup.abd.backupCard.title', 'archive back up backup delete remove server free space vault drive premium'],
+    ['settings.backup.abd.archiveCard.title', 'archive delete remove server free space vault only copy premium'],
+  ] },
   // Cleanup and Time Capsule keep their settings behind the page's own
   // "Settings" sub-view — section: 'config' tells openResult to open it.
   { id: 'cleanup', section: 'config', settings: [

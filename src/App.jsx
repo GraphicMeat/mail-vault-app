@@ -28,6 +28,8 @@ import { EmailViewer } from './components/EmailViewer';
 import { discardDraftFor } from './services/localDrafts';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
+import { AbdProgressPanel } from './components/abd/AbdProgressPanel';
+import { AbdPill } from './components/abd/AbdPill';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { MailArrivalCelebration } from './components/MailArrivalCelebration';
@@ -81,6 +83,8 @@ import { shouldStartFullInit } from './utils/shouldStartFullInit';
 import { filterUnread } from './utils/emailParser';
 import { rowKey, stepThroughList, spansMailboxes } from './stores/slices/unifiedHelpers';
 import { migrationManager } from './services/migrationManager.js';
+import { initAbd } from './services/abd.js';
+import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
@@ -567,6 +571,8 @@ function App() {
     return () => registerComposeOpener(null);
   }, [setComposeState]);
 
+  // A minimized Archive & delete job shares the corner stack below.
+  const abdMinimized = useAbdStore(s => !!s.panel?.minimized && !!s.jobs[s.panel.accountId]);
   const exportTarget = useExportStore(s => s.target);
   const showExportSamples = useExportStore(s => s.showSamples);
   const closeExport = useExportStore(s => s.closeExport);
@@ -645,6 +651,8 @@ function App() {
   useEffect(() => {
     migrationManager.init();
     restoreManager.init();
+    // Archive & delete jobs live in the daemon: pick up the ones already running.
+    initAbd();
     return () => {
       migrationManager.destroy();
       restoreManager.destroy();
@@ -1535,8 +1543,9 @@ function App() {
       </ChunkErrorBoundary>
 
       {/* Minimized windows share one stack so their restore buttons never overlap. */}
-      {(settingsMinimized || composeWindows.some(w => w.minimized)) && (
+      {(settingsMinimized || abdMinimized || composeWindows.some(w => w.minimized)) && (
         <div className="fixed top-16 right-4 z-40 flex flex-col gap-2">
+          <AbdPill />
           {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings}
             onClose={() => useUnsavedStore.getState().leave(closeSettings)} />}
           {composeWindows.filter(w => w.minimized).map(w => {
@@ -1606,6 +1615,7 @@ function App() {
 
       {!overlayOpen && <SelectionActionBar />}
       <BulkSaveProgress />
+      <AbdProgressPanel />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
       <SearchIndexReindexPrompt />
       <KeychainToast

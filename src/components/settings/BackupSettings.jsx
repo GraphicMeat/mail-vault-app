@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import BackupRestore from './BackupRestore';
 import BackupConfig from './BackupConfig';
 import BackupSchedule from './BackupSchedule';
+import AbdSection from './abd/AbdSection';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { t, useT } from '../../i18n/index.js';
 
@@ -9,6 +10,7 @@ const backupSubTabs = () => ([
   { id: 'restore', label: t('settings.tab.backup') },
   { id: 'config', label: t('settings.backup.backupSettings') },
   { id: 'schedule', label: t('settings.backup.backupSchedule') },
+  { id: 'abd', label: t('settings.backup.abd.tab') },
 ]);
 
 export default function BackupSettings({ initialAccountId = null, initialSubTab = null, onSubTabChange, onUpgrade }) {
@@ -30,6 +32,7 @@ export default function BackupSettings({ initialAccountId = null, initialSubTab 
         {activeSubTab === 'schedule' && (
           <BackupSchedule initialAccountId={initialAccountId} onUpgrade={onUpgrade} />
         )}
+        {activeSubTab === 'abd' && <AbdSection onUpgrade={onUpgrade} />}
     </SettingsTabs>
   );
 }
