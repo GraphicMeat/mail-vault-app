@@ -420,7 +420,6 @@ impl FolderListing {
 /// count (a Graph folder, a cache the app wrote): the rows are the listing,
 /// as before.
 fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<FolderListing, String> {
-    use rusqlite::OptionalExtension;
     let mut stmt = conn
         .prepare_cached(
             "SELECT mailbox_path FROM header_cache WHERE account_id=?1 UNION SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1",
@@ -435,20 +434,7 @@ fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<F
     let mut counted_empty = false;
     for mailbox in mailboxes.into_iter().filter(|m| crate::search_index::text::vault_dir_name(m) == vault_dir) {
         let rows = count(conn, account, &mailbox)? as u64;
-        // The daemon's count less what the app has taken off since it.
-        let (server, uid_next): (Option<i64>, Option<i64>) = conn
-            .query_row(
-                "SELECT CASE WHEN json_valid(meta_json) AND json_extract(meta_json, '$.syncTotalEmails') IS NOT NULL
-                             THEN max(0, json_extract(meta_json, '$.syncTotalEmails')
-                                         - coalesce(json_extract(meta_json, '$.appRemovedSinceSync'), 0)) END,
-                        CASE WHEN json_valid(meta_json) THEN json_extract(meta_json, '$.syncUidNext') END
-                 FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
-                params![account, mailbox],
-                |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<i64>>(1)?)),
-            )
-            .optional()
-            .map_err(err)?
-            .unwrap_or((None, None));
+        let (server, uid_next) = recorded_count(conn, account, &mailbox)?;
         // The rows the daemon's count covers: those below its `syncUidNext`.
         let judged = match (server, uid_next) {
             (Some(_), Some(next)) => conn
@@ -470,6 +456,79 @@ fn folder_listing(conn: &Connection, account: &str, vault_dir: &str) -> Result<F
         }
     }
     Ok(if readable.is_empty() && !counted_empty { FolderListing::Unknown } else { FolderListing::Complete(readable) })
+}
+
+/// What `mailbox`'s rows are judged complete against (`folder_listing`): the
+/// server's count the daemon's sync last recorded (`syncTotalEmails`) less
+/// what the app's own writes took off since (`APP_REMOVED_SINCE_SYNC`), and
+/// the `syncUidNext` it was taken at. `None`s: no count recorded (a Graph
+/// folder, a cache the app wrote), where the rows are the listing.
+pub fn recorded_count(conn: &Connection, account: &str, mailbox: &str) -> Result<(Option<i64>, Option<i64>), String> {
+    use rusqlite::OptionalExtension;
+    Ok(conn
+        .query_row(
+            "SELECT CASE WHEN json_valid(meta_json) AND json_extract(meta_json, '$.syncTotalEmails') IS NOT NULL
+                         THEN max(0, json_extract(meta_json, '$.syncTotalEmails')
+                                     - coalesce(json_extract(meta_json, '$.appRemovedSinceSync'), 0)) END,
+                    CASE WHEN json_valid(meta_json) THEN json_extract(meta_json, '$.syncUidNext') END
+             FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
+            params![account, mailbox],
+            |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<i64>>(1)?)),
+        )
+        .optional()
+        .map_err(err)?
+        .unwrap_or((None, None)))
+}
+
+/// Whether the cache knows `account` at all: a header row, a folder's meta or
+/// its folder list. Three index seeks, never a scan.
+pub fn knows_account(conn: &Connection, account: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM header_cache WHERE account_id=?1)
+             OR EXISTS(SELECT 1 FROM header_cache_meta WHERE account_id=?1)
+             OR EXISTS(SELECT 1 FROM mailbox_cache WHERE account_id=?1)",
+        [account],
+        |r| r.get(0),
+    )
+    .map_err(err)
+}
+
+/// The first mailbox of `account` after `after` (by name) that holds a header
+/// row: one index seek, so walking every mailbox of a large account holds the
+/// custody lock one short step at a time, never for a scan of its rows.
+pub fn next_mailbox_with_headers(conn: &Connection, account: &str, after: Option<&str>) -> Result<Option<String>, String> {
+    use rusqlite::OptionalExtension;
+    match after {
+        None => conn
+            .query_row("SELECT mailbox_path FROM header_cache WHERE account_id=?1 ORDER BY mailbox_path LIMIT 1", [account], |r| r.get(0))
+            .optional(),
+        Some(after) => conn
+            .query_row(
+                "SELECT mailbox_path FROM header_cache WHERE account_id=?1 AND mailbox_path > ?2 ORDER BY mailbox_path LIMIT 1",
+                params![account, after],
+                |r| r.get(0),
+            )
+            .optional(),
+    }
+    .map_err(err)
+}
+
+/// Up to `limit` of `mailbox`'s cached `(uid, sort_ms)` after uid `after`,
+/// ascending: one page of a walk over a folder of any size, each page its own
+/// unit of the caller's lock. Never parses a row.
+pub fn uid_dates_after(conn: &Connection, account: &str, mailbox: &str, after: Option<u32>, limit: usize) -> Result<Vec<(u32, i64)>, String> {
+    let from = after.map_or(-1, i64::from);
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT uid, sort_ms FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid > ?3 ORDER BY uid LIMIT ?4",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![account, mailbox, from, limit as i64], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err);
+    rows
 }
 
 /// One chunk of the lookup over `mailboxes`.
@@ -1161,5 +1220,78 @@ mod tests {
         insert(&c, "a", "INBOX", 1, ms(2021, 3, 1));
         assert_eq!(month_histogram(&c, "a", "Archive").unwrap(), json!([]));
         assert_eq!(month_histogram(&c, "z", "INBOX").unwrap(), json!([]));
+    }
+
+    // ── Phase 5: the pieces the vault-gap count walks the cache with ──
+
+    /// Pages by uid, ascending, from just past `after`: every row once, none
+    /// skipped at a page edge, nothing of another mailbox or account. A page
+    /// by `sort_ms` or with `>=` would repeat or lose the edge row.
+    #[test]
+    fn uid_dates_after_pages_every_row_once_by_uid() {
+        let (_t, c) = store();
+        // Inserted out of order, dates unrelated to uids.
+        for (uid, sort_ms) in [(7, 70), (2, 900), (5, -3), (1, 10), (6, 60), (3, 30), (4, 40)] {
+            insert(&c, "a", "INBOX", uid, sort_ms);
+        }
+        insert(&c, "a", "Archive", 8, 80);
+        insert(&c, "b", "INBOX", 9, 90);
+
+        assert_eq!(uid_dates_after(&c, "a", "INBOX", None, 3).unwrap(), vec![(1, 10), (2, 900), (3, 30)]);
+        assert_eq!(uid_dates_after(&c, "a", "INBOX", Some(3), 3).unwrap(), vec![(4, 40), (5, -3), (6, 60)]);
+        assert_eq!(uid_dates_after(&c, "a", "INBOX", Some(6), 3).unwrap(), vec![(7, 70)]);
+        assert!(uid_dates_after(&c, "a", "INBOX", Some(7), 3).unwrap().is_empty());
+        assert!(uid_dates_after(&c, "a", "Sent", None, 3).unwrap().is_empty());
+    }
+
+    /// One seek per step, in name order, each mailbox once however many rows
+    /// it holds; another account's mailboxes never appear.
+    #[test]
+    fn next_mailbox_with_headers_steps_through_each_mailbox_once() {
+        let (_t, c) = store();
+        for uid in 1..=5 {
+            insert(&c, "a", "INBOX", uid, 0);
+        }
+        insert(&c, "a", "Archive", 1, 0);
+        insert(&c, "a", "A/B", 1, 0);
+        insert(&c, "b", "Zeta", 1, 0);
+
+        let mut seen = Vec::new();
+        let mut after: Option<String> = None;
+        while let Some(m) = next_mailbox_with_headers(&c, "a", after.as_deref()).unwrap() {
+            seen.push(m.clone());
+            after = Some(m);
+        }
+        assert_eq!(seen, vec!["A/B", "Archive", "INBOX"]);
+        assert_eq!(next_mailbox_with_headers(&c, "nobody", None).unwrap(), None);
+    }
+
+    /// A header row, a folder's meta alone (a synced empty folder) or a folder
+    /// list alone each make the account known; nothing makes it unknown.
+    #[test]
+    fn knows_account_by_a_row_a_meta_or_a_folder_list() {
+        let (_t, c) = store();
+        assert!(!knows_account(&c, "a").unwrap());
+        insert(&c, "a", "INBOX", 1, 0);
+        assert!(knows_account(&c, "a").unwrap());
+
+        save_headers(&c, "m", "INBOX", r#"{"emails": [], "syncTotalEmails": 0}"#).unwrap();
+        assert!(knows_account(&c, "m").unwrap());
+
+        save_mailboxes(&c, "f", r#"{"mailboxes": []}"#).unwrap();
+        assert!(knows_account(&c, "f").unwrap());
+        assert!(!knows_account(&c, "ghost").unwrap());
+    }
+
+    /// The daemon's count less the app's removals, and its UIDNEXT; nothing
+    /// recorded reads as `(None, None)`, never as zero.
+    #[test]
+    fn recorded_count_is_the_sync_count_less_what_the_app_removed() {
+        let (_t, c) = store();
+        save_headers(&c, "a", "INBOX", r#"{"emails": [], "syncTotalEmails": 10, "syncUidNext": 50, "appRemovedSinceSync": 3}"#).unwrap();
+        assert_eq!(recorded_count(&c, "a", "INBOX").unwrap(), (Some(7), Some(50)));
+        save_headers(&c, "a", "Sent", r#"{"emails": [], "uidValidity": 1}"#).unwrap();
+        assert_eq!(recorded_count(&c, "a", "Sent").unwrap(), (None, None));
+        assert_eq!(recorded_count(&c, "a", "Nowhere").unwrap(), (None, None));
     }
 }

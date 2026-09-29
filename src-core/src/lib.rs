@@ -23,6 +23,7 @@ pub mod takeout;
 pub mod vault_eml;
 pub mod vault_files;
 pub mod vault_flags;
+pub mod vault_gap;
 pub mod vault_layout;
 pub mod vault_ops;
 pub mod vault_registry;

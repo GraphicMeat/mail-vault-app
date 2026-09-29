@@ -43,6 +43,7 @@ mod server;
 pub mod search_index;
 mod snapshot;
 mod snooze_worker;
+mod vault_gap;
 pub mod sync_engine;
 
 // Note: backup, external_location modules require tauri::AppHandle for data

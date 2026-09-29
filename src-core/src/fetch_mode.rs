@@ -143,6 +143,20 @@ impl FetchPolicy {
         }
     }
 
+    /// Whether this mode means the vault to hold a full copy of a message
+    /// dated `date_ms` (Phase 5: what a message missing from the vault is
+    /// measured against). On Demand keeps no body on disk. Index Only keeps
+    /// one only until the search index holds it: `eviction_candidates` then
+    /// removes it whatever its age. Keep Recent keeps what is inside its
+    /// window (`keeps_body_dated`: an unknown date is kept, a window of 0 keeps
+    /// all). Hoarder keeps every message.
+    pub fn promises_copy(&self, date_ms: Option<i64>, now_ms: i64) -> bool {
+        match self.mode {
+            FetchMode::OnDemand | FetchMode::IndexOnly => false,
+            FetchMode::KeepRecent | FetchMode::Hoarder => self.keeps_body_dated(date_ms, now_ms),
+        }
+    }
+
     /// Whether the daemon's proactive all-folders Hoarder worker should run
     /// for this account. Premium gates only this worker (ruling 09-27): a
     /// missing or lapsed Premium never deletes anything, it just leaves a
@@ -674,6 +688,28 @@ mod tests {
         let keep_recent = FetchPolicy { mode: FetchMode::KeepRecent, window_months: 3, hoarder_premium: false };
         assert!(!keep_recent.caches_fetched(false, Some(STALE_DATE_MS), NOW_MS));
         assert!(keep_recent.caches_fetched(false, Some(NOW_MS), NOW_MS));
+    }
+
+    /// Phase 5: only Keep Recent (inside its window, or undated, or window 0)
+    /// and Hoarder promise a copy; Index Only promises none even inside its
+    /// window, since eviction takes an indexed body whatever its age.
+    #[test]
+    fn only_keep_recent_inside_its_window_and_hoarder_promise_a_vault_copy() {
+        let fresh = Some(NOW_MS - 24 * 60 * 60 * 1000);
+        let stale = Some(STALE_DATE_MS);
+        let cases = [
+            (FetchMode::OnDemand, 3, [false, false, false]),
+            (FetchMode::IndexOnly, 3, [false, false, false]),
+            (FetchMode::KeepRecent, 3, [true, false, true]),
+            (FetchMode::KeepRecent, 0, [true, true, true]),
+            (FetchMode::Hoarder, 3, [true, true, true]),
+        ];
+        for (mode, window_months, [want_fresh, want_stale, want_undated]) in cases {
+            let policy = FetchPolicy { mode, window_months, hoarder_premium: false };
+            assert_eq!(policy.promises_copy(fresh, NOW_MS), want_fresh, "{mode:?}/{window_months} fresh");
+            assert_eq!(policy.promises_copy(stale, NOW_MS), want_stale, "{mode:?}/{window_months} stale");
+            assert_eq!(policy.promises_copy(None, NOW_MS), want_undated, "{mode:?}/{window_months} undated");
+        }
     }
 
     // ── H3c: raw bytes of a message the vault does not hold ──

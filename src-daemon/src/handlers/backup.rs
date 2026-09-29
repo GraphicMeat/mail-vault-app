@@ -62,10 +62,61 @@ use tracing::warn;
 /// panic tests document). Removes by `Arc::ptr_eq`, never by key alone, so a
 /// guard from a finished run can never evict a newer run's token for the
 /// same account (`backup_runs`'s doc comment in `server.rs`).
-struct BackupRunGuard {
+pub(crate) struct BackupRunGuard {
     state: Arc<DaemonState>,
     account_id: String,
     cancel: Arc<AtomicBool>,
+}
+
+impl BackupRunGuard {
+    pub(crate) fn cancel(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.cancel)
+    }
+}
+
+/// Registers a run for `account_id` unless one is already in flight (`None`
+/// then): the check and the insert under one lock, so two callers can never
+/// both start one. `vault_gap_save` uses it; `backup_run_account` does not,
+/// it replaces a running entry, and the app's stall watchdog retry relies on
+/// that.
+pub(crate) fn claim_run(state: &Arc<DaemonState>, account_id: &str) -> Option<BackupRunGuard> {
+    let mut runs = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
+    if runs.contains_key(account_id) {
+        return None;
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    runs.insert(account_id.to_string(), Arc::clone(&cancel));
+    Some(BackupRunGuard { state: Arc::clone(state), account_id: account_id.to_string(), cancel })
+}
+
+/// The one terminal frame for a run that ended before its own terminal emit
+/// (an early `?`-return: LIST or UID FETCH failing outright).
+pub(crate) fn failed_frame(account_id: &str, error: String) -> BackupProgress {
+    BackupProgress {
+        account_id: account_id.to_string(),
+        folder: "Error".to_string(),
+        total_folders: 0,
+        completed_folders: 0,
+        total_emails: 0,
+        completed_emails: 0,
+        errors: 0,
+        active: false,
+        last_error: Some(error),
+        missing_in_folder: 0,
+        // An early `?`-return isn't a user cancel, and it means the
+        // run never got far enough to know its own external-copy
+        // outcome — `false` is the conservative default so nothing
+        // downstream mistakes "unknown" for "succeeded".
+        cancelled: false,
+        // The one frame that is neither a completion nor a cancel.
+        // Explicit, because JS reads `success !== false` and would
+        // otherwise file this dead run as a clean backup of zero
+        // messages — see `BackupProgress::success` (Task 7b).
+        success: false,
+        external_copy_ok: false,
+        external_copy_error: None,
+        external_copy_failed_count: 0,
+    }
 }
 
 impl Drop for BackupRunGuard {
@@ -162,32 +213,7 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         // unconditionally would give JS two `active:false` frames per run.
         if let Err(e) = result {
             warn!("backup_run_account: {} failed before its own terminal event: {}", run_account_id, e);
-            let progress = BackupProgress {
-                account_id: run_account_id.clone(),
-                folder: "Error".to_string(),
-                total_folders: 0,
-                completed_folders: 0,
-                total_emails: 0,
-                completed_emails: 0,
-                errors: 0,
-                active: false,
-                last_error: Some(e),
-                missing_in_folder: 0,
-                // An early `?`-return isn't a user cancel, and it means the
-                // run never got far enough to know its own external-copy
-                // outcome — `false` is the conservative default so nothing
-                // downstream mistakes "unknown" for "succeeded".
-                cancelled: false,
-                // The one frame that is neither a completion nor a cancel.
-                // Explicit, because JS reads `success !== false` and would
-                // otherwise file this dead run as a clean backup of zero
-                // messages — see `BackupProgress::success` (Task 7b).
-                success: false,
-                external_copy_ok: false,
-                external_copy_error: None,
-                external_copy_failed_count: 0,
-            };
-            if let Ok(v) = serde_json::to_value(&progress) {
+            if let Ok(v) = serde_json::to_value(failed_frame(&run_account_id, e)) {
                 state2.events.emit("backup-progress", v);
             }
         }
@@ -307,6 +333,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             Ok(v) => RpcResponse::success(id, v),
             Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
         },
+        // Phase 5 (D7): messages the vault is missing, and saving them.
+        "vault_gap_count" => crate::vault_gap::count(state, params, id).await,
+        "vault_gap_save" => crate::vault_gap::save(state, params, id).await,
         _ => return None,
     })
 }

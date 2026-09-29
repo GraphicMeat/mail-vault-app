@@ -509,7 +509,7 @@ fn backoff(level: u32, t: &Tuning) -> Duration {
     full.mul_f64(1.0 + rand::random::<f64>() / 2.0).min(t.backoff_max)
 }
 
-fn background_qos() {
+pub(crate) fn background_qos() {
     #[cfg(target_os = "macos")]
     unsafe {
         libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);

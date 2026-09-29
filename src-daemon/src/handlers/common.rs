@@ -58,7 +58,7 @@ pub(crate) fn done(id: Value, r: Result<Value, String>) -> RpcResponse {
 /// The exact message text every `E_VAULT_UNAVAILABLE:` gate answers with —
 /// callers (JS and Rust) match on this prefix verbatim (Global constraints:
 /// "Same JSON in/out" / error texts callers match on).
-fn gate_message(reason: &str) -> String {
+pub(crate) fn gate_message(reason: &str) -> String {
     format!("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: {reason}")
 }
 

@@ -388,6 +388,77 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     })
 }
 
+/// A backup of exactly `plan`'s uids, folder by folder: Phase 5's "Save them
+/// now", for the messages the vault is missing. No LIST, no server listing,
+/// no flag catch-up, no mirror or local-folder work, no resume checkpoint: the
+/// plan is recomputed on every run. The same per-message step as
+/// `run_imap_account` (`archive::run_with_backup`, "backup" operation, on the
+/// pool's background lane) and the same `backup-progress` frames: one as each
+/// folder starts (`missing_in_folder`: what it will fetch there), then the one
+/// terminal frame. `ctx.mirror_root`, `skip_folders`, `mailbox_concurrency`
+/// and `apply_flags` are not read.
+pub async fn run_imap_uids(ctx: BackupRunContext, plan: Vec<(String, Vec<u32>)>) -> Result<BackupResult, String> {
+    let start = std::time::Instant::now();
+    net_activity::with_purpose("backup", async move {
+        let total_folders = plan.len();
+        let (mut completed_folders, mut backed_up, mut errors, mut ext_failures) = (0, 0, 0, 0);
+        let (mut bandwidth_stop, mut last_error, mut cancelled) = (None, None, false);
+        for (mailbox, uids) in plan {
+            if ctx.cancel.load(Ordering::Relaxed) {
+                cancelled = true;
+                break;
+            }
+            (ctx.on_progress)(BackupProgress {
+                account_id: ctx.account_id.clone(), folder: mailbox.clone(), total_folders, completed_folders,
+                total_emails: backed_up + errors, completed_emails: backed_up, errors, active: true, last_error: None,
+                missing_in_folder: uids.len(), cancelled: false, success: true, external_copy_ok: ext_failures == 0,
+                external_copy_error: None, external_copy_failed_count: ext_failures,
+            });
+            let archived = archive::run_with_backup(
+                Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox, uids,
+                Arc::clone(&ctx.cancel), None, None, false, "backup", true,
+            ).await?;
+            backed_up += archived.completed;
+            errors += archived.errors;
+            ext_failures += archived.external_copy_failures;
+            // A provider's bandwidth stop sets the cancel flag too, as in
+            // `run_imap_account`, and the archive run's `last_error` is then
+            // the backup's own words for it: the terminal frame carries them.
+            if archived.bandwidth_limited {
+                bandwidth_stop = archived.last_error;
+            } else if archived.errors > 0 {
+                last_error = archived.last_error;
+            }
+            if ctx.cancel.load(Ordering::Relaxed) {
+                cancelled = true;
+                break;
+            }
+            completed_folders += 1;
+        }
+        let error_message = bandwidth_stop.or_else(|| partial_error_message(errors, backed_up, last_error.as_deref()));
+        (ctx.on_progress)(terminal_backup_progress(
+            &ctx.account_id, cancelled, total_folders, completed_folders, backed_up, errors, ext_failures, error_message.clone(),
+        ));
+        info!(
+            "backup(uids): {} for {}: {} saved, {} errors (folders: {}/{})",
+            if cancelled { "cancelled" } else { "completed" }, ctx.account.email, backed_up, errors, completed_folders, total_folders
+        );
+        Ok(BackupResult {
+            emails_backed_up: backed_up,
+            errors,
+            duration_secs: start.elapsed().as_secs_f64(),
+            success: !cancelled,
+            error_message,
+            cancelled,
+            completed_folders,
+            external_copy_ok: ext_failures == 0,
+            external_copy_error: (ext_failures > 0).then(|| format!("{} emails failed to copy to external backup", ext_failures)),
+            external_copy_failed_count: ext_failures,
+        })
+    })
+    .await
+}
+
 fn contiguous_completed_checkpoint(start: usize, completed: &[bool]) -> usize {
     start + completed.iter().take_while(|done| **done).count()
 }
