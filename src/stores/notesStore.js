@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import { getCachedMailboxes } from '../services/db';
+import { getCachedMailboxes, getEmailHeadersByUids } from '../services/db';
 import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
 import { accountPayload } from './viewStore';
@@ -192,6 +192,41 @@ export const useNotesStore = create((set, get) => ({
       return flag === '\\Flagged'
         ? { ...card, copies, starred: copies.some(copy => copy.flags?.includes('\\Flagged')) }
         : { ...card, copies };
+    });
+    if (touched) set({ cards });
+  },
+
+  /// A sync wrote another device's read or star into the header cache of
+  /// this folder (the change feed's `updatedFlags`). The board's copies there
+  /// take their \Seen and \Flagged from those cached rows, the same reread the
+  /// open list does (loadEmails `rereadFlags`); only a card whose copy
+  /// changed is replaced. A copy the cache holds no row for keeps its flags.
+  rereadCopyFlags: async (accountId, mailbox) => {
+    if (!get().isOpen) return;
+    const inFolder = copy => copy.accountId === accountId && copy.mailbox === mailbox;
+    const uids = [...new Set(get().cards.flatMap(card => (card.copies || []).filter(inFolder).map(copy => copy.uid)))];
+    if (!uids.length) return;
+    const mine = generation;
+    const rows = await getEmailHeadersByUids(accountId, mailbox, uids).catch(() => []);
+    if (mine !== generation || !get().isOpen) return;
+    const cached = new Map((rows || []).map(row => [String(row.uid), row.flags || []]));
+    const TRACKED = ['\\Seen', '\\Flagged'];
+    const reread = copy => {
+      const flags = inFolder(copy) && cached.get(String(copy.uid));
+      if (!flags) return copy;
+      const own = copy.flags || [];
+      if (TRACKED.every(flag => own.includes(flag) === flags.includes(flag))) return copy;
+      return { ...copy, flags: [...own.filter(flag => !TRACKED.includes(flag)), ...TRACKED.filter(flag => flags.includes(flag))] };
+    };
+    let touched = false;
+    const { busy } = get();
+    const cards = get().cards.map(card => {
+      // A star still on its way owns the card: the cache may not hold it yet.
+      if (busy[card.key]) return card;
+      const copies = (card.copies || []).map(reread);
+      if (copies.every((copy, i) => copy === card.copies[i])) return card;
+      touched = true;
+      return { ...card, copies, starred: copies.some(copy => copy.flags?.includes('\\Flagged')) };
     });
     if (touched) set({ cards });
   },

@@ -57,6 +57,8 @@ export const SERVER_RETRY_MS = 1500;
 export async function reloadListInView() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+  // Every caller put mail back or moved it: the saved views hold other mail now.
+  viewCountsStale();
   if (get().activeMailbox !== 'UNIFIED') return get().loadEmails();
   // A cache-merge repaint (loadUnifiedInbox alone) would bring the row back
   // carrying the uid the delete retired — the move back gave the message a new
@@ -189,6 +191,7 @@ export async function saveEmailLocally(uid) {
         flags: vaultStoreFlags(email.flags),
       });
     }
+    viewCountsStale();
 
     try {
       const emailData = get().emails?.find(e => e.uid === uid) || get().sortedEmails?.find(e => e.uid === uid);
@@ -401,6 +404,8 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
 // way that loader stamps them.
 async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   const get = () => useMailStore.getState();
+  // The vault took mail in, whatever folder is on screen.
+  viewCountsStale();
   const state = get();
   const spans = spansMailboxes(state);
   if (!spans && (accountId !== state.activeAccountId || mailbox !== state.activeMailbox)) return;
@@ -577,6 +582,7 @@ export async function removeLocalEmails(targets) {
 // the view on screen now, which may not be the one the removal started in.
 async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
   const get = () => useMailStore.getState();
+  viewCountsStale();
   const removed = new Set(uids.map(String));
   const isRemoved = email => removed.has(String(email.uid));
 
@@ -763,6 +769,7 @@ function _hideDeleted(useMailStore, targets, { keys = [] } = {}) {
   _shiftUnread(removed, -1);
   _dropUnifiedFolderCache(live);
   useMailStore.getState().updateSortedEmails();
+  viewCountsStale();
   // Now, not after the round trip: the reader is empty from this paint, and a
   // message that appears seconds later reads as a bug.
   if (openNext) useMailStore.getState().selectEmail(selectionKey(openNext, live));
@@ -790,6 +797,7 @@ function _reinsertRestored(useMailStore, restored) {
   _shiftUnread(back, 1);
   _dropUnifiedFolderCache(live);
   useMailStore.getState().updateSortedEmails();
+  viewCountsStale();
   return back;
 }
 
@@ -1431,6 +1439,15 @@ function patchNotesFlags(targets, flag, on) {
     .catch(error => console.warn('[messageMutations] Could not repaint the notes board:', error));
 }
 
+// And the badge beside each saved view: a read, a star, a delete or a move
+// can change what a view holds. The store asks the daemon once, a beat after
+// the last of a burst, so every path below can say so without waiting on it.
+function viewCountsStale() {
+  import('../../stores/viewStore')
+    .then(({ scheduleViewCountsRefresh }) => scheduleViewCountsRefresh())
+    .catch(error => console.warn('[messageMutations] Could not count the saved views again:', error));
+}
+
 export async function pruneSearchResults(copies) {
   if (!copies.length) return;
   const { useSearchStore } = await import('../../stores/searchStore');
@@ -1495,6 +1512,8 @@ export async function applyServerRemoval(uid, {
 } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+  // The server copy is gone now, not just hidden (_hideDeleted counted then).
+  viewCountsStale();
 
   // Record the removal on the vault entry before touching the store: this is
   // the only durable proof that the server copy is gone by our own hand, and
@@ -1678,6 +1697,7 @@ function _refreshAfterFlagChange(useMailStore) {
   bumpFlagChangeCounter();
   useMailStore.setState(state => ({ _flagSeq: state._flagSeq + 1 }));
   useMailStore.getState().updateSortedEmails();
+  viewCountsStale();
 }
 
 // Unified rows span accounts, so one \Seen change there has to be counted per
@@ -1787,6 +1807,9 @@ async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, 
     if (!changes.length) return;
     const accountEmail = s.accounts?.find(a => a.id === accountId)?.email || null;
     await api.vaultApplyFlags(accountId, mailbox, accountEmail, changes);
+    // The index the views count from is patched with the vault copy, and the
+    // count asked for at the repaint may have run before this landed.
+    viewCountsStale();
   } catch (e) {
     console.warn('[persistVaultFlags] Failed to persist flags for', accountId, mailbox, uids, e);
   }

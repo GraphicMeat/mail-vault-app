@@ -89,6 +89,20 @@ export function notifyArrival(accountId, folder, count, header) {
   }]);
 }
 
+// Fire-and-forget, loaded late: both stores sit on top of the mail store this
+// hook is imported under, and nothing in the change feed waits on either.
+function viewCountsStale() {
+  import('../stores/viewStore')
+    .then(({ scheduleViewCountsRefresh }) => scheduleViewCountsRefresh())
+    .catch(error => console.warn('[scheduler] Could not count the saved views again:', error));
+}
+
+function rereadNoteFlags(accountId, mailbox) {
+  import('../stores/notesStore')
+    .then(({ useNotesStore }) => useNotesStore.getState().rereadCopyFlags(accountId, mailbox))
+    .catch(error => console.warn('[scheduler] Could not repaint the notes board:', error));
+}
+
 export function useEmailScheduler() {
   const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
   const accounts = useAccountStore(s => s.accounts);
@@ -205,8 +219,12 @@ export function useEmailScheduler() {
       notifyArrival(accountId, mailbox, newEmails, newest);
     }
     // A restore window saved before the change holds the old flags, and All
-    // Inboxes paints those ahead of the cache.
-    if (updatedFlags > 0) invalidateRestoreDescriptors(accountId);
+    // Inboxes paints those ahead of the cache. The Notes to Self board keeps
+    // its own copy of each note's flags, whichever list is on screen.
+    if (updatedFlags > 0) {
+      invalidateRestoreDescriptors(accountId);
+      rereadNoteFlags(accountId, mailbox);
+    }
     if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
     return onScreen;
   };
@@ -258,6 +276,10 @@ export function useEmailScheduler() {
           const seen = byFolder.get(key);
           byFolder.set(key, seen ? { ...seen, newEmails: (seen.newEmails || 0) + (c.newEmails || 0), updatedFlags: (seen.updatedFlags || 0) + (c.updatedFlags || 0) } : c);
         }
+        // Any change can move a saved view's badge: a read, a star, an
+        // arrival, or a removal, which the feed reports without a count of
+        // its own. Once per reply, and the store coalesces it further.
+        if (byFolder.size) viewCountsStale();
         let repaint = false, flagsMoved = false;
         for (const c of byFolder.values()) {
           if (stopped) break;

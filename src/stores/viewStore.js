@@ -129,10 +129,14 @@ export const useViewStore = create((set, get) => ({
     return get().views;
   },
 
-  refreshCounts: async () => {
+  /// `keepOnEmpty`: the daemon answers `{}` while the index cannot count, and a
+  /// change made mid-build should not blank badges that were true a moment ago.
+  refreshCounts: async ({ keepOnEmpty = false } = {}) => {
     try {
       const counts = await daemonCall('views.counts', { accounts: accountsPayload() });
-      set({ counts: counts && typeof counts === 'object' ? counts : {} });
+      const next = counts && typeof counts === 'object' ? counts : {};
+      if (keepOnEmpty && !Object.keys(next).length) return;
+      set({ counts: next });
     } catch {
       // A count that would not come is not worth an error in the sidebar.
     }
@@ -295,3 +299,48 @@ export const useViewStore = create((set, get) => ({
     };
   },
 }));
+
+/// The badges after a change: a read, a star, a move or a delete made here,
+/// or one a sync reports, can change what any view holds. Those come in
+/// bursts (a select-all, the reads of a scroll, a sync naming ten folders),
+/// so the count is asked for once, a beat after the last of them, off the
+/// click path, and never twice at once: a change made while one count is on
+/// its way asks for one more after it. The daemon counts from the search
+/// index, which may take a moment more to catch up; the next change counts
+/// again.
+const COUNTS_DELAY_MS = 600;
+let countsTimer = null;
+let countsRunning = false;
+let countsAgain = false;
+
+export function scheduleViewCountsRefresh() {
+  clearTimeout(countsTimer);
+  countsTimer = setTimeout(runScheduledCounts, COUNTS_DELAY_MS);
+}
+
+async function runScheduledCounts() {
+  countsTimer = null;
+  if (countsRunning) {
+    countsAgain = true;
+    return;
+  }
+  // No view, no badge to keep true.
+  if (!useViewStore.getState().views.length) return;
+  countsRunning = true;
+  try {
+    await useViewStore.getState().refreshCounts({ keepOnEmpty: true });
+  } finally {
+    countsRunning = false;
+    if (countsAgain) {
+      countsAgain = false;
+      scheduleViewCountsRefresh();
+    }
+  }
+}
+
+export function __resetViewCountsForTests() {
+  clearTimeout(countsTimer);
+  countsTimer = null;
+  countsRunning = false;
+  countsAgain = false;
+}

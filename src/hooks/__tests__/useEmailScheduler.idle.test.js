@@ -52,6 +52,17 @@ vi.mock('../../services/searchIndex', () => ({
   onDaemonReconnected: (cb) => { daemonReconnected = cb; return Promise.resolve(() => { daemonReconnected = null; }); },
 }));
 
+// The saved-view badges and the Notes to Self board, which a synced change
+// makes stale too.
+const mockScheduleViewCounts = vi.fn();
+vi.mock('../../stores/viewStore', () => ({
+  scheduleViewCountsRefresh: (...a) => mockScheduleViewCounts(...a),
+}));
+const mockRereadCopyFlags = vi.fn();
+vi.mock('../../stores/notesStore', () => ({
+  useNotesStore: { getState: () => ({ rereadCopyFlags: (...a) => mockRereadCopyFlags(...a) }) },
+}));
+
 vi.mock('../../services/workflows/replayOps', () => ({
   replayOps: vi.fn().mockResolvedValue(undefined),
   wireReplayOnReconnect: vi.fn(),
@@ -119,6 +130,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     mockNotify.mockClear();
     mockLoadEmails.mockClear();
     mockLoadUnifiedInbox.mockClear();
+    mockScheduleViewCounts.mockClear();
+    mockRereadCopyFlags.mockClear();
     mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
     mockGetAllHeaders.mockReset().mockResolvedValue(null);
     mailStore.setState(mailState());
@@ -310,6 +323,59 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockLoadEmails).toHaveBeenCalledTimes(1);
       expect(mockLoadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+    });
+
+    // The saved-view badges count from the index, which a sync changes as
+    // well, whichever folder is on screen.
+    it('counts the saved views again, once for the whole reply', async () => {
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'Archive' });
+      eventReplies = [reply({ gen: 2, changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 },
+        { gen: 2, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 2 },
+      ] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      await vi.waitFor(() => expect(mockScheduleViewCounts).toHaveBeenCalled());
+      await flush();
+      expect(mockScheduleViewCounts).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks nothing of the views while the feed is quiet', async () => {
+      eventReplies = [reply({ gen: 0, changes: [] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      await flush();
+
+      expect(mockScheduleViewCounts).not.toHaveBeenCalled();
+    });
+
+    // The Notes to Self board keeps its own copy of each note's flags.
+    it('has the notes board reread the flags of the folder that changed, on screen or not', async () => {
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [reply({ gen: 2, changes: [
+        { gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 },
+        { gen: 2, accountId: 'a2', mailbox: 'INBOX', newEmails: 0, updatedFlags: 2, at: 2 },
+      ] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      await vi.waitFor(() => expect(mockRereadCopyFlags).toHaveBeenCalledWith('a2', 'INBOX'));
+      expect(mockRereadCopyFlags).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the notes board alone for an arrival', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [flagChange({ newEmails: 1, updatedFlags: 0 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      await vi.waitFor(() => expect(mockScheduleViewCounts).toHaveBeenCalled());
+
+      expect(mockRereadCopyFlags).not.toHaveBeenCalled();
     });
 
     it('leaves an arrival-only reload alone', async () => {

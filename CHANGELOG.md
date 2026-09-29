@@ -57,6 +57,8 @@
 - **Compose remembers its own window.** Open a message you are writing in a new window, and every compose after it, new messages, replies and forwards alike, opens in a window of its own too. Settings > Mail preferences > Behavior > Open Compose switches back to writing over your mail.
 
 ### Fixed
+- **Saved-view counts stay true.** The badge beside each view is counted again a moment after you read, star, move or delete mail, undo one of those, or a sync brings a change from another device. A count taken while the search index is still building keeps the last numbers instead of blanking them.
+- **The Notes to Self board follows other devices.** A star or read change made on another device now repaints the board's cards when MailVault syncs it, without pressing Refresh.
 - **A signature that is only a logo is no longer erased.** Opening Account Settings used to save a logo-only signature as empty, so it never went out with your mail.
 - **Undoing a star updates the Notes to Self card.** Undo, Cmd+Z and a star made from the list now repaint the card and the vault copy too. Marking a note done and deleting one can be undone as well, and Cmd+Z works while Notes is open.
 - **Saved views no longer look empty while the search index rebuilds.** A view opened during indexing says it is waiting, a notice explains that views can lag until indexing finishes, and the view fills in by itself when it is done.

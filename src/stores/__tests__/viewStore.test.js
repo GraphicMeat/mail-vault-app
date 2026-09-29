@@ -15,7 +15,10 @@ vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: id => harness.cacheMailboxes[id] || [],
 }));
 
-const { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults } = await import('../viewStore');
+const {
+  useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults,
+  scheduleViewCountsRefresh, __resetViewCountsForTests,
+} = await import('../viewStore');
 const { useSettingsStore } = await import('../settingsStore');
 const { useSearchStore } = await import('../searchStore.js');
 const { useFieldStore } = await import('../fieldStore');
@@ -183,6 +186,81 @@ describe('saved views', () => {
       searchFilters: { location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: '2026-09-03', hasAttachments: false },
     });
     expect(useViewStore.getState().defFromSearch([]).dateTo).toBe(Date.parse('2026-09-03T23:59:59Z') / 1000);
+  });
+});
+
+/// A read, a star, a move or a delete changes what a view holds, and the badge
+/// beside it only knew the count from when the view was last opened.
+describe('the badge counts after a change', () => {
+  const countCalls = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'views.counts');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetViewCountsForTests();
+    useViewStore.setState({ views: [STARRED, MINE] });
+  });
+  afterEach(() => {
+    __resetViewCountsForTests();
+    vi.useRealTimers();
+  });
+
+  it('counts once, a beat after the last change of a burst', async () => {
+    harness.daemonCall.mockResolvedValue({ 'builtin-starred': 3, v1: 0 });
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(300);
+    scheduleViewCountsRefresh();
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(countCalls()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(countCalls()).toHaveLength(1);
+    expect(useViewStore.getState().counts).toEqual({ 'builtin-starred': 3, v1: 0 });
+  });
+
+  it('keeps the badges it has when the index cannot answer yet', async () => {
+    useViewStore.setState({ counts: { 'builtin-starred': 3, v1: 2 } });
+    harness.daemonCall.mockResolvedValue({});
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(countCalls()).toHaveLength(1);
+    expect(useViewStore.getState().counts).toEqual({ 'builtin-starred': 3, v1: 2 });
+  });
+
+  it('returns before the count is asked for', () => {
+    expect(scheduleViewCountsRefresh()).toBeUndefined();
+    expect(countCalls()).toHaveLength(0);
+  });
+
+  it('never runs two counts at once, and counts again for a change made during one', async () => {
+    let answer = null;
+    harness.daemonCall.mockImplementation(method => (method === 'views.counts'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve({})));
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(countCalls()).toHaveLength(1);
+
+    scheduleViewCountsRefresh();
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(countCalls()).toHaveLength(1);
+
+    answer({ v1: 1 });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(countCalls()).toHaveLength(2);
+
+    answer({ v1: 2 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(countCalls()).toHaveLength(2);
+    expect(useViewStore.getState().counts).toEqual({ v1: 2 });
+  });
+
+  it('asks nothing while no view is loaded', async () => {
+    useViewStore.setState({ views: [] });
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(countCalls()).toHaveLength(0);
   });
 });
 

@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => ({
   deleteEmailFromServer: vi.fn(),
   setDeleteUndo: vi.fn(),
   vaultApplyFlags: vi.fn(),
+  headersByUids: vi.fn(),
   mailState: null,
   cacheMailboxes: {},
   savedMailboxes: {},
@@ -22,6 +23,7 @@ vi.mock('../../services/cacheManager', () => ({
 // The folder list a past session saved: what the sidebar restores from.
 vi.mock('../../services/db', () => ({
   getCachedMailboxes: async id => harness.savedMailboxes[id] ?? null,
+  getEmailHeadersByUids: (...args) => harness.headersByUids(...args),
 }));
 vi.mock('../../services/api', () => ({
   vaultApplyFlags: (...args) => harness.vaultApplyFlags(...args),
@@ -57,6 +59,7 @@ beforeEach(() => {
   harness.deleteEmailFromServer.mockReset().mockResolvedValue(undefined);
   harness.setDeleteUndo.mockReset().mockResolvedValue(undefined);
   harness.vaultApplyFlags.mockReset().mockResolvedValue({ renamed: 1 });
+  harness.headersByUids.mockReset().mockResolvedValue([]);
   harness.cacheMailboxes = {
     a: [{ path: 'INBOX', name: 'INBOX' }, { path: '[Gmail]/Sent Mail', name: 'Sent Mail', specialUse: '\\Sent' }],
     b: [{ path: 'INBOX', name: 'INBOX' }],
@@ -374,6 +377,96 @@ describe('useNotesStore', () => {
     const cards = useNotesStore.getState().cards;
     useNotesStore.getState().applyCopyFlag([{ accountId: 'c', mailbox: 'INBOX', uid: 3 }], '\\Flagged', true);
     expect(useNotesStore.getState().cards).toBe(cards);
+  });
+
+  /// A star or a read made on another device: the daemon's sync wrote it into
+  /// the header cache and the change feed named the folder. The board kept the
+  /// flags it was listed with until Refresh.
+  describe('a flag change synced from another device', () => {
+    const synced = () => [
+      card('starred-elsewhere', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Seen'] }] }),
+      card('read-elsewhere', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 4, flags: [] }] }),
+      card('unchanged', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 5, flags: ['\\Seen'] }] }),
+      card('other-folder', { copies: [{ accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 3, flags: [] }] }),
+    ];
+
+    it('rereads the cached flags of that folder, and repaints only the cards that changed', async () => {
+      harness.daemonCall.mockResolvedValue({ cards: synced() });
+      await useNotesStore.getState().open();
+      const before = useNotesStore.getState().cards;
+      // Keywords the vault copy never carries are no change.
+      harness.headersByUids.mockResolvedValue([
+        { uid: 3, flags: ['\\Seen', '\\Flagged', '$NotJunk'] },
+        { uid: 4, flags: ['\\Seen'] },
+        { uid: 5, flags: ['\\Seen', '$Forwarded'] },
+      ]);
+
+      await useNotesStore.getState().rereadCopyFlags('a', 'INBOX');
+
+      expect(harness.headersByUids).toHaveBeenCalledTimes(1);
+      expect(harness.headersByUids.mock.calls[0][0]).toBe('a');
+      expect(harness.headersByUids.mock.calls[0][1]).toBe('INBOX');
+      expect(harness.headersByUids.mock.calls[0][2].map(Number).sort()).toEqual([3, 4, 5]);
+      const [starred, read, unchanged, other] = useNotesStore.getState().cards;
+      expect(starred.starred).toBe(true);
+      expect([...starred.copies[0].flags].sort()).toEqual(['\\Flagged', '\\Seen']);
+      expect(read.starred).toBe(false);
+      expect(read.copies[0].flags).toEqual(['\\Seen']);
+      expect(unchanged).toBe(before[2]);
+      expect(other).toBe(before[3]);
+    });
+
+    it('takes a star off that was taken off elsewhere', async () => {
+      harness.daemonCall.mockResolvedValue({ cards: [
+        card('s', { starred: true, copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Seen', '\\Flagged'] }] }),
+      ] });
+      await useNotesStore.getState().open();
+      harness.headersByUids.mockResolvedValue([{ uid: 3, flags: ['\\Seen'] }]);
+
+      await useNotesStore.getState().rereadCopyFlags('a', 'INBOX');
+
+      expect(useNotesStore.getState().cards[0]).toMatchObject({ starred: false, copies: [{ flags: ['\\Seen'] }] });
+    });
+
+    it('leaves the board alone when the cache holds the same flags, or no row for a copy', async () => {
+      harness.daemonCall.mockResolvedValue({ cards: synced() });
+      await useNotesStore.getState().open();
+      const before = useNotesStore.getState().cards;
+      harness.headersByUids.mockResolvedValue([{ uid: 5, flags: ['\\Seen'] }]);
+
+      await useNotesStore.getState().rereadCopyFlags('a', 'INBOX');
+
+      expect(useNotesStore.getState().cards).toBe(before);
+    });
+
+    it('reads nothing for a folder no card has a copy in', async () => {
+      harness.daemonCall.mockResolvedValue({ cards: synced() });
+      await useNotesStore.getState().open();
+
+      await useNotesStore.getState().rereadCopyFlags('b', 'INBOX');
+
+      expect(harness.headersByUids).not.toHaveBeenCalled();
+    });
+
+    it('does nothing while the board is closed', async () => {
+      await useNotesStore.getState().rereadCopyFlags('a', 'INBOX');
+      expect(harness.headersByUids).not.toHaveBeenCalled();
+      expect(useNotesStore.getState().cards).toEqual([]);
+    });
+
+    it('drops what it read when the board closed while the cache was read', async () => {
+      harness.daemonCall.mockResolvedValue({ cards: synced() });
+      await useNotesStore.getState().open();
+      let answer;
+      harness.headersByUids.mockReturnValue(new Promise(resolve => { answer = resolve; }));
+
+      const reread = useNotesStore.getState().rereadCopyFlags('a', 'INBOX');
+      useNotesStore.getState().close();
+      answer([{ uid: 3, flags: ['\\Flagged'] }]);
+      await reread;
+
+      expect(useNotesStore.getState().cards).toEqual([]);
+    });
   });
 
   it('deletes every server copy through the server delete, then drops the card', async () => {
