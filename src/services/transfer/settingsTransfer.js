@@ -31,7 +31,7 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'backupNotifyOnSuccess', 'backupNotifyOnFailure',
 ];
 // notificationSettings is handled specially: globals copied, .accounts filtered per account.
-export const PER_ACCOUNT_MAPS = ['signatures', 'displayNames', 'sendAsAddresses', 'accountColors', 'hiddenAccounts', 'fetchModes'];
+export const PER_ACCOUNT_MAPS = ['signatures', 'displayNames', 'sendAsAddresses', 'aliases', 'dismissedAliases', 'accountColors', 'hiddenAccounts', 'fetchModes'];
 
 const pickIds = (map, ids) =>
   Object.fromEntries(ids.filter(id => map && Object.hasOwn(map, id)).map(id => [id, map[id]]));

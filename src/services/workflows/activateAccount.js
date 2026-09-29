@@ -1368,6 +1368,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     // so a freshly added account is watched the moment it is opened, rather
     // than whenever the scheduler's effect next notices it.
     if (!isGraphAccount(detectAccount) && hasValidCredentials(detectAccount)) watchAccount(detectAccount);
+    // The addresses this account can send as, once per session, well after
+    // this first paint and sync. Fire-and-forget; the daemon reads at
+    // background QoS.
+    import('../aliasDiscovery').then(m => m.scheduleAliasRefresh(detectAccount)).catch(() => {});
   }
 
   activationTrace.end('done', { emailCount: get().emails.length });
@@ -1436,6 +1440,14 @@ export async function init() {
         const lastMailbox = useSettingsStore.getState().getLastMailbox(firstVisible.id);
         await openFolder(firstVisible.id, lastMailbox || 'INBOX');
       }
+    }
+
+    // Every visible account's aliases, not just the one opened: All inboxes
+    // and compose's From row show them all. Spaced out, once per session.
+    if (accounts.length > 0) {
+      const { hiddenAccounts } = useSettingsStore.getState();
+      const visible = accounts.filter(a => !hiddenAccounts?.[a.id]);
+      import('../aliasDiscovery').then(m => m.scheduleAliasRefreshAll(visible)).catch(() => {});
     }
 
     get()._prewarmAccountCaches()

@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
+import { ownAddresses } from '../utils/ownAddresses';
 import { Users, Clock, Star } from 'lucide-react';
 import {
   buildContactsIndex,
@@ -31,6 +32,13 @@ function useContactsIndex() {
   const sentEmails = useMailStore(s => s.sentEmails);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const accounts = useAccountStore(s => s.accounts);
+  const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const aliases = useSettingsStore(s => s.aliases);
+  // Your own aliases are never offered as contacts, like your logins.
+  const own = useMemo(
+    () => (accounts || []).flatMap(account => ownAddresses({ account, sendAsAddress: sendAsAddresses?.[account.id], aliases: aliases?.[account.id] })),
+    [sendAsAddresses, aliases, accounts],
+  );
   const [hydrationTick, setHydrationTick] = useState(0);
 
   useEffect(() => {
@@ -45,9 +53,9 @@ function useContactsIndex() {
       ...byRowAccount(emails, activeAccountId),
       ...byRowAccount(sentEmails, activeAccountId),
     ];
-    return buildContactsIndex(sources, accounts || []);
+    return buildContactsIndex(sources, accounts || [], own);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emails, sentEmails, accounts, activeAccountId, hydrationTick]);
+  }, [emails, sentEmails, accounts, activeAccountId, hydrationTick, own]);
 }
 
 // Appends a contact address to a comma-separated recipient string. If the

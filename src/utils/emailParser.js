@@ -9,19 +9,17 @@ import { formatTime, formatDateOnly, formatDateLong, formatWeekdayShort } from '
 // `ReferenceError: Can't find variable: t` — inside render, which the error
 // boundary turned into "Something went wrong. Please restart the app."
 import { t as tr } from '../i18n/index.js';
+import { ownAddressSet, isOwnAddress } from './ownAddresses.js';
 
 /**
- * Normalize the caller's identity argument to a lowercase Set.
- * An account can send under more than one address (the per-account send-as
- * override), so every "is this mine?" check takes a string OR a list.
+ * Normalize the caller's identity argument to a Set of identities.
+ * An account sends under more than one address (its default From and every
+ * alias, see ownAddresses.js), so every "is this mine?" check takes a string
+ * OR a list, and probes the Set through isOwnAddress, never `.has` on a raw
+ * address: Gmail entries are dot- and plus-folded.
  */
 export function identitySet(userEmail) {
-  const list = Array.isArray(userEmail) ? userEmail : [userEmail];
-  return new Set(
-    list
-      .map(v => (typeof v === 'string' ? v.toLowerCase().trim() : ''))
-      .filter(Boolean)
-  );
+  return ownAddressSet(userEmail);
 }
 
 /**
@@ -45,7 +43,7 @@ export function getCorrespondent(email, userEmail) {
   };
 
   // If the email is from the user, the correspondent is the recipient
-  if (identities.has(fromAddress)) {
+  if (isOwnAddress(fromAddress, identities)) {
     const to = email.to?.[0];
     return {
       email: to?.address?.toLowerCase() || '',
@@ -256,7 +254,7 @@ export function groupBySender(emails, userEmail) {
       const identities = identitySet(userEmail);
       for (const email of thread.emails) {
         const c = getCorrespondent(email, userEmail);
-        if (c.email && !identities.has(c.email)) {
+        if (c.email && !isOwnAddress(c.email, identities)) {
           correspondent = c;
           break;
         }
@@ -512,7 +510,7 @@ export function splitRecipients(raw) {
  */
 export function computeReplyRecipients(replyTo, mode, ownAddresses = []) {
   const own = identitySet(ownAddresses);
-  const isOwn = a => own.has((a || '').toLowerCase());
+  const isOwn = a => isOwnAddress(a || '', own);
   const sender = replyTo?.replyTo?.[0]?.address || replyTo?.from?.address || '';
   const toList = (replyTo?.to || []).map(t => t.address).filter(Boolean);
   const ccList = (replyTo?.cc || []).map(c => c.address).filter(Boolean);
@@ -1113,7 +1111,7 @@ export function isDifferentDay(date1Str, date2Str) {
 export function isFromUser(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
   if (!fromAddress) return false;
-  return identitySet(userEmail).has(fromAddress);
+  return isOwnAddress(fromAddress, identitySet(userEmail));
 }
 
 /**

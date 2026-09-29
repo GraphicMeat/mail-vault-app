@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankSendAsCandidates, composeIdentities, resolveInitialComposeIdentity } from '../sendAsSuggestions';
+import { rankSendAsCandidates, composeIdentities, composeSenderName, resolveInitialComposeIdentity } from '../sendAsSuggestions';
 
 const LOGIN = 'ABC@fastmail.fm';
 
@@ -60,55 +60,70 @@ describe('composeIdentities', () => {
     { id: 'a1', email: 'one@fastmail.fm' },
     { id: 'a2', email: 'two@corp.com' },
   ];
+  const alias = (address, name = '', source = 'manual') => ({ address, name, source });
 
   it('offers each account its login when nothing else is known', () => {
     expect(composeIdentities(accounts)).toEqual([
-      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm' },
-      { key: 'a2 two@corp.com', accountId: 'a2', address: 'two@corp.com' },
+      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm', name: '' },
+      { key: 'a2 two@corp.com', accountId: 'a2', address: 'two@corp.com', name: '' },
     ]);
   });
 
-  it('leads with the send-as override, then the login', () => {
-    const out = composeIdentities([accounts[0]], { a1: 'alias@fastmail.fm' });
-    expect(out.map(i => i.address)).toEqual(['alias@fastmail.fm', 'one@fastmail.fm']);
-  });
-
-  it('never repeats the override or the login, whatever their case', () => {
-    const out = composeIdentities([accounts[0]], { a1: 'alias@fastmail.fm' }, {
-      a1: [{ address: 'ALIAS@fastmail.fm' }, { address: 'One@Fastmail.fm' }],
+  it('leads with the default From, then the login, then every alias', () => {
+    const out = composeIdentities([accounts[0]], { a1: 'desk@fastmail.fm' }, {
+      a1: [alias('sales@fastmail.fm', 'Sales'), alias('desk@fastmail.fm', 'Front Desk', 'provider')],
     });
-    expect(out.map(i => i.address)).toEqual(['alias@fastmail.fm', 'one@fastmail.fm']);
-  });
-
-  it('appends mined addresses in the order given', () => {
-    const out = composeIdentities([accounts[0]], {}, {
-      a1: [{ address: 'often@fastmail.fm' }, { address: 'rare@fastmail.fm' }],
-    });
-    expect(out.map(i => i.address)).toEqual([
-      'one@fastmail.fm',
-      'often@fastmail.fm',
-      'rare@fastmail.fm',
+    expect(out).toEqual([
+      { key: 'a1 desk@fastmail.fm', accountId: 'a1', address: 'desk@fastmail.fm', name: 'Front Desk' },
+      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm', name: '' },
+      { key: 'a1 sales@fastmail.fm', accountId: 'a1', address: 'sales@fastmail.fm', name: 'Sales' },
     ]);
   });
 
-  it('treats a blank override as no override', () => {
+  it('never repeats the default, the login or an alias, whatever their case', () => {
+    const out = composeIdentities([accounts[0]], { a1: 'desk@fastmail.fm' }, {
+      a1: [alias('DESK@fastmail.fm'), alias('One@Fastmail.fm'), alias('desk@FASTMAIL.fm')],
+    });
+    expect(out.map(i => i.address)).toEqual(['desk@fastmail.fm', 'one@fastmail.fm']);
+  });
+
+  it('treats a blank default as none', () => {
     const out = composeIdentities([accounts[0]], { a1: '   ' });
     expect(out).toEqual([
-      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm' },
+      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm', name: '' },
     ]);
   });
 
   it('keeps accounts in input order, each account contiguous', () => {
     const out = composeIdentities(accounts, { a1: 'alias@fastmail.fm' }, {
-      a2: [{ address: 'mined@corp.com' }],
+      a2: [alias('second@corp.com')],
     });
     expect(out.map(i => i.accountId)).toEqual(['a1', 'a1', 'a2', 'a2']);
     expect(out.map(i => i.address)).toEqual([
       'alias@fastmail.fm',
       'one@fastmail.fm',
       'two@corp.com',
-      'mined@corp.com',
+      'second@corp.com',
     ]);
+  });
+});
+
+describe('composeSenderName', () => {
+  const account = { id: 'a1', email: 'one@fastmail.fm', name: 'Account Name' };
+  const aliases = [{ address: 'desk@fastmail.fm', name: 'Front Desk', source: 'provider' }, { address: 'bare@fastmail.fm', name: '', source: 'manual' }];
+
+  it('names the message after the alias it leaves from', () => {
+    expect(composeSenderName({ account, fromAddress: 'Desk@Fastmail.fm', displayName: 'Chosen', aliases })).toBe('Front Desk');
+  });
+
+  it('falls back to the account\'s name for the login or an unnamed alias', () => {
+    expect(composeSenderName({ account, fromAddress: 'one@fastmail.fm', displayName: 'Chosen', aliases })).toBe('Chosen');
+    expect(composeSenderName({ account, fromAddress: 'bare@fastmail.fm', displayName: 'Chosen', aliases })).toBe('Chosen');
+    expect(composeSenderName({ account, fromAddress: 'bare@fastmail.fm', displayName: '', aliases })).toBe('Account Name');
+  });
+
+  it('keeps the old last resort, which the sender drops as a bare address', () => {
+    expect(composeSenderName({ account: { id: 'a1', email: 'one@fastmail.fm' }, fromAddress: '', displayName: '' })).toBe('one@fastmail.fm');
   });
 });
 

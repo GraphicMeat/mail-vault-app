@@ -170,6 +170,7 @@ beforeEach(() => {
   mail.sentEmails = [];
   mail.emails = [];
   settings.sendAsAddresses = {};
+  settings.aliases = {};
   settings.lastComposeIdentity = null;
   settings.composeContextVisible = true;
   settings.composeOpenMode = undefined;
@@ -201,6 +202,31 @@ describe('the quoted original in a reply', () => {
 
     await waitFor(() => expect(onQueueSend).toHaveBeenCalled());
     expect(onQueueSend.mock.calls[0][0]._fromAddress).toBe('alias@example.test');
+  });
+
+  // The From row lists the account's aliases by name, and a message leaves
+  // under the name of the alias it is sent from.
+  it('sends under the chosen alias\'s name, and under the account\'s name once From changes back', async () => {
+    settings.aliases = { 'acct-1': [{ address: 'desk@example.test', name: 'Front Desk', source: 'provider' }] };
+    settings.sendAsAddresses = { 'acct-1': 'desk@example.test' };
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+
+    await screen.findByTestId('compose-from');
+    expect(screen.getByRole('option', { name: 'Front Desk <desk@example.test>' })).not.toBeNull();
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
+    expect(buildOutgoingMime.mock.calls[0][0]).toMatchObject({ name: 'Front Desk', fromEmail: 'desk@example.test' });
+    cleanup();
+
+    buildOutgoingMime.mockClear();
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: 'acct-1 me@example.test' } });
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
+    expect(buildOutgoingMime.mock.calls[0][0].name).toBe('Me');
+    expect(buildOutgoingMime.mock.calls[0][0].fromEmail).toBeUndefined();
   });
 
   it('freezes editing and Escape while a detached window request is pending, then recovers on failure', async () => {

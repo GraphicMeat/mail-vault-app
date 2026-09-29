@@ -1,5 +1,6 @@
 import { t } from '../../i18n/index.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
+import { ownAddresses } from '../../utils/ownAddresses.js';
 // ── Shared helpers used across multiple mail store slices ──
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -70,16 +71,15 @@ export function _resolveUnifiedContext(key, state) {
 
 /**
  * Every address that counts as "you" in the view on screen: the active
- * account's login and send-as address, or, in All inboxes, those of every
- * visible account, since the list holds all of their mail and a reply sent
- * from any of them is yours.
+ * account's own addresses (login, default From, aliases: utils/ownAddresses),
+ * or, in All inboxes, those of every visible account, since the list holds
+ * all of their mail and a reply sent from any of them is yours.
  */
-export function ownAddresses(state, sendAsAddresses = {}, hiddenAccounts = {}) {
+export function viewOwnAddresses(state, sendAsAddresses = {}, hiddenAccounts = {}, aliases = {}) {
   const spans = state?.activeMailbox === 'UNIFIED';
   return (state?.accounts || [])
     .filter(a => (spans ? !hiddenAccounts?.[a.id] : a.id === state.activeAccountId))
-    .flatMap(a => [a.email, sendAsAddresses?.[a.id]])
-    .filter(Boolean);
+    .flatMap(account => ownAddresses({ account, sendAsAddress: sendAsAddresses?.[account.id], aliases: aliases?.[account.id] }));
 }
 
 /**

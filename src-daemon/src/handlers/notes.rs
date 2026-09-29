@@ -28,6 +28,10 @@ struct Account {
     account_id: String,
     #[serde(default)]
     address: String,
+    /// Its other own addresses (default From, aliases): a note from or to
+    /// one of them is a note to self as much as one on the login.
+    #[serde(default)]
+    aliases: Vec<String>,
     /// Server paths, so a copy names the mailbox it came from rather than
     /// the vault directory it is stored in — same field, same resolver
     /// (`mail_search::mailbox_for_vault_dir`), as `handlers::views::Account`.
@@ -118,14 +122,16 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let mut known_mailboxes: HashMap<String, Vec<String>> = HashMap::new();
     for account in &accounts {
         known_mailboxes.insert(account.account_id.clone(), account.known_mailboxes.clone());
-        let addr = account.address.trim();
-        if addr.is_empty() {
-            continue;
+        for addr in std::iter::once(&account.address).chain(account.aliases.iter()) {
+            let addr = addr.trim();
+            if addr.is_empty() {
+                continue;
+            }
+            let normalized = normalize_identity(addr);
+            sql_own.insert(addr.to_lowercase());
+            sql_own.insert(normalized.clone());
+            own_normalized.insert(normalized);
         }
-        let normalized = normalize_identity(addr);
-        sql_own.insert(addr.to_lowercase());
-        sql_own.insert(normalized.clone());
-        own_normalized.insert(normalized);
     }
     if own_normalized.is_empty() {
         return Ok(serde_json::json!({ "cards": [] }));
@@ -334,6 +340,21 @@ mod tests {
         let cards = out["cards"].as_array().unwrap();
         assert_eq!(cards.len(), 1, "{cards:?}");
         assert_eq!(cards[0]["copies"].as_array().unwrap().len(), 2);
+    }
+
+    /// An alias is one of your own addresses: a note sent from it to your
+    /// login is a note to self.
+    #[tokio::test]
+    async fn a_note_sent_from_an_alias_to_the_login_is_a_card() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Sent", 1, "S", Some("<n9@x.test>"), "desk@x.test", "me@x.test", "From the desk", 100);
+        install(&s, conn);
+        let accts = json!([{ "accountId": "a", "address": "me@x.test", "aliases": ["Desk@x.test"] }]);
+        let out = call(&s, "notes.list", json!({ "accounts": accts })).await;
+        let cards = out["cards"].as_array().unwrap();
+        assert_eq!(cards.len(), 1, "{cards:?}");
+        assert_eq!(cards[0]["subject"], "From the desk");
     }
 
     #[tokio::test]

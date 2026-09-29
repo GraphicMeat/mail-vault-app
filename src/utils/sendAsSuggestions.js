@@ -1,10 +1,14 @@
-// ── sendAsSuggestions — candidate "send mail as" addresses from cached mail ──
+// ── sendAsSuggestions: compose identities, and the old "send mail as" chips ──
 //
-// Discovering aliases from the provider needs credentials we don't hold
-// (Fastmail JMAP is scoped separately from the IMAP app password; Gmail's
-// settings.sendAs.list needs a restricted OAuth scope), so we mine the user's
-// own cached headers instead. Suggestions only — the SMTP server is the
-// authority on what it will accept.
+// composeIdentities / composeSenderName / resolveInitialComposeIdentity decide
+// what compose's From row offers and sends as. Aliases themselves come from
+// the daemon's `aliases.discover` (services/aliasDiscovery.js), which reads
+// the provider's send-as list and the account's own mail.
+//
+// rankSendAsCandidates / suggestSendAsAddresses below are the chips under the
+// old Settings "Send Mail As" field, and go with it: they mine the user's own
+// cached Sent headers. Suggestions only, the SMTP server is the authority on
+// what it will accept.
 //
 // Sent `From` is the ONLY source. We used to also mine To/Cc of received mail,
 // gated on the address turning up from 3+ distinct senders, and it offered a
@@ -52,33 +56,53 @@ export function rankSendAsCandidates(sent, loginAddress) {
 
 /**
  * Every address compose may send from, one entry per (account, address):
- * the account's default first (its send-as override, else the login), then
- * the login, then addresses it has provably sent as. Case-insensitive dedupe.
- * `key` is what the From <select> carries; split on the first space.
+ * the account's default first (its default From, else the login), then the
+ * login, then every alias (settingsStore `aliases`, which discovery fills from
+ * the provider and from what the account has sent as). Case-insensitive
+ * dedupe. `key` is what the From <select> carries; split on the first space.
+ * `name` is the alias's own name, '' when it has none.
  *
  * @param {object[]} accounts
- * @param {Record<string, string>} sendAsAddresses per-account From override
- * @param {Record<string, {address: string}[]>} sentAsByAccount mined candidates
- * @returns {{ key: string, accountId: string, address: string }[]}
+ * @param {Record<string, string>} sendAsAddresses per-account default From
+ * @param {Record<string, {address: string, name?: string}[]>} aliasesByAccount
+ * @returns {{ key: string, accountId: string, address: string, name: string }[]}
  */
-export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccount = {}) {
+export function composeIdentities(accounts, sendAsAddresses = {}, aliasesByAccount = {}) {
   const out = [];
 
   for (const account of accounts || []) {
     if (!account?.id) continue;
     const seen = new Set();
-    const override = (sendAsAddresses[account.id] || '').trim();
-    const mined = (sentAsByAccount[account.id] || []).map(entry => entry.address);
+    const aliases = aliasesByAccount?.[account.id] || [];
+    const defaultFrom = (sendAsAddresses?.[account.id] || '').trim();
 
-    for (const address of [override, account.email, ...mined]) {
+    for (const address of [defaultFrom, account.email, ...aliases.map(alias => alias?.address)]) {
       const clean = (address || '').trim();
       if (!clean || seen.has(clean.toLowerCase())) continue;
       seen.add(clean.toLowerCase());
-      out.push({ key: `${account.id} ${clean}`, accountId: account.id, address: clean });
+      out.push({ key: `${account.id} ${clean}`, accountId: account.id, address: clean, name: aliasName(aliases, clean) });
     }
   }
 
   return out;
+}
+
+function aliasName(aliases, address) {
+  const k = (address || '').trim().toLowerCase();
+  const alias = k && (aliases || []).find(a => (a?.address || '').trim().toLowerCase() === k);
+  return (alias?.name || '').trim();
+}
+
+/**
+ * The display name a message goes out under: the name of the alias it leaves
+ * from, else the account's name (`displayName` from Settings, else the
+ * account's own), else its login. The sender drops a name that is only an
+ * address (smtp.rs), so the last resort never reaches the header.
+ * `fromAddress` '' means the account's default From.
+ */
+export function composeSenderName({ account, fromAddress, displayName, aliases, sendAsAddress }) {
+  const from = (fromAddress || sendAsAddress || account?.email || '').trim();
+  return aliasName(aliases, from) || displayName || account?.name || account?.email || '';
 }
 
 /**

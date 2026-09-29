@@ -15,6 +15,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { composeSenderName } from './utils/sendAsSuggestions';
 import { currentListView } from './stores/viewStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
@@ -436,7 +437,12 @@ function App() {
         const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
         if (!account) throw new Error(tr('compose.noAccountSelected'));
         const replyTo = snapshot._replyTo || null;
-        const settings = { displayName: useSettingsStore.getState().getDisplayName(snapshot._accountId) || account.name || account.email };
+        const prefs = useSettingsStore.getState();
+        // A detached window's send: the name of the alias it leaves from, else the account's.
+        const settings = { displayName: composeSenderName({
+          account, fromAddress: snapshot._fromAddress, displayName: prefs.getDisplayName(account.id),
+          aliases: prefs.aliases?.[account.id], sendAsAddress: prefs.sendAsAddresses?.[account.id],
+        }) };
         if (scheduled) {
           await scheduleCompose({ snapshot, account, settings });
           return;

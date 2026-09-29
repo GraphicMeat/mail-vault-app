@@ -9,6 +9,7 @@
 import { findSentMailboxPath } from './sentFolder';
 import { daemonCall } from '../services/daemonClient';
 import { t as tr } from '../i18n/index.js';
+import { ownAddressSet, isOwnAddress } from './ownAddresses.js';
 
 let _cache = null;
 let _fingerprint = '';
@@ -197,7 +198,7 @@ function _addAddress(map, addr, dateMs, accountId, ownAddresses) {
   if (!addr) return;
   const address = (addr.address || addr.email || '').toLowerCase().trim();
   if (!address || !address.includes('@')) return;
-  if (ownAddresses.has(address)) return;
+  if (isOwnAddress(address, ownAddresses)) return;
   const name = (addr.name || '').trim();
   let entry = map.get(address);
   if (!entry) {
@@ -234,14 +235,16 @@ function _collectAddresses(email, map, accountId, ownAddresses) {
 // extraSources: `[{ accountId, emails }, ...]` — ephemeral (active mailbox)
 //   emails that aren't yet in the per-account hydration (live Zustand state).
 // accounts: full accounts list; their own addresses are filtered out.
-export function buildContactsIndex(accountSources, accounts = []) {
+// own: every other address that is the user (default From, aliases), from
+//   selectOwnAddressesByAccount, filtered out the same way.
+export function buildContactsIndex(accountSources, accounts = [], own = []) {
   const fp = accountSources
     .map(s => `${s.accountId || '*'}:${s.emails.length}:${s.emails[0]?.uid || 0}:${s.emails[s.emails.length - 1]?.uid || 0}`)
     .join('|')
-    + '#' + accounts.map(a => a.email).join(',');
+    + '#' + accounts.map(a => a.email).join(',') + '#' + own.join(',');
   if (fp === _fingerprint && _cache) return _cache;
 
-  const ownAddresses = new Set(accounts.map(a => (a.email || '').toLowerCase()).filter(Boolean));
+  const ownAddresses = ownAddressSet([...accounts.map(a => a.email), ...own]);
   const map = new Map();
   for (const src of accountSources) {
     if (!Array.isArray(src?.emails)) continue;

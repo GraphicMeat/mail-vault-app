@@ -1,4 +1,5 @@
 import { identitySet } from '../emailParser.js';
+import { isOwnAddress } from '../ownAddresses.js';
 import { calendarCell, calendarDays, localDateKey } from './calendar.js';
 
 /**
@@ -97,8 +98,8 @@ function normalize(copy, account, own) {
     || ((specialUse === 'outbox' || folder === 'outbox') && copy.origin !== 'local_sent');
   const sent = copy.origin === 'local_sent' || specialUse === 'sent'
     || (account?.sentFolderOverride && account.sentFolderOverride === copy.mailbox)
-    || own.has(from.address);
-  const received = !sent || people.some(person => own.has(person.address));
+    || isOwnAddress(from.address, own);
+  const received = !sent || people.some(person => isOwnAddress(person.address, own));
   const row = { copy, from, recipients: people, excluded, sent: !!sent, received,
     messageId: clean(copy.messageId), subject: clean(copy.subject),
     messageDate: instant(copy.messageDate), receivedAt: instant(copy.receivedAt), sentAt: instant(copy.sentAt) };
@@ -188,7 +189,7 @@ function scopedEvents(model, accountIds) {
       for (const row of rows) {
         const people = direction === 'received' ? [row.from] : row.recipients;
         for (const person of people) {
-          if (!person.address || model.allOwn.has(person.address)) continue;
+          if (!person.address || isOwnAddress(person.address, model.allOwn)) continue;
           const previous = correspondents.get(person.address);
           if (!previous || (!previous.name && person.name)) correspondents.set(person.address, person);
           addEvidence(person.address, direction === 'received' ? receivedEvidence(row) : mailboxEvidence(person.address));
