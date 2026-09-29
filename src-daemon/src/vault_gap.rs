@@ -198,8 +198,16 @@ fn plan(state: &DaemonState, account_id: &str, now_ms: i64) -> Result<Plan, Unkn
             // counted, and saved, once, in `\All`.
             Some((selectable, hoarded)) if selectable.contains(&mailbox) && !hoarded.contains(&mailbox) => continue,
             // Not on the server's list any more (deleted or renamed there):
-            // its rows cannot be fetched, so it is never walked or saved.
-            Some((selectable, _)) if !selectable.contains(&mailbox) => false,
+            // its rows cannot be fetched, so it is never walked or saved. A
+            // vault-only local folder (mode 3) is no server's at all: never a
+            // gap, and not an unknown one either.
+            Some((selectable, _)) if !selectable.contains(&mailbox) => {
+                let account_dir = vault_files::account_dir(&state.data_dir.join("Maildir"), account_id);
+                if matches!(mailvault_core::local_folder::read_marker(&account_dir, &vault_dir_name(&mailbox)), Ok(Some(_))) {
+                    continue;
+                }
+                false
+            }
             // Two cached folders filed under one vault folder: a vault uid
             // does not say whose message it is (the hoarder skips these too).
             _ => per_dir[&vault_dir_name(&mailbox)] == 1,
@@ -888,6 +896,31 @@ mod tests {
         released(&r.s).await;
     }
 
+    /// A vault-only local folder (mode 3) under a header-cache key an app
+    /// path wrote is on no server's list and is no server's: neither counted
+    /// nor unknown, so it never keeps the account from "all saved".
+    #[tokio::test]
+    async fn a_vault_only_local_folder_is_neither_counted_nor_unknown() {
+        let r = rig();
+        folder_list(&r.s, &[("INBOX", &[])]);
+        cached(&r.s, "INBOX", [1]);
+        let name = "MBOX import 2026-09-29";
+        cached(&r.s, name, [1, 2]);
+        let folder = vault_files::account_dir(&r.s.data_dir.join("Maildir"), ACCT).join(vault_dir_name(name));
+        std::fs::create_dir_all(&folder).unwrap();
+        let marker = mailvault_core::local_folder::Marker {
+            kind: mailvault_core::local_folder::KIND_IMPORT.to_string(),
+            name: name.to_string(),
+            created: 1,
+            source: "takeout.mbox".to_string(),
+        };
+        mailvault_core::local_folder::write_marker(&folder, &marker).unwrap();
+        let got = count_of(&r.s).await;
+        assert_eq!(got["count"], json!(1), "{got}");
+        assert_eq!(got["partial"], json!(false), "{got}");
+        assert_eq!(by_mailbox(&got), vec![("INBOX".to_string(), 1, false)]);
+    }
+
     /// A folder the server refuses to SELECT is given up after one try: one
     /// SELECT, one login for it, all its messages reported as not fetched,
     /// and the next folder still saved. Without the first-message probe every
@@ -1450,7 +1483,11 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         let second = spawn(&r.s);
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Joined: the map's walk, the first request's and the second's.
+        while lock(&WALKS).get(&key).and_then(|(_, walk)| walk.strong_count()) != Some(3) {
+            assert!(Instant::now() < deadline, "the second count never joined the first");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
         drop(held);
         let ((a, a_started), (b, b_started)) = (first.await.unwrap(), second.await.unwrap());
         assert!(a_started && !b_started, "the second joined the first");
