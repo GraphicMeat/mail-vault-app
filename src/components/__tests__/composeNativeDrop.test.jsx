@@ -49,10 +49,6 @@ vi.mock('../../services/localDrafts', () => ({
 vi.mock('../../services/api', () => ({}));
 vi.mock('../../services/db', () => ({}));
 vi.mock('../../services/authUtils', () => ({ ensureFreshToken: vi.fn() }));
-vi.mock('../../utils/sendAsSuggestions', async (orig) => ({
-  ...(await orig()),
-  suggestSendAsAddresses: vi.fn().mockResolvedValue([]),
-}));
 
 const account = { id: 'acct-1', email: 'me@example.test', name: 'Me' };
 const mail = { accounts: [account], activeAccountId: 'acct-1', lastSelectedAccountId: 'acct-1', activeMailbox: 'INBOX' };

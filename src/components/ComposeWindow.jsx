@@ -235,6 +235,7 @@ export function ComposeWindow() {
       onSchedule={snapshot => request('schedule', { snapshot }, { timeoutMs: null })}
       // Settings lives in the main window, which also answers the native menu's Settings item.
       onUpgrade={() => { void emit('open-settings', { tab: 'billing' }).catch(() => {}); }}
+      onOpenAliases={accountId => { void emit('open-settings', { tab: 'accounts', accountId, section: 'aliases' }).catch(() => {}); }}
     />
   </>;
 }

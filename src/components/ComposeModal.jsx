@@ -114,7 +114,7 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend }) {
   const t = useT();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
@@ -781,6 +781,17 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     setShowTemplates(false);
   };
 
+  // "Add address..." beside From: aliases are added in Settings > Accounts >
+  // Aliases. A compose window of its own asks the main window (ComposeWindow);
+  // in the app the draft goes to its bubble first, so Settings is not hidden
+  // behind it, and comes back with the new address in the From row.
+  const openAliases = async () => {
+    if (detaching) return;
+    if (onOpenAliases) { onOpenAliases(selectedAccountId); return; }
+    await handleMinimize();
+    useMailStore.getState().requestSettingsTab('accounts', { accountId: selectedAccountId, section: 'aliases' });
+  };
+
   const upgrade = () => {
     setShowSchedulePicker(false);
     // A compose window of its own has no Settings: ComposeWindow routes this
@@ -1391,6 +1402,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                   <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2
                                                      text-mail-text-muted pointer-events-none" />
                 </div>
+                {/* A native <select> cannot hold an action, so it sits beside it. */}
+                <button type="button" onClick={openAliases} data-testid="compose-add-address"
+                  title={t('compose.addAddressHint')}
+                  className="flex-shrink-0 text-xs text-mail-accent-text hover:underline whitespace-nowrap">
+                  {t('compose.addAddress')}
+                </button>
               </div>
             )}
 

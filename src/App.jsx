@@ -498,9 +498,11 @@ function App() {
   // A compose window of its own was handed the billing profile, font and text
   // size at detach; a change made here afterwards has to reach it too.
   useEffect(() => useSettingsStore.subscribe((state, prev) => {
-    if (['billingProfile', 'appFont', 'textScale'].some(key => state[key] !== prev[key])) {
-      const { billingProfile, appFont, textScale } = state;
-      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale });
+    // Aliases too: a compose window's "Add address..." sends the user to
+    // Settings here, and the address they add belongs in that window's From row.
+    if (['billingProfile', 'appFont', 'textScale', 'aliases', 'sendAsAddresses'].some(key => state[key] !== prev[key])) {
+      const { billingProfile, appFont, textScale, aliases, sendAsAddresses } = state;
+      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale, aliases, sendAsAddresses });
     }
   }), []);
 
@@ -591,7 +593,8 @@ function App() {
   const settingsRequest = useMailStore(s => s.settingsRequest);
   useEffect(() => {
     if (!settingsRequest) return;
-    openSettings({ tab: settingsRequest.tab });
+    const { tab, accountId, section } = settingsRequest;
+    openSettings({ tab, accountId, section });
     useMailStore.getState().clearSettingsRequest();
   }, [settingsRequest, openSettings]);
 
@@ -1050,7 +1053,10 @@ function App() {
       listen('open-settings', ({ payload }) => {
         if (typeof payload?.tab !== 'string') { openSettings(); return; }
         void WebviewWindow.getByLabel('main').then(window => window?.setFocus()).catch(() => {});
-        openSettings({ tab: payload.tab });
+        // A compose window's "Add address..." names the account and its Aliases section.
+        const accountId = typeof payload.accountId === 'string' ? payload.accountId : undefined;
+        const section = typeof payload.section === 'string' ? payload.section : undefined;
+        openSettings({ tab: payload.tab, accountId, section });
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;

@@ -33,8 +33,15 @@ export const createUiSlice = (set, get) => ({
   // the reading pane and the thread view are all too deep to prop-drill an
   // opener down to, and the tracker glyph's upsell has to reach one from
   // every one of them.
-  settingsRequest: null, // { tab: string, at: number }
-  requestSettingsTab: (tab) => set({ settingsRequest: { tab, at: Date.now() } }),
+  // `where` may name the account and the section to open, as compose's
+  // "Add address..." does for Accounts > Aliases.
+  settingsRequest: null, // { tab: string, accountId?: string, section?: string, at: number }
+  requestSettingsTab: (tab, where = {}) => set({ settingsRequest: {
+    tab,
+    ...(where.accountId ? { accountId: where.accountId } : {}),
+    ...(where.section ? { section: where.section } : {}),
+    at: Date.now(),
+  } }),
   clearSettingsRequest: () => set({ settingsRequest: null }),
 
   // Bulk save progress

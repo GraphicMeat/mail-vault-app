@@ -108,6 +108,37 @@
 .account-settings-error-details summary { cursor: pointer; color: var(--mail-text); }
 .account-settings-error-details p { margin-top: 12px; overflow-wrap: anywhere; }
 
+/* Settings > Accounts > Aliases (AliasesSection.jsx) */
+.alias-section { display: flex; flex-direction: column; gap: 16px; }
+.alias-section-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; }
+.alias-section-head > button { flex-shrink: 0; }
+.account-settings-detail .alias-section-head h4 { font-size: 18px; }
+.alias-status { min-height: 1.5em; margin-top: -8px; color: var(--mail-text-muted); font-size: 13px; line-height: 1.5; }
+.alias-status:empty { visibility: hidden; }
+.alias-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.alias-fieldset > legend { padding: 0; margin-bottom: 4px; }
+.alias-list { border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); }
+.alias-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 4px 12px; padding: 12px 14px; }
+.alias-row + .alias-row { border-top: 1px solid var(--mail-border); }
+.alias-radio { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--mail-accent); cursor: pointer; }
+.alias-row-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.alias-row-address { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+.alias-badge { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 9999px; background: var(--mail-surface-hover); color: var(--mail-text-muted); font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; }
+.alias-badge-login { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.alias-name { display: flex; flex-direction: column; gap: 4px; max-width: 320px; }
+.alias-row-actions { display: flex; align-items: center; gap: 4px; }
+.alias-add-fields { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.alias-add-address { flex: 2 1 240px; min-width: 0; }
+.alias-add-name { flex: 1 1 160px; min-width: 0; }
+.alias-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px dashed var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; transition: color .15s, background-color .15s, border-color .15s; }
+.alias-chip:hover { color: var(--mail-text); background: var(--mail-surface-hover); border-color: var(--mail-accent); }
+
+@media (max-width: 600px) {
+  .alias-row { grid-template-columns: auto minmax(0, 1fr); }
+  .alias-row-actions { grid-column: 2; }
+  .alias-name { max-width: none; }
+}
+
 @media (max-width: 600px) {
   .account-settings-identity { padding: 16px 20px 12px; }
   .account-settings-detail .settings-section :where(.flex.items-center.justify-between) { flex-wrap: wrap; }
