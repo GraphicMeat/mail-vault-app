@@ -671,6 +671,7 @@ export function SelectionActionBarView({
       {/* Selection count */}
       <span
         ref={labelRef}
+        data-selection-label
         className="text-sm font-medium text-mail-text px-3 whitespace-nowrap"
       >
         {label ?? t("selection.selected", { summary: selectedRows.length })}

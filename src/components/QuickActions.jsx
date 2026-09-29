@@ -403,10 +403,11 @@ function QuickActionsConfigured({
       !actionsRef.current?.parentElement
     ) return undefined;
     const parent = actionsRef.current.parentElement;
+    // The bar's count and Clear share its width, as SelectionActionBar measures.
     const measure = () => {
-      const copy = parent.querySelector(".quick-actions-preview-copy");
+      const label = parent.querySelector("[data-selection-label]");
       const width = parent.getBoundingClientRect().width -
-        (copy?.getBoundingClientRect().width || 0) - 16;
+        (label?.getBoundingClientRect().width || 0) - 86;
       setParentAvailableWidth(Math.max(34, width));
     };
     measure();

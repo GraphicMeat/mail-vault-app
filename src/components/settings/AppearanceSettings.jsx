@@ -60,7 +60,8 @@ export function AppearanceSettings({ initialSection = 'colors', onSectionChange 
     <SettingsTabs tabs={sections.map(({ id, key }) => ({ id, label: key === 'quickActions' ? t('quickActions.title') : key === 'language' ? t('settings.tab.language') : t(`settings.appearance.section.${key}`) }))}
       value={section} onChange={value => { setSection(value); onSectionChange?.(value); }} label={t('settings.appearance.appearance')}>
     <div className="appearance-settings">
-      {section !== 'language' && <p className="appearance-preview-intro">{t('settings.preview.intro')}</p>}
+      {/* Quick actions draws the person's own mail, not samples. */}
+      {!['language', 'quick-actions'].includes(section) && <p className="appearance-preview-intro">{t('settings.preview.intro')}</p>}
       {section === 'colors' && <ColorSchemeSettings />}
       {section === 'text' && <TextSettings />}
       {section === 'layout' && <WorkspaceSettings windowIsNarrow={windowIsNarrow} />}

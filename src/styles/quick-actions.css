@@ -336,7 +336,6 @@
 
 /* .segmented-choice is styled with the settings tabs, in index.css. */
 
-.quick-actions-choice-controls { align-items: start; }
 .quick-actions-choice-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--mail-text-muted); font-size: 12px; }
 .quick-actions-choice-hint { max-width: 30ch; color: var(--mail-text-muted); font-size: 11px; line-height: 1.35; }
 .quick-actions-scope-status { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 20px; }
@@ -471,105 +470,155 @@
   background: var(--mail-surface);
 }
 
-.quick-actions-preview {
+/* Quick actions' examples in Settings and onboarding (settings/
+   QuickActionSamples.jsx): the real list row, selection bar and reader
+   toolbar, over the person's own mail. A list row sits absolutely in a box of
+   its own height, as the list's virtualizer places it. */
+.quick-actions-sample,
+.quick-actions-presets {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--mail-border);
-}
-
-.quick-actions-preview-surface {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--mail-border);
-}
-
-.quick-actions-preview-row,
-.quick-actions-preview-selection,
-.quick-actions-preview-reader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  min-height: 48px;
-  padding: 6px 8px;
+}
+
+.quick-actions-sample > h5,
+.quick-actions-presets-heading > h5 {
+  color: var(--mail-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quick-actions-presets-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.quick-actions-presets-heading > span {
+  padding: 1px 6px;
   border: 1px solid var(--mail-border);
-  border-radius: 6px;
+  border-radius: 4px;
+  color: var(--mail-text-muted);
+  font-size: 11px;
+}
+
+.quick-actions-settings > .quick-actions-presets { margin-top: 20px; }
+.quick-actions-settings > .quick-actions-scope { margin: 20px 0 4px; }
+
+.quick-actions-sample-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--mail-border);
+  border-radius: 8px;
   background: var(--mail-bg);
 }
 
-.quick-actions-preview-row[data-radial="true"],
-.quick-actions-preview-selection[data-radial="true"],
-.quick-actions-preview-reader[data-radial="true"] {
-  display: block;
-  padding: 10px;
-}
+/* Room for a wheel drawn over the rows above and below its own. */
+.quick-actions-sample-frame[data-radial] { padding-block: 28px; }
 
-.quick-actions-preview-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.quick-actions-preview-copy > span,
-.quick-actions-preview-copy > header {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  color: var(--mail-text);
-  font-size: 12px;
-}
-
-.quick-actions-preview-row[data-radial="true"] .quick-actions-radial-preview,
-.quick-actions-preview-selection[data-radial="true"] .quick-actions-radial-preview,
-.quick-actions-preview-reader[data-radial="true"] .quick-actions-radial-preview {
-  width: 304px;
-  max-width: 100%;
-  aspect-ratio: 1;
-  height: auto;
-  margin: 12px auto 2px;
+.quick-actions-sample-row {
+  position: relative;
   flex-shrink: 0;
 }
 
-.quick-actions-preview-surface .quick-actions-radial-preview[data-radial-layout="categories"] {
-  width: 400px;
+/* The row showing its actions paints over the next one, as an open menu does. */
+.quick-actions-sample-frame[data-sample-surface="row"] > .quick-actions-sample-row:nth-child(2) { z-index: 1; }
+
+/* A list row clips what it paints; a sample row's wheel reaches past it,
+   without the hover plate behind the actions. */
+.virtual-row[data-quick-actions-preview] { contain: none; }
+.virtual-row[data-quick-actions-preview] > div:has(> .quick-actions-radial-preview) { background: transparent; }
+
+.quick-actions-sample-bar {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
 }
 
-.quick-actions-preview-copy small,
-.quick-actions-preview-copy header span,
-.quick-actions-preview-copy time {
+.quick-actions-sample-frame > .email-action-bar {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mail-border);
+}
+
+.quick-actions-sample-reader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px 14px;
+}
+
+.quick-actions-sample-reader > strong {
   overflow: hidden;
-  color: var(--mail-text-muted);
-  font-size: 11px;
+  color: var(--mail-text);
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.quick-actions-preview-row .quick-actions[data-surface="row"] {
-  max-width: 45%;
-}
-
-.quick-actions-preview-selection {
-  justify-content: flex-start;
-  background: var(--mail-surface);
-}
-
-.quick-actions-preview-selection > span {
-  flex-shrink: 0;
-  color: var(--mail-text);
+.quick-actions-sample-reader > span {
+  color: var(--mail-text-muted);
   font-size: 12px;
 }
 
-.quick-actions-preview-reader {
-  align-items: flex-end;
-  min-height: 72px;
-  background: var(--mail-surface);
+/* A wheel is drawn in place, smaller. Its center disc has a fixed size, so it
+   shrinks by zoom, not by width. */
+.quick-actions-sample-frame .quick-actions-radial-preview,
+.quick-actions-card-sample .quick-actions-radial-preview {
+  width: 304px;
+  height: 304px;
+  margin: 0;
+  zoom: .6;
+}
+
+.quick-actions-sample-frame .quick-actions-radial-preview[data-radial-layout="categories"],
+.quick-actions-card-sample .quick-actions-radial-preview[data-radial-layout="categories"] {
+  width: 400px;
+  height: 400px;
+  zoom: .45;
+}
+
+/* A card's picture: the same components at under three quarters their size. */
+.quick-actions-card-sample {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 104px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--mail-border);
+  background: var(--mail-bg);
+  pointer-events: none;
+}
+
+.quick-actions-card-sample-content { zoom: .72; }
+.quick-actions-card-sample .quick-actions-radial-preview { zoom: .42; }
+.quick-actions-card-sample .quick-actions-radial-preview[data-radial-layout="categories"] { zoom: .32; }
+.quick-actions-card-sample .quick-actions-sample-bar { padding: 4px; }
+
+.quick-actions-option-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.quick-actions-selection-limit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.quick-actions-selection-limit input {
+  width: 64px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--mail-border);
+  border-radius: 6px;
+  color: var(--mail-text);
+  background: var(--mail-bg);
 }
 
 .local-mail-labels,

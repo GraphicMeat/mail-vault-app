@@ -160,7 +160,8 @@ export const settingSearchGroups = [
     ['settings.appearance.timeFormat', 'time format 12 24 hour clock'],
   ] },
   { id: 'appearance', section: 'quick-actions', sectionKey: 'quickActions.title', settings: [
-    ['quickActions.layout', 'quick action toolbar button layout inline menu radial favorite order customize appearance'],
+    ['quickActions.presets', 'preset action set gmail outlook thunderbird mailvault default switch from another app'],
+    ['quickActions.layout','quick action toolbar button layout inline menu radial favorite order customize appearance'],
     ['quickActions.surface.row', 'list row message thread actions archive move label star'],
     ['quickActions.surface.selection', 'selected bulk toolbar actions delete archive move'],
     ['quickActions.surface.reader', 'reader email toolbar actions reply forward'],

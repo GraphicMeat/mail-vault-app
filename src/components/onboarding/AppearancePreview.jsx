@@ -8,6 +8,8 @@ import { SampleConversation } from '../ui/SampleConversation';
 import { fontStack } from '../../utils/appFont';
 
 // An isolated illustration. Never mount live readers or seed the mail store.
+// (The quick actions tab is not drawn here: it shows the real, inert
+// components of settings/QuickActionSamples.jsx.)
 // The list's row gutter (RowGutter in EmailRow.jsx), same classes: an
 // expandable list reserves the disclosure slot on every row, so the text
 // starts at one x whether a row has a chevron or not.

@@ -1,21 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { QuickActions } from "../QuickActions";
 import { AccountReorderList } from "./AccountReorderList";
-import { EmailActionBar } from "../email/EmailActionBar";
+import { CardSample, QuickActionLayoutCards, QuickActionPresets, QuickActionSample } from "./QuickActionSamples";
 import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
+import { ChoiceCards } from "../ui/ChoiceCards";
 import { TomSelectField } from "../ui/TomSelectField";
 import { useMailStore } from "../../stores/mailStore";
 import { useTagStore } from "../../stores/tagStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useQuickActionConfiguration } from "../../hooks/useQuickActionConfiguration";
+import { useQuickActionSamples } from "../../hooks/useQuickActionSamples";
 import {
   DEFAULT_QUICK_ACTIONS,
   insertQuickActionEntry,
   normalizeQuickActions,
   isQuickActionStyleLinked,
-  QUICK_ACTION_MODES,
+  QUICK_ACTION_PALETTES,
   QUICK_ACTION_SURFACES,
   QUICK_ACTION_SURFACE_ACTIONS as SURFACE_ACTIONS,
   quickActionScopeKey,
@@ -24,7 +25,6 @@ import {
 } from "../../utils/quickActions";
 import { quickActionColorFor } from "../../utils/quickActionColors";
 import { QUICK_ACTION_ICONS as ICONS } from "../../utils/quickActionIcons";
-import { formatTime } from "../../utils/dateFormat";
 import { useT } from "../../i18n/index.js";
 import "../../styles/settings-usability.css";
 import "../../styles/account-settings-navigation.css";
@@ -55,7 +55,6 @@ const LABELS = {
   snooze: "snooze.action",
   unsubscribe: "unsubscribe.action",
 };
-const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const EMPTY_ARRAY = Object.freeze([]);
 const newEntry = (action, params = {}) => ({
   id: action === "tag"
@@ -68,47 +67,6 @@ const newEntry = (action, params = {}) => ({
   action,
   ...(Object.keys(params).length ? { params } : {}),
 });
-
-function QuickActionsSettingsPreview({
-  preview, isRadialPreview, surface, scopeChoice, config,
-  activeAccountId, activeMailbox, onPreview, status,
-}) {
-  const t = useT();
-  const identity = `${surface}:${scopeChoice}:${config.mode}`;
-  return <section className="quick-actions-preview" aria-labelledby="quick-actions-preview-title">
-    <h5 id="quick-actions-preview-title">{t("quickActions.preview")}</h5>
-    <p className="text-xs text-mail-text-muted">{t("quickActions.previewDescription")}</p>
-    <div className="quick-actions-preview-surface" role="group"
-      aria-label={t(`quickActions.surface.${preview.name}`)}>
-      {preview.name === "row" && <div className="quick-actions-preview-row" data-radial={isRadialPreview}>
-        <div className="quick-actions-preview-copy">
-          <span><strong>{t("quickActions.sample.sender")}</strong><small>{t("quickActions.sample.subject")}</small></span>
-          <time>{formatTime(new Date(2026, 1, 25, 10, 42))}</time>
-        </div>
-        <QuickActions surface="row" config={preview.config} descriptors={preview.descriptors} preview identity={identity} />
-      </div>}
-      {preview.name === "selection" && <div className="quick-actions-preview-selection selection-action-bar-inner" data-radial={isRadialPreview}>
-        <div className="quick-actions-preview-copy"><span>{t("quickActions.sample.selected")}</span></div>
-        <QuickActions surface="selection" config={preview.config} descriptors={preview.descriptors}
-          display={config.selectionDisplay || "icon-label"}
-          inlineLimit={config.selectionDisplay === "icon-only" ? undefined : config.selectionActionLimit || 3}
-          className="quick-actions-selection" preview identity={identity} />
-      </div>}
-      {preview.name === "reader" && <div className="quick-actions-preview-reader" data-radial={isRadialPreview}>
-        <div className="quick-actions-preview-copy"><header><strong>{t("quickActions.sample.reader")}</strong><span>{t("quickActions.sample.sender")}</span></header></div>
-        <EmailActionBar
-          email={{ uid: -1, _accountId: activeAccountId, _mailbox: activeMailbox || "INBOX", subject: t("quickActions.sample.reader"), from: { name: t("quickActions.sample.sender"), address: "mira@example.test" }, to: [{ address: "you@example.test" }], flags: [] }}
-          variant="single" configOverride={preview.config} preview onActionPreview={onPreview}
-          onReply={() => {}} onReplyAll={() => {}} onForward={() => {}} onArchive={() => {}} onDelete={() => {}} onDeleteEverywhere={() => {}}
-          onMove={() => {}} onToggleRead={() => {}} onToggleFlag={() => {}} onSpam={() => {}} onApplyLocalLabel={() => {}} onReplyTemplate={() => {}}
-          onOpenInWindow={() => {}} onViewSource={() => {}} onExport={() => {}} onToggleEmailTheme={() => {}}
-          isArchived={false} isRead={false} isLocalOnly={false} isSentEmail={false} singleRecipient={false}
-        />
-      </div>}
-    </div>
-    <p role="status" className="text-xs text-mail-text-muted">{status || t("quickActions.sample.previewStatus")}</p>
-  </section>;
-}
 
 export function QuickActionsSettings() {
   const t = useT();
@@ -136,7 +94,7 @@ export function QuickActionsSettings() {
   const [tagId, setTagId] = useState("");
   const [folder, setFolder] = useState("");
   const [templateId, setTemplateId] = useState("");
-  const [previewStatus, setPreviewStatus] = useState("");
+  const samples = useQuickActionSamples();
   const { scope } = useQuickActionConfiguration(surface);
   const scopeKey = quickActionScopeKey(scope);
   const normalized = useMemo(() => normalizeQuickActions(quickActions), [
@@ -164,7 +122,6 @@ export function QuickActionsSettings() {
     if (!SURFACE_ACTIONS[surface].includes(addType)) {
       setAddType(SURFACE_ACTIONS[surface][0]);
     }
-    setPreviewStatus("");
   }, [surface, addType]);
 
   const persist = (next) => setSurface(surface, isGlobal ? null : scope, next);
@@ -238,34 +195,12 @@ export function QuickActionsSettings() {
     ...config.entries.map((item) => ({ value: item.id, label: getLabel(item) })),
   ]);
   const favoriteOptions = useMemo(() => JSON.parse(favoriteKey), [favoriteKey]);
-  const getDescriptors = (entries) =>
-    entries.map((entry) => {
-      const missingTemplate = entry.action === "replyTemplate" &&
-        !templates.some((item) => item.id === entry.params?.templateId);
-      const missingFolder = entry.action === "move" && entry.params?.mailbox &&
-        !mailboxes.some((item) => item.path === entry.params.mailbox);
-      return {
-        id: entry.id,
-        action: entry.action,
-        label: getLabel(entry),
-        Icon: ICONS[entry.action],
-        disabled: missingTemplate || missingFolder,
-        tone: DESTRUCTIVE.has(entry.action)
-          ? "danger"
-          : entry.action === "archive"
-          ? "positive"
-          : undefined,
-        isDestructive: DESTRUCTIVE.has(entry.action),
-        onActivate: () => setPreviewStatus(t("quickActions.previewResult")),
-      };
-    });
-
-  const preview = {
-    name: surface,
-    config,
-    descriptors: getDescriptors(config.entries),
-  };
-  const isRadialPreview = config.mode === "radial";
+  // Each option's card draws this surface as that option would.
+  const cards = (options, override) => options.map(({ value, label }) => ({
+    value,
+    label,
+    preview: <CardSample surface={surface} config={{ ...config, ...override(value) }} rows={samples} />,
+  }));
   const addNeedsTag = addType === "tag";
   const addNeedsFolder = addType === "move";
   const addNeedsTemplate = addType === "replyTemplate";
@@ -278,6 +213,20 @@ export function QuickActionsSettings() {
       <p className="text-sm text-mail-text-muted">
         {t("quickActions.description")}
       </p>
+      <QuickActionPresets scope={isGlobal ? null : scope} rows={samples} />
+      <div className="quick-actions-choice-field quick-actions-scope">
+        <span>{t("quickActions.scope")}</span>
+        <SegmentedChoice
+          label={t("quickActions.scope")}
+          value={scopeChoice}
+          onChange={pickScope}
+          options={[
+            { value: "global", label: t("quickActions.scope.global") },
+            { value: "current", label: t("quickActions.scope.current"), disabled: !scopeKey },
+          ]}
+        />
+        {scopeKey && <span className="quick-actions-choice-hint">{scopeDescription}</span>}
+      </div>
       <SettingsTabs
         tabs={QUICK_ACTION_SURFACES.map((name) => ({
           id: name,
@@ -287,102 +236,81 @@ export function QuickActionsSettings() {
         onChange={setSurfaceId}
         label={t("quickActions.surface")}
       >
-        <div className="quick-actions-editor-controls quick-actions-choice-controls">
-          <div className="quick-actions-choice-field">
-            <span>{t("quickActions.scope")}</span>
-            <SegmentedChoice
-              label={t("quickActions.scope")}
-              value={scopeChoice}
-              onChange={pickScope}
-              options={[
-                { value: "global", label: t("quickActions.scope.global") },
-                { value: "current", label: t("quickActions.scope.current"), disabled: !scopeKey },
-              ]}
-            />
-            {scopeKey && <span className="quick-actions-choice-hint">{scopeDescription}</span>}
-          </div>
-          <div className="quick-actions-choice-field">
-            <span>{t("quickActions.layout")}</span>
-            <SegmentedChoice
-              label={t("quickActions.layout")}
-              value={config.mode}
-              onChange={setMode}
-              options={QUICK_ACTION_MODES.map((mode) => ({
-                value: mode,
-                label: t(`quickActions.layout.${mode === "favorite-menu" ? "favoriteMenu" : mode}`),
-              }))}
-            />
-          </div>
+        <QuickActionSample key={surface} surface={surface} config={config} rows={samples} />
+
+        <div className="quick-actions-choice-field">
+          <span>{t("quickActions.styleAcrossSurfaces")}</span>
+          <SegmentedChoice
+            label={t("quickActions.styleAcrossSurfaces")}
+            value={linkedStyle ? "linked" : "separate"}
+            onChange={(choice) => setStyleLink(isGlobal ? null : scope, choice === "linked", surface)}
+            options={[
+              { value: "separate", label: t("quickActions.styleSeparate") },
+              { value: "linked", label: t("quickActions.styleLinked") },
+            ]}
+          />
         </div>
 
-        <div className="quick-actions-editor-controls quick-actions-choice-controls">
+        <div className="quick-actions-option-cards">
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.layout")}</span>
+            <QuickActionLayoutCards surface={surface} config={config} rows={samples} onChange={setMode} />
+          </div>
           <div className="quick-actions-choice-field">
             <span>{t("quickActions.palette")}</span>
-            <SegmentedChoice
+            {/* Inline in every card: a menu's trigger shows no colors. */}
+            <ChoiceCards
               label={t("quickActions.palette")}
               value={config.palette}
               onChange={(palette) => persistStyle({ palette })}
-              options={["neutral", "semantic", "custom"].map((palette) => ({ value: palette, label: t(`quickActions.palette.${palette}`) }))}
-            />
-          </div>
-          <div className="quick-actions-choice-field">
-            <span>{t("quickActions.styleAcrossSurfaces")}</span>
-            <SegmentedChoice
-              label={t("quickActions.styleAcrossSurfaces")}
-              value={linkedStyle ? "linked" : "separate"}
-              onChange={(choice) => setStyleLink(isGlobal ? null : scope, choice === "linked", surface)}
-              options={[
-                { value: "separate", label: t("quickActions.styleSeparate") },
-                { value: "linked", label: t("quickActions.styleLinked") },
-              ]}
+              options={cards(QUICK_ACTION_PALETTES.map((palette) => ({ value: palette, label: t(`quickActions.palette.${palette}`) })),
+                (palette) => ({ palette, mode: "inline" }))}
             />
           </div>
           {config.mode === "radial" && (
             <div className="quick-actions-choice-field">
               <span>{t("quickActions.radialLayout")}</span>
-              <SegmentedChoice
+              <ChoiceCards
                 label={t("quickActions.radialLayout")}
                 value={config.radialLayout === "categories" ? "categories" : "flat"}
                 onChange={(value) => persistStyle({ radialLayout: value })}
-                options={[
+                options={cards([
                   { value: "flat", label: t("quickActions.radialLayout.flat") },
                   { value: "categories", label: t("quickActions.radialLayout.categories") },
-                ]}
+                ], (radialLayout) => ({ radialLayout }))}
               />
             </div>
           )}
           {config.mode === "radial" && config.radialLayout !== "categories" && (
             <div className="quick-actions-choice-field">
               <span>{t("quickActions.radialPagination")}</span>
-              <SegmentedChoice
+              <ChoiceCards
                 label={t("quickActions.radialPagination")}
                 value={config.radialPagination ? "pages" : "all"}
                 onChange={(value) => persistStyle({ radialPagination: value === "pages" })}
-                options={[
+                options={cards([
                   { value: "all", label: t("quickActions.radialPagination.all") },
                   { value: "pages", label: t("quickActions.radialPagination.pages") },
-                ]}
+                ], (value) => ({ radialPagination: value === "pages" }))}
               />
             </div>
           )}
           {surface === "selection" &&
             ["inline", "favorite-menu"].includes(config.mode) && (
-            <>
-              <div className="quick-actions-choice-field">
-                <span>{t("quickActions.selectionDisplay")}</span>
-                <SegmentedChoice
-                  label={t("quickActions.selectionDisplay")}
-                  value={config.selectionDisplay || "icon-label"}
-                  onChange={(selectionDisplay) => persist({ ...config, selectionDisplay })}
-                  options={[
-                    { value: "icon-label", label: t("quickActions.selectionDisplay.iconLabel") },
-                    { value: "icon-only", label: t("quickActions.selectionDisplay.iconOnly") },
-                  ]}
-                />
-              </div>
+            <div className="quick-actions-choice-field">
+              <span>{t("quickActions.selectionDisplay")}</span>
+              <ChoiceCards
+                label={t("quickActions.selectionDisplay")}
+                value={config.selectionDisplay || "icon-label"}
+                onChange={(selectionDisplay) => persist({ ...config, selectionDisplay })}
+                options={cards([
+                  { value: "icon-label", label: t("quickActions.selectionDisplay.iconLabel") },
+                  { value: "icon-only", label: t("quickActions.selectionDisplay.iconOnly") },
+                ], (selectionDisplay) => ({ selectionDisplay }))}
+              />
               {config.mode === "inline" &&
                 config.selectionDisplay !== "icon-only" && (
-                <label>
+                <label className="quick-actions-selection-limit">
                   {t("quickActions.selectionLimit")}
                   <input
                     aria-label={t("quickActions.selectionLimit")}
@@ -398,7 +326,7 @@ export function QuickActionsSettings() {
                   />
                 </label>
               )}
-            </>
+            </div>
           )}
         </div>
 
@@ -431,18 +359,6 @@ export function QuickActionsSettings() {
           </>}
           {isGlobal && <button type="button" onClick={resetSurface}>{t("common.resetToDefault")}</button>}
         </div>
-
-        <QuickActionsSettingsPreview
-          preview={preview}
-          isRadialPreview={isRadialPreview}
-          surface={surface}
-          scopeChoice={scopeChoice}
-          config={config}
-          activeAccountId={activeAccountId}
-          activeMailbox={activeMailbox}
-          onPreview={() => setPreviewStatus(t("quickActions.previewResult"))}
-          status={previewStatus}
-        />
 
         <div className="quick-actions-entry-list">
           <AccountReorderList

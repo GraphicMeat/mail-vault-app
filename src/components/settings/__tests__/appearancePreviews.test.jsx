@@ -8,6 +8,9 @@ import { useThemeStore } from '../../../stores/themeStore';
 import { getEmailColors } from '../../../utils/mailChrome';
 import { setLocale } from '../../../i18n';
 
+// Its own test mounts it; here it only has to be the tab's content.
+vi.mock('../QuickActionsSettings', () => ({ QuickActionsSettings: () => <div data-testid="quick-actions-settings" /> }));
+
 const example = name => screen.getByRole('figure', { name: `Example: ${name}`, exact: true });
 const select = (name, value) => fireEvent.change(screen.getByRole('combobox', { name, exact: true }), { target: { value } });
 
@@ -30,6 +33,14 @@ it('gives every Appearance preference a sample without adding mail actions to se
       expect(within(figure).queryByRole('link')).toBeNull();
     }
   }
+  expect(screen.getByText(/All messages below are samples/)).toBeTruthy();
+});
+
+it('says nothing about samples on Quick actions, whose examples are the person\'s own mail', () => {
+  render(<AppearanceSettings initialSection="quick-actions" />);
+  expect(screen.getByTestId('quick-actions-settings')).toBeTruthy();
+  expect(screen.queryByText(/All messages below are samples/)).toBeNull();
+  fireEvent.click(screen.getByRole('tab', { name: 'Colors', exact: true }));
   expect(screen.getByText(/All messages below are samples/)).toBeTruthy();
 });
 

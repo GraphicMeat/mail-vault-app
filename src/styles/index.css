@@ -1213,6 +1213,23 @@ input[type="range"]::-moz-range-thumb:hover {
 .settings-visual-options > button { min-width: 0; padding: 4px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); text-align: left; color: var(--mail-text); }
 .settings-visual-options > button:hover { border-color: var(--mail-text-muted); background: var(--mail-surface-hover); }
 .settings-visual-options > button[aria-pressed="true"] { border-color: var(--mail-accent-text); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+/* ui/ChoiceCards.jsx: a picture over each option's label, the picked one
+   outlined and ticked. The label's button covers its card (::after). */
+.choice-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice-card { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--mail-border-strong); border-radius: 10px; background: var(--mail-surface); }
+.choice-card:hover { border-color: var(--mail-text-muted); }
+.choice-card[data-selected] { border-color: var(--mail-accent); box-shadow: 0 0 0 1px var(--mail-accent); background: var(--mail-accent-tint); }
+.choice-card-button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 36px; padding: 8px 10px; color: var(--mail-text); font-size: 13px; font-weight: 500; line-height: 1.35; text-align: start; }
+.choice-card-button::after { position: absolute; inset: 0; border-radius: 9px; content: ""; }
+.choice-card-button > svg { flex-shrink: 0; visibility: hidden; }
+.choice-card[data-selected] .choice-card-button { color: var(--mail-accent-text); }
+.choice-card[data-selected] .choice-card-button > svg { visibility: visible; }
+.choice-cards .choice-card-button:focus-visible { outline: none; }
+.choice-card-button:focus-visible::after { outline: 2px solid var(--mail-accent); outline-offset: -2px; }
+.choice-card-button:disabled { cursor: not-allowed; opacity: .45; }
+@container (max-width: 420px) {
+  .choice-cards { grid-template-columns: minmax(0, 1fr); }
+}
 .font-options { display: grid; gap: 12px; min-width: 0; }
 .font-options-heading { margin-bottom: 6px; color: var(--mail-text-muted); font-size: 12px; font-weight: 500; }
 .settings-visual-option-label { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px; font-size: 13px; font-weight: 500; }
@@ -1371,15 +1388,6 @@ input[type="range"]::-moz-range-thumb:hover {
 .onboarding-choices button svg { flex-shrink: 0; }
 .onboarding-sound-choices button { flex: 1 0 28%; }
 .onboarding-appearance-example { min-width: 0; }
-.onboarding-quick-actions-preview { display: flex; flex-direction: column; gap: 16px; min-height: 208px; padding: 20px; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
-.onboarding-quick-actions-preview h3 { font-size: 14px; font-weight: 600; color: var(--mail-text); }
-.onboarding-quick-actions-preview p { margin-top: 4px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; }
-.onboarding-quick-actions-surface { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; min-height: 64px; padding: 12px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); }
-.onboarding-quick-actions-label { flex: 1 1 100%; color: var(--mail-text-muted); font-size: 12px; }
-.onboarding-quick-actions-surface .onboarding-quick-actions { flex-wrap: wrap; max-width: 100%; }
-.onboarding-quick-actions-surface .onboarding-quick-actions[data-surface="reader"] { justify-content: flex-start; }
-.onboarding-quick-actions-surface[data-radial="true"] { display: block; text-align: center; }
-.onboarding-quick-actions-surface[data-radial="true"] .quick-actions-radial-preview { width: min(260px, 100%); height: auto; aspect-ratio: 1; margin: 12px auto 0; }
 .onboarding-appearance-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--mail-border); }
 .onboarding-appearance-footer > button:last-child { flex-shrink: 0; }
 .onboarding-appearance-footer svg { flex-shrink: 0; }
@@ -1449,7 +1457,6 @@ input[type="range"]::-moz-range-thumb:hover {
   .onboarding-appearance-controls > p { grid-column: 1 / -1; }
   .onboarding-appearance-controls > .onboarding-section-hint { grid-column: 1 / -1; }
   .onboarding-appearance-footer { position: sticky; bottom: 0; background: var(--mail-bg); padding-bottom: 12px; z-index: 1; }
-  .onboarding-quick-actions-preview { min-height: 0; }
 }
 @media (max-width: 440px) {
   .onboarding-appearance-controls { grid-template-columns: minmax(0, 1fr); }

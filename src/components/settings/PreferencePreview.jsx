@@ -13,6 +13,8 @@ import '../../styles/sidebar-navigation.css';
 
 // Draw only illustrative content. These examples never mount a real mail
 // component or put sample messages into the user's accounts or mail stores.
+// Quick actions is the exception: QuickActionSamples.jsx draws the real
+// components, inert, over the person's own mail.
 const SAMPLE_DATE = new Date(2026, 1, 25, 14, 30);
 const FIRST_REPLY = new Date(2026, 1, 25, 9, 15);
 

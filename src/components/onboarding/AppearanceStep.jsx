@@ -1,22 +1,49 @@
 import React, { useState } from 'react';
 import { ArrowRight, Moon, Sun } from 'lucide-react';
-import { useTagStore } from '../../stores/tagStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
-import { QuickActions } from '../QuickActions';
 import { ColorOptionPreview } from '../settings/PreferencePreview';
+import { QuickActionLayoutCards, QuickActionPresets, QuickActionSample } from '../settings/QuickActionSamples';
 import { FontOptions, TextSizeChoice } from '../settings/TextSettings';
 import { AppearancePreview } from './AppearancePreview';
 import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
 import { previewNotificationSound } from '../../services/api';
-import { DEFAULT_QUICK_ACTIONS, isQuickActionStyleLinked, normalizeQuickActions, QUICK_ACTION_MODES, QUICK_ACTION_SURFACES } from '../../utils/quickActions';
-import { QUICK_ACTION_ICONS } from '../../utils/quickActionIcons';
+import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions, QUICK_ACTION_SURFACES } from '../../utils/quickActions';
+import { useQuickActionSamples } from '../../hooks/useQuickActionSamples';
 
-const QUICK_ACTION_LABELS = { archive: 'common.archive', unarchive: 'rowMenu.unarchive', delete: 'common.delete', deleteServer: 'rowMenu.deleteServer', deleteEverywhere: 'rowMenu.deleteEverywhere', toggleRead: 'quickActions.action.toggleRead', markRead: 'rowMenu.markRead', markUnread: 'rowMenu.markUnread', star: 'rowMenu.star', unstar: 'rowMenu.unstar', tag: 'quickActions.action.tag', move: 'quickActions.action.move', spam: 'quickActions.action.spam', reply: 'emailActionBar.reply', replyAll: 'emailActionBar.replyAll', forward: 'emailActionBar.forward', replyTemplate: 'quickActions.action.replyTemplate', export: 'common.export', newMessage: 'quickActions.action.newMessage', open: 'common.open', source: 'emailActionBar.source', theme: 'emailActionBar.dark' };
+// The quick actions tab: Settings' action sets, layout cards and live sample,
+// for All views. The samples are read when this tab opens, the last step, so a
+// first run's new account has had the longest to cache some mail.
+function QuickActionsSection() {
+  const t = useT();
+  const [surface, setSurface] = useState('row');
+  const quickActions = useSettingsStore(state => state.quickActions);
+  const setStyle = useSettingsStore(state => state.setQuickActionStyle);
+  const config = normalizeQuickActions(quickActions).defaults[surface];
+  const rows = useQuickActionSamples();
+  return <div className="onboarding-appearance-grid onboarding-quick-actions-grid">
+    <div className="onboarding-appearance-controls">
+      <p className="onboarding-section-hint">{t('onboarding.quick-actionsHint')}</p>
+      <QuickActionPresets scope={null} rows={rows} />
+      <fieldset data-testid="appearance-control-quick-surface">
+        <legend>{t('quickActions.surface')}</legend>
+        <SegmentedChoice label={t('quickActions.surface')} value={surface} onChange={setSurface}
+          options={QUICK_ACTION_SURFACES.map(value => ({ value, label: t(`quickActions.surface.${value}`) }))} />
+      </fieldset>
+      <fieldset data-testid="appearance-control-quick-layout">
+        <legend>{t('quickActions.layout')}</legend>
+        <QuickActionLayoutCards surface={surface} config={config} rows={rows} onChange={mode => setStyle(surface, null, { mode })} />
+      </fieldset>
+    </div>
+    <div className="onboarding-appearance-example">
+      <QuickActionSample key={surface} surface={surface} config={config} rows={rows} />
+    </div>
+  </div>;
+}
 
 function Choice({ id, active, value, onPick, disabled, children }) {
   return <button type="button" data-testid={id} onClick={() => onPick(value)}
@@ -35,27 +62,9 @@ export function AppearanceStep({ onContinue }) {
   const [section, setSection] = useState('colors');
   const { theme, setTheme, palette, setPalette } = useThemeStore();
   const settings = useSettingsStore();
-  const tags = useTagStore(state => state.tags) || [];
-  const [quickSurface, setQuickSurface] = useState('row');
   const chat = settings.viewStyle === 'chat';
   const nextSection = SECTIONS[SECTIONS.indexOf(section) + 1];
   const tabs = SECTIONS.map(id => ({ id, label: id === 'quick-actions' ? t('quickActions.title') : t(`settings.appearance.section.${id}`) }));
-  const quickActions = normalizeQuickActions(settings.quickActions);
-  const quickConfig = quickActions.defaults[quickSurface];
-  const quickStyleLinked = isQuickActionStyleLinked(quickActions);
-  const quickActionLabel = entry => {
-    if (entry.action === 'tag') return tags.find(tag => tag.id === entry.params?.tagId)?.name || t(QUICK_ACTION_LABELS.tag);
-    if (entry.action === 'move' && entry.params?.mailbox) return `${t(QUICK_ACTION_LABELS.move)}: ${entry.params.mailbox}`;
-    if (entry.action === 'replyTemplate') return settings.emailTemplates?.find(template => template.id === entry.params?.templateId)?.name || t(QUICK_ACTION_LABELS.replyTemplate);
-    return t(QUICK_ACTION_LABELS[entry.action] || 'quickActions.title');
-  };
-  const quickDescriptors = quickConfig.entries.map((entry) => ({
-    id: entry.id,
-    action: entry.action,
-    label: quickActionLabel(entry),
-    Icon: QUICK_ACTION_ICONS[entry.action],
-    onActivate: () => {},
-  }));
   const groups = section === 'layout' ? [
     { id: 'view', key: 'viewStyle', setter: 'setViewStyle', label: 'workspace.mailExperience', options: [['list', 'workspace.emailView', 'workspace.emailViewHint'], ['chat', 'workspace.chatView', 'workspace.chatViewHint']] },
     { id: 'layout', key: 'layoutMode', setter: 'setLayoutMode', label: 'workspace.readingPane', disabled: chat, options: [['three-column', 'workspace.besideList', 'workspace.besideListHint'], ['two-column', 'workspace.belowList', 'workspace.belowListHint']] },
@@ -76,6 +85,7 @@ export function AppearanceStep({ onContinue }) {
     settings.setConfirmBeforeDelete(true);
     settings.setEmailRowHighlight('hover');
     settings.setQuickActionStyleLink(null, false, 'row');
+    // The look only, not the MailVault set: a replay keeps the actions chosen.
     QUICK_ACTION_SURFACES.forEach(surface => {
       const defaults = DEFAULT_QUICK_ACTIONS.defaults[surface];
       settings.setQuickActionStyle(surface, null, {
@@ -93,7 +103,7 @@ export function AppearanceStep({ onContinue }) {
       <p>{t('onboarding.appearanceSubtitle')}</p>
     </header>
     <SettingsTabs tabs={tabs} value={section} onChange={setSection} label={t('onboarding.appearanceTitle')}>
-      <div className={`onboarding-appearance-grid ${section === 'quick-actions' ? 'onboarding-quick-actions-grid' : ''}`}>
+      {section === 'quick-actions' ? <QuickActionsSection /> : <div className="onboarding-appearance-grid">
         <div className="onboarding-appearance-controls">
           <p className="onboarding-section-hint">{t(`onboarding.${section}Hint`)}</p>
           {section === 'colors' && <>
@@ -120,44 +130,6 @@ export function AppearanceStep({ onContinue }) {
               <legend>{t('settings.text.size')}</legend>
               <TextSizeChoice label={t('settings.text.size')} value={settings.textScale} onChange={settings.setTextScale} />
             </fieldset>
-          </>}
-          {section === 'quick-actions' && <>
-            <fieldset data-testid="appearance-control-quick-surface">
-              <legend>{t('quickActions.surface')}</legend>
-              <SegmentedChoice label={t('quickActions.surface')} value={quickSurface} onChange={setQuickSurface}
-                options={QUICK_ACTION_SURFACES.map(value => ({ value, label: t(`quickActions.surface.${value}`) }))} />
-            </fieldset>
-            <fieldset data-testid="appearance-control-quick-layout">
-              <legend>{t('quickActions.layout')}</legend>
-              <SegmentedChoice label={t('quickActions.layout')} value={quickConfig.mode}
-                onChange={mode => settings.setQuickActionStyle(quickSurface, null, { mode })}
-                options={QUICK_ACTION_MODES.map(value => ({ value, label: t(`quickActions.layout.${value === 'favorite-menu' ? 'favoriteMenu' : value}`) }))} />
-            </fieldset>
-            <fieldset data-testid="appearance-control-quick-palette">
-              <legend>{t('quickActions.palette')}</legend>
-              <SegmentedChoice label={t('quickActions.palette')} value={quickConfig.palette}
-                onChange={palette => settings.setQuickActionStyle(quickSurface, null, { palette })}
-                options={['neutral', 'semantic', 'custom'].map(value => ({ value, label: t(`quickActions.palette.${value}`) }))} />
-            </fieldset>
-            <fieldset data-testid="appearance-control-quick-link">
-              <legend>{t('quickActions.styleAcrossSurfaces')}</legend>
-              <SegmentedChoice label={t('quickActions.styleAcrossSurfaces')} value={quickStyleLinked ? 'linked' : 'separate'}
-                onChange={value => settings.setQuickActionStyleLink(null, value === 'linked', quickSurface)}
-                options={[{ value: 'separate', label: t('quickActions.styleSeparate') }, { value: 'linked', label: t('quickActions.styleLinked') }]} />
-            </fieldset>
-            {quickConfig.mode === 'radial' && <fieldset data-testid="appearance-control-quick-radial-layout">
-              <legend>{t('quickActions.radialLayout')}</legend>
-              <SegmentedChoice label={t('quickActions.radialLayout')} value={quickConfig.radialLayout === 'categories' ? 'categories' : 'flat'}
-                onChange={radialLayout => settings.setQuickActionStyle(quickSurface, null, { radialLayout })}
-                options={[{ value: 'flat', label: t('quickActions.radialLayout.flat') }, { value: 'categories', label: t('quickActions.radialLayout.categories') }]} />
-            </fieldset>}
-            {/* Paging does nothing for a categorized wheel: at most six wedges. */}
-            {quickConfig.mode === 'radial' && quickConfig.radialLayout !== 'categories' && <fieldset data-testid="appearance-control-quick-pagination">
-              <legend>{t('quickActions.radialPagination')}</legend>
-              <SegmentedChoice label={t('quickActions.radialPagination')} value={quickConfig.radialPagination ? 'pages' : 'all'}
-                onChange={value => settings.setQuickActionStyle(quickSurface, null, { radialPagination: value === 'pages' })}
-                options={[{ value: 'all', label: t('quickActions.radialPagination.all') }, { value: 'pages', label: t('quickActions.radialPagination.pages') }]} />
-            </fieldset>}
           </>}
           {groups.map(({ id, key, setter, label, disabled, options }) => {
             const value = key === 'emailListStyle' && settings[key] !== 'compact' ? 'default' : settings[key];
@@ -201,29 +173,12 @@ export function AppearanceStep({ onContinue }) {
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>
         <div className="onboarding-appearance-example">
-          {section === 'quick-actions'
-            ? <section className="onboarding-quick-actions-preview" aria-labelledby="onboarding-quick-actions-preview-title">
-              <div><h3 id="onboarding-quick-actions-preview-title">{t('quickActions.preview')}</h3><p>{t('quickActions.previewDescription')}</p></div>
-              <div className="onboarding-quick-actions-surface" data-radial={quickConfig.mode === 'radial'}>
-                <span className="onboarding-quick-actions-label">{t(`quickActions.surface.${quickSurface}`)}</span>
-                <QuickActions
-                  surface={quickSurface}
-                  config={quickConfig}
-                  descriptors={quickDescriptors}
-                  display={quickSurface === 'selection' ? quickConfig.selectionDisplay || 'icon-label' : undefined}
-                  inlineLimit={quickSurface === 'selection' && quickConfig.selectionDisplay !== 'icon-only' ? quickConfig.selectionActionLimit || 3 : undefined}
-                  className="onboarding-quick-actions"
-                  preview
-                  identity={`onboarding:${quickSurface}:${quickConfig.mode}`}
-                />
-              </div>
-            </section>
-            : <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle}
+          <AppearancePreview layoutMode={settings.layoutMode} sidebarStyle={settings.sidebarStyle}
             viewStyle={settings.viewStyle} emailListStyle={settings.emailListStyle} threadMode={settings.threadMode}
             theme={theme} palette={palette} emailViewerTheme={settings.emailViewerTheme}
-            highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} />}
+            highlight={settings.emailRowHighlight} actionButtonDisplay={settings.actionButtonDisplay} appFont={settings.appFont} />
         </div>
-      </div>
+      </div>}
     </SettingsTabs>
     <footer className="onboarding-appearance-footer">
       <Button variant="ghost" size="sm" onClick={applyRecommended} data-testid="appearance-recommended">{t('onboarding.recommended')}</Button>

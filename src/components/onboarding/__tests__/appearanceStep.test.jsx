@@ -4,9 +4,11 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useThemeStore } from '../../../stores/themeStore';
+import { useMailStore } from '../../../stores/mailStore';
 import { t } from '../../../i18n';
 import { AppearanceStep } from '../AppearanceStep';
 import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from '../../../utils/quickActions';
+import { QUICK_ACTION_PRESETS } from '../../../utils/quickActionPresets';
 import { previewNotificationSound } from '../../../services/api';
 
 vi.mock('../../../services/api', async (importOriginal) => ({
@@ -114,43 +116,70 @@ describe('appearance step', () => {
     expect(useSettingsStore.getState().confirmBeforeDelete).toBe(true);
   });
 
-  it('persists linked radial pagination through the quick-actions tab and Continue', () => {
+  it('picks each surface\'s layout from its cards and keeps it through Continue', () => {
     const onContinue = vi.fn();
     render(<AppearanceStep onContinue={onContinue} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Use everywhere' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Radial' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Pages' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Email reader' }));
-    expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
+    const layout = within(screen.getByTestId('appearance-control-quick-layout')).getByRole('radiogroup', { name: 'Layout' });
+    expect(within(layout).getByRole('radio', { name: 'Inline' }).getAttribute('aria-checked')).toBe('true');
+    // Each card draws the reader's toolbar in its layout.
+    expect(within(layout).getByRole('radio', { name: 'Menu' }).closest('.choice-card').querySelector('.email-action-bar')).not.toBeNull();
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Menu' }));
+    expect(useSettingsStore.getState().quickActions.defaults).toMatchObject({ reader: { mode: 'menu' }, row: { mode: 'radial' }, selection: { mode: 'inline' } });
     fireEvent.click(tab('colors'));
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
     fireEvent.click(screen.getByTestId('onboarding-continue'));
     expect(onContinue).toHaveBeenCalledOnce();
-    expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
+    expect(useSettingsStore.getState().quickActions.defaults.reader.mode).toBe('menu');
   });
 
-  it('offers the wheel layout for a radial surface and hides wheel paging for categories', () => {
+  it('offers the other apps\' action sets, and one click sets all three surfaces', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Radial' }));
-    expect(screen.getByTestId('appearance-control-quick-pagination')).toBeTruthy();
-    const layout = screen.getByTestId('appearance-control-quick-radial-layout');
-    expect(within(layout).getByRole('radio', { name: 'One ring' }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(within(layout).getByRole('radio', { name: 'Categories' }));
-    expect(useSettingsStore.getState().quickActions.defaults.row.radialLayout).toBe('categories');
-    expect(screen.queryByTestId('appearance-control-quick-pagination')).toBeNull();
-    fireEvent.click(screen.getByRole('radio', { name: 'Menu' }));
-    expect(screen.queryByTestId('appearance-control-quick-radial-layout')).toBeNull();
+    const sets = screen.getByRole('group', { name: 'Action sets' });
+    const names = () => within(sets).getAllByRole('button').filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent.trim());
+    expect(within(sets).getAllByRole('button').map(button => button.textContent.trim())).toEqual(['MailVault', 'Gmail', 'Outlook', 'Thunderbird']);
+    expect(names()).toEqual(['MailVault']);
+    fireEvent.click(within(sets).getByRole('button', { name: 'Thunderbird' }));
+    const { surfaces } = QUICK_ACTION_PRESETS.find(preset => preset.id === 'thunderbird');
+    const { defaults } = useSettingsStore.getState().quickActions;
+    for (const surface of ['row', 'selection', 'reader']) {
+      expect(defaults[surface].entries.map(entry => entry.action)).toEqual(surfaces[surface].entries.map(entry => entry.action));
+      expect(defaults[surface].mode).toBe(surfaces[surface].mode);
+    }
+    expect(names()).toEqual(['Thunderbird']);
   });
 
-  it('restores One ring with the recommended settings', () => {
+  it('draws the sample from previewMail\'s cast before there is any mail, and nothing in it acts', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
-    fireEvent.click(within(screen.getByTestId('appearance-control-quick-radial-layout')).getByRole('radio', { name: 'Categories' }));
+    const frame = document.querySelector('.quick-actions-sample-frame');
+    expect(frame.hasAttribute('data-quick-actions-preview')).toBe(true);
+    const rows = within(frame).getAllByTestId('email-row');
+    expect(rows.map(row => row.querySelector('[data-testid="row-subject"]').textContent))
+      .toEqual([t('preview.row1.subject'), t('preview.row2.subject'), t('preview.row3.subject')]);
+    fireEvent.click(rows[1]);
+    fireEvent.click(within(rows[1]).getByTestId('star-toggle'));
+    fireEvent.click(within(rows[2]).getByRole('checkbox'));
+    const mail = useMailStore.getState();
+    expect(mail.selectedEmailIds.size).toBe(0);
+    expect(mail.selectedEmail).toBeFalsy();
+    expect(mail.emails).toEqual([]);
+  });
+
+  it('restores One ring with the recommended settings, keeping the actions', () => {
+    useSettingsStore.getState().setQuickActionStyle('row', null, { radialLayout: 'categories' });
+    useSettingsStore.getState().setQuickActionSurface('row', null, {
+      ...useSettingsStore.getState().quickActions.defaults.row, entries: [{ id: 'reply', action: 'reply' }, { id: 'forward', action: 'forward' }],
+    });
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    expect(document.querySelector('.quick-actions-sample-frame .quick-actions-radial-preview').dataset.radialLayout).toBe('categories');
     fireEvent.click(screen.getByTestId('appearance-recommended'));
-    expect(within(screen.getByTestId('appearance-control-quick-radial-layout')).getByRole('radio', { name: 'One ring' }).getAttribute('aria-checked')).toBe('true');
     expect(useSettingsStore.getState().quickActions.defaults.row.radialLayout).toBe('flat');
+    expect(useSettingsStore.getState().quickActions.defaults.row.entries.map(entry => entry.id)).toEqual(['reply', 'forward']);
+    expect(document.querySelector('.quick-actions-sample-frame .quick-actions-radial-preview').dataset.radialLayout).toBeUndefined();
   });
 
   it('picks and plays the new email sound on the reading tab, on a Mac with notifications on', () => {
