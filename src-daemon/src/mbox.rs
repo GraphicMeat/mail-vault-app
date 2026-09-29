@@ -712,46 +712,60 @@ pub async fn delete_local_folder(state: &Arc<DaemonState>, account_id: &str, nam
     // One message per unit: its capture, then its removal under the
     // mailbox lock, so a foreground read never waits on more than one.
     let mut deleted = 0u32;
-    for uid in uids {
-        let kept = match capture(state, &safe_account_id, &folder_name, uid, Source::Local).await {
-            Ok(Some((_, true))) => true,
-            // The bin already held a copy under this key: a delete cut off
-            // after its capture, or a deleted folder of the same name whose
-            // uid came back. Only these very bytes count as kept.
-            Ok(Some((bin_id, false))) => kept_as_is(state, &safe_account_id, &folder_name, uid, bin_id).await,
-            // `Source::Local` reads nothing into this too: leave the message,
-            // the folder then stays and the delete says so.
-            Ok(None) => false,
-            Err(e) => return Err(format!("E_BIN_CAPTURE: {e}")),
-        };
-        if !kept {
-            continue;
-        }
-        let (st, acct, n) = (Arc::clone(state), safe_account_id.clone(), folder_name.clone());
-        blocking(move || common::with_mailbox_write(&st, &acct, &n, |root| mailvault_core::vault_files::delete(&st.vault_registry, root, &acct, &n, uid)))
-            .await
-            .and_then(|r| r)?;
-        deleted += 1;
-    }
-
-    // The folder goes last, under its lock, and only with no mail left in it.
-    let (st, acct, d) = (Arc::clone(state), safe_account_id.clone(), dir.clone());
-    let removed = blocking(move || {
-        common::with_mailbox_write(&st, &acct, &d, |root| {
-            let folder = local_account_dir(root, &acct).join(&d);
-            if folder.symlink_metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
-                return Ok(true);
+    let mut removed = false;
+    let result = async {
+        for uid in uids {
+            let kept = match capture(state, &safe_account_id, &folder_name, uid, Source::Local).await {
+                Ok(Some((_, true))) => true,
+                // The bin already held a copy under this key: a delete cut off
+                // after its capture, or a deleted folder of the same name whose
+                // uid came back. Only these very bytes count as kept.
+                Ok(Some((bin_id, false))) => kept_as_is(state, &safe_account_id, &folder_name, uid, bin_id).await,
+                // `Source::Local` reads nothing into this too: leave the message,
+                // the folder then stays and the delete says so.
+                Ok(None) => false,
+                Err(e) => return Err(format!("E_BIN_CAPTURE: {e}")),
+            };
+            if !kept {
+                continue;
             }
-            let removed = local_folder::remove_if_no_mail(&folder);
-            st.vault_registry.invalidate(&acct, &d);
-            removed
+            let (st, acct, n) = (Arc::clone(state), safe_account_id.clone(), folder_name.clone());
+            blocking(move || common::with_mailbox_write(&st, &acct, &n, |root| mailvault_core::vault_files::delete(&st.vault_registry, root, &acct, &n, uid)))
+                .await
+                .and_then(|r| r)?;
+            deleted += 1;
+        }
+
+        // The folder goes last, under its lock, and only with no mail left in it.
+        let (st, acct, d) = (Arc::clone(state), safe_account_id.clone(), dir.clone());
+        removed = blocking(move || {
+            common::with_mailbox_write(&st, &acct, &d, |root| {
+                let folder = local_account_dir(root, &acct).join(&d);
+                if folder.symlink_metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
+                    return Ok(true);
+                }
+                let removed = local_folder::remove_if_no_mail(&folder);
+                st.vault_registry.invalidate(&acct, &d);
+                removed
+            })
         })
-    })
-    .await
-    .and_then(|r| r)?;
-    if !removed {
-        return Err(format!("{E_LOCAL_FOLDER_NOT_EMPTY}: {deleted} moved to the deleted bin, some mail is left in {dir}"));
+        .await
+        .and_then(|r| r)?;
+        if !removed {
+            return Err(format!("{E_LOCAL_FOLDER_NOT_EMPTY}: {deleted} moved to the deleted bin, some mail is left in {dir}"));
+        }
+        Ok(())
     }
+    .await;
+    // The per-file nudges cannot drop these search rows: a scoped pass keeps
+    // the row of a gone file its folder has no server listing for, and does
+    // nothing for a folder that is gone. A full pass prunes a gone folder's
+    // rows. Asked for whenever this delete changed the vault, a partial one
+    // included.
+    if deleted > 0 || removed {
+        crate::search_index::sweep_soon(&state.search_index);
+    }
+    result?;
     info!("local folder {dir} of {safe_account_id} deleted, {deleted} message(s) into the deleted bin");
     Ok(json!({"dir": dir, "deleted": deleted}))
 }

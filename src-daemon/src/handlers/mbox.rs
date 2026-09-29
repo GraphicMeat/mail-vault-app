@@ -375,6 +375,7 @@ mod tests {
     use mailvault_core::app_db::{self, deleted as bin};
     use mailvault_core::local_folder;
     use mailvault_core::maildir::IMPORT_UID_BASE;
+    use mailvault_core::search_index::plan::Signal;
     use mailvault_core::search_index::text::vault_dir_name;
     use std::path::Path;
 
@@ -440,6 +441,18 @@ mod tests {
 
     fn binned(s: &Arc<DaemonState>) -> Vec<bin::Deleted> {
         app_db::with(&s.app_dir, |c| bin::list(c, &s.app_dir)).unwrap()
+    }
+
+    /// The signals the search index worker would get from here on.
+    fn index_signals(s: &Arc<DaemonState>) -> std::sync::mpsc::Receiver<Signal> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *s.search_index.signals.lock().unwrap() = Some(tx);
+        rx
+    }
+
+    /// Full index passes asked for since the last look.
+    fn sweeps_asked(rx: &std::sync::mpsc::Receiver<Signal>) -> usize {
+        rx.try_iter().filter(|s| *s == Signal::Sweep).count()
     }
 
     /// Mode 3: a new folder of its own with its marker, every message in it
@@ -578,10 +591,12 @@ mod tests {
             std::os::unix::fs::symlink(account_dir(v.path()).join(&fdir), account_dir(v.path()).join("Linked")).unwrap();
             refused.push("Linked");
         }
+        let index = index_signals(&s);
         for n in &refused {
             let msg = err_of(delete_folder(&s, n).await);
             assert!(msg.starts_with("E_NOT_LOCAL_FOLDER:"), "{n}: {msg}");
         }
+        assert_eq!(sweeps_asked(&index), 0, "a refusal changes nothing");
         for dir in ["INBOX", "Broken", "Other", fdir.as_str()] {
             assert_eq!(files_in(v.path(), dir).len(), 1, "{dir} keeps its mail");
         }
@@ -595,12 +610,16 @@ mod tests {
     #[tokio::test]
     async fn deleting_a_folder_that_is_gone_is_a_success() {
         let (v, _a, s) = st(true);
+        let index = index_signals(&s);
         let r = delete_folder(&s, "MBOX import 2000-01-01").await;
         assert_eq!(r.result.expect("nothing to delete"), json!({"dir": "MBOX_import_2000-01-01", "deleted": 0}));
+        assert_eq!(sweeps_asked(&index), 0, "nothing changed");
         let name = "MBOX import 2026-09-29";
         let fdir = local_folder_with(v.path(), name, "import", &[&msg_with_id("a@x", "one")]);
         assert_eq!(delete_folder(&s, name).await.result.expect("deleted")["deleted"], json!(1));
+        assert_eq!(sweeps_asked(&index), 1);
         assert_eq!(delete_folder(&s, &fdir).await.result.expect("again, by its dir"), json!({"dir": fdir, "deleted": 0}));
+        assert_eq!(sweeps_asked(&index), 0, "nothing changed");
         assert_eq!(binned(&s).len(), 1);
     }
 
@@ -620,15 +639,19 @@ mod tests {
         assert_eq!(delete_folder(&s, name).await.result.expect("the kept copy is these bytes")["deleted"], json!(1));
         assert_eq!(binned(&s).len(), 1, "no second copy");
 
-        local_folder_with(v.path(), name, "import", &["Subject: chat two\r\n\r\nsecond"]);
+        // The name again: another chat at the same uid, and a new message.
+        let third = msg_with_id("c@x", "three");
+        local_folder_with(v.path(), name, "import", &["Subject: chat two\r\n\r\nsecond", &third]);
+        let index = index_signals(&s);
         let msg = err_of(delete_folder(&s, name).await);
-        assert!(msg.starts_with("E_LOCAL_FOLDER_NOT_EMPTY:"), "{msg}");
+        assert!(msg.starts_with("E_LOCAL_FOLDER_NOT_EMPTY: 1 moved"), "{msg}");
         let left = files_in(v.path(), &fdir);
         assert_eq!(left.iter().map(|f| f.2.as_slice()).collect::<Vec<_>>(), vec![&b"Subject: chat two\r\n\r\nsecond"[..]]);
         assert!(account_dir(v.path()).join(&fdir).join(local_folder::MARKER_FILE).exists(), "still listed, so it can be deleted again");
-        let rows = binned(&s);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(bin::read_eml(&s.app_dir, &rows[0].id).unwrap(), b"Subject: chat one\r\n\r\nfirst");
+        let mut kept: Vec<Vec<u8>> = binned(&s).iter().map(|d| bin::read_eml(&s.app_dir, &d.id).unwrap()).collect();
+        kept.sort();
+        assert_eq!(kept, vec![third.into_bytes(), b"Subject: chat one\r\n\r\nfirst".to_vec()], "chat two has no bin copy, so it stayed");
+        assert_eq!(sweeps_asked(&index), 1, "a partial delete took a message out: a full pass is asked for too");
     }
 
     /// A Graph account keys its server folders by storage key; a local folder
@@ -649,6 +672,38 @@ mod tests {
         assert_eq!(listed(&s).await.as_array().map(|a| a.iter().map(|f| f["dir"].clone()).collect::<Vec<_>>()), Some(vec![json!(fdir)]));
         assert_eq!(delete_folder(&s, &name).await.result.expect("deleted")["deleted"], json!(2));
         assert!(!account_dir(v.path()).join(&fdir).exists());
+    }
+
+    /// A local folder has no server listing, so the scoped pass each removed
+    /// file nudges keeps that file's search row; only a full pass's prune of
+    /// gone folders drops them. The delete asks for one, and that pass leaves
+    /// no row of the folder.
+    #[tokio::test]
+    async fn deleting_a_local_folder_asks_for_the_full_pass_that_drops_its_search_rows() {
+        let (v, _a, s) = st(true);
+        let name = "MBOX import 2026-09-29";
+        let fdir = local_folder_with(v.path(), name, "import", &[&msg_with_id("a@x", "one"), &msg_with_id("b@x", "two")]);
+        *mailvault_core::search_index::lock(&s.search_index.db) = Some(mailvault_core::search_index::db::open(v.path()).unwrap());
+        let full_pass = || {
+            let config = mailvault_core::search_index::reconcile::IndexConfig { bodies: true, attachments: false, image_text: false };
+            let generation = s.search_index.operation_generation.load(std::sync::atomic::Ordering::SeqCst);
+            let out = crate::search_index::sweep(&s.search_index, &v.path().join("Maildir"), config, None, generation);
+            assert!(out.success, "{:?}", out.error);
+        };
+        let rows = || -> i64 {
+            let db = mailvault_core::search_index::lock(&s.search_index.db);
+            let sql = "SELECT COUNT(*) FROM messages WHERE account_id = 'acct1' AND vault_dir = ?1";
+            db.as_ref().unwrap().query_row(sql, [&fdir], |r| r.get(0)).unwrap()
+        };
+        full_pass();
+        assert_eq!(rows(), 2, "indexed before the delete");
+
+        let rx = index_signals(&s);
+        assert_eq!(delete_folder(&s, name).await.result.expect("deleted")["deleted"], json!(2));
+        let asked: Vec<Signal> = rx.try_iter().collect();
+        assert!(asked.contains(&Signal::Sweep), "a full pass must be asked for: {asked:?}");
+        full_pass();
+        assert_eq!(rows(), 0, "no search row of the deleted folder is left");
     }
 
     #[tokio::test]
