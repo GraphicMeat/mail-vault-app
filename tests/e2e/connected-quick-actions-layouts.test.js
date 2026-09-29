@@ -321,7 +321,8 @@ describe('Quick action layouts', function () {
   it('a starred message shows the filled star, an unstarred one the outline', async function () {
     const starState = () => browser.execute(() => {
       const real = (el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]');
-      const row = [...document.querySelectorAll('[data-testid="email-row"]')].find(real);
+      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find((el) => real(el) && el.querySelector('[data-testid="star-toggle"]'));
       if (!row) return null;
       row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
       const fill = (root, action) => root?.querySelector(`[data-quick-action="${action}"] svg`)?.getAttribute('fill') ?? null;
@@ -336,7 +337,8 @@ describe('Quick action layouts', function () {
     });
     const clickStar = () => browser.execute(() => {
       const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]'));
+        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]')
+          && el.querySelector('[data-testid="star-toggle"]'));
       const star = row?.querySelector('[data-testid="star-toggle"]');
       if (!star) return false;
       star.click();
@@ -351,10 +353,12 @@ describe('Quick action layouts', function () {
 
     // Every row action inline, so Star and Unstar are buttons on the row.
     await browser.execute(() => window.__SETTINGS_STORE__.getState().setQuickActionStyle('row', null, { mode: 'inline' }));
-    // The reader shows the same message as the first row.
+    // The reader shows the same message as the first single-message row (a
+    // conversation row has no star to toggle).
     expect(await browser.execute(() => {
       const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]'));
+        .find((el) => !el.closest('[data-testid="settings-page"], [data-quick-actions-preview]')
+          && el.querySelector('[data-testid="star-toggle"]'));
       row?.click();
       return !!row;
     })).toBe(true);
