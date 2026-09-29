@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import en from '../locales/en.json';
 import es from '../locales/es.json';
 import fr from '../locales/fr.json';
@@ -55,6 +56,26 @@ describe('Archive & delete catalog', () => {
     const keys = OURS(en).map(([k]) => k);
     for (const [locale, catalog] of Object.entries(CATALOGS)) {
       expect(keys.filter(k => !(k in catalog)), locale).toEqual([]);
+    }
+  });
+
+  it('has an errors key for every E_ABD code the daemon, the shell and the service can raise', () => {
+    // The lookbehind keeps env names such as MAILVAULT_DISABLE_ABD_RESUME out of it.
+    const CODE = /(?<![A-Za-z0-9_])E_ABD_[A-Z]+(?:_[A-Z]+)*/g;
+    const SOURCES = [
+      'src-daemon/src/handlers/abd.rs',
+      'src-daemon/src/abd_worker.rs',
+      'src-tauri/src/abd.rs',
+      'src/services/abd.js',
+      'src/services/api.js',
+    ];
+    const found = new Set();
+    for (const file of SOURCES) for (const code of readFileSync(file, 'utf8').match(CODE) || []) found.add(code);
+    // Reads the sources for real: the eight codes in use must be among them, so an empty scan cannot pass.
+    for (const code of ['E_ABD_JOB_EXISTS', 'E_ABD_PREVIEW_EXPIRED', 'E_ABD_NOT_CONFIRMED', 'E_ABD_NO_BACKUP_DRIVE',
+      'E_ABD_CANNOT_DELETE', 'E_ABD_JOB_UNFINISHED', 'E_ABD_NO_JOB', 'E_ABD_UNAVAILABLE']) expect(found.has(code), code).toBe(true);
+    for (const code of found) {
+      for (const [locale, catalog] of Object.entries(CATALOGS)) expect(catalog[`errors.${code}`], `${locale} errors.${code}`).toBeTruthy();
     }
   });
 });

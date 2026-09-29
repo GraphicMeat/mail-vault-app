@@ -76,7 +76,7 @@
       "name": "归档并从服务器删除时会发生什么？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "「归档并删除」会按顺序执行三步：把邮件复制进你的保险库，存为 .eml 文件；确认这份副本确实在那里；只有到这时才从服务器上删除。任何没通过确认的邮件都会留在服务器上。之后这一行会显示「唯一副本」状态——你的保险库是这封邮件仅存的地方，这也提醒你该把备份盘接上。"
+        "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted. Two jobs in Settings > Backup & Restore > Archive & delete, both Premium, do the same for a whole account instead of selected messages: Archive, back up & delete from server saves the mail you scope to your vault and your backup folder, and Archive & delete from server saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail's own limits instead of failing."
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "如果我从服务器删除邮件会怎样？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "凡是你事先归档过的邮件，都会留在保险库里，之后服务器发生什么都不影响它——这正是这个产品的意义所在。凡是没有事先归档的邮件，都会随服务器副本一起消失，所以 MailVault 在你删除之前，会在每封邮件所在的行上显示它的状态：在服务器上、在保险库里，还是两边都有。稳妥的做法是「归档并删除」，它会先把每封邮件复制进保险库并验证确实存在，然后才从服务器上删除。"
+        "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
       }
     },
     {
@@ -233,14 +233,19 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档并从服务器删除时会发生什么？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>归档并删除</strong>按顺序做三件事：把邮件作为 .eml 文件复制进你的保险库，核对这份副本确实在那里，然后才从服务器上删除。任何没通过核对的都会留在服务器上 &mdash; 复制失败绝不会让你搭上原件。做完之后，这一行会显示<strong>你的唯一副本</strong>：保险库是这封邮件仅存的地方，这也提醒你该把备份盘接上。
+              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
+            </p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Two jobs in <strong>Settings &rarr; Backup &amp; Restore &rarr; Archive &amp; delete</strong>, both Premium, do the same for a whole account instead of selected messages. <strong>Archive, back up &amp; delete from server</strong> saves the mail you scope to your vault and your backup folder, and <strong>Archive &amp; delete from server</strong> saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail&rsquo;s own limits instead of failing.
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如果我从服务器删除邮件会怎样？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              凡是你事先归档过的，都留在你的保险库里，之后服务器怎么变都碰不到它 —— 这正是这个产品存在的意义。凡是你<em>没有</em>归档的，会随服务器上那份一起消失，所以在你删除之前，MailVault 会在每封邮件自己的行上标出它的状态：在服务器上、在保险库里，还是两边都有。稳妥的做法是<strong>归档并删除</strong>，它会把每封邮件复制进你的保险库并在那里核验之后，才从服务器上移除。
+              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档到本地、仅在本地的状态图标" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

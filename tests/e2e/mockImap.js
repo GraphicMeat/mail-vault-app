@@ -718,7 +718,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null, backupDeleteMailbox = null } = {}) {
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null, backupDeleteMailbox = null, abdMailboxes = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message', sentByOwner: true });
 
@@ -933,6 +933,16 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     }));
   }
 
+  // Disposable folders for the Archive & delete JOBS (connected-abd). Each run
+  // removes its messages from the server (they end in Trash), so nothing else may
+  // read these folders. Same placement rule as the backup fixture above: after the
+  // folders the skipFolders specs count through, on luke only.
+  for (const box of abdMailboxes || []) {
+    mailboxes.push(mailbox(box.name, box.count, {
+      owner, attrs: ['\\HasNoChildren'], subjectPrefix: box.subjectPrefix, uidStart: box.uidStart,
+    }));
+  }
+
   // Every account's SMTP listener refuses the same one address, so a spec asks
   // for a failing send by typing it — see SEND_REFUSED_TO.
   return { state: { mailboxes }, faults, smtp: { refuse_recipient: `@${SMTP_REFUSED_DOMAIN}` } };
@@ -1064,6 +1074,23 @@ export function vanishedMessage(uid) {
  */
 export function bodyFetchDropsAlways(uid) {
   return [{ trigger: bodyFetchOfUid(uid), action: 'DropConnection' }];
+}
+
+/**
+ * Stall one message's body fetch by `ms`; the fetch then succeeds. Scoped to the
+ * uid, so keep the uid inside a folder only the spec that wants the pause reads
+ * (connected-abd holds a job mid-download this way long enough to minimize it).
+ *
+ * Two triggers, because two readers ask differently: the app's pipeline sends
+ * `(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[])`, and the Archive & delete job
+ * (`imap::abd_cmds::fetch_raw`) sends `(UID FLAGS INTERNALDATE BODY.PEEK[])`.
+ */
+export function slowBodyFetch(uid, ms) {
+  const action = { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } };
+  return [
+    { trigger: bodyFetchOfUid(uid), action },
+    { trigger: { OnCommandWith: ['FETCH', `${uid} (UID FLAGS INTERNALDATE BODY.PEEK[])`] }, action },
+  ];
 }
 
 /** Stall one message's body fetch by `ms`, then fail it with a tagged NO. */

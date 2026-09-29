@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "The backup drive is not available.",
   "errors.E_ABD_CANNOT_DELETE": "This server cannot remove emails safely.",
   "errors.E_ABD_NOT_CONFIRMED": "Tick the box to confirm first.",
+  "errors.E_ABD_JOB_UNFINISHED": "The job is still going. Stop it first.",
+  "errors.E_ABD_NO_JOB": "There is no job for this account.",
+  "errors.E_ABD_UNAVAILABLE": "This needs the desktop app.",
   "errors.abdPremiumRequired": "Archive and delete jobs are part of Premium."
 }

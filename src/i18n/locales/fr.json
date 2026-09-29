@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "Le disque de sauvegarde n'est pas disponible.",
   "errors.E_ABD_CANNOT_DELETE": "Ce serveur ne peut pas supprimer des e-mails en toute sécurité.",
   "errors.E_ABD_NOT_CONFIRMED": "Cochez d'abord la case de confirmation.",
+  "errors.E_ABD_JOB_UNFINISHED": "La tâche est toujours en cours. Arrêtez-la d'abord.",
+  "errors.E_ABD_NO_JOB": "Aucune tâche n'existe pour ce compte.",
+  "errors.E_ABD_UNAVAILABLE": "Cette action nécessite l'application de bureau.",
   "errors.abdPremiumRequired": "Les tâches d'archivage et de suppression font partie de Premium."
 }

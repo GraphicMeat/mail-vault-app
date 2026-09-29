@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "La unidad de respaldo no está disponible.",
   "errors.E_ABD_CANNOT_DELETE": "Este servidor no puede eliminar correos de forma segura.",
   "errors.E_ABD_NOT_CONFIRMED": "Marca primero la casilla de confirmación.",
+  "errors.E_ABD_JOB_UNFINISHED": "El trabajo sigue en curso. Deténlo primero.",
+  "errors.E_ABD_NO_JOB": "No hay ningún trabajo para esta cuenta.",
+  "errors.E_ABD_UNAVAILABLE": "Esto requiere la aplicación de escritorio.",
   "errors.abdPremiumRequired": "Los trabajos de archivar y eliminar forman parte de Premium."
 }

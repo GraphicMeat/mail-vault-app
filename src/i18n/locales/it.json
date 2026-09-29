@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "Il disco di backup non è disponibile.",
   "errors.E_ABD_CANNOT_DELETE": "Questo server non può rimuovere le email in sicurezza.",
   "errors.E_ABD_NOT_CONFIRMED": "Seleziona prima la casella di conferma.",
+  "errors.E_ABD_JOB_UNFINISHED": "L'attività è ancora in corso. Fermala prima.",
+  "errors.E_ABD_NO_JOB": "Non c'è nessuna attività per questo account.",
+  "errors.E_ABD_UNAVAILABLE": "Serve l'app per desktop.",
   "errors.abdPremiumRequired": "Le attività di archiviazione ed eliminazione fanno parte di Premium."
 }

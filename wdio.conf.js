@@ -12,6 +12,7 @@ import {
   dropIdlersOnAppendOf,
   unreadableBody,
   bodyFetchDropsAlways,
+  slowBodyFetch,
   unreachableMessage,
   vanishedMessage,
   mockAccount,
@@ -160,8 +161,17 @@ let MOCK_ACCOUNTS = [
     ],
     // connected-archive-backup-delete removes these three from the server for good.
     backupDeleteMailbox: { name: 'BackupDelete', count: 3, subjectPrefix: 'ABD fixture', uidStart: 9601 },
+    // connected-abd runs the Archive & delete jobs on these two and removes their
+    // messages from the server for good (they end in Trash). AbdBackup's middle
+    // message downloads slowly (fault below) so the spec can minimize the job's
+    // panel while it is still running.
+    abdMailboxes: [
+      { name: 'AbdBackup', count: 3, subjectPrefix: 'ABD job backup', uidStart: 9701 },
+      { name: 'AbdArchive', count: 2, subjectPrefix: 'ABD job archive', uidStart: 9751 },
+    ],
     faults: [
       ...bodyFetchDropsAlways(9301),
+      ...slowBodyFetch(9702, 8000),
       // connected-sent-single-copy: one reply's Sent APPEND is stored only
       // after the client gave up on it, and answered after the old 30 s
       // compose listener. Scoped to that message by its Subject token.
@@ -483,6 +493,7 @@ export const config = {
         extraMailbox: a.extraMailbox,
         nestedMailboxes: a.nestedMailboxes,
         backupDeleteMailbox: a.backupDeleteMailbox,
+        abdMailboxes: a.abdMailboxes,
       }))),
     );
     // A Graph entry ({ graph: true, account }) carries its whole seeded account:

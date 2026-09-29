@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "Das Sicherungslaufwerk ist nicht verfügbar.",
   "errors.E_ABD_CANNOT_DELETE": "Dieser Server kann E-Mails nicht sicher entfernen.",
   "errors.E_ABD_NOT_CONFIRMED": "Setze zuerst das Häkchen zur Bestätigung.",
+  "errors.E_ABD_JOB_UNFINISHED": "Der Auftrag läuft noch. Beende ihn zuerst.",
+  "errors.E_ABD_NO_JOB": "Für dieses Konto gibt es keinen Auftrag.",
+  "errors.E_ABD_UNAVAILABLE": "Dafür wird die Desktop-App benötigt.",
   "errors.abdPremiumRequired": "Aufträge zum Archivieren und Löschen gehören zu Premium."
 }

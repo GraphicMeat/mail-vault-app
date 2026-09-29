@@ -76,7 +76,7 @@
       "name": "보관 후 서버에서 삭제하면 어떻게 됩니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "보관 후 삭제는 세 단계를 순서대로 실행합니다: 메시지를 .eml 파일로 볼트에 복사하고, 그 사본이 실제로 있는지 확인한 다음, 그때서야 서버에서 삭제합니다. 확인을 통과하지 못한 메일은 서버에 그대로 남습니다. 그 뒤에는 해당 행이 유일한 사본 상태로 표시됩니다 — 그 메시지가 남아 있는 곳은 볼트뿐이라는 뜻이며, 백업 드라이브를 연결해 두어야 한다는 신호이기도 합니다."
+        "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted. Two jobs in Settings > Backup & Restore > Archive & delete, both Premium, do the same for a whole account instead of selected messages: Archive, back up & delete from server saves the mail you scope to your vault and your backup folder, and Archive & delete from server saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail's own limits instead of failing."
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "서버에서 메일을 삭제하면 어떻게 됩니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "먼저 보관해 둔 메일은 볼트에 그대로 남으며, 그 뒤 서버에서 무슨 일이 일어나든 영향을 받지 않습니다 — 이 제품의 존재 이유가 바로 그것입니다. 보관해 두지 않은 메일은 서버 사본과 함께 사라집니다. 그래서 MailVault는 삭제하기 전에 모든 메시지의 상태를 각 행에 표시합니다: 서버에 있는지, 볼트에 있는지, 둘 다인지. 안전한 방법은 보관 후 삭제이며, 이 방법은 각 메시지를 볼트에 복사하고 볼트에 제대로 들어갔는지 확인한 뒤에야 서버에서 지웁니다."
+        "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
       }
     },
     {
@@ -233,14 +233,19 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">보관 후 서버에서 삭제하면 어떻게 됩니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong>는 세 단계를 차례로 밟습니다. 메시지를 .eml 파일로 볼트에 복사하고, 그 사본이 정말 거기 있는지 확인한 다음, 그때에야 서버에서 지웁니다. 확인을 통과하지 못한 것은 서버에 남습니다 &mdash; 복사에 실패해도 원본을 잃는 일은 없습니다. 그 뒤 해당 행에는 <strong>사본은 이곳뿐</strong>이라고 표시됩니다. 그 메시지가 아직 존재하는 곳은 볼트 하나라는 뜻이며, 백업 드라이브를 연결해 두라는 신호이기도 합니다.
+              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
+            </p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Two jobs in <strong>Settings &rarr; Backup &amp; Restore &rarr; Archive &amp; delete</strong>, both Premium, do the same for a whole account instead of selected messages. <strong>Archive, back up &amp; delete from server</strong> saves the mail you scope to your vault and your backup folder, and <strong>Archive &amp; delete from server</strong> saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail&rsquo;s own limits instead of failing.
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">서버에서 메일을 삭제하면 어떻게 됩니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              먼저 보관해 둔 것은 서버가 그 뒤에 무엇을 하든 손대지 않은 채 볼트에 남습니다 — 그것이 이 제품의 존재 이유 전부입니다. 보관하지 <em>않은</em> 것은 서버 사본과 함께 사라지므로, MailVault는 지우기 전에 메시지마다 그 상태를 각자의 행에 보여 줍니다. 서버에 있는지, 볼트에 있는지, 둘 다인지 말입니다. 안전한 길은 <strong>Archive &amp; Delete</strong>입니다. 각 메시지를 볼트로 복사하고 거기 있는지 확인한 뒤에야 서버에서 지웁니다.
+              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w, /screenshots/ko/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에만 있는 메일, 로컬에 보관된 메일, 로컬에만 있는 메일을 메시지마다 아이콘으로 표시한 MailVault 받은편지함" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

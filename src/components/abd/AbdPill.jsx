@@ -24,6 +24,7 @@ export function AbdPill() {
   return (
     <motion.div
       data-testid="abd-pill"
+      data-state={job.status?.state}
       initial={{ x: 100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 100, opacity: 0 }}

@@ -76,7 +76,7 @@
       "name": "アーカイブしてサーバーから削除すると何が起きますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "「アーカイブして削除」は3つの手順を順番に実行します。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが確かにあることを確認し、そのうえでサーバーから削除します。確認に失敗したものはサーバーに残ります。処理のあと、その行には唯一のコピーであることが表示されます。そのメッセージが残っている場所は保管庫だけだという意味であり、バックアップ用のドライブをつないでおく合図でもあります。"
+        "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted. Two jobs in Settings > Backup & Restore > Archive & delete, both Premium, do the same for a whole account instead of selected messages: Archive, back up & delete from server saves the mail you scope to your vault and your backup folder, and Archive & delete from server saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail's own limits instead of failing."
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "サーバーからメールを削除するとどうなりますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません。それがこの製品の目的そのものです。逆に、アーカイブしなかったものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は「アーカイブして削除」です。各メッセージを保管庫にコピーし、そこに確かにあることを確認してから、サーバーから削除します。"
+        "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
       }
     },
     {
@@ -233,14 +233,19 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">アーカイブしてサーバーから削除すると何が起きますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong>は3つの手順を順に行います。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが本当にあることを確かめ、そのあとで初めてサーバーから削除します。確認に通らなかったものはサーバーに残ります &mdash; コピーに失敗しても、元を失うことはありません。そのあと行には<strong>唯一のコピー</strong>と表示されます。そのメッセージが残っている場所は保管庫だけだということで、バックアップ用のドライブをつないでおく合図でもあります。
+              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
+            </p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Two jobs in <strong>Settings &rarr; Backup &amp; Restore &rarr; Archive &amp; delete</strong>, both Premium, do the same for a whole account instead of selected messages. <strong>Archive, back up &amp; delete from server</strong> saves the mail you scope to your vault and your backup folder, and <strong>Archive &amp; delete from server</strong> saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail&rsquo;s own limits instead of failing.
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">サーバーからメールを削除するとどうなりますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません — それがこの製品の目的そのものです。アーカイブし<em>なかった</em>ものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は<strong>Archive &amp; Delete</strong>です。各メッセージを保管庫にコピーし、そこに確かにあることを確かめてから、サーバーから削除します。
+              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

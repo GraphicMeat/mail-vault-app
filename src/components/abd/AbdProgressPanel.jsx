@@ -106,7 +106,7 @@ function PanelBody({ job }) {
         </div>
 
         <div className="px-4 py-3 space-y-3">
-          <p role="status" aria-live="polite" data-testid="abd-status" className={`text-sm ${failed ? 'text-mail-danger' : 'text-mail-text'}`}>
+          <p role="status" aria-live="polite" data-testid="abd-status" data-state={state} className={`text-sm ${failed ? 'text-mail-danger' : 'text-mail-text'}`}>
             {statusLine}
           </p>
 

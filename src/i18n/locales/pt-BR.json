@@ -3484,5 +3484,8 @@
   "errors.E_ABD_NO_BACKUP_DRIVE": "A unidade de backup não está disponível.",
   "errors.E_ABD_CANNOT_DELETE": "Este servidor não consegue remover e-mails com segurança.",
   "errors.E_ABD_NOT_CONFIRMED": "Marque primeiro a caixa de confirmação.",
+  "errors.E_ABD_JOB_UNFINISHED": "O trabalho ainda está em andamento. Pare-o primeiro.",
+  "errors.E_ABD_NO_JOB": "Não há nenhum trabalho para esta conta.",
+  "errors.E_ABD_UNAVAILABLE": "Isso exige o aplicativo para desktop.",
   "errors.abdPremiumRequired": "Os trabalhos de arquivar e excluir fazem parte do Premium."
 }
