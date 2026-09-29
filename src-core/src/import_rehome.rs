@@ -41,7 +41,7 @@ const FENCE_MIN: u32 = 10;
 pub struct Head {
     /// Normalized, as `maildir::read_message_id` gives it.
     pub id: Option<String>,
-    /// Decoded, whitespace runs squashed to one space.
+    /// Decoded, whitespace runs squashed to one space (`subject_key`).
     pub subject: String,
     pub date_secs: Option<i64>,
 }
@@ -50,12 +50,20 @@ pub struct Head {
 pub fn head_of(raw: &[u8]) -> Head {
     let (subject, date_secs) = match mailparse::parse_headers(maildir::header_section(raw)) {
         Ok((headers, _)) => (
-            headers.get_first_value("Subject").unwrap_or_default(),
+            // Decoded the way the server's rows are (the fetch decodes the raw
+            // value with the lenient `decode_rfc2047`): mailparse leaves an
+            // encoded word that touches plain text raw, and the two would then
+            // never compare equal.
+            headers
+                .iter()
+                .find(|h| h.get_key().eq_ignore_ascii_case("Subject"))
+                .map(|h| crate::mime::decode_rfc2047(h.get_value_raw()))
+                .unwrap_or_default(),
             headers.get_first_value("Date").and_then(|d| maildir::header_date_secs(&d)),
         ),
         Err(_) => (String::new(), None),
     };
-    Head { id: maildir::message_id_in(raw), subject: squash(&subject), date_secs }
+    Head { id: maildir::message_id_in(raw), subject: subject_key(&subject), date_secs }
 }
 
 /// `head_of` a vault file, from its first 128 KiB.
@@ -94,6 +102,19 @@ fn squash(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// A Subject as the rule compares it: whitespace runs squashed, and the
+/// placeholder a server row carries for a message without one
+/// (`(No Subject)`, what the fetch writes) read as none, so such a message
+/// matches its own row.
+fn subject_key(subject: &str) -> String {
+    let subject = squash(subject);
+    if subject == "(No Subject)" {
+        String::new()
+    } else {
+        subject
+    }
+}
+
 struct ServerRow {
     message_id: String,
     subject: String,
@@ -104,7 +125,9 @@ struct ServerRow {
 #[derive(Default)]
 pub struct ServerView {
     by_uid: HashMap<u32, ServerRow>,
-    by_id: HashMap<String, u32>,
+    /// Every uid a Message-ID is listed under, in row order: a folder can hold
+    /// two messages sharing one (a list copy, a message filed again).
+    by_id: HashMap<String, Vec<u32>>,
     /// Subject and Date of the dated rows with no Message-ID: all a message
     /// without one (a Takeout chat or draft) can be matched by. Kept apart so
     /// the rehome plan, which keys files by the server's id, never sees them.
@@ -117,6 +140,14 @@ impl ServerView {
     /// Message-ID counts only for a message without one.
     pub fn from_headers(rows: &[Value]) -> Self {
         let mut view = Self::default();
+        view.extend(rows);
+        view
+    }
+
+    /// `from_headers` a chunk at a time, for a caller that reads the cache in
+    /// pieces.
+    pub fn extend(&mut self, rows: &[Value]) {
+        let view = self;
         for row in rows {
             let text = |k: &str| row.get(k).and_then(Value::as_str);
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
@@ -125,49 +156,44 @@ impl ServerView {
             let id = maildir::normalize_message_id(text("messageId").or_else(|| text("message_id")).unwrap_or(""));
             // `messageDate` is the Date header; a row without one has it in `date`.
             let date_secs = text("messageDate").or_else(|| text("date")).and_then(maildir::header_date_secs);
-            let subject = squash(text("subject").unwrap_or(""));
+            let subject = subject_key(text("subject").unwrap_or(""));
             if id.is_empty() {
                 if let Some(date) = date_secs {
                     view.no_id.insert((subject, date));
                 }
                 continue;
             }
-            view.by_id.insert(id.clone(), uid);
+            let uids = view.by_id.entry(id.clone()).or_default();
+            if !uids.contains(&uid) {
+                uids.push(uid);
+            }
             view.by_uid.insert(uid, ServerRow { message_id: id, subject, date_secs });
         }
-        view
+    }
+
+    /// Rows held: what the view costs in memory.
+    pub fn rows(&self) -> usize {
+        self.by_uid.len() + self.no_id.len()
     }
 
     /// Whether the server lists a message with `head`'s Message-ID, Subject
     /// and Date: the same-message rule when only its header is known. A
     /// message with no Message-ID matches a dated row with none, by Subject
     /// and Date alone.
+    ///
+    /// Every row under the Message-ID is tested, not only one of them.
     pub fn lists_same(&self, head: &Head) -> bool {
         match &head.id {
-            Some(id) => self.by_id.get(id).is_some_and(|v| self.row_matches(*v, head)),
+            Some(_) => !self.uids_of(head).is_empty(),
             None => head.date_secs.is_some_and(|date| self.no_id.contains(&(head.subject.clone(), date))),
         }
     }
 
-    /// Count a message the caller just put on the server, under `uid` when the
-    /// server said which, so the same message later in one run reads as there.
-    /// False when it cannot be placed (a Message-ID with no uid): the caller
-    /// then asks the server instead.
-    pub fn add(&mut self, uid: Option<u32>, head: &Head) -> bool {
-        match (&head.id, uid) {
-            (Some(id), Some(uid)) => {
-                self.by_id.insert(id.clone(), uid);
-                self.by_uid.insert(uid, ServerRow { message_id: id.clone(), subject: head.subject.clone(), date_secs: head.date_secs });
-                true
-            }
-            (Some(_), None) => false,
-            (None, _) => {
-                if let Some(date) = head.date_secs {
-                    self.no_id.insert((head.subject.clone(), date));
-                }
-                true
-            }
-        }
+    /// The uids of the rows that are `head`'s message by the same rule.
+    /// Empty for a message without a Message-ID: its rows keep no uid here.
+    pub fn uids_of(&self, head: &Head) -> Vec<u32> {
+        let Some(uids) = head.id.as_ref().and_then(|id| self.by_id.get(id)) else { return Vec::new() };
+        uids.iter().copied().filter(|v| self.row_matches(*v, head)).collect()
     }
 
     fn row_matches(&self, uid: u32, head: &Head) -> bool {
@@ -230,7 +256,8 @@ pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: 
         let Some(head) = read_head(path) else { continue };
         let Some(id) = head.id.clone() else { continue };
         plan.compared += 1;
-        let listed_at = server.by_id.get(&id).copied();
+        // The row read last under the id, as when the index kept one per id.
+        let listed_at = server.by_id.get(&id).and_then(|uids| uids.last()).copied();
         if id == row.message_id || listed_at == Some(uid) {
             confirmed += 1;
             continue;
@@ -527,20 +554,52 @@ mod tests {
         assert!(view(&[idless(DATE)]).by_uid.is_empty());
     }
 
+    /// Two server rows can share a Message-ID (a list copy under another
+    /// Subject, a message filed again): each is tested, whichever row was
+    /// read last.
     #[test]
-    fn a_message_added_to_the_view_is_listed_by_it() {
-        let mut v = ServerView::default();
-        let with_id = head_of(eml("<n@x>", "New", DATE, "", "body").as_bytes());
-        let chat = head_of(b"Subject: Chat\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nhi");
-        assert!(!v.lists_same(&with_id) && !v.lists_same(&chat));
-        assert!(v.add(Some(9), &with_id));
-        assert!(v.add(None, &chat), "an idless message needs no uid");
-        assert!(v.lists_same(&with_id) && v.lists_same(&chat));
+    fn every_row_under_one_message_id_is_compared() {
+        let one = head_of(eml("<n@x>", "One", DATE, "", "body").as_bytes());
         let other = head_of(eml("<n@x>", "Another subject", DATE, "", "body").as_bytes());
-        assert!(!v.lists_same(&other), "the rule is unchanged: same id, another subject is another message");
-        let unplaced = head_of(eml("<u@x>", "Unplaced", DATE, "", "body").as_bytes());
-        assert!(!v.add(None, &unplaced), "an id with no uid cannot be placed");
-        assert!(!v.lists_same(&unplaced));
+        for rows in [
+            [row(5, "<n@x>", "One", DATE), row(6, "<n@x>", "Another subject", DATE)],
+            [row(6, "<n@x>", "Another subject", DATE), row(5, "<n@x>", "One", DATE)],
+        ] {
+            let v = view(&rows);
+            assert!(v.lists_same(&one) && v.lists_same(&other), "{rows:?}");
+            assert_eq!((v.uids_of(&one), v.uids_of(&other)), (vec![5], vec![6]));
+        }
+        let third = head_of(eml("<n@x>", "A third", DATE, "", "body").as_bytes());
+        assert!(!view(&[row(5, "<n@x>", "One", DATE)]).lists_same(&third), "the rule is unchanged");
+    }
+
+    /// The file's Subject is decoded the way the server's rows are
+    /// (`mime::decode_rfc2047`), so an encoded word that touches plain text,
+    /// which mailparse leaves raw, still compares equal; and a message without
+    /// a Subject matches the `(No Subject)` a fetched row carries for it.
+    #[test]
+    fn a_subject_reads_the_same_from_the_file_and_from_the_server() {
+        let raw_subject = "=?utf-8?Q?Dovan=C4=97l=C4=97_?=naujagimiui";
+        let head = head_of(eml("<d@x>", raw_subject, DATE, "", "body").as_bytes());
+        let decoded = crate::mime::decode_rfc2047(raw_subject.as_bytes());
+        assert_eq!(head.subject, decoded);
+        assert!(!head.subject.contains("=?"), "{}", head.subject);
+        assert!(view(&[row(5, "<d@x>", &decoded, DATE)]).lists_same(&head));
+
+        let bare = head_of(format!("Message-ID: <e@x>\r\nDate: {DATE}\r\n\r\nbody\r\n").as_bytes());
+        assert_eq!(bare.subject, "");
+        assert!(view(&[row(5, "<e@x>", "(No Subject)", DATE)]).lists_same(&bare));
+    }
+
+    #[test]
+    fn a_view_read_in_chunks_is_the_view_read_at_once() {
+        let rows = [row(5, "<a@x>", "A", DATE), row(6, "<b@x>", "B", DATE), json!({"uid": 7, "subject": "Chat", "messageDate": DATE})];
+        let mut chunked = ServerView::default();
+        chunked.extend(&rows[..2]);
+        chunked.extend(&rows[2..]);
+        assert_eq!((chunked.rows(), view(&rows).rows()), (3, 3));
+        let b = head_of(eml("<b@x>", "B", DATE, "", "body").as_bytes());
+        assert!(chunked.lists_same(&b));
     }
 
     #[test]

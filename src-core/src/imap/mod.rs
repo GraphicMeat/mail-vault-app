@@ -2463,7 +2463,9 @@ pub async fn uid_of_message_id(session: &mut ImapSession, message_id: &str) -> R
 pub async fn message_id_uids(session: &mut ImapSession, message_id: &str) -> Result<Vec<u32>, String> {
     let term = message_id_search_term(message_id);
     if term.is_empty() || term.chars().any(char::is_control) {
-        return Err(format!("Message-ID search: no usable Message-ID in {message_id:?}"));
+        // The id is the file's, not ours: it stays out of an error a caller
+        // classifies by its words.
+        return Err("Message-ID search: no usable Message-ID".to_string());
     }
     let mut uids = patient(uid_search_to_tag(session, &format!("HEADER Message-ID \"{term}\""))).await?;
     uids.sort_unstable();

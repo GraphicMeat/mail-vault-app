@@ -9,25 +9,31 @@
 //! copy under the uid the server gave it, where sync keeps server mail.
 //!
 //! Dedupe asks the header cache first and the server second, by mode 2's rule
-//! (`ServerView::lists_same`: same Message-ID, Subject and Date). The cached
-//! rows decide alone only while they are the whole folder as the server has it
-//! (`lists_whole_mailbox`, judged once per folder per run against a SELECT);
-//! otherwise `UID SEARCH HEADER Message-ID` does, so a message an earlier run
-//! uploaded is found before any sync has cached it. A message with no
-//! Message-ID has only the cached rows (Subject and Date) to go by.
+//! (`ServerView::lists_same`: same Message-ID, Subject and Date, every row
+//! under the id tested). The cached rows decide alone only while they are the
+//! whole folder as the server has it (`lists_whole_mailbox`, judged once per
+//! folder per run against a SELECT); otherwise `UID SEARCH HEADER Message-ID`
+//! does, so a message an earlier run uploaded is found before any sync has
+//! cached it. A message with no Message-ID has only the cached rows (Subject
+//! and Date) to go by. What this run uploaded is remembered as a fingerprint
+//! per message, never as a row.
 //!
 //! The connection is the pipeline's own, not a pooled one, and uncompressed
 //! (`create_imap_session_no_compress`, one slot of the account's connection
 //! budget): Hostinger hangs an APPEND on a compressed stream. The literal is
 //! LITERAL+ where the server offers it, since the same host also hung waiting
-//! for the synchronous literal's `+`. The connection is dropped after anything
-//! but an OK or a tagged NO: an APPEND cut off mid-literal leaves the server
-//! reading whatever comes next as message bytes. One found dead before its
-//! APPEND went out is replaced once; an APPEND is never sent twice.
+//! for the synchronous literal's `+`, and the whole APPEND is bounded in time
+//! (a server that stops reading mid-literal would hold the write for ever).
+//! The connection is dropped after anything but an OK or a tagged NO: an
+//! APPEND cut off mid-literal leaves the server reading whatever comes next as
+//! message bytes. One found dead before its APPEND went out is replaced once;
+//! an APPEND is never sent twice.
 //!
 //! The pipeline never waits or retries beyond that: a failure is `Transient`
-//! (throttling, a lost connection: the job backs off and tries the message
-//! again) or `Permanent` (the server refused this message).
+//! (throttling, a lost or silent connection: the job backs off and tries the
+//! message again) or `Permanent` (the server refused this message). Only the
+//! server's or the socket's own words are classified, never the folder name
+//! an error carries: that name is a label, and the file chose it.
 
 // The upload job (Task 10) is its caller.
 #![cfg_attr(not(test), allow(dead_code))]
@@ -41,7 +47,7 @@ use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::takeout::{self, FolderRef, Home, Role};
 use mailvault_core::{maildir, vault_files};
 use serde_json::{json, Value};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -52,6 +58,17 @@ pub const E_MBOX_SERVER_GRAPH: &str = "E_MBOX_SERVER_GRAPH";
 /// What the connection is for on the Network Activity page: one of the
 /// purposes the app has a name for.
 const PURPOSE: &str = "sync";
+
+/// An APPEND may take this long plus a second per `APPEND_MIN_RATE` bytes of
+/// the message (a 35 MB Gmail maximum: about 20 minutes) before the server
+/// counts as gone. Past that the connection is dropped and the message is a
+/// `Transient` failure.
+const APPEND_FLOOR_SECS: u64 = 120;
+const APPEND_MIN_RATE: u64 = 32 * 1024;
+
+/// Uids per custody unit when a folder's cached rows are read: the store's
+/// lock, which every foreground header read shares, is held for one chunk.
+const CACHE_CHUNK: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailKind {
@@ -86,44 +103,80 @@ pub struct MboxUpload {
     boxes: HashMap<String, Folder>,
     created: BTreeSet<String>,
     touched: BTreeSet<String>,
+    /// The APPEND bound: `APPEND_FLOOR_SECS` and `APPEND_MIN_RATE` (a test
+    /// shortens them).
+    append_floor_secs: u64,
+    append_min_rate: u64,
 }
 
 struct Conn {
     session: ImapSession,
     literal_plus: bool,
+    /// APPENDUID answers the uid; without it the pipeline looks it up.
+    uidplus: bool,
     selected: Option<String>,
 }
 
 /// One folder as this run knows it, from its first message on.
 struct Folder {
-    /// What the header cache held, plus what this run put there.
+    /// What the header cache held when the run first opened the folder.
     view: ServerView,
     /// `view` is the whole folder: a message it lacks is not on the server.
     whole: bool,
-    /// The lowest uid a message appended from now on can get: UIDNEXT at the
-    /// first SELECT, raised past every uid this run was given.
-    floor: u32,
+    /// Fingerprints of what this run put here (`fingerprint`): the same
+    /// message later in the file is known without keeping its row.
+    uploaded: HashSet<u64>,
+    /// The vault registry holds this folder: a uid's file is looked up, not
+    /// searched for in `cur/`. Cleared when the registry stops answering.
+    listed: bool,
 }
 
 impl Folder {
     /// A folder this run made: nothing cached belongs to it, and the server's
     /// search decides what it holds.
     fn made_again() -> Self {
-        Folder { view: ServerView::default(), whole: false, floor: 1 }
+        Folder { view: ServerView::default(), whole: false, uploaded: HashSet::new(), listed: false }
     }
 }
 
-/// Why an attempt stopped. `appended`: its APPEND went out, so the message may
-/// be on the server whatever the error says.
+/// Why an attempt stopped.
 struct Fail {
+    /// The whole text, for the log and the caller. It can name the folder.
     error: String,
+    /// The server's or the socket's own words: `error` without the prefix our
+    /// call put on it that names the folder. A folder name is a label, the
+    /// file's to choose ("Temporary", "no response:"), so it is all a
+    /// classifier reads.
+    cause: String,
+    /// The APPEND went out, so the message may be on the server whatever the
+    /// error says.
     appended: bool,
+}
+
+impl Fail {
+    /// `error` from a call whose own words start with `prefix`
+    /// (`"SELECT <folder> failed: "`): only what follows is classified.
+    fn named(prefix: &str, error: String, appended: bool) -> Self {
+        let cause = error.strip_prefix(prefix).unwrap_or(&error).to_string();
+        Fail { error, cause, appended }
+    }
 }
 
 impl From<String> for Fail {
     fn from(error: String) -> Self {
-        Fail { error, appended: false }
+        Fail { cause: error.clone(), error, appended: false }
     }
+}
+
+/// What the same-message rule compares (Message-ID, Subject, Date), as 8
+/// bytes: a million uploads cost a few megabytes. `None` without a Date: the
+/// rule never matches such a message, here as on the server.
+fn fingerprint(head: &Head) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let date = head.date_secs?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (&head.id, &head.subject, date).hash(&mut hasher);
+    Some(hasher.finish())
 }
 
 impl MboxUpload {
@@ -146,6 +199,8 @@ impl MboxUpload {
             boxes: HashMap::new(),
             created: BTreeSet::new(),
             touched: BTreeSet::new(),
+            append_floor_secs: APPEND_FLOOR_SECS,
+            append_min_rate: APPEND_MIN_RATE,
         })
     }
 
@@ -167,7 +222,7 @@ impl MboxUpload {
         let msg = crate::mbox::mbox_unescape_from(raw);
         let result = match self.attempt(&msg).await {
             // Found dead before the APPEND went out: once more, on a new connection.
-            Err(f) if !f.appended && pool::is_connection_lost(&f.error) => {
+            Err(f) if !f.appended && pool::is_connection_lost(&f.cause) => {
                 warn!("[mbox_upload] {}: {}; reconnecting once", self.config.email, f.error);
                 self.conn = None;
                 self.attempt(&msg).await
@@ -177,10 +232,10 @@ impl MboxUpload {
         match result {
             Ok(outcome) => outcome,
             Err(f) => {
-                if !is_tagged_no(&f.error) {
+                if !is_tagged_no(&f.cause) {
                     self.conn = None;
                 }
-                let kind = classify(&f.error);
+                let kind = classify(&f.cause);
                 warn!("[mbox_upload] {}: not uploaded ({kind:?}): {}", self.config.email, f.error);
                 Outcome::Failed(kind, f.error)
             }
@@ -208,15 +263,8 @@ impl MboxUpload {
         }
         let uid = self.append(&path, msg, &labels, &head).await?;
         self.touched.insert(path.clone());
-        if let Some(f) = self.boxes.get_mut(&path) {
-            if let Some(uid) = uid {
-                f.floor = f.floor.max(uid.saturating_add(1));
-            }
-            // Known to the view, so the same message later in the file reads as
-            // there; one it cannot place is left to the server's search.
-            if !f.view.add(uid, &head) {
-                f.whole = false;
-            }
+        if let (Some(f), Some(fp)) = (self.boxes.get_mut(&path), fingerprint(&head)) {
+            f.uploaded.insert(fp);
         }
         if let Some(uid) = uid {
             self.keep_copy(&path, uid, msg, &labels, &head).await;
@@ -233,12 +281,12 @@ impl MboxUpload {
         let connecting = imap::create_imap_session_no_compress(&self.config, &self.state.imap_pool);
         let mut session = mailvault_core::net_activity::with_purpose(PURPOSE, connecting).await?;
         let caps = session.capabilities().await.map_err(|e| format!("CAPABILITY failed: {e}"))?;
-        let literal_plus = caps.has_str("LITERAL+");
+        let (literal_plus, uidplus) = (caps.has_str("LITERAL+"), caps.has_str("UIDPLUS"));
         if self.folders.is_none() {
             let listed = imap::list_mailboxes(&mut session).await?;
             self.folders = Some(takeout::folder_refs_from_listing(&json!({ "mailboxes": listed }).to_string()));
         }
-        self.conn = Some(Conn { session, literal_plus, selected: None });
+        self.conn = Some(Conn { session, literal_plus, uidplus, selected: None });
         Ok(())
     }
 
@@ -259,9 +307,10 @@ impl MboxUpload {
             return Ok(());
         }
         if let Err(e) = imap::create_mailbox(&mut self.conn()?.session, path).await {
-            let low = e.to_ascii_lowercase();
-            if !low.contains("alreadyexists") && !low.contains("already exists") {
-                return Err(e.into());
+            let fail = Fail::named(&format!("CREATE {path} failed: "), e, false);
+            let low = fail.cause.to_ascii_lowercase();
+            if !is_tagged_no(&fail.cause) || !(low.contains("alreadyexists") || low.contains("already exists")) {
+                return Err(fail);
             }
         }
         info!("[mbox_upload] {}: made folder {path}", self.config.email);
@@ -278,46 +327,58 @@ impl MboxUpload {
         let conn = self.conn()?;
         // A SELECT that fails leaves no mailbox selected.
         conn.selected = None;
-        let mailbox = imap::select_mailbox(&mut conn.session, path).await?;
+        let mailbox = imap::select_mailbox(&mut conn.session, path).await.map_err(|e| Fail::named(&format!("SELECT {path} failed: "), e, false))?;
         conn.selected = Some(path.to_string());
         Ok(mailbox)
     }
 
+    /// SELECT `path`, making it first when the server says it is missing (once
+    /// per run). A folder made again is a new one: what the run knew of the
+    /// old one goes.
+    async fn select_or_make(&mut self, path: &str) -> Result<imap::async_imap::types::Mailbox, Fail> {
+        match self.select(path).await {
+            Err(f) if needs_create(&f.cause) && !self.created.contains(path) => {
+                self.create(path).await?;
+                if self.boxes.contains_key(path) {
+                    self.boxes.insert(path.to_string(), Folder::made_again());
+                }
+                self.select(path).await
+            }
+            other => other,
+        }
+    }
+
     /// A folder's first message this run: its UIDVALIDITY and UIDNEXT from a
-    /// SELECT (a folder gone from the server is made again), then what the
-    /// header cache holds of it and whether that is all of it. Rows cached
-    /// under another UIDVALIDITY, or for a folder this run made, describe an
-    /// earlier folder of that name, not this one: they count for nothing.
+    /// SELECT, then what the header cache holds of it and whether that is all
+    /// of it. Rows cached under another UIDVALIDITY, or for a folder this run
+    /// made, describe an earlier folder of that name, not this one: they count
+    /// for nothing. The rows are read a chunk at a time (`cached_rows`).
     async fn open(&mut self, path: &str) -> Result<(), Fail> {
         if self.boxes.contains_key(path) {
             return Ok(());
         }
-        let mailbox = match self.select(path).await {
-            Err(f) if needs_create(&f.error) && !self.created.contains(path) => {
-                self.create(path).await?;
-                self.select(path).await?
-            }
-            other => other?,
-        };
-        let (validity, next) = (mailbox.uid_validity, mailbox.uid_next);
+        let mailbox = self.select_or_make(path).await?;
         if self.created.contains(path) {
-            self.boxes.insert(path.to_string(), Folder { floor: next.unwrap_or(1), ..Folder::made_again() });
+            self.boxes.insert(path.to_string(), Folder::made_again());
             return Ok(());
         }
+        let (validity, next) = (mailbox.uid_validity, mailbox.uid_next);
         let (st, account, p) = (Arc::clone(&self.state), self.account_id.clone(), path.to_string());
-        let read = blocking(move || {
-            crate::custody::with_conn(&st, |c| {
+        let read = blocking(move || -> Result<(ServerView, bool), String> {
+            let (cached_validity, whole) = crate::custody::with_conn(&st, |c| {
                 let (cached_validity, _) = cache::sync_meta(c, &account, &p)?;
-                if cached_validity.is_some() && cached_validity != validity {
-                    return Ok((ServerView::default(), false));
-                }
-                let view = ServerView::from_headers(&cache::all_headers(c, &account, &p)?);
                 let whole = match (validity, next) {
                     (Some(v), Some(n)) => cache::lists_whole_mailbox(c, &account, &p, v, n)?,
                     _ => false,
                 };
-                Ok((view, whole))
-            })
+                Ok((cached_validity, whole))
+            })?;
+            if cached_validity.is_some() && cached_validity != validity {
+                return Ok((ServerView::default(), false));
+            }
+            let mut view = ServerView::default();
+            cached_rows(&st, &account, &p, CACHE_CHUNK, |rows| view.extend(&rows))?;
+            Ok((view, whole))
         })
         .await
         .and_then(|r| r);
@@ -325,15 +386,16 @@ impl MboxUpload {
             warn!("[mbox_upload] header cache of {path} unreadable, the server decides: {e}");
             (ServerView::default(), false)
         });
-        self.boxes.insert(path.to_string(), Folder { view, whole, floor: next.unwrap_or(1) });
+        self.boxes.insert(path.to_string(), Folder { view, whole, uploaded: HashSet::new(), listed: false });
         Ok(())
     }
 
-    /// Whether `path` already holds this message: the cached rows, then, while
-    /// they are not the whole folder, the server's own search.
+    /// Whether `path` already holds this message: the cached rows and this
+    /// run's uploads, then, while the rows are not the whole folder, the
+    /// server's own search.
     async fn on_server(&mut self, path: &str, head: &Head) -> Result<bool, Fail> {
         let Some(folder) = self.boxes.get(path) else { return Ok(false) };
-        if folder.view.lists_same(head) {
+        if folder.view.lists_same(head) || fingerprint(head).is_some_and(|fp| folder.uploaded.contains(&fp)) {
             return Ok(true);
         }
         let Some(id) = head.id.clone() else { return Ok(false) };
@@ -353,18 +415,26 @@ impl MboxUpload {
                 return Ok(false);
             }
         };
+        Ok(!self.same_message_uids(path, &uids, head).await?.is_empty())
+    }
+
+    /// Which of `uids` in `path` hold `head`'s message, judged by the rule on
+    /// their fetched headers, every one of them.
+    async fn same_message_uids(&mut self, path: &str, uids: &[u32], head: &Head) -> Result<Vec<u32>, Fail> {
         if uids.is_empty() {
-            return Ok(false);
+            return Ok(Vec::new());
         }
-        let (headers, _) = imap::fetch_headers_by_uids(&mut self.conn()?.session, path, &uids).await?;
+        let fetched = imap::fetch_headers_by_uids(&mut self.conn()?.session, path, uids).await;
+        let (headers, _) = fetched.map_err(|e| Fail::named(&format!("SELECT {path} failed: "), e, false))?;
         let rows: Vec<Value> = headers.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
-        Ok(ServerView::from_headers(&rows).lists_same(head))
+        Ok(ServerView::from_headers(&rows).uids_of(head))
     }
 
     /// APPEND with the message's own date and, with labels, its Starred and
-    /// read state (R5). A folder the server says is missing is made once and
-    /// the APPEND sent once more. The uid: APPENDUID, else the newest copy of
-    /// its Message-ID at or past the folder's `floor`.
+    /// read state (R5). A folder the server says is missing (a tagged NO) is
+    /// made once and the APPEND sent once more. The uid: APPENDUID, else the
+    /// newest copy of the message at or past the folder's UIDNEXT from right
+    /// before this APPEND (`lookup_uid`).
     async fn append(&mut self, path: &str, msg: &[u8], labels: &[String], head: &Head) -> Result<Option<u32>, Fail> {
         let attrs = takeout::attrs_of(labels);
         let mut flags = Vec::new();
@@ -376,63 +446,78 @@ impl MboxUpload {
         }
         let flags = flags.join(" ");
         let date = imap::internaldate_of(msg);
-        let mut sent = self.append_once(path, msg, &flags, date.as_deref()).await;
-        // A tagged NO: nothing was stored, so the one resend is safe. The
-        // folder is a new one now: what the run knew of the old one goes.
-        if matches!(&sent, Err(e) if needs_create(e)) && !self.created.contains(path) {
-            self.create(path).await?;
+        // Without UIDPLUS the uid is looked up afterwards: only a copy at or
+        // past this UIDNEXT can be the one this APPEND stores.
+        let lookup = !self.conn()?.uidplus && head.id.is_some();
+        let mut before = if lookup { self.select_or_make(path).await?.uid_next } else { None };
+        let mut sent = self.append_bounded(path, msg, &flags, date.as_deref()).await;
+        if matches!(&sent, Err(f) if needs_create(&f.cause)) && !self.created.contains(path) {
+            // A tagged NO [TRYCREATE]: nothing was stored. The folder made now
+            // is a new one, so what the run knew of the old one goes, whatever
+            // happens next; and from here an APPEND may be out.
             self.boxes.insert(path.to_string(), Folder::made_again());
+            let remade = self.create(path).await;
             if let Some(conn) = self.conn.as_mut() {
                 conn.selected = None;
             }
-            sent = self.append_once(path, msg, &flags, date.as_deref()).await;
+            remade.map_err(|f| Fail { appended: true, ..f })?;
+            if lookup {
+                before = self.select(path).await.map_err(|f| Fail { appended: true, ..f })?.uid_next;
+            }
+            sent = self.append_bounded(path, msg, &flags, date.as_deref()).await;
         }
         match sent {
             Ok(Some((_, uid))) => Ok(Some(uid)),
-            Ok(None) => Ok(self.lookup_uid(path, head).await),
-            Err(error) => {
+            Ok(None) => Ok(self.lookup_uid(path, head, before).await),
+            Err(f) => {
                 // Anything but a clean refusal may have stored it: the next try
                 // asks the server, not the rows.
-                if !is_tagged_no(&error) {
-                    if let Some(f) = self.boxes.get_mut(path) {
-                        f.whole = false;
+                if !is_tagged_no(&f.cause) {
+                    if let Some(folder) = self.boxes.get_mut(path) {
+                        folder.whole = false;
                     }
                 }
-                Err(Fail { error, appended: true })
+                Err(f)
             }
         }
     }
 
-    async fn append_once(&mut self, path: &str, msg: &[u8], flags: &str, date: Option<&str>) -> Result<Option<(u32, u32)>, String> {
-        let conn = self.conn.as_mut().ok_or("connection lost")?;
-        imap::append_email_with(&mut conn.session, path, msg, flags, date, conn.literal_plus).await
+    /// One APPEND, bounded by `append_floor_secs` plus a second per
+    /// `append_min_rate` bytes: past that the server counts as gone (the
+    /// stream's own deadline arms on reads only, so a server that stops
+    /// reading mid-literal would hold the write for ever).
+    async fn append_bounded(&mut self, path: &str, msg: &[u8], flags: &str, date: Option<&str>) -> Result<Option<(u32, u32)>, Fail> {
+        let secs = self.append_floor_secs + msg.len() as u64 / self.append_min_rate.max(1);
+        let conn = self.conn.as_mut().ok_or_else(|| Fail::from("connection lost".to_string()))?;
+        let sending = imap::append_email_with(&mut conn.session, path, msg, flags, date, conn.literal_plus);
+        imap::bounded("APPEND", secs, sending).await.map_err(|e| Fail::named(&format!("IMAP APPEND to '{path}' failed: "), e, true))
     }
 
     /// The uid a server without UIDPLUS gave the message just appended: the
-    /// newest copy of its Message-ID at or past the folder's floor, so an older
-    /// copy of the same id, or a search that has not caught up with the
-    /// APPEND, never names it. `None` when there is none or the lookup fails:
-    /// the message is stored either way.
-    async fn lookup_uid(&mut self, path: &str, head: &Head) -> Option<u32> {
-        let id = head.id.as_deref()?;
-        let floor = self.boxes.get(path).map_or(1, |f| f.floor);
-        let found = match self.select(path).await {
-            Ok(_) => match self.conn.as_mut() {
-                Some(c) => imap::message_id_uids(&mut c.session, id).await,
-                None => Err("connection lost".to_string()),
-            },
-            Err(f) => Err(f.error),
-        };
-        match found {
-            Ok(uids) => uids.into_iter().filter(|u| *u >= floor).max(),
-            Err(e) => {
-                warn!("[mbox_upload] stored in {path}, its uid not found: {e}");
-                if pool::is_connection_lost(&e) {
+    /// newest copy at or past `before` (the folder's UIDNEXT from right before
+    /// the APPEND) whose fetched header is this message by the rule. An older
+    /// copy, one whose Message-ID only contains this one, a search that has
+    /// not caught up with the APPEND: none of them names it. `None` when there
+    /// is none or the lookup fails: the message is stored either way.
+    async fn lookup_uid(&mut self, path: &str, head: &Head, before: Option<u32>) -> Option<u32> {
+        let (id, floor) = (head.id.as_deref()?, before?);
+        match self.find_uid(path, id, floor, head).await {
+            Ok(uid) => uid,
+            Err(f) => {
+                warn!("[mbox_upload] stored in {path}, its uid not found: {}", f.error);
+                if !is_tagged_no(&f.cause) {
                     self.conn = None;
                 }
                 None
             }
         }
+    }
+
+    async fn find_uid(&mut self, path: &str, id: &str, floor: u32, head: &Head) -> Result<Option<u32>, Fail> {
+        self.select(path).await?;
+        let found = imap::message_id_uids(&mut self.conn()?.session, id).await?;
+        let candidates: Vec<u32> = found.into_iter().filter(|u| *u >= floor).collect();
+        Ok(self.same_message_uids(path, &candidates, head).await?.into_iter().max())
     }
 
     /// The vault's copy of what the server now holds at `uid`, where sync keeps
@@ -442,11 +527,22 @@ impl MboxUpload {
     /// registry row). Never over a different message at that uid: this copy
     /// then goes to `orphaned/`. A failure is only logged: the message is on
     /// the server, and the next sync or backup brings its copy in.
-    async fn keep_copy(&self, path: &str, uid: u32, msg: &[u8], labels: &[String], head: &Head) {
+    ///
+    /// The folder is listed through the registry once, outside the mailbox
+    /// lock (a listing takes it), before its first copy and again only after
+    /// the registry lost it: `store` then looks a uid up instead of sweeping
+    /// `cur/` under the lock for every message.
+    async fn keep_copy(&mut self, path: &str, uid: u32, msg: &[u8], labels: &[String], head: &Head) {
         let flags = if self.use_labels { crate::mbox::label_flags(labels) } else { vec!["archived".to_string()] };
+        let listed = self.boxes.get(path).is_some_and(|f| f.listed);
         let (st, account, p, raw, head) = (Arc::clone(&self.state), self.account_id.clone(), path.to_string(), msg.to_vec(), head.clone());
-        let kept = blocking(move || {
-            common::with_mailbox_write(&st, &account, &p, |root| {
+        let done = blocking(move || {
+            if !listed {
+                if let Ok(root) = common::vault_root(&st) {
+                    st.vault_registry.files(&root, &account, &p);
+                }
+            }
+            let kept = common::with_mailbox_write(&st, &account, &p, |root| {
                 if vault_files::store(&st.vault_registry, root, &account, &p, uid, &raw, &flags, false)? {
                     return Ok(None);
                 }
@@ -457,10 +553,14 @@ impl MboxUpload {
                 }
                 let name = vault_files::build_maildir_filename(uid, &flags);
                 maildir::set_aside_copy(cur.parent().unwrap_or(&cur), &name, &raw).map(Some)
-            })
+            });
+            (kept, st.vault_registry.known(&account, &p, uid).is_some())
         })
-        .await
-        .and_then(|r| r);
+        .await;
+        let (kept, still_listed) = done.unwrap_or_else(|e| (Err(e), false));
+        if let Some(f) = self.boxes.get_mut(path) {
+            f.listed = still_listed;
+        }
         match kept {
             Ok(None) => {}
             Ok(Some(aside)) => warn!("[mbox_upload] the vault holds another message at {path} uid {uid}; this copy is kept at {aside:?}"),
@@ -469,26 +569,43 @@ impl MboxUpload {
     }
 }
 
-/// A tagged NO: the server refused and the connection is still in step.
-fn is_tagged_no(error: &str) -> bool {
-    error.contains("no response:")
+/// Every cached header row of `mailbox`, handed to `f` one chunk of uids at a
+/// time, each chunk read in its own custody unit: the store's lock is never
+/// held for a whole folder (All Mail, the Gmail fallback, is the largest).
+fn cached_rows(state: &DaemonState, account: &str, mailbox: &str, chunk: usize, mut f: impl FnMut(Vec<Value>)) -> Result<(), String> {
+    let mut uids: Vec<u32> = crate::custody::with_conn(state, |c| cache::uid_set(c, account, mailbox))?.into_iter().collect();
+    uids.sort_unstable();
+    for part in uids.chunks(chunk.max(1)) {
+        f(crate::custody::with_conn(state, |c| cache::load_by_uids(c, account, mailbox, part))?);
+    }
+    Ok(())
 }
 
-/// The server says the folder is not there: RFC 3501's `[TRYCREATE]` (the
-/// parser's `TryCreate`) or a wording `is_missing_mailbox` knows.
-fn needs_create(error: &str) -> bool {
-    imap::is_missing_mailbox(error) || error.to_ascii_lowercase().contains("trycreate")
+/// A tagged NO: the server refused and the connection is still in step. Read
+/// on a `Fail::cause`, which starts with the server's words.
+fn is_tagged_no(cause: &str) -> bool {
+    cause.starts_with("no response:")
+}
+
+/// The server refused because the folder is not there: a tagged NO with
+/// RFC 3501's `[TRYCREATE]` (the parser's `TryCreate`) or a wording
+/// `is_missing_mailbox` knows. Never a lost connection, whatever it says.
+fn needs_create(cause: &str) -> bool {
+    is_tagged_no(cause) && (imap::is_missing_mailbox(cause) || cause.to_ascii_lowercase().contains("trycreate"))
 }
 
 /// Throttling (Gmail's `[THROTTLED]` and "Too many simultaneous
 /// connections", its bandwidth cap), a busy server, a dropped, silent or
 /// unreachable connection: another try after a wait can work. Anything else
-/// is this message, or this account (a rejected sign-in), refused.
-fn classify(error: &str) -> FailKind {
-    const WAIT: [&str; 10] =
+/// is this message, or this account (a rejected sign-in), refused. Read on a
+/// `Fail::cause`; a reply the server did send is never a lost connection.
+fn classify(cause: &str) -> FailKind {
+    const BUSY: [&str; 10] =
         ["[throttled]", "[unavailable]", "[inuse]", "[limit]", "too many", "rate limit", "bandwidth", "try again", "temporar", "timed out"];
-    let low = error.to_ascii_lowercase();
-    if pool::is_retryable_connect_error(error) || imap::is_bandwidth_limited(error) || WAIT.iter().any(|n| low.contains(n)) {
+    let low = cause.to_ascii_lowercase();
+    let answered = is_tagged_no(cause) || cause.starts_with("bad response:");
+    let busy = imap::is_bandwidth_limited(cause) || BUSY.iter().any(|n| low.contains(n));
+    if busy || (!answered && pool::is_retryable_connect_error(cause)) {
         FailKind::Transient
     } else {
         FailKind::Permanent
@@ -1007,40 +1124,313 @@ mod tests {
         assert!(creates[0].ends_with("CREATE \"&ZEU-\""), "{creates:?}");
     }
 
+    // ---- fix round 1 ----
+
+    /// A Subject with an encoded word that touches plain text (mailparse
+    /// leaves it raw, the fetch decodes it), and a message with no Subject at
+    /// all (the fetch writes `(No Subject)`): a second run finds both.
+    #[tokio::test]
+    async fn an_encoded_word_subject_and_a_missing_one_are_found_on_a_second_run() {
+        let server = MockImap::start(gmail());
+        let (_v, s) = state();
+        let encoded = format!("Message-ID: <d@x>\r\nSubject: =?utf-8?Q?Dovan=C4=97l=C4=97_?=naujagimiui\r\nDate: {DATE}\r\n\r\ngift").into_bytes();
+        let bare = format!("Message-ID: <e@x>\r\nDate: {DATE}\r\n\r\nno subject").into_bytes();
+        let mut first = upload(&s, &server);
+        assert_eq!(first.upload_message(&encoded).await, uploaded("[Gmail]/All Mail", 1));
+        assert_eq!(first.upload_message(&bare).await, uploaded("[Gmail]/All Mail", 2));
+
+        let mut second = upload(&s, &server);
+        assert_eq!(second.upload_message(&encoded).await, skipped("[Gmail]/All Mail"));
+        assert_eq!(second.upload_message(&bare).await, skipped("[Gmail]/All Mail"));
+        assert_eq!(server.count_commands("APPEND"), 2);
+    }
+
+    /// Two messages share a Message-ID under different Subjects: a later run
+    /// compares every copy the server search finds, not only one of them.
+    #[tokio::test]
+    async fn every_copy_of_a_message_id_on_the_server_is_compared_on_a_later_run() {
+        let server = MockImap::start(gmail());
+        let (_v, s) = state();
+        let (one, another) = (tmsg("a@x", "one", "Inbox"), tmsg("a@x", "another subject", "Inbox"));
+        assert_eq!(upload(&s, &server).upload_message(&one).await, uploaded("INBOX", 5));
+        assert_eq!(upload(&s, &server).upload_message(&another).await, uploaded("INBOX", 6));
+
+        let mut third = upload(&s, &server);
+        assert_eq!(third.upload_message(&one).await, skipped("INBOX"));
+        assert_eq!(third.upload_message(&another).await, skipped("INBOX"));
+        assert_eq!(server.count_commands("APPEND"), 2);
+    }
+
+    /// The same, answered by the header cache alone.
+    #[tokio::test]
+    async fn every_cached_copy_of_a_message_id_is_compared() {
+        let server = MockImap::start(gmail());
+        let (_v, s) = state();
+        let row = |uid: u32, subject: &str| json!({"uid": uid, "messageId": "<a@x>", "subject": subject, "messageDate": DATE});
+        cache_headers(&s, "Work", json!({"emails": [row(5, "one"), row(6, "another subject")]}));
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Work")).await, skipped("Work"));
+        assert_eq!(up.upload_message(&tmsg("a@x", "another subject", "Work")).await, skipped("Work"));
+        assert_eq!(server.count_commands("APPEND"), 0);
+    }
+
+    /// A server that stops answering mid-APPEND is given up on within the
+    /// bound: `Transient`, sent once, and the connection goes with it.
+    #[tokio::test]
+    async fn an_append_the_server_stops_answering_is_cut_off_and_transient() {
+        let stall = Action::Delay(std::time::Duration::from_secs(4));
+        let server = MockImap::start(gmail().fault(Trigger::with("APPEND", "stalls"), stall));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        up.append_floor_secs = 1;
+        up.append_min_rate = u64::MAX;
+
+        let started = std::time::Instant::now();
+        let got = up.upload_message(&tmsg("a@x", "stalls", "Inbox")).await;
+        assert!(matches!(&got, Outcome::Failed(FailKind::Transient, e) if e.contains("timed out")), "{got:?}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+        assert_eq!(server.count_commands("APPEND"), 1, "never sent twice");
+
+        let next = up.upload_message(&tmsg("b@x", "next", "Inbox")).await;
+        assert!(matches!(next, Outcome::Uploaded { .. }), "{next:?}");
+        assert_eq!(server.connection_count(), 2, "the stalled connection is not used again");
+    }
+
+    /// Folders named like a busy server: a refusal stays `Permanent`.
+    #[tokio::test]
+    async fn a_folder_named_like_a_busy_server_keeps_a_refusal_permanent() {
+        let refused = Action::Respond("NO".into(), "[CANNOT] Message too large".into());
+        let server = MockImap::start(gmail().fault(Trigger::with("APPEND", "too-big"), refused));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        for (i, label) in ["Temporary", "Too many", "Try again", "Bandwidth"].into_iter().enumerate() {
+            let got = up.upload_message(&tmsg(&format!("m{i}@x"), "too-big", label)).await;
+            assert!(matches!(got, Outcome::Failed(FailKind::Permanent, _)), "{label}: {got:?}");
+        }
+        assert_eq!(server.connection_count(), 1, "a tagged NO keeps the connection");
+    }
+
+    /// A folder named like a missing one: a connection lost during its APPEND
+    /// is not a `[TRYCREATE]`, so no folder is made and the message, which may
+    /// have landed, is not sent again.
+    #[tokio::test]
+    async fn a_folder_named_like_a_missing_one_never_gets_a_second_append() {
+        let scenario = gmail().mailbox(Mailbox::new("does not exist")).fault(Trigger::nth_with("APPEND", "drop-me", 1), Action::DropConnection);
+        let server = MockImap::start(scenario);
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let got = up.upload_message(&tmsg("a@x", "drop-me", "does not exist")).await;
+        assert!(matches!(got, Outcome::Failed(FailKind::Transient, _)), "{got:?}");
+        assert_eq!(server.count_commands("APPEND"), 1, "an APPEND that may have landed is never sent again");
+        assert_eq!(server.count_commands("CREATE"), 0);
+    }
+
+    /// A folder named "no response:": a BAD still drops the connection.
+    #[tokio::test]
+    async fn a_folder_named_no_response_never_keeps_a_connection_out_of_step() {
+        let bad = Action::Respond("BAD".into(), "Invalid literal".into());
+        let server = MockImap::start(gmail().fault(Trigger::with("APPEND", "bad-one"), bad));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let got = up.upload_message(&tmsg("a@x", "bad-one", "no response:")).await;
+        assert!(matches!(got, Outcome::Failed(FailKind::Permanent, _)), "{got:?}");
+        let next = up.upload_message(&tmsg("b@x", "next", "Inbox")).await;
+        assert!(matches!(next, Outcome::Uploaded { .. }), "{next:?}");
+        assert_eq!(server.connection_count(), 2, "dropped whatever the folder is called");
+    }
+
+    /// This run's uploads are remembered as fingerprints: the folder's view
+    /// keeps only the cached rows, and a duplicate later in the file is still
+    /// skipped with no search.
+    #[tokio::test]
+    async fn uploads_are_remembered_without_growing_the_folder_view() {
+        let mut scenario = gmail();
+        scenario.state.find_mut("Work").unwrap().add(Message::new(1, stored("a@x", "one", "Work")));
+        let server = MockImap::start(scenario);
+        let (_v, s) = state();
+        let row = json!({"uid": 1, "messageId": "<a@x>", "subject": "one", "messageDate": DATE});
+        cache_headers(&s, "Work", json!({"uidValidity": 1, "syncTotalEmails": 1, "syncUidNext": 2, "emails": [row]}));
+        let mut up = upload(&s, &server);
+        for i in 0..5 {
+            let got = up.upload_message(&tmsg(&format!("z{i}@x"), &format!("new {i}"), "Work")).await;
+            assert_eq!(got, uploaded("Work", i + 2));
+        }
+        let folder = &up.boxes["Work"];
+        assert_eq!((folder.view.rows(), folder.uploaded.len()), (1, 5));
+
+        assert_eq!(up.upload_message(&tmsg("z2@x", "new 2", "Work")).await, skipped("Work"));
+        assert_eq!(server.count_commands("SEARCH"), 0);
+    }
+
+    /// The cached rows come a chunk of uids at a time, each chunk its own
+    /// custody unit, and together they are every row the one-shot read gives.
+    #[test]
+    fn the_cache_is_read_a_chunk_at_a_time_with_every_row() {
+        let (_v, s) = state();
+        let rows: Vec<Value> =
+            (1..=5).map(|uid| json!({"uid": uid, "messageId": format!("<m{uid}@x>"), "subject": format!("m{uid}"), "messageDate": DATE})).collect();
+        cache_headers(&s, "Work", json!({ "emails": rows }));
+        let mut chunks: Vec<Vec<Value>> = Vec::new();
+        cached_rows(&s, "acct1", "Work", 2, |part| chunks.push(part)).unwrap();
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), [2, 2, 1]);
+
+        let uid_of = |r: &Value| r["uid"].as_u64().unwrap();
+        let mut chunked: Vec<Value> = chunks.into_iter().flatten().collect();
+        let mut whole = crate::custody::with_conn(&s, |c| cache::all_headers(c, "acct1", "Work")).unwrap();
+        chunked.sort_by_key(uid_of);
+        whole.sort_by_key(uid_of);
+        assert_eq!(chunked, whole);
+    }
+
+    /// Without UIDPLUS: an earlier upload whose uid was never learned carries a
+    /// Message-ID that contains this one, and the lookup search lags and sees
+    /// only that one. Its uid is below this APPEND's UIDNEXT and its header is
+    /// another message: not taken, so no vault copy is filed under it.
+    #[tokio::test]
+    async fn the_uid_lookup_never_names_an_earlier_upload_whose_id_holds_this_one() {
+        // SEARCH 1 and 3 are the dedupes; 2 and 4 the lookups after each APPEND.
+        let scenario = gmail()
+            .without_cap("UIDPLUS")
+            .fault(Trigger::nth("SEARCH", 2), Action::PartialSearchResult(0.0))
+            .fault(Trigger::nth("SEARCH", 4), Action::PartialSearchResult(0.5));
+        let server = MockImap::start(scenario);
+        let (v, s) = state();
+        let mut up = upload(&s, &server);
+        let unknown = Outcome::Uploaded { mailbox: "INBOX".into(), uid: None };
+        assert_eq!(up.upload_message(&tmsg("xa@x", "earlier", "Inbox")).await, unknown);
+        assert_eq!(up.upload_message(&tmsg("a@x", "this one", "Inbox")).await, unknown);
+        assert_eq!(subjects(&server, "INBOX")[4..], ["earlier", "this one"]);
+        assert!(names_in(v.path(), "INBOX").is_empty(), "no copy under another message's uid");
+    }
+
+    /// Without UIDPLUS: between the APPEND and its lookup another message
+    /// arrives whose Message-ID contains this one. Newer, so the highest uid,
+    /// but its header is another message: the lookup keeps this one's uid.
+    #[tokio::test]
+    async fn the_uid_lookup_takes_only_a_copy_whose_header_is_this_message() {
+        // SEARCH 2 is the lookup: it waits long enough for the other message to land.
+        let wait = Action::Delay(std::time::Duration::from_millis(800));
+        let server = MockImap::start(gmail().without_cap("UIDPLUS").fault(Trigger::nth("SEARCH", 2), wait));
+        let (v, s) = state();
+        let mut up = upload(&s, &server);
+        let arrives = async {
+            while server.state().find("INBOX").unwrap().messages.len() < 5 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+            server.mutate(|st| {
+                let inbox = st.find_mut("INBOX").unwrap();
+                let uid = inbox.uid_next;
+                inbox.add(Message::new(uid, stored("a@x.elsewhere", "someone else's", "Inbox")));
+            });
+        };
+        let msg = tmsg("a@x", "one", "Inbox");
+        let (got, ()) = tokio::join!(up.upload_message(&msg), arrives);
+        assert_eq!(got, uploaded("INBOX", 5));
+        assert_eq!(subjects(&server, "INBOX")[4..], ["one", "someone else's"]);
+        assert_eq!(names_in(v.path(), "INBOX"), ["5:2,AS.eml"]);
+    }
+
+    /// A folder whose vault dir the registry has not listed is listed once,
+    /// before its first copy, and never swept again per message.
+    #[tokio::test]
+    async fn a_folder_is_listed_once_not_swept_per_message() {
+        let server = MockImap::start(gmail());
+        let (v, s) = state();
+        for uid in 1..=4 {
+            seed_vault(v.path(), "INBOX", &format!("{uid}:2,S.eml"), format!("Message-ID: <old{uid}@x>\r\n\r\nold").as_bytes());
+        }
+        let reg = &s.vault_registry;
+        assert_eq!(reg.listing_count(), 0);
+        let mut up = upload(&s, &server);
+        for i in 0..3 {
+            let got = up.upload_message(&tmsg(&format!("n{i}@x"), &format!("n{i}"), "Inbox")).await;
+            assert_eq!(got, uploaded("INBOX", 5 + i));
+        }
+        assert_eq!(reg.listing_count(), 1, "one listing for the folder, not a sweep per message");
+        assert!(matches!(reg.known("acct1", "INBOX", 7), Some(Some(_))), "the registry answers for the folder");
+        assert_eq!(names_in(v.path(), "INBOX").len(), 7);
+    }
+
+    /// A label too long for a directory name: the message is on the server,
+    /// and nothing is written anywhere but inside the account's dir.
+    #[tokio::test]
+    async fn a_very_long_label_never_names_a_directory_outside_the_account() {
+        let server = MockImap::start(gmail());
+        let (v, s) = state();
+        let label = "x".repeat(300);
+        assert_eq!(upload(&s, &server).upload_message(&tmsg("a@x", "long", &label)).await, uploaded(&label, 1));
+        let maildir = v.path().join("Maildir");
+        let top: Vec<String> = std::fs::read_dir(&maildir).into_iter().flatten().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(top.iter().all(|name| name == "acct1"), "{top:?}");
+    }
+
     // ---- classification ----
+
+    /// An APPEND error as the pipeline sees it: our prefix naming the folder,
+    /// then the server's or the socket's words.
+    fn append_fail(folder: &str, rest: &str) -> Fail {
+        let prefix = format!("IMAP APPEND to '{folder}' failed: ");
+        Fail::named(&prefix, format!("{prefix}{rest}"), true)
+    }
+
+    fn no(info: &str) -> String {
+        format!(r#"no response: code: None, info: Some("{info}")"#)
+    }
 
     #[test]
     fn a_failure_is_transient_only_when_waiting_can_help() {
-        let no = |info: &str| format!(r#"IMAP APPEND to 'INBOX' failed: no response: code: None, info: Some("{info}")"#);
-        for e in [
-            no("[THROTTLED] Too many commands"),
-            no("[UNAVAILABLE] Server busy, try again later"),
-            no("[ALERT] Account exceeded command or bandwidth limits. (Failure)"),
-            no("Rate limit exceeded"),
-            r#"Login failed for u@gmail.com: no response: code: None, info: Some("[ALERT] Too many simultaneous connections. (Failure)")"#.to_string(),
-            "IMAP APPEND to 'INBOX' failed: connection lost".to_string(),
-            "IMAP APPEND to 'INBOX' failed: io: connection lost: no reply from the server for 180s".to_string(),
-            "SELECT INBOX failed: io: Broken pipe (os error 32)".to_string(),
-            "TCP connect to imap.example.com:993 failed: future timed out".to_string(),
-            "Login for u@example.com timed out after 20s".to_string(),
+        for f in [
+            append_fail("INBOX", &no("[THROTTLED] Too many commands")),
+            append_fail("INBOX", &no("[UNAVAILABLE] Server busy, try again later")),
+            append_fail("INBOX", &no("[ALERT] Account exceeded command or bandwidth limits. (Failure)")),
+            append_fail("INBOX", &no("Rate limit exceeded")),
+            append_fail("INBOX", "connection lost"),
+            append_fail("INBOX", "io: connection lost: no reply from the server for 180s"),
+            Fail::from("APPEND timed out after 120s".to_string()),
+            Fail::named("SELECT INBOX failed: ", "SELECT INBOX failed: io: Broken pipe (os error 32)".into(), false),
+            Fail::from(r#"Login failed for u@gmail.com: no response: code: None, info: Some("[ALERT] Too many simultaneous connections. (Failure)")"#.to_string()),
+            Fail::from("TCP connect to imap.example.com:993 failed: future timed out".to_string()),
+            Fail::from("Login for u@example.com timed out after 20s".to_string()),
         ] {
-            assert_eq!(classify(&e), FailKind::Transient, "{e}");
+            assert_eq!(classify(&f.cause), FailKind::Transient, "{}", f.error);
         }
-        for e in [
-            no("[CANNOT] Message too large"),
-            r#"IMAP APPEND to 'INBOX' failed: bad response: code: None, info: Some("Invalid arguments")"#.to_string(),
-            r#"Login failed for u@example.com: no response: code: None, info: Some("[AUTHENTICATIONFAILED] Invalid credentials")"#.to_string(),
-            r#"CREATE Evil failed: no response: code: None, info: Some("[CANNOT] create failure: NAME NOT ALLOWED")"#.to_string(),
+        for f in [
+            append_fail("INBOX", &no("[CANNOT] Message too large")),
+            append_fail("INBOX", r#"bad response: code: None, info: Some("Invalid arguments")"#),
+            Fail::from(r#"Login failed for u@example.com: no response: code: None, info: Some("[AUTHENTICATIONFAILED] Invalid credentials")"#.to_string()),
+            Fail::named("CREATE Evil failed: ", format!("CREATE Evil failed: {}", no("[CANNOT] create failure: NAME NOT ALLOWED")), false),
         ] {
-            assert_eq!(classify(&e), FailKind::Permanent, "{e}");
+            assert_eq!(classify(&f.cause), FailKind::Permanent, "{}", f.error);
+        }
+    }
+
+    /// A folder name is a label the file chose: named "Temporary", "Too many",
+    /// "Try again" or "Bandwidth" it never makes a refusal worth retrying;
+    /// named "does not exist" it never makes a lost connection read as a
+    /// missing folder; named "no response:" it never keeps a connection that
+    /// failed on I/O.
+    #[test]
+    fn a_folder_name_never_sways_the_classifiers() {
+        for folder in ["Temporary", "Too many", "Try again", "Bandwidth", "Rate limit", "[THROTTLED]", "timed out", "connection lost"] {
+            let refused = append_fail(folder, &no("[CANNOT] Message too large"));
+            assert_eq!(classify(&refused.cause), FailKind::Permanent, "{}", refused.error);
+            assert!(is_tagged_no(&refused.cause));
+        }
+        for folder in ["does not exist", "[NONEXISTENT] Nonexistent", "TryCreate", "no response:"] {
+            let lost = append_fail(folder, "connection lost");
+            assert!(!needs_create(&lost.cause), "{}", lost.error);
+            assert!(!is_tagged_no(&lost.cause), "{}", lost.error);
+            assert_eq!(classify(&lost.cause), FailKind::Transient, "{}", lost.error);
         }
     }
 
     #[test]
     fn a_trycreate_code_or_a_missing_mailbox_wording_asks_for_the_folder() {
-        assert!(needs_create(r#"IMAP APPEND to 'Work' failed: no response: code: Some(TryCreate), info: Some("Folder gone")"#));
-        assert!(needs_create(r#"SELECT Work failed: no response: code: None, info: Some("[NONEXISTENT] Unknown Mailbox: Work (Failure)")"#));
-        assert!(!needs_create("IMAP APPEND to 'Work' failed: connection lost"));
-        assert!(!needs_create(r#"IMAP APPEND to 'Work' failed: no response: code: None, info: Some("[CANNOT] Message too large")"#));
+        assert!(needs_create(&append_fail("Work", r#"no response: code: Some(TryCreate), info: Some("Folder gone")"#).cause));
+        let select = Fail::named("SELECT Work failed: ", format!("SELECT Work failed: {}", no("[NONEXISTENT] Unknown Mailbox: Work (Failure)")), false);
+        assert!(needs_create(&select.cause));
+        assert!(!needs_create(&append_fail("Work", "connection lost").cause));
+        assert!(!needs_create(&append_fail("Work", "io: Mailbox does not exist").cause), "only a tagged NO says so");
+        assert!(!needs_create(&append_fail("Work", &no("[CANNOT] Message too large")).cause));
     }
 }
