@@ -552,6 +552,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (method === 'unsubscribe.senders' || method === 'unsubscribe.history') return [];
         // Settings > Storage > Deleted emails: the demo keeps no deleted-mail bin.
         if (method === 'deleted.list') return [];
+        // Send mail as: the demo asks no provider; the studio account "found"
+        // its shared addresses in its own mail.
+        if (method === 'aliases.discover') {
+          const detected = args.params?.accountId === ACCOUNT_IDS[0]
+            ? [
+              { address: 'hello@primecut.studio', name: 'Prime Cut Studio', count: 12, source: 'sent_from' },
+              { address: 'bookings@primecut.studio', name: '', count: 4, source: 'delivered_to' },
+            ]
+            : [];
+          return { provider: { status: 'unsupported', aliases: [] }, detected };
+        }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         if (method === 'sync.events') {
           const timeoutMs = Math.min(25000, Math.max(1, Number(args.params?.timeoutMs ?? args.timeoutMs ?? 25000)));

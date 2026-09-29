@@ -158,6 +158,9 @@ export const DAEMON_OWNED = new Set([
   'fetch_remote_asset',
   // OpenPGP keys live in the keychain; the daemon lists, imports and removes them.
   'pgp.list_keys', 'pgp.import_key', 'pgp.remove_key',
+  // Send-as aliases: what the provider lists (Gmail over OAuth) and what the
+  // mail of the account proves, both found by the daemon.
+  'aliases.discover',
   // Track H: the app saved a new download mode or window; the daemon's
   // eviction (and, with Premium, Hoarder) worker re-derives its work now.
   'storage.fetch_mode_changed',

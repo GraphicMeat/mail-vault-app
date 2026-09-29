@@ -255,6 +255,17 @@ export async function pgpRemoveKey(fingerprint) {
   return transportSend('pgp.remove_key', { fingerprint });
 }
 
+/**
+ * Send-as aliases for one account (`src-daemon/src/handlers/aliases.rs`):
+ * `{ provider: { status: 'ok'|'unsupported'|'denied'|'error', aliases: [{ address, name, isPrimary, verified }] },
+ *    detected: [{ address, name, count, source: 'sent_from'|'delivered_to' }] }`.
+ * `account` is the account as every other daemon call carries it; an OAuth
+ * token must be fresh (`ensureFreshToken`) or Gmail answers `denied`.
+ */
+export async function discoverAliases(account, accountId) {
+  return transportSend('aliases.discover', { account, accountId });
+}
+
 // `intent` tells the daemon why the body is fetched, which decides whether it
 // is kept on disk under the account's download mode: 'open' (default; a
 // message the user opened, kept in every mode but On Demand), 'backfill' (the

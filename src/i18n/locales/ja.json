@@ -3225,6 +3225,7 @@
   "netActivity.purposes.releaseNotes": "リリースノート",
   "netActivity.purposes.connectivityCheck": "接続確認",
   "netActivity.purposes.accountSetup": "アカウント設定",
+  "netActivity.purposes.aliasLookup": "エイリアスの確認",
   "netActivity.notShown.title": "この一覧に表示されないもの",
   "netActivity.notShown.webContent": "メール内のリモート画像やその他のウェブコンテンツ。画像は上で数えています。",
   "netActivity.notShown.appWindow": "アプリのウィンドウ自体が行うリクエスト (購入確認など)。",

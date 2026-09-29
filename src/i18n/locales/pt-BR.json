@@ -3225,6 +3225,7 @@
   "netActivity.purposes.releaseNotes": "Notas da versão",
   "netActivity.purposes.connectivityCheck": "Teste de conexão",
   "netActivity.purposes.accountSetup": "Configurar conta",
+  "netActivity.purposes.aliasLookup": "Busca de aliases",
   "netActivity.notShown.title": "O que esta lista não mostra",
   "netActivity.notShown.webContent": "Imagens remotas e outros conteúdos da web dentro dos e-mails. As imagens são contadas acima.",
   "netActivity.notShown.appWindow": "Solicitações que a própria janela do app faz, como verificações de compra.",

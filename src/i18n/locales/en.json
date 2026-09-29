@@ -3225,6 +3225,7 @@
   "netActivity.purposes.releaseNotes": "Release notes",
   "netActivity.purposes.connectivityCheck": "Connectivity check",
   "netActivity.purposes.accountSetup": "Account setup",
+  "netActivity.purposes.aliasLookup": "Alias lookup",
   "netActivity.notShown.title": "What this list does not show",
   "netActivity.notShown.webContent": "Remote images and other web content inside emails. Images are counted above.",
   "netActivity.notShown.appWindow": "Requests the app window makes itself, such as purchase checks.",

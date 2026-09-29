@@ -3225,6 +3225,7 @@
   "netActivity.purposes.releaseNotes": "Versionshinweise",
   "netActivity.purposes.connectivityCheck": "Verbindungsprüfung",
   "netActivity.purposes.accountSetup": "Konto einrichten",
+  "netActivity.purposes.aliasLookup": "Alias-Abfrage",
   "netActivity.notShown.title": "Was diese Liste nicht zeigt",
   "netActivity.notShown.webContent": "Externe Bilder und andere Webinhalte in E-Mails. Bilder werden oben gezählt.",
   "netActivity.notShown.appWindow": "Anfragen, die das App-Fenster selbst stellt, etwa Kaufprüfungen.",

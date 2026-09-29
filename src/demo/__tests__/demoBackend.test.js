@@ -196,6 +196,19 @@ describe('demo mailbox backend', () => {
     await expect(backend.invoke('daemon_rpc', { method: 'vault_search', params: { request: { accountId: 'x', query: 'y' } } })).resolves.toEqual({ available: false });
   });
 
+  it('answers alias discovery in the daemon shape without asking any provider', async () => {
+    const backend = createDemoBackend();
+    const [studio, personal] = backend.snapshot().accounts || [];
+    const found = await backend.invoke('daemon_rpc', { method: 'aliases.discover', params: { account: studio, accountId: studio?.id } });
+    expect(found.provider).toEqual({ status: 'unsupported', aliases: [] });
+    expect(found.detected.length).toBeGreaterThan(0);
+    for (const entry of found.detected) {
+      expect(entry).toEqual({ address: expect.stringContaining('@'), name: expect.any(String), count: expect.any(Number), source: expect.stringMatching(/^(sent_from|delivered_to)$/) });
+    }
+    const none = await backend.invoke('daemon_rpc', { method: 'aliases.discover', params: { account: personal, accountId: personal?.id } });
+    expect(none).toEqual({ provider: { status: 'unsupported', aliases: [] }, detected: [] });
+  });
+
   it('keeps native-shaped sync, folder, backup and browser file contracts usable', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];

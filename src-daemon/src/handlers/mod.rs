@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 pub(crate) mod ai;
+pub(crate) mod aliases;
 pub(crate) mod archive;
 pub(crate) mod auto_tags;
 pub(crate) mod backup;

@@ -21,6 +21,12 @@ describe('daemon-owned commands', () => {
     expect(block).toContain("'storage.fetch_mode_changed'");
   });
 
+  it('owns aliases.discover (send-as alias discovery)', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
+    const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
+    expect(block).toContain("'aliases.discover'");
+  });
+
   it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7) plus the six simple vault writers (Task 2.8) plus custody and the three custody-backed vault writers (Task 2.9b) plus archive, bulk delete and verify (Task 3.5) plus the three insights snapshot commands (Task 3.7) plus fetch_remote_asset (Task 4.2) plus backup ZIP export/import (Task 4.4) plus mbox export/import (Task 4.6) plus migration and restore (Task 4.8) plus the IMAP read-path (Task 5.4a) plus the IMAP write-path and lifecycle (Task 5.4b) plus SMTP (Task 5.5) plus Graph (Task 5.6) plus OAuth2 (Task 5.7) plus DNS (Task 5.8) plus backup cancel (Phase 3 remainder, Task 6) plus daemon search (Task 5)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
