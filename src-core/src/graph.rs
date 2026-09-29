@@ -229,6 +229,84 @@ impl GraphMessage {
 }
 
 // ---------------------------------------------------------------------------
+// Scope listing rows (abd)
+// ---------------------------------------------------------------------------
+
+/// One row of `GraphClient::list_page`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphListed {
+    pub id: String,
+    /// `receivedDateTime`, UTC milliseconds.
+    pub received_ms: i64,
+    /// As Graph stores it, angle brackets included.
+    pub internet_message_id: Option<String>,
+    /// `PR_MESSAGE_SIZE`; `None` when the property did not come back.
+    pub size: Option<u32>,
+}
+
+/// The MAPI property `PR_MESSAGE_SIZE` (Integer 0x0E08), read as an extended
+/// property because `message` has no size field.
+const SIZE_PROPERTY_ID: &str = "Integer 0x0E08";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawListed {
+    id: String,
+    received_date_time: Option<String>,
+    internet_message_id: Option<String>,
+    single_value_extended_properties: Option<Vec<RawProperty>>,
+}
+
+#[derive(Deserialize)]
+struct RawProperty {
+    id: String,
+    value: Option<serde_json::Value>,
+}
+
+impl RawListed {
+    fn into_listed(self) -> Option<GraphListed> {
+        let received_ms = chrono::DateTime::parse_from_rfc3339(self.received_date_time.as_deref()?)
+            .ok()?
+            .timestamp_millis();
+        let size = self
+            .single_value_extended_properties
+            .unwrap_or_default()
+            .iter()
+            .find(|p| is_size_property(&p.id))
+            .and_then(|p| match p.value.as_ref()? {
+                serde_json::Value::String(s) => s.trim().parse::<u64>().ok(),
+                serde_json::Value::Number(n) => n.as_u64(),
+                _ => None,
+            })
+            .and_then(|n| u32::try_from(n).ok());
+        Some(GraphListed { id: self.id, received_ms, internet_message_id: self.internet_message_id, size })
+    }
+}
+
+/// Graph may echo the property id as `Integer 0xe08`; only the hex matters.
+fn is_size_property(id: &str) -> bool {
+    let id = id.to_ascii_lowercase().replace(' ', "");
+    id == "integer0x0e08" || id == "integer0xe08"
+}
+
+/// RFC 3986 percent-encoding of one URL component (unreserved characters pass).
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// Is `link` under the Graph base (so it is safe to send the token to it)?
+fn is_graph_link(link: &str) -> bool {
+    link.strip_prefix(graph_base()).is_some_and(|rest| rest.starts_with('/') || rest.starts_with('?'))
+}
+
+// ---------------------------------------------------------------------------
 // Graph API client
 // ---------------------------------------------------------------------------
 
@@ -1003,10 +1081,18 @@ impl GraphClient {
     /// The response check the three folder operations share, including the 429
     /// branch every other Graph call carries.
     async fn folder_op_status(resp: reqwest::Response, what: &str) -> Result<(), String> {
-        let status = resp.status();
-        if status.is_success() {
+        if resp.status().is_success() {
             return Ok(());
         }
+        Err(Self::failure_text(resp, what).await)
+    }
+
+    /// The error text of a non-success answer: `Graph <what> failed (<status>)
+    /// <body>`, and for a 429 `(429:retry_after=N)` (30 when the header is
+    /// missing), which `abd::throttle::classify_graph` and
+    /// `retry_after_from_error` read back.
+    async fn failure_text(resp: reqwest::Response, what: &str) -> String {
+        let status = resp.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
             let retry_after = resp
                 .headers()
@@ -1015,13 +1101,137 @@ impl GraphClient {
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(30);
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!(
-                "Graph {} failed (429:retry_after={}) {}",
-                what, retry_after, body
-            ));
+            return format!("Graph {} failed (429:retry_after={}) {}", what, retry_after, body);
         }
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Graph {} failed ({}) {}", what, status.as_u16(), body))
+        format!("Graph {} failed ({}) {}", what, status.as_u16(), body)
+    }
+
+    // -----------------------------------------------------------------------
+    // Archive, back up & delete (abd::graph_ops)
+    // -----------------------------------------------------------------------
+
+    /// One page of a folder's messages with what a scope listing needs: the
+    /// received time, the Message-ID and the size (`PR_MESSAGE_SIZE`, an
+    /// extended property, so `None` when Graph does not return it).
+    /// `next` is the previous page's link (`None` = first page). The link is
+    /// only followed when it points at the Graph base, because every request
+    /// carries the bearer token. A message with no usable `receivedDateTime` is
+    /// left out: filing it under 1970 would put it in an "older than" scope.
+    pub async fn list_page(
+        &self,
+        folder_id: &str,
+        next: Option<&str>,
+    ) -> Result<(Vec<GraphListed>, Option<String>), String> {
+        let url = match next {
+            Some(link) => {
+                if !is_graph_link(link) {
+                    return Err("Graph list_page refused a nextLink outside the Graph base".to_string());
+                }
+                link.to_string()
+            }
+            None => format!(
+                "{}/me/mailFolders/{}/messages?$top=1000&$select=id,receivedDateTime,internetMessageId&$expand={}",
+                graph_base(),
+                percent_encode(folder_id),
+                percent_encode(&format!("singleValueExtendedProperties($filter=id eq '{}')", SIZE_PROPERTY_ID)),
+            ),
+        };
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph list_page request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "list_page").await);
+        }
+        let list: GraphListResponse<RawListed> = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph list_page parse error: {}", e))?;
+        let total = list.value.len();
+        let rows: Vec<GraphListed> = list.value.into_iter().filter_map(RawListed::into_listed).collect();
+        if rows.len() < total {
+            warn!("[Graph] list_page left out {} message(s) without a received time", total - rows.len());
+        }
+        Ok((rows, list.next_link))
+    }
+
+    /// Does the message still exist (under this id)? A moved message gets a new
+    /// id, so the old one answers 404.
+    pub async fn message_exists(&self, id: &str) -> Result<bool, String> {
+        let url = format!("{}/me/messages/{}?$select=id", graph_base(), percent_encode(id));
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph message_exists request failed: {}", e))?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        Self::folder_op_status(resp, "message_exists").await?;
+        Ok(true)
+    }
+
+    /// The message's `internetMessageId` as Graph stores it (bracketed), or
+    /// `None` when it has none. 404 is `Err` (`Graph message_internet_id failed (404)`).
+    pub async fn message_internet_id(&self, id: &str) -> Result<Option<String>, String> {
+        let url = format!("{}/me/messages/{}?$select=id,internetMessageId", graph_base(), percent_encode(id));
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph message_internet_id request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "message_internet_id").await);
+        }
+        let m: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph message_internet_id parse error: {}", e))?;
+        Ok(m.get("internetMessageId").and_then(|v| v.as_str()).map(str::to_string))
+    }
+
+    /// Delete the message for good, skipping the Deleted Items soft delete that
+    /// a plain `DELETE` does (`POST .../permanentDelete`, 204).
+    pub async fn permanent_delete(&self, id: &str) -> Result<(), String> {
+        let url = format!("{}/me/messages/{}/permanentDelete", graph_base(), percent_encode(id));
+        let resp = self
+            .client
+            .send(self.client.post(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph permanent_delete request failed: {}", e))?;
+        Self::folder_op_status(resp, "permanent_delete").await
+    }
+
+    /// Every message id in the folder whose `internetMessageId` is `imid`
+    /// (exactly as Graph stores it, angle brackets included). All hits are
+    /// returned, up to 10, so a caller can tell a duplicate from a single match.
+    pub async fn find_by_internet_message_id(&self, folder_id: &str, imid: &str) -> Result<Vec<String>, String> {
+        let filter = format!("internetMessageId eq '{}'", imid.replace('\'', "''"));
+        let url = format!(
+            "{}/me/mailFolders/{}/messages?$filter={}&$select=id&$top=10",
+            graph_base(),
+            percent_encode(folder_id),
+            percent_encode(&filter),
+        );
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph find_by_internet_message_id request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "find_by_internet_message_id").await);
+        }
+        #[derive(Deserialize)]
+        struct IdOnly {
+            id: String,
+        }
+        let list: GraphListResponse<IdOnly> = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph find_by_internet_message_id parse error: {}", e))?;
+        Ok(list.value.into_iter().map(|m| m.id).collect())
     }
 
     // -----------------------------------------------------------------------
@@ -1032,8 +1242,18 @@ impl GraphClient {
         error.contains("(401)")
     }
 
+    /// A 429. Every call formats it `(429:retry_after=N)`, so matching `(429)`
+    /// alone (as this once did) never fired.
     pub fn is_rate_limited(error: &str) -> bool {
-        error.contains("(429)")
+        error.contains("(429)") || error.contains("(429:")
+    }
+
+    /// The `N` of a `(429:retry_after=N)` error, in seconds.
+    pub fn retry_after_from_error(error: &str) -> Option<u64> {
+        const MARKER: &str = "(429:retry_after=";
+        let rest = &error[error.find(MARKER)? + MARKER.len()..];
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        digits.parse().ok()
     }
 }
 
@@ -1253,6 +1473,54 @@ mod tests {
         assert!(!GraphClient::is_rate_limited(
             "Graph list_messages failed (500) Server Error"
         ));
+    }
+
+    #[test]
+    fn a_retry_after_429_is_rate_limited_and_its_seconds_are_readable() {
+        // Every call formats a 429 this way; matching "(429)" alone never fired.
+        let e = "Graph move_message failed (429:retry_after=12) {\"error\":{}}";
+        assert!(GraphClient::is_rate_limited(e));
+        assert_eq!(GraphClient::retry_after_from_error(e), Some(12));
+        assert_eq!(GraphClient::retry_after_from_error("Graph x failed (429) slow down"), None);
+        assert_eq!(GraphClient::retry_after_from_error("Graph x failed (500) (429:retry_after=oops)"), None);
+        assert!(!GraphClient::is_rate_limited("Graph x failed (4290) nope"));
+    }
+
+    #[test]
+    fn percent_encode_keeps_unreserved_and_escapes_the_rest() {
+        assert_eq!(percent_encode("AaZz09-._~"), "AaZz09-._~");
+        assert_eq!(percent_encode("a b+c&d='e'<x@y>"), "a%20b%2Bc%26d%3D%27e%27%3Cx%40y%3E");
+        assert_eq!(percent_encode("\u{e4}"), "%C3%A4");
+    }
+
+    #[test]
+    fn the_size_property_is_read_case_insensitively_and_absent_means_none() {
+        let listed = |props: serde_json::Value| -> Option<GraphListed> {
+            serde_json::from_value::<RawListed>(serde_json::json!({
+                "id": "m", "receivedDateTime": "2024-03-01T10:00:00Z", "singleValueExtendedProperties": props
+            }))
+            .unwrap()
+            .into_listed()
+        };
+        assert_eq!(listed(serde_json::json!([{"id": "Integer 0x0E08", "value": "2048"}])).unwrap().size, Some(2048));
+        assert_eq!(listed(serde_json::json!([{"id": "integer 0xe08", "value": 12}])).unwrap().size, Some(12));
+        assert_eq!(listed(serde_json::json!([{"id": "Integer 0x0E08", "value": "-5"}])).unwrap().size, None);
+        assert_eq!(listed(serde_json::json!([{"id": "Integer 0x0E08", "value": "99999999999"}])).unwrap().size, None);
+        assert_eq!(listed(serde_json::json!([{"id": "String 0x0037", "value": "3"}])).unwrap().size, None);
+        assert_eq!(listed(serde_json::Value::Null).unwrap().size, None);
+        let undated: RawListed = serde_json::from_value(serde_json::json!({"id": "m"})).unwrap();
+        assert!(undated.into_listed().is_none());
+        let bad: RawListed = serde_json::from_value(serde_json::json!({"id": "m", "receivedDateTime": "soon"})).unwrap();
+        assert!(bad.into_listed().is_none());
+    }
+
+    #[test]
+    fn only_a_link_under_the_graph_base_is_followed() {
+        let base = graph_base().to_string();
+        assert!(is_graph_link(&format!("{base}/me/mailFolders/x/messages?$skiptoken=1")));
+        assert!(!is_graph_link(&format!("{base}.evil.example/me")));
+        assert!(!is_graph_link("https://evil.example/v1.0/me"));
+        assert!(!is_graph_link(&format!("{base}9/me")));
     }
 
     // -- Edge cases ---------------------------------------------------------
