@@ -2167,45 +2167,177 @@ pub fn imap_date_time(dt: &chrono::DateTime<chrono::FixedOffset>) -> String {
 
 /// The message's own `Date:` header as an APPEND `date-time` (UTC), so a
 /// restored or migrated message keeps its date instead of arriving "today".
-pub fn internal_date_from_raw(raw: &[u8]) -> Option<String> {
+///
+/// `head` is the start of the message: only its header block is read, up to the
+/// blank line, so a whole message is fine and its body is never parsed.
+/// `None` for a missing or unparseable date; an APPEND never fails over one.
+pub fn internaldate_of(head: &[u8]) -> Option<String> {
     use chrono::TimeZone;
     use mailparse::MailHeaderMap;
-    let parsed = mailparse::parse_mail(raw).ok()?;
-    let date = parsed.headers.get_first_value("Date");
+    let (headers, _) = mailparse::parse_headers(head).ok()?;
+    let date = headers.get_first_value("Date");
     let Some(secs) = date.as_deref().and_then(crate::maildir::header_date_secs) else {
-        // Never fail an append over a date, but a restore that silently keeps
-        // "now" here reproduces the exact bug this function exists to fix.
-        tracing::debug!("internal_date_from_raw: no usable Date header ({:?})", date);
+        // A restore that silently keeps "now" here reproduces the exact bug
+        // this function exists to fix.
+        tracing::debug!("internaldate_of: no usable Date header ({:?})", date);
         return None;
     };
     let utc = chrono::Utc.timestamp_opt(secs, 0).single()?;
     Some(imap_date_time(&utc.with_timezone(&chrono::FixedOffset::east_opt(0)?)))
 }
 
+/// `internaldate_of` under the name its restore and migration callers use.
+pub fn internal_date_from_raw(raw: &[u8]) -> Option<String> {
+    internaldate_of(raw)
+}
+
 /// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND.
 ///
 /// `internal_date` is the RFC 3501 `date-time` the server should stamp
-/// (`imap_date_time` / `internal_date_from_raw`); `None` lets the server use
-/// now, which is right only for a message written this instant.
+/// (`imap_date_time` / `internaldate_of`); `None` lets the server use now,
+/// which is right only for a message written this instant.
+///
+/// Returns the `(UIDVALIDITY, UID)` the server gave the message when it said so
+/// (`[APPENDUID validity uid]`, RFC 4315, needs UIDPLUS), `None` when it did
+/// not. `None` is not a failure: the message is stored, its uid just was not
+/// reported. `append_email_uid` finds it another way.
+///
+/// The literal is synchronous (`{n}`, wait for `+`, the bytes): the one form
+/// every server takes, where `{n+}` needs LITERAL+ (or LITERAL-, capped at 4 KiB).
+/// async-imap's `Session::append` speaks the same wire but discards the tagged
+/// reply's response code, which is where APPENDUID rides, so the exchange is
+/// spelled out from its public pieces, the way `collect_copyuid` reads COPYUID.
 pub async fn append_email(
     session: &mut ImapSession,
     mailbox: &str,
     raw_email: &[u8],
     flags: &str,
     internal_date: Option<&str>,
-) -> Result<(), String> {
-    // async-imap inserts both arguments verbatim. RFC 3501 wants the flag list
-    // parenthesized and the date-time quoted; every caller passes bare flags
-    // (`\Seen \Flagged`), which without the parens leaves the date in a position
-    // no server parses — and is malformed APPEND on its own.
-    let flag_list = if flags.is_empty() { None } else { Some(format!("({})", flags)) };
-    let quoted_date = internal_date.map(|d| format!("\"{}\"", d));
+) -> Result<Option<(u32, u32)>, String> {
+    // RFC 3501 wants the flag list parenthesized and the date-time quoted; every
+    // caller passes bare flags (`\Seen \Flagged`), which without the parens
+    // leaves the date in a position no server parses, and is a malformed APPEND
+    // on its own.
+    let failed = |e: String| format!("IMAP APPEND to '{}' failed: {}", mailbox, e);
+    let flag_list = if flags.is_empty() { String::new() } else { format!(" ({})", flags) };
+    let quoted_date = internal_date.map(|d| format!(" \"{}\"", d)).unwrap_or_default();
+    let command = format!(
+        "APPEND {}{}{} {{{}}}",
+        quote_mailbox(mailbox).map_err(failed)?,
+        flag_list,
+        quoted_date,
+        raw_email.len()
+    );
 
-    patient(session.append(mailbox, flag_list.as_deref(), quoted_date.as_deref(), raw_email))
-        .await
-        .map_err(|e| format!("IMAP APPEND to '{}' failed: {}", mailbox, e))?;
+    patient(append_with_literal(session, command, raw_email)).await.map_err(failed)
+}
 
-    Ok(())
+/// Send `command` (an APPEND ending in `{n}`), the literal once the server says
+/// `+`, and read the tagged reply. A server that refuses before the `+` (a
+/// mailbox that does not exist) gets no literal: it would read the message as
+/// commands.
+async fn append_with_literal(
+    session: &mut ImapSession,
+    command: String,
+    raw_email: &[u8],
+) -> Result<Option<(u32, u32)>, String> {
+    use async_imap::error::Error as ImapError;
+    use async_std::io::WriteExt;
+    use imap_proto::Response;
+    // Worded as async-imap words them ("io: ...", "connection lost"): the pool's
+    // retry (`is_connection_lost`) reads these strings.
+    let io = |e: std::io::Error| ImapError::from(e).to_string();
+    let id = session.run_command(&command).await.map_err(|e| e.to_string())?;
+    let mut sent = false;
+    loop {
+        let rd = session
+            .read_response()
+            .await
+            .map_err(io)?
+            .ok_or_else(|| ImapError::ConnectionLost.to_string())?;
+        match rd.parsed() {
+            Response::Done { tag, status, code, information } if *tag == id => {
+                return append_outcome(status, code, information.as_deref());
+            }
+            Response::Continue { .. } if !sent => {}
+            _ => continue, // EXISTS and the like between the command and its tag
+        }
+        drop(rd);
+        sent = true;
+        // The stream async-imap's own `append` writes the literal to: under the
+        // command encoder, over the transport (COMPRESS included).
+        let out = session.get_mut();
+        out.write_all(raw_email).await.map_err(io)?;
+        out.write_all(b"\r\n").await.map_err(io)?;
+        out.flush().await.map_err(io)?;
+    }
+}
+
+/// What an APPEND's tagged reply says: the `(UIDVALIDITY, UID)` from its
+/// `[APPENDUID]` code, `None` when the OK carries none, the server's words when
+/// it is not an OK. A uid set is `None` too: that is MULTIAPPEND's answer, and
+/// one message has one uid.
+///
+/// A refusal reads exactly as async-imap's `check_status_ok` words it, code
+/// included: `is_missing_mailbox`, `is_bandwidth_limited` and the callers that
+/// log or match these strings saw that text before this function existed.
+fn append_outcome(
+    status: &imap_proto::Status,
+    code: &Option<imap_proto::ResponseCode<'_>>,
+    information: Option<&str>,
+) -> Result<Option<(u32, u32)>, String> {
+    use imap_proto::{ResponseCode, Status, UidSetMember};
+    match status {
+        Status::Ok => Ok(match code {
+            Some(ResponseCode::AppendUid(validity, uids)) => match uids.as_slice() {
+                [UidSetMember::Uid(uid)] => Some((*validity, *uid)),
+                _ => None,
+            },
+            _ => None,
+        }),
+        _ => {
+            let detail = format!("code: {code:?}, info: {information:?}");
+            Err(match status {
+                Status::Bad => async_imap::error::Error::Bad(detail),
+                _ => async_imap::error::Error::No(detail),
+            }
+            .to_string())
+        }
+    }
+}
+
+/// APPEND and return the uid the server gave the message: the APPENDUID it sent,
+/// else the newest message in `mailbox` whose Message-ID is `message_id` (as it
+/// sits in the header, `<>` optional). `None` when the server said nothing and
+/// there is no Message-ID to look for, or the lookup finds nothing or fails: the
+/// message IS stored in every one of those, so none of them is an `Err` a caller
+/// could take for "not uploaded" and upload again.
+///
+/// The fallback SELECTs `mailbox` (a search runs in the selected mailbox), so a
+/// pooled session's `last_selected` must be updated by the caller. Newest is
+/// the message just appended unless the server's search lags behind its APPEND.
+pub async fn append_email_uid(
+    session: &mut ImapSession,
+    mailbox: &str,
+    raw_email: &[u8],
+    flags: &str,
+    internal_date: Option<&str>,
+    message_id: Option<&str>,
+) -> Result<Option<u32>, String> {
+    if let Some((_, uid)) = append_email(session, mailbox, raw_email, flags, internal_date).await? {
+        return Ok(Some(uid));
+    }
+    let Some(id) = message_id.map(|m| m.trim_matches(['<', '>'])).filter(|m| !m.is_empty()) else {
+        return Ok(None);
+    };
+    let found = match select_mailbox(session, mailbox).await {
+        Ok(_) => uid_of_message_id(session, id).await,
+        Err(e) => Err(e),
+    };
+    found.or_else(|e| {
+        warn!("[append_uid] stored in '{}' but its uid could not be looked up: {}", mailbox, e);
+        Ok(None)
+    })
 }
 
 /// Dedicated fresh IMAP session that explicitly DOES NOT enable COMPRESS=DEFLATE.
@@ -3962,5 +4094,52 @@ mod net_activity_tests {
         let addrs = net_activity::with_purpose("test: ip literal", resolve_addrs(&config)).await;
         assert!(addrs.is_ok(), "{addrs:?}");
         assert!(snapshot().iter().all(|e| e.purpose != "test: ip literal"));
+    }
+}
+
+#[cfg(test)]
+mod append_outcome_tests {
+    use super::*;
+
+    /// `append_outcome` over the tagged line as the parser really reads it.
+    fn outcome(line: &[u8]) -> Result<Option<(u32, u32)>, String> {
+        match imap_proto::parser::parse_response(line).expect("a parsable reply").1 {
+            imap_proto::Response::Done { status, code, information, .. } => {
+                append_outcome(&status, &code, information.as_deref())
+            }
+            other => panic!("not a tagged reply: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn appenduid_gives_the_validity_and_the_uid() {
+        assert_eq!(outcome(b"a1 OK [APPENDUID 38505 3955] APPEND completed\r\n"), Ok(Some((38505, 3955))));
+    }
+
+    #[test]
+    fn an_ok_without_the_code_is_none() {
+        assert_eq!(outcome(b"a1 OK APPEND completed\r\n"), Ok(None));
+        assert_eq!(outcome(b"a1 OK [READ-WRITE] APPEND completed\r\n"), Ok(None));
+    }
+
+    /// One message has one uid. A set or a range is MULTIAPPEND's answer, not
+    /// ours: read as a uid it would file the message under a neighbour's name.
+    #[test]
+    fn a_uid_set_is_none_because_one_message_has_one_uid() {
+        assert_eq!(outcome(b"a1 OK [APPENDUID 1 5:7] APPEND completed\r\n"), Ok(None));
+        assert_eq!(outcome(b"a1 OK [APPENDUID 1 5,7] APPEND completed\r\n"), Ok(None));
+    }
+
+    /// The text is async-imap's own, code and all: what classifies these
+    /// strings (`is_missing_mailbox`, `is_bandwidth_limited`) reads them as before.
+    #[test]
+    fn a_no_or_bad_reads_as_async_imap_words_it() {
+        let no = outcome(b"a1 NO [TRYCREATE] Mailbox does not exist\r\n").expect_err("NO");
+        assert_eq!(no, r#"no response: code: Some(TryCreate), info: Some("Mailbox does not exist")"#);
+        assert!(is_missing_mailbox(&no));
+        let bad = outcome(b"a1 BAD Invalid arguments\r\n").expect_err("BAD");
+        assert_eq!(bad, r#"bad response: code: None, info: Some("Invalid arguments")"#);
+        let limited = outcome(b"a1 NO Account exceeded bandwidth limits. (Failure)\r\n").expect_err("NO");
+        assert!(is_bandwidth_limited(&limited), "{limited}");
     }
 }

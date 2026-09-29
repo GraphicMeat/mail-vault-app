@@ -867,5 +867,11 @@ fn do_append(cmd: &Command, state: &mut ServerState) -> Response {
     mb.add(msg);
     mb.highest_modseq = modseq;
 
-    Response::ok(&format!("[APPENDUID {} {}] APPEND completed", validity, uid))
+    // APPENDUID is RFC 4315 (UIDPLUS), like COPYUID: a server without it says
+    // nothing about the uid, and the client has to find the message itself.
+    if state.has_cap("UIDPLUS") {
+        Response::ok(&format!("[APPENDUID {} {}] APPEND completed", validity, uid))
+    } else {
+        Response::ok("APPEND completed")
+    }
 }

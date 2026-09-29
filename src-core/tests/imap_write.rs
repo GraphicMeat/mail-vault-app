@@ -363,6 +363,76 @@ async fn append_to_a_missing_mailbox_reports_the_failure() {
     assert!(err.to_lowercase().contains("append"), "unhelpful error: {err}");
 }
 
+/// The synchronous-literal APPEND is the one form every server takes, so its
+/// line is pinned whole: an argument in the wrong PLACE passes every substring
+/// check.
+#[async_std::test]
+async fn append_sends_flags_then_date_then_a_synchronous_literal() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+    let mut sess = session(&server).await;
+    let raw = eml("Migrated", "a@example.com", "body");
+
+    append_email(&mut sess, "INBOX", raw.as_bytes(), "\\Seen \\Flagged", Some("05-Mar-2019 08:15:00 +0000"))
+        .await
+        .expect("append");
+
+    let append = server.commands().into_iter().find(|c| c.contains("APPEND")).expect("an APPEND line");
+    let (_tag, rest) = append.split_once(' ').expect("tag and command");
+    assert_eq!(
+        rest,
+        format!("APPEND \"INBOX\" (\\Seen \\Flagged) \"05-Mar-2019 08:15:00 +0000\" {{{}}}", raw.len()),
+        "mailbox, (flags), \"date-time\", then a literal WITHOUT the `+`: {append}"
+    );
+    let state = server.state();
+    let msg = state.find("INBOX").unwrap().messages.last().expect("appended");
+    assert!(msg.has_flag("\\Seen") && msg.has_flag("\\Flagged"), "flags dropped: {:?}", msg.flags);
+    assert_eq!(msg.internal_date, "05-Mar-2019 08:15:00 +0000");
+}
+
+/// A hand-written literal upload has to carry what the library's own `append`
+/// did: every byte, and more than one socket write's worth. (Non-ASCII, but
+/// valid UTF-8: the mock keeps a message through `String::from_utf8_lossy`, so
+/// it cannot show whether stray 8-bit bytes survived.)
+#[async_std::test]
+async fn append_stores_a_large_non_ascii_message_byte_for_byte() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+    let mut sess = session(&server).await;
+    let mut raw = String::from(
+        "From: a@example.com\r\nSubject: café\r\nMessage-ID: <wide@example.com>\r\n\
+         Content-Type: text/plain; charset=UTF-8\r\n\r\n",
+    );
+    for _ in 0..20_000 {
+        raw.push_str("naïve ☕ bytes\r\n");
+    }
+
+    append_email(&mut sess, "INBOX", raw.as_bytes(), "", None).await.expect("append");
+
+    let state = server.state();
+    let stored = &state.find("INBOX").unwrap().messages.last().expect("appended").raw;
+    assert_eq!(stored.len(), raw.len());
+    assert!(stored == raw.as_bytes(), "the stored bytes differ from the uploaded ones");
+}
+
+/// A `Respond` fault only rewrites the reply: the mock has stored the message
+/// by then, so this asserts what the CALLER is told, not the server's contents.
+#[async_std::test]
+async fn append_refused_after_the_literal_is_an_error() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .fault(Trigger::on("APPEND"), Action::Respond("NO".into(), "Quota exceeded".into())),
+    );
+    let mut sess = session(&server).await;
+    let raw = eml("Too big", "a@example.com", "body");
+
+    let err = append_email(&mut sess, "INBOX", raw.as_bytes(), "", None)
+        .await
+        .expect_err("a tagged NO must not read as an upload that happened");
+    assert!(err.contains("APPEND") && err.contains("Quota exceeded"), "the server's words are lost: {err}");
+    // The refusal left the stream in step: the next command still works.
+    select_mailbox(&mut sess, "INBOX").await.expect("session usable after a refused APPEND");
+}
+
 // ── move_uids ──────────────────────────────────────────────────────────────
 // The shipped move fallback (src-tauri/move_emails.rs, deleted with this)
 // collected and discarded the STORE and EXPUNGE streams, so a socket that died

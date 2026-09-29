@@ -257,7 +257,7 @@ async fn restore_folder(
             std::time::Duration::from_secs(30),
             imap::append_email(&mut guard.session, folder, &raw, &msg.imap_flags, internal_date.as_deref()),
         ).await {
-            Ok(Ok(())) => uploaded += 1,
+            Ok(Ok(_)) => uploaded += 1,
             Ok(Err(e)) => { warn!("[restore] APPEND uid {} to {} failed: {}", msg.uid, folder, e); failed += 1; }
             Err(_) => { warn!("[restore] APPEND uid {} to {} timed out", msg.uid, folder); failed += 1; }
         }
