@@ -95,6 +95,28 @@ it('shows grouped, expanded and separate messages, and reverses the sample reply
   expect(messages()).toEqual(['Two works for me.', 'Shall we meet at two?']);
 });
 
+it('sets the message list density beside the sidebar\'s, on a sample of its own, without touching the sidebar', () => {
+  useSettingsStore.setState({ listDensity: 'comfortable', sidebarDensity: 'comfortable' });
+  render(<AppearanceSettings initialSection="layout" />);
+  const group = screen.getByRole('group', { name: 'Message list density' });
+  const sample = () => example('Message list density').querySelector('.preview-message-rows');
+  expect(sample().dataset.listDensity).toBe('comfortable');
+  // Two lines, as the list is set here, so the sample is the list's own shape.
+  expect(sample().classList.contains('preview-single-line')).toBe(false);
+  fireEvent.click(within(group).getByRole('button', { name: 'Compact' }));
+  expect(useSettingsStore.getState().listDensity).toBe('compact');
+  expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
+  expect(within(group).getByRole('button', { name: 'Compact' }).getAttribute('aria-pressed')).toBe('true');
+  expect(sample().dataset.listDensity).toBe('compact');
+  expect(screen.getByText('Shorter message rows, so more of the list fits on screen.')).toBeTruthy();
+  // The sidebar's own control sits just before it.
+  const labels = [...document.querySelectorAll('.setting-row-copy > :first-child')].map(label => label.textContent);
+  expect(labels.indexOf('Message list density')).toBe(labels.indexOf('Sidebar density') + 1);
+  fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
+  expect(within(group).getByRole('button', { name: 'Comfortable' }).disabled).toBe(true);
+  useSettingsStore.setState({ listDensity: 'comfortable', viewStyle: 'list' });
+});
+
 it('changes backup placement immediately without changing the backup schedule', () => {
   useSettingsStore.setState({ sidebarBackupStatusLocation: 'avatar', backupGlobalEnabled: true });
   render(<AppearanceSettings initialSection="layout" />);

@@ -87,12 +87,23 @@ describe('saved views', () => {
     expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([1, 2]);
   });
 
-  /// An index that cannot answer is not an empty view.
-  it('says the index could not answer rather than showing an empty view', async () => {
+  /// An index that cannot answer is not an empty view: the reason is kept for
+  /// the list to say. It shows no rows either, rather than the folder behind
+  /// the view under the view's name.
+  it('says the index could not answer, and shows no folder rows under the view', async () => {
     harness.daemonCall.mockResolvedValueOnce({ available: false, reason: 'building', rows: [] });
     await useViewStore.getState().openView(STARRED);
     expect(useViewStore.getState().unavailableReason).toBe('building');
-    expect(useSearchStore.getState().searchActive).toBe(false);
+    expect(useSearchStore.getState().searchActive).toBe(true);
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+  });
+
+  it('shows no folder rows under a view that failed to run', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('daemon gone'));
+    await useViewStore.getState().openView(STARRED);
+    expect(useViewStore.getState().unavailableReason).toBe('error');
+    expect(useSearchStore.getState().searchActive).toBe(true);
+    expect(useSearchStore.getState().searchResults).toEqual([]);
   });
 
   it('closing a view puts the mailbox back', async () => {

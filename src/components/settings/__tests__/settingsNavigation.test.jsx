@@ -37,6 +37,33 @@ it('uses arrow keys and Home/End to navigate settings tabs', () => {
   expect(document.activeElement).toBe(first);
 });
 
+// Quick actions' surface tabs (Message rows, Selection bar, Reader) sit halfway
+// down Appearance: picking one threw the page back to its top.
+it('keeps the page where it is when a tab set inside it changes, and starts a new page at the top', () => {
+  function Nested() {
+    const [page, setPage] = useState('first');
+    const [surface, setSurface] = useState('row');
+    return <div className="settings-content">
+      <SettingsTabs label="Page" value={page} onChange={setPage}
+        tabs={[{ id: 'first', label: 'First' }, { id: 'second', label: 'Second' }]}>
+        <SettingsTabs label="Surface" value={surface} onChange={setSurface}
+          tabs={[{ id: 'row', label: 'Message rows' }, { id: 'selection', label: 'Selection bar' }]}>{surface}</SettingsTabs>
+      </SettingsTabs>
+    </div>;
+  }
+  const { container } = render(<Nested />);
+  const scroller = container.querySelector('.settings-content');
+  let top = 300;
+  const writes = [];
+  Object.defineProperty(scroller, 'scrollTop', { configurable: true, get: () => top, set: value => { writes.push(value); top = value; } });
+  fireEvent.click(screen.getByRole('tab', { name: 'Selection bar' }));
+  expect(screen.getByRole('tab', { name: 'Selection bar' }).getAttribute('aria-selected')).toBe('true');
+  expect(writes).toEqual([]);
+  expect(top).toBe(300);
+  fireEvent.click(screen.getByRole('tab', { name: 'Second' }));
+  expect(top).toBe(0);
+});
+
 it('applies the palette independently of light and dark mode', () => {
   useThemeStore.setState({ theme: 'dark', palette: 'indigo' });
   render(<ColorSchemeSettings />);

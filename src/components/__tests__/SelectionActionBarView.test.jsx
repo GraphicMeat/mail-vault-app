@@ -86,6 +86,29 @@ describe('SelectionActionBarView', () => {
     expect(document.querySelector('[data-testid="selection-action-bar"]')).toBeNull();
   });
 
+  // The sample bar is only as wide as what it holds. Measured against itself,
+  // the room left for its actions shrank on every pass until it was 34px, and
+  // the Menu trigger's label and the favorite's were painted over Clear. The
+  // room is what the bar can grow into, as the list's floating bar measures.
+  it.each(['menu', 'favorite-menu'])('gives the %s layout the room the bar sits in, not the width it already has', (mode) => {
+    const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const width = this.classList.contains('sample-room') ? 600
+        : this.hasAttribute('data-selection-label') ? 80
+        : this.hasAttribute('data-quick-actions-preview') ? 100 : 0;
+      return { width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0, toJSON() {} };
+    });
+    try {
+      render(<div className="sample-room">
+        <SelectionActionBarView rows={ROWS} config={{ ...CONFIG, mode, selectionDisplay: 'icon-label' }} preview />
+      </div>);
+      const actions = document.querySelector('.quick-actions-selection');
+      expect(actions.dataset.layout).toBe(mode);
+      expect(actions.style.maxWidth).toBe('434px');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('runs nothing, whichever action or Clear is pressed', async () => {
     render(<SelectionActionBarView rows={ROWS} config={CONFIG} preview />);
     const pressed = [];

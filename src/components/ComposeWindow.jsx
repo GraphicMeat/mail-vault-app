@@ -224,6 +224,9 @@ export function ComposeWindow() {
       }}
       snapshotRef={snapshotRef}
       onMinimize={snapshot => { latest.current = snapshot; void close('minimize', snapshot).catch(() => {}); }}
+      // Back into the main window, open there rather than as a bubble. The
+      // promise is handed back so a refused handoff unfreezes this editor.
+      onAttach={snapshot => { latest.current = snapshot; return close('attach', snapshot); }}
       onClose={() => { void close('return').catch(() => {}); }}
       onDiscard={() => { void close('discard').catch(() => {}); }}
       onContextVisibleChange={visible => relaySetting('composeContextVisible', visible)}

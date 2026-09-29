@@ -1,5 +1,7 @@
 import React, {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -53,6 +55,11 @@ const CATEGORY_WHEEL_SIZE = 400;
 export const CATEGORY_WHEEL = {
   size: CATEGORY_WHEEL_SIZE, inner: INNER_RING, arc: ARC_RING,
 };
+// A picture of a radial layout that nothing can open (Settings' option cards):
+// the wheel is drawn open, in place. Everywhere else, the Settings sample
+// included, a wheel sits behind its trigger and opens over the page, as it
+// does in the list.
+export const QuickActionWheelInPlace = createContext(false);
 // A wedge's clip-path depends only on its position, count and ring, all
 // bounded: cache it at module level so hovering never re-walks the trig and
 // rebuilds the polygon string.
@@ -332,6 +339,7 @@ function QuickActionsConfigured({
   const radialFits = typeof window !== "undefined" &&
     window.innerWidth >= 420 && window.innerHeight >= 430;
   const radial = mode === "radial" && (radialFits || preview);
+  const inPlace = useContext(QuickActionWheelInPlace) && preview && radial;
   const requestedInlineLimit = inlineLimit
     ? Math.max(1, Math.min(6, Number(inlineLimit)))
     : configured.length;
@@ -371,7 +379,7 @@ function QuickActionsConfigured({
   // while the wheel shows (a closed row menu renders on every live row).
   let inner = [];
   let centerEntries = menuEntries;
-  if (categories && (opened || preview)) {
+  if (categories && (opened || inPlace)) {
     const byId = new Map(remaining.map((item) => [item.entry.id, item]));
     inner = groupRadialEntries(remaining.map((item) => item.entry)).map((group) =>
       group.type === "action" ? { item: byId.get(group.entry.id) } : {
@@ -403,10 +411,14 @@ function QuickActionsConfigured({
       !actionsRef.current?.parentElement
     ) return undefined;
     const parent = actionsRef.current.parentElement;
-    // The bar's count and Clear share its width, as SelectionActionBar measures.
+    // The bar's count and Clear share the room the bar sits in, as
+    // SelectionActionBar measures its full-width wrapper. Not the bar's own
+    // width: a bar is as wide as what it holds, so every pass shrank it and
+    // the room with it, down to 34px under a Menu trigger's words.
+    const room = parent.parentElement || parent;
     const measure = () => {
       const label = parent.querySelector("[data-selection-label]");
-      const width = parent.getBoundingClientRect().width -
+      const width = room.getBoundingClientRect().width -
         (label?.getBoundingClientRect().width || 0) - 86;
       setParentAvailableWidth(Math.max(34, width));
     };
@@ -414,7 +426,7 @@ function QuickActionsConfigured({
     const observer = typeof ResizeObserver === "function"
       ? new ResizeObserver(measure)
       : null;
-    observer?.observe(parent);
+    observer?.observe(room);
     return () => observer?.disconnect();
   }, [inlineAvailableWidth, mode, surface]);
 
@@ -498,14 +510,14 @@ function QuickActionsConfigured({
     if (page === previousPageRef.current) return;
     previousPageRef.current = page;
     requestAnimationFrame(() => {
-      const root = preview ? actionsRef.current : panelRef.current;
+      const root = inPlace ? actionsRef.current : panelRef.current;
       // The pointer is still on the page button in the center: this focus
       // names nothing, like the one on opening.
       openingFocusRef.current = true;
       root?.querySelector(".quick-action-radial-item:not(:disabled)")?.focus();
       openingFocusRef.current = false;
     });
-  }, [page, preview]);
+  }, [page, inPlace]);
   // A new identity (another message) closes the menu. Not on mount: a row
   // mounts this inside the right-click that opens it (`openAt` below).
   const identityRef = useRef(identity);
@@ -584,7 +596,7 @@ function QuickActionsConfigured({
   };
   const onMenuKeyDown = (event) => {
     if (event.key === "Tab") {
-      if (preview) return;
+      if (inPlace) return;
       event.preventDefault();
       event.stopPropagation();
       close(true);
@@ -830,7 +842,7 @@ function QuickActionsConfigured({
     );
     if (distance > rect.width * INNER_RING.outer / 100) close();
   };
-  if (preview && radial) {
+  if (inPlace) {
     return (
       <div
         ref={actionsRef}
@@ -892,6 +904,7 @@ function QuickActionsConfigured({
         {...(categories ? { onClick: panelClick } : {})}
         data-surface={surface}
         data-radial-layout={categories ? "categories" : undefined}
+        data-quick-actions-preview={preview || undefined}
         className={radial ? "quick-actions-radial" : "quick-actions-menu"}
         style={panelStyle}
       >

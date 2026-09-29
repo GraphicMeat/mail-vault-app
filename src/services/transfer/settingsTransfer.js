@@ -18,7 +18,7 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'autoSaveDrafts', 'autoSaveInterval', 'spellcheckEnabled', 'composeContextVisible', 'composeContextSplit', 'closeToTray', 'composeOpenMode',
   'refreshInterval', 'refreshOnLaunch', 'badgeEnabled', 'badgeMode', 'markAsReadMode',
   'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'updateTrack',
-  'autoDownloadAttachments', 'layoutMode', 'viewStyle', 'emailListStyle', 'listPreviewLines', 'emailListGrouping',
+  'autoDownloadAttachments', 'layoutMode', 'viewStyle', 'emailListStyle', 'listPreviewLines', 'listDensity', 'emailListGrouping',
   'emailListView', 'listTimelineVisible', 'explorerGrouping', 'explorerDateDepth',
   'insightsPreferences', 'threadReaderLayout', 'threadSortOrder', 'threadMode',
   'emailRowHighlight', 'dateFormat', 'customDateFormat', 'timeFormat', 'language',

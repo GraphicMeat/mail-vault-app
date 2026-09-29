@@ -77,6 +77,67 @@ describe('compose window ownership', () => {
     expect(update).toHaveBeenLastCalledWith(8, expect.objectContaining({ minimized: true, detached: false, snapshot: expect.objectContaining({ subject: 'latest' }) }));
   });
 
+  // The window's "move back into the main window": the latest draft reopens in
+  // main, open rather than minimized, and main hears of it before that
+  // compose mounts, so it can stop the mount handing the draft straight back.
+  it('reopens a draft moved back from its window in main, open, with its latest content', async () => {
+    const order = [];
+    const update = vi.fn((_id, patch) => order.push(['update', patch]));
+    const attached = vi.fn(id => order.push(['attached', id]));
+    const open = vi.fn().mockResolvedValue('compose-attach');
+    const emitTo = vi.fn().mockResolvedValue(undefined);
+    const owner = createComposeWindowOwner({ open, emitTo, update, close: vi.fn(), queueSend: vi.fn(), attached });
+    const handoff = owner.detach({ id: 81, mode: 'reply', snapshot: snapshot('old') });
+    await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+    ready(owner, 81, token);
+    owner.receive({ composeId: '81', token, requestId: 'init', type: 'initialized' });
+    await handoff;
+    order.length = 0;
+
+    owner.receive({ composeId: '81', token, requestId: 'attach', type: 'attach', payload: snapshot('typed in the window') });
+    await vi.waitFor(() => expect(attached).toHaveBeenCalledWith(81));
+    expect(emitTo).toHaveBeenCalledWith('compose-attach', 'compose-window-message', expect.objectContaining({ requestId: 'attach', type: 'ack' }));
+    expect(order.map(([what]) => what)).toEqual(['attached', 'update']);
+    expect(order[1][1]).toMatchObject({
+      minimized: false, detached: false, nativeLabel: null,
+      snapshot: expect.objectContaining({ subject: 'typed in the window', bcc: 'bcc@example.test', _draftUid: 12 }),
+      initialData: expect.objectContaining({ subject: 'typed in the window' }),
+    });
+  });
+
+  it('still minimizes a closed window to a bubble without calling it a move back', async () => {
+    const update = vi.fn();
+    const attached = vi.fn();
+    const open = vi.fn().mockResolvedValue('compose-close-bubble');
+    const owner = createComposeWindowOwner({ open, emitTo: vi.fn().mockResolvedValue(undefined), update, close: vi.fn(), queueSend: vi.fn(), attached });
+    const handoff = owner.detach({ id: 82, mode: 'new', snapshot: snapshot() });
+    await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+    ready(owner, 82, token);
+    owner.receive({ composeId: '82', token, requestId: 'init', type: 'initialized' });
+    await handoff;
+    owner.receive({ composeId: '82', token, requestId: 'close', type: 'closed' });
+    await vi.waitFor(() => expect(update).toHaveBeenLastCalledWith(82, expect.objectContaining({ minimized: true, detached: false })));
+    expect(attached).not.toHaveBeenCalled();
+  });
+
+  it('refuses a move back while a send from the window is in flight', async () => {
+    const emitTo = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn();
+    const attached = vi.fn();
+    const open = vi.fn().mockResolvedValue('compose-attach-busy');
+    const owner = createComposeWindowOwner({ open, emitTo, update, close: vi.fn(), queueSend: () => new Promise(() => {}), attached });
+    const handoff = owner.detach({ id: 83, mode: 'new', snapshot: snapshot() });
+    await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+    ready(owner, 83, token);
+    owner.receive({ composeId: '83', token, requestId: 'init', type: 'initialized' });
+    await handoff;
+    owner.receive({ composeId: '83', token, requestId: 'send', type: 'send', payload: { snapshot: snapshot() } });
+    owner.receive({ composeId: '83', token, requestId: 'attach', type: 'attach', payload: snapshot() });
+    await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('compose-attach-busy', 'compose-window-message', expect.objectContaining({ requestId: 'attach', type: 'error' })));
+    expect(attached).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalledWith(83, expect.objectContaining({ minimized: false, detached: false }));
+  });
+
   it('queues detached sends in main and ignores unknown settings writes', async () => {
     const queueSend = vi.fn();
     const update = vi.fn();

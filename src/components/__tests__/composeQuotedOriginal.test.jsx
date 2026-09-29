@@ -303,6 +303,48 @@ describe('the quoted original in a reply', () => {
     expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftUid: 1, _draftAccountId: 'acct-1' });
   });
 
+  // A compose moved into a window of its own had no way back. The window now
+  // offers one, mirroring the pop-out the main window's compose offers.
+  it('offers the move back into the main window only in a window of its own', async () => {
+    const onAttach = vi.fn().mockResolvedValue(undefined);
+    const inMain = render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}}
+      onDetach={vi.fn()} onAttach={onAttach} />);
+    await screen.findByTestId('compose-detach');
+    expect(screen.queryByTestId('compose-attach')).toBeNull();
+    inMain.unmount();
+
+    render(<ComposeModal mode="new" detached onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onAttach={onAttach} />);
+    const back = await screen.findByTestId('compose-attach');
+    expect(back.getAttribute('aria-label')).toBe(back.getAttribute('title'));
+    expect(back.getAttribute('title')).toBeTruthy();
+    expect(screen.queryByTestId('compose-detach')).toBeNull();
+  });
+
+  it('hands the draft as it stands to the main window and stays frozen until the window goes', async () => {
+    const onAttach = vi.fn(() => new Promise(() => {}));
+    render(<ComposeModal mode="new" detached initialData={{ to: 'before@example.test', subject: 'Kept', body: '<p>Body</p>', _baseline: null }}
+      onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onAttach={onAttach} />);
+
+    fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'typed@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-attach'));
+    await waitFor(() => expect(onAttach).toHaveBeenCalledTimes(1));
+    expect(onAttach.mock.calls[0][0]).toMatchObject({ to: 'typed@example.test', subject: 'Kept' });
+    expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(true);
+    fireEvent.click(screen.getByTestId('compose-attach'));
+    expect(onAttach).toHaveBeenCalledTimes(1);
+  });
+
+  it('unfreezes with the error when the main window refuses the draft', async () => {
+    const onAttach = vi.fn().mockRejectedValue(new Error('Main window busy'));
+    render(<ComposeModal mode="new" detached initialData={{ to: 'before@example.test', body: '<p>Body</p>', _baseline: null }}
+      onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onAttach={onAttach} />);
+
+    fireEvent.click(await screen.findByTestId('compose-attach'));
+    await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Main window busy'));
+    expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(false);
+    expect(screen.getByTestId('compose-to').value).toBe('before@example.test');
+  });
+
   it('does not publish an autosave snapshot after unmount', async () => {
     let resolveSave;
     saveLocalDraft.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }));

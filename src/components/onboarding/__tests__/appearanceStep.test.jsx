@@ -175,11 +175,17 @@ describe('appearance step', () => {
     });
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
-    expect(document.querySelector('.quick-actions-sample-frame .quick-actions-radial-preview').dataset.radialLayout).toBe('categories');
+    // The sample's wheel opens from its row's trigger, as in the list.
+    const sampleWheel = () => {
+      const open = () => document.querySelector('.quick-actions-radial[data-surface="row"][data-quick-actions-preview]');
+      if (!open()) fireEvent.click(document.querySelector('.quick-actions-sample-frame .quick-actions-trigger'));
+      return open();
+    };
+    expect(sampleWheel().dataset.radialLayout).toBe('categories');
     fireEvent.click(screen.getByTestId('appearance-recommended'));
     expect(useSettingsStore.getState().quickActions.defaults.row.radialLayout).toBe('flat');
     expect(useSettingsStore.getState().quickActions.defaults.row.entries.map(entry => entry.id)).toEqual(['reply', 'forward']);
-    expect(document.querySelector('.quick-actions-sample-frame .quick-actions-radial-preview').dataset.radialLayout).toBeUndefined();
+    expect(sampleWheel().dataset.radialLayout).toBeUndefined();
   });
 
   it('picks and plays the new email sound on the reading tab, on a Mac with notifications on', () => {

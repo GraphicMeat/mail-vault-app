@@ -313,8 +313,14 @@ describe('QuickActionsSettings', () => {
     // Choosing categories adds no favorite field in front of the wheel layout.
     expect(document.querySelector('select[aria-label="Favorite action"]')).toBeNull();
     expect(controls().slice(0, before.indexOf('Wheel layout') + 1)).toEqual(before.slice(0, before.indexOf('Wheel layout') + 1));
-    // The live sample's wheel, not a card's.
-    const wheel = sampleFrame().querySelector('.quick-actions-radial-preview');
+    // The live sample's wheel, not a card's: opened from its row's trigger, as
+    // in the list, never drawn over the rows.
+    expect(sampleFrame().querySelector('.quick-actions-radial-preview')).toBeNull();
+    const triggers = sampleFrame().querySelectorAll('.quick-actions-trigger');
+    expect(triggers).toHaveLength(1);
+    fireEvent.click(triggers[0]);
+    const wheel = document.querySelector('.quick-actions-radial[data-surface="row"][data-quick-actions-preview]');
+    expect(sampleFrame().contains(wheel)).toBe(false);
     expect(wheel.dataset.radialLayout).toBe('categories');
     // Archive stays in Organize with Move, not a wedge of its own.
     expect([...wheel.children].some(element => element.dataset.quickAction === 'archive')).toBe(false);

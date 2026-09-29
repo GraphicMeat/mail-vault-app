@@ -126,57 +126,91 @@ export const useNotesStore = create((set, get) => ({
   setDetailOpen: (detailOpen, openKey = null) => set({ detailOpen, openKey }),
 
   /// Done tags every copy with the app tag `Done`; the server is not touched.
-  /// The tag store is told: the tag may be new (its list and counts), and the
-  /// copies' cached chips are dropped so any row showing them asks again.
+  /// It takes the card off the board the way a delete takes a row off the
+  /// list, so it is offered back the same way: the undo takes the tag off and
+  /// puts the card back as it was.
   markDone: card => guarded(card, async () => {
     await daemonCall('notes.set_done', { copies: card.copies, done: true });
     offBoard.add(card.key);
     set({ cards: get().cards.filter(other => other.key !== card.key) });
-    const stale = new Set((card.copies || []).map(copy => tagRowKey(copy.accountId, copy.mailbox, copy.uid)));
-    useTagStore.setState(state => ({
-      byRow: Object.fromEntries(Object.entries(state.byRow).filter(([key]) => !stale.has(key))),
-    }));
-    await useTagStore.getState().refreshCounts();
+    useMailStore.getState().setUndo({
+      labelKey: 'undo.noteDone',
+      run: async () => {
+        await daemonCall('notes.set_done', { copies: card.copies, done: false });
+        // A list asked for before the undo must not drop it again.
+        offBoard.delete(card.key);
+        if (get().isOpen && !get().cards.some(other => other.key === card.key)) set({ cards: [...get().cards, card] });
+        await tagChanged(card.copies);
+      },
+    });
+    await tagChanged(card.copies);
   }),
 
   /// The card knows whether it is starred; a board card is never a loaded
   /// list row, so the one-row toggle (which reads the row) would always star.
+  /// Each copy goes to the flag core as a target that names its own folder:
+  /// the daemon listed it from the vault, which is the proof a list row gives
+  /// that core, so the core lands the star on the vault copy as well (as a
+  /// delta over what the copy holds by then), and its undo takes it back off
+  /// there and off this card (applyCopyFlag).
   toggleStar: card => guarded(card, async () => {
     if (!canToggleStar(card, get().accounts)) return;
-    const copies = serverCopies(card, get().accounts);
+    const mailAccounts = useMailStore.getState().accounts || [];
+    const targets = serverCopies(card, get().accounts).flatMap(copy => {
+      const account = mailAccounts.find(candidate => candidate.id === copy.accountId);
+      return account ? [{ account, accountId: copy.accountId, mailbox: copy.mailbox, uid: copy.uid, named: true }] : [];
+    });
+    if (!targets.length) return;
     const starred = !card.starred;
-    const flip = value => set({ cards: get().cards.map(other => (other.key === card.key ? { ...other, starred: value } : other)) });
-    flip(starred);
+    const before = get().cards.find(other => other.key === card.key);
+    get().applyCopyFlag(targets, '\\Flagged', starred);
     try {
-      const { applyFlagToKeys } = await import('../services/workflows/messageMutations');
-      await applyFlagToKeys(copies.map(copyKey), '\\Flagged', starred);
+      const { applyFlagToTargets } = await import('../services/workflows/messageMutations');
+      await applyFlagToTargets(targets, '\\Flagged', starred);
     } catch (error) {
-      flip(!starred);
+      if (before) set({ cards: get().cards.map(other => (other.key === card.key ? before : other)) });
       throw error;
     }
-    // That write takes a vault copy's flags from its list row, and a board
-    // card usually has none: the copies kept their old flags, and the board
-    // reads its stars from them. The star goes on as a delta over what each
-    // copy holds by then: the flags the board loaded with are stale once the
-    // note has been read in the reader.
-    const { vaultApplyFlags } = await import('../services/api');
-    const mailAccounts = useMailStore.getState().accounts || [];
-    await Promise.all(copies.map(copy => vaultApplyFlags(copy.accountId, copy.mailbox,
-      mailAccounts.find(account => account.id === copy.accountId)?.email || null,
-      [{ uid: copy.uid, flags: ['\\Flagged'], on: starred }])
-      .catch(error => console.warn('[notes] vault copy not starred:', error?.message || error))));
   }),
+
+  /// One flag change for these copies, from wherever it was made: this
+  /// board's star, the undo of one, a star on a list row of the same message.
+  /// Each copy keeps its own flags, and a card is starred while any copy is.
+  /// Nothing changes identity unless a copy on the board was named.
+  applyCopyFlag: (targets, flag, on) => {
+    const named = copy => targets.some(target => target.accountId === copy.accountId
+      && target.mailbox === copy.mailbox && String(target.uid) === String(copy.uid));
+    let touched = false;
+    const cards = get().cards.map(card => {
+      if (!(card.copies || []).some(named)) return card;
+      touched = true;
+      const copies = card.copies.map(copy => {
+        if (!named(copy)) return copy;
+        const flags = (copy.flags || []).filter(other => other !== flag);
+        return { ...copy, flags: on ? [...flags, flag] : flags };
+      });
+      return flag === '\\Flagged'
+        ? { ...card, copies, starred: copies.some(copy => copy.flags?.includes('\\Flagged')) }
+        : { ...card, copies };
+    });
+    if (touched) set({ cards });
+  },
 
   /// Every copy the server knows goes through the reader's own server delete.
   /// Answers `{ deleted, kept }`: a copy in a folder the account list did not
   /// name is never addressed, and the card stays with just those copies. A
   /// refusal leaves the card holding the copies not yet deleted and is
   /// rethrown for the confirm dialog's error toast.
+  ///
+  /// One copy at a time (`skipRefresh`), and one undo for all of them: a slot
+  /// per copy put back only the last. The undo brings the card back too; the
+  /// restored copies carry new uids, which only a fresh list knows.
   deleteCard: card => guarded(card, async () => {
     const copies = serverCopies(card, get().accounts);
     if (!copies.length) return { deleted: 0, kept: (card.copies || []).length };
-    const { deleteEmailFromServer } = await import('../services/workflows/messageMutations');
+    const { deleteEmailFromServer, setDeleteUndo } = await import('../services/workflows/messageMutations');
     const gone = new Set();
+    const outcomes = [];
     const keep = () => {
       const left = (card.copies || []).filter(copy => !gone.has(copy));
       if (!left.length) offBoard.add(card.key);
@@ -185,22 +219,43 @@ export const useNotesStore = create((set, get) => ({
         : get().cards.filter(other => other.key !== card.key) });
       return left.length;
     };
+    const offerUndo = tagged => setDeleteUndo(outcomes.filter(Boolean), {
+      afterRestore: async () => {
+        if (tagged) await daemonCall('notes.set_done', { copies: card.copies, done: false });
+        if (get().isOpen) await get().load();
+      },
+    });
     try {
       for (const copy of copies) {
-        await deleteEmailFromServer(copy.uid, { accountId: copy.accountId, mailboxOverride: copy.mailbox });
+        outcomes.push(await deleteEmailFromServer(copy.uid, { accountId: copy.accountId, mailboxOverride: copy.mailbox, skipRefresh: true }));
         gone.add(copy);
       }
     } catch (error) {
-      if (gone.size) keep();
+      if (gone.size) {
+        keep();
+        await offerUndo(false);
+      }
       throw error;
     }
     const kept = keep();
     // The board lists the vault's copies, and a server delete leaves those:
     // tag the note Done so it does not come back with the next list.
-    if (!kept) await daemonCall('notes.set_done', { copies: card.copies, done: true }).catch(() => {});
+    const tagged = !kept && await daemonCall('notes.set_done', { copies: card.copies, done: true }).then(() => true, () => false);
+    await offerUndo(tagged);
     return { deleted: gone.size, kept };
   }),
 }));
+
+/// `Done` went on or came off these copies. The tag store is told: the tag
+/// may be new (its list and counts), and the copies' cached chips are dropped
+/// so any row showing them asks again.
+async function tagChanged(copies) {
+  const stale = new Set((copies || []).map(copy => tagRowKey(copy.accountId, copy.mailbox, copy.uid)));
+  useTagStore.setState(state => ({
+    byRow: Object.fromEntries(Object.entries(state.byRow).filter(([key]) => !stale.has(key))),
+  }));
+  await useTagStore.getState().refreshCounts();
+}
 
 /// Runs one action for a card unless one is already running for it.
 function guarded(card, action) {

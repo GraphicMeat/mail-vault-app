@@ -6,7 +6,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
@@ -113,7 +113,7 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
   const t = useT();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
@@ -1145,6 +1145,25 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return transferred;
   };
 
+  // The way back from a window of its own (ComposeWindow.jsx): the draft goes
+  // to the main window's compose, open, not minimized. Frozen from the
+  // snapshot until the window is gone, so nothing typed in that gap is lost,
+  // and handed over only once an autosave in flight has landed, so this
+  // window's write and main's first one never interleave on one draft.
+  const handleAttach = async () => {
+    if (!onAttach || sending || detaching) return;
+    setDetaching(true);
+    setSending(true);
+    try {
+      await saveChainRef.current.catch(() => {});
+      await onAttach(latestSnapshotRef.current());
+    } catch (err) {
+      setError(err?.message || String(err));
+      setSending(false);
+      setDetaching(false);
+    }
+  };
+
   // A pop-out is remembered: every compose after it opens in a window of its
   // own, until Settings switches back. Auto-detach calls handleDetach alone,
   // so following the setting never writes it.
@@ -1283,6 +1302,13 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
                 onClick={popOut} title={t('chat.bubble.openNewWindow')} data-testid="compose-detach">
                 <Maximize2 size={16} className="text-mail-text-muted" />
+              </Button>
+            )}
+            {onAttach && detached && (
+              <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
+                onClick={handleAttach} title={t('compose.moveToMainWindow')}
+                aria-label={t('compose.moveToMainWindow')} data-testid="compose-attach">
+                <PictureInPicture2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
             <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"

@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
 import { ExplorerView } from './ExplorerView';
+import { ViewUnavailableState } from './ViewUnavailableState';
 import { LEGEND_ENTRIES } from './email/stateLegend.jsx';
 import { DateScrubber, MonthHeader, MONTH_HEADER_H, useDateScrubber, useMonthBuckets } from './email/DateScrubber';
 import { bucketAtIndex, firstRowOfMonth } from '../utils/dateBuckets';
@@ -209,6 +210,9 @@ function EmailListComponent({ stacked = false }) {
   const toggleUnreadOnly = useUiStore(s => s.toggleUnreadOnly);
   const searchActive = useSearchStore(s => s.searchActive);
   const activeView = useViewStore(s => s.views.find(view => view.id === s.activeViewId) || null);
+  // Why the open view could not be worked out (the index is rebuilding, off
+  // or closed), or null. Said in place of the rows, not as an empty list.
+  const viewUnavailable = useViewStore(s => (s.activeViewId ? s.unavailableReason : null));
   const closeView = useViewStore(s => s.closeView);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
@@ -260,6 +264,7 @@ function EmailListComponent({ stacked = false }) {
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const previewLines = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines));
+  const listDensity = useSettingsStore(s => s.listDensity);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const emailListView = useSettingsStore(s => s.emailListView);
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
@@ -323,7 +328,8 @@ function EmailListComponent({ stacked = false }) {
   const isCompact = emailListStyle === 'compact' || narrowList;
   // Every row the same height for a given N, whether or not its body has been
   // indexed yet: the virtualizer places rows by arithmetic, never by measuring.
-  const ROW_HEIGHT = listRowHeight(isCompact, previewLines);
+  // Density is part of that arithmetic, so the rows and their slots agree.
+  const ROW_HEIGHT = listRowHeight(isCompact, previewLines, listDensity);
   const rowStyle = useMemo(() => ({ height: ROW_HEIGHT }), [ROW_HEIGHT]);
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
@@ -1304,7 +1310,9 @@ function EmailListComponent({ stacked = false }) {
             />
           </div>
         )}
-        {isExplorer ? (
+        {activeView && viewUnavailable ? (
+          <ViewUnavailableState reason={viewUnavailable} />
+        ) : isExplorer ? (
           <ExplorerView emails={searchActive ? searchResults : sortedEmails}
             conversationEmails={mergedEmails || (searchActive ? searchResults : sortedEmails)}
             context={explorerContext} rootLabel={searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox)}

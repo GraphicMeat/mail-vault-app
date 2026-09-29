@@ -16,6 +16,7 @@ import { AccountTransfer } from './AccountTransfer';
 import { DownloadModeControl } from './DownloadModeControl';
 import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
+import { classifySignatureImageSize, signatureHasContent, signatureImageBytes, signatureImageKb } from '../../utils/signatureImages';
 import { Toast } from '../Toast';
 import {
   User,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   Key,
   AlertCircle,
+  AlertTriangle,
   Plus,
   Eye,
   EyeOff,
@@ -53,6 +55,29 @@ function SavedBadge({ visible }) {
         </motion.span>
       )}
     </AnimatePresence>
+  );
+}
+
+// A logo in the signature goes out with every email, so its size is graded
+// where it is added. Warning only: the picture is never resized.
+const SIGNATURE_IMAGE_TIERS = {
+  good: { labelKey: 'settings.accounts.signatureImageGood', Icon: Check, className: 'text-mail-success' },
+  warn: { labelKey: 'settings.accounts.signatureImageWarn', Icon: AlertTriangle, className: 'text-mail-warning' },
+  alert: { labelKey: 'settings.accounts.signatureImageAlert', Icon: AlertCircle, className: 'text-mail-danger' },
+};
+
+function SignatureImageSize({ html }) {
+  const t = useT();
+  const bytes = React.useMemo(() => signatureImageBytes(html), [html]);
+  const tier = classifySignatureImageSize(bytes);
+  if (!tier) return null;
+  const { labelKey, Icon, className } = SIGNATURE_IMAGE_TIERS[tier];
+  return (
+    <p role="status" aria-live="polite" data-signature-image-size="" data-tier={tier}
+      className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${className}`}>
+      <Icon size={13} aria-hidden="true" className="flex-shrink-0" />
+      {t(labelKey, { size: signatureImageKb(bytes) })}
+    </p>
   );
 }
 
@@ -181,7 +206,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     if (!accountId) return;
     const sig = getSignature(accountId);
     const text = htmlToText(rawHtml);
-    const html = text ? rawHtml : '';
+    const hasContent = signatureHasContent(rawHtml, text);
+    const html = hasContent ? rawHtml : '';
     const nameChanged = (getDisplayName(accountId) || '') !== name;
     const sigChanged = (sig.html || '') !== html || (sig.text || '') !== text;
     const trimmedSendAs = (sendAsValue || '').trim();
@@ -196,7 +222,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
         html,
         text,
         // first content on a never-configured signature turns it on
-        enabled: sig.enabled || (!sig.html && !sig.text && !!text),
+        enabled: sig.enabled || (!sig.html && !sig.text && hasContent),
       });
     }
     setAutoSaved(true);
@@ -641,6 +667,10 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   <p className="text-xs text-mail-text-muted mt-2">
                     {t('settings.accounts.boldItalicLinksListsSupported')}
                   </p>
+                  <p className="text-xs text-mail-text-muted mt-1">
+                    {t('settings.accounts.signatureImageHint')}
+                  </p>
+                  <SignatureImageSize html={signatureHtml} />
                 </div>
               </div>
             </div>

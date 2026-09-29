@@ -147,6 +147,13 @@
    preview line. */
 .row-compact .row-gutter-cell .row-gutter-slot { height: 15px; }
 .row-compact .row-snippet { margin-left: -28px; }
+/* Message list density compact (listRowHeight's dense bases in EmailRow.jsx):
+   the same lines and targets with less air. A single-line row is 40px, so a
+   first line that hangs from the top sits 10px down, where a centred one
+   would. The two-line layout is 44px: its text block trims py-1.5 to py-0.5,
+   and the gutter rises with it. */
+.row-dense { --row-top: 10px; }
+.row-compact.row-dense { --row-top: 2px; --row-gutter-top: 2px; }
 
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:
@@ -1254,6 +1261,8 @@ input[type="range"]::-moz-range-thumb:hover {
 .preview-email-body p { margin-top: 5px; }
 .preview-message-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; --row-first-line: 18px; }
 .preview-message-rows:not(.preview-single-line) .preview-message-row { align-items: flex-start; }
+/* Message list density: compact takes the same air out as the list's rows. */
+.preview-message-rows[data-list-density="compact"] .preview-message-row { padding-block: 3px; }
 .preview-checkbox { display: block; width: 16px; height: 16px; border-width: 1.5px; cursor: default; }
 .preview-message-row + .preview-message-row { border-top: 1px solid var(--mail-border); }
 .preview-message-copy { display: flex; flex-direction: column; flex: 1; min-width: 0; }

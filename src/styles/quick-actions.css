@@ -325,6 +325,26 @@
   flex-wrap: nowrap;
 }
 
+/* Still short of room (a layout card's small bar), the Menu trigger's words
+   and the favorite's give way to an ellipsis instead of running under Clear.
+   Only those: the inline layout decides what overflows into its menu by each
+   button's natural width, and icons never shrink. */
+.quick-actions-selection[data-layout="menu"] > .quick-actions-trigger,
+.quick-actions-selection[data-layout="favorite-menu"] > .quick-action-button {
+  min-width: 0;
+}
+
+.quick-actions-selection[data-layout="menu"] > .quick-actions-trigger > span,
+.quick-actions-selection[data-layout="favorite-menu"] > .quick-action-button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-actions-selection svg {
+  flex-shrink: 0;
+}
+
 .quick-actions-editor-controls,
 .quick-actions-add-row,
 .quick-actions-parameter {
@@ -516,19 +536,13 @@
   background: var(--mail-bg);
 }
 
-/* Room for a wheel drawn over the rows above and below its own. */
-.quick-actions-sample-frame[data-radial] { padding-block: 28px; }
-
 .quick-actions-sample-row {
   position: relative;
   flex-shrink: 0;
 }
 
-/* The row showing its actions paints over the next one, as an open menu does. */
-.quick-actions-sample-frame[data-sample-surface="row"] > .quick-actions-sample-row:nth-child(2) { z-index: 1; }
-
-/* A list row clips what it paints; a sample row's wheel reaches past it,
-   without the hover plate behind the actions. */
+/* A list row clips what it paints; a card's row draws its wheel open past
+   it, without the hover plate behind the actions. */
 .virtual-row[data-quick-actions-preview] { contain: none; }
 .virtual-row[data-quick-actions-preview] > div:has(> .quick-actions-radial-preview) { background: transparent; }
 
@@ -564,21 +578,17 @@
   font-size: 12px;
 }
 
-/* A wheel is drawn in place, smaller. Its center disc has a fixed size, so it
-   shrinks by zoom, not by width. */
-.quick-actions-sample-frame .quick-actions-radial-preview,
+/* A card draws its wheel in place, smaller. Its center disc has a fixed size,
+   so it shrinks by zoom, not by width. */
 .quick-actions-card-sample .quick-actions-radial-preview {
   width: 304px;
   height: 304px;
   margin: 0;
-  zoom: .6;
 }
 
-.quick-actions-sample-frame .quick-actions-radial-preview[data-radial-layout="categories"],
 .quick-actions-card-sample .quick-actions-radial-preview[data-radial-layout="categories"] {
   width: 400px;
   height: 400px;
-  zoom: .45;
 }
 
 /* A card's picture: the same components at under three quarters their size. */
@@ -1008,11 +1018,6 @@
 .views-empty,
 .views-refused {
   color: var(--mail-text-muted);
-}
-
-.views-upgrade {
-  color: var(--mail-accent, #4f46e5);
-  text-decoration: underline;
 }
 
 /* The builder is a page, not a sidebar popover: it gets page-sized type. */

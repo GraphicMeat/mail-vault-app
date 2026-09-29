@@ -1,6 +1,7 @@
 import React, { useId, useState } from 'react';
 import { EmailRow, CompactEmailRow, listRowHeight } from '../EmailRow';
 import { SelectionActionBarView } from '../SelectionActionBar';
+import { QuickActionWheelInPlace } from '../QuickActions';
 import { EmailActionBar } from '../email/EmailActionBar';
 import { ChoiceCards } from '../ui/ChoiceCards';
 import { normalizeListPreviewLines, useSettingsStore } from '../../stores/settingsStore';
@@ -14,7 +15,8 @@ import { useT } from '../../i18n/index.js';
 // thing: the list row, the selection bar and the reader toolbar, over the
 // person's own latest mail (hooks/useQuickActionSamples.js). Every action and
 // handler here is a no-op, and a click that is not on a quick action never
-// reaches the component under it.
+// reaches the component under it. A wheel or menu opens from its trigger over
+// the page, as in the list; only an option card draws a wheel open in place.
 
 const NOOP = () => {};
 // The keys EmailList hands its rows.
@@ -38,8 +40,9 @@ function SurfaceSample({ surface, config, rows, onAction = NOOP, list = false })
   const t = useT();
   const compact = useSettingsStore(state => state.emailListStyle) === 'compact';
   const previewLines = useSettingsStore(state => normalizeListPreviewLines(state.listPreviewLines));
+  const density = useSettingsStore(state => state.listDensity);
   const Row = compact ? CompactEmailRow : EmailRow;
-  const height = listRowHeight(compact, previewLines);
+  const height = listRowHeight(compact, previewLines, density);
   const row = (email, props) => <div key={email.uid} className="quick-actions-sample-row" style={{ height }}>
     <Row rowId={`sample:${email.uid}`} email={email} style={{ height }} isSelected={false} isChecked={false}
       onSelect={NOOP} onToggleSelection={NOOP} actions={NOOP_ROW_ACTIONS} onRequestDelete={NOOP}
@@ -90,7 +93,7 @@ export function QuickActionSample({ surface, config, rows }) {
     <h5 id={id}>{t('quickActions.preview')}</h5>
     <p className="text-xs text-mail-text-muted">{t(`quickActions.where.${surface}`)} {t('quickActions.previewDescription')}</p>
     <div className="quick-actions-sample-frame" data-quick-actions-preview data-sample-surface={surface}
-      data-sample-account={rows[0]?._accountId} data-radial={config.mode === 'radial' || undefined}
+      data-sample-account={rows[0]?._accountId}
       onClickCapture={event => {
         if (event.target.closest?.('[data-quick-action]')) setStatus(t('quickActions.previewResult'));
         shield(event);
@@ -101,10 +104,12 @@ export function QuickActionSample({ surface, config, rows }) {
   </section>;
 }
 
-/** A card's picture of one option: the same surface, small and inert. */
+/** A card's picture of one option: the same surface, small and inert, its wheel drawn open. */
 export function CardSample({ surface, config, rows }) {
   return <div className="quick-actions-card-sample" data-quick-actions-preview aria-hidden="true" inert="">
-    <div className="quick-actions-card-sample-content"><SurfaceSample surface={surface} config={config} rows={rows} /></div>
+    <QuickActionWheelInPlace.Provider value>
+      <div className="quick-actions-card-sample-content"><SurfaceSample surface={surface} config={config} rows={rows} /></div>
+    </QuickActionWheelInPlace.Provider>
   </div>;
 }
 

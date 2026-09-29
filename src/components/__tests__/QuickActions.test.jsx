@@ -9,7 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { CATEGORY_WHEEL, QuickActions } from "../QuickActions";
+import { CATEGORY_WHEEL, QuickActions, QuickActionWheelInPlace } from "../QuickActions";
 
 const icon = () => <span aria-hidden="true">•</span>;
 const descriptors = [
@@ -289,6 +289,47 @@ describe("QuickActions", () => {
       }),
     );
     render(
+      <QuickActionWheelInPlace.Provider value>
+        <QuickActions
+          config={{
+            mode: "radial",
+            palette: "semantic",
+            radialPagination: true,
+            entries: many.map(({ id, action }) => ({ id, action })),
+          }}
+          descriptors={many}
+          preview
+        />
+      </QuickActionWheelInPlace.Provider>,
+    );
+    expect(document.querySelector(".quick-actions-radial-preview")).not.toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Next actions" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("menuitem", { name: "Preview 8" }),
+      )
+    );
+    // The pointer is still on the page button: the refocus names nothing.
+    expect(
+      document.querySelector(".quick-actions-radial-center > span:not([aria-hidden])").textContent,
+    ).toBe("");
+  });
+
+  // Settings' sample is the list's own control: a trigger, and a wheel that
+  // opens over the page, marked as a preview, paging and focusing as the
+  // list's does. Only a picture nothing can open draws the wheel in place.
+  it("keeps a preview wheel behind its trigger, as the list does", async () => {
+    const many = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `sample-${index}`,
+        action: "archive",
+        label: `Sample ${index}`,
+        Icon: icon,
+        onActivate: vi.fn(),
+      }),
+    );
+    render(
       <QuickActions
         config={{
           mode: "radial",
@@ -300,16 +341,19 @@ describe("QuickActions", () => {
         preview
       />,
     );
+    expect(document.querySelector(".quick-actions-radial-preview")).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Sample 0" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Quick actions" }));
+    const wheel = document.querySelector(".quick-actions-radial[data-surface=\"row\"]");
+    expect(wheel.hasAttribute("data-quick-actions-preview")).toBe(true);
     fireEvent.click(screen.getByRole("menuitem", { name: "Next actions" }));
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByRole("menuitem", { name: "Preview 8" }),
+        screen.getByRole("menuitem", { name: "Sample 8" }),
       )
     );
-    // The pointer is still on the page button: the refocus names nothing.
-    expect(
-      document.querySelector(".quick-actions-radial-center > span:not([aria-hidden])").textContent,
-    ).toBe("");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sample 8" }));
+    expect(many[8].onActivate).toHaveBeenCalledTimes(1);
   });
 
   it("keeps colors stable when actions are reordered and puts inline overflow in a reachable menu", () => {

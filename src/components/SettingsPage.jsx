@@ -146,6 +146,7 @@ export const settingSearchGroups = [
     ['workspace.backupStatusLocation', 'backup status location indicator icon badge avatar green check info hide hidden sidebar'],
     ['workspace.navigation', 'sidebar navigation folders bubbles list'],
     ['workspace.messageRows', 'message rows density compact single two lines'],
+    ['workspace.listDensity', 'message list rows density compact comfortable spacing dense tight'],
     ['listPreview.title', 'preview snippet excerpt body text lines message list rows'],
   ] },
   { id: 'appearance', section: 'reading', sectionKey: 'settings.appearance.section.reading', settings: [

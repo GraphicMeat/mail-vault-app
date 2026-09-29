@@ -9,6 +9,7 @@ import { SettingsSection, SettingsPageLayout } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
 import { ViewIcon } from '../ViewIcon';
 import { AccountReorderList } from './AccountReorderList';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 
 /// The views page: one list, one builder, and the builder previews what it
 /// would find while it is being typed.
@@ -113,14 +114,21 @@ export function ViewsSettings({ onUpgrade }) {
         aria-label={t('views.new')} onClick={() => leave(startNew)}><Plus size={14} /> {t('views.new')}</Button>
 
     {/* The cap is a fact about the plan, so it is stated before it bites, not
-        only when the + refuses. */}
-    {!premium && <p className="views-limit text-xs text-mail-text-muted" data-testid="views-limit">
-      {t('views.limit', { used: views.length, max: MAX_FREE_VIEWS })}
-      {' '}
-      <button type="button" className="views-upgrade" data-testid="views-upgrade" onClick={() => onUpgrade?.()}>
-        {t('views.upgrade')}
-      </button>
-    </p>}
+        only when the + refuses. Body-size text and a real button, the shape of
+        every other upsell: a muted 12px line with a link at its end read as a
+        footnote nobody was meant to act on. */}
+    {!premium && <div className="views-upsell mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mail-border bg-mail-surface p-4"
+      data-testid="views-upsell">
+      <p className="views-limit text-sm font-medium text-mail-text" data-testid="views-limit">
+        {t('views.limit', { used: views.length, max: MAX_FREE_VIEWS })}
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="primary" size="sm" data-testid="views-upgrade" onClick={() => onUpgrade?.()}>
+          {t('views.upgrade')}
+        </Button>
+        <PremiumFeaturesLink />
+      </div>
+    </div>}
 
     {refused && <p className="views-refused text-xs" role="status" data-testid="views-refused">
       {t('views.limitReached', { max: MAX_FREE_VIEWS })}

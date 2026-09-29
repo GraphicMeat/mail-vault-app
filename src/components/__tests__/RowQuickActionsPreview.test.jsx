@@ -52,6 +52,7 @@ useTagStore.getState = () => useTagStoreMock.getState();
 vi.mock('../../stores/tagStore', () => ({ useTagStore }));
 
 const { RowQuickActions } = await import('../RowQuickActions');
+const { QuickActionWheelInPlace } = await import('../QuickActions');
 const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
 const { QUICK_ACTION_TYPES } = await import('../../utils/quickActions');
 
@@ -116,14 +117,29 @@ describe('RowQuickActions — configOverride', () => {
 });
 
 describe('RowQuickActions — preview', () => {
-  it('draws a radial set as the wheel itself, in place, with the star in its state', () => {
+  // As the list draws it: a trigger on the row, and the wheel it opens over
+  // the page, not a wheel painted across the rows around it.
+  it('keeps a radial set behind its trigger, and the wheel it opens shows the star in its state', () => {
     const wheel = { ...inline(entry('archive'), entry('star'), entry('unstar')), mode: 'radial', palette: 'semantic' };
     renderRow([email({ flags: ['\\Flagged'] })], { configOverride: wheel, preview: true });
+    expect(document.querySelector('.quick-actions-radial-preview')).toBeNull();
+    expect(document.querySelector('[data-quick-action]')).toBeNull();
+    fireEvent.click(document.querySelector('.quick-actions-trigger'));
+    const opened = document.querySelector('.quick-actions-radial[data-surface="row"]');
+    expect(opened.hasAttribute('data-quick-actions-preview')).toBe(true);
+    expect(opened.querySelector('[data-quick-action="star"]')).toBeNull();
+    expect(opened.querySelector('[data-quick-action="unstar"] svg').getAttribute('fill')).toBe('currentColor');
+  });
+
+  it('draws the wheel open in place only in a picture nothing can open', () => {
+    const wheel = { ...inline(entry('archive'), entry('unstar')), mode: 'radial', palette: 'semantic' };
+    render(<QuickActionWheelInPlace.Provider value>
+      <RowQuickActions emails={[email({ flags: ['\\Flagged'] })]} actions={rowActions} onRequestDelete={onRequestDelete}
+        onArchive={onArchive} onClose={onClose} configOverride={wheel} preview />
+    </QuickActionWheelInPlace.Provider>);
     const preview = document.querySelector('.quick-actions-radial-preview');
-    expect(preview).not.toBeNull();
+    expect(preview.querySelector('[data-quick-action="unstar"]')).not.toBeNull();
     expect(document.querySelector('.quick-actions-trigger')).toBeNull();
-    expect(preview.querySelector('[data-quick-action="star"]')).toBeNull();
-    expect(preview.querySelector('[data-quick-action="unstar"] svg').getAttribute('fill')).toBe('currentColor');
   });
 
   it('runs nothing, whichever action is pressed', async () => {

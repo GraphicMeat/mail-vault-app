@@ -56,10 +56,10 @@ export function EmailThemePreview() {
 
 // The list's row gutter in miniature (RowGutter in EmailRow.jsx): the same
 // classes, so the sample stacks and aligns exactly as the real rows do.
-function SampleRows({ singleLine = false, previewLines = 0 }) {
+function SampleRows({ singleLine = false, previewLines = 0, density }) {
   const t = useT();
   const stacked = !singleLine || previewLines > 0;
-  return <div className={`preview-message-rows ${singleLine ? 'preview-single-line' : ''}`}>
+  return <div className={`preview-message-rows ${singleLine ? 'preview-single-line' : ''}`} data-list-density={density}>
     {['Nell Okafor', 'Priya Raines'].map((sender, index) => <div className="preview-message-row" key={sender}>
       <span className={`row-gutter${stacked ? ' row-gutter-stacked' : ''}`} aria-hidden="true">
         <span className="row-gutter-cell">
@@ -88,6 +88,7 @@ export function WorkspacePreview({ setting, value, label, disabled }) {
   const t = useT();
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const sidebarDensity = useSettingsStore(s => s.sidebarDensity);
+  const emailListStyle = useSettingsStore(s => s.emailListStyle);
   let content;
   if (setting === 'viewStyle' || setting === 'layoutMode') {
     content = <PanePreview chat={setting === 'viewStyle' && value === 'chat'} below={(setting === 'layoutMode' ? value : layoutMode) === 'two-column'} />;
@@ -127,6 +128,9 @@ export function WorkspacePreview({ setting, value, label, disabled }) {
     </div>;
   } else if (setting === 'listPreviewLines') {
     content = <SampleRows previewLines={value} />;
+  } else if (setting === 'listDensity') {
+    // In the row layout the list is set to, one line or two.
+    content = <SampleRows singleLine={emailListStyle === 'default'} density={value === 'compact' ? 'compact' : 'comfortable'} />;
   } else {
     content = <SampleRows singleLine={value === 'default'} />;
   }

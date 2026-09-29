@@ -63,6 +63,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   const t = useT();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
+  const dense = useSettingsStore(s => s.listDensity) === 'compact';
 
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
@@ -117,7 +118,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       data-thread-count={thread.messageCount}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'} gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'}${dense ? ' row-dense' : ''} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
@@ -185,6 +186,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 // Compact thread row for compact layout
 export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
   const t = useT();
+  const dense = useSettingsStore(s => s.listDensity) === 'compact';
 
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
@@ -235,7 +237,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       data-thread-count={thread.messageCount}
       data-landed={landed || undefined}
       style={style}
-      className={`virtual-row row-compact row-top group relative flex gap-2 px-4 border-b border-mail-border
+      className={`virtual-row row-compact row-top${dense ? ' row-dense' : ''} group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
@@ -247,7 +249,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
         disclosure={<ThreadDisclosure expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />}
         state={<ConnectedStateIcon email={latestEmail} size={13} />} />
 
-      <div className="flex-1 min-w-0 py-1.5">
+      <div className={`flex-1 min-w-0 ${dense ? 'py-0.5' : 'py-1.5'}`}>
         {/* Line 1: participants, count, alerts ... date */}
         <div className="flex items-center gap-1.5">
           <span data-testid="row-sender" className={`truncate min-w-0 text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>

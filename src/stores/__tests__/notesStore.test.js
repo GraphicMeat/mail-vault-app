@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const harness = vi.hoisted(() => ({
   daemonCall: vi.fn(),
-  applyFlagToKeys: vi.fn(),
+  applyFlagToTargets: vi.fn(),
   deleteEmailFromServer: vi.fn(),
+  setDeleteUndo: vi.fn(),
   vaultApplyFlags: vi.fn(),
   mailState: null,
   cacheMailboxes: {},
@@ -26,8 +27,9 @@ vi.mock('../../services/api', () => ({
   vaultApplyFlags: (...args) => harness.vaultApplyFlags(...args),
 }));
 vi.mock('../../services/workflows/messageMutations', () => ({
-  applyFlagToKeys: (...args) => harness.applyFlagToKeys(...args),
+  applyFlagToTargets: (...args) => harness.applyFlagToTargets(...args),
   deleteEmailFromServer: (...args) => harness.deleteEmailFromServer(...args),
+  setDeleteUndo: (...args) => harness.setDeleteUndo(...args),
 }));
 
 const { useNotesStore, boardColumns, serverCopies, canToggleStar, AUTO_COLUMNS } = await import('../notesStore');
@@ -51,8 +53,9 @@ const card = (key, extra = {}) => ({
 
 beforeEach(() => {
   harness.daemonCall.mockReset().mockResolvedValue({ cards: [] });
-  harness.applyFlagToKeys.mockReset().mockResolvedValue(undefined);
+  harness.applyFlagToTargets.mockReset().mockResolvedValue(undefined);
   harness.deleteEmailFromServer.mockReset().mockResolvedValue(undefined);
+  harness.setDeleteUndo.mockReset().mockResolvedValue(undefined);
   harness.vaultApplyFlags.mockReset().mockResolvedValue({ renamed: 1 });
   harness.cacheMailboxes = {
     a: [{ path: 'INBOX', name: 'INBOX' }, { path: '[Gmail]/Sent Mail', name: 'Sent Mail', specialUse: '\\Sent' }],
@@ -69,6 +72,7 @@ beforeEach(() => {
     activeAccountId: 'a',
     activeMailbox: 'INBOX',
     mailboxes: [],
+    setUndo: vi.fn(),
   };
   useSettingsStore.setState({ hiddenAccounts: { c: true } });
   useNotesStore.getState().close();
@@ -225,88 +229,88 @@ describe('useNotesStore', () => {
     expect(useTagStore.getState().byRow).toEqual({ 'b|INBOX|1': ['t1'] });
   });
 
-  it('stars every server copy by its full key, and unstars a starred card', async () => {
-    const note = card('s', { copies: [
+  /// Done takes a card off the board like a delete takes a row off the list,
+  /// and it was the one card action with nothing to undo it.
+  it('offers Done back: the undo takes the tag off every copy and puts the card back', async () => {
+    const note = card('d', { copies: [
       { accountId: 'a', mailbox: 'INBOX', uid: 3 },
       { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 },
     ] });
-    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    harness.daemonCall.mockResolvedValue({ cards: [note, card('keep')] });
     await useNotesStore.getState().open();
-    await useNotesStore.getState().toggleStar(note);
-    expect(harness.applyFlagToKeys).toHaveBeenCalledWith(['a:INBOX:3', 'a:[Gmail]/Sent Mail:9'], '\\Flagged', true);
-    expect(useNotesStore.getState().cards[0].starred).toBe(true);
+    harness.daemonCall.mockImplementation(async method => (method === 'tags.list' ? [] : { count: 2 }));
+    await useNotesStore.getState().markDone(note);
+    expect(harness.mailState.setUndo).toHaveBeenCalledTimes(1);
+    const [slot] = harness.mailState.setUndo.mock.calls[0];
+    expect(slot.labelKey).toBe('undo.noteDone');
 
-    await useNotesStore.getState().toggleStar(useNotesStore.getState().cards[0]);
-    expect(harness.applyFlagToKeys).toHaveBeenLastCalledWith(['a:INBOX:3', 'a:[Gmail]/Sent Mail:9'], '\\Flagged', false);
-    expect(useNotesStore.getState().cards[0].starred).toBe(false);
+    useTagStore.setState({ byRow: { 'a|INBOX|3': ['done-id'], 'b|INBOX|1': ['t1'] } });
+    harness.daemonCall.mockClear();
+    await slot.run();
+
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: false });
+    expect(harness.daemonCall).toHaveBeenCalledWith('tags.list', {});
+    expect(useTagStore.getState().byRow).toEqual({ 'b|INBOX|1': ['t1'] });
+    expect(useNotesStore.getState().cards.map(c => c.key).sort()).toEqual(['d', 'keep']);
   });
 
-  /// A board card is no list row, so the server write leaves the vault
-  /// copies as they were, and the next list reads the star from them. Only
-  /// the star is sent: each copy's other flags are the vault's, not the
-  /// card's, which were read when the board loaded.
-  it('writes the star to every vault copy it starred as a delta, never a whole list', async () => {
-    const note = card('v', { copies: [
+  it('an undone Done is not dropped by a list already on its way', async () => {
+    const note = card('d');
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    let answer;
+    harness.daemonCall.mockImplementation(method => (method === 'notes.list'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve(method === 'tags.list' ? [] : { count: 1 })));
+    const loading = useNotesStore.getState().load();
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
+    await useNotesStore.getState().markDone(note);
+    const [slot] = harness.mailState.setUndo.mock.calls[0];
+    await slot.run();
+    answer({ cards: [note] });
+    await loading;
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['d']);
+  });
+
+  it('an undone Done with the board closed changes only the tag', async () => {
+    const note = card('d');
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    harness.daemonCall.mockImplementation(async method => (method === 'tags.list' ? [] : { count: 1 }));
+    await useNotesStore.getState().markDone(note);
+    const [slot] = harness.mailState.setUndo.mock.calls[0];
+    useNotesStore.getState().close();
+    await slot.run();
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: false });
+    expect(useNotesStore.getState().cards).toEqual([]);
+  });
+
+  const target = (accountId, mailbox, uid) => ({
+    account: harness.mailState.accounts.find(account => account.id === accountId), accountId, mailbox, uid, named: true,
+  });
+
+  /// Each copy goes to the flag core as a target that names its own folder:
+  /// the daemon listed it from the vault, which is the proof a list row
+  /// gives that core. So the core writes the vault copy too, for the star
+  /// and for its undo, and the store writes none of its own.
+  it('stars every server copy as a target naming its own folder, and unstars a starred card', async () => {
+    const note = card('s', { copies: [
       { accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Seen'] },
-      { accountId: 'b', mailbox: 'INBOX', uid: 7, flags: [] },
+      { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9, flags: [] },
     ] });
     harness.daemonCall.mockResolvedValue({ cards: [note] });
     await useNotesStore.getState().open();
     await useNotesStore.getState().toggleStar(note);
-    expect(harness.vaultApplyFlags.mock.calls).toEqual([
-      ['a', 'INBOX', 'me@x.test', [{ uid: 3, flags: ['\\Flagged'], on: true }]],
-      ['b', 'INBOX', 'work@y.test', [{ uid: 7, flags: ['\\Flagged'], on: true }]],
-    ]);
-
-    harness.vaultApplyFlags.mockClear();
-    const starred = card('w', { starred: true, copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 5, flags: ['\\Seen', '\\Flagged'] }] });
-    useNotesStore.setState({ cards: [starred] });
-    await useNotesStore.getState().toggleStar(starred);
-    expect(harness.vaultApplyFlags).toHaveBeenCalledWith('a', 'INBOX', 'me@x.test', [{ uid: 5, flags: ['\\Flagged'], on: false }]);
-    expect(useNotesStore.getState().cards[0].starred).toBe(false);
-  });
-
-  /// A vault that lands what it is sent the way the daemon does: a whole
-  /// list replaces a copy's flags, a delta moves only the flags it names.
-  function fakeVault(start) {
-    const held = new Map(Object.entries(start).map(([key, flags]) => [key, new Set(flags)]));
-    harness.vaultApplyFlags.mockImplementation(async (accountId, mailbox, _email, changes) => {
-      for (const { uid, flags, on } of changes) {
-        const key = `${accountId}|${mailbox}|${uid}`;
-        const next = on === undefined ? new Set() : new Set(held.get(key));
-        for (const flag of flags) if (on === false) next.delete(flag); else next.add(flag);
-        held.set(key, next);
-      }
-      return { renamed: 1 };
-    });
-    return key => [...(held.get(key) || [])].sort();
-  }
-
-  /// The board loaded while the note was unread, and the reader's delayed
-  /// mark read has landed since: starring it then used to write the card's
-  /// old flags back, and the note was unread again.
-  it('stars a note read since the board loaded without marking it unread', async () => {
-    const note = card('r', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3, flags: [] }] });
-    harness.daemonCall.mockResolvedValue({ cards: [note] });
-    await useNotesStore.getState().open();
-    const vault = fakeVault({ 'a|INBOX|3': ['\\Seen'] });
-
-    await useNotesStore.getState().toggleStar(note);
-    expect(vault('a|INBOX|3')).toEqual(['\\Flagged', '\\Seen']);
+    const both = [target('a', 'INBOX', 3), target('a', '[Gmail]/Sent Mail', 9)];
+    expect(harness.applyFlagToTargets).toHaveBeenCalledWith(both, '\\Flagged', true);
+    expect(harness.vaultApplyFlags).not.toHaveBeenCalled();
+    expect(useNotesStore.getState().cards[0].starred).toBe(true);
+    expect(useNotesStore.getState().cards[0].copies.map(copy => copy.flags)).toEqual([['\\Seen', '\\Flagged'], ['\\Flagged']]);
 
     await useNotesStore.getState().toggleStar(useNotesStore.getState().cards[0]);
-    expect(vault('a|INBOX|3')).toEqual(['\\Seen']);
-  });
-
-  it('keeps the star when only the vault copy could not be written', async () => {
-    const note = card('v');
-    harness.daemonCall.mockResolvedValue({ cards: [note] });
-    await useNotesStore.getState().open();
-    harness.vaultApplyFlags.mockRejectedValue(new Error('vault gone'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await useNotesStore.getState().toggleStar(note);
-    warn.mockRestore();
-    expect(useNotesStore.getState().cards[0].starred).toBe(true);
+    expect(harness.applyFlagToTargets).toHaveBeenLastCalledWith(both, '\\Flagged', false);
+    expect(useNotesStore.getState().cards[0].starred).toBe(false);
+    expect(useNotesStore.getState().cards[0].copies.map(copy => copy.flags)).toEqual([['\\Seen'], []]);
   });
 
   /// A copy the server cannot be asked about may be the flagged one: a star
@@ -322,13 +326,13 @@ describe('useNotesStore', () => {
     const accounts = useNotesStore.getState().accounts;
     expect(canToggleStar(note, accounts)).toBe(true);
     await useNotesStore.getState().toggleStar(note);
-    expect(harness.applyFlagToKeys).toHaveBeenCalledWith(['a:INBOX:3'], '\\Flagged', true);
+    expect(harness.applyFlagToTargets).toHaveBeenCalledWith([target('a', 'INBOX', 3)], '\\Flagged', true);
 
     const starred = useNotesStore.getState().cards[0];
     expect(canToggleStar(starred, accounts)).toBe(false);
-    harness.applyFlagToKeys.mockClear();
+    harness.applyFlagToTargets.mockClear();
     await useNotesStore.getState().toggleStar(starred);
-    expect(harness.applyFlagToKeys).not.toHaveBeenCalled();
+    expect(harness.applyFlagToTargets).not.toHaveBeenCalled();
     expect(useNotesStore.getState().cards[0].starred).toBe(true);
   });
 
@@ -336,9 +340,40 @@ describe('useNotesStore', () => {
     const note = card('s');
     harness.daemonCall.mockResolvedValue({ cards: [note] });
     await useNotesStore.getState().open();
-    harness.applyFlagToKeys.mockRejectedValue(new Error('offline'));
+    harness.applyFlagToTargets.mockRejectedValue(new Error('offline'));
     await expect(useNotesStore.getState().toggleStar(note)).rejects.toThrow('offline');
+    expect(useNotesStore.getState().cards[0]).toEqual(note);
+  });
+
+  /// Whatever lands a flag on a copy on the board (its own star, the undo of
+  /// one, a star from the list) reaches the card through here.
+  it('repaints the cards holding a changed copy, and only those', async () => {
+    const two = card('two', { starred: true, copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Flagged'] },
+      { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9, flags: ['\\Seen', '\\Flagged'] },
+    ] });
+    const one = card('one', { starred: true, copies: [{ accountId: 'b', mailbox: 'INBOX', uid: 3, flags: ['\\Flagged'] }] });
+    harness.daemonCall.mockResolvedValue({ cards: [two, one] });
+    await useNotesStore.getState().open();
+    const before = useNotesStore.getState().cards;
+
+    useNotesStore.getState().applyCopyFlag([{ accountId: 'a', mailbox: 'INBOX', uid: 3 }], '\\Flagged', false);
+    const [twoAfter, oneAfter] = useNotesStore.getState().cards;
+    // Still starred: the Sent copy keeps its star.
+    expect(twoAfter.starred).toBe(true);
+    expect(twoAfter.copies.map(copy => copy.flags)).toEqual([[], ['\\Seen', '\\Flagged']]);
+    expect(oneAfter).toBe(before[1]);
+
+    useNotesStore.getState().applyCopyFlag([{ accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 }], '\\Flagged', false);
     expect(useNotesStore.getState().cards[0].starred).toBe(false);
+
+    // A read change moves no star.
+    useNotesStore.getState().applyCopyFlag([{ accountId: 'b', mailbox: 'INBOX', uid: 3 }], '\\Seen', true);
+    expect(useNotesStore.getState().cards[1]).toMatchObject({ starred: true, copies: [{ flags: ['\\Flagged', '\\Seen'] }] });
+
+    const cards = useNotesStore.getState().cards;
+    useNotesStore.getState().applyCopyFlag([{ accountId: 'c', mailbox: 'INBOX', uid: 3 }], '\\Flagged', true);
+    expect(useNotesStore.getState().cards).toBe(cards);
   });
 
   it('deletes every server copy through the server delete, then drops the card', async () => {
@@ -349,9 +384,65 @@ describe('useNotesStore', () => {
     harness.daemonCall.mockResolvedValue({ cards: [note, card('keep')] });
     await useNotesStore.getState().open();
     await expect(useNotesStore.getState().deleteCard(note)).resolves.toEqual({ deleted: 2, kept: 0 });
-    expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(3, { accountId: 'a', mailboxOverride: 'INBOX' });
-    expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(7, { accountId: 'b', mailboxOverride: 'INBOX' });
+    expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(3, { accountId: 'a', mailboxOverride: 'INBOX', skipRefresh: true });
+    expect(harness.deleteEmailFromServer).toHaveBeenCalledWith(7, { accountId: 'b', mailboxOverride: 'INBOX', skipRefresh: true });
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['keep']);
+  });
+
+  /// One delete per copy each filled the undo slot with its own copy, so the
+  /// undo put back the last one only, and the Done tag the delete left kept
+  /// the card off the board even for that one.
+  it('offers one undo for every copy it deleted, which brings the card back', async () => {
+    const note = card('del', { copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3 },
+      { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 },
+    ] });
+    harness.daemonCall.mockResolvedValue({ cards: [note, card('keep')] });
+    await useNotesStore.getState().open();
+    const first = { accountId: 'a', mailbox: 'INBOX', uid: 3, trash: 'Trash', trashUid: 40 };
+    const second = { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9, trash: 'Trash', trashUid: 41 };
+    harness.deleteEmailFromServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    await useNotesStore.getState().deleteCard(note);
+
+    expect(harness.setDeleteUndo).toHaveBeenCalledTimes(1);
+    const [outcomes, { afterRestore }] = harness.setDeleteUndo.mock.calls[0];
+    expect(outcomes).toEqual([first, second]);
+
+    // The restored messages carry new uids: the board asks for its list again.
+    harness.daemonCall.mockClear();
+    harness.daemonCall.mockImplementation(async method => (method === 'notes.list' ? { cards: [{ ...note, copies: [{ ...note.copies[0], uid: 50 }] }, card('keep')] } : { count: 2 }));
+    await afterRestore();
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.set_done', { copies: note.copies, done: false });
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.list', expect.anything());
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['del', 'keep']);
+  });
+
+  it('a partly deleted card was never tagged Done, and its undo leaves the tag alone', async () => {
+    const skipped = { accountId: 'a', mailbox: 'Local-Only', uid: 4 };
+    const note = card('part', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, skipped] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    harness.deleteEmailFromServer.mockResolvedValueOnce({ accountId: 'a', mailbox: 'INBOX', uid: 3, trash: 'Trash', trashUid: 40 });
+    await useNotesStore.getState().deleteCard(note);
+    const [, { afterRestore }] = harness.setDeleteUndo.mock.calls[0];
+    harness.daemonCall.mockClear();
+    await afterRestore();
+    expect(harness.daemonCall).not.toHaveBeenCalledWith('notes.set_done', expect.anything());
+    expect(harness.daemonCall).toHaveBeenCalledWith('notes.list', expect.anything());
+  });
+
+  it('offers the copies it did delete back when the server refuses a later one', async () => {
+    const note = card('mid', { copies: [
+      { accountId: 'a', mailbox: 'INBOX', uid: 3 },
+      { accountId: 'a', mailbox: '[Gmail]/Sent Mail', uid: 9 },
+    ] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    const first = { accountId: 'a', mailbox: 'INBOX', uid: 3, trash: 'Trash', trashUid: 40 };
+    harness.deleteEmailFromServer.mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('refused'));
+    await expect(useNotesStore.getState().deleteCard(note)).rejects.toThrow('refused');
+    expect(harness.setDeleteUndo).toHaveBeenCalledWith([first], expect.objectContaining({ afterRestore: expect.any(Function) }));
   });
 
   it('tags a note Done once its last copy is deleted, so the vault copy that stays does not bring it back', async () => {

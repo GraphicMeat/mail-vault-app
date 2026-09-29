@@ -8,7 +8,7 @@ export const isComposeMessage = (message, composeId, token) => Boolean(
 
 const makeToken = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, settings }) {
+export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, settings, attached }) {
   const sessions = new Map();
   const sessionFor = id => sessions.get(String(id));
   const reply = (session, requestId, type, payload) => {
@@ -120,7 +120,10 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
           remove?.(session.id);
           finish(session);
         }).catch(() => { session.terminal = false; recover(session); });
-      } else if (message.type === 'return' || message.type === 'closed' || message.type === 'minimize') {
+      } else if (['return', 'closed', 'minimize', 'attach'].includes(message.type)) {
+        // `attach` is the window's "move back into the main window": the same
+        // handover, except the draft reopens in main instead of as a bubble.
+        const attach = message.type === 'attach';
         if (session.busy) {
           void reply(session, requestId, 'error', t('errors.composeWindowRequestInProgress')).catch(() => recover(session));
           return true;
@@ -136,7 +139,10 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
         }
         session.terminal = true;
         void reply(session, requestId, 'ack').then(() => {
-          update(session.id, { snapshot: latest, initialData: latest, minimized: true, detached: false, nativeLabel: null });
+          // Before the update that mounts main's compose: that mount decides
+          // whether to hand the draft straight back to a window.
+          if (attach) attached?.(session.id);
+          update(session.id, { snapshot: latest, initialData: latest, minimized: !attach, detached: false, nativeLabel: null });
           finish(session, new Error(t('errors.composeWindowClosed')));
         }).catch(() => { session.terminal = false; recover(session); });
       } else if (message.type === 'send' || message.type === 'schedule') {

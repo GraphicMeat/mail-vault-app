@@ -100,6 +100,8 @@ export const DEFAULT_SHORTCUTS = {
 // behaviour directly, without standing up zustand/persist's storage plumbing.
 const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
 const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
+// The message list's rows, the same two choices apart from the sidebar's.
+const normalizeListDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].includes(location) ? location : 'avatar';
 const normalizeEmailListView = value => value === 'explorer' ? 'explorer' : 'list';
 const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(value) ? value : 'date';
@@ -183,6 +185,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   },
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
+  listDensity: normalizeListDensity(persisted?.listDensity ?? current.listDensity),
   sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(persisted?.sidebarBackupStatusLocation ?? current.sidebarBackupStatusLocation),
   emailListView: normalizeEmailListView(persisted?.emailListView ?? current.emailListView),
   explorerGrouping: normalizeExplorerGrouping(persisted?.explorerGrouping ?? current.explorerGrouping),
@@ -483,6 +486,7 @@ export const useSettingsStore = create(
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'compact', // 'default' | 'compact'
       listPreviewLines: 0, // 0 (off) | 1 | 2 | 3 lines of body text under each row
+      listDensity: 'comfortable', // 'comfortable' | 'compact': message rows, in one line or two alike
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       emailListView: 'list', // 'list' | 'explorer'
       listTimelineVisible: false,
@@ -1138,6 +1142,7 @@ export const useSettingsStore = create(
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setListPreviewLines: (lines) => set({ listPreviewLines: normalizeListPreviewLines(lines) }),
+      setListDensity: (density) => set({ listDensity: normalizeListDensity(density) }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setInsightsPreferences: value => set({ insightsPreferences: normalizeInsightsPreferences(value) }),
       // Changing the endpoint URL points `endpointConsented` at a NEW
@@ -1439,6 +1444,7 @@ export const useSettingsStore = create(
           viewStyle: 'list',
           emailListStyle: 'compact',
           listPreviewLines: 0,
+          listDensity: 'comfortable',
           emailListGrouping: 'chronological',
           emailListView: 'list',
           listTimelineVisible: false,

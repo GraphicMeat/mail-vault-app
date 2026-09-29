@@ -48,4 +48,18 @@ describe('extractInlineImages', () => {
     const unnamed = extractInlineImages(`<img src="data:image/jpeg;base64,${PNG}">`);
     expect(unnamed.attachments[0].filename).toBe('inline-1.jpg');
   });
+
+  // The body compose sends carries the signature block as ComposeModal's
+  // signatureBlock writes it: a logo pasted into Settings is a data: URI
+  // there, and must leave as a named part the signature's <img> points at.
+  it('sends a signature logo as a named part the signature references', () => {
+    const body = '<p>Thanks!</p><p></p><p>--</p>'
+      + `<p>Rokas</p><p><img src="data:image/png;base64,${PNG}" alt="logo.png" title="logo.png"></p>`;
+    const { html, attachments } = extractInlineImages(body);
+
+    expect(attachments).toEqual([{ cid: expect.any(String), filename: 'logo.png', contentType: 'image/png', content: PNG }]);
+    expect(html).toContain(`<img src="cid:${attachments[0].cid}" alt="logo.png" title="logo.png">`);
+    expect(html).toContain('<p>--</p><p>Rokas</p>');
+    expect(html).not.toContain('data:');
+  });
 });

@@ -6,6 +6,9 @@ export function SettingsTabs({ tabs, value, onChange, label, children }) {
   const id = useId();
   const root = useRef(null);
   useEffect(() => {
+    // A new page starts at its top. A tab set inside a page (Quick actions'
+    // surfaces) only swaps the part under it: the page stays where it is.
+    if (root.current?.parentElement?.closest('.settings-tabbed-page')) return;
     const scroller = root.current?.closest('.settings-content');
     if (scroller) scroller.scrollTop = 0;
   }, [value]);

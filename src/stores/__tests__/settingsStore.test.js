@@ -474,6 +474,39 @@ describe('sidebar density persistence', () => {
   });
 });
 
+describe('message list density persistence', () => {
+  it('saves compact rows, restores them on hydration, and resets to comfortable', async () => {
+    const { safeStorage } = await import('../safeStorage');
+    useSettingsStore.getState().setListDensity('compact');
+    const persisted = JSON.parse(safeStorage.getItem('mailvault-settings'));
+    expect(persisted.state.listDensity).toBe('compact');
+    const current = useSettingsStore.getInitialState();
+    expect(_mergePersistedSettings(persisted.state, current).listDensity).toBe('compact');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().listDensity).toBe('comfortable');
+  });
+
+  // Every install before the setting keeps the rows it had.
+  it('is comfortable by default, for old settings and invalid saved choices, and apart from the sidebar\'s', () => {
+    const current = useSettingsStore.getInitialState();
+    expect(current.listDensity).toBe('comfortable');
+    expect(_mergePersistedSettings({}, current).listDensity).toBe('comfortable');
+    expect(_mergePersistedSettings({ listDensity: 'invalid' }, current).listDensity).toBe('comfortable');
+    expect(_mergePersistedSettings({ sidebarDensity: 'compact' }, current).listDensity).toBe('comfortable');
+    useSettingsStore.getState().setListDensity('invalid');
+    expect(useSettingsStore.getState().listDensity).toBe('comfortable');
+    useSettingsStore.getState().setSidebarDensity('comfortable');
+    useSettingsStore.getState().setListDensity('compact');
+    expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
+    useSettingsStore.getState().resetSettings();
+  });
+
+  it('travels with the other layout settings in a transfer file', async () => {
+    const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).toContain('listDensity');
+  });
+});
+
 describe('backup status placement persistence', () => {
   it.each(['avatar', 'row', 'hidden'])('persists and restores %s without changing sidebar layout or density', async placement => {
     const { safeStorage } = await import('../safeStorage');

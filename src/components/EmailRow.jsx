@@ -90,9 +90,13 @@ function StarToggle({ email, actions, size }) {
 // every row whatever its text and the virtualizer never has to measure one.
 export const SNIPPET_LINE_PX = 16;
 const ROW_BASE_PX = { compact: 52, default: 56 };
+// Message list density compact (Settings > Appearance > Layout): the same
+// lines with less air around them, `.row-dense` in index.css.
+const DENSE_ROW_BASE_PX = { compact: 44, default: 40 };
 
-export function listRowHeight(compact, previewLines = 0) {
-  return (compact ? ROW_BASE_PX.compact : ROW_BASE_PX.default) + previewLines * SNIPPET_LINE_PX;
+export function listRowHeight(compact, previewLines = 0, density = 'comfortable') {
+  const base = density === 'compact' ? DENSE_ROW_BASE_PX : ROW_BASE_PX;
+  return (compact ? base.compact : base.default) + previewLines * SNIPPET_LINE_PX;
 }
 
 /**
@@ -187,6 +191,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   const t = useT();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
+  const dense = useSettingsStore(s => s.listDensity) === 'compact';
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
@@ -233,7 +238,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       data-landed={landed || undefined}
       data-quick-actions-preview={preview || undefined}
       style={style}
-      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'} gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'}${dense ? ' row-dense' : ''} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
@@ -307,6 +312,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
+  const dense = useSettingsStore(s => s.listDensity) === 'compact';
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
@@ -349,7 +355,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       data-landed={landed || undefined}
       data-quick-actions-preview={preview || undefined}
       style={style}
-      className={`virtual-row row-compact row-top group relative flex gap-2 px-4 border-b border-mail-border
+      className={`virtual-row row-compact row-top${dense ? ' row-dense' : ''} group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
@@ -361,7 +367,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
         state={<ConnectedStateIcon email={email} size={13} />} />
 
       {/* Two-line content */}
-      <div className="flex-1 min-w-0 py-1.5">
+      <div className={`flex-1 min-w-0 ${dense ? 'py-0.5' : 'py-1.5'}`}>
         {/* Line 1: Sender, star, alerts ... Date */}
         <div className="flex items-center gap-1.5">
           {unifiedInbox && email._accountEmail && (

@@ -1108,6 +1108,42 @@ mod tests {
         );
     }
 
+    /// A signature logo as compose hands it over (extractInlineImages): the
+    /// HTML points at it by cid, the part carries it. Readers that show the
+    /// text part keep the words; the rest render the picture from the part,
+    /// since Gmail and Outlook drop a data: URI. A scheduled send is frozen
+    /// through `build_draft_mime`, so both builders are pinned.
+    #[test]
+    fn signature_logo_travels_as_an_inline_part_beside_the_text_alternative() {
+        let mut email = outgoing();
+        email.text = Some("Thanks!\n\n--\nRokas".to_string());
+        email.html = Some(
+            "<p>Thanks!</p><p></p><p>--</p><p>Rokas</p><p><img src=\"cid:sig-1@mailvault.inline\" alt=\"logo.png\"></p>"
+                .to_string(),
+        );
+        email.attachments = Some(vec![attachment("logo.png", "image/png", Some("sig-1@mailvault.inline"))]);
+        let cfg = account("me@x.com", None);
+        for built in [build_mime(&cfg, &email).expect("build_mime"), build_draft_mime(&cfg, &email).expect("build_draft_mime")] {
+            let raw = String::from_utf8_lossy(&built.raw_rfc2822).to_string();
+            let related = raw.find("multipart/related").expect("multipart/related missing");
+            let alternative = raw.find("multipart/alternative").expect("multipart/alternative missing");
+            assert!(related < alternative, "the text/html pair must nest inside related: {}", raw);
+            assert!(raw.contains("Content-Type: text/plain"), "{}", raw);
+            assert!(raw.contains("Rokas"), "{}", raw);
+            // The html part is quoted-printable: undo its soft line breaks.
+            let unfolded = raw.replace("=\r\n", "").replace("=\n", "");
+            assert!(unfolded.contains("cid:sig-1@mailvault.inline"), "{}", raw);
+            assert!(raw.contains("Content-ID: <sig-1@mailvault.inline>"), "{}", raw);
+            assert!(raw.contains("Content-Type: image/png"), "{}", raw);
+            assert!(raw.contains("Content-Disposition: inline; filename=\"logo.png\""), "{}", raw);
+            // The picture's bytes themselves, not a reference to them.
+            assert!(raw.contains("iVBORw0KGgo="), "{}", raw);
+            assert!(!raw.contains("data:image"), "{}", raw);
+            // An inline logo is not a file the user attached.
+            assert!(!raw.contains("multipart/mixed"), "{}", raw);
+        }
+    }
+
     #[test]
     fn regular_attachment_without_cid_keeps_mixed_shape() {
         let raw = raw_with(None, vec![attachment("notes.pdf", "application/pdf", None)]);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -30,6 +30,9 @@ vi.mock('../../../stores/settingsStore', () => ({
     getState: () => useSettingsStoreMock.getState(),
   }),
   hasPremiumAccess: profile => !!profile?.premium,
+}));
+vi.mock('../../PremiumFeaturesLink', () => ({
+  PremiumFeaturesLink: () => React.createElement('span', { 'data-testid': 'premium-features-link' }),
 }));
 vi.mock('../../ViewEditor', () => ({
   ViewEditor: ({ view, isNew }) => React.createElement('div', { 'data-testid': `view-editor-${view.id}`, 'data-new': String(!!isNew) }),
@@ -137,6 +140,32 @@ describe('the Views settings page', () => {
     render(<ViewsSettings onUpgrade={onUpgrade} />);
     fireEvent.click(screen.getByTestId('views-upgrade'));
     expect(onUpgrade).toHaveBeenCalled();
+  });
+
+  /// The cap used to be a muted 12px sentence with the upgrade as a link at
+  /// its tail. It reads as a card now: the cap at body size, then a real
+  /// button and the shared "everything in Premium" link, as other upsells do.
+  it('states the free cap in a card with its own upgrade button', () => {
+    render(<ViewsSettings onUpgrade={vi.fn()} />);
+    const card = screen.getByTestId('views-upsell');
+    const limit = within(card).getByTestId('views-limit');
+    const upgrade = within(card).getByTestId('views-upgrade');
+    expect(limit.textContent).toContain('views.limit');
+    expect(limit.className).not.toContain('text-xs');
+    expect(limit.className).not.toContain('text-mail-text-muted');
+    expect(limit.contains(upgrade)).toBe(false);
+    expect(upgrade.tagName).toBe('BUTTON');
+    expect(upgrade.textContent).toBe('views.upgrade');
+    expect(upgrade.className).toContain('bg-mail-accent-fill');
+    expect(within(card).getByTestId('premium-features-link')).toBeTruthy();
+  });
+
+  it('shows no upsell at all on a paid plan', () => {
+    useSettingsStoreMock.setState({ billingProfile: { premium: true } });
+    render(<ViewsSettings onUpgrade={vi.fn()} />);
+    expect(screen.queryByTestId('views-upsell')).toBeNull();
+    expect(screen.queryByTestId('views-upgrade')).toBeNull();
+    expect(screen.queryByTestId('premium-features-link')).toBeNull();
   });
 
   /// Settings is a window of its own, so the sidebar's + leaves its intent in

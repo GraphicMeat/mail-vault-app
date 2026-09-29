@@ -133,6 +133,54 @@ describe('row height', () => {
   });
 });
 
+// Settings > Appearance > Layout > Message list density: the same lines with
+// less air, and the virtualizer's arithmetic moves with them.
+describe('list density', () => {
+  afterEach(() => act(() => useSettingsStore.setState({ listDensity: 'comfortable' })));
+
+  it('keeps the heights every list had, and takes a compact row in by a fixed amount', () => {
+    expect(listRowHeight(false, 0, 'comfortable')).toBe(56);
+    expect(listRowHeight(true, 0, 'comfortable')).toBe(52);
+    expect(listRowHeight(false, 0, undefined)).toBe(56);
+    expect(listRowHeight(false, 0, 'compact')).toBe(40);
+    expect(listRowHeight(true, 0, 'compact')).toBe(44);
+    expect(listRowHeight(true, 2, 'compact')).toBe(44 + 2 * SNIPPET_LINE_PX);
+  });
+
+  it('marks every row kind compact only while the setting is', () => {
+    for (const renderRow of Object.values(rows)) {
+      act(() => useSettingsStore.setState({ listDensity: 'comfortable' }));
+      let row = render(renderRow(email())).container.querySelector('[data-testid="email-row"]');
+      expect(row.classList.contains('row-dense')).toBe(false);
+      cleanup();
+      act(() => useSettingsStore.setState({ listDensity: 'compact' }));
+      row = render(renderRow(email())).container.querySelector('[data-testid="email-row"]');
+      expect(row.classList.contains('row-dense')).toBe(true);
+      cleanup();
+    }
+  });
+
+  // The two-line layout's text block carries its own padding: compact trims it
+  // to fit 44px, and its gutter rises with it.
+  it('trims the two-line layout\'s text block, and the gutter follows it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'), 'utf8');
+    for (const renderRow of [rows.CompactEmailRow, rows.CompactThreadRow]) {
+      act(() => useSettingsStore.setState({ listDensity: 'comfortable' }));
+      expect(render(renderRow(email())).container.querySelector('.py-1\\.5 [data-testid="row-subject"]')).not.toBeNull();
+      cleanup();
+      act(() => useSettingsStore.setState({ listDensity: 'compact' }));
+      const { container } = render(renderRow(email()));
+      expect(container.querySelector('.py-1\\.5 [data-testid="row-subject"]')).toBeNull();
+      expect(container.querySelector('.py-0\\.5 [data-testid="row-subject"]')).not.toBeNull();
+      cleanup();
+    }
+    expect(css).toMatch(/\.row-compact\.row-dense\s*\{[^}]*--row-gutter-top:\s*2px/);
+  });
+});
+
 describe('the preview in a row', () => {
   it('never prints an entity the snippet cap cut in half', () => {
     act(() => useSettingsStore.setState({ listPreviewLines: 2 }));

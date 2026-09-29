@@ -1070,9 +1070,19 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
  * has nothing addressable, and leaves the previous slot alone.
  *
  * Exported because the row menu deletes each copy of a thread row separately
- * (`skipRefresh`) and offers the whole row back in one go.
+ * (`skipRefresh`) and offers the whole row back in one go, and so does the
+ * Notes to Self board for the copies of one note. `afterRestore` runs once the
+ * messages are back, for a view the list reload does not repaint (the board);
+ * one that fails is not a failed undo, the messages are back all the same.
  */
-export async function setDeleteUndo(outcomes) {
+export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
+  const repaint = async () => {
+    try {
+      await afterRestore?.();
+    } catch (error) {
+      console.warn('[undo] The messages are back; the view that asked could not repaint:', error);
+    }
+  };
   const { useMailStore } = await import('../../stores/mailStore');
   // Addressable, not necessarily by uid. A server without UIDPLUS reports no
   // COPYUID, so `trashUid` is null for a message that is sitting in Trash and
@@ -1094,13 +1104,17 @@ export async function setDeleteUndo(outcomes) {
       run: async () => {
         await _restoreFromTrash(restorable);
         if (binned.length) await recoverFromBin(binned);
+        await repaint();
       },
     });
   } else if (binned.length) {
     useMailStore.getState().setUndo({
       labelKey: 'undo.deletedKept',
       labelParams: { count: binned.length },
-      run: () => recoverFromBin(binned),
+      run: async () => {
+        await recoverFromBin(binned);
+        await repaint();
+      },
     });
   } else if (outcomes?.length) {
     useMailStore.getState().setUndo({
@@ -1405,6 +1419,16 @@ function patchSearchFlags(targets, map) {
   import('../../stores/searchStore')
     .then(({ useSearchStore }) => useSearchStore.getState().patchResultFlags(targets, map))
     .catch(error => console.warn('[messageMutations] Could not repaint the search rows:', error));
+}
+
+// And the Notes to Self board: a card is no row either, it keeps each copy's
+// flags and reads its star off them. Only the board's own star used to change
+// a card, so undoing that star changed the server and the list and left the
+// card showing the star it no longer had.
+function patchNotesFlags(targets, flag, on) {
+  import('../../stores/notesStore')
+    .then(({ useNotesStore }) => useNotesStore.getState().applyCopyFlag(targets, flag, on))
+    .catch(error => console.warn('[messageMutations] Could not repaint the notes board:', error));
 }
 
 export async function pruneSearchResults(copies) {
@@ -1733,22 +1757,30 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
 // looked up there after a miss, and only when it names its account and
 // folder, as patchResultFlags matches it. Only a miss awaits the import: a
 // list row's write stays in the caller's tick.
-async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, on) {
+//
+// `namedUids` need no row: their caller named the folder from the vault
+// itself (the Notes to Self board, whose copies the daemon lists from the
+// vault's own files), which is the proof a row otherwise gives. A board card
+// is no row, so without this its star, and the undo of it, never reached the
+// vault file the board reads its stars back from.
+async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, on, namedUids = []) {
   try {
     const s = useMailStore.getState();
     const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
     let searchRows = null;
     const changes = [];
     for (const uid of uids) {
-      const isRow = _rowOf(s, accountId, mailbox, uid);
-      let row = pool.find(e => e && isRow(e));
-      if (!row) {
-        searchRows ??= await _searchRows();
-        row = searchRows.find(e => e.uid === uid && e._accountId === accountId && e._mailbox === mailbox);
-      }
-      if (!row) {
-        console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
-        continue;
+      if (!namedUids.includes(uid)) {
+        const isRow = _rowOf(s, accountId, mailbox, uid);
+        let row = pool.find(e => e && isRow(e));
+        if (!row) {
+          searchRows ??= await _searchRows();
+          row = searchRows.find(e => e.uid === uid && e._accountId === accountId && e._mailbox === mailbox);
+        }
+        if (!row) {
+          console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
+          continue;
+        }
       }
       changes.push({ uid, flags: [flag], on });
     }
@@ -1890,6 +1922,9 @@ export async function exportEmail(uid, subject) {
  * replay one, so those go straight out and are never journalled.
  *
  * `targets` are already-resolved locations: [{ account, accountId, mailbox, uid }].
+ * A target with `named: true` names its folder from the vault itself (a Notes
+ * to Self copy), so its vault copy is written without a row to prove it; the
+ * undo reverses the same targets, so it writes the vault copy back too.
  * `undoable` fills the undo slot with the reverse change — only for the two
  * flags the user sets deliberately, and only over the rows this call actually
  * changes. The reverse itself passes false, or Cmd+Z would ping-pong.
@@ -1944,6 +1979,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     if (entry) entry.email = { ...entry.email, flags: map(entry.email.flags) };
   }
   patchSearchFlags(targets, map);
+  patchNotesFlags(targets, flag, on);
   _refreshAfterFlagChange(useMailStore);
 
   // The rows have changed; offer the change back. Only the two flags the user
@@ -1969,11 +2005,12 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   const byFolder = new Map();
   for (const t of targets) {
     const k = `${t.accountId}|${t.mailbox}`;
-    if (!byFolder.has(k)) byFolder.set(k, { ...t, uids: [] });
+    if (!byFolder.has(k)) byFolder.set(k, { ...t, uids: [], namedUids: [] });
     byFolder.get(k).uids.push(t.uid);
+    if (t.named) byFolder.get(k).namedUids.push(t.uid);
   }
   for (const f of byFolder.values()) {
-    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, flag, on);
+    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, flag, on, f.namedUids);
   }
 
   const action = on ? 'add' : 'remove';

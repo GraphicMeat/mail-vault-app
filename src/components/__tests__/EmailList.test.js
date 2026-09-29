@@ -282,6 +282,32 @@ describe('EmailList virtualization', () => {
     expect(virtualizedRows.length).toBeLessThan(500);
   });
 
+  // The virtualizer places rows by arithmetic: compact density must reach its
+  // estimate, or rows 40px tall sit in 56px slots with gaps between them.
+  it('sizes the rows and their virtualizer slots by the list density', async () => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const settings = useSettingsStore.getState();
+    const previous = { ...settings };
+    const measured = () => {
+      const chronological = virtualizerConfigs.filter(config => config.enabled).at(-1);
+      const row = document.querySelector('[data-testid="email-row"]');
+      return { slot: chronological.estimateSize(1), row: row.style.height, dense: row.classList.contains('row-dense') };
+    };
+    try {
+      render(React.createElement(EmailList));
+      expect(measured()).toEqual({ slot: 56, row: '56px', dense: false });
+      cleanup();
+      virtualizerConfigs = [];
+      Object.assign(settings, { listDensity: 'compact' });
+      render(React.createElement(EmailList));
+      expect(measured()).toEqual({ slot: 40, row: '40px', dense: true });
+    } finally {
+      cleanup();
+      Object.assign(settings, previous, { listDensity: undefined });
+    }
+  });
+
   it('virtualizer count equals threadedDisplay length (PERF-01)', async () => {
     const { EmailList } = await import('../EmailList.jsx');
     render(React.createElement(EmailList));

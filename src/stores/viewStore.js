@@ -152,14 +152,19 @@ export const useViewStore = create((set, get) => ({
     } catch (error) {
       if (mine !== runGeneration) return false;
       set({ loading: false, unavailableReason: 'error' });
+      useSearchStore.getState().showRows([]);
       console.warn('[views] could not run the view:', error?.message || error);
       return false;
     }
     // A view opened while this one was still running owns the screen now.
     if (mine !== runGeneration) return false;
     if (!reply?.available) {
-      // Not an empty view: the index could not answer at all.
+      // Not an empty view: the index could not answer at all, and the list
+      // says why (`unavailableReason`). No rows either way: left alone, the
+      // list kept showing the folder behind the view under the view's name,
+      // and select-all acted on mail the view never found.
       set({ loading: false, unavailableReason: reply?.reason || 'unavailable' });
+      useSearchStore.getState().showRows([]);
       return false;
     }
     const rows = reply.rows || [];

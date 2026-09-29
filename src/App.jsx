@@ -50,6 +50,7 @@ import { PortableUnlockCard } from './components/PortableUnlockCard';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
 import { PortableDriveBanner } from './components/PortableIndicators';
 import { SearchIndexProgress } from './components/SearchIndexProgress';
+import { ViewsReindexNotice } from './components/ViewsReindexNotice';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { FocusLock } from './components/FocusLock';
@@ -105,7 +106,9 @@ import { formatCount } from './utils/formatCount';
 // Each one is warmed at idle below, so the first click still opens instantly.
 const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const NotesBoard = lazy(() => import('./components/notes/NotesBoard'));
-const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
+// Undo too: the toast offers it over the board (a card's star, Done or
+// delete), and Cmd+Z there did nothing.
+const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts', 'undo'];
 // Leaving Insights or Notes for the mail the user picked: never bring the
 // earlier selection back over it.
 const KEEP_NO_SELECTION = { restoreSelection: false };
@@ -417,6 +420,17 @@ function App() {
       emitTo,
       update: (id, patch) => patchComposeWindow(id, patch),
       remove: id => setComposeWindows(prev => prev.filter(window => window.id !== id)),
+      // A compose moved back from its own window. Popping out is remembered
+      // (ComposeModal popOut), so popping back in is too: left on 'window',
+      // the compose about to open here would hand itself straight back.
+      attached: () => {
+        useSettingsStore.getState().setComposeOpenMode('app');
+        // A minimized main would take the draft out of sight: it comes forward
+        // the way a focused native compose does (focusNativeCompose).
+        void WebviewWindow.getByLabel('main')
+          .then(async window => { await window?.unminimize(); await window?.setFocus(); })
+          .catch(() => {});
+      },
       close: label => WebviewWindow.getByLabel(label).then(window => window?.destroy()).catch(() => {}),
       queueSend: async (snapshot, delay, session, scheduled) => {
         const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
@@ -1594,6 +1608,7 @@ function App() {
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
       <SearchIndexProgress />
+      <ViewsReindexNotice />
       <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
       <BackupUpsellModal onUpgrade={() => openSettings({ tab: 'billing' })} />
 
