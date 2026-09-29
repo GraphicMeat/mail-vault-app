@@ -189,7 +189,7 @@ describe('toggleFlagged', () => {
 
     expect(flagsOf(7)).toContain('\\Flagged');
     expect(useMailStore.getState().selectedEmail.flags).toContain('\\Flagged');
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Seen', '\\Flagged'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Flagged'], on: true }]);
     expect(mockQueueOp).toHaveBeenCalledWith({
       op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
       arg: { flags: ['\\Flagged'], action: 'add' },
@@ -227,7 +227,7 @@ describe('toggleFlagged', () => {
       arg: { flags: ['\\Flagged'], action: 'remove' },
     });
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'remove', 'INBOX');
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Seen'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Flagged'], on: false }]);
     // The toast has to name the direction that actually happened — a star
     // removed offering "Starred 1 message" back told the user the opposite
     // of what their click just did.
@@ -281,7 +281,7 @@ describe('toggleFlagged', () => {
     await toggleFlagged(7);
 
     await vi.waitFor(() => {
-      expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Seen'] }]);
+      expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Flagged'], on: false }]);
     });
   });
 
@@ -336,7 +336,7 @@ describe('toggleFlagged', () => {
     await toggleFlagged(900001);
 
     expect(useMailStore.getState().localEmails[0].flags).toContain('\\Flagged');
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 900001, flags: ['\\Flagged'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 900001, flags: ['\\Flagged'], on: true }]);
     expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
   });
@@ -375,8 +375,8 @@ describe('setSelectedFlagged', () => {
     expect(flagsOf(7)).toContain('\\Flagged');
     expect(flagsOf(3)).toContain('\\Flagged');
     expect(mockVaultApplyFlags).toHaveBeenCalledTimes(2);
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Flagged'] }]);
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'Sent', 'a1@x', [{ uid: 3, flags: ['\\Flagged'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 7, flags: ['\\Flagged'], on: true }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'Sent', 'a1@x', [{ uid: 3, flags: ['\\Flagged'], on: true }]);
     expect(mockUpdateEmailFlags.mock.calls.map(c => [c[1], c[4]])).toEqual([[7, 'INBOX'], [3, 'Sent']]);
     // The bulk paths hand the selection back empty, as mark read always has.
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
@@ -463,7 +463,7 @@ describe('mark read, through the same core', () => {
 
     await vi.waitFor(() => {
       expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [
-        { uid: 7, flags: expect.arrayContaining(['\\Flagged', '\\Seen']) },
+        { uid: 7, flags: ['\\Seen'], on: true },
       ]);
     });
   });
@@ -480,6 +480,33 @@ describe('mark read, through the same core', () => {
       expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('a1', 1);
     } finally {
       useSnoozeStore.setState({ rows: [] });
+    }
+  });
+});
+
+// A list row can be behind its vault copy: the Notes to Self reader marks the
+// copy it opened read, and the INBOX row of the same message, loaded behind
+// the board, is not the row it maps. A star written as that row's whole flag
+// list took the read state back off the vault copy and the cached header.
+describe('the vault write', () => {
+  it('stars the vault copy without writing back a read state the row is behind on', async () => {
+    primeStore({ emails: [{ uid: 7, messageId: 'a@mock', subject: 'General', flags: [], from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z' }] });
+    // The copy as the daemon lands what it is sent: a whole list replaces
+    // its flags, a delta moves only the flags it names.
+    const held = new Set(['\\Seen']);
+    mockVaultApplyFlags.mockImplementation(async (_accountId, _mailbox, _email, changes) => {
+      for (const { flags, on } of changes) {
+        if (on === undefined) held.clear();
+        for (const flag of flags) if (on === false) held.delete(flag); else held.add(flag);
+      }
+      return { renamed: 1 };
+    });
+    try {
+      await applyFlagToTargets([{ account: ACCOUNT, accountId: 'a1', mailbox: 'INBOX', uid: 7 }], '\\Flagged', true);
+      await vi.waitFor(() => expect(mockVaultApplyFlags).toHaveBeenCalled());
+      expect([...held].sort()).toEqual(['\\Flagged', '\\Seen']);
+    } finally {
+      mockVaultApplyFlags.mockReset().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
     }
   });
 });

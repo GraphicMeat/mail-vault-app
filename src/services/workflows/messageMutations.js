@@ -1713,9 +1713,12 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
 // back repainted the old state until the next delta sync corrected it.
 //
 // Best-effort, and silent for a message the vault does not hold: Rust finds
-// nothing to rename or patch and says so in its counts. A list row's flags are
-// read after the caller mapped them, so `mapFlags` is a no-op on it that keeps
-// the call honest if the order ever changes.
+// nothing to rename or patch and says so in its counts.
+//
+// The one flag goes as a delta (`on`), never as the row's whole list: a row
+// can be behind the vault copy (the Notes to Self reader marks the copy it
+// opened, not an INBOX row of the same message), and its list would take that
+// change back off the file and the cached header.
 //
 // One call for all of `uids`: the writer rewrites the whole index file, so a
 // call per message would race itself and the losers' flags would vanish.
@@ -1723,17 +1726,14 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
 // A uid is a name only inside one (account, mailbox), and the row is the proof
 // of which one: a Sent copy merged into the INBOX list carries
 // `_fromSentFolder` / `_mailbox`, and INBOX's own message under that number
-// is a different file — the one restore uploads. So the row read here is the
-// one of THIS folder, and no row at all (a flag list rebuilt from nothing
-// would strip \Flagged and \Answered) is skipped rather than guessed at.
+// is a different file — the one restore uploads. So a uid with no row of THIS
+// folder is skipped rather than guessed at.
 //
 // A saved view's or a search's row lives only in `searchResults`, so it is
 // looked up there after a miss, and only when it names its account and
-// folder, as patchResultFlags matches it. That repaint may not have landed
-// yet, which is why the row's flags go through `mapFlags` rather than being
-// read as they are. Only a miss awaits the import: a list row's write stays
-// in the caller's tick.
-async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFlags) {
+// folder, as patchResultFlags matches it. Only a miss awaits the import: a
+// list row's write stays in the caller's tick.
+async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, on) {
   try {
     const s = useMailStore.getState();
     const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
@@ -1750,7 +1750,7 @@ async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFla
         console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
         continue;
       }
-      changes.push({ uid, flags: mapFlags(row.flags) });
+      changes.push({ uid, flags: [flag], on });
     }
     if (!changes.length) return;
     const accountEmail = s.accounts?.find(a => a.id === accountId)?.email || null;
@@ -1761,7 +1761,7 @@ async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFla
 }
 
 const _persistVaultSeen = (useMailStore, accountId, mailbox, uids, read) =>
-  _persistVaultFlags(useMailStore, accountId, mailbox, uids, (f) => _withSeen(f, read));
+  _persistVaultFlags(useMailStore, accountId, mailbox, uids, '\\Seen', read);
 
 // Land one message's \Seen change on every surface that renders read state:
 // the list row, the open viewer copy, the cached body, the derived lists and
@@ -1973,7 +1973,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     byFolder.get(k).uids.push(t.uid);
   }
   for (const f of byFolder.values()) {
-    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, map);
+    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, flag, on);
   }
 
   const action = on ? 'add' : 'remove';

@@ -176,15 +176,15 @@ describe('marking a vault-only row read from the unified list', () => {
     expect(useMailStore.getState().localEmails[0].flags).toContain('\\Seen');
   });
 
-  it('hands the flag to the vault writer with the message\'s whole flag list', async () => {
+  it('hands the flag to the vault writer as one flag switched on', async () => {
     primeUnifiedVault([]);
 
     await useMailStore.getState().markSelectedAsRead();
 
-    // The account's address names the mirror directory; the full flag list is
-    // what Rust merges over the file name.
+    // The account's address names the mirror directory; the one flag is what
+    // Rust switches on over the file name, the entry and the cached header.
     expect(mockVaultApplyFlags).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }],
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: true }],
     );
     // The old index-only write is gone — two writers would race each other.
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
@@ -197,17 +197,17 @@ describe('marking a vault-only row read from the unified list', () => {
 
     expect(rowSeen()).toBe(false);
     expect(mockVaultApplyFlags).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: [] }],
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: false }],
     );
   });
 
-  it('keeps every other flag the message had', async () => {
+  it('never names the other flags the message had, so none of them can be undone', async () => {
     primeUnifiedVault(['\\Flagged']);
 
     await useMailStore.getState().markSelectedAsRead();
 
     expect(mockVaultApplyFlags).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Flagged', '\\Seen'] }],
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: true }],
     );
   });
 
@@ -233,7 +233,7 @@ describe('marking a vault-only row read from the unified list', () => {
     await useMailStore.getState().markSelectedAsRead();
 
     expect(mockVaultApplyFlags).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }],
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: true }],
     );
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
@@ -255,7 +255,7 @@ describe('marking a vault-only row read from the unified list', () => {
     expect(mockVaultApplyFlags).toHaveBeenCalledTimes(1);
     expect(mockVaultApplyFlags).toHaveBeenCalledWith(
       ACCOUNT.id, 'INBOX', ACCOUNT.email,
-      expect.arrayContaining([{ uid: UID, flags: ['\\Seen'] }, { uid: UID + 1, flags: ['\\Seen'] }]),
+      expect.arrayContaining([{ uid: UID, flags: ['\\Seen'], on: true }, { uid: UID + 1, flags: ['\\Seen'], on: true }]),
     );
   });
 
@@ -346,7 +346,7 @@ describe('marking a vault-only row read from the unified list', () => {
 
     expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: true }]);
     expect(rowSeen()).toBe(false);
     expect(useMailStore.getState().sentEmails[0].flags).toContain('\\Seen');
   });
@@ -363,7 +363,7 @@ describe('marking a vault-only row read from the unified list', () => {
 
     expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'], on: true }]);
     const rows = useMailStore.getState().emails;
     expect(rows.find(e => e._mailbox === 'INBOX').flags).not.toContain('\\Seen');
     expect(rows.find(e => e._mailbox === SENT).flags).toContain('\\Seen');
