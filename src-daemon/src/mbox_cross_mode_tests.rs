@@ -113,6 +113,13 @@ fn tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
     out
 }
 
+/// A new path an import into the account may make: inside the account's own
+/// dir, or one of the dirs that lead to it from the vault root (`Maildir/`
+/// itself, made by the first write when the vault held none yet).
+fn in_account(path: &Path, own: &Path, vault: &Path) -> bool {
+    path.starts_with(own) || (own.starts_with(path) && path.starts_with(vault) && path != vault)
+}
+
 /// The account's cached folder list, as the app saves it.
 fn save_listing(s: &Arc<DaemonState>, account: &str, paths: &[&str]) {
     let list: Vec<Value> =
@@ -189,12 +196,13 @@ async fn list_rows(rig: &Rig, mailbox: &str) -> Vec<(u64, String)> {
 /// caches those uids as server rows. What must then hold: the server has each
 /// message once, nothing is lost, and the list shows each message once.
 ///
-/// Traced, not run: `import_rehome::plan` and `maildir::repair_generation`
-/// leave import-range uids alone, the upload's dedupe asks only the header
-/// cache and the server (never the vault), and the app's list adds a vault
-/// row whose uid no server row has. So today the import copy (at
-/// `IMPORT_UID_BASE`) lists beside the server's copy and the last assertion
-/// fails, until the upload retires the import copy of what it restored.
+/// The upload's dedupe asks only the header cache and the server, never the
+/// vault, and the app's list adds a vault row whose uid no server row has: so
+/// each import copy (at `IMPORT_UID_BASE`) would list beside the server's
+/// copy. The rehome pass the job runs for every folder it touched, after its
+/// sync, sets the import copy aside (`orphaned/`, through the ledger).
+/// `the_rehome_pass_alone_sets_aside_the_import_copies_an_upload_left` below
+/// proves that pass without the job.
 #[tokio::test]
 async fn a_file_imported_locally_then_restored_to_the_server_lists_each_message_once() {
     let mut rig = setup(gmail(), fast());
@@ -236,6 +244,50 @@ async fn a_file_imported_locally_then_restored_to_the_server_lists_each_message_
         let n = rows.iter().filter(|r| r.1 == id).count();
         assert_eq!(n, 1, "<{id}> lists once after mode 2, mode 1 and the sync, not as its import copy beside the server's: {rows:?}");
     }
+}
+
+/// The end state of mode 2 then mode 1, built without the job: the import
+/// copies at the import uids, the upload's copies at the server uids 5 and 6
+/// (as `keep_copy` stores them), and the header rows a sync leaves, with no
+/// folder read before (so no generation stamp either). One rehome pass sets
+/// both import copies aside into `orphaned/`, the list then shows each
+/// message once, and the next import never takes a set-aside uid again.
+#[tokio::test]
+async fn the_rehome_pass_alone_sets_aside_the_import_copies_an_upload_left() {
+    let rig = setup(gmail(), fast());
+    let messages = [msg("m1@x", "one"), msg("m2@x", "two")];
+    let file = mbox(&rig, &messages);
+    assert_eq!(import_local(&rig, "acct1", &file, "INBOX", false).await["emailCount"], json!(2));
+
+    let root = rig._vault.path().to_path_buf();
+    for (uid, raw) in [(5, &messages[0]), (6, &messages[1])] {
+        crate::handlers::common::with_mailbox_write(&rig.s, "acct1", "INBOX", |root| {
+            vault_files::store(&rig.s.vault_registry, root, "acct1", "INBOX", uid, raw, &["archived".to_string()], false)
+        })
+        .unwrap();
+    }
+    let row = |uid: u32, id: &str, subject: &str| json!({"uid": uid, "messageId": format!("<{id}>"), "subject": subject, "messageDate": DATE});
+    let mut emails: Vec<Value> = (1..=4).map(|uid| row(uid, &format!("old{uid}@x"), &format!("old {uid}"))).collect();
+    emails.extend([row(5, "m1@x", "one"), row(6, "m2@x", "two")]);
+    save_headers(&rig.s, "acct1", "INBOX", &json!({"uidValidity": 1, "totalEmails": 6, "emails": emails}));
+    let inbox = vault_files::cur_path(&root, "acct1", "INBOX").parent().unwrap().to_path_buf();
+    assert_eq!(maildir::read_generation(&inbox), None, "no folder read ran");
+
+    let b = IMPORT_UID_BASE;
+    let report = crate::handlers::custody::rehome_imports_for(&rig.s, "acct1", "INBOX").unwrap().expect("a pass ran");
+    assert_eq!((report.set_aside.clone(), report.moved.len(), report.errors), (vec![b, b + 1], 0, 0));
+    let aside = prints(files_in(&inbox.join(maildir::ORPHAN_DIR)));
+    assert_eq!(aside, prints(messages.to_vec()), "both import copies are set aside, whole");
+    let rows = list_rows(&rig, "INBOX").await;
+    for id in ["m1@x", "m2@x"] {
+        assert_eq!(rows.iter().filter(|r| r.1 == id).map(|r| r.0).collect::<Vec<_>>(), vec![if id == "m1@x" { 5 } else { 6 }], "{rows:?}");
+    }
+    assert_no_garbage(&account_dir(&rig, "acct1"));
+
+    let next = mbox(&rig, &[msg("m3@x", "three")]);
+    assert_eq!(import_local(&rig, "acct1", &next, "INBOX", false).await["emailCount"], json!(1));
+    let sets = ok(call(&rig.s, "vault_uid_sets", json!({"accountId": "acct1", "mailbox": "INBOX"})).await);
+    assert_eq!(sets["archived"], json!([5, 6, b + 2]), "never a set-aside uid again");
 }
 
 /// The other order: mode 1, then mode 2 over the same file. The upload's
@@ -610,8 +662,9 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
     let long = "x".repeat(300);
 
     // Folder names in the cached list, each the home of one message by its
-    // label; the one no file system takes goes last.
-    let names = ["..", ".", "../Escape", "a/../../b", "CON", "NUL.txt", long.as_str()];
+    // label. The one no file system takes sits in the middle: its message
+    // fails and the import goes on with the rest.
+    let names = ["..", ".", "../Escape", long.as_str(), "a/../../b", "CON", "NUL.txt"];
     let listed: Vec<&str> = std::iter::once("INBOX").chain(names).collect();
     save_listing(&s, "acct1", &listed);
     let by_label = scratch.path().join("labels.mbox");
@@ -624,6 +677,7 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
     let params = json!({"sourcePath": by_label.to_string_lossy(), "accountId": "acct1", "mode": "local", "mailbox": "INBOX", "useLabels": true});
     let r = ok(call(&s, "import_mbox", params).await);
     assert_eq!(r["emailCount"], json!(names.len() - 1), "every folder a file system holds took its message: {r}");
+    assert_eq!(r["failedCount"], json!(1), "the one it cannot hold failed alone: {r}");
 
     // A folder name resolves inside its account's dir: it must stay there,
     // never reach `Maildir/` itself or a sibling account's dir.
@@ -632,7 +686,7 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
     let own = vault_files::account_dir(&maildir, "acct1");
     let mid = tree(scratch.path());
     for path in mid.keys().filter(|p| !before.contains(*p)) {
-        assert!(path.starts_with(&own) || path.starts_with(&store) || path.starts_with(&app), "{path:?} was written outside the account's dir");
+        assert!(in_account(path, &own, &vault) || path.starts_with(&store) || path.starts_with(&app), "{path:?} was written outside the account's dir");
     }
     for escaped in [maildir.join("cur"), own.join("cur"), maildir.join("Escape"), maildir.join("b")] {
         assert!(!escaped.exists(), "{escaped:?}");
@@ -694,9 +748,56 @@ async fn an_upload_keeps_hostile_labels_and_account_ids_inside_the_maildir_tree(
     let own = vault_files::account_dir(&maildir, "acct1");
     let store = mailvault_core::custody::db::db_path(&vault).parent().unwrap().to_path_buf();
     for path in tree(&vault).into_keys().filter(|p| !before.contains(p)) {
-        assert!(path.starts_with(&own) || path.starts_with(&store), "{path:?} was written outside the account's dir");
+        assert!(in_account(&path, &own, &vault) || path.starts_with(&store), "{path:?} was written outside the account's dir");
     }
     for escaped in [maildir.join("cur"), own.join("cur"), maildir.join(&escape), vault.join(&escape), vault.parent().unwrap().join(&escape)] {
         assert!(!escaped.exists(), "{escaped:?}");
     }
+}
+
+// ---- recover into a deleted local folder ----
+
+/// A message recovered from the bin, as a local copy, into a local folder
+/// the user has since deleted brings that folder back: marked again (its
+/// name, kind `import`, source `recovered`), so it lists under "On this
+/// computer" with the message in it, instead of an unmarked dir no view
+/// shows. A message recovered into a folder the server lists gets no marker.
+#[tokio::test]
+async fn a_message_recovered_into_a_deleted_local_folder_brings_the_folder_back() {
+    use crate::handlers::deleted::{capture, Source};
+    use mailvault_core::app_db::{self, deleted as bin};
+    let rig = setup(gmail(), fast());
+    save_listing(&rig.s, "acct1", &["INBOX", "Work"]);
+    let binned = |s: &Arc<DaemonState>| app_db::with(&s.app_dir, |c| bin::list(c, &s.app_dir)).unwrap();
+    let recover = |id: String| json!({"ids": [id], "target": "local"});
+
+    let made = import_folder(&rig, "acct1", &mbox(&rig, &[msg("a@x", "one")])).await;
+    let (name, dir) = (made["folder"]["name"].clone(), made["folder"]["dir"].clone());
+    let deleted = ok(call(&rig.s, "delete_local_folder", json!({"accountId": "acct1", "name": name})).await);
+    assert_eq!(deleted["deleted"], json!(1));
+    assert_eq!(local_folders(&rig, "acct1").await, json!([]));
+    let row = binned(&rig.s).pop().expect("the message is in the bin");
+    assert_eq!(json!(row.mailbox), name);
+
+    let out = ok(call(&rig.s, "deleted.recover", recover(row.id)).await);
+    assert_eq!(out["failed"], json!([]), "{out}");
+    let listed = local_folders(&rig, "acct1").await;
+    let back = listed.as_array().and_then(|a| a.first()).cloned().unwrap_or_else(|| panic!("the folder lists again: {listed}"));
+    assert_eq!((back["name"].clone(), back["dir"].clone(), back["kind"].clone(), back["source"].clone()), (name.clone(), dir, json!("import"), json!("recovered")));
+    let sets = ok(call(&rig.s, "vault_uid_sets", json!({"accountId": "acct1", "mailbox": name})).await);
+    assert_eq!(sets["archived"], json!([IMPORT_UID_BASE]), "with its message: {sets}");
+
+    // INBOX is a server folder: a recover into it marks nothing.
+    let inbox = vault_files::cur_path(rig._vault.path(), "acct1", "INBOX");
+    std::fs::create_dir_all(&inbox).unwrap();
+    let file = inbox.join(vault_files::build_maildir_filename(3, &["archived".to_string()]));
+    std::fs::write(&file, msg("i@x", "in inbox")).unwrap();
+    let (id, created) = capture(&rig.s, "acct1", "INBOX", 3, Source::Local).await.unwrap().expect("captured");
+    assert!(created);
+    std::fs::remove_file(&file).unwrap();
+    rig.s.vault_registry.invalidate("acct1", "INBOX");
+    let out = ok(call(&rig.s, "deleted.recover", recover(id)).await);
+    assert_eq!(out["failed"], json!([]), "{out}");
+    assert!(!inbox.parent().unwrap().join(local_folder::MARKER_FILE).exists(), "INBOX got no marker");
+    assert_eq!(local_folders(&rig, "acct1").await.as_array().map(Vec::len), Some(1), "only the recovered local folder lists");
 }
