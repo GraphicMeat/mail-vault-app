@@ -119,15 +119,7 @@ pub fn home_folder(labels: &[String], folders: &[FolderRef], create_missing: boo
             }
         }
     }
-    let customs = labels.iter().filter(|l| {
-        let low = l.to_lowercase();
-        !low.is_empty()
-            && !SYSTEM.iter().any(|(n, _)| low == *n)
-            && !NOT_CUSTOM.contains(&low.as_str())
-            && !low.starts_with("category ")
-            && !low.starts_with("category_")
-    });
-    for label in customs {
+    for label in labels.iter().filter(|l| is_custom(l)) {
         let want = fold(label);
         // A label is `/`-separated whatever the server's delimiter is.
         match folders.iter().find(|f| fold(&f.path.replace(f.delim, "/")) == want) {
@@ -137,6 +129,34 @@ pub fn home_folder(labels: &[String], folders: &[FolderRef], create_missing: boo
         }
     }
     Home::Fallback
+}
+
+/// A label that names a folder of its own: not a system label, not one that
+/// only sets a flag or says nothing (`NOT_CUSTOM`), not a Gmail category.
+fn is_custom(label: &str) -> bool {
+    let low = label.to_lowercase();
+    !low.is_empty()
+        && !SYSTEM.iter().any(|(n, _)| low == *n)
+        && !NOT_CUSTOM.contains(&low.as_str())
+        && !low.starts_with("category ")
+        && !low.starts_with("category_")
+}
+
+/// The custom labels of a message other than the one its home folder `home`
+/// (a server path, `delim` its hierarchy) stands for, in label order, each
+/// once: what a Gmail upload adds to the message on top of its folder.
+/// Matched the way `home_folder` matches a label to a folder.
+pub fn other_labels(labels: &[String], home: &str, delim: char) -> Vec<String> {
+    let mut seen = vec![fold(&home.replace(delim, "/"))];
+    let mut out = Vec::new();
+    for label in labels.iter().filter(|l| is_custom(l)) {
+        let key = fold(label);
+        if !seen.contains(&key) {
+            seen.push(key);
+            out.push(label.clone());
+        }
+    }
+    out
 }
 
 /// `name` lowercased outside its modified UTF-7 runs (`&...-`, RFC 3501
@@ -589,6 +609,42 @@ mod tests {
         let labels = labels_of(&h);
         assert_eq!(home_folder(&labels, &f, false), Home::Folder(folder(&f, "Work/Clients").clone()));
         assert_eq!(attrs_of(&labels), MsgAttrs { flagged: true, unread: false });
+    }
+
+    // ---- other_labels ----
+
+    /// Homed in INBOX: every custom label is another label, in order; a
+    /// system label, a flag-only one and a category never are.
+    #[test]
+    fn other_labels_are_the_custom_ones_in_order() {
+        let labels = labs(&[
+            "Inbox", "Sent", "Drafts", "Spam", "Trash", "Starred", "Important", "Opened", "Unread", "Chat", "Archived",
+            "Category Promotions", "Category_Updates", "Work", "Receipts", "Work/Clients",
+        ]);
+        assert_eq!(other_labels(&labels, "INBOX", '/'), labs(&["Work", "Receipts", "Work/Clients"]));
+        assert!(other_labels(&labs(&["Inbox", "Starred", "Category Social"]), "INBOX", '/').is_empty());
+        assert!(other_labels(&[], "INBOX", '/').is_empty());
+    }
+
+    /// The label the home folder stands for is left out, matched as
+    /// `home_folder` matches it: case-blind, `/` against the server's
+    /// delimiter.
+    #[test]
+    fn other_labels_leave_out_the_label_of_the_home_folder() {
+        let labels = labs(&["work", "Receipts"]);
+        assert_eq!(other_labels(&labels, "Work", '/'), labs(&["Receipts"]));
+        let nested = labs(&["Work/Clients", "Receipts"]);
+        assert_eq!(other_labels(&nested, "Work.Clients", '.'), labs(&["Receipts"]));
+        assert_eq!(other_labels(&nested, "Work/Clients", '/'), labs(&["Receipts"]));
+        assert_eq!(other_labels(&nested, "Work", '/'), nested, "a parent folder is another label");
+    }
+
+    /// A modified UTF-7 name keeps the case of its base64 (日 `&ZeU-`, 摅
+    /// `&ZEU-`), and a label met twice is sent once.
+    #[test]
+    fn other_labels_keep_utf7_case_and_name_a_label_once() {
+        assert_eq!(other_labels(&labs(&["&ZeU-", "&ZEU-"]), "&ZeU-", '/'), labs(&["&ZEU-"]));
+        assert_eq!(other_labels(&labs(&["Work", "work", "WORK", "Receipts", "Work"]), "INBOX", '/'), labs(&["Work", "Receipts"]));
     }
 
     // ---- role_of_special_use ----

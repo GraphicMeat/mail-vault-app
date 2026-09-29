@@ -14,6 +14,10 @@ pub struct Message {
     /// are all derived from this — fixtures stay readable .eml text.
     #[serde(with = "raw_bytes")]
     pub raw: Vec<u8>,
+    /// Gmail's user labels (`X-GM-LABELS`, X-GM-EXT-1), as `STORE` left
+    /// them. Left out of a serialized state while empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
 }
 
 mod raw_bytes {
@@ -38,6 +42,7 @@ impl Default for Message {
             internal_date: "01-Jan-2026 12:00:00 +0000".to_string(),
             modseq: 1,
             raw: Vec::new(),
+            labels: Vec::new(),
         }
     }
 }

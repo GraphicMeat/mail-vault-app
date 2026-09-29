@@ -679,6 +679,9 @@ fn do_store(cmd: &Command, state: &mut ServerState, sess: &Session) -> Response 
     let mut args = cmd.args.as_str();
     let set = next_arg(&mut args).unwrap_or_default();
     let op = next_arg(&mut args).unwrap_or_default().to_uppercase();
+    if op.trim_start_matches(['+', '-']).starts_with("X-GM-LABELS") {
+        return store_labels(cmd, state, sess, &set, &op, args);
+    }
     let flags_raw = next_group(&mut args).unwrap_or_else(|| args.trim().to_string());
     let mut flags: Vec<String> = flags_raw.split_whitespace().map(|s| s.to_string()).collect();
     let silent = op.ends_with(".SILENT");
@@ -745,6 +748,45 @@ fn do_store(cmd: &Command, state: &mut ServerState, sess: &Session) -> Response 
                 msg.flags.join(" ")
             ));
         }
+    }
+    r
+}
+
+/// Gmail's `STORE +X-GM-LABELS (...)` (X-GM-EXT-1; `-` removes, neither
+/// replaces): the labels are astrings, quoted when they hold a space.
+/// Answered, as Gmail does, with each
+/// message's labels in an untagged FETCH. A server without the extension
+/// knows no such item: BAD, as a real one answers. The group is not read
+/// quote-aware: a label holding an unbalanced paren is not modelled.
+fn store_labels(cmd: &Command, state: &mut ServerState, sess: &Session, set: &str, op: &str, mut args: &str) -> Response {
+    if !state.has_cap("X-GM-EXT-1") {
+        return Response::bad("Unknown STORE data item");
+    }
+    let group = next_group(&mut args).unwrap_or_default();
+    let mut rest = group.as_str();
+    let labels: Vec<String> = std::iter::from_fn(|| next_arg(&mut rest)).collect();
+    let Some(mb) = selected_mut(state, sess) else {
+        return Response::bad("No mailbox selected");
+    };
+    let universe: Vec<u32> = if cmd.is_uid { mb.messages.iter().map(|m| m.uid).collect() } else { (1..=mb.messages.len() as u32).collect() };
+    let mut r = Response::ok("STORE completed");
+    for id in expand_set(set, &universe) {
+        let uid = if cmd.is_uid { id } else { mb.messages[id as usize - 1].uid };
+        let Some(msg) = mb.by_uid_mut(uid) else { continue };
+        if op.starts_with('+') {
+            for l in &labels {
+                if !msg.labels.contains(l) {
+                    msg.labels.push(l.clone());
+                }
+            }
+        } else if op.starts_with('-') {
+            msg.labels.retain(|l| !labels.contains(l));
+        } else {
+            msg.labels = labels.clone();
+        }
+        let now: Vec<String> = msg.labels.iter().map(|l| quoted(l)).collect();
+        let seq = mb.seq_of(uid).unwrap_or(0);
+        r = r.line(format!("* {} FETCH (X-GM-LABELS ({}) UID {})", seq, now.join(" "), uid));
     }
     r
 }

@@ -33,7 +33,8 @@
 //!   the job goes on. The job itself never fails because of one message.
 //! - **Progress** is the `mbox-import-progress` event, at most one per
 //!   `progress_every` plus every change of state, with a throughput ETA the
-//!   daemon measures (D5). The worker is registered per account rather than
+//!   daemon measures (D5) and `labelWarnings`, the uploads whose other Gmail
+//!   labels did not stick (D2). The worker is registered per account rather than
 //!   through `handlers::common::RunGuard`: `cancel_kind` and `pause_kind` act
 //!   on every run of a kind, and this job pauses, resumes and cancels one
 //!   account's upload by its id.
@@ -305,6 +306,10 @@ pub(crate) struct Journal {
     pub uploaded: u64,
     pub skipped: u64,
     pub failed: u64,
+    /// Uploaded messages whose other Gmail labels were not applied
+    /// (`MboxUpload::label_warnings`).
+    #[serde(default)]
+    pub label_warnings: u64,
     /// `running` (a live worker, or one a quit or crash cut off), `paused`,
     /// `needsSignIn` or `cancelled`.
     pub state: String,
@@ -320,7 +325,7 @@ pub(crate) struct Journal {
 impl Journal {
     fn restart(&mut self, source_path: String, size: u64, mtime_ms: u64) {
         (self.source_path, self.size, self.mtime_ms) = (source_path, size, mtime_ms);
-        (self.offset, self.uploaded, self.skipped, self.failed) = (0, 0, 0, 0);
+        (self.offset, self.uploaded, self.skipped, self.failed, self.label_warnings) = (0, 0, 0, 0, 0);
     }
 }
 
@@ -464,6 +469,7 @@ fn progress(j: &Journal, active: bool, state: &str, throttled: bool, eta: Option
         "uploadedCount": j.uploaded,
         "skippedCount": j.skipped,
         "failedCount": j.failed,
+        "labelWarnings": j.label_warnings,
         "paused": state == PAUSED || state == NEEDS_SIGN_IN,
         "throttled": throttled,
         "needsSignIn": state == NEEDS_SIGN_IN,
@@ -579,6 +585,7 @@ pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Valu
             uploaded: 0,
             skipped: 0,
             failed: 0,
+            label_warnings: 0,
             state: RUNNING.to_string(),
             touched: BTreeSet::new(),
             created: BTreeSet::new(),
@@ -858,7 +865,12 @@ impl Runner {
         loop {
             let outcome = {
                 let (rt, pipeline) = (&self.rt, &mut self.pipeline);
-                rt.block_on(pipeline.upload_message(raw))
+                // Read around the call on this very pipeline: a rebuild
+                // between tries starts a new count, never loses or repeats one.
+                let before = pipeline.label_warnings();
+                let outcome = rt.block_on(pipeline.upload_message(raw));
+                self.journal.label_warnings += pipeline.label_warnings() - before;
+                outcome
             };
             let kind = match outcome {
                 Outcome::Uploaded { .. } => return Some(self.cleared(Done::Uploaded)),
@@ -1081,7 +1093,10 @@ impl Runner {
             }
         };
         let j = &self.journal;
-        info!("[mbox_upload] {account}: job {} {state}: uploaded={} skipped={} failed={}", self.job.id, j.uploaded, j.skipped, j.failed);
+        info!(
+            "[mbox_upload] {account}: job {} {state}: uploaded={} skipped={} failed={} label_warnings={}",
+            self.job.id, j.uploaded, j.skipped, j.failed, j.label_warnings
+        );
         unregister(&self.state, &self.job);
         let mut last = progress(&self.journal, false, state, false, None);
         last["foldersChanged"] = json!(!self.journal.created.is_empty());
@@ -1227,6 +1242,7 @@ mod tests {
             uploaded: 2,
             skipped: 1,
             failed: 0,
+            label_warnings: 1,
             state: PAUSED.into(),
             touched: ["INBOX".to_string()].into(),
             created: BTreeSet::new(),
@@ -1235,6 +1251,10 @@ mod tests {
         write_journal(app.path(), &journal).unwrap();
         assert_eq!(read_journal(app.path(), &journal.job_id), Some(journal.clone()));
         assert_eq!(list_journals(app.path()), vec![journal.clone()]);
+        let mut changed = journal.clone();
+        changed.restart("/somewhere/else.mbox".into(), 100, 8);
+        let j = &changed;
+        assert_eq!((j.offset, j.uploaded, j.skipped, j.failed, j.label_warnings), (0, 0, 0, 0, 0), "a changed file counts from nothing");
 
         std::fs::write(tail_path(app.path(), &journal.job_id), "u 00000000000000ff\ns 0000000000000001\nf 00000000000000\nu 12").unwrap();
         let tail = read_tail(app.path(), &journal.job_id);
@@ -1813,5 +1833,33 @@ mod tests {
         assert_eq!(last["state"], json!(DISCARDED));
         assert!(read_journal(&rig.s.app_dir, &job).is_none());
         assert_eq!(status_of(&rig, &job).await, Value::Null);
+    }
+
+    /// On Gmail every label STORE is refused here: each message still counts
+    /// as uploaded, and the refusals reach the app as `labelWarnings` on every
+    /// event, the last one included. A message with no other label sends no
+    /// STORE, and a refused one is not tried again.
+    #[tokio::test]
+    async fn label_warnings_reach_every_progress_event() {
+        let refused = Action::Respond("NO".into(), "[CANNOT] Invalid label".into());
+        let mut rig = setup(gmail().with_cap("X-GM-EXT-1").fault(Trigger::on("STORE"), refused), fast());
+        let file = mbox(
+            &rig,
+            &[
+                labelled("a@x", "one", "Inbox,Opened,Receipts"),
+                labelled("b@x", "two", "Inbox,Opened"),
+                labelled("c@x", "three", "Work,Opened,Receipts"),
+            ],
+        );
+        start(&rig, &file, true).await;
+        let events = until_done(&mut rig.rx).await;
+        assert!(events.iter().all(|e| e["labelWarnings"].is_u64()), "{events:?}");
+        let after_first = events.iter().find(|e| e["active"] == json!(true) && e["uploadedCount"] == json!(1)).expect("an event after the first message");
+        assert_eq!(after_first["labelWarnings"], json!(1));
+        let last = events.last().unwrap();
+        let counts = (last["state"].clone(), last["uploadedCount"].clone(), last["failedCount"].clone(), last["labelWarnings"].clone());
+        assert_eq!(counts, (json!(DONE), json!(3), json!(0), json!(2)));
+        assert_eq!(rig.server.count_commands("X-GM-LABELS"), 2);
+        assert_eq!(rig.server.count_commands("APPEND"), 3);
     }
 }

@@ -6,7 +6,9 @@
 //! made on the server when no folder has it yet, R6/D3); a message that
 //! folder already holds is skipped; anything else is APPENDed with its own
 //! date and, with labels, its Starred and read state; and the vault keeps a
-//! copy under the uid the server gave it, where sync keeps server mail.
+//! copy under the uid the server gave it, where sync keeps server mail. On
+//! Gmail (X-GM-EXT-1) that uid also gets the message's other custom labels
+//! (D2); a label that does not stick is counted, never the upload's failure.
 //!
 //! Dedupe asks the header cache first and the server second, by mode 2's rule
 //! (`ServerView::lists_same`: same Message-ID, Subject and Date, every row
@@ -109,6 +111,8 @@ pub struct MboxUpload {
     /// shortens them).
     append_floor_secs: u64,
     append_min_rate: u64,
+    /// Uploads whose other Gmail labels were not applied (`add_labels`).
+    label_warnings: u64,
 }
 
 struct Conn {
@@ -116,6 +120,8 @@ struct Conn {
     literal_plus: bool,
     /// APPENDUID answers the uid; without it the pipeline looks it up.
     uidplus: bool,
+    /// Gmail (X-GM-EXT-1): an upload gets its other labels (`add_labels`).
+    gmail: bool,
     selected: Option<String>,
 }
 
@@ -203,7 +209,14 @@ impl MboxUpload {
             touched: BTreeSet::new(),
             append_floor_secs: APPEND_FLOOR_SECS,
             append_min_rate: APPEND_MIN_RATE,
+            label_warnings: 0,
         })
+    }
+
+    /// Messages uploaded this run whose other Gmail labels were not applied:
+    /// they are on the server, in their folder, without them.
+    pub fn label_warnings(&self) -> u64 {
+        self.label_warnings
     }
 
     /// Every folder an APPEND went out to this run (one made for it
@@ -278,8 +291,49 @@ impl MboxUpload {
         }
         if let Some(uid) = uid {
             self.keep_copy(&path, uid, msg, &labels, &head).await;
+            self.add_labels(&path, uid, &wire).await;
         }
         Ok(Outcome::Uploaded { mailbox: path, uid })
+    }
+
+    /// Gmail only (X-GM-EXT-1): the message just stored at `uid` in `path`
+    /// also gets its other custom labels (`takeout::other_labels`, as the
+    /// server names them: `wire`), with one `UID STORE +X-GM-LABELS`. Never
+    /// a system label: `Starred` is the `\Flagged` the APPEND set. A failure
+    /// never fails the upload, which already happened: it is counted
+    /// (`label_warnings`) and the connection goes unless the server refused
+    /// in step (a tagged NO). Nothing here returns an error, so a lost
+    /// connection can never send the APPEND again.
+    async fn add_labels(&mut self, path: &str, uid: u32, wire: &[String]) {
+        if !self.conn.as_ref().is_some_and(|c| c.gmail) {
+            return;
+        }
+        let delim = self.delimiter();
+        let Some(list) = x_gm_labels(&takeout::other_labels(wire, path, delim), delim) else { return };
+        // APPEND needs no folder selected, STORE does: after an APPENDUID
+        // the one selected is often another.
+        let mut stored = Ok(());
+        if !self.conn.as_ref().is_some_and(|c| c.selected.as_deref() == Some(path)) {
+            stored = self.select(path).await.map(|_| ()).map_err(|f| f.cause);
+        }
+        if stored.is_ok() {
+            stored = match self.conn.as_mut() {
+                Some(conn) => {
+                    let command = format!("UID STORE {uid} +X-GM-LABELS ({list})");
+                    imap::patient(conn.session.run_command_and_check_ok(&command)).await.map_err(|e| e.to_string())
+                }
+                None => Err("connection lost".to_string()),
+            };
+        }
+        if let Err(cause) = stored {
+            let refused = is_tagged_no(&cause);
+            if !refused {
+                self.conn = None;
+            }
+            self.label_warnings += 1;
+            let how = if refused { "refused" } else { "connection dropped" };
+            warn!("[mbox_upload] {}: uid {uid} stored without its other labels ({how}); {} so far", self.account_id, self.label_warnings);
+        }
     }
 
     /// The pipeline's connection, made on the first message and after one was
@@ -291,12 +345,12 @@ impl MboxUpload {
         let connecting = imap::create_imap_session_no_compress(&self.config, &self.state.imap_pool);
         let mut session = mailvault_core::net_activity::with_purpose(PURPOSE, connecting).await?;
         let caps = session.capabilities().await.map_err(|e| format!("CAPABILITY failed: {e}"))?;
-        let (literal_plus, uidplus) = (caps.has_str("LITERAL+"), caps.has_str("UIDPLUS"));
+        let (literal_plus, uidplus, gmail) = (caps.has_str("LITERAL+"), caps.has_str("UIDPLUS"), caps.has_str("X-GM-EXT-1"));
         if self.folders.is_none() {
             let listed = imap::list_mailboxes(&mut session).await?;
             self.folders = Some(takeout::folder_refs_from_listing(&json!({ "mailboxes": listed }).to_string()));
         }
-        self.conn = Some(Conn { session, literal_plus, uidplus, selected: None });
+        self.conn = Some(Conn { session, literal_plus, uidplus, gmail, selected: None });
         Ok(())
     }
 
@@ -589,6 +643,19 @@ fn cached_rows(state: &DaemonState, account: &str, mailbox: &str, chunk: usize, 
         f(crate::custody::with_conn(state, |c| cache::load_by_uids(c, account, mailbox, part))?);
     }
     Ok(())
+}
+
+/// The inside of `X-GM-LABELS (...)` for `labels` (modified UTF-7, `/`
+/// hierarchy): each one's `/` turned into the server's delimiter, as a folder
+/// made for it is named, and quoted as an IMAP string (`\` and `"` escaped;
+/// one holding CR or LF is refused by `quote_mailbox` and left out). A label
+/// starting with `\` is left out too: Gmail reads that as one of its system
+/// labels (`\Inbox`, `\Important`), which an upload never sets. `None` when
+/// nothing is left to send.
+fn x_gm_labels(labels: &[String], delim: char) -> Option<String> {
+    let quoted: Vec<String> =
+        labels.iter().filter(|l| !l.starts_with('\\')).filter_map(|l| imap::quote_mailbox(&l.replace('/', &delim.to_string())).ok()).collect();
+    (!quoted.is_empty()).then(|| quoted.join(" "))
 }
 
 /// A tagged NO: the server refused and the connection is still in step. Read
@@ -1515,5 +1582,218 @@ mod tests {
         up.disconnect();
         assert_eq!(up.upload_message(&tmsg("b@x", "two", "Inbox")).await, uploaded("INBOX", 6));
         assert_eq!(server.connection_count(), 2);
+    }
+
+    // ---- Task 12: Gmail labels after the upload (D2) ----
+
+    /// `gmail()` advertising Gmail's IMAP extension.
+    fn gmail_ext() -> Scenario {
+        gmail().with_cap("X-GM-EXT-1")
+    }
+
+    /// The Gmail labels the server holds for `uid` in `mailbox`.
+    fn gm_labels(server: &MockImap, mailbox: &str, uid: u32) -> Vec<String> {
+        server_message(server, mailbox, uid).labels
+    }
+
+    fn label_stores(server: &MockImap) -> Vec<String> {
+        server.commands().into_iter().filter(|c| c.to_uppercase().contains("X-GM-LABELS")).collect()
+    }
+
+    /// Homed in INBOX, the message's custom labels follow in one STORE; the
+    /// system, flag-only and category labels do not, and the flags stay the
+    /// APPEND's. Homed in its first custom label, that one is its folder and
+    /// only the rest are added. Gmail's answer (an untagged FETCH with the
+    /// labels) leaves the connection in step.
+    #[tokio::test]
+    async fn a_gmail_upload_gets_its_other_labels_and_keeps_its_flags() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let labels = "Inbox,Important,Opened,Category Promotions,Work,Starred,Projects/2026";
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", labels)).await, uploaded("INBOX", 5));
+        let stores = label_stores(&server);
+        assert_eq!(stores.len(), 1, "{stores:?}");
+        assert!(stores[0].ends_with(r#"UID STORE 5 +X-GM-LABELS ("Work" "Projects/2026")"#), "{stores:?}");
+        assert_eq!(gm_labels(&server, "INBOX", 5), ["Work", "Projects/2026"]);
+        assert_eq!(server_message(&server, "INBOX", 5).flags, ["\\Seen", "\\Flagged"], "Starred stays the flag the APPEND set");
+
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "work,Opened,Receipts")).await, uploaded("Work", 1));
+        assert_eq!(gm_labels(&server, "Work", 1), ["Receipts"], "its home label is its folder, not another label");
+        assert_eq!(up.label_warnings(), 0);
+        assert_eq!(server.connection_count(), 1);
+    }
+
+    /// A server without X-GM-EXT-1 gets no label STORE, whatever the labels.
+    #[tokio::test]
+    async fn without_gmails_extension_no_label_is_stored() {
+        let server = MockImap::start(gmail());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let labels = "Inbox,Important,Opened,Work,Starred,Projects/2026";
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", labels)).await, uploaded("INBOX", 5));
+        assert_eq!(server.count_commands("STORE"), 0);
+        assert!(gm_labels(&server, "INBOX", 5).is_empty());
+        assert_eq!(up.label_warnings(), 0);
+    }
+
+    /// Every system label, every flag-only one, every category and anything
+    /// Gmail would read as a system label (`\Inbox`, `\Important`) stays off
+    /// the wire; only the one real custom label goes.
+    #[tokio::test]
+    async fn system_and_flag_labels_are_never_sent_to_gmail() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let every = r"Inbox,Sent,Drafts,Spam,Trash,Starred,Important,Opened,Unread,Chat,Archived,Category Social,Category_Updates,\Inbox,\Important,Receipts";
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", every)).await, uploaded("INBOX", 5));
+        let stores = label_stores(&server);
+        assert_eq!(stores.len(), 1, "{stores:?}");
+        assert!(stores[0].ends_with(r#"UID STORE 5 +X-GM-LABELS ("Receipts")"#), "{stores:?}");
+        assert_eq!(gm_labels(&server, "INBOX", 5), ["Receipts"]);
+
+        let none = "Important,Category Promotions,Starred,Unread";
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", none)).await, uploaded("[Gmail]/All Mail", 1));
+        assert_eq!(label_stores(&server).len(), 1, "nothing but system labels: no STORE");
+    }
+
+    /// A label with a space, a quote, a backslash and a `/` hierarchy goes
+    /// out as one IMAP string each, escaped the way Gmail reads them back;
+    /// the hierarchy takes the server's delimiter, as a folder made for it
+    /// would.
+    #[tokio::test]
+    async fn a_label_is_quoted_and_escaped_the_way_gmail_reads_it() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let labels = r#"Inbox,My Label,"say \"hi\"",back\slash,Work/Clients"#;
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", labels)).await, uploaded("INBOX", 5));
+        let line = label_stores(&server).pop().expect("a label STORE");
+        assert!(line.ends_with(r#"UID STORE 5 +X-GM-LABELS ("My Label" "say \"hi\"" "back\\slash" "Work/Clients")"#), "{line}");
+        assert_eq!(gm_labels(&server, "INBOX", 5), ["My Label", r#"say "hi""#, r"back\slash", "Work/Clients"]);
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "Inbox")).await, uploaded("INBOX", 6));
+        assert_eq!((up.label_warnings(), server.connection_count()), (0, 1), "the session stayed in step");
+
+        let mut dotted = gmail_ext();
+        dotted.state.delimiter = ".".into();
+        let dotted = MockImap::start(dotted);
+        let (_v2, s2) = state();
+        assert_eq!(upload(&s2, &dotted).upload_message(&tmsg("a@x", "one", "Inbox,Work/Clients")).await, uploaded("INBOX", 5));
+        let line = label_stores(&dotted).pop().expect("a label STORE");
+        assert!(line.ends_with(r#"UID STORE 5 +X-GM-LABELS ("Work.Clients")"#), "{line}");
+    }
+
+    /// A non-ASCII label goes out in modified UTF-7, the form Gmail lists its
+    /// labels in; a label holding CR/LF goes out encoded too, so it can never
+    /// end the STORE early and start a command of its own.
+    #[tokio::test]
+    async fn a_non_ascii_or_control_character_label_goes_out_in_modified_utf7() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let labels = "Inbox,Übung,=?UTF-8?Q?Evil=0D=0AA1_DELETE_INBOX?=";
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", labels)).await, uploaded("INBOX", 5));
+        let line = label_stores(&server).pop().expect("a label STORE");
+        assert!(line.ends_with(r#"UID STORE 5 +X-GM-LABELS ("&ANw-bung" "Evil&AA0ACg-A1 DELETE INBOX")"#), "{line}");
+        assert_eq!(gm_labels(&server, "INBOX", 5), ["&ANw-bung", "Evil&AA0ACg-A1 DELETE INBOX"]);
+        assert!(server.commands().iter().all(|c| c.split_whitespace().nth(1) != Some("DELETE")), "{:?}", server.commands());
+        assert_eq!(subjects(&server, "INBOX").len(), 5, "INBOX is untouched");
+    }
+
+    /// The argument itself: `\` names are dropped, CR/LF is refused whatever
+    /// the caller passed, `/` takes the delimiter, and nothing left is `None`.
+    #[test]
+    fn the_label_list_leaves_out_what_gmail_must_never_get() {
+        let labs = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(x_gm_labels(&labs(&["a\r\nb", "\\Inbox", "ok", "x\ny"]), '/'), Some(r#""ok""#.to_string()));
+        assert_eq!(x_gm_labels(&labs(&["A/B", r#"q"x"#]), '.'), Some(r#""A.B" "q\"x""#.to_string()));
+        assert_eq!(x_gm_labels(&labs(&["\\Important", "\r"]), '/'), None);
+        assert_eq!(x_gm_labels(&[], '/'), None);
+    }
+
+    /// Gmail refuses the labels: the message is uploaded all the same, with
+    /// its vault copy, and the refusal is counted. A tagged NO keeps the
+    /// connection; the next message's labels go on. (The mock still ran the
+    /// refused STORE, so what the first message holds is not asserted.)
+    #[tokio::test]
+    async fn a_refused_label_store_is_counted_and_the_upload_stands() {
+        let refused = Action::Respond("NO".into(), "[CANNOT] Invalid label".into());
+        let server = MockImap::start(gmail_ext().fault(Trigger::nth("STORE", 1), refused));
+        let (v, s) = state();
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox,Work")).await, uploaded("INBOX", 5));
+        assert_eq!(up.label_warnings(), 1);
+        assert_eq!(names_in(v.path(), "INBOX"), ["5:2,AS.eml"], "its vault copy is kept");
+
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "Inbox,Work")).await, uploaded("INBOX", 6));
+        assert_eq!(gm_labels(&server, "INBOX", 6), ["Work"]);
+        assert_eq!(up.label_warnings(), 1, "the next message's labels went on");
+        assert_eq!(server.connection_count(), 1, "a tagged NO keeps the connection");
+        assert_eq!(server.count_commands("APPEND"), 2, "nothing is sent twice");
+    }
+
+    /// The connection dies on the label STORE: the upload stands (it is never
+    /// sent again), the loss is counted, and the next message gets a new
+    /// connection and its labels.
+    #[tokio::test]
+    async fn a_label_store_that_loses_the_connection_is_counted_and_the_next_message_reconnects() {
+        let server = MockImap::start(gmail_ext().fault(Trigger::nth("STORE", 1), Action::DropConnection));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox,Work")).await, uploaded("INBOX", 5));
+        assert_eq!(up.label_warnings(), 1);
+
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "Inbox,Work")).await, uploaded("INBOX", 6));
+        assert_eq!(gm_labels(&server, "INBOX", 6), ["Work"]);
+        assert_eq!(server.connection_count(), 2, "the dropped connection is not used again");
+        assert_eq!(server.count_commands("APPEND"), 2, "the upload is never sent again");
+        assert_eq!(subjects(&server, "INBOX")[4..], ["one", "two"]);
+    }
+
+    /// A skipped message was not uploaded: no labels, in this run or the next.
+    #[tokio::test]
+    async fn a_skipped_message_gets_no_label_store() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let m = tmsg("a@x", "one", "Inbox,Work");
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&m).await, uploaded("INBOX", 5));
+        assert_eq!(up.upload_message(&m).await, skipped("INBOX"));
+        assert_eq!(upload(&s, &server).upload_message(&m).await, skipped("INBOX"));
+        assert_eq!(server.count_commands("X-GM-LABELS"), 1, "only the upload got its labels");
+    }
+
+    /// Without UIDPLUS the uid found by the Message-ID gets the labels; a
+    /// message with no Message-ID has no uid to name, so none is sent.
+    #[tokio::test]
+    async fn labels_follow_a_looked_up_uid_and_skip_an_unknown_one() {
+        let server = MockImap::start(gmail_ext().without_cap("UIDPLUS"));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox,Work")).await, uploaded("INBOX", 5));
+        assert_eq!(gm_labels(&server, "INBOX", 5), ["Work"]);
+
+        let chat = format!("X-Gmail-Labels: Inbox,Chat,Work\r\nSubject: Chat with Ann\r\nDate: {DATE}\r\n\r\nhi").into_bytes();
+        assert_eq!(up.upload_message(&chat).await, Outcome::Uploaded { mailbox: "INBOX".into(), uid: None });
+        assert_eq!(server.count_commands("X-GM-LABELS"), 1, "no uid, no label STORE");
+        assert!(gm_labels(&server, "INBOX", 6).is_empty());
+        assert_eq!(up.label_warnings(), 0, "an unknown uid is not a failure");
+    }
+
+    /// A message with no custom label besides its home (or none at all, or
+    /// read without labels) sends no STORE.
+    #[tokio::test]
+    async fn a_message_with_no_other_custom_label_sends_no_store() {
+        let server = MockImap::start(gmail_ext());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox,Opened,Important")).await, uploaded("INBOX", 5));
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "Work,Opened")).await, uploaded("Work", 1));
+        assert_eq!(up.upload_message(&tmsg("c@x", "three", "Projects/2026,Unread")).await, uploaded("Projects/2026", 1));
+        assert_eq!(up.upload_message(&tmsg("d@x", "four", "Category Promotions")).await, uploaded("[Gmail]/All Mail", 1));
+        let mut plain = MboxUpload::new(Arc::clone(&s), config(&server), "acct1".into(), "Work".into(), false).unwrap();
+        assert_eq!(plain.upload_message(&tmsg("e@x", "five", "Inbox,Receipts")).await, uploaded("Work", 2));
+        assert_eq!(server.count_commands("X-GM-LABELS"), 0);
+        assert_eq!((up.label_warnings(), plain.label_warnings()), (0, 0));
     }
 }
