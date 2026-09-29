@@ -113,10 +113,12 @@ describe('Quick action samples and action sets', function () {
     expect(shown.account).toBe(account.id);
     expect(shown.marked).toBe(true);
     expect(shown.rows).toHaveLength(3);
-    const list = await listRows();
+    // A conversation row may name its thread by a reply's "Re:" subject.
+    const bare = (subject) => subject.replace(/^((re|fwd?):\s*)+/i, '');
+    const list = (await listRows()).map((item) => bare(item.subject));
     for (const row of shown.rows) {
       expect(row.subject.length).toBeGreaterThan(0);
-      expect(list.map((item) => item.subject)).toContain(row.subject);
+      expect(list).toContain(bare(row.subject));
     }
   });
 
@@ -196,6 +198,25 @@ describe('Quick action samples and action sets', function () {
         };
       });
     });
+    // Where the cards and the sample sit, for the log: each card's picture
+    // and the live wheel are drawn smaller by `zoom`.
+    console.log('[quick-actions-presets] geometry', JSON.stringify(await browser.execute(() => {
+      const rect = (el) => el && (({ left, top, width, height }) => ({ left, top, width, height }))(el.getBoundingClientRect());
+      const root = document.querySelector('[data-testid="settings-page"]');
+      const frame = root.querySelector('.quick-actions-sample-frame');
+      return {
+        cards: [...root.querySelectorAll('.choice-card')].slice(0, 8).map((card) => ({
+          name: card.querySelector('.choice-card-button').textContent.trim(),
+          card: rect(card),
+          picture: rect(card.querySelector('.quick-actions-card-sample')),
+          wheel: rect(card.querySelector('.quick-actions-radial-preview')),
+          row: rect(card.querySelector('[data-testid="email-row"]')),
+        })),
+        frame: rect(frame),
+        rows: [...frame.querySelectorAll('[data-testid="email-row"]')].map(rect),
+        wheel: rect(frame.querySelector('.quick-actions-radial-preview')),
+      };
+    })));
     const initial = await cards();
     expect(initial.map((card) => card.name)).toEqual(['MailVault', 'Gmail', 'Outlook', 'Thunderbird']);
     expect(initial.filter((card) => card.pressed).map((card) => card.name)).toEqual(['MailVault']);
