@@ -242,8 +242,10 @@ describe('useNotesStore', () => {
   });
 
   /// A board card is no list row, so the server write leaves the vault
-  /// copies as they were, and the next list reads the star from them.
-  it('writes the star to every vault copy it starred, keeping each copy\'s other flags', async () => {
+  /// copies as they were, and the next list reads the star from them. Only
+  /// the star is sent: each copy's other flags are the vault's, not the
+  /// card's, which were read when the board loaded.
+  it('writes the star to every vault copy it starred as a delta, never a whole list', async () => {
     const note = card('v', { copies: [
       { accountId: 'a', mailbox: 'INBOX', uid: 3, flags: ['\\Seen'] },
       { accountId: 'b', mailbox: 'INBOX', uid: 7, flags: [] },
@@ -252,16 +254,48 @@ describe('useNotesStore', () => {
     await useNotesStore.getState().open();
     await useNotesStore.getState().toggleStar(note);
     expect(harness.vaultApplyFlags.mock.calls).toEqual([
-      ['a', 'INBOX', 'me@x.test', [{ uid: 3, flags: ['\\Seen', '\\Flagged'] }]],
-      ['b', 'INBOX', 'work@y.test', [{ uid: 7, flags: ['\\Flagged'] }]],
+      ['a', 'INBOX', 'me@x.test', [{ uid: 3, flags: ['\\Flagged'], on: true }]],
+      ['b', 'INBOX', 'work@y.test', [{ uid: 7, flags: ['\\Flagged'], on: true }]],
     ]);
 
     harness.vaultApplyFlags.mockClear();
     const starred = card('w', { starred: true, copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 5, flags: ['\\Seen', '\\Flagged'] }] });
     useNotesStore.setState({ cards: [starred] });
     await useNotesStore.getState().toggleStar(starred);
-    expect(harness.vaultApplyFlags).toHaveBeenCalledWith('a', 'INBOX', 'me@x.test', [{ uid: 5, flags: ['\\Seen'] }]);
+    expect(harness.vaultApplyFlags).toHaveBeenCalledWith('a', 'INBOX', 'me@x.test', [{ uid: 5, flags: ['\\Flagged'], on: false }]);
     expect(useNotesStore.getState().cards[0].starred).toBe(false);
+  });
+
+  /// A vault that lands what it is sent the way the daemon does: a whole
+  /// list replaces a copy's flags, a delta moves only the flags it names.
+  function fakeVault(start) {
+    const held = new Map(Object.entries(start).map(([key, flags]) => [key, new Set(flags)]));
+    harness.vaultApplyFlags.mockImplementation(async (accountId, mailbox, _email, changes) => {
+      for (const { uid, flags, on } of changes) {
+        const key = `${accountId}|${mailbox}|${uid}`;
+        const next = on === undefined ? new Set() : new Set(held.get(key));
+        for (const flag of flags) if (on === false) next.delete(flag); else next.add(flag);
+        held.set(key, next);
+      }
+      return { renamed: 1 };
+    });
+    return key => [...(held.get(key) || [])].sort();
+  }
+
+  /// The board loaded while the note was unread, and the reader's delayed
+  /// mark read has landed since: starring it then used to write the card's
+  /// old flags back, and the note was unread again.
+  it('stars a note read since the board loaded without marking it unread', async () => {
+    const note = card('r', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3, flags: [] }] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    const vault = fakeVault({ 'a|INBOX|3': ['\\Seen'] });
+
+    await useNotesStore.getState().toggleStar(note);
+    expect(vault('a|INBOX|3')).toEqual(['\\Flagged', '\\Seen']);
+
+    await useNotesStore.getState().toggleStar(useNotesStore.getState().cards[0]);
+    expect(vault('a|INBOX|3')).toEqual(['\\Seen']);
   });
 
   it('keeps the star when only the vault copy could not be written', async () => {

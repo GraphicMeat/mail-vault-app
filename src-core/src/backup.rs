@@ -1589,7 +1589,7 @@ fn catch_up_changes(server_flags: &[(u32, Vec<String>)], local_uids: &HashSet<u3
         .map(|(uid, flags)| {
             let mut flags = flags.clone();
             flags.push("archived".to_string());
-            FlagChange { uid: *uid, flags }
+            FlagChange { uid: *uid, flags, on: None }
         })
         .collect()
 }

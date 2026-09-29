@@ -14,8 +14,13 @@ const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGetMeta = vi.fn().mockResolvedValue(null);
 const mockEnsureToken = vi.fn(async a => a);
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
+const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
+let mockMarkAsRead = { markAsReadMode: 'manual', markAsReadDelay: 3 };
 
 vi.mock('../../db', () => ({
+  // The flag core journals a star before it goes to the server.
+  queueOp: vi.fn().mockResolvedValue(1),
+  clearOps: vi.fn().mockResolvedValue(undefined),
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
   getEmailHeadersMeta: (...a) => mockGetMeta(...a),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
@@ -34,7 +39,7 @@ vi.mock('../../db', () => ({
 }));
 
 vi.mock('../../api', () => ({
-  vaultApplyFlags: vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 }),
+  vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   fetchEmailLight: (...a) => mockFetchEmailLight(...a),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
@@ -85,8 +90,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       emailListStyle: 'default',
       linkAlerts: {},
       linkSafetyEnabled: false,
-      markAsReadMode: 'manual',
-      markAsReadDelay: 3,
+      ...mockMarkAsRead,
       setUnreadForAccount: () => {},
     }),
   },
@@ -103,6 +107,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 
 const { openInsightsMessage, cancelInsightsSelection } = await import('../openInsightsMessage.js');
+const { applyFlagToKeys } = await import('../messageMutations');
 const accountA = { id: 'a1', email: 'a@example.test' };
 const accountB = { id: 'a2', email: 'b@example.test' };
 const inbox = { uid: 7, messageId: '<inbox-a@test>', subject: 'Visible inbox', flags: [], _accountId: 'a1', _mailbox: 'INBOX' };
@@ -312,6 +317,46 @@ it('caches Graph MIME only after the explicit body passes identity validation', 
   expect(mockGraphCacheMime).not.toHaveBeenCalled();
 });
 
+
+// Notes to Self opens a note from its vault copy, and the reader marks it read
+// after a countdown. A star put on during the countdown must still be on the
+// vault copy when the mark lands, and at every write after it: the board reads
+// its stars off the file name, and a refresh can land between two writes.
+it('a delayed mark read of a vault copy never takes a star put on during the countdown back off', async () => {
+  // The vault copy's flags, landed the way the daemon lands what it is sent:
+  // a whole list replaces them, a delta moves only the flags it names.
+  const held = new Set();
+  const history = [];
+  mockVaultApplyFlags.mockImplementation(async (_accountId, _mailbox, _email, changes) => {
+    for (const { flags, on } of changes) {
+      if (on === undefined) held.clear();
+      for (const flag of flags) if (on === false) held.delete(flag); else held.add(flag);
+    }
+    history.push([...held].sort());
+    return { renamed: 1 };
+  });
+  mockMarkAsRead = { markAsReadMode: 'delay', markAsReadDelay: 0.2 };
+  mockGetLocalEmailLight.mockResolvedValue(body());
+  // Loaded up front, so the star's own lookup of search rows cannot outlast
+  // the countdown.
+  await import('../../../stores/searchStore');
+  try {
+    expect(await openInsightsMessage(match(copy({ source: 'vault', localMailbox: 'Archive_2026' })))).toBe(true);
+    await applyFlagToKeys(['a2:Archive/2026:7'], '\\Flagged', true);
+    expect([...held]).toEqual(['\\Flagged']);
+    const starredAt = history.length;
+
+    await vi.waitFor(() => expect(held.has('\\Seen')).toBe(true));
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(history.length).toBeGreaterThan(starredAt);
+    for (const flags of history.slice(starredAt)) expect(flags).toContain('\\Flagged');
+    expect([...held].sort()).toEqual(['\\Flagged', '\\Seen']);
+  } finally {
+    mockMarkAsRead = { markAsReadMode: 'manual', markAsReadDelay: 3 };
+    mockVaultApplyFlags.mockReset().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
+  }
+});
 
 it('restores current ordinary row flags instead of stale cached body flags', async () => {
   const header = { ...inbox, flags: ['\\Seen'], _insightsReadOnly: false };

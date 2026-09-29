@@ -156,12 +156,14 @@ export const useNotesStore = create((set, get) => ({
     }
     // That write takes a vault copy's flags from its list row, and a board
     // card usually has none: the copies kept their old flags, and the board
-    // reads its stars from them.
+    // reads its stars from them. The star goes on as a delta over what each
+    // copy holds by then: the flags the board loaded with are stale once the
+    // note has been read in the reader.
     const { vaultApplyFlags } = await import('../services/api');
     const mailAccounts = useMailStore.getState().accounts || [];
     await Promise.all(copies.map(copy => vaultApplyFlags(copy.accountId, copy.mailbox,
       mailAccounts.find(account => account.id === copy.accountId)?.email || null,
-      [{ uid: copy.uid, flags: [...(copy.flags || []).filter(flag => flag !== '\\Flagged'), ...(starred ? ['\\Flagged'] : [])] }])
+      [{ uid: copy.uid, flags: ['\\Flagged'], on: starred }])
       .catch(error => console.warn('[notes] vault copy not starred:', error?.message || error))));
   }),
 

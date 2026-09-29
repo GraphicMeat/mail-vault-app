@@ -32,11 +32,35 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 /// One message's flags as the server names them: `\Seen`, `\Flagged`,
-/// `\Answered`. The full list, not a delta — what the message has now.
+/// `\Answered`. The full list, not a delta — what the message has now —
+/// unless `on` is set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlagChange {
     pub uid: u32,
     pub flags: Vec<String>,
+    /// Set: `flags` are switched on (true) or off (false) over what each copy
+    /// holds when the change lands, and nothing else moves. A whole list read
+    /// before another writer's change (a board card's flags, a reader's at
+    /// open) would take that change back off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+}
+
+impl FlagChange {
+    /// The full list this change leaves on a copy that holds `current`.
+    pub fn over(&self, current: &[String]) -> Vec<String> {
+        let Some(on) = self.on else { return self.flags.clone() };
+        let named = |f: &String| self.flags.iter().any(|g| g.eq_ignore_ascii_case(f));
+        let mut out: Vec<String> = current.iter().filter(|f| on || !named(*f)).cloned().collect();
+        if on {
+            for g in &self.flags {
+                if !out.iter().any(|f| f.eq_ignore_ascii_case(g)) {
+                    out.push(g.clone());
+                }
+            }
+        }
+        out
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -173,10 +197,8 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
     let mirror_files = dirs.mirror_cur.as_deref().map(mirror_file_map);
 
     for change in changes {
-        let imap = &change.flags;
-
         if let Some(path) = app_files.get(&change.uid) {
-            match rename_for(path, change.uid, imap) {
+            match rename_for(path, change) {
                 Ok(Some(new_name)) => {
                     reg.rename(&dirs.account_id, &dirs.mailbox, change.uid, &new_name);
                     out.renamed += 1;
@@ -188,7 +210,7 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
 
         if let Some(files) = &mirror_files {
             if let Some(path) = files.get(&change.uid) {
-                match rename_for(path, change.uid, imap) {
+                match rename_for(path, change) {
                     Ok(Some(_)) => out.mirrored += 1,
                     Ok(None) => {}
                     Err(e) => warn!("vault_flags: mirror rename uid {} failed: {}", change.uid, e),
@@ -203,7 +225,8 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
 
 /// `apply_files` plus the custody entry's flags: the one call the app's mark
 /// read/unread and the backup's catch-up both make. `patch_custody` receives
-/// `(uid, flags)` pairs for every change and returns `(custody entries,
+/// the changes (a delta is resolved against each record's own flags there)
+/// and returns `(custody entries,
 /// cached headers)` touched — whether it patches the header cache at all is
 /// the caller's call: the app's mark read/unread wants it (the next repaint
 /// reads from there, and a server-only message has no other copy), the backup
@@ -221,15 +244,14 @@ pub fn apply_everywhere(
     reg: &VaultRegistry,
     dirs: &Dirs,
     changes: &[FlagChange],
-    patch_custody: impl FnOnce(&[(u32, Vec<String>)]) -> Result<(usize, usize), String>,
+    patch_custody: impl FnOnce(&[FlagChange]) -> Result<(usize, usize), String>,
 ) -> Applied {
     if changes.is_empty() {
         return Applied::default();
     }
     let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
     let mut applied = apply_files(reg, dirs, changes);
-    let patch: Vec<(u32, Vec<String>)> = changes.iter().map(|c| (c.uid, c.flags.clone())).collect();
-    match patch_custody(&patch) {
+    match patch_custody(changes) {
         Ok((entries, headers)) => {
             applied.index_patched = entries;
             applied.sidecars_patched = headers;
@@ -239,15 +261,16 @@ pub fn apply_everywhere(
     applied
 }
 
-/// Rename `path` so its flag letters carry `imap`. `Some(new name)` when the
-/// name changed, `None` when it already said this.
-fn rename_for(path: &Path, uid: u32, imap: &[String]) -> Result<Option<String>, String> {
+/// Rename `path` so its flag letters carry `change`, a delta read against the
+/// name it has now. `Some(new name)` when the name changed, `None` when it
+/// already said this.
+fn rename_for(path: &Path, change: &FlagChange) -> Result<Option<String>, String> {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let current = parse_flags_from_filename(&name);
-    let new_name = build_maildir_filename(uid, &merge_flags(&current, imap));
+    let new_name = build_maildir_filename(change.uid, &merge_flags(&current, &change.over(&current)));
     if new_name == name {
         return Ok(None);
     }
@@ -574,7 +597,72 @@ mod tests {
 
 
     fn change(uid: u32, flags: &[&str]) -> FlagChange {
-        FlagChange { uid, flags: s(flags) }
+        FlagChange { uid, flags: s(flags), on: None }
+    }
+
+    fn delta(uid: u32, flag: &str, on: bool) -> FlagChange {
+        FlagChange { uid, flags: s(&[flag]), on: Some(on) }
+    }
+
+    /// A delta keeps every flag it does not name, keywords included, and
+    /// hands back the list as it was when it changes nothing, so no record
+    /// is rewritten for it.
+    #[test]
+    fn a_delta_moves_only_the_flag_it_names() {
+        let cached = s(&["\\Seen", "$Forwarded"]);
+        assert_eq!(delta(1, "\\Flagged", true).over(&cached), s(&["\\Seen", "$Forwarded", "\\Flagged"]));
+        assert_eq!(delta(1, "\\Seen", false).over(&cached), s(&["$Forwarded"]));
+        assert_eq!(delta(1, "\\seen", true).over(&cached), cached, "already on, matched without case");
+        assert_eq!(delta(1, "\\Flagged", false).over(&cached), cached, "already off");
+        // A full list is still the list.
+        assert_eq!(change(1, &["\\Flagged"]).over(&cached), s(&["\\Flagged"]));
+    }
+
+    /// The board reads a note's star off its file name: starring a note read
+    /// since the board loaded must not mark it unread, and marking it read
+    /// must not take the star back off.
+    #[test]
+    fn a_delta_on_the_file_name_keeps_every_other_letter() {
+        let f = fixture();
+        let d = &f.dirs;
+        for (uid, letters) in [(1, "AS"), (2, "AF"), (3, "AFS"), (4, "DST")] {
+            fs::write(d.cur.join(format!("{uid}{INFO_PREFIX}{letters}.eml")), b"body").unwrap();
+        }
+        fs::write(d.mirror_cur.as_ref().unwrap().join(format!("1{INFO_PREFIX}AS.eml")), b"body").unwrap();
+
+        let applied = apply_in(
+            &f.reg,
+            d,
+            &[delta(1, "\\Flagged", true), delta(2, "\\Seen", true), delta(3, "\\Flagged", false), delta(4, "\\Flagged", true)],
+        );
+
+        assert_eq!(applied.renamed, 4);
+        assert_eq!(applied.mirrored, 1);
+        assert_eq!(
+            names(&d.cur),
+            vec![
+                format!("1{INFO_PREFIX}AFS.eml"),
+                format!("2{INFO_PREFIX}AFS.eml"),
+                format!("3{INFO_PREFIX}AS.eml"),
+                format!("4{INFO_PREFIX}DFST.eml"),
+            ]
+        );
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec![format!("1{INFO_PREFIX}AFS.eml")]);
+    }
+
+    /// The custody half gets the changes as sent: a delta is resolved against
+    /// each record there, never flattened into the one flag it names.
+    #[test]
+    fn apply_everywhere_hands_the_delta_to_the_custody_half_unflattened() {
+        let f = fixture();
+        let d = &f.dirs;
+        fs::write(d.cur.join(format!("7{INFO_PREFIX}AS.eml")), b"body").unwrap();
+        let mut seen = None;
+        apply_everywhere(&f.reg, d, &[delta(7, "\\Flagged", true)], |changes| {
+            seen = Some(changes.iter().map(|c| (c.uid, c.over(&s(&["\\Seen"])))).collect::<Vec<_>>());
+            Ok((0, 0))
+        });
+        assert_eq!(seen, Some(vec![(7, s(&["\\Seen", "\\Flagged"]))]));
     }
 
     /// The lock is taken exactly once on the way in. Not a race detector: a

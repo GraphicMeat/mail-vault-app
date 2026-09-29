@@ -57,7 +57,7 @@ pub(crate) fn apply_flags(
                 // `sidecars`: the header cache is what the next repaint reads,
                 // so mark read/unread wants it patched; the backup reconcile
                 // hands this every message a folder holds and does not.
-                let headers = if sidecars { cache::patch_flags(c, account_id, mailbox, patch)? } else { 0 };
+                let headers = if sidecars { cache::patch_changes(c, account_id, mailbox, patch)? } else { 0 };
                 Ok((rows, headers))
             }) {
                 Ok(counts) => Ok(counts),
@@ -262,7 +262,7 @@ mod tests {
     }
 
     fn change(uid: u32, flags: &[&str]) -> FlagChange {
-        FlagChange { uid, flags: flags.iter().map(|s| s.to_string()).collect() }
+        FlagChange { uid, flags: flags.iter().map(|s| s.to_string()).collect(), on: None }
     }
 
     fn file_names(dir: &std::path::Path) -> Vec<String> {
@@ -328,6 +328,45 @@ mod tests {
         for uid in 0..N {
             assert!(mirror_cur.join(vault_files::build_maildir_filename(uid, &["seen".to_string()])).exists(), "uid {uid} mirror copy not renamed");
         }
+    }
+
+    /// The params exactly as `api.vaultApplyFlags` sends a note's star: one
+    /// flag on, over whatever the file, the custody entry and the cached
+    /// header hold by then. A note read since the board loaded stays read.
+    #[tokio::test]
+    async fn a_delta_through_the_route_moves_one_flag_on_every_record() {
+        let (vault, s) = st();
+        seed_file(vault.path(), "acc", "INBOX", 7, &["archived", "seen"]);
+        daemon_custody::with_conn(&s, |c| {
+            entries::upsert(c, "acc", "INBOX", &[serde_json::json!({"uid": 7, "flags": ["\\Seen"]})])?;
+            cache::save_headers(c, "acc", "INBOX", &serde_json::json!({"emails": [{"uid": 7, "flags": ["\\Seen", "$Forwarded"]}]}).to_string())?;
+            Ok(())
+        })
+        .unwrap();
+        let star = |on: bool| serde_json::json!({"accountId": "acc", "mailbox": "INBOX", "accountEmail": null, "changes": [{"uid": 7, "flags": ["\\Flagged"], "on": on}]});
+        let header_flags = || {
+            daemon_custody::with_conn(&s, |c| {
+                c.query_row("SELECT header_json FROM header_cache WHERE account_id='acc' AND uid=7", [], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())
+            })
+            .map(|text| serde_json::from_str::<Value>(&text).unwrap()["flags"].clone())
+            .unwrap()
+        };
+        let entry_flags = || {
+            let text = daemon_custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap();
+            serde_json::from_str::<Vec<Value>>(&text).unwrap()[0]["flags"].clone()
+        };
+        let cur = vault_files::cur_path(vault.path(), "acc", "INBOX");
+
+        let resp = route(&s, "vault_apply_flags", &star(true), serde_json::json!(1)).await.unwrap();
+        assert!(resp.error.is_none(), "{:?}", resp.error.map(|e| e.message));
+        assert_eq!(file_names(&cur), vec![format!("7{INFO_PREFIX}AFS.eml")]);
+        assert_eq!(entry_flags(), serde_json::json!(["\\Seen", "\\Flagged"]));
+        assert_eq!(header_flags(), serde_json::json!(["\\Seen", "$Forwarded", "\\Flagged"]));
+
+        route(&s, "vault_apply_flags", &star(false), serde_json::json!(2)).await.unwrap();
+        assert_eq!(file_names(&cur), vec![format!("7{INFO_PREFIX}AS.eml")]);
+        assert_eq!(entry_flags(), serde_json::json!(["\\Seen"]));
+        assert_eq!(header_flags(), serde_json::json!(["\\Seen", "$Forwarded"]));
     }
 
     #[test]

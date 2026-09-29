@@ -4,6 +4,7 @@
 //! is lost here. `mailbox_path` is the RAW server path (`Projects/2026`),
 //! exactly what the per-mailbox files nested by.
 
+use crate::vault_flags::FlagChange;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -77,10 +78,14 @@ pub fn remove(conn: &Connection, account_id: &str, mailbox: &str, uids: &[u32]) 
 
 /// Set `$.flags` on each uid's entry, one transaction; how many entries
 /// changed. An entry that already says this, or a uid with no entry, counts 0.
-pub fn patch_flags_many(conn: &Connection, account_id: &str, mailbox: &str, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
+/// A delta is read against the entry's own flags, in the same transaction.
+pub fn patch_flags_many(conn: &Connection, account_id: &str, mailbox: &str, changes: &[FlagChange]) -> Result<usize, String> {
     let tx = conn.unchecked_transaction().map_err(err)?;
     let mut n = 0;
     {
+        let mut held = tx
+            .prepare_cached("SELECT json_extract(entry_json, '$.flags') FROM vault_entries WHERE account_id = ?1 AND mailbox_path = ?2 AND uid = ?3")
+            .map_err(err)?;
         let mut stmt = tx
             .prepare_cached(
                 "UPDATE vault_entries SET entry_json = json_set(entry_json, '$.flags', json(?4)) \
@@ -88,9 +93,19 @@ pub fn patch_flags_many(conn: &Connection, account_id: &str, mailbox: &str, chan
                    AND (json_extract(entry_json, '$.flags') IS NULL OR json_extract(entry_json, '$.flags') != json(?4))",
             )
             .map_err(err)?;
-        for (uid, flags) in changes {
-            let flags_json = serde_json::to_string(flags).map_err(|e| e.to_string())?;
-            n += stmt.execute(params![account_id, mailbox, uid, flags_json]).map_err(err)?;
+        for change in changes {
+            let current: Vec<String> = if change.on.is_none() {
+                Vec::new()
+            } else {
+                held.query_row(params![account_id, mailbox, change.uid], |r| r.get::<_, Option<String>>(0))
+                    .optional()
+                    .map_err(err)?
+                    .flatten()
+                    .and_then(|text| serde_json::from_str(&text).ok())
+                    .unwrap_or_default()
+            };
+            let flags_json = serde_json::to_string(&change.over(&current)).map_err(|e| e.to_string())?;
+            n += stmt.execute(params![account_id, mailbox, change.uid, flags_json]).map_err(err)?;
         }
     }
     tx.commit().map_err(err)?;
@@ -277,21 +292,45 @@ mod tests {
         let (_t, c) = store();
         let entries: Vec<Value> = (1..=500).map(|uid| json!({"uid": uid, "flags": if uid % 2 == 0 { json!(["\\Seen"]) } else { json!([]) }})).collect();
         upsert(&c, "a", "INBOX", &entries).unwrap();
-        let changes: Vec<(u32, Vec<String>)> = (1..=500).map(|uid| (uid, vec!["\\Seen".to_string()])).collect();
+        let changes: Vec<FlagChange> = (1..=500).map(|uid| change(uid, &["\\Seen"], None)).collect();
         assert_eq!(patch_flags_many(&c, "a", "INBOX", &changes).unwrap(), 250);
         let rows = parsed(&c, "a", "INBOX");
         assert!(rows.iter().all(|e| e["flags"] == json!(["\\Seen"])));
         assert_eq!(patch_flags_many(&c, "a", "INBOX", &changes).unwrap(), 0, "already says this");
-        assert_eq!(patch_flags_many(&c, "a", "INBOX", &[(9999, vec![])]).unwrap(), 0, "no entry, nothing invented");
+        assert_eq!(patch_flags_many(&c, "a", "INBOX", &[change(9999, &[], None)]).unwrap(), 0, "no entry, nothing invented");
         assert_eq!(rows.len(), 500);
+    }
+
+    fn change(uid: u32, flags: &[&str], on: Option<bool>) -> FlagChange {
+        FlagChange { uid, flags: flags.iter().map(|f| f.to_string()).collect(), on }
     }
 
     #[test]
     fn patch_flags_adds_a_flags_field_an_entry_never_had_and_keeps_the_rest() {
         let (_t, c) = store();
         upsert(&c, "a", "INBOX", &[json!({"uid": 7, "subject": "s", "source": "local_draft"})]).unwrap();
-        assert_eq!(patch_flags_many(&c, "a", "INBOX", &[(7, vec!["\\Seen".into(), "\\Flagged".into()])]).unwrap(), 1);
+        assert_eq!(patch_flags_many(&c, "a", "INBOX", &[change(7, &["\\Seen", "\\Flagged"], None)]).unwrap(), 1);
         assert_eq!(parsed(&c, "a", "INBOX")[0], json!({"uid": 7, "subject": "s", "source": "local_draft", "flags": ["\\Seen", "\\Flagged"]}));
+    }
+
+    /// A star keeps the entry's read state and keywords; a mark read keeps
+    /// its star. An entry with no flags yet starts from none.
+    #[test]
+    fn a_delta_moves_only_its_flag_on_the_entry() {
+        let (_t, c) = store();
+        upsert(&c, "a", "INBOX", &[
+            json!({"uid": 1, "flags": ["\\Seen", "$Forwarded"]}),
+            json!({"uid": 2, "flags": ["\\Flagged"]}),
+            json!({"uid": 3, "subject": "s"}),
+        ]).unwrap();
+        let changes = [change(1, &["\\Flagged"], Some(true)), change(2, &["\\Seen"], Some(true)), change(3, &["\\Flagged"], Some(true))];
+        assert_eq!(patch_flags_many(&c, "a", "INBOX", &changes).unwrap(), 3);
+        let rows = parsed(&c, "a", "INBOX");
+        assert_eq!(rows[0]["flags"], json!(["\\Seen", "$Forwarded", "\\Flagged"]));
+        assert_eq!(rows[1]["flags"], json!(["\\Flagged", "\\Seen"]));
+        assert_eq!(rows[2], json!({"uid": 3, "subject": "s", "flags": ["\\Flagged"]}));
+        assert_eq!(patch_flags_many(&c, "a", "INBOX", &[change(1, &["\\Flagged"], Some(false))]).unwrap(), 1);
+        assert_eq!(parsed(&c, "a", "INBOX")[0]["flags"], json!(["\\Seen", "$Forwarded"]));
     }
 
     #[test]

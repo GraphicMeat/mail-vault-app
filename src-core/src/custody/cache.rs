@@ -1,5 +1,6 @@
 //! SQLite-backed mailbox tree and email-header cache.
 
+use crate::vault_flags::FlagChange;
 use chrono::DateTime;
 use rusqlite::{params, params_from_iter, Connection};
 use serde_json::{json, Value};
@@ -583,16 +584,25 @@ pub fn sync_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<(Opt
 }
 
 pub fn patch_flags(conn: &Connection, account: &str, mailbox: &str, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
+    let changes: Vec<FlagChange> = changes.iter().map(|(uid, flags)| FlagChange { uid: *uid, flags: flags.clone(), on: None }).collect();
+    patch_changes(conn, account, mailbox, &changes)
+}
+
+/// `patch_flags` for the vault's writer: a delta is read against the cached
+/// header's own flags, in the same transaction, so its keywords survive.
+pub fn patch_changes(conn: &Connection, account: &str, mailbox: &str, changes: &[FlagChange]) -> Result<usize, String> {
     let tx = conn.unchecked_transaction().map_err(err)?;
     let mut changed = 0;
-    for (uid, flags) in changes {
+    for change in changes {
+        let uid = change.uid;
         let current: Option<String> = tx.query_row(
             "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3",
             params![account, mailbox, uid], |r| r.get(0),
         ).ok();
         let Some(text) = current else { continue };
         let mut row: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-        let next = json!(flags);
+        let held: Vec<String> = row.get("flags").and_then(|f| serde_json::from_value(f.clone()).ok()).unwrap_or_default();
+        let next = json!(change.over(&held));
         if row.get("flags") == Some(&next) { continue; }
         let Some(map) = row.as_object_mut() else { continue };
         map.insert("flags".into(), next);
@@ -1079,6 +1089,28 @@ mod tests {
         uids.sort_unstable();
         assert_eq!(uids, vec![1, 2]);
         assert!(folder_headers(&c, "a", "Archive").unwrap().is_empty());
+    }
+
+    /// A star from a board card or a reader's delayed mark read moves only
+    /// its flag in the cached header: the read state, the star and keywords
+    /// the vault file cannot hold all stay.
+    #[test]
+    fn a_delta_keeps_every_other_flag_of_the_cached_header() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "subject": "One", "flags": ["\\Seen", "$Forwarded"]}));
+        put(&c, "a", "INBOX", 2, 2, json!({"uid": 2, "flags": ["\\Flagged"]}));
+        let delta = |uid, flag: &str, on| FlagChange { uid, flags: vec![flag.to_string()], on: Some(on) };
+        assert_eq!(patch_changes(&c, "a", "INBOX", &[delta(1, "\\Flagged", true), delta(2, "\\Seen", true)]).unwrap(), 2);
+        let flags = |uid: u32| -> Value {
+            let text: String = c.query_row("SELECT header_json FROM header_cache WHERE uid=?1", [uid], |r| r.get(0)).unwrap();
+            serde_json::from_str::<Value>(&text).unwrap()["flags"].clone()
+        };
+        assert_eq!(flags(1), json!(["\\Seen", "$Forwarded", "\\Flagged"]));
+        assert_eq!(flags(2), json!(["\\Flagged", "\\Seen"]));
+        assert_eq!(patch_changes(&c, "a", "INBOX", &[delta(1, "\\Flagged", true)]).unwrap(), 0, "already on: no write");
+        // The server's whole list still replaces it.
+        assert_eq!(patch_flags(&c, "a", "INBOX", &[(1, vec![])]).unwrap(), 1);
+        assert_eq!(flags(1), json!([]));
     }
 
     #[test]

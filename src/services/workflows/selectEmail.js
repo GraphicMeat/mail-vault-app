@@ -361,8 +361,10 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
       // between, and a resolve here means "written" to the repaint after it.
       markOnServer: async () => {
         if (localOnly || header._insightsNoServerActions) {
+          // A delta: the flags read at open are stale if the note was starred
+          // during the countdown.
           await api.vaultApplyFlags(accountId, mailbox, account.email || null,
-            [{ uid, flags: [...new Set([...(email.flags || []), '\\Seen'])] }]);
+            [{ uid, flags: ['\\Seen'], on: true }]);
         } else if (graphId) {
           await api.graphSetRead(freshAccount.oauth2AccessToken, graphId, true);
         } else {
