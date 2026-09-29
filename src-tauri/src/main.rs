@@ -2908,6 +2908,27 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // to the `_ => None` default cannot silently take or grant a budget.
         "export_mbox_all" | "import_mbox" => None,
 
+        // MBOX import options: each answers from a bounded amount of work.
+        // `mbox_probe` reads a capped sample of the file's start and the
+        // cached folder list; `list_local_folders` one directory listing;
+        // the upload job's routes read or steer a job that runs on its own
+        // thread (a resume's keychain read is bounded at 20s by the daemon);
+        // `vault_gap_save` starts its run and answers at once.
+        "mbox_probe" | "list_local_folders" | "mbox_upload_status" | "mbox_upload_pause" | "mbox_upload_resume"
+        | "mbox_upload_cancel" | "mbox_upload_discard" | "vault_gap_save" => Some(Duration::from_secs(30)),
+
+        // Reads every cached header row of the account against the vault
+        // before it answers: the first count of a very large folder is slow.
+        "vault_gap_count" => Some(Duration::from_secs(120)),
+
+        // Same reasoning as archive_emails/bulk_delete_emails: every message
+        // of the folder is copied into the deleted-mail bin inline, within
+        // this call, and there is no cancel route; a budget would turn a
+        // slow success on a big import into a reported failure while the
+        // daemon goes on deleting. Its own arm so the default cannot hand
+        // it one.
+        "delete_local_folder" => None,
+
         // Task 4.8 / decision 8: each of these ten either kicks off a
         // tokio::spawn and returns almost immediately (progress flows over
         // channel.open, not this reply) or is a fast local read/flag flip.
@@ -4535,6 +4556,33 @@ mod tests {
     fn reply_timeout_is_none_for_export_mbox_all_and_import_mbox() {
         assert_eq!(crate::reply_timeout("export_mbox_all"), None);
         assert_eq!(crate::reply_timeout("import_mbox"), None);
+    }
+
+    /// MBOX import options: the probe, the local folder list, the upload
+    /// job's routes and the gap save answer from bounded work; a daemon that
+    /// never answers them no longer leaves the app waiting for ever.
+    #[test]
+    fn reply_timeout_gives_the_mbox_option_and_upload_routes_thirty_seconds() {
+        for method in [
+            "mbox_probe", "list_local_folders", "mbox_upload_status", "mbox_upload_pause", "mbox_upload_resume",
+            "mbox_upload_cancel", "mbox_upload_discard", "vault_gap_save",
+        ] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    /// The first count of a very large folder is slow; two minutes, as the
+    /// other single-pass readers.
+    #[test]
+    fn reply_timeout_gives_vault_gap_count_two_minutes() {
+        assert_eq!(crate::reply_timeout("vault_gap_count"), Some(std::time::Duration::from_secs(120)));
+    }
+
+    /// Pinned by name, not the `_ => None` default: the whole folder goes
+    /// into the deleted-mail bin inline, with no cancel route.
+    #[test]
+    fn reply_timeout_is_none_for_delete_local_folder() {
+        assert_eq!(crate::reply_timeout("delete_local_folder"), None);
     }
 
     // -----------------------------------------------------------------------
