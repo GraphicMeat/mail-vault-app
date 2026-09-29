@@ -1300,6 +1300,23 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         }
     }
 
+    /// Nothing landed and a write failed: the run is an error, never
+    /// "0 imported" (the up-front `create_dir_all` this replaced answered so).
+    #[test]
+    fn an_import_that_cannot_write_its_first_message_is_an_error() {
+        for use_labels in [false, true] {
+            let (v, s) = state(true);
+            save_listing(&s, &gmail_listing());
+            let account = mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1");
+            std::fs::create_dir_all(&account).unwrap();
+            std::fs::write(account.join("INBOX"), b"a file where the folder dir belongs").unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = write_mbox(dir.path(), "t.mbox", &[&tmsg("a@x", "one", Some("Inbox"))]);
+            let r = import_mbox(&s, path, "acct1".into(), "INBOX".into(), use_labels, |_, _| {});
+            assert!(r.is_err(), "labels: {use_labels}: {r:?}");
+        }
+    }
+
     // -- probe ---------------------------------------------------------------
 
     fn mbox_bytes(messages: &[String]) -> Vec<u8> {
