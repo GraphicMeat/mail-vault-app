@@ -72,7 +72,6 @@
   </style>
 <link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
-<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -126,11 +125,619 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.17.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.17.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 30, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Resize a signature picture, and get a sharp file.</strong> The signature editors in Settings > Accounts (the account's and an alias's own) now have an Insert image button, take a picture dragged in from Finder or pasted, and show corner handles on a picture to resize it. After you resize, MailVault offers to store the picture at three times the size it is shown at (a logo shown at 40 × 40 becomes a 120 × 120 file), which looks sharp on every screen and is usually much smaller. The offer shows the file size now and after, and the picture as it will look; Keep original leaves it alone, and nothing is offered when the file is already that small.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compact or comfortable message rows.</strong> Settings > Appearance > Layout > Message list density switches the list between the current comfortable rows and tighter compact ones, like the sidebar density beside it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Move a compose window back into the main window.</strong> A message you are writing in its own window has a button in its header that brings the draft back into the main window, content intact.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Signature logo size guidance.</strong> Settings > Accounts shows how large the logo in your signature is: under 100 KB is ideal, 100 to 200 KB gets a warning, and more than 200 KB is flagged as too large, with the recommended size next to the editor.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Choose how an MBOX file is imported.</strong> After you pick a file with Import MBOX in Settings > Backup & Restore, a dialog asks which account it is for and offers three ways to bring the mail in: Import and restore to the server, Import into my existing folders and Import as a separate folder. Import into my existing folders is the default: it saves the mail in your vault, in the folders the account already has, and uploads nothing. Messages that are already in the target are skipped.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Google Takeout files are filed by their Gmail labels.</strong> When a file carries Gmail labels, Use Gmail labels (on by default) files each message by them instead of putting everything in one folder. A message goes to Inbox, Sent, Drafts, Spam or Trash when it has that label, in that order; otherwise to a folder named like one of its labels, taking them in the order the message lists them; otherwise to a fallback folder you pick, which starts as All Mail on Gmail and Archive on other accounts (Inbox when there is none). Import into my existing folders never creates a folder, so a label with no folder there falls back, while Import and restore to the server creates the folder on the server first. Starred keeps its star, a message is unread only when it carries the Unread label, and the Important and Category labels are ignored. A file without labels goes to the one folder you choose, Inbox to start with. Import as a separate folder does not sort by labels.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Import an MBOX file as a separate folder, kept on this computer.</strong> Import as a separate folder puts the whole file in a new folder named MBOX import and the date, such as MBOX import 2026-09-29 (a second import on the same day adds a number), under a new On this computer heading in the sidebar. The folder lives only in your vault: it is never uploaded to a mail server or merged into one. You can read, search, star and mark its messages, export them and delete them (a deleted message goes to Deleted emails), and delete the whole folder from its right-click menu, which sends its messages to Deleted emails first. Moving, snoozing and archiving mail are not offered there. Backups keep a copy of it in a folder of its own on your backup drive, and ZIP exports include it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Restore an MBOX file to your mail server.</strong> Import and restore to the server uploads each message to the account, into the folder its label names (created on the server when it is missing) and with its original date, so every device sees it; a message the server already holds is skipped. It is for IMAP accounts: on an Outlook account that uses Microsoft Graph the option is disabled and says why. The upload runs in the background, one per account at a time, and its progress is a small card in the corner with Pause, Resume and Cancel, so MailVault stays usable meanwhile. When the server limits uploads, MailVault waits and tries again by itself. A large file warns that the upload can take many hours, and a time estimate appears only once MailVault has measured its speed. Cancelling, quitting or a crash does not lose the place: the card offers Resume where it stopped (MailVault may ask you to pick the file again), and starting the same file again offers Resume or Start over. If the server refuses the sign-in, the upload waits and the card offers Account settings. On Gmail, a message's other labels are added after it is uploaded; that depends on Gmail accepting the change and is best effort, so a message whose labels are refused stays in its folder without them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>See which messages are not in your vault yet, and save them.</strong> Each account's card in Settings > Backup & Restore > Backup Schedule now shows Not yet in your vault: how many copies of messages MailVault has shown or cached whose full copy your vault does not hold (a message kept in two folders counts once in each). Save them now downloads them into the vault. A count that cannot be complete says at least, and if the vault cannot be reached the count is shown with the reason. An account whose download mode keeps mail on the server by design says so instead of counting, and Outlook accounts show the count but cannot use Save them now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Aliases for every account.</strong> Settings > Accounts has a new Aliases section that lists every address an account sends from: its login address, which stays as it is, then each alias. For a Google account signed in with Google, MailVault fetches the aliases Gmail lets it send as; for any other account it finds the addresses you have sent from in your own mail, suggests the ones your mail arrives at, and you add the rest by hand. Give each alias the name recipients should see: a name typed on an alias is what goes out on mail sent from it. Pick which address new messages start from, and use Verify to send one test message from an alias and see whether your provider accepts it. The Send Mail As field that sat under Profile now lives here, and the From row of a new message has an Add address link that opens this section for its account.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Adding an account says what it reached.</strong> When the connection test passes, the add-account window says which server MailVault connected to, how many messages are in your Inbox and the address your mail will be sent as, for example "Connected to imap.example.com. 1,204 messages in your Inbox. Mail will be sent as you@example.com." A wrong server or a wrong sending address shows up right away, not after your first sync or your first reply. Reading the count adds one quick, read-only request to the test, and the window still closes on its own as before. The count is left out when the server does not give it within a few seconds, and Outlook accounts connected through Microsoft Graph do not show this line.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A signature for each alias.</strong> In Settings > Accounts > Aliases, every alias has a Signature choice: the account's signature, which it follows by default, or its own. Choosing Its own starts you from a copy of the account's signature to edit, and an own signature left empty sends from that address with no signature. In a new message, a reply or a forward, the signature follows the address in the From row: pick an alias and its signature replaces the previous one, whatever you have typed stays, and picking the login again brings the account's back. An alias's own signature is used even when the account's signature is switched off, and one that follows the account follows its switch too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive, back up & delete from server</strong> *(Premium)*. Settings > Backup & Restore > Archive & delete can now clear a whole account, or just the folders and years you pick, off your mail server while keeping every email. Choose an account, tick the folders, then choose the dates: All dates, This year, Last year, Older than 2 years, or Choose years, which lists each year with its number of emails. MailVault saves each email into your vault and onto your backup drive, checks both copies, and only then removes it from the server. Choose when it deletes, after everything is saved or as each email is saved, and how: Move to Trash, or Move to Trash and empty it, which removes from Trash only the emails the job moved and leaves the rest of Trash alone. Before you start, a summary shows how many emails and how much data are involved, how many are already saved, and how many days it should take at your daily limit, and you confirm it with a tick. An email whose copy in the vault or on the drive cannot be confirmed stays on the server, and if the backup drive is disconnected the job pauses and carries on when it is back. It needs a backup folder, and is greyed out with "Choose a backup folder first" until you choose one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive & delete from server</strong> *(Premium)*. The same job for people who keep one copy: it saves each email into your vault only, checks it, and removes it from the server. The card says plainly that your vault will be the only copy, and points to Archive, back up & delete for a second one. Both jobs show their progress in a panel in the corner of the main window that you can minimize to a small pill and reopen from it. They keep running when you close the window, carry on by themselves after a restart, wait for the next UTC day when your daily download limit is spent, and wait and try again when Gmail or another server asks them to slow down. On Gmail, an email that carries several labels is removed from all of them. Outlook and Google accounts keep signing in for as long as MailVault is open; while it is closed, their job waits.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive, Back up & Delete</strong> *(Premium)*. The bulk dialog (Select messages) has a new action that copies the selected messages into your vault and onto your backup drive, checks both copies, and only then removes them from the server. A message either check does not confirm stays on the server; when the backup drive cannot be reached or a copy does not match, nothing is deleted for those messages and the result says how many stayed and why. The action needs a backup folder: until one is chosen it is greyed out with "Choose a backup folder first".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Shift-click to select a range of messages.</strong> With one message ticked, or one open, hold Shift and tick another above or below it: every message in between is selected too, conversations included.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>See the connections MailVault makes.</strong> Settings > Privacy & security > Network Activity lists, newest first, the connections MailVault and its background helper make: mail sync and sending, sign-ins, DNS lookups, backups, AI model downloads, release notes and unsubscribe requests. Each row shows the time, direction, protocol, host (its address on hover), port, purpose, account, data sent and received, how long it took and how it ended. The account column names, by its address, the account each connection was for, including Outlook requests, sign-in renewals, sender logos, unsubscribe requests and the remote content an export saves; a connection made for no account, such as the update check, says "Not tied to an account". Filter by protocol, purpose or account, pick a time range from the last hour to the last month, pause the list to read it, or copy what it shows as text. A world map shades each country by how many connections went there; point at a country for its connections, data and busiest hosts, or click it to list only its rows, and connections inside your own network are counted beside the map. Countries come from the DB-IP country database built into MailVault, so no address is ever looked up online. Above the list, the hosts contacted and the data sent and received in the chosen range, and how many remote images in the emails you opened were blocked by tracker blocking or allowed to load. The page also says what it does not list: web content inside emails, requests the app window makes itself, app update downloads (and on macOS the update check too), and mail connections that are still open. The history stays on this computer only, for 24 hours, 7 days (the default), 2 weeks or a month as you choose, and a portable copy never takes it along.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Notes to Self: a board for mail you send yourself.</strong> Notes to Self, above your views in the sidebar, gathers every message you sent from one of your accounts to your own addresses, across all accounts, as cards on one page. Put a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">#tag</code> in the subject and the note gets a column of its own, so <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">#recipes Pasta</code> lands under Recipes; anything else is sorted into Links, Files, Photos or Notes by what it holds. A card shows the subject, the first lines, the sites it links to, its attachments with a preview of the first photo, the date and which account it came from. Click a card to read it, copy or open its link, star it to keep it at the top of its column, mark it done to take it off the board, or delete it from the server, whichever account it came from; a deleted note keeps its saved copy in your vault and gets the Done tag so it stays off the board. The note you are reading has the same star, done and delete buttons above it, and a button beside its close button opens it in a new window. A button that cannot act on a note, like delete for a note in a folder MailVault has never loaded from the server, is greyed out and says why. A done note only gets the Done tag in MailVault, nothing changes on the server, and removing the tag brings it back. Type in the filter to narrow the board at once; <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">/</code> jumps to the filter and the arrow keys move between cards. Buttons at the top of the board show or hide each account's notes, and MailVault remembers which are on. Select all and Deselect all switch every account at once, and right-clicking an account shows every account but that one, or only that one. Opening Notes to Self takes the highlight off the view or folder you came from, and clicking any view in the sidebar leaves it again. Works from any phone: just email yourself.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pick where mail and its backup go before adding an account.</strong> The first run of onboarding now starts with a storage step: the mail folder MailVault reads and syncs, a backup folder for a separate safe copy that keeps mail even after it is deleted from the server, and the download mode that decides how much mail stays on this computer. Each row is the same control as in Settings, so a folder chosen here is checked for real write access right away, and pressing Continue without changing anything keeps the defaults. The Mac App Store version shows the backup folder and download mode only. Replaying the tour with accounts already set up skips this step. Choosing a backup folder in Settings > Backup now runs the same check at once and says why a folder was refused, instead of waiting for the next visit.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Choose how much mail stays on this computer.</strong> Settings > Storage > Download mode offers four modes, and Settings > Accounts > Advanced can give one account its own. On Demand downloads nothing ahead: a message is fetched when you open it and not kept, and full-text search covers only mail kept on this computer. Keep Recent, the default, keeps the last 1, 3, 6 or 12 months; after updating, it removes cached copies older than that from this computer, while the server keeps its copy. Index Only downloads the same period, indexes it for search and then removes it, and opening a message shows its preview at once while the full message downloads. Hoarder *(Premium)* downloads every folder and all history in the background and keeps it. If you had "All emails" chosen, you are on Hoarder now, and without Premium it keeps mail exactly as before. Backups and archived mail are never removed by any mode, and a lapsed Premium never deletes anything.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Download a month or a year of a view's attachments from its timeline.</strong> When a saved view shows the timeline and its messages span more than one month, each month header has a button that saves every attachment from that month, and the first month of each year also has one for the whole year. You pick the folder, the header shows the progress, and the other timeline buttons wait until it is done. A month or year that is only partly inside the view saves only the part the view covers.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Group the quick actions wheel into categories.</strong> In Settings > Appearance > Quick actions, Wheel layout > Categories turns a radial wheel into a short inner ring: Send, Mark, Organize, Clean up and More, each as a wide, easy target. Point at a category, click it or move to it with the keyboard, and its actions fan out beside it; your actions sort into their categories on their own and keep the order you gave them. A category with one action shows that action directly, and one with nothing that applies to the message is left out. One ring, the default, keeps the wheel as it was.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Start from the quick actions of Gmail, Outlook or Thunderbird.</strong> Settings > Appearance > Quick actions and the quick actions step of onboarding now begin with action sets: MailVault's own, and the ones Gmail, Outlook and Thunderbird offer on a message row, over selected messages and on an open message, each drawn as the row it gives. One click sets the message rows, the selection bar and the email reader together, for all views, or for this view alone with Scope on Current view. The set in use is outlined; once you change an action or a layout it reads Custom, and you can pick a set again at any time.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Help for the search operators.</strong> A help button in the search box lists every operator MailVault understands, with an example of each; click an example to add it to your search. The first time you search, a small tip points to it. A search written with operators is kept in your recent searches exactly as you typed it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Web and email addresses in a message are clickable.</strong> An address written as plain text in a message, or a link the sender left without a target, now opens like any other link.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Choose the app's font and text size.</strong> Settings > Appearance > Text, and the Appearance step of onboarding, let you pick the font MailVault's own screens use: the system font, Instrument Sans, Inter, Atkinson Hyperlegible Next, IBM Plex Sans or Source Sans 3, or a coding font (JetBrains Mono, Fira Code, IBM Plex Mono). Every font ships inside the app, so it looks the same on Mac, Windows and Linux and needs no internet. Text size scales the whole window from 90% to 150%. Emails keep their own fonts.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The original beside a reply reads like the reading pane, and remembers how wide you made it.</strong> A reply shows the message it answers the way the reader does: the whole conversation, your own sent replies included, with the message you are answering open and the rest folded. Nothing on it acts: there is no reply, unsubscribe or other action there, and an email address in it does not start another message. Web links still open in your browser. It opens in your email theme and has its own light and dark switch; the pop-out window and a reply in its own window get the switch too. Drag the divider, or pick the half-and-half or narrow-original layout from the icons above it, and every reply after that opens the same way. Neither side can be squeezed below 10% of the window. Reset compose layout in Settings > Mail preferences > Behavior puts it back. A button left of Minimize in the compose header shows or hides the original, and takes no space when it is off.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Read OpenPGP-encrypted mail.</strong> Import your OpenPGP secret key in Settings > Privacy & security > Encryption, by pasting it or choosing its file, and MailVault decrypts PGP/MIME and inline-encrypted messages on your device, with no GnuPG needed. The key and its passphrase are kept in your system keychain so decryption happens on its own. A decrypted message says so above its body, and one that no imported key can open says to import your key instead of showing the scrambled text. The first time a message in your vault is decrypted, MailVault keeps a decrypted copy beside the encrypted original, so it stays readable and searchable even without the key; the original is never changed, and deleting the message from your vault, clearing cached mail or purging orphaned mail removes the copy too. MailVault only decrypts: sending encrypted or signed mail and checking signatures are not supported.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>See the start of each message in the list.</strong> Settings > Workspace > Preview lines shows one, two or three lines of a message's text under its row, in every row style and in threads. The text comes from the offline search index, so it covers the mail already in your vault as well as new mail, and a message the index has not read yet simply shows no preview. Off by default, which keeps the list exactly as it was.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pick senders and tags for a view as you type.</strong> In the view editor, the sender field suggests the people and domains your indexed mail actually comes from, with how many messages each has sent, and the tags field offers your tags by name. Use the arrow keys and Enter, or click, to add one; anything else you type still works as before, and Backspace in an empty field takes off the last one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Words and phrases for a view, suggested as you type.</strong> In the view editor, typing two letters or more into "Add a word or phrase" lists the words and phrases that start with them in the subjects and attachment names of your indexed mail, from every folder, sent mail included, with how many messages carry each. The 20 most common come first, and scrolling to the end of the list, or arrowing past its last entry, brings the next 20.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Unsaved view changes are no longer lost by leaving.</strong> If you edited a view and then pick another view, another Settings page or close Settings, MailVault lists what you changed and asks whether to save it, discard it or keep editing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings search takes you to the setting itself.</strong> Clicking a result opens its page, scrolls the setting into view, briefly outlines it and puts the keyboard on its control. Backup results now open the right tab too, whether that is Backup & Restore, Backup Settings or Backup Schedule.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The update window lists what changed.</strong> When a new version is offered, MailVault shows the release notes of every version between yours and the new one in a scrollable list, read from the project's GitHub releases. If they cannot be fetched, the notes that came with the update are shown as before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Take MailVault with you on a drive</strong> *(Premium)*. Settings > Portable copies MailVault to a USB stick or external drive, with a MailVault Data folder beside it holding your accounts, settings and, if you like, all your mail. Opened from the drive on any computer, MailVault uses that folder for everything and asks for the password you set; passwords and sign-ins are kept encrypted on the drive, never on the computer it runs on, and a forgotten password cannot be recovered. Everything is copied and checked before anything else happens, and only then, if you ask, are your mail and accounts removed from this computer. A copy running from a drive says so in the sidebar, can be locked or ejected from Settings, and stops writing if the drive is pulled out. It does not start at login, become the default mail app or update itself: to update it, replace the app on the drive with a newer one. Windows for now; the Mac and Linux versions say so instead of copying.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Snooze a message until you want it.</strong> Snooze moves a message into a Snoozed folder on your mail server, so it leaves the inbox on every device, and brings it back unread at the time you chose. Pick Later today, Tomorrow, This weekend, Next week or a date and time of your own, from the row menu, the selection bar, the reading pane's actions or the B key. A message in Snoozed shows when it comes back, Undo brings it straight back, and one you move out of Snoozed yourself is simply left alone. The background helper wakes snoozed mail even while MailVault is closed, if it is set to keep running. If your mail server will not keep a Snoozed folder, MailVault snoozes the message on this computer instead: it leaves your inbox here and comes back unread at the time you chose, with a notification if MailVault is open, but it stays where it is on the server, so your other devices still show it. When snooze fails for any other reason, the error now says why. Not yet available for Outlook accounts connected through Microsoft Graph.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Swipe a message to act on it.</strong> Swipe two fingers left or right across a message row on the trackpad to archive it, delete it, mark it read or unread, star it, snooze it or move it. The row follows your fingers and shows what letting go will do; stop short and nothing happens. Swiping left archives and swiping right marks read or unread until you choose otherwise in Settings > Mail preferences > Behavior, where swipes can also be turned off. Scrolling the list up and down is never mistaken for a swipe.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search with the operators you know from Gmail.</strong> Type <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">from:</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">to:</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">in:</code> (inbox, sent, trash, spam, archive, anywhere, or any folder name), <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">has:attachment</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">is:unread</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">after:</code> and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">before:</code> (as 2026-09-01 or 2026/09/01) straight into the search box, and put a minus in front of a word or a quoted phrase to leave out the messages that contain it. Values with spaces go in quotes, like <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">from:"Ann Lee"</code>. Typed operators apply to that search only and take precedence over the filter panel, and anything MailVault does not recognise is searched for as ordinary text. Saving the search as a view keeps the sender, dates, attachments and unread operators.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Unsubscribe from a list in one click.</strong> Mail that carries an unsubscribe link shows an Unsubscribe link beside the sender in the reading pane and an Unsubscribe action in the message row's menu. It is also in the sender details in Insights, and can be added to the reading pane's actions in Settings > Appearance > Quick actions. A new Settings > Unsubscribe page lists every sender offering it that lists every sender offering one, for all accounts or one. MailVault always asks first. When the list supports one-click unsubscribe and the message passed DKIM, MailVault sends the request itself; otherwise it opens the list's unsubscribe page in your browser, or a ready-made unsubscribe email in Compose. The page also keeps a history of what you unsubscribed from.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sender logos next to the security badge.</strong> A message that passed DMARC from a domain that enforces it shows the domain's BIMI logo beside the SPF, DKIM and DMARC shield, and right after the sender's name in the message list. Logos are fetched once per domain and kept for a week; MailVault does not check the brand certificate some logos come with.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A Blog link in Help.</strong> The Help menu and Settings > Help & Support now link to the MailVault blog, alongside the website link.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Get deleted emails back.</strong> Every email you delete is kept on this computer, out of sight, for a day, and Cmd+Z (Ctrl+Z on Windows and Linux) brings back the last one you deleted. Settings > Storage > Deleted emails lists them, with Recover to server, which puts the message back in its folder on the mail server, Recover locally, which keeps it in your vault only, and Delete now. Choose how long they are kept, from one day up to 30 days. A message moved to Trash is recovered from Trash; one deleted permanently is saved whole before it leaves the server, so deleting many messages permanently now takes longer. Outlook accounts connected through Microsoft Graph can recover locally only, and only mail already on this computer.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compose opens at the size you left it.</strong> Resize the compose window, in the app or in its own window, and the next one opens at that size, never smaller than 200 by 200 pixels and never larger than the screen it opens on.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive & Delete in the bulk dialog is now a Premium feature.</strong> The one-step Archive & Delete, and the new Archive, Back up & Delete, show a Premium badge and open the upgrade prompt without a subscription. Archiving on its own and deleting from the server on its own stay free, and cleanup rules are unchanged.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The daily download limit now protects everyday mail instead of pausing it.</strong> Settings > Data usage > an account: "Pause background downloads at daily limit" (it used to read "Pause sync at daily limit") makes backups, Hoarder and download-ahead stop for the rest of the UTC day once the limit is spent, and carry on after midnight UTC. New mail keeps arriving, and opening a message always works, because those never stop for the limit. A backup that stops says "Stopped at your daily limit of 2000 MB. Continues after midnight UTC." and runs again by itself after the reset; Hoarder downloads what is left of your limit each day instead of its fixed 1,000 MB while the limit is on. On Gmail, an empty limit field now means 2,000 MB (the field shows it), which leaves room under Gmail's own 2,500 MB a day for everyday mail; the account is recognised as Gmail by its mail server, so a Google Workspace address counts too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Hoarder is explained where you choose it.</strong> Settings > Storage > Download mode now says how much Hoarder downloads a day (about 1,000 MB per account, or what is left of your daily limit), that copies stay after mail is deleted from the server, and that Clear Cache removes them; a "Hoarder or backup?" button beside the modes compares it with Archive and backups, and the Clear Cache text says it also removes mail Hoarder downloaded.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Onboarding: pick the new email sound, and See Premium opens Premium.</strong> The Reading tab of the Appearance step offers the new email sound on a Mac (when notifications are on), and picking one plays it. On the thank-you screen, See Premium now opens Settings > Billing with your first account's address already chosen for checkout, and the welcome animation follows when you close Settings. With Premium already active, or no account added yet, the screen has a single Continue button.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick actions are reordered by dragging.</strong> In Settings > Appearance > Quick actions, drag an action by its handle to move it (or use the arrow keys on the handle), and remove one with the red trash button. A newly added action goes next to the actions of its kind instead of at the end; "Where new actions go" lists every action in its place. The favorite action picker has its own row, so opening it no longer moves the controls around it, and the wheel's center shows a name only while you point at an action.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick actions settings show your own mail.</strong> Settings > Appearance > Quick actions now draws the real message rows, selection bar and reader toolbar over the latest messages in one of your inboxes, read from this computer only, and says where each one appears. Nothing in the example acts on those messages: open its menus and wheels and try any action, and your mail stays as it was. Layout, color style, wheel layout, wheel pages and how selection buttons show are cards that each picture their option, the chosen one outlined. Before any mail is on this computer, the example uses sample messages. The quick actions step of onboarding has the same action sets, layout cards and example.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>All Inboxes opens at once.</strong> Switching to All Inboxes shows the newest messages MailVault already has in memory right away, then each account's mail as soon as it is read, newest first, instead of waiting for every account. Messages that join the list fade in. With nothing to show yet, placeholder rows stand in until the first account answers.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The update window lists the commits too.</strong> Under the release notes, a scrollable list shows every commit between your version and the offered one, with a link to each on GitHub. A nightly build, whose release only says which commit it was built from, now shows what actually changed instead of "Nightly build of" and a hash.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive then delete only removes mail that is safely archived.</strong> Archive and delete, in bulk actions and in cleanup rules, now removes a message from the server only once your vault holds an archived copy of it; a copy that was only cached because you opened the message no longer counts as saved.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Download All asks where to save, and shows how far it has got.</strong> Saving all of a message's attachments now opens a folder picker, starting in Downloads, and puts the files in a folder named after the message inside the one you choose; cancelling saves nothing. While the files are saved, the button becomes a progress bar and the message's attachments cannot be clicked, and when it is done it says where the files went, with a Show in Folder button. Chat view now has Download All too, on a message with more than one attachment. The Download attachments button of a saved view or a search also asks where to save, and shows its progress in its place while it saves. On the Mac, MailVault keeps access to the folder you pick the same way it does for your backup location, so saving works outside Downloads too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings choices look like the tabs above them.</strong> The choice buttons across Settings, from quick actions and text in Appearance to the Auto Tags rule editor, and in the appearance step of onboarding now use the same underlined style as the settings tabs. In Settings > Appearance > Quick actions, how selection buttons show is one of these choices instead of a dropdown, and the favorite action is picked from a searchable list.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Blocked trackers are shown where they were.</strong> With tracker blocking on, each removed tracking pixel leaves a highlighted "Tracker blocked" label in the message, like a suspicious link is outlined; hover it to see what was removed and why.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A friendlier Settings > Unsubscribe.</strong> Accounts are picked from a row of buttons showing how many senders each has, instead of a drop-down. Every account loads at the same time and stays loaded while Settings is open, so switching between accounts and back to All accounts is instant. Click a sender to see its mail: Settings shrinks to its bubble and the folder with that sender's newest list mail opens, searched to that sender.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Message text lines up down the whole list.</strong> The checkbox, the server and vault icon and the thread arrow now sit in one fixed column at the start of every row, so senders, subjects and previews start at the same place on every message. With preview lines on, the icons stack under the checkbox.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Closing the window quits MailVault on Windows and Linux.</strong> The close button now quits, like other mail clients there. Turn on "Keep running in the tray when closed" in Settings > Mail preferences > Behavior to keep MailVault running in the tray instead, as before. On the Mac, closing the window still keeps MailVault running.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Bug reports go to a new address.</strong> "Email the developer" in the bug report window now addresses the message to prime@graphicmeat.com; the old hello@mailvaultapp.com mailbox is no longer read.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>One bug report every five minutes.</strong> After opening a GitHub issue or sending the bug-report email, the Report a Bug dialog disables filing another report or emailing, and shows a countdown until they are available again, so a slow connection or a double click cannot file the same report twice. FAQ, Discussions and suggesting a feature stay open, since none of those is filing a report.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Standard logs no longer contain email addresses.</strong> Every address in MailVault's logs is replaced by its provider and a short code, like <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline"><gmail#3f2a></code>, so one address can still be followed through a log without being written in it. Who you send mail to and how long your password is are no longer logged at all. Settings > Diagnostics > Logs now shows the background helper's log too, and log files older than a week are deleted, which until now never happened.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings > Diagnostics > Logs can switch to Verbose.</strong> Standard stays the default and keeps addresses and subjects out of the log; Verbose writes them in full, for a support session, and applies right away without a restart.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A shorter Settings menu.</strong> Settings now has four groups, General, Accounts & import, Organize, and Vault & privacy, with Billing, Diagnostics and Help & Support kept at the bottom. Pages that belong together share one entry with tabs: Storage holds Data Usage, Privacy & security holds Security, Tracker Blocking and Encryption, Diagnostics holds Background Daemon and Logs, and Language is now a tab of Appearance. Links and search results that opened those pages still open them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail deleted elsewhere disappears sooner on Fastmail, Dovecot and other servers that support QRESYNC.</strong> When a message is deleted from another device, MailVault now asks the server which messages are gone instead of listing every message in the folder again, which on a large mailbox can take close to a minute. Servers without it, Gmail among them, work as before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compose remembers its own window.</strong> Open a message you are writing in a new window, and every compose after it, new messages, replies and forwards alike, opens in a window of its own too. Settings > Mail preferences > Behavior > Open Compose switches back to writing over your mail.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A view's unsaved-changes prompt shows the words.</strong> Leaving a view you edited without saving used to list "Contains" or "Sender" with no hint of what changed; it now shows what the phrase was and what it became, for the name, the words and the sender.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A view's words also match attachment file names.</strong> A view asking for "invoice" now finds a message whose attachment is named invoice-4471.pdf, as the word suggestions already implied, and it does the same for the search box and for excluded words. Attachment text was already searched when attachment indexing is on; file names are found wherever attachments are indexed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive & Delete no longer brings deleted messages back.</strong> After Bulk Email Operations deleted messages from the server, the folder list went blank and reopening the folder showed them again as plain archived mail. The deleted messages now leave the list at once, and their saved copies are marked as deleted from the server by MailVault, the same as when you delete a single message.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Resuming a paused account migration continues the same run.</strong> Pressing Resume after Pause used to leave the paused run waiting and start a second one beside it; it now wakes the run that was paused. A pause that lands in the middle of a folder is saved right away, so it survives closing MailVault.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Saved-view counts stay true.</strong> The badge beside each view is counted again a moment after you read, star, move or delete mail, undo one of those, or a sync brings a change from another device. A count taken while the search index is still building keeps the last numbers instead of blanking them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Notes to Self board follows other devices.</strong> A star or read change made on another device now repaints the board's cards when MailVault syncs it, without pressing Refresh.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A view no longer shows read mail as unread.</strong> A message the view lists from your server only, with no saved copy on this computer, kept the read state it had when it was first indexed, so mail you had since read (here or on another device) stayed bold in a view. Views now take the read, starred and answered state of such messages from the server's own flags.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Closing Bulk Email Operations with nothing selected no longer leaves a "0 selected" chip.</strong> Closing the window, or unticking the last message while it is minimized, now ends the selection. A date range that matches no email says "Nothing found for this range" instead of a bare prompt.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A signature that is only a logo is no longer erased.</strong> Opening Account Settings used to save a logo-only signature as empty, so it never went out with your mail.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Undoing a star updates the Notes to Self card.</strong> Undo, Cmd+Z and a star made from the list now repaint the card and the vault copy too. Marking a note done and deleting one can be undone as well, and Cmd+Z works while Notes is open.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Saved views no longer look empty while the search index rebuilds.</strong> A view opened during indexing says it is waiting, a notice explains that views can lag until indexing finishes, and the view fills in by itself when it is done.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Views upgrade message is readable.</strong> The free-plan limit under New view is now a clear card with an Upgrade button.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick actions settings keep their place.</strong> Choosing Message rows, Selection bar or Email reader no longer scrolls Settings to the top, the Menu and favorite labels no longer run over the Clear button, and the preview no longer draws the wheel over the sample rows.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail you send from an alias counts as yours everywhere.</strong> Only the login address and the one "Send Mail As" address were recognised as you, so a message sent from any other alias showed as a stranger's bubble in Chat, was grouped under the wrong person when sorting by sender, turned up among your contacts, landed in a "Needs reply" view and was missing from Notes to Self, and Reply All could put that alias back on the To line. Every alias of an account now counts as yours in all of those places, and in Chat, sender grouping, Reply All, contacts and Insights a Gmail address is recognised however its dots are written. The From row of a new message also shows each alias under its own name, and the message goes out with that name.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"No internet connection" no longer appears on networks that block DNS traffic.</strong> To tell whether this computer is online, MailVault connected to three public DNS servers on the DNS port only. Many company networks, VPNs and internet providers block that port, so on those networks the banner said the internet was gone, and background syncing stopped, while everything else worked. The check now also tries those servers on the port secure websites use, which is almost never blocked, and your own mail servers as well: any one of them answering means you are online. A mail provider that is down still never makes MailVault say the internet is gone, because the public servers are always asked too. Mail servers on this computer or your local network, such as the Proton Mail Bridge, are left out of the check, since they answer even when the internet is down. Every connection the check makes is listed on the Network Activity page.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A failed connection says what went wrong and what to do about it.</strong> Instead of a bare "Connection problem" under the account, MailVault now says which of these it ran into: the server name could not be found, the server refused the connection on that port, nothing answered on the server and port (which it names, so you can ask your IT team to allow it, since a firewall or VPN is the usual cause), the server's certificate could not be verified, the server rejected the sign-in, or your provider is limiting connections for now, in which case waiting a few minutes or closing other mail apps helps. For a rejected sign-in, the button under the message opens the account to enter the password or sign in again, instead of retrying. Adding an account gives the same answers, with the server's own message still shown underneath. A certificate problem while adding an account now reads properly instead of starting with "undefined".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message read or starred on another device shows so in the open list.</strong> MailVault already knew, but the folder you were looking at kept the old read and star state until you switched folders. It now updates by itself, and in All Inboxes too, and the unread count follows.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick action icons show the state of the message.</strong> On a starred message the star in the row actions, the selection bar, the reading pane and the wheel is now a filled star, and on one that is not starred it is an empty one, like the star beside the sender; the old crossed-out star is gone. A lone Archive on an archived message now shows the restore icon that goes with its Unarchive label, and the reading pane's light and dark switch shows a sun or a moon for the theme it switches to. Every place that shows quick actions, Settings and onboarding included, now uses the same icon for each action.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A backup during an MBOX import no longer copies half a message.</strong> Each imported message is now written in one step, so a backup that runs while a large file is still being imported sees a whole message or none of it, and cannot keep a cut-off copy.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The message list stays responsive while MailVault builds its search index.</strong> The index now works at background priority and pauses whenever you open, delete, flag or move a message, and its progress is a small chip in the corner instead of a window that covers the list. Click the chip for details.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Importing a large MBOX file no longer runs out of memory, and imported mail shows up.</strong> MBOX import used to read the whole file into memory first, so a big Google Takeout export ran the computer out of memory. It now reads one message at a time, whatever the file's size, and the progress bar follows how much of the file has been read. Imported messages were also given numbers the mail server uses for its own messages, so the server's messages hid them in the list and could even open with an imported message's text. Imports now get numbers of their own and appear in the folder, sorted by date, next to your other mail. A file that cannot be read to the end keeps the messages imported before the problem. The import goes to the account you have open unless you pick another in the dialog, not always the first account.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail imported from MBOX by an earlier version now shows up, and importing a file twice no longer doubles it.</strong> An MBOX import made before this fix gave its messages numbers the mail server uses for its own mail, so they stayed hidden behind the server's messages, and the server messages with those numbers were never downloaded or backed up. When you open such a folder, MailVault now moves that imported mail to numbers of its own, in your vault and in your backup folder, so it appears in the list, and the messages it was hiding are downloaded and backed up again. Nothing is deleted: an imported copy of a message the server already has is set aside instead of being shown twice. Importing an MBOX file whose messages the folder already has, in your vault or on the server, skips them, and the message at the end says how many were skipped.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Onboarding no longer jumps around.</strong> The Appearance step kept moving as you switched between Colors, Layout, Reading and Quick actions or changed a choice; each step now starts at the top and grows downward. The thank-you screen no longer scrolls sideways while its hearts fly, and the welcome animation no longer shakes while the envelopes land. Its choice buttons no longer split a word across two lines (Expandable under Conversations, and longer labels in other languages): a choice that does not fit moves to the next row.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An account's unread count updates as soon as its mail arrives.</strong> New mail shown straight away in All Inboxes left the unread badge of the account it arrived in at the old number until the next scheduled check. The count now follows every change the helper picks up, a message read on another device included.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Reply starts on the first line.</strong> Reply and Reply all opened with the cursor after your signature; it now starts on the first line, above it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The star button in the reading pane shows what it will do.</strong> Once a message is starred, the button shows the unstar icon, not the star it already has.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The wheel's Mark read icon matches its label.</strong> The read toggle in the quick actions wheel always showed an open envelope, even when it said Mark unread. A conversation now offers Mark read and Mark unread side by side.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Report on GitHub is always available.</strong> The five-minute wait after a bug report now applies to emailing the developer only; opening GitHub never starts it or waits for it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Unstarring from the Starred view works.</strong> Clicking the star of a starred message in a saved view, such as Starred, said "Starred 1 message" and left the star on. It now removes the star and says so. The message stays in the view, unstarred, until the view reloads, so a star taken off by mistake can be put back.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sent and Trash on servers that keep every folder under Inbox.</strong> On mail servers that refuse folders at the top level ("NAME NOT ALLOWED"), MailVault now creates Sent, Trash and Snoozed inside Inbox instead of failing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The original message in a reply or forward respects tracker blocking.</strong> The quoted original shown while replying or forwarding, and its pop-out window, loaded remote images and tracking beacons even with tracker blocking on, unlike the reading pane. It now strips them the same way the reading pane does.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A folder with subfolders keeps its own list.</strong> Opening a folder that has folders under it lists every message in the branch. MailVault then tried to download all of them from the top folder alone, where most of them are not, and saved the whole branch as that one folder's list of messages. It now downloads only the top folder's own messages ahead of time, fetches the others from their own folders when you open them, and leaves the top folder's list as it is.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A folder with subfolders keeps the right message count.</strong> A message deleted from the top folder, or found gone from it, could take one off the count shown for the whole branch even when that message was not in the list.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Chat view opens the right attachment in All inboxes.</strong> In chat view, opening or saving an attachment of a message from another account than the one selected in the sidebar could read the selected account's copy instead, and with two messages sharing a number that meant the wrong file. Attachments now always come from the message's own account and folder.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings opens before you add an account.</strong> Choosing Settings from the menu on the welcome screen or during onboarding did nothing; it now opens Settings there too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The tray icon shows on Linux.</strong> It was a black glyph meant for the macOS menu bar, which disappeared against the dark GNOME top bar; Linux now uses the app icon, as Windows already did.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The snap keeps your sign-ins without any setup.</strong> The snap now stores account passwords and sign-in tokens through the desktop's Secret portal, in an encrypted file inside its own data folder, instead of asking for access to the whole system keyring, which snaps do not get automatically. Adding an account works straight after installing. Sign-ins saved by an earlier snap you had connected to the keyring by hand are moved over the first time they are read. On a desktop without the Secret portal, the snap falls back to the system keyring and says to run <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sudo snap connect mailvault:password-manager-service</code> if that is not allowed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Linux snap starts on up-to-date systems.</strong> On Ubuntu 26.04, Debian 13 and similar systems the snap could stop at launch with "did not find extension DRI_Mesa version 1". It carried an older copy of the graphics libraries that clashed with the GNOME platform snap it runs on; it now uses the platform's copy only, which also makes the download smaller.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Reset view only shows when there is something to reset.</strong> Switching a saved view between list and explorer, its grouping or its timeline and then back to how it was saved no longer leaves the Reset view button behind.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>All inboxes threads show the replies you sent.</strong> In threads view, All inboxes now joins your sent replies to their conversations the way a single account's inbox does, for every account at once: in grouped and expandable rows, in the thread's message count, in the reading pane and in the chat view. A reply sent from an account other than the one open in the sidebar no longer disappears from its thread a moment after sending.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message opened from search shows everything it shows in its folder.</strong> The SPF, DKIM and DMARC shield, the warnings for a look-alike sender name, a Reply-To going elsewhere, suspicious links and trackers, and the Unsubscribe link were missing from search results and from a message opened from them. The sender info button now always opens, counting the search results and the open message too, where before it showed nothing for a sender outside the open folder. After updating, MailVault asks once whether to rebuild the search index, so mail indexed by the previous version shows them in search results and among archived messages in the list too; saying no changes nothing, and the rebuild is also in Settings > Search index.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>No more <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">&zwnj;</code> in message previews.</strong> Invisible padding that some newsletters put after their teaser text showed up as a run of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">&zwnj;</code> in the list's preview lines.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Every folder the server lists shows up, and opens with its mail.</strong> A folder whose name contains a backslash or a quote, such as a Gmail label created by another mail app, opened empty; it now opens with its messages. A folder that is only named like Trash or Archive, such as Gmail's <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">[Imap]/Trash</code>, now stays under its own parent instead of being moved to the top, and only the folders the server itself marks as Sent, Drafts, Trash, Junk or Archive are moved there and used for deleting and sending. Two folders that would end up with the same name are both shown instead of one disappearing, and an empty <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">[Gmail]</code> container is no longer listed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search results show preview lines.</strong> With preview lines turned on, search results and saved views now show the start of each message like the rest of the list. The Appearance sample is long enough to show the difference between one, two and three lines.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The read or unread button shows the right envelope.</strong> In the reading pane and the full view, the button's icon now changes with the message, so it always shows what clicking it will do.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Undo brings a deleted email back at once.</strong> The email is back in the list the moment you click Undo; moving it back on the server happens afterwards, and if that fails the email leaves the list again and MailVault says why.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting, undoing and deleting an email again no longer leaves it in All Inboxes.</strong> It used to show up in All Inboxes while also sitting in Trash.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting keeps every view in step.</strong> Deleting an email in All Inboxes now closes it if it was open, and the message count and unread badge change straight away; the account's own inbox agrees without a reload, and so does All Inboxes when you delete from an inbox.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Retry on a connection problem waits for the answer.</strong> Clicking Retry hides the notice while MailVault reconnects, shows it again only if that fails, and cannot be clicked twice. In All Inboxes, Retry now actually reconnects the account instead of doing nothing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Restore and folder names can no longer reach outside the mail vault.</strong> A malformed account id or a folder named <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">..</code> could point a restore, import or vault read at a directory outside the account's own mail. Such names are now kept inside the vault, and restore refuses them outright.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Replies you send keep their "Original Message" header in view.</strong> The header naming who wrote the quoted message now sits above the quote instead of inside it, so a mail app that folds the quote, MailVault included, still shows it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Your own sent mail is recognised in every provider's Sent folder.</strong> In Gmail's "Sent Mail", Outlook's "Sent Items" and other Sent folders not named exactly "Sent", your own message offered Reply, Reply All and quick replies as if someone else had written it. It is now treated as sent mail wherever it is filed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A reply shows its text and one quote toggle.</strong> A reply from Gmail, and some from Thunderbird and Outlook, could show two quote toggles side by side, hide the line naming who wrote the quoted message, or, when the reply was all quote, show nothing but the toggles. Each quote now folds under one toggle below its "wrote:" line, and a message that would fold down to nothing is shown in full.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault gives memory back on the Mac once a large mailbox has loaded.</strong> After loading a big folder, MailVault and its background helper kept the memory they had just used and freed for minutes, so Activity Monitor showed them at their peak. After syncing a 10,000-message inbox, the helper now sits at about 15 MB instead of 107 MB and the app itself at about 26 MB instead of 84 MB.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening MailVault no longer announces mail you were already told about.</strong> When the background helper kept running while MailVault was closed, the next launch showed a burst of new-mail notifications for mail that had arrived hours earlier, often the same message several times. Mail that came in while MailVault was closed is still announced, with one notification per folder that counts it all.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault stops drawing while it is in the tray or minimized on Windows.</strong> A hidden or minimized window kept rendering its page as if it were on screen, so any animation on it kept the processor and graphics card busy for as long as MailVault stayed out of sight. The page now rests until you open the window again, as it already did on the Mac.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A view saved from a search keeps the search's last day.</strong> A search that ends on a date includes that whole day, but the view saved from it stopped at midnight and left that day's mail out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>New mail shows up the moment it arrives.</strong> A Gmail account no longer drops its live connection every hour when its sign-in is refreshed, and after any dropped connection (a Wi-Fi blip, a restarted helper) MailVault now fetches the mail that came in meanwhile instead of waiting for the next scheduled refresh or a restart of the app. On a large inbox a new message is shown before MailVault finishes checking the rest of the folder, and its body is downloaded straight away, so it opens at once, reads offline and turns up in search. All Inboxes now updates on the scheduled refresh too, and whenever mail arrives in any of its accounts.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Threads follow your mark-as-read setting.</strong> Opening a thread used to leave its messages unread whatever Settings said. Now each unread message you have open in a thread is marked read on its own, right away or after your delay, and folding one before the delay runs out keeps it unread. Mail that arrives while the thread is open stays folded and unread until you open it. In the chat view, every unread message of the conversation you are reading is marked after the delay.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message marked read by the reading timer now shows as read in the list.</strong> If you moved to the next message, closed the reader or opened a thread while the timer's change was reaching the server, the message was read on the server but stayed bold in the list, in a search and in a saved view. Every row now follows. A message from another account or folder opened from a saved view is also opened, and marked, in its own account instead of the one you were in.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A new-mail notification names the message that just arrived.</strong> When a message came in with a date older than mail you already had, such as a forwarded or migrated copy or a sender whose clock is wrong, the notification showed the sender and subject of an older message instead.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Changing From changes the signature too.</strong> Since 2.16.0, picking another account in From left the signature of the account you started with in the message. The new account's signature now replaces it, and whatever you have written stays as it is.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compose opens at its usual size again.</strong> Since 2.16.0 a new message filled the whole width of the window. It opens at its usual width again, and its corner still lets you make it as large as the window.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The row menu offers "Delete everywhere" only when there is more than the server copy.</strong> On a message that is only on your mail server it was shown greyed out, under a name that promised to clear your vault and backup as well.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Setting the read state yourself keeps the message where it is.</strong> Marking the open message unread no longer has the reading timer mark it read again a moment later, the thread reader shows the new state straight away, and with the Unread filter on in the explorer the message you are reading, and the ones you read since turning the filter on, stay on screen.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a message on a throttled Gmail account no longer takes 20-40 seconds.</strong> A pooled connection that was simply slow to answer was treated as dead and replaced with a fresh login every time; it is now given enough time to answer before MailVault gives up on it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a message no longer waits behind a bulk archive, a cleanup rule or snoozed mail waking up.</strong> These took the connections kept for the message you click, so opening one while they ran could take as long as several whole downloads. They now use the connections kept for background work, while saving a message you picked yourself or unsnoozing one right away still goes first.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Two copies of MailVault on one Gmail account no longer get the account slowed down.</strong> Gmail allows 15 connections to an account at once, and two MailVault installs (a second computer, a portable copy, a backup) could open more than that between them, after which Google answered every request in about 10 seconds for hours. MailVault now keeps at most seven connections open per account, closing an unused one when it needs room, so two installs and a phone fit.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A connection that went silent no longer holds a message up for 45 seconds.</strong> When a kept-open connection to the mail server had quietly died, opening a message waited for the full timeout before failing. MailVault now gives up on a connection after 15 seconds without a reply and fetches the message on a fresh one, and a server that stops answering while connecting (looking up its address, securing the connection, greeting or signing in) is given up on too instead of being waited on indefinitely.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message the server no longer has is no longer fetched over and over.</strong> Background loading kept retrying a deleted message forever, up to dozens of times a day on a busy account, each one paying the full cost of a slow fetch; the row is now dropped from the list instead.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message that timed out or hit a dropped connection while opening now retries once on its own.</strong> Most of the time it simply opens on the second try instead of showing an error, while a message the server has confirmed is gone is never retried.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Adding a Google account no longer fails with "the server did not answer in time" on a slow connection.</strong> Testing the connection now retries once if the first attempt stalls, and no longer waits on a slow sign-out after the test has already succeeded.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Signing in with Google or Microsoft now finishes adding the account on its own.</strong> After you complete sign-in in the browser and return to MailVault, the account is added right away, with no extra click on Add Account needed; that button is still there if the automatic add fails. If you sign in to a different Google account than the address you typed, MailVault now says so and does not add it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The radial quick-actions wheel opens and reacts instantly, especially on Windows.</strong> Right-clicking a message opened the wheel only after the button was released, and moving between its actions could feel sluggish. It now opens the moment the button goes down, and moving between actions no longer redraws the whole wheel.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The row menu and reading pane show only the read, star and archive actions that apply.</strong> Mark as read, mark as unread, star, unstar, archive and unarchive used to stay in the menu greyed out once they no longer applied; they are left out instead. Right-clicking inside a multi-message selection shows both sides of a pair when the messages are a mix of read and unread, starred and not, or archived and not.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Open in window works for plain-text messages.</strong> The reading pane's Open in window did nothing for a message with no formatted version, only text; it now opens that text in its own window.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Reply puts the cursor in the message body.</strong> Reply and Reply all used to leave the cursor in the To field, which already has a recipient, so nothing typed there went where it should. New messages and forwards still start in To, since a forward has no recipients yet. A reply started from the row's radial quick-actions wheel also opens right away instead of waiting on the message to finish loading, with the quoted text filling in a moment later. When Compose opens in a window of its own, it waits for the message instead, so the window has the quoted text.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.16.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.16.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 25, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

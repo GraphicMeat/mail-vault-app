@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-09-30
+
 ### Added
 - **Resize a signature picture, and get a sharp file.** The signature editors in Settings > Accounts (the account's and an alias's own) now have an Insert image button, take a picture dragged in from Finder or pasted, and show corner handles on a picture to resize it. After you resize, MailVault offers to store the picture at three times the size it is shown at (a logo shown at 40 × 40 becomes a 120 × 120 file), which looks sharp on every screen and is usually much smaller. The offer shows the file size now and after, and the picture as it will look; Keep original leaves it alone, and nothing is offered when the file is already that small.
 - **Compact or comfortable message rows.** Settings > Appearance > Layout > Message list density switches the list between the current comfortable rows and tighter compact ones, like the sidebar density beside it.
