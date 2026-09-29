@@ -100,7 +100,7 @@ pub fn probe_mbox(state: &Arc<DaemonState>, source_path: &Path, account_id: &str
     let file = std::fs::File::open(source_path).map_err(|e| format!("Failed to read mbox file: {}", e))?;
     let bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
     let (has_labels, sampled_messages) = sample_labels(file, PROBE_MESSAGES, PROBE_BYTES)?;
-    let folders_known = !account_folders(state, account_id).is_empty();
+    let folders_known = account_folders(state, account_id).is_ok_and(|f| !f.is_empty());
     Ok(MboxProbe { bytes, has_labels, folders_known, sampled_messages })
 }
 
@@ -119,14 +119,23 @@ fn sample_labels(r: impl Read, max_messages: u32, max_bytes: u64) -> Result<(boo
 }
 
 /// The account's folders from its cached listing, read the way
-/// `load_mailbox_cache` reads it. Empty, meaning unknown, when there is none
-/// or it does not read.
-fn account_folders(state: &Arc<DaemonState>, account_id: &str) -> Vec<takeout::FolderRef> {
-    crate::handlers::cache::load_mailbox_listing(state, account_id)
-        .ok()
-        .flatten()
-        .map(|listing| takeout::folder_refs_from_listing(&listing))
-        .unwrap_or_default()
+/// `load_mailbox_cache` reads it. Empty, meaning unknown, when there is none.
+/// A list that cannot be read is an error, never "none": an import would
+/// file everything in the fallback.
+fn account_folders(state: &Arc<DaemonState>, account_id: &str) -> Result<Vec<takeout::FolderRef>, String> {
+    let listing = crate::handlers::cache::load_mailbox_listing(state, account_id)?;
+    Ok(listing.map(|l| takeout::folder_refs_from_listing(&l)).unwrap_or_default())
+}
+
+/// The uid a vault file name starts with: `<uid>:2,...` (`;2,` on Windows)
+/// or a bare `<uid>.eml`.
+fn name_uid(name: &str) -> Option<u32> {
+    name.split(|c| is_info_sep(c) || c == '.').next()?.parse().ok()
+}
+
+/// Whether any file in `cur_dir` is named for `uid`, whatever its flags.
+fn uid_on_disk(cur_dir: &Path, uid: u32) -> bool {
+    std::fs::read_dir(cur_dir).into_iter().flatten().flatten().any(|e| name_uid(&e.file_name().to_string_lossy()) == Some(uid))
 }
 
 /// Escape "From " at the start of lines in an email body for mbox format.
@@ -367,6 +376,9 @@ struct Dest {
     server: import_rehome::ServerView,
     /// Message-ID -> copies in the folder, read on the first message with an id.
     known: Option<HashMap<String, Vec<PathBuf>>>,
+    /// The vault registry holds this folder, so it can say whether a uid is
+    /// taken without a directory scan. Cleared when it stops answering.
+    listed: bool,
     imported: u32,
     skipped: u32,
 }
@@ -379,15 +391,14 @@ impl Dest {
     fn open(state: &Arc<DaemonState>, account_dir: &Path, account_id: &str, mailbox: String, dir: String) -> Self {
         let mut max_uid: u32 = IMPORT_UID_BASE - 1;
         for f in std::fs::read_dir(account_dir.join(&dir).join("cur")).into_iter().flatten().flatten() {
-            let fname = f.file_name().to_string_lossy().to_string();
-            if let Some(uid) = fname.split(is_info_sep).next().and_then(|u| u.parse::<u32>().ok()) {
+            if let Some(uid) = name_uid(&f.file_name().to_string_lossy()) {
                 max_uid = max_uid.max(uid);
             }
         }
         let server = crate::custody::with_conn(state, |c| mailvault_core::custody::cache::all_headers(c, account_id, &mailbox))
             .map(|rows| import_rehome::ServerView::from_headers(&rows))
             .unwrap_or_default();
-        Dest { mailbox, dir, max_uid, server, known: None, imported: 0, skipped: 0 }
+        Dest { mailbox, dir, max_uid, server, known: None, listed: false, imported: 0, skipped: 0 }
     }
 }
 
@@ -426,7 +437,7 @@ fn import_from(
     // Folder dirs come from core's `vault_dir_name`, the function sync writes
     // with, which also keeps a `.` or `..` name inside the account dir. With
     // no folder list every message goes to `mailbox`.
-    let folders = if use_labels { account_folders(state, &account_id) } else { Vec::new() };
+    let folders = if use_labels { account_folders(state, &account_id)? } else { Vec::new() };
     let fallback_dir = vault_dir_name(&mailbox);
     // One destination per vault dir, never per name: two names that share a
     // dir must share its uid allocator.
@@ -483,6 +494,12 @@ fn import_from(
         // when labels were asked for, so the old call shape writes what it did.
         let flags = if use_labels { label_flags(&labels) } else { vec!["archived".to_string()] };
 
+        if !d.listed {
+            // One listing, outside the mailbox lock (a registry listing takes
+            // it), so the registry answers for this folder's uids below.
+            d.listed = state.vault_registry.files(&root, &safe_account_id, &d.dir).is_some();
+        }
+
         // Decision 10: the gate is re-acquired here, inside the loop, once
         // per message, never once around the whole import. A refusal (e.g.
         // the vault closing mid-import for a move) stops the loop cleanly
@@ -496,18 +513,33 @@ fn import_from(
             let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&d.dir).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
-            d.max_uid = d.max_uid.checked_add(1).ok_or("The import uid range is full")?;
-            let mut dest = cur_dir.join(build_maildir_filename(d.max_uid, &flags));
-            if dest.exists() {
-                d.max_uid = d.max_uid.checked_add(1).ok_or("The import uid range is full")?;
-                dest = cur_dir.join(build_maildir_filename(d.max_uid, &flags));
+            // The next uid no file holds, under any flags: another writer (the
+            // rehome pass, a second import) may have taken some since `open`
+            // seeded the allocator. The registry answers while it holds the
+            // folder (`known` takes no mailbox lock); otherwise the disk does.
+            let mut uid = d.max_uid;
+            loop {
+                uid = uid.checked_add(1).ok_or("The import uid range is full")?;
+                let taken = match state.vault_registry.known(&safe_account_id, &d.dir, uid) {
+                    Some(row) => row.is_some(),
+                    None => {
+                        d.listed = false;
+                        uid_on_disk(&cur_dir, uid)
+                    }
+                };
+                if !taken {
+                    break;
+                }
             }
+            // Spent even if the write below fails: a uid is never reused.
+            d.max_uid = uid;
+            let dest = cur_dir.join(build_maildir_filename(uid, &flags));
             if let Err(e) = std::fs::write(&dest, &unescaped) {
                 // A failed plain write can leave a partial file.
                 state.vault_registry.invalidate(&safe_account_id, &d.dir);
                 return Err(format!("Failed to write .eml: {}", e));
             }
-            state.vault_registry.upsert(&safe_account_id, &d.dir, d.max_uid, &dest);
+            state.vault_registry.upsert(&safe_account_id, &d.dir, uid, &dest);
             Ok(dest)
         });
 
@@ -524,7 +556,7 @@ fn import_from(
                 true
             }
             Err(e) => {
-                warn!("import_mbox: vault gate refused a write, stopping the import early: {}", e);
+                warn!("import_mbox: a write failed (vault gate or disk), stopping the import early: {}", e);
                 write_error = Some(e);
                 false
             }
@@ -1298,6 +1330,68 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
             assert!(!v.path().join("Maildir").join("cur").exists(), "escaped the account dir (labels: {use_labels})");
             assert_eq!(names_in(v.path(), "..").len(), 1, "labels: {use_labels}");
         }
+    }
+
+    /// Another writer (the rehome pass, a second import) takes the next import
+    /// uid after this import seeded its allocator, under other flags than the
+    /// import's own. The import must step past it, never write a second file
+    /// under that uid. Once with the taker's row in the registry, once with
+    /// the registry invalidated as the rehome pass leaves it (disk decides).
+    #[test]
+    fn a_uid_another_writer_took_after_the_seed_is_skipped_whatever_its_flags() {
+        for registry_row in [true, false] {
+            let (v, s) = state(true);
+            save_listing(&s, &gmail_listing());
+            let dir = tempfile::tempdir().unwrap();
+            let msgs: Vec<String> = (0..51).map(|i| tmsg(&format!("{i}@x"), &format!("m{i}"), Some("Work,Opened"))).collect();
+            let refs: Vec<&str> = msgs.iter().map(String::as_str).collect();
+            let taken = IMPORT_UID_BASE + 50;
+            let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "Work");
+            let planted = cur.join(build_maildir_filename(taken, &["archived".to_string(), "flagged".to_string()]));
+            let s2 = Arc::clone(&s);
+            let p2 = planted.clone();
+            let r = import_mbox(&s, write_mbox(dir.path(), "t.mbox", &refs), "acct1".into(), "INBOX".into(), true, move |name, payload| {
+                // Right after message 50 landed at BASE + 49, before message 51.
+                if name == "mbox-import-progress" && payload["completed"] == 50 && payload["active"] == true {
+                    std::fs::write(&p2, b"Subject: taken\r\n\r\nanother writer's message").unwrap();
+                    if registry_row {
+                        s2.vault_registry.upsert("acct1", "Work", taken, &p2);
+                    } else {
+                        s2.vault_registry.invalidate("acct1", "Work");
+                    }
+                }
+            })
+            .unwrap();
+            assert_eq!(r.email_count, 51, "registry row: {registry_row}");
+
+            let uids = uids_in(v.path(), "Work");
+            let mut unique = uids.clone();
+            unique.dedup();
+            assert_eq!(uids, unique, "two files under one uid (registry row: {registry_row})");
+            assert_eq!(uids.len(), 52, "registry row: {registry_row}");
+            assert_eq!(std::fs::read(&planted).unwrap(), b"Subject: taken\r\n\r\nanother writer's message");
+            let last = mailvault_core::maildir::find_by_uid(&cur, taken + 1).expect("message 51 lands past the taken uid");
+            assert!(std::fs::read_to_string(last).unwrap().contains("Subject: m50"), "registry row: {registry_row}");
+        }
+    }
+
+    /// A label import whose folder list cannot be read fails before writing:
+    /// filing a whole Takeout in the fallback could not be undone. An import
+    /// without labels never reads the list; the probe degrades to "unknown".
+    #[test]
+    fn an_unreadable_folder_list_fails_a_label_import_and_writes_nothing() {
+        let (v, s) = state(true);
+        save_listing(&s, &gmail_listing());
+        crate::custody::close(&s);
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_mbox(dir.path(), "t.mbox", &[&tmsg("a@x", "one", Some("Work"))]);
+
+        assert!(import_mbox(&s, path.clone(), "acct1".into(), "INBOX".into(), true, |_, _| {}).is_err());
+        assert!(!mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1").exists(), "nothing was written");
+
+        assert!(!probe_mbox(&s, &path, "acct1").unwrap().folders_known);
+        let plain = import_mbox(&s, path, "acct1".into(), "INBOX".into(), false, |_, _| {}).unwrap();
+        assert_eq!(counts(&plain), vec![("INBOX", 1, 0)]);
     }
 
     /// Nothing landed and a write failed: the run is an error, never
