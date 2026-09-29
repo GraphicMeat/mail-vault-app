@@ -148,9 +148,20 @@ describe('Settings > Backup - copies not yet in the vault', function () {
     assert.notEqual(diskSettings()?.fetchModePremium, true,
       'With Premium the Hoarder worker would fill the vault behind the spec');
 
-    const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
-    assert.equal(reply.ok, true, `vault_gap_count refused: ${reply.__error}`);
-    counted = reply.v;
+    // The header cache may still be landing (INBOX pages, Sent for threading):
+    // take the count once two reads a second apart agree and neither is a floor.
+    let last = null;
+    try {
+      await browser.waitUntil(async () => {
+        const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
+        const same = reply.ok && !!last?.ok && JSON.stringify(last.v) === JSON.stringify(reply.v);
+        last = reply;
+        return same && reply.v.partial === false;
+      }, { timeout: 90_000, interval: 1_000 });
+    } catch (e) {
+      throw new Error(`luke's count never settled: ${JSON.stringify(last)} (${e.message})`);
+    }
+    counted = last.v;
     console.log('[vault-gap] before the save:', JSON.stringify(counted));
     assert.equal(counted.vaultReachable, true);
     assert.equal(counted.partial, false,
@@ -179,14 +190,20 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   });
 
   it('shows the count of copies not in the vault on the account\'s card', async function () {
+    // The row shows what the daemon says now, not a number the spec remembers.
     let seen = null;
+    let fresh = null;
     try {
-      await wait(async () => { seen = await gapRow(lukeId); return seen?.state === 'missing'; }, 60_000);
+      await wait(async () => {
+        seen = await gapRow(lukeId);
+        const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
+        fresh = reply.ok ? reply.v : null;
+        return seen?.state === 'missing' && !!fresh && seen.count === String(fresh.count);
+      }, 60_000);
     } catch (e) {
-      throw new Error(`luke's row never showed a count: ${JSON.stringify(seen)} (${e.message})`);
+      throw new Error(`luke's row never showed the daemon's count: row ${JSON.stringify(seen)}, daemon ${JSON.stringify(fresh)} (${e.message})`);
     }
-    assert.equal(seen.count, String(counted.count));
-    const phrase = counted.count === 1 ? '1 copy is not in your vault yet' : `${counted.count} copies are not in your vault yet`;
+    const phrase = fresh.count === 1 ? '1 copy is not in your vault yet' : `${fresh.count} copies are not in your vault yet`;
     assert.ok(seen.text.includes(phrase), seen.text);
     assert.ok(!seen.text.includes(NONE), seen.text);
     assert.equal(seen.saveDisabled, false, 'Save them now is disabled with copies to save');
