@@ -2256,6 +2256,8 @@
   "settings.dataUsage.unavailable": "使用量を取得できません。設定した上限は保存されています。",
   "settings.help.blog": "ブログ",
   "settings.help.blogSubtitle": "お知らせ、リリース情報、使い方ガイド",
+  "settings.help.privacyPolicy": "プライバシーポリシー",
+  "settings.help.privacyPolicySubtitle": "MailVault がデータをどのように扱うか",
   "settings.help.docsFaqLatestRelease": "ドキュメント・FAQ・最新リリース",
   "settings.help.faq": "よくある質問",
   "settings.help.faqSubtitle": "設定・保存先・プロバイダ・Premium についての回答",

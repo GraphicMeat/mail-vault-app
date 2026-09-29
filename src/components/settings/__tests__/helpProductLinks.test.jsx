@@ -40,6 +40,16 @@ describe('Help & Support product links', () => {
     expect(openInBrowser).toHaveBeenCalledWith('https://graphicmeat.com');
   });
 
+  // Google OAuth verification requires the privacy policy to be reachable
+  // from inside the app.
+  it('links the privacy policy', () => {
+    render(<HelpSettings onClose={() => {}} onReportBug={() => {}} />);
+    const button = screen.getByTestId('settings-link-privacy').querySelector('button');
+    expect(button.dataset.url).toBe('https://mailvaultapp.com/privacy.html');
+    fireEvent.click(button);
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/privacy.html');
+  });
+
   // The native Help menu cannot be driven from a webview test, so guard its
   // URLs at the source: mailvault.app is offline and must never come back.
   it('keeps the native Help menu on the same two live URLs', () => {

@@ -17,8 +17,9 @@ import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
 import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
-// ponytail: same three links as the native Help menu (src-tauri/src/main.rs).
-// Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
+// ponytail: the native Help menu's three links (src-tauri/src/main.rs), plus the
+// privacy policy. Kept here too because the menu bar is invisible on Windows/Linux
+// and unclickable in e2e.
 const LINKS = () => ([
   {
     testid: 'settings-link-website',
@@ -31,6 +32,14 @@ const LINKS = () => ([
     title: tr('settings.help.blog'),
     subtitle: tr('settings.help.blogSubtitle'),
     url: 'https://mailvaultapp.com/blog.html',
+  },
+  {
+    // Google's OAuth verification requires the privacy policy to be easy to
+    // find inside the app, not only on the website.
+    testid: 'settings-link-privacy',
+    title: tr('settings.help.privacyPolicy'),
+    subtitle: tr('settings.help.privacyPolicySubtitle'),
+    url: 'https://mailvaultapp.com/privacy.html',
   },
   {
     testid: 'settings-link-more-apps',

@@ -2256,6 +2256,8 @@
   "settings.dataUsage.unavailable": "사용량을 확인할 수 없습니다. 설정한 한도는 저장되어 있습니다.",
   "settings.help.blog": "블로그",
   "settings.help.blogSubtitle": "소식, 릴리스, 사용법 안내",
+  "settings.help.privacyPolicy": "개인정보 처리방침",
+  "settings.help.privacyPolicySubtitle": "MailVault의 데이터 처리 방식",
   "settings.help.docsFaqLatestRelease": "문서, FAQ, 최신 릴리스",
   "settings.help.faq": "자주 묻는 질문",
   "settings.help.faqSubtitle": "설정, 저장, 제공업체, 프리미엄에 대한 답변",

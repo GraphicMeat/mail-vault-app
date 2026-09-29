@@ -2256,6 +2256,8 @@
   "settings.dataUsage.unavailable": "El uso no está disponible. Tus límites siguen guardados.",
   "settings.help.blog": "Blog",
   "settings.help.blogSubtitle": "Noticias, versiones y guías",
+  "settings.help.privacyPolicy": "Política de privacidad",
+  "settings.help.privacyPolicySubtitle": "Cómo trata MailVault tus datos",
   "settings.help.docsFaqLatestRelease": "Documentación, preguntas frecuentes y la última versión",
   "settings.help.faq": "Preguntas frecuentes",
   "settings.help.faqSubtitle": "Respuestas sobre configuración, almacenamiento, proveedores y Premium",

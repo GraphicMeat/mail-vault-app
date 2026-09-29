@@ -2256,6 +2256,8 @@
   "settings.dataUsage.unavailable": "使用情况暂不可用。您的限额仍已保存。",
   "settings.help.blog": "博客",
   "settings.help.blogSubtitle": "新闻、版本发布与使用指南",
+  "settings.help.privacyPolicy": "隐私政策",
+  "settings.help.privacyPolicySubtitle": "MailVault 如何处理你的数据",
   "settings.help.docsFaqLatestRelease": "文档、常见问题与最新版本",
   "settings.help.faq": "常见问题",
   "settings.help.faqSubtitle": "关于设置、存储、服务商和高级版的解答",
