@@ -3,7 +3,7 @@
 //! Every fault here exists because a real provider did it to us in production.
 //! Add faults with the regression test that needs them, not speculatively.
 
-use crate::state::{Mailbox, ServerState};
+use crate::state::{GmailMsg, Mailbox, ServerState, GMAIL_ALL_MAIL, GMAIL_SPAM, GMAIL_TRASH};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -77,6 +77,18 @@ pub enum Action {
     /// Replace the tagged result: ("NO"|"BAD"|"BYE", text). Untagged data suppressed.
     Respond(String, String),
 
+    /// Answer the command with this tagged status ("NO" | "BAD") and text and
+    /// do NOT run it: nothing changes on the server. `Respond` runs the
+    /// command first and only rewrites the reply, which is the wrong model for
+    /// a provider that turns a command away (`NO [THROTTLED] ...`, Gmail's
+    /// `NO [ALERT] Account exceeded command or bandwidth limits`): a STORE
+    /// that "failed" must not have set the flag. Checked before dispatch.
+    RefuseWith(String, String),
+
+    /// Send an untagged `* BYE <text>` and close the socket, without running
+    /// the command. A server that hangs up on a client that went over a limit.
+    ByeAndClose(String),
+
     /// Close the socket without responding.
     DropConnection,
 
@@ -138,6 +150,36 @@ pub enum Action {
     /// covers `UID FETCH` too: the mock strips the `UID ` prefix, so both
     /// arrive as `FETCH`.
     PoisonFetchUid(u32),
+}
+
+impl Action {
+    /// `NO [THROTTLED] ...`: the command was turned away, retry later.
+    pub fn throttled() -> Action {
+        Action::RefuseWith("NO".into(), "[THROTTLED] Too many commands, slow down".into())
+    }
+
+    /// Gmail's daily/burst cap: `NO [ALERT] Account exceeded command or
+    /// bandwidth limits. (Failure)`. Neither "exceeded bandwidth" nor
+    /// "throttled" appears in it.
+    pub fn gmail_bandwidth_limit() -> Action {
+        Action::RefuseWith(
+            "NO".into(),
+            "[ALERT] Account exceeded command or bandwidth limits. (Failure)".into(),
+        )
+    }
+
+    /// The same cap with the RFC 5530 code a server may add: `[OVERQUOTA]`.
+    pub fn overquota() -> Action {
+        Action::RefuseWith(
+            "NO".into(),
+            "[OVERQUOTA] Account exceeded command or bandwidth limits. (Failure)".into(),
+        )
+    }
+
+    /// `NO [ALERT] Too many simultaneous connections.`
+    pub fn too_many_connections() -> Action {
+        Action::RefuseWith("NO".into(), "[ALERT] Too many simultaneous connections. (Failure)".into())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +268,39 @@ impl Scenario {
     pub fn inbox_namespace(mut self, delimiter: &str) -> Self {
         self.state.delimiter = delimiter.to_string();
         self.state.personal_namespace = Some(format!("INBOX{}", delimiter));
+        self
+    }
+
+    /// A Gmail account: `X-GM-EXT-1`, the label model (`ServerState::gmail`),
+    /// and INBOX plus the `[Gmail]` folders (`\All`, `\Trash`, `\Junk`).
+    /// Add mail with `gmail_message`.
+    pub fn gmail() -> Self {
+        let mut s = Scenario::new();
+        s.state.gmail = true;
+        s.state.capabilities.push("X-GM-EXT-1".to_string());
+        s.state.mailboxes = vec![
+            Mailbox::new("INBOX"),
+            Mailbox::new("[Gmail]").with_attrs(&["\\Noselect", "\\HasChildren"]),
+            Mailbox::new(GMAIL_ALL_MAIL).with_attrs(&["\\HasNoChildren", "\\All"]),
+            Mailbox::new(GMAIL_TRASH).with_attrs(&["\\HasNoChildren", "\\Trash"]),
+            Mailbox::new(GMAIL_SPAM).with_attrs(&["\\HasNoChildren", "\\Junk"]),
+        ];
+        s
+    }
+
+    /// Place a Gmail message: one copy per label folder plus one in All Mail,
+    /// sharing an X-GM-MSGID, each with its own uid. Missing label folders are
+    /// created.
+    pub fn gmail_message(mut self, msg: GmailMsg) -> Self {
+        self.state.add_gmail_message(msg);
+        self
+    }
+
+    /// Refuse what the server did not advertise instead of tolerating it (see
+    /// `ServerState::strict_caps`). Combine with `without_cap("MOVE")` /
+    /// `without_cap("UIDPLUS")` to drive a client's refusal paths.
+    pub fn strict_caps(mut self) -> Self {
+        self.state.strict_caps = true;
         self
     }
 

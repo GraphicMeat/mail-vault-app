@@ -23,7 +23,7 @@ mod smtp;
 pub mod state;
 
 pub use scenario::{Action, Fault, Scenario, SmtpScenario, Trigger};
-pub use state::{Mailbox, Message, ServerState};
+pub use state::{GmailMsg, Mailbox, Message, ServerState};
 
 use commands::{Command, Response, Session};
 use std::collections::HashMap;
@@ -291,6 +291,26 @@ fn handle_conn(
                     std::thread::sleep(*d);
                 }
             }
+        }
+
+        // A refused command never runs: the tagged NO/BAD goes out and the
+        // server state is exactly as it was. (`Respond` runs it first.)
+        if let Some(text) = actions.iter().find_map(|a| match a {
+            Action::ByeAndClose(t) => Some(t.clone()),
+            _ => None,
+        }) {
+            // Counted closed before the BYE goes out, as `close_after` is.
+            open.take();
+            write_line(&mut out, format!("* BYE {}", text).as_bytes())?;
+            return Ok(());
+        }
+        if let Some((status, text)) = actions.iter().find_map(|a| match a {
+            Action::RefuseWith(s, t) => Some((s.clone(), t.clone())),
+            _ => None,
+        }) {
+            write_line(&mut out, format!("{} {} {}", cmd.tag, status, text).as_bytes())?;
+            responses_sent += 1;
+            continue;
         }
 
         // IDLE parks this connection's thread instead of answering once, so it

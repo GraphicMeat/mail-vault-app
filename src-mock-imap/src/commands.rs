@@ -198,6 +198,12 @@ pub fn dispatch(
         "SEARCH" => do_search(cmd, state, sess, faults),
         "FETCH" => do_fetch(cmd, state, sess, faults),
         "STORE" => do_store(cmd, state, sess),
+        // A strict server answers what it did not advertise with BAD, the way
+        // one without the extension does; a lenient one (the default) runs it.
+        "MOVE" if state.strict_caps && !state.has_cap("MOVE") => Response::bad("Unknown command MOVE"),
+        "EXPUNGE" if state.strict_caps && cmd.is_uid && !state.has_cap("UIDPLUS") => {
+            Response::bad("Unknown command UID EXPUNGE (UIDPLUS not advertised)")
+        }
         "COPY" => do_copy(cmd, state, sess, false),
         "MOVE" => do_copy(cmd, state, sess, true),
         "EXPUNGE" => do_expunge(cmd, state, sess),
@@ -485,31 +491,64 @@ fn header_value(raw: &[u8], name: &str) -> Option<String> {
     parsed.headers.get_first_value(name)
 }
 
-fn matches_criteria(msg: &Message, criteria: &str) -> bool {
+/// What a search key may need to know beyond the one message it looks at.
+struct SearchCtx {
+    max_uid: u32,
+    count: u32,
+    /// A strict server refuses X-GM-* keys it did not advertise.
+    strict_no_gmail_ext: bool,
+}
+
+fn matches_criteria(msg: &Message, seq: u32, ctx: &SearchCtx, criteria: &str) -> Result<bool, String> {
     let rest = criteria.trim();
     if rest.is_empty() || rest.eq_ignore_ascii_case("ALL") {
-        return true;
+        return Ok(true);
     }
     let text = String::from_utf8_lossy(&msg.raw).to_lowercase();
 
-    // All criteria are ANDed, matching how the client builds them.
+    // All criteria are ANDed, matching how the client builds them. Every key is
+    // read even after one fails, so a malformed key is BAD whatever precedes it.
     let mut s = rest;
+    let mut all = true;
     while let Some(key) = next_arg(&mut s) {
-        if !matches_one(msg, &text, &key, &mut s) {
-            return false;
-        }
+        all &= matches_one(msg, seq, ctx, &text, &key, &mut s)?;
     }
-    true
+    Ok(all)
+}
+
+/// Is `value` in the sequence-set `set` (`1:5`, `3,7`, `2:*`)? `*` is `max`.
+/// A malformed set is an error, not "no match".
+fn set_contains(set: &str, value: u32, max: u32) -> Result<bool, String> {
+    let num = |t: &str| -> Result<u32, String> {
+        if t == "*" {
+            Ok(max)
+        } else {
+            t.parse::<u32>().map_err(|_| format!("Invalid sequence set {}", set))
+        }
+    };
+    let mut hit = false;
+    for part in set.split(',') {
+        let (lo, hi) = match part.split_once(':') {
+            Some((a, b)) => (num(a)?, num(b)?),
+            None => {
+                let n = num(part)?;
+                (n, n)
+            }
+        };
+        let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+        hit |= value >= lo && value <= hi;
+    }
+    Ok(hit)
 }
 
 /// One search key and the arguments it takes off the front of `s`.
-fn matches_one(msg: &Message, text: &str, key: &str, s: &mut &str) -> bool {
-    match key.to_uppercase().as_str() {
+fn matches_one(msg: &Message, seq: u32, ctx: &SearchCtx, text: &str, key: &str, s: &mut &str) -> Result<bool, String> {
+    Ok(match key.to_uppercase().as_str() {
         "ALL" => true,
         // `NOT <key>` negates the one key after it (RFC 3501 §6.4.4).
         "NOT" => {
-            let Some(inner) = next_arg(s) else { return false };
-            !matches_one(msg, text, &inner, s)
+            let Some(inner) = next_arg(s) else { return Err("NOT needs a search key".into()) };
+            !matches_one(msg, seq, ctx, text, &inner, s)?
         }
         // Clients prepend `CHARSET <name>` for non-ASCII values; matching is
         // byte-oriented here, so consume and ignore it rather than silently
@@ -520,6 +559,21 @@ fn matches_one(msg: &Message, text: &str, key: &str, s: &mut &str) -> bool {
         }
         "UNSEEN" => !msg.has_flag("\\Seen"),
         "SEEN" => msg.has_flag("\\Seen"),
+        // `UID <set>`: the message's uid is in the set (RFC 3501 §6.4.4).
+        "UID" => {
+            let set = next_arg(s).unwrap_or_default();
+            set_contains(&set, msg.uid, ctx.max_uid)?
+        }
+        // Gmail's X-GM-MSGID search key: every copy of one message.
+        "X-GM-MSGID" => {
+            if ctx.strict_no_gmail_ext {
+                return Err("X-GM-MSGID needs X-GM-EXT-1".into());
+            }
+            let n: u64 = next_arg(s)
+                .and_then(|v| v.parse().ok())
+                .ok_or_else(|| "X-GM-MSGID needs a number".to_string())?;
+            msg.gm_msgid == Some(n)
+        }
         "HEADER" => {
             let name = next_arg(s).unwrap_or_default();
             let want = next_arg(s).unwrap_or_default();
@@ -539,26 +593,30 @@ fn matches_one(msg: &Message, text: &str, key: &str, s: &mut &str) -> bool {
         }
         "SINCE" | "BEFORE" => {
             let when = next_arg(s).unwrap_or_default();
-            match (
-                chrono::NaiveDate::parse_from_str(&when, "%d-%b-%Y"),
-                chrono::NaiveDate::parse_from_str(
-                    msg.internal_date.split(' ').next().unwrap_or(""),
-                    "%d-%b-%Y",
-                ),
+            // A date the server cannot read is BAD, not "matches everything".
+            let bound = chrono::NaiveDate::parse_from_str(&when, "%d-%b-%Y")
+                .map_err(|_| format!("Invalid {} date {}", key.to_uppercase(), when))?;
+            match chrono::NaiveDate::parse_from_str(
+                msg.internal_date.split(' ').next().unwrap_or(""),
+                "%d-%b-%Y",
             ) {
-                (Ok(bound), Ok(actual)) => {
+                Ok(actual) => {
                     if key.eq_ignore_ascii_case("SINCE") {
                         actual >= bound
                     } else {
                         actual < bound
                     }
                 }
-                _ => true,
+                Err(_) => true,
             }
+        }
+        // A bare sequence set (`1:5`, `2,4`, `3:*`) matches by sequence number.
+        k if !k.is_empty() && k.chars().all(|c| c.is_ascii_digit() || matches!(c, ',' | ':' | '*')) => {
+            set_contains(k, seq, ctx.count)?
         }
         // Unknown key: do not silently pass — a test relying on it should fail loudly.
         _ => false,
-    }
+    })
 }
 
 fn do_search(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Action]) -> Response {
@@ -566,12 +624,26 @@ fn do_search(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Actio
         return Response::bad("No mailbox selected");
     };
 
-    let mut hits: Vec<u32> = mb
-        .messages
-        .iter()
-        .filter(|m| matches_criteria(m, &cmd.args))
-        .map(|m| if cmd.is_uid { m.uid } else { mb.seq_of(m.uid).unwrap_or(0) })
-        .collect();
+    let ctx = SearchCtx {
+        max_uid: mb.messages.iter().map(|m| m.uid).max().unwrap_or(0),
+        count: mb.messages.len() as u32,
+        strict_no_gmail_ext: state.strict_caps && !state.has_cap("X-GM-EXT-1"),
+    };
+    // Read the criteria once against a blank message: a malformed key is BAD
+    // even when the mailbox is empty and no real message would ever reach it.
+    if let Err(e) = matches_criteria(&Message::default(), 0, &ctx, &cmd.args) {
+        return Response::bad(&e);
+    }
+
+    let mut hits: Vec<u32> = Vec::new();
+    for (i, m) in mb.messages.iter().enumerate() {
+        let seq = i as u32 + 1;
+        match matches_criteria(m, seq, &ctx, &cmd.args) {
+            Ok(true) => hits.push(if cmd.is_uid { m.uid } else { seq }),
+            Ok(false) => {}
+            Err(e) => return Response::bad(&e),
+        }
+    }
     if let Some(Action::PartialSearchResult(frac)) = faults
         .iter()
         .find(|f| matches!(f, Action::PartialSearchResult(_)))
@@ -601,7 +673,17 @@ fn do_fetch(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Action
 
     // Split off a trailing modifier group, e.g. "(UID FLAGS) (CHANGEDSINCE 42)".
     let (spec, changed_since) = split_changedsince(&spec_and_mods);
-    let mut items = encode::parse_fetch_spec(&spec);
+    let (mut items, unknown) = encode::parse_fetch_spec_checked(&spec);
+    if state.strict_caps {
+        if let Some(bad) = unknown.first() {
+            return Response::bad(&format!("Invalid fetch attribute {}", bad));
+        }
+        let gm = items.iter().any(|i| matches!(i, FetchItem::GmMsgId | FetchItem::GmLabels));
+        if gm && !state.has_cap("X-GM-EXT-1") {
+            return Response::bad("Invalid fetch attribute X-GM-* (X-GM-EXT-1 not advertised)");
+        }
+    }
+    let want_labels = items.contains(&FetchItem::GmLabels);
     if changed_since.is_some() && !items.contains(&FetchItem::ModSeq) {
         items.push(FetchItem::ModSeq);
     }
@@ -642,7 +724,11 @@ fn do_fetch(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Action
         }
 
         let seq = mb.seq_of(msg.uid).unwrap_or(0);
-        let data = encode::render_items(msg, &items, cmd.is_uid);
+        let labels = match (want_labels, msg.gm_msgid) {
+            (true, Some(g)) => state.gmail_labels(g),
+            _ => Vec::new(),
+        };
+        let data = encode::render_items_with_labels(msg, &items, cmd.is_uid, &labels);
         let mut line = format!("* {} FETCH (", seq).into_bytes();
         line.extend_from_slice(&data);
         line.push(b')');
@@ -810,11 +896,31 @@ fn do_copy(cmd: &Command, state: &mut ServerState, sess: &Session, is_move: bool
         .collect();
     let src_validity = src.uid_validity;
     let src_name = src.name.clone();
+    let src_is_all_mail = src.is_all_mail();
+
+    // Gmail's label model: filing a message under Trash takes it out of every
+    // other folder it was in (All Mail included), so the one copy left is the
+    // Trash one. Any other destination just adds a label.
+    let dest_is_trash = state.find(&dest_name).is_some_and(|d| d.is_trash());
+    let gmail_trash = state.gmail && dest_is_trash;
+    // Moving out of All Mail into a label folder adds the label; All Mail
+    // keeps the message (a Gmail message cannot leave All Mail except for
+    // Trash and Spam).
+    let keep_source = state.gmail && src_is_all_mail && !dest_is_trash;
+    let bump = state.has_cap("QRESYNC");
 
     let dest = state.find_mut(&dest_name).unwrap();
     let dest_validity = dest.uid_validity;
     let mut new_uids = Vec::new();
-    for mut m in moved {
+    for mut m in moved.clone() {
+        // Trash holds one copy per X-GM-MSGID: a second COPY of a message
+        // already there points at the copy that is.
+        if gmail_trash {
+            if let Some(there) = m.gm_msgid.and_then(|g| dest.messages.iter().find(|x| x.gm_msgid == Some(g))) {
+                new_uids.push(there.uid);
+                continue;
+            }
+        }
         m.uid = dest.uid_next;
         new_uids.push(dest.uid_next);
         dest.add(m);
@@ -841,13 +947,30 @@ fn do_copy(cmd: &Command, state: &mut ServerState, sess: &Session, is_move: bool
         (None, m) => Response::ok(if m { "MOVE completed" } else { "COPY completed" }),
     };
 
-    if is_move {
-        let bump = state.has_cap("QRESYNC");
-        let src = state.find_mut(&src_name).unwrap();
+    // What the selected mailbox reports is read before anything leaves it.
+    if is_move && !keep_source {
+        let src = state.find(&src_name).unwrap();
         for line in removal_lines(sess, src, &targets) {
             r = r.line(line);
         }
-        src.expunge(&targets, bump);
+    }
+    if gmail_trash {
+        let ids: Vec<u64> = moved.iter().filter_map(|m| m.gm_msgid).collect();
+        for mb in state.mailboxes.iter_mut() {
+            if mb.is_trash() || mb.is_spam() {
+                continue;
+            }
+            let gone: Vec<u32> = mb
+                .messages
+                .iter()
+                .filter(|m| m.gm_msgid.is_some_and(|g| ids.contains(&g)))
+                .map(|m| m.uid)
+                .collect();
+            mb.expunge(&gone, bump);
+        }
+    }
+    if is_move && !keep_source {
+        state.find_mut(&src_name).unwrap().expunge(&targets, bump);
     }
     let _ = src_validity;
     r

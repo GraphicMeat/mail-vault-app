@@ -303,6 +303,10 @@ pub enum FetchItem {
     Rfc822Size,
     BodyStructure,
     ModSeq,
+    /// Gmail's X-GM-MSGID. Only rendered for a message that has one.
+    GmMsgId,
+    /// Gmail's X-GM-LABELS. Rendered from the labels the caller passes in.
+    GmLabels,
     /// BODY[] / BODY.PEEK[] — whole message
     BodyFull { peek: bool },
     /// BODY[HEADER.FIELDS (...)]
@@ -314,9 +318,16 @@ pub enum FetchItem {
 /// A trailing modifier group like `(CHANGEDSINCE 5)` is not an item group and
 /// is handled by the caller before this is called.
 pub fn parse_fetch_spec(spec: &str) -> Vec<FetchItem> {
+    parse_fetch_spec_checked(spec).0
+}
+
+/// `parse_fetch_spec` plus the tokens it did not recognise, so a strict server
+/// can answer BAD instead of quietly dropping them.
+pub fn parse_fetch_spec_checked(spec: &str) -> (Vec<FetchItem>, Vec<String>) {
     let s = spec.trim().trim_start_matches('(').trim_end_matches(')');
     let bytes: Vec<char> = s.chars().collect();
     let mut items = Vec::new();
+    let mut unknown = Vec::new();
     let mut i = 0;
 
     while i < bytes.len() {
@@ -337,11 +348,12 @@ pub fn parse_fetch_spec(spec: &str) -> Vec<FetchItem> {
             i += 1;
         }
         let token: String = bytes[start..i].iter().collect();
-        if let Some(item) = parse_fetch_item(&token) {
-            items.push(item);
+        match parse_fetch_item(&token) {
+            Some(item) => items.push(item),
+            None => unknown.push(token),
         }
     }
-    items
+    (items, unknown)
 }
 
 fn parse_fetch_item(token: &str) -> Option<FetchItem> {
@@ -354,6 +366,8 @@ fn parse_fetch_item(token: &str) -> Option<FetchItem> {
         "RFC822.SIZE" => return Some(FetchItem::Rfc822Size),
         "BODYSTRUCTURE" | "BODY" => return Some(FetchItem::BodyStructure),
         "MODSEQ" => return Some(FetchItem::ModSeq),
+        "X-GM-MSGID" => return Some(FetchItem::GmMsgId),
+        "X-GM-LABELS" => return Some(FetchItem::GmLabels),
         _ => {}
     }
 
@@ -385,6 +399,22 @@ fn parse_fetch_item(token: &str) -> Option<FetchItem> {
 /// Render the data list for one message: `UID 3 FLAGS (\Seen) ...`
 /// Returns bytes because BODY[...] items are IMAP literals containing raw email.
 pub fn render_items(msg: &Message, items: &[FetchItem], force_uid: bool) -> Vec<u8> {
+    render_items_with_labels(msg, items, force_uid, &[])
+}
+
+/// One X-GM-LABELS entry: a system label (`\Inbox`) is a bare flag-style atom,
+/// anything else a quoted string, as Gmail sends them.
+fn gm_label(label: &str) -> String {
+    if label.starts_with('\\') {
+        label.to_string()
+    } else {
+        quoted(label)
+    }
+}
+
+/// `render_items` for a server that knows the message's labels (the folders,
+/// All Mail aside, that hold a copy of its X-GM-MSGID).
+pub fn render_items_with_labels(msg: &Message, items: &[FetchItem], force_uid: bool, labels: &[String]) -> Vec<u8> {
     let parsed = mailparse::parse_mail(&msg.raw).ok();
     let mut out: Vec<u8> = Vec::new();
     let mut wrote_uid = false;
@@ -413,6 +443,17 @@ pub fn render_items(msg: &Message, items: &[FetchItem], force_uid: bool) -> Vec<
             }
             FetchItem::ModSeq => {
                 push(&mut out, &format!("MODSEQ ({})", msg.modseq));
+            }
+            FetchItem::GmMsgId => {
+                if let Some(id) = msg.gm_msgid {
+                    push(&mut out, &format!("X-GM-MSGID {}", id));
+                }
+            }
+            FetchItem::GmLabels => {
+                if msg.gm_msgid.is_some() {
+                    let list: Vec<String> = labels.iter().map(|l| gm_label(l)).collect();
+                    push(&mut out, &format!("X-GM-LABELS ({})", list.join(" ")));
+                }
             }
             FetchItem::Envelope => {
                 let v = parsed.as_ref().map(envelope).unwrap_or_else(|| b"NIL".to_vec());
