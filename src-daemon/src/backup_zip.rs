@@ -596,6 +596,31 @@ mod tests {
         assert_eq!(result.email_count, 1, "only the archived file should be exported");
     }
 
+    /// A vault-only folder (an MBOX import kept on this computer) is a Maildir
+    /// folder like any other to the export: its mail goes into the ZIP under
+    /// its directory. Its marker is not mail and does not.
+    #[test]
+    fn export_includes_a_local_folders_mail() {
+        let (v, s) = state(true);
+        seed_file(v.path(), "acct1", "INBOX", 1, &["A"], b"server mail");
+        seed_file(v.path(), "acct1", "MBOX import 2026-09-29", 3_221_225_472, &["A"], b"imported mail");
+        let folder = mailvault_core::vault_files::cur_path(v.path(), "acct1", "MBOX import 2026-09-29").parent().unwrap().to_path_buf();
+        let marker = mailvault_core::local_folder::Marker { kind: "import".into(), name: "MBOX import 2026-09-29".into(), created: 1, source: "t.mbox".into() };
+        mailvault_core::local_folder::write_marker(&folder, &marker).unwrap();
+        let entries = vec![AccountsJsonEntry { id: "acct1".into(), email: Some("a@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let dest = tempfile::tempdir().unwrap().keep().join("out.zip");
+
+        let result = export(&s, dest.clone(), &entries, vec![], None, false, |_, _| {}).unwrap();
+
+        assert_eq!(result.email_count, 2);
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(&dest).unwrap()).unwrap();
+        let file = mailvault_core::vault_files::build_maildir_filename(3_221_225_472, &["A".to_string()]);
+        let mut body = String::new();
+        archive.by_name(&format!("mailvault-backup/emails/a@test.com/MBOX_import_2026-09-29/{file}")).unwrap().read_to_string(&mut body).unwrap();
+        assert_eq!(body, "imported mail");
+        assert!(!(0..archive.len()).any(|i| archive.by_index(i).unwrap().name().contains(mailvault_core::local_folder::MARKER_FILE)));
+    }
+
     /// Task 1b: a `;2,`-spelled (Windows) vault file must be recognized both
     /// as a vault message at all (`has_info`, was a bare `contains(":2,")`)
     /// and for its flags (`info_flags`, was `split(":2,").nth(1)`). Two

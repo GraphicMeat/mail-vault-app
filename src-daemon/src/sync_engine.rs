@@ -2144,6 +2144,34 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// A sync works on the server's folders only: a vault-only folder beside
+    /// them (an MBOX import kept on this computer, which no server lists) is
+    /// left with its marker and its mail.
+    #[tokio::test]
+    async fn a_sync_leaves_a_local_folder_beside_the_server_folders_alone() {
+        use mailvault_core::local_folder;
+        use mailvault_core::maildir::{IMPORT_UID_BASE, INFO_PREFIX};
+        let dir = scratch_dir("local_folder");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let engine = engine_for(&dir);
+        let account_dir = mailvault_core::vault_files::account_dir(&dir.join("Maildir"), "acc1");
+        let (_, folder) = local_folder::create_import_folder(&account_dir, "2026-09-29", "takeout.mbox", 1).unwrap();
+        let cur = account_dir.join(&folder).join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        let mail = cur.join(format!("{IMPORT_UID_BASE}{INFO_PREFIX}A.eml"));
+        fs::write(&mail, b"imported").unwrap();
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(cached_count(&engine, "INBOX"), 2, "the sync ran");
+        assert_eq!(fs::read(&mail).unwrap(), b"imported");
+        assert_eq!(fs::read_dir(&cur).unwrap().count(), 1);
+        assert!(local_folder::read_marker(&account_dir, &folder).unwrap().is_some());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// A sync that reaches the server is proof of connectivity — the gate must
     /// take it, so a user who reconnects does not wait out the backoff.
     #[tokio::test]

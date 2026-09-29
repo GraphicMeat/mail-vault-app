@@ -273,6 +273,36 @@ mod tests {
         assert_eq!(list(&t.path().join("no-such-account")).unwrap(), vec![], "no account dir: none");
     }
 
+    /// Nothing prunes a folder no server lists. The search index's vault walk
+    /// lists it like any other (its folder prune drops only what the walk
+    /// does not list), and Clear cached emails keeps its mail, which the
+    /// import writes with `A`, and its marker. The INBOX cache copy is the
+    /// control: the clear did run.
+    #[test]
+    fn the_index_walk_lists_a_local_folder_and_clearing_the_cache_keeps_it() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        let acct = root.join("Maildir/acct");
+        let dir = marked(&acct, "MBOX import 2026-09-29", 1);
+        let mail = acct.join(&dir).join("cur").join(format!("3221225472{INFO_PREFIX}A.eml"));
+        fs::write(&mail, b"imported").unwrap();
+        fs::create_dir_all(acct.join("INBOX/cur")).unwrap();
+        let cached = acct.join("INBOX/cur").join(format!("1{INFO_PREFIX}S.eml"));
+        fs::write(&cached, b"a cache copy").unwrap();
+
+        let dirs = crate::search_index::reconcile::list_vault_dirs(&root.join("Maildir")).unwrap();
+        assert!(dirs.contains(&("acct".to_string(), dir.clone())), "{dirs:?}");
+
+        let app = tempfile::tempdir().unwrap();
+        let registry = crate::vault_registry::VaultRegistry::open(app.path(), root);
+        let gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let cleared = crate::vault_files::clear_cache(&registry, root, &gate).unwrap();
+        assert_eq!(cleared.deleted_count, 1);
+        assert!(!cached.exists(), "the control: a cache copy goes");
+        assert_eq!(fs::read(&mail).unwrap(), b"imported");
+        assert_eq!(read_marker(&acct, &dir).unwrap().map(|m| m.name).as_deref(), Some("MBOX import 2026-09-29"));
+    }
+
     /// Mail anywhere in the folder keeps it, `orphaned/` included; with none
     /// left it goes whole, the marker last. A symlink inside is removed as a
     /// link, never followed.

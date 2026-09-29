@@ -1423,7 +1423,18 @@ pub(crate) fn sweep(
             return SweepOutcome { parsed, completed, success: false, error: None };
         }
         let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); yield_to_foreground(st); };
+        // A vault-only folder (an MBOX import kept on this computer, told by
+        // its marker) is listed by no server, now or later: its files are the
+        // whole truth, so a gone file's row goes, and no header cache, not
+        // even one left under its name, speaks for it.
+        let local = matches!(
+            mailvault_core::local_folder::read_marker(&mailvault_core::vault_files::account_dir(maildir, &account), &dir),
+            Ok(Some(_))
+        );
         let listing = |uids: &[u32]| {
+            if local {
+                return Ok(Default::default());
+            }
             server_listing(st, &account, &dir, uids).inspect_err(|e| {
                 // A folder the header cache has no row for stays so until it is
                 // synced: every pass would say so.
@@ -1444,7 +1455,7 @@ pub(crate) fn sweep(
                 }
                 // A folder filled once is not read again while another one's
                 // partial cache keeps the mark set.
-                if listed_rows_pending && !lock(&st.db).as_ref().is_some_and(|c| db::listed_rows_filled(c, &account, &dir)) {
+                if listed_rows_pending && !local && !lock(&st.db).as_ref().is_some_and(|c| db::listed_rows_filled(c, &account, &dir)) {
                     match add_listed_rows(st, maildir, &account, &dir, &keep_going) {
                         Ok(added) => {
                             if added > 0 {
@@ -2046,6 +2057,76 @@ mod tests {
         sweep_now(&st, root, None);
         assert_eq!(indexed_uids(&st, "acct"), vec![1, 1, 2, 3]);
         assert_eq!(pending().as_deref(), Some("0"), "every folder filled; the never-synced one had nothing to add");
+    }
+
+    /// A folder as an MBOX import "as a separate folder" leaves it: its
+    /// marker names it, and no server lists it.
+    fn mark_local(root: &std::path::Path, account: &str, name: &str) {
+        let folder = root.join("Maildir").join(account).join(mailvault_core::search_index::text::vault_dir_name(name));
+        let marker = mailvault_core::local_folder::Marker { kind: "import".into(), name: name.into(), created: 1, source: "t.mbox".into() };
+        mailvault_core::local_folder::write_marker(&folder, &marker).unwrap();
+    }
+
+    fn uids_in(st: &crate::search_index::SearchIndexState, dir: &str) -> Vec<u32> {
+        let g = mailvault_core::search_index::lock(&st.db);
+        let mut stmt = g.as_ref().unwrap().prepare("SELECT uid FROM messages WHERE vault_dir = ?1 ORDER BY uid").unwrap();
+        stmt.query_map([dir], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+    }
+
+    /// A vault-only folder has no server listing and never will: its files
+    /// are the whole truth. A message deleted inside it leaves search on the
+    /// next pass, the nudge's scoped one or a full one, and the rest stay. An
+    /// unmarked folder with no header rows is the control: without a listing
+    /// its gone row is kept, as before.
+    #[test]
+    fn a_message_deleted_inside_a_local_folder_leaves_search() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "MBOX_import_2026-09-29", 3);
+        mark_local(root, "acct", "MBOX import 2026-09-29");
+        seed(root, "acct", "Never_synced", 2);
+        let (st, _custody) = with_custody(root);
+        let folder = || Some(vec![("acct".to_string(), "MBOX_import_2026-09-29".to_string())]);
+        sweep_now(&st, root, None);
+        assert_eq!(uids_in(&st, "MBOX_import_2026-09-29"), vec![1, 2, 3]);
+
+        let cur = root.join("Maildir/acct/MBOX_import_2026-09-29/cur");
+        std::fs::remove_file(cur.join(format!("2{INFO_PREFIX}S.eml"))).unwrap();
+        sweep_now(&st, root, folder());
+        assert_eq!(uids_in(&st, "MBOX_import_2026-09-29"), vec![1, 3], "the scoped pass drops it");
+
+        std::fs::remove_file(cur.join(format!("1{INFO_PREFIX}S.eml"))).unwrap();
+        std::fs::remove_file(root.join(format!("Maildir/acct/Never_synced/cur/1{INFO_PREFIX}S.eml"))).unwrap();
+        sweep_now(&st, root, None);
+        assert_eq!(uids_in(&st, "MBOX_import_2026-09-29"), vec![3], "and a full pass");
+        assert_eq!(uids_in(&st, "Never_synced"), vec![1, 2], "the control: no marker, no listing, kept");
+    }
+
+    /// A fresh index's header-only rows come from the header cache, which
+    /// never speaks for a local folder, so the fill leaves such a folder out
+    /// and the mark clears with one present. Twice: a plain local folder, and
+    /// one with a header cache left under its name (1 of 3 rows, a partial
+    /// cache that would otherwise hold the mark for good).
+    #[test]
+    fn the_fresh_index_mark_clears_with_a_local_folder_present() {
+        use mailvault_core::search_index::{db, lock};
+        for leftover in [false, true] {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path();
+            seed(root, "acct", "MBOX_import_2026-09-29", 2);
+            mark_local(root, "acct", "MBOX import 2026-09-29");
+            let (st, custody) = with_custody(root);
+            if leftover {
+                save_listing(&custody, "acct", "MBOX import 2026-09-29", serde_json::json!({"syncTotalEmails": 3, "emails": header_rows(&[9])}));
+            }
+            let pending = || db::meta_get(lock(&st.db).as_ref().unwrap(), db::LISTED_ROWS_PENDING);
+            assert_eq!(pending().as_deref(), Some("1"), "a fresh index");
+
+            sweep_now(&st, root, None);
+
+            assert_eq!(pending().as_deref(), Some("0"), "cleared (leftover cache: {leftover})");
+            assert_eq!(uids_in(&st, "MBOX_import_2026-09-29"), vec![1, 2], "its files, no header-only rows");
+        }
     }
 
     /// H3b round 2 (N2): while one folder's cache stays partial the fresh-index

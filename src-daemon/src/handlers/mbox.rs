@@ -501,6 +501,28 @@ mod tests {
         assert_eq!(files_in(v.path(), &fdir), files_in(v.path(), &format!("{fdir}_2")), "the same uids and bytes, each folder its own");
     }
 
+    /// Every read of a folder runs the generation repair and the old-import
+    /// pass first (`registry_read`). Both go by the server's listing, which a
+    /// local folder never has, so both leave it as the import made it.
+    #[tokio::test]
+    async fn reading_a_local_folder_leaves_it_as_the_import_made_it() {
+        let (v, _a, s) = st(true);
+        let dir = tempfile::tempdir().unwrap();
+        import_as_folder(&s, &takeout(dir.path(), &["", ""])).await;
+        let (name, fdir) = today_folder();
+        let made = files_in(v.path(), &fdir);
+        assert_eq!(made.len(), 2);
+
+        let sets = handle_request_for_test(&s, "vault_uid_sets", json!({"accountId": "acct1", "mailbox": name})).await;
+        assert_eq!(sets.result.expect("an answer")["archived"].as_array().map(Vec::len), Some(2));
+        let repaired = crate::handlers::custody::repair_generation_for(&s, "acct1", &name).unwrap();
+        assert!(repaired.rebound.is_empty() && repaired.orphaned.is_empty());
+        assert!(crate::handlers::custody::rehome_imports_for(&s, "acct1", &name).unwrap().is_none());
+
+        assert_eq!(files_in(v.path(), &fdir), made);
+        assert!(local_folder::read_marker(&account_dir(v.path()), &fdir).unwrap().is_some());
+    }
+
     /// A directory already at the sanitized name, here a server folder that
     /// happens to be called "MBOX import <today>", is never reused.
     #[tokio::test]

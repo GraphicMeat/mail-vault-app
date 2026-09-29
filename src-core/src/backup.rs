@@ -251,6 +251,7 @@ pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
         // back the very files the queue is about to delete.
         drain_purge_queue(&ctx.app_dir, Path::new(root));
     }
+    mirror_local_folders_blocking(&ctx).await;
 
     // Every IMAP connection this run opens shows as "backup" on Network
     // Activity (the folder workers below are spawned: scoped again there).
@@ -494,6 +495,7 @@ pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, St
         // work touches the files the queue is about to delete.
         drain_purge_queue(&ctx.app_dir, Path::new(root));
     }
+    mirror_local_folders_blocking(&ctx).await;
 
     run_graph_backup_inner(ctx, start).await
 }
@@ -1464,9 +1466,8 @@ pub fn scan_uids(mirror_root: Option<&Path>, email: &str, mailbox: &str) -> Opti
 /// Returns total files synced, and whether any copy INTO the vault was
 /// attempted (the caller's vault registry then lists the folder again).
 fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
-    use crate::maildir::{mirror_file_map, mirror_filename_uid, uid_file_map};
+    use crate::maildir::{mirror_filename_uid, uid_file_map};
     use std::fs;
-    let mut synced = 0;
     let mut vault_touched = false;
 
     // Ensure both dirs exist; if backup dir can't be created (disconnected drive), skip
@@ -1475,33 +1476,7 @@ fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
         return (0, false); // Backup location not available — skip sync, backup to the vault only
     }
 
-    // One listing per side instead of rescanning the other side per file,
-    // which on the external drive was n²/2 directory entries every backup. A
-    // copy counts in the set, as the rescan used to find the file it had just
-    // written. Each side keeps its own uid rule.
-    // ponytail: a writer landing the same uid mid-sync can leave it twice under
-    // two flag names; the rescan had that race too, only narrower.
-    let mut in_backup: HashSet<u32> = mirror_file_map(backup_dir).into_keys().collect();
-
-    // Vault → Backup: copy vault files that don't exist in backup, keeping the
-    // Maildir name so the flag suffix travels with the message.
-    if let Ok(entries) = fs::read_dir(vault_cur_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(uid) = mirror_filename_uid(&name) else { continue };
-            if in_backup.contains(&uid) {
-                continue;
-            }
-            let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
-            if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() {
-                synced += 1;
-                in_backup.insert(uid);
-            }
-        }
-    }
+    let mut synced = copy_to_backup(vault_cur_dir, backup_dir, &mut |_| true);
 
     // Backup → Vault: copy backup .eml files that don't exist in the vault,
     // restoring flags from the backup filename (legacy `<uid>.eml` has none).
@@ -1546,6 +1521,138 @@ fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
     }
 
     (synced, vault_touched)
+}
+
+/// Vault → backup, the first half of `sync_locations`: copies every vault file
+/// whose uid the backup does not hold, keeping the Maildir name so the flag
+/// suffix travels with the message. `keep_going` is asked before each copy,
+/// with the count so far. Returns how many files were copied.
+fn copy_to_backup(vault_cur_dir: &Path, backup_dir: &Path, keep_going: &mut dyn FnMut(usize) -> bool) -> usize {
+    use crate::maildir::{mirror_file_map, mirror_filename_uid};
+    use std::fs;
+    let mut copied = 0;
+
+    // One listing per side instead of rescanning the other side per file,
+    // which on the external drive was n²/2 directory entries every backup. A
+    // copy counts in the set, as the rescan used to find the file it had just
+    // written. Each side keeps its own uid rule.
+    // ponytail: a writer landing the same uid mid-sync can leave it twice under
+    // two flag names; the rescan had that race too, only narrower.
+    let mut in_backup: HashSet<u32> = mirror_file_map(backup_dir).into_keys().collect();
+
+    if let Ok(entries) = fs::read_dir(vault_cur_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let Some(uid) = mirror_filename_uid(&name) else { continue };
+            if in_backup.contains(&uid) {
+                continue;
+            }
+            if !keep_going(copied) {
+                break;
+            }
+            let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
+            if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() {
+                copied += 1;
+                in_backup.insert(uid);
+            }
+        }
+    }
+    copied
+}
+
+/// The mirror folder of a vault-only folder (`local_folder`): its directory
+/// plus the marker's creation stamp. A folder deleted and then imported again
+/// the same day gets the same name and restarts at the same uids, so a mirror
+/// keyed by the name alone would hold the deleted folder's message under each
+/// reused uid, and the new one would never be copied.
+fn local_mirror_name(dir: &str, marker: &crate::local_folder::Marker) -> String {
+    format!("{dir} ({})", marker.created)
+}
+
+/// The account's vault-only folders, mirrored into the backup location. One
+/// way only, vault to backup: every delete in such a folder is a local one
+/// with no server copy and no mirror purge, and the restore half of
+/// `sync_locations` would bring each deleted message back on the next run.
+/// The vault is only read, so this takes no gate and no registry lock. A
+/// folder with no `cur/` holds no mail and is skipped; a backup folder that
+/// cannot be made (the drive is gone) is skipped, as the pre-sync does.
+///
+/// Runs before the server folders, so a server that cannot be listed (or a
+/// Graph token that is missing) does not keep the only copy of this mail off
+/// the backup drive. It reports one progress frame per folder, named by its
+/// display name, and again every `PROGRESS_EVERY` copies so the app's stall
+/// watchdog sees a long first copy working. Local folders are not in
+/// `total_folders`/`completed_folders`: those are the server-folder resume
+/// checkpoint the app feeds back as `skip_folders`.
+fn mirror_local_folders(ctx: &BackupRunContext) {
+    const PROGRESS_EVERY: usize = 500;
+    let Some(mirror_root) = ctx.mirror_root.as_deref() else { return };
+    // The account dir an import writes: keyed by the sanitized id.
+    let account_dir = crate::vault_files::account_dir(
+        &ctx.archive_ctx.root.join("Maildir"),
+        &crate::search_index::text::vault_dir_name(&ctx.account_id),
+    );
+    let folders = match crate::local_folder::list(&account_dir) {
+        Ok(folders) => folders,
+        Err(e) => {
+            warn!("backup: local folders of {} not listed: {}", ctx.account_id, e);
+            return;
+        }
+    };
+    let cancelled = || ctx.cancel.load(Ordering::Relaxed);
+    for (dir, marker) in folders {
+        if cancelled() {
+            return;
+        }
+        let cur = account_dir.join(&dir).join("cur");
+        if !cur.is_dir() {
+            continue;
+        }
+        let frame = || BackupProgress {
+            account_id: ctx.account_id.clone(),
+            folder: marker.name.clone(),
+            total_folders: 0,
+            completed_folders: ctx.skip_folders,
+            total_emails: 0,
+            completed_emails: 0,
+            errors: 0,
+            active: true,
+            last_error: None,
+            missing_in_folder: 0,
+            cancelled: false,
+            success: true,
+            external_copy_ok: true,
+            external_copy_error: None,
+            external_copy_failed_count: 0,
+        };
+        (ctx.on_progress)(frame());
+        let backup_dir = Path::new(mirror_root).join(&ctx.account.email).join(local_mirror_name(&dir, &marker)).join("cur");
+        if let Err(e) = std::fs::create_dir_all(&backup_dir) {
+            warn!("backup: local folder {} not mirrored, {:?} cannot be made: {}", dir, backup_dir, e);
+            continue;
+        }
+        let copied = copy_to_backup(&cur, &backup_dir, &mut |done| {
+            if done > 0 && done % PROGRESS_EVERY == 0 {
+                (ctx.on_progress)(frame());
+            }
+            !cancelled()
+        });
+        if copied > 0 {
+            info!("backup: mirrored {} files of local folder {} to {:?}", copied, dir, backup_dir);
+        }
+    }
+}
+
+/// `mirror_local_folders` off the runtime workers: directory listings and file
+/// copies on whatever drive the vault and the backup are on.
+async fn mirror_local_folders_blocking(ctx: &BackupRunContext) {
+    let ctx = ctx.clone();
+    if let Err(e) = tokio::task::spawn_blocking(move || mirror_local_folders(&ctx)).await {
+        warn!("backup: the local folder pass panicked: {}", e);
+    }
 }
 
 /// Message-IDs the generation repair moved out of the uid namespace.
