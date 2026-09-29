@@ -297,6 +297,64 @@ describe('demo mailbox backend', () => {
     });
   });
 
+  // Settings > Backup's "not yet in your vault": the demo counts and saves
+  // with the daemon's reply shapes, and the save ends on the backup's own
+  // terminal frame, which is what the row waits for.
+  describe('copies not yet in the vault', () => {
+    const serverOnly = (backend, accountId) => backend.snapshot().messages
+      .filter(m => m.accountId === accountId && m.custody === 'server');
+
+    it('counts server copies with no vault copy per folder, and a save puts them in the vault', async () => {
+      const backend = createDemoBackend();
+      const [account, other] = backend.accounts;
+      const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+      const frames = [];
+      backend.on('backup-progress', ({ payload }) => frames.push(payload));
+      const missing = serverOnly(backend, account.id);
+      const otherMissing = serverOnly(backend, other.id).length;
+      expect(missing.length).toBeGreaterThan(0);
+
+      const counted = await rpc('vault_gap_count', { accountId: account.id });
+      expect(counted).toMatchObject({ count: missing.length, vaultReachable: true, partial: false });
+      expect('reason' in counted).toBe(false);
+      expect(counted.byMailbox.map(f => f.mailbox).sort()).toEqual([...new Set(missing.map(m => m.mailbox))].sort());
+      expect(counted.byMailbox.reduce((n, f) => n + f.count, 0)).toBe(missing.length);
+      expect(counted.byMailbox.every(f => f.count > 0 && f.partial === false)).toBe(true);
+
+      await expect(rpc('vault_gap_save', { accountId: account.id, accountJson: JSON.stringify(account) }))
+        .resolves.toEqual({ runId: account.id, started: true });
+      expect(frames).toHaveLength(1);
+      expect(frames[0]).toMatchObject({
+        account_id: account.id, active: false, folder: 'Complete',
+        completed_emails: missing.length, errors: 0, cancelled: false, success: true,
+      });
+      await expect(rpc('vault_gap_count', { accountId: account.id })).resolves.toMatchObject({ count: 0, partial: false, byMailbox: [] });
+      expect(serverOnly(backend, account.id)).toEqual([]);
+      expect(missing.every(m => backend.snapshot().messages.find(row => row.id === m.id)?.custody === 'both')).toBe(true);
+      // Only that account was saved.
+      expect((await rpc('vault_gap_count', { accountId: other.id })).count).toBe(otherMissing);
+    });
+
+    it('a second save finds nothing and still ends with its frame', async () => {
+      const backend = createDemoBackend();
+      const account = backend.accounts[0];
+      const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+      await rpc('vault_gap_save', { accountId: account.id, accountJson: JSON.stringify(account) });
+      const frames = [];
+      backend.on('backup-progress', ({ payload }) => frames.push(payload));
+      await expect(rpc('vault_gap_save', { accountId: account.id, accountJson: JSON.stringify(account) }))
+        .resolves.toEqual({ runId: account.id, started: true });
+      expect(frames).toEqual([expect.objectContaining({ account_id: account.id, active: false, completed_emails: 0, total_folders: 0 })]);
+    });
+
+    it('an account it does not know is E_ACCOUNT_NOT_FOUND on both routes', async () => {
+      const backend = createDemoBackend();
+      const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+      await expect(rpc('vault_gap_count', { accountId: 'nobody' })).rejects.toThrow(/^E_ACCOUNT_NOT_FOUND: nobody$/);
+      await expect(rpc('vault_gap_save', { accountId: 'nobody', accountJson: '{}' })).rejects.toThrow(/^E_ACCOUNT_NOT_FOUND: nobody$/);
+    });
+  });
+
   it('imports into a new folder kept on this computer, lists it and deletes it, as the daemon does', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];

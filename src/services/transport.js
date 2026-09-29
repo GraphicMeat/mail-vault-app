@@ -126,6 +126,10 @@ export const DAEMON_OWNED = new Set([
   'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
   // The vault registry's reads: what a mailbox holds, and its light rows.
   'vault_uid_sets', 'vault_light_rows',
+  // Settings > Backup: the copies the app has shown or cached that the vault
+  // does not hold, counted and saved by the daemon (the save reports through
+  // `backup-progress` and stops on `backup_cancel`).
+  'vault_gap_count', 'vault_gap_save',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments', 'export_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.
   'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_meta',

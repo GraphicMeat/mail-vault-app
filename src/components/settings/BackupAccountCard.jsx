@@ -11,6 +11,7 @@ import { formatDateTime } from '../../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import BackupVerificationTree from './BackupVerificationTree';
+import VaultGapRow from './VaultGapRow';
 import { send } from '../../services/transport';
 import {
   Clock,
@@ -487,6 +488,9 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           </button>
         ) : null}
       </div>
+
+      {/* Outside the Premium gate: what is not in the vault yet, for everyone. */}
+      <VaultGapRow account={account} />
 
       {/* Premium gate or schedule content */}
       {!isPaidUser ? (

@@ -35,6 +35,12 @@ vi.mock('../../../services/backupScheduler', () => ({
 vi.mock('../../../services/api', () => ({ backupStatus: vi.fn() }));
 vi.mock('../../../services/authUtils', () => ({ resolveServerAccount: vi.fn() }));
 vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
+// The not-in-vault row has its own spec (VaultGapRow.test.jsx) and its own
+// `backup-progress` listener, which would share `eventHandlers` above. A stub
+// marks where the card puts it.
+vi.mock('../VaultGapRow', () => ({
+  default: ({ account }) => React.createElement('div', { 'data-testid': 'vault-gap-row-stub', 'data-account-id': account.id }),
+}));
 
 // M4a (2.6 review): `maildir_storage_stats`'s daemon reply is `totalBytes`
 // (camelCase, always has been), but the card read `total_bytes` — a
@@ -201,5 +207,28 @@ describe('BackupAccountCard - the stored size on the card', () => {
     // M4a: was stuck at '--' forever because the card read the wrong key
     // (`total_bytes`) off a reply that has always been `totalBytes`.
     await waitFor(() => expect(screen.getByText('2 KB')).toBeTruthy());
+  });
+});
+
+// Phase 5 (D7): "not yet in your vault" is for every user, so it sits outside
+// the Premium blur, once per card, in all three layouts.
+describe('BackupAccountCard - the not-in-vault row', () => {
+  const stubs = () => [...document.querySelectorAll('[data-testid="vault-gap-row-stub"]')];
+
+  it('shows it once, outside the Premium blur, for a free user', () => {
+    render(<BackupAccountCard account={ACCOUNT} isPaidUser={false} globalEnabled={false} />);
+    expect(stubs()).toHaveLength(1);
+    expect(stubs()[0].dataset.accountId).toBe(ACCOUNT.id);
+    expect(stubs()[0].closest('[aria-hidden="true"]')).toBe(null);
+    expect(stubs()[0].closest('.pointer-events-none')).toBe(null);
+  });
+
+  it.each([
+    ['with its own schedule', false],
+    ['under the global schedule', true],
+  ])('shows it once for a Premium user %s', (_, globalEnabled) => {
+    render(<BackupAccountCard account={ACCOUNT} isPaidUser globalEnabled={globalEnabled} />);
+    expect(stubs()).toHaveLength(1);
+    expect(stubs()[0].dataset.accountId).toBe(ACCOUNT.id);
   });
 });

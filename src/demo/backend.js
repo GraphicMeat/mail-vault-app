@@ -747,6 +747,28 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       }
       case 'backup_verify': return { folders: [], total_server: 0, total_app: messages.filter(row => row.vaultPresent).length, total_external: 0, external_available: false, simulated: true };
       case 'backup_cancel': return { cancelled: true, simulated: true };
+      // Settings > Backup: server rows this session shows with no vault copy,
+      // counted per folder and saved as the daemon does (vault_gap.rs): the
+      // save answers at once and ends on a terminal `backup-progress` frame.
+      case 'vault_gap_count': case 'vault_gap_save': {
+        if (!ACCOUNT_IDS.includes(accountId)) throw new Error(`E_ACCOUNT_NOT_FOUND: ${accountId}`);
+        const missing = messages.filter(row => row.accountId === accountId && row.serverPresent && !row.vaultPresent);
+        const folders = [...new Set(missing.map(row => row.mailbox))];
+        if (command === 'vault_gap_count') {
+          return { count: missing.length, vaultReachable: true, partial: false, byMailbox: folders.map(path => ({ mailbox: path, count: missing.filter(row => row.mailbox === path).length, partial: false })) };
+        }
+        missing.forEach(row => { row.vaultPresent = true; row.vaultFlags = [...new Set([...(row.vaultFlags || []), 'archived'])]; });
+        emit('demo:state', { type: 'backup', accountId });
+        emit('backup-progress', {
+          account_id: accountId, folder: 'Complete',
+          total_folders: folders.length, completed_folders: folders.length,
+          total_emails: missing.length, completed_emails: missing.length,
+          errors: 0, active: false, last_error: null, missing_in_folder: 0,
+          cancelled: false, success: true,
+          external_copy_ok: true, external_copy_error: null, external_copy_failed_count: 0,
+        });
+        return { runId: accountId, started: true };
+      }
       case 'preview_notification_sound': return { success: true, simulated: true };
       case 'get_transfer_stats': {
         const stats = {};
