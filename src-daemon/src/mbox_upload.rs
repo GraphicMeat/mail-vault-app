@@ -688,8 +688,13 @@ fn needs_create(cause: &str) -> bool {
 /// is this message, or this account (a rejected sign-in), refused. Read on a
 /// `Fail::cause`; a reply the server did send is never a lost connection.
 fn classify(cause: &str) -> FailKind {
+    // Worth another try, but this very message can draw them: RFC 5530's
+    // `LIMIT` (Dovecot answers a message over its size limit with it),
+    // `INUSE` (one folder locked), a stall.
+    const ONE_MESSAGE: [&str; 3] = ["[limit]", "[inuse]", "timed out"];
     let answered = is_tagged_no(cause) || cause.starts_with("bad response:");
-    let busy = throttled(cause) || cause.to_ascii_lowercase().contains("timed out");
+    let low = cause.to_ascii_lowercase();
+    let busy = throttled(cause) || ONE_MESSAGE.iter().any(|n| low.contains(n));
     if busy || (!answered && pool::is_retryable_connect_error(cause)) {
         FailKind::Transient
     } else {
@@ -699,10 +704,11 @@ fn classify(cause: &str) -> FailKind {
 
 /// The server or the account is throttled or over a limit, whatever the
 /// message: Gmail's bandwidth cap and `[THROTTLED]`, a busy or unavailable
-/// server, too many connections. A timeout is not in it: that can be this
-/// one message's size on a slow link.
+/// server, too many connections or commands. Only what no single message
+/// can draw: the job waits these out without end, so `[LIMIT]`, `[INUSE]`
+/// and a timeout stay one message's bounded tries (`classify`).
 fn throttled(cause: &str) -> bool {
-    const THROTTLE: [&str; 9] = ["[throttled]", "[unavailable]", "[inuse]", "[limit]", "too many", "rate limit", "bandwidth", "try again", "temporar"];
+    const THROTTLE: [&str; 7] = ["[throttled]", "[unavailable]", "too many", "rate limit", "bandwidth", "try again", "temporar"];
     let low = cause.to_ascii_lowercase();
     imap::is_bandwidth_limited(cause) || THROTTLE.iter().any(|n| low.contains(n))
 }
@@ -1604,8 +1610,15 @@ mod tests {
         ] {
             assert_eq!(kind_of(&cause), FailKind::Busy, "{cause}");
         }
-        for cause in ["connection lost", "io: connection lost: no reply from the server for 180s", "APPEND timed out after 120s"] {
-            assert_eq!(kind_of(cause), FailKind::Transient, "{cause}");
+        for cause in [
+            "connection lost".to_string(),
+            "io: connection lost: no reply from the server for 180s".to_string(),
+            "APPEND timed out after 120s".to_string(),
+            // One message can draw these: bounded tries, never an endless wait.
+            no("[LIMIT] Mail size is larger than the maximum size allowed by server configuration"),
+            no("[INUSE] Mailbox is locked by another process"),
+        ] {
+            assert_eq!(kind_of(&cause), FailKind::Transient, "{cause}");
         }
         assert_eq!(kind_of(&no("[OVERQUOTA] Quota exceeded")), FailKind::Refused("OVERQUOTA"));
         assert_eq!(kind_of(&no("[NOPERM] Access denied")), FailKind::Refused("NOPERM"));

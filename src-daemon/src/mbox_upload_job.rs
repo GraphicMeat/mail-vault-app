@@ -522,9 +522,10 @@ fn list_journals(app_dir: &Path) -> Vec<Journal> {
 }
 
 /// The ids of journals this build cannot read: empty, torn, not JSON, or
-/// another version. Listed as damaged so a discard can take them away.
+/// another version. Listed as damaged so a discard can take them away. One
+/// that is gone by the time it is read (a job ending) is not one.
 fn damaged_journals(app_dir: &Path) -> Vec<String> {
-    journal_ids(app_dir).into_iter().filter(|id| read_journal(app_dir, id).is_none()).collect()
+    journal_ids(app_dir).into_iter().filter(|id| read_journal(app_dir, id).is_none() && journal_path(app_dir, id).exists()).collect()
 }
 
 fn remove_journal(app_dir: &Path, id: &str) {
@@ -938,7 +939,9 @@ pub(crate) fn status(state: &DaemonState) -> Value {
         }
         v
     }));
-    jobs.extend(damaged_journals(&state.app_dir).iter().map(|id| damaged(id, false, DAMAGED)));
+    // A live job's journal is its worker's (a finishing one removes it).
+    let damaged_ids = damaged_journals(&state.app_dir).into_iter().filter(|id| !live.iter().any(|l| &l.id == id));
+    jobs.extend(damaged_ids.map(|id| damaged(&id, false, DAMAGED)));
     json!({ "jobs": jobs })
 }
 
@@ -1097,18 +1100,23 @@ impl Runner {
     /// (a new pipeline takes over: the old one's state is not to be trusted),
     /// never the job.
     fn try_once(&mut self, raw: &[u8], at: u64) -> Outcome {
+        #[cfg(test)]
+        let hit = self.tuning.panic_in_upload.is_some_and(|needle| raw.windows(needle.len()).any(|w| w == needle.as_bytes()));
+        #[cfg(not(test))]
+        let hit = false;
         let (rt, pipeline) = (&self.rt, &mut self.pipeline);
         // Read around the call on this very pipeline: a rebuild between
         // tries starts a new count, never loses or repeats one.
         let before = pipeline.label_warnings();
-        #[cfg(test)]
-        let panic_on = self.tuning.panic_in_upload;
         let tried = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            #[cfg(test)]
-            if panic_on.is_some_and(|needle| raw.windows(needle.len()).any(|w| w == needle.as_bytes())) {
-                panic!("a test's panic in the upload pipeline");
-            }
-            rt.block_on(pipeline.upload_message(raw))
+            rt.block_on(async {
+                // A test's panic, inside the future the runtime polls: the
+                // runtime must serve the next message after it.
+                if hit {
+                    panic!("a test's panic in the upload pipeline");
+                }
+                pipeline.upload_message(raw).await
+            })
         }));
         match tried {
             Ok(outcome) => {
@@ -2561,6 +2569,24 @@ mod tests {
         let last = events.last().unwrap();
         assert_eq!((last["state"].clone(), last["failedCount"].clone()), (json!(DONE), json!(6)));
         assert_eq!(rig.server.count_commands("APPEND"), 6, "each tried once");
+    }
+
+    /// I1's bound: `[LIMIT]` (Dovecot's answer to a message over its size
+    /// limit) is this message's, not the account's: bounded tries, then
+    /// failed, and the job finishes; no wait without end. (A message without
+    /// a Message-ID, so each try is a fresh APPEND despite the mock storing
+    /// a refused one.)
+    #[tokio::test]
+    async fn a_message_over_the_servers_size_limit_fails_after_its_tries_and_the_job_goes_on() {
+        let limit = Action::Respond("NO".into(), "[LIMIT] Mail size is larger than the maximum size allowed by server configuration".into());
+        let mut rig = setup(gmail().fault(Trigger::with("APPEND", "huge-one"), limit), fast());
+        let file = mbox(&rig, &[msg("a@x", "one"), idless("huge-one"), msg("c@x", "three")]);
+        start(&rig, &file, false).await;
+        let events = until_done(&mut rig.rx).await;
+        assert!(events.iter().all(|e| e["holdReason"].is_null()), "never an account wait");
+        let last = events.last().unwrap();
+        assert_eq!((last["state"].clone(), counts_of(last)), (json!(DONE), (json!(2), json!(0), json!(1))));
+        assert_eq!(rig.server.count_commands("APPEND"), 2 + 3, "the huge one tried `attempts` (3) times");
     }
 
     /// I2: the daemon quitting holds every live upload at its next message
