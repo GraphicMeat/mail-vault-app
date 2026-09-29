@@ -599,6 +599,29 @@ pub async fn run_migration(
         state.events.emit("migration-progress", serde_json::to_value(&payload).unwrap_or_default());
     };
 
+    // Persists a checkpoint (status "paused" while parked, "running" once
+    // woken) so migration_state.json always reflects a mid-folder pause too.
+    let save_checkpoint = |status: &str, folders: &[FolderMapping], migrated: u32, skipped: u32, failed: u32| {
+        let checkpoint = MigrationState {
+            id: migration_id.clone(),
+            source_email: source_email.clone(),
+            dest_email: dest_email.clone(),
+            source_transport: source_transport.clone(),
+            dest_transport: dest_transport.clone(),
+            source_account_json: source_account_json.clone(),
+            dest_account_json: dest_account_json.clone(),
+            status: status.to_string(),
+            folder_mappings: folders.to_vec(),
+            total_emails,
+            migrated_emails: migrated,
+            skipped_emails: skipped,
+            failed_emails: failed,
+            started_at: started_at.clone(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let _ = save_migration_state(&state.app_dir, &checkpoint);
+    };
+
     // Graph folder cache for destination
     let mut graph_folder_cache: HashMap<String, String> = HashMap::new();
 
@@ -631,24 +654,7 @@ pub async fn run_migration(
 
         // Pause loop, save state and wait
         if pause.load(Ordering::Relaxed) {
-            let paused_state = MigrationState {
-                id: migration_id.clone(),
-                source_email: source_email.clone(),
-                dest_email: dest_email.clone(),
-                source_transport: source_transport.clone(),
-                dest_transport: dest_transport.clone(),
-                source_account_json: source_account_json.clone(),
-                dest_account_json: dest_account_json.clone(),
-                status: "paused".to_string(),
-                folder_mappings: folder_mappings.clone(),
-                total_emails,
-                migrated_emails: migrated_total,
-                skipped_emails: skipped_total,
-                failed_emails: failed_total,
-                started_at: started_at.clone(),
-                updated_at: chrono::Utc::now().to_rfc3339(),
-            };
-            let _ = save_migration_state(&state.app_dir, &paused_state);
+            save_checkpoint("paused", &folder_mappings, migrated_total, skipped_total, failed_total);
             info!("[migration] Paused, state saved to disk");
 
             while pause.load(Ordering::Relaxed) {
@@ -673,6 +679,9 @@ pub async fn run_migration(
                     None,
                 );
                 let _ = interruptible_sleep(std::time::Duration::from_millis(500), &cancel, &notify).await;
+            }
+            if !cancel.load(Ordering::Relaxed) {
+                save_checkpoint("running", &folder_mappings, migrated_total, skipped_total, failed_total);
             }
         }
 
@@ -841,11 +850,32 @@ pub async fn run_migration(
                 }
 
                 // Pause check, finish current email then stop
-                while pause.load(Ordering::Relaxed) {
-                    if cancel.load(Ordering::Relaxed) {
-                        break;
+                if pause.load(Ordering::Relaxed) {
+                    // Checkpoint with this folder's live counters: the
+                    // folder's own totals are only folded into
+                    // `folder_mappings` when it ends.
+                    let mut snapshot = folder_mappings.clone();
+                    snapshot[folder_idx].migrated = folder_migrated;
+                    snapshot[folder_idx].skipped = folder_skipped;
+                    snapshot[folder_idx].failed = folder_failed;
+                    save_checkpoint("paused", &snapshot, migrated_total, skipped_total, failed_total);
+                    while pause.load(Ordering::Relaxed) {
+                        if cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        emit_progress(
+                            "paused",
+                            Some(src_path.clone()),
+                            Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
+                            migrated_total, skipped_total, failed_total,
+                            &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
+                            &source_email, &dest_email, total_emails, &state, None, None,
+                        );
+                        let _ = interruptible_sleep(std::time::Duration::from_millis(500), &cancel, &notify).await;
                     }
-                    let _ = interruptible_sleep(std::time::Duration::from_millis(500), &cancel, &notify).await;
+                    if !cancel.load(Ordering::Relaxed) {
+                        save_checkpoint("running", &snapshot, migrated_total, skipped_total, failed_total);
+                    }
                 }
 
                 // Track sender/subject for log entries

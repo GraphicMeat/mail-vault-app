@@ -298,6 +298,27 @@ pub(crate) fn pause_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize 
     }
 }
 
+/// Clears the pause flag on every currently-registered token under `kind` and
+/// wakes any waiter, so a run parked in its pause loop continues. Returns how
+/// many live runs were hit (0 = nothing is running under `kind`).
+pub(crate) fn resume_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize {
+    let map = state.run_tokens.lock().unwrap_or_else(|p| p.into_inner());
+    match map.get(kind) {
+        Some(tokens) => {
+            for t in tokens {
+                if let Some(p) = &t.pause {
+                    p.store(false, Ordering::Relaxed);
+                }
+                if let Some(n) = &t.notify {
+                    n.notify_waiters();
+                }
+            }
+            tokens.len()
+        }
+        None => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,6 +583,38 @@ mod tests {
         let _guard = RunGuard::register(&st, "restore");
         let hit = pause_kind(&st, "restore");
         assert_eq!(hit, 0);
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// Nothing else ever clears the flag `pause_kind` sets: without this a
+    /// resumed run stays parked forever.
+    #[tokio::test]
+    async fn resume_kind_clears_the_pause_flag_and_wakes_the_parked_run() {
+        let st = state(true);
+        let guard = RunGuard::register_with_pause(&st, "migration");
+        let pause = guard.pause();
+        let notify = guard.notify();
+        pause_kind(&st, "migration");
+        assert!(pause.load(Ordering::Relaxed));
+
+        let waiter = tokio::spawn(async move {
+            tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified())
+                .await
+                .expect("resume_kind must wake a task already parked on notified()")
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+        assert_eq!(resume_kind(&st, "migration"), 1);
+        assert!(!pause.load(Ordering::Relaxed), "resume must clear the pause flag");
+
+        waiter.await.expect("waiter task panicked");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    #[test]
+    fn resume_kind_with_no_live_run_reports_zero() {
+        let st = state(true);
+        assert_eq!(resume_kind(&st, "migration"), 0);
         let _ = std::fs::remove_dir_all(&st.data_dir);
     }
 }

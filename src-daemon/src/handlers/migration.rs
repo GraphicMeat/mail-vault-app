@@ -9,7 +9,7 @@
 //! replacing the app's single-slot `MigrationCancelToken`/
 //! `MigrationPauseToken`/`MigrationNotify`.
 
-use crate::handlers::common::{self, cancel_kind, pause_kind, str_arg, RunGuard};
+use crate::handlers::common::{self, cancel_kind, pause_kind, resume_kind, str_arg, RunGuard};
 use crate::ipc::{self, RpcResponse};
 use crate::migration::{self, FolderMapping};
 use crate::server::DaemonState;
@@ -122,6 +122,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let dest_transport = req!(str_arg(&id, params, "destTransport"));
             let source_config = req!(parse_imap_config(&id, &source_account, "source"));
             let dest_config = req!(parse_imap_config(&id, &dest_account, "dest"));
+
+            // A run still registered in this daemon is parked (or running):
+            // wake that one instead of spawning a second beside it. Only a
+            // daemon restart, or a run that already ended, rebuilds from disk.
+            if resume_kind(state, "migration") > 0 {
+                return Some(RpcResponse::success(id, Value::Null));
+            }
 
             let app_dir = state.app_dir.clone();
             let loaded = match common::blocking(move || migration::load_migration_state(&app_dir)).await.and_then(|r| r) {
@@ -407,14 +414,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn pause_migration_persists_a_paused_checkpoint() {
         let (_v, _a, s) = st(true);
-        // run_migration's pause check lives at the TOP of the per-folder
-        // loop only -- the inner per-message loop sleeps on pause but never
-        // checkpoints or emits "paused" (a real asymmetry, not a test
-        // artifact; see the Task 4.7 report's Known Gap note). Two folders,
-        // so folder 0 finishing (slowly, via the FETCH delay) hands control
-        // to folder 1's top-of-loop check, which is where "paused" actually
-        // gets written. Folder 1's own path is never touched by IMAP: the
-        // pause check fires before any I/O for it.
+        // Two folders, so folder 0 finishing (slowly, via the FETCH delay)
+        // hands control to folder 1's top-of-loop pause check. The mid-folder
+        // case has its own test. Folder 1's own path is never touched by
+        // IMAP: the pause check fires before any I/O for it.
         let source = MockImap::start(
             Scenario::new()
                 .mailbox(inbox_with(&[1, 2]))
@@ -449,6 +452,126 @@ mod tests {
         )
         .await;
         assert!(paused, "pause_migration never produced a paused checkpoint");
+    }
+
+    fn two_pending_folders(inbox_count: u32) -> Vec<FolderMapping> {
+        ["INBOX", "Archive"]
+            .iter()
+            .map(|name| FolderMapping {
+                source_path: name.to_string(), dest_path: name.to_string(), source_special_use: None,
+                dest_folder_id: None, email_count: if *name == "INBOX" { inbox_count } else { 0 },
+                status: "pending".to_string(), migrated: 0, skipped: 0, failed: 0, failed_uids: Vec::new(),
+            })
+            .collect()
+    }
+
+    fn live_migration_runs(s: &Arc<DaemonState>) -> usize {
+        s.run_tokens.lock().unwrap().get("migration").map_or(0, Vec::len)
+    }
+
+    /// Pause then resume must continue the run that is parked, not start a
+    /// second one beside it: one registered token, the same migration id, and
+    /// the parked run itself carries on to "completed".
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_after_pause_wakes_the_parked_run_instead_of_spawning_a_second() {
+        let (_v, _a, s) = st(true);
+        let source = MockImap::start(
+            Scenario::new()
+                .mailbox(inbox_with(&[1, 2]))
+                .mailbox(mailbox_with("Archive", &[]))
+                .fault(Trigger::on("FETCH"), Action::Delay(Duration::from_millis(300))),
+        );
+        let dest = MockImap::start(
+            Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)).mailbox(synthetic_mailbox("Archive", 0)),
+        );
+        let src = account_json(&source, "wake-src@example.com");
+        let dst = account_json(&dest, "wake-dst@example.com");
+
+        call(&s, "start_migration", json!({
+            "sourceAccount": src, "destAccount": dst,
+            "sourceTransport": "imap", "destTransport": "imap",
+            "folderMappings": two_pending_folders(2),
+        })).await;
+        call(&s, "pause_migration", json!({})).await;
+        assert!(
+            wait_for(
+                || matches!(migration::load_migration_state(&s.app_dir), Ok(Some(st)) if st.status == "paused"),
+                Duration::from_secs(15),
+            )
+            .await,
+            "never paused"
+        );
+        let paused_id = migration::load_migration_state(&s.app_dir).unwrap().unwrap().id;
+        assert_eq!(live_migration_runs(&s), 1);
+
+        let resp = call(&s, "resume_migration", json!({
+            "sourceAccount": src, "destAccount": dst,
+            "sourceTransport": "imap", "destTransport": "imap",
+        })).await;
+        assert!(resp.error.is_none(), "resume_migration must succeed: {:?}", resp.error);
+        assert_eq!(live_migration_runs(&s), 1, "resume must not register a second run");
+
+        assert!(
+            wait_for(
+                || matches!(migration::load_migration_state(&s.app_dir), Ok(Some(st)) if st.status == "completed"),
+                Duration::from_secs(15),
+            )
+            .await,
+            "resumed migration never completed"
+        );
+        let done = migration::load_migration_state(&s.app_dir).unwrap().unwrap();
+        assert_eq!(done.id, paused_id, "the parked run must finish, not a fresh one");
+        assert_eq!(done.migrated_emails, 2);
+    }
+
+    /// A pause that lands inside a folder's per-message loop must still write
+    /// the "paused" checkpoint (it used to leave the file untouched until a
+    /// folder boundary that a parked run never reaches).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_mid_folder_pause_persists_a_paused_checkpoint() {
+        let (_v, _a, s) = st(true);
+        let source = MockImap::start(
+            Scenario::new()
+                .mailbox(inbox_with(&[1, 2, 3, 4, 5]))
+                .fault(Trigger::on("FETCH"), Action::Delay(Duration::from_millis(300))),
+        );
+        let dest = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
+        let mut events = s.events.subscribe();
+
+        call(&s, "start_migration", json!({
+            "sourceAccount": account_json(&source, "mid-src@example.com"),
+            "destAccount": account_json(&dest, "mid-dst@example.com"),
+            "sourceTransport": "imap", "destTransport": "imap",
+            "folderMappings": vec![two_pending_folders(5).remove(0)],
+        })).await;
+
+        // Wait until the first message is through, so the pause is provably
+        // inside the per-message loop and not at the top-of-folder check.
+        let inside = tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                let Ok(line) = events.recv().await else { return false };
+                let v: Value = serde_json::from_str(&line).unwrap_or_default();
+                let p = &v["params"]["payload"];
+                if v["params"]["name"] == "migration-progress" && p["status"] == "running" && p["migrated_emails"].as_u64() >= Some(1) {
+                    return true;
+                }
+            }
+        })
+        .await
+        .unwrap_or(false);
+        assert!(inside, "run never got into the folder");
+
+        call(&s, "pause_migration", json!({})).await;
+        assert!(
+            wait_for(
+                || matches!(migration::load_migration_state(&s.app_dir), Ok(Some(st)) if st.status == "paused"),
+                Duration::from_secs(15),
+            )
+            .await,
+            "mid-folder pause never persisted a paused checkpoint"
+        );
+        let st = migration::load_migration_state(&s.app_dir).unwrap().unwrap();
+        assert!(st.migrated_emails >= 1 && st.migrated_emails < 5, "checkpoint must reflect partial progress, got {}", st.migrated_emails);
     }
 
     /// The real `resume_migration` route: a pre-seeded `migration_state.json`
