@@ -14,7 +14,7 @@
 //!   the exact Trash uids a job moved are expunged (I6), and backup mode never
 //!   deletes without a verified mirror copy (I7).
 
-use super::ops::{Control, Env, Fetched, FolderInfo, ListedMsg, LocalError, LocalStore, OpsError, ServerOps};
+use super::ops::{Control, Env, Fetched, FolderInfo, ListedMsg, LocalError, LocalStore, OpsError, ServerOps, StoreOutcome};
 use super::plan::{estimate_days, scoped_folders, AllMailMap, FolderPlan, GmIndex, PlanStore, PreviewListing, Selection};
 use super::state::*;
 use super::uidset::UidSet;
@@ -74,6 +74,20 @@ enum React {
     Gone,
     Other(String),
 }
+
+/// What the server says about a folder's generation against the one the plan
+/// was made under (I5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Validity {
+    Same,
+    Changed,
+    /// Could not be read (an error, no UIDVALIDITY in the reply, or a folder
+    /// planned without one). Never "unchanged": nothing is deleted on it.
+    Unknown,
+}
+
+/// Reads of an unreadable UIDVALIDITY before a delete step gives up on it.
+const VALIDITY_TRIES: u32 = 3;
 
 /// Numbers the frame needs that the job file does not hold.
 #[derive(Default, Clone, Debug)]
@@ -180,6 +194,12 @@ fn expected_ids(plan: &FolderPlan, uids: &[u32]) -> HashMap<u32, String> {
     m
 }
 
+/// Whether the plan knows the message's Message-ID (the proof a vault file
+/// is checked against).
+fn has_planned_id(plan: &FolderPlan, uid: u32) -> bool {
+    plan.index_of(uid).map_or(false, |k| plan.message_ids[k].is_some())
+}
+
 fn kept_reason(fs: &FolderState, uid: u32) -> Option<KeptReason> {
     fs.kept.iter().find(|(_, s)| s.contains(uid)).map(|(r, _)| *r)
 }
@@ -230,6 +250,12 @@ struct Engine<'a, S: ServerOps, L: LocalStore, E: Env> {
     trash_info: Option<FolderInfo>,
     planned: Vec<(String, FolderPlan)>,
     planned_allmail: Option<AllMailMap>,
+    /// Vault files this run wrote, or found byte for byte what the server
+    /// sent: the only proof a message without a Message-ID has (E1).
+    proven: HashSet<(usize, u32)>,
+    /// Per folder, this run: whether the vault's recorded generation is the
+    /// plan's UIDVALIDITY, so a file already on disk may be adopted by uid.
+    gen_ok: HashMap<usize, bool>,
 }
 
 impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
@@ -260,6 +286,8 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             trash_info: None,
             planned: Vec::new(),
             planned_allmail: None,
+            proven: HashSet::new(),
+            gen_ok: HashMap::new(),
         }
     }
 
@@ -401,7 +429,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                 Err(paused(PauseReason::SignInNeeded))
             }
             OpsError::Gone => Ok(React::Gone),
-            OpsError::Other(t) => {
+            OpsError::Other(t) | OpsError::ValidityChanged(t) => {
                 self.note_error(&t);
                 Ok(React::Other(t))
             }
@@ -623,7 +651,13 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         let badset: HashSet<u32> = v.mismatched.iter().copied().collect();
         for &u in uids {
             if okset.contains(&u) {
-                self.mark_vault_ok(i, u);
+                // Without a Message-ID, presence proves nothing: only a file
+                // this run wrote (or found byte for byte) counts.
+                if has_planned_id(plan, u) || self.proven.contains(&(i, u)) {
+                    self.mark_vault_ok(i, u);
+                } else {
+                    self.keep_uid(i, u, KeptReason::VaultMismatch);
+                }
             } else if badset.contains(&u) {
                 self.keep_uid(i, u, KeptReason::VaultMismatch);
             } else {
@@ -635,9 +669,10 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
     }
 
     async fn mirror_batch(&mut self, i: usize, uids: &[u32]) -> Flow<()> {
+        self.ensure_listing(i).await?;
         self.prelude().await?;
         let path = self.job.folders[i].path.clone();
-        let r = self.local.mirror_copy_verify(&path, uids).await;
+        let r = self.local.mirror_copy_verify(&path, &self.listings[&i], uids).await;
         let v = match r {
             Ok(v) => v,
             Err(LocalError::VaultUnavailable(t)) => {
@@ -751,9 +786,48 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
 
     // ── UIDVALIDITY (I5) ────────────────────────────────────────────────────
 
-    async fn current_validity(&mut self, folder: &FolderInfo) -> Flow<Option<u32>> {
+    /// The folder's generation now, against `recorded`. Graph has none and is
+    /// always `Same`; an IMAP folder planned without one is `Unknown`. An
+    /// error, "gone" and a reply without UIDVALIDITY are `Unknown`, never
+    /// "unchanged".
+    async fn read_validity(&mut self, folder: &FolderInfo, recorded: Option<u32>) -> Flow<Validity> {
+        if self.job.provider == Provider::Graph {
+            return Ok(Validity::Same);
+        }
+        let Some(recorded) = recorded else { return Ok(Validity::Unknown) };
         let r: Result<Option<u32>, Option<String>> = server_call!(self, self.ops.uid_validity(folder).await);
-        Ok(r.unwrap_or(None))
+        Ok(match r {
+            Ok(Some(cur)) if cur == recorded => Validity::Same,
+            Ok(Some(_)) => Validity::Changed,
+            _ => Validity::Unknown,
+        })
+    }
+
+    /// `read_validity` before a destructive step: an unreadable answer is
+    /// asked again, with a wait, before the step gives up on the folder.
+    async fn validity_for_delete(&mut self, folder: &FolderInfo, recorded: Option<u32>) -> Flow<Validity> {
+        let mut n = 0u32;
+        loop {
+            let v = self.read_validity(folder, recorded).await?;
+            n += 1;
+            if v != Validity::Unknown || recorded.is_none() || n >= VALIDITY_TRIES {
+                return Ok(v);
+            }
+            let until = self.env.now_ms() + backoff_ms(BACKOFF_BASE_MS, n - 1);
+            self.wait(WaitReason::Throttled, until).await?;
+            self.gate().await?;
+        }
+    }
+
+    /// The UIDVALIDITY a command in `via` must find, or `None` for Graph.
+    fn expected_validity(&self, i: usize, via_path: &str) -> Option<u32> {
+        if self.job.provider == Provider::Graph {
+            return None;
+        }
+        match self.job.gmail.as_ref() {
+            Some(g) if g.all_mail == via_path => Some(g.all_mail_validity),
+            _ => self.job.folders[i].uid_validity,
+        }
     }
 
     /// The folder stops deleting: every uid not yet deleted is left on the server.
@@ -771,43 +845,98 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         }
     }
 
-    /// True when the folder is still the one the plan was made from.
+    /// Every folder whose deletes go through All Mail stops deleting.
+    fn mark_gmail_stale(&mut self) {
+        for idx in 0..self.job.folders.len() {
+            if self.is_gmail_route(idx) {
+                self.mark_stale(idx);
+            }
+        }
+    }
+
+    /// Before a download pass: false (and the folder is left alone) only when
+    /// the server says the folder was reissued. An unreadable answer does not
+    /// stop the download; it stops the delete (`delete_validity`).
     async fn check_validity(&mut self, i: usize) -> Flow<bool> {
-        let recorded = match self.job.folders[i].uid_validity {
-            Some(v) => v,
-            None => return Ok(true),
-        };
+        if self.job.folders[i].stale {
+            return Ok(false);
+        }
+        if self.job.provider == Provider::Graph || self.job.folders[i].uid_validity.is_none() {
+            return Ok(true);
+        }
+        let folder = self.folder_info(i)?;
+        let recorded = self.job.folders[i].uid_validity;
+        if self.read_validity(&folder, recorded).await? == Validity::Changed {
+            self.mark_stale(i);
+            self.checkpoint()?;
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
+    /// Before a delete in folder `i`: true only when the folder is provably
+    /// the one the plan was made from. A change, or a generation that cannot
+    /// be read after `VALIDITY_TRIES`, stops deletes in the folder (I5).
+    async fn delete_validity(&mut self, i: usize) -> Flow<bool> {
         if self.job.folders[i].stale {
             return Ok(false);
         }
         let folder = self.folder_info(i)?;
-        match self.current_validity(&folder).await? {
-            Some(cur) if cur != recorded => {
+        let recorded = self.job.folders[i].uid_validity;
+        match self.validity_for_delete(&folder, recorded).await? {
+            Validity::Same => Ok(true),
+            Validity::Changed | Validity::Unknown => {
                 self.mark_stale(i);
                 self.checkpoint()?;
                 Ok(false)
             }
-            _ => Ok(true),
         }
     }
 
-    async fn check_all_mail_validity(&mut self) -> Flow<bool> {
+    async fn all_mail_delete_validity(&mut self) -> Flow<bool> {
         let (info, recorded) = match (self.all_mail_info(), self.job.gmail.as_ref()) {
             (Some(info), Some(g)) => (info, g.all_mail_validity),
             _ => return Ok(true),
         };
-        match self.current_validity(&info).await? {
-            Some(cur) if cur != recorded => {
-                for idx in 0..self.job.folders.len() {
-                    if self.is_gmail_route(idx) {
-                        self.mark_stale(idx);
-                    }
-                }
+        match self.validity_for_delete(&info, Some(recorded)).await? {
+            Validity::Same => Ok(true),
+            Validity::Changed | Validity::Unknown => {
+                self.mark_gmail_stale();
                 self.checkpoint()?;
                 Ok(false)
             }
-            _ => Ok(true),
         }
+    }
+
+    /// Whether a vault file already on disk may stand for the planned message
+    /// by its uid: the vault folder's recorded generation is the plan's
+    /// UIDVALIDITY. Graph uids come from the job's own ledger (by Graph id),
+    /// so they need no generation. Read once per folder per run.
+    async fn vault_gen_ok(&mut self, i: usize) -> Flow<bool> {
+        if let Some(b) = self.gen_ok.get(&i) {
+            return Ok(*b);
+        }
+        let ok = if self.job.provider == Provider::Graph {
+            true
+        } else {
+            match self.job.folders[i].uid_validity {
+                None => false,
+                Some(v) => {
+                    self.gate().await?;
+                    let path = self.job.folders[i].path.clone();
+                    let r = self.local.vault_generation(&path).await;
+                    match self.map_local(r)? {
+                        Ok(g) => g == Some(v),
+                        Err(t) => {
+                            self.note_error(&t);
+                            false
+                        }
+                    }
+                }
+            }
+        };
+        self.gen_ok.insert(i, ok);
+        Ok(ok)
     }
 
     // ── downloading ─────────────────────────────────────────────────────────
@@ -917,9 +1046,22 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         self.prelude().await?;
         let r = self.local.store_archived(&folder.path, uid, fetched).await;
         match self.map_local(r)? {
-            Ok(p) => {
-                self.listings.entry(i).or_default().insert(uid, p);
-                self.job.folders[i].stored.insert(uid);
+            Ok(st) => {
+                let accept = match st.outcome {
+                    StoreOutcome::Wrote | StoreOutcome::FoundSame => {
+                        self.proven.insert((i, uid));
+                        true
+                    }
+                    // Another file already holds the uid. Only its Message-ID,
+                    // under the plan's own generation, can say it is this message.
+                    StoreOutcome::FoundDifferent => has_planned_id(plan, uid) && self.vault_gen_ok(i).await?,
+                };
+                if accept {
+                    self.listings.entry(i).or_default().insert(uid, st.path);
+                    self.job.folders[i].stored.insert(uid);
+                } else {
+                    self.keep_uid(i, uid, KeptReason::VaultMismatch);
+                }
             }
             Err(t) => {
                 self.note_error(&t);
@@ -935,16 +1077,24 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         self.ensure_listing(i).await?;
         for &uid in batch {
             self.gate().await?;
+            let with_id = has_planned_id(plan, uid);
             let skip = {
                 let fs = &self.job.folders[i];
-                fs.stored.contains(uid) || fs.is_kept(uid)
+                // A message without a Message-ID stored by an earlier run is
+                // stored again: only this run's own write proves its file.
+                fs.is_kept(uid)
+                    || fs.vault_ok.contains(uid)
+                    || (fs.stored.contains(uid) && (with_id || self.proven.contains(&(i, uid))))
             };
             if skip {
                 continue;
             }
             // An archived copy already on disk (a kill between the store and
-            // the save) is verified, not downloaded again (I2).
-            if self.listings.get(&i).map_or(false, |l| l.contains_key(&uid)) {
+            // the save) is verified, not downloaded again (I2): only with a
+            // Message-ID to check it against, and only under the plan's own
+            // generation, since a uid of another generation names other mail.
+            let on_disk = self.listings.get(&i).map_or(false, |l| l.contains_key(&uid));
+            if on_disk && with_id && self.vault_gen_ok(i).await? {
                 self.job.folders[i].stored.insert(uid);
                 continue;
             }
@@ -1152,10 +1302,17 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
 
     /// Re-verify, persist the intent, send one MOVE, record the outcome.
     async fn delete_units(&mut self, i: usize, via: FolderInfo, units: Vec<Unit>) -> Flow<()> {
-        if !self.check_validity(i).await? {
+        // An intent nobody reconciled yet is never overwritten by a new one.
+        if self.job.folders[i].deleting.is_some() {
+            self.recover(i).await?;
+            if self.job.folders[i].deleting.is_some() {
+                return Ok(());
+            }
+        }
+        if !self.delete_validity(i).await? {
             return Ok(());
         }
-        if self.is_gmail_route(i) && !self.check_all_mail_validity().await? {
+        if self.is_gmail_route(i) && !self.all_mail_delete_validity().await? {
             return Ok(());
         }
         let mut checks: Vec<(usize, u32)> = Vec::new();
@@ -1192,8 +1349,11 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         self.set_running(Phase::Delete);
         self.checkpoint()?;
         let msgs: Vec<ListedMsg> = units.iter().map(|u| u.msg.clone()).collect();
+        // Checked again by the MOVE's own SELECT: a reissue between the check
+        // above and the command refuses it before anything is sent (I5).
+        let validity = self.expected_validity(i, &via.path);
         self.prelude().await?;
-        match self.ops.move_to_trash(&via, &msgs, &trash).await {
+        match self.ops.move_to_trash(&via, &msgs, &trash, validity).await {
             Ok(mr) => {
                 self.ok();
                 let moved: HashSet<u32> = mr.moved.iter().copied().collect();
@@ -1229,6 +1389,17 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                     self.local.deleted_from_server(&path, &uids).await;
                 }
                 Ok(())
+            }
+            Err(OpsError::ValidityChanged(t)) => {
+                // Refused before anything was sent: no intent to reconcile.
+                self.note_error(&t);
+                if via.path == self.job.folders[i].path {
+                    self.mark_stale(i);
+                } else {
+                    self.mark_gmail_stale();
+                }
+                self.job.folders[i].deleting = None;
+                self.checkpoint()
             }
             Err(e) => match self.react(e).await? {
                 React::Retry => self.recover(i).await,
@@ -1331,14 +1502,18 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             None => return Ok(()),
         };
         let own_path = self.job.folders[i].path.clone();
+        // `present` in another generation answers about other messages, and a
+        // uid read as gone would be recorded deleted (and, emptying, looked
+        // for in Trash by Message-ID). A folder whose generation is changed or
+        // unreadable stops deleting instead; nothing is recorded (I5, I6).
         let via = if batch.via == own_path {
-            if !self.check_validity(i).await? {
+            if !self.delete_validity(i).await? {
                 self.job.folders[i].deleting = None;
                 return self.checkpoint();
             }
             self.folder_info(i)?
         } else {
-            if !self.check_all_mail_validity().await? {
+            if !self.all_mail_delete_validity().await? {
                 self.job.folders[i].deleting = None;
                 return self.checkpoint();
             }
@@ -1391,7 +1566,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
     }
 
     async fn empty_trash_folder(&mut self, i: usize, ready: Vec<u32>) -> Flow<()> {
-        if !self.check_validity(i).await? {
+        if !self.delete_validity(i).await? {
             return Ok(());
         }
         let checks: Vec<(usize, u32)> = ready.iter().map(|&u| (i, u)).collect();
@@ -1406,10 +1581,12 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             for &u in chunk {
                 self.trash_pairs.insert((i, u), u);
             }
+            // The uids are the Trash folder's own, under the plan's generation.
+            let trash_validity = self.job.folders[i].uid_validity;
             self.job.folders[i].trash_pending.push(TrashBatch {
                 src: src.clone(),
                 trash_uids: Some(src),
-                trash_validity: None,
+                trash_validity,
                 graph_trash_ids: None,
             });
         }
@@ -1440,16 +1617,38 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         }
         let trash = self.trash_folder()?;
         self.set_running(Phase::Empty);
-        if let Some(recorded) = tb.trash_validity {
-            if let Some(cur) = self.current_validity(&trash).await? {
-                if cur != recorded {
-                    for u in src {
-                        self.keep_uid(i, u, KeptReason::NotEmptied);
-                    }
-                    return Ok(());
+        // The Trash generation every uid below is read in, and the one the
+        // expunge's own SELECT must find. Unreadable, or not the one the move
+        // recorded: nothing is emptied (I5, I6).
+        let trash_validity: Option<u32> = if self.job.provider == Provider::Graph {
+            None
+        } else {
+            let mut cur: Option<u32> = None;
+            for n in 0..VALIDITY_TRIES {
+                if n > 0 {
+                    let until = self.env.now_ms() + backoff_ms(BACKOFF_BASE_MS, n - 1);
+                    self.wait(WaitReason::Throttled, until).await?;
+                    self.gate().await?;
+                }
+                let r: Result<Option<u32>, Option<String>> = server_call!(self, self.ops.uid_validity(&trash).await);
+                if let Ok(Some(v)) = r {
+                    cur = Some(v);
+                    break;
                 }
             }
-        }
+            let usable = match (cur, tb.trash_validity) {
+                (None, _) => false,
+                (Some(c), Some(recorded)) => c == recorded,
+                (Some(_), None) => true,
+            };
+            if !usable {
+                for u in src {
+                    self.keep_uid(i, u, KeptReason::NotEmptied);
+                }
+                return Ok(());
+            }
+            cur
+        };
         // Pair each source uid with its Trash uid: exact pairs from this run,
         // else the sorted COPYUID pairing (plain folders), else look it up.
         let sorted_trash: Option<Vec<u32>> = if self.is_gmail_route(i) {
@@ -1552,7 +1751,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         }
         let exp_uids: Vec<u32> = expect.iter().map(|e| e.0).collect();
         let r: Result<Vec<u32>, Option<String>> =
-            server_call!(self, self.ops.expunge_exact(&trash, &exp_uids, &expect).await);
+            server_call!(self, self.ops.expunge_exact(&trash, &exp_uids, &expect, trash_validity).await);
         match r {
             Ok(done) => {
                 let done: HashSet<u32> = done.into_iter().collect();
@@ -1734,6 +1933,38 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                         }
                     }
                 }
+                // A uid the server did not answer never becomes "has no
+                // Message-ID": ask once more, then drop the ones that are gone
+                // from the folder (nothing to archive or delete) and fail the
+                // plan on any that are still there.
+                let mut unanswered: Vec<u32> = need.iter().copied().filter(|u| !got.contains_key(u)).collect();
+                if !unanswered.is_empty() {
+                    let r: Result<Vec<(u32, Option<String>)>, Option<String>> =
+                        server_call!(self, self.ops.message_ids(&info, &unanswered).await);
+                    if let Ok(v) = r {
+                        for (u, id) in v {
+                            got.insert(u, id);
+                        }
+                    }
+                    unanswered.retain(|u| !got.contains_key(u));
+                }
+                if !unanswered.is_empty() {
+                    let r: Result<Vec<u32>, Option<String>> =
+                        server_call!(self, self.ops.present(&info, &unanswered).await);
+                    let still: HashSet<u32> = match r {
+                        Ok(p) => p.into_iter().collect(),
+                        Err(_) => unanswered.iter().copied().collect(),
+                    };
+                    if !still.is_empty() {
+                        return Err(stop(RunExit::Failed(format!(
+                            "could not read the Message-IDs of {}: the server did not answer for {} messages. Start the job again.",
+                            info.path,
+                            still.len()
+                        ))));
+                    }
+                    let gone: HashSet<u32> = unanswered.iter().copied().collect();
+                    rows.retain(|m| !gone.contains(&m.uid));
+                }
                 for m in rows.iter_mut() {
                     if m.message_id.is_none() {
                         m.message_id = got.get(&m.uid).cloned().flatten();
@@ -1793,7 +2024,10 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             };
 
             // I2: an archived copy already in the vault with the right
-            // Message-ID counts as saved without a download.
+            // Message-ID counts as saved without a download: only when the
+            // vault folder is keyed under this plan's generation (a uid of
+            // another generation names other mail) and only against a
+            // Message-ID (a file is no proof of a message that has none).
             self.gate().await?;
             let r = self.local.archived_listing(&info.path).await;
             let listing = match self.map_local(r)? {
@@ -1803,7 +2037,25 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                     return Err(paused(PauseReason::VaultUnavailable));
                 }
             };
-            let cand: Vec<u32> = plan.uids.iter().copied().filter(|u| listing.contains_key(u)).collect();
+            let gen_ok = if preview.provider == Provider::Graph {
+                true
+            } else if let Some(v) = sf.uid_validity {
+                let r = self.local.vault_generation(&info.path).await;
+                match self.map_local(r)? {
+                    Ok(g) => g == Some(v),
+                    Err(t) => {
+                        self.note_error(&t);
+                        false
+                    }
+                }
+            } else {
+                false
+            };
+            let cand: Vec<u32> = if gen_ok {
+                plan.uids.iter().copied().filter(|u| listing.contains_key(u) && has_planned_id(&plan, *u)).collect()
+            } else {
+                Vec::new()
+            };
             if !cand.is_empty() {
                 let expected = expected_ids(&plan, &cand);
                 let r = self.local.verify_vault(&info.path, &listing, &cand, &expected).await;

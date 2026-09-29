@@ -383,6 +383,12 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
     setSelectedAction(id);
   };
 
+  // The same rule as the option's own row: the backup folder can be removed in
+  // Settings while the modal is minimized with this action still chosen. The
+  // row then says "Choose a backup folder first", and Confirm waits for it. A
+  // lapsed subscription keeps Confirm live so it can explain the upsell.
+  const needsBackupFolder = selectedAction === 'archive_backup_delete' && !hasBackupConfigured && premium;
+
   const handleConfirm = () => {
     // The action lives in the bulk session, which outlasts a minimize: a
     // subscription that lapsed meanwhile must not start a Premium run.
@@ -767,7 +773,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
                 </button>
                 <button
                   onClick={handleConfirm}
-                  disabled={!selectedAction}
+                  disabled={!selectedAction || needsBackupFolder}
                   data-testid="bulk-step2-confirm"
                   className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-all
                             disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"

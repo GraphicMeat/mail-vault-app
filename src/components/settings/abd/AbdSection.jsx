@@ -64,6 +64,10 @@ export default function AbdSection({ onUpgrade }) {
 
   const job = jobs[account.id];
   const running = !!job && !isFinished(job);
+  // The progress panel renders in the main window only (App.jsx). In a Settings
+  // window of its own, Show progress would open it in this window's store,
+  // where nothing draws it; the main window shows the job's pill by itself.
+  const inSettingsWindow = document.body.dataset.auxiliaryWindow === 'settings';
   const backupReady = backupLocation?.status === 'ready';
   const graph = account.oauth2Transport === 'graph';
 
@@ -113,9 +117,11 @@ export default function AbdSection({ onUpgrade }) {
       {job && (
         <div className="flex items-center justify-between gap-3 rounded-lg bg-mail-bg p-3" data-testid="abd-job-line">
           <p className="text-sm text-mail-text">{running ? t('settings.backup.abd.jobRunning') : statusText(job)}</p>
-          <Button variant="accentTint" size="sm" data-testid="abd-show-progress" onClick={() => useAbdStore.getState().openPanel(account.id)}>
-            {t('settings.backup.abd.showProgress')}
-          </Button>
+          {!inSettingsWindow && (
+            <Button variant="accentTint" size="sm" data-testid="abd-show-progress" onClick={() => useAbdStore.getState().openPanel(account.id)}>
+              {t('settings.backup.abd.showProgress')}
+            </Button>
+          )}
         </div>
       )}
 

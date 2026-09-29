@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Archive } from 'lucide-react';
 import { useAbdStore, selectPanelJob } from '../../stores/abdStore';
@@ -15,7 +15,20 @@ export function AbdPill() {
   const t = useT();
   const minimized = useAbdStore(s => !!s.panel?.minimized);
   const job = useAbdStore(selectPanelJob);
-  if (!minimized || !job) return null;
+  const focusPill = useAbdStore(s => s.focusPill);
+  const restoreButton = useRef(null);
+  const shown = minimized && !!job;
+
+  // Minimize unmounts the panel with focus on its button: keyboard focus
+  // follows it here instead of dropping to the page. A pill that appears on
+  // its own (a job started elsewhere) is not asked to, and takes none.
+  useEffect(() => {
+    if (!focusPill || !shown || !restoreButton.current) return;
+    restoreButton.current.focus();
+    useAbdStore.getState().pillFocused();
+  }, [focusPill, shown]);
+
+  if (!shown) return null;
 
   const text = isFinished(job) ? statusText(job)
     : isStalled(job) ? t('abd.pillWaiting')
@@ -30,7 +43,7 @@ export function AbdPill() {
       exit={{ x: 100, opacity: 0 }}
       className="flex items-center rounded-lg bg-mail-surface border border-mail-strong hover:bg-mail-surface-hover transition-colors max-w-[280px]"
     >
-      <button type="button" data-testid="abd-pill-restore" onClick={() => useAbdStore.getState().restore()}
+      <button ref={restoreButton} type="button" data-testid="abd-pill-restore" onClick={() => useAbdStore.getState().restore()}
         className="flex items-center gap-2 px-3 py-2 min-w-0 text-left">
         <span className="w-7 h-7 rounded-full bg-mail-accent/20 flex items-center justify-center flex-shrink-0">
           <Archive size={14} className="text-mail-accent-text" aria-hidden="true" />

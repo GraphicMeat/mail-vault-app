@@ -229,19 +229,44 @@ describe('start, pause, resume, cancel, dismiss', () => {
     expect(useAbdStore.getState().panel).toBeNull();
   });
 
-  it('clears a finished job of the account before it starts the next one', async () => {
+  it('starts over a finished job without dismissing it: the daemon replaces it, and so does the new job\'s frame', async () => {
     const order = [];
     h.daemon = vi.fn(async (m) => { order.push(m); return m === 'abd.status' ? h.status : {}; });
-    h.start = vi.fn(async () => { order.push('abd_start'); return { jobId: 'j2' }; });
+    h.start = vi.fn(async () => { order.push('abd_start'); return { jobId: 'abd-acc-2' }; });
     useAbdStore.getState().applyFrame(frame({ finished: true, outcome: 'completed', status: { state: 'completed' } }));
     await abd.startJob({ accountId: OAUTH.id, previewId: 'p2', mode: 'archive_delete', confirmed: true });
-    expect(order.indexOf('abd.dismiss')).toBeGreaterThan(-1);
-    expect(order.indexOf('abd.dismiss')).toBeLessThan(order.indexOf('abd_start'));
+    expect(order).toContain('abd_start');
+    expect(order).not.toContain('abd.dismiss');
+    // The panel opens on the new job, not on the old result.
+    expect(useAbdStore.getState().jobs[OAUTH.id]).toBeUndefined();
+    expect(useAbdStore.getState().panel).toEqual({ accountId: OAUTH.id, minimized: false });
+    useAbdStore.getState().applyFrame(frame({ jobId: 'abd-acc-2', updatedMs: 2000 }));
+    expect(useAbdStore.getState().jobs[OAUTH.id].jobId).toBe('abd-acc-2');
     // A running one is never dismissed by a start.
     order.length = 0;
     useAbdStore.getState().applyFrame(frame({ jobId: 'abd-acc-2', updatedMs: 9000 }));
     await abd.startJob({ accountId: OAUTH.id, previewId: 'p3', mode: 'archive_delete', confirmed: true });
     expect(order).not.toContain('abd.dismiss');
+  });
+
+  it('a refused start keeps the finished job\'s result, and never dismisses it', async () => {
+    h.start = vi.fn(async () => { throw new Error('E_ABD_NO_BACKUP_DRIVE: no drive'); });
+    useAbdStore.getState().applyFrame(frame({ finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    await expect(abd.startJob({ accountId: OAUTH.id, previewId: 'p2', mode: 'archive_backup_delete', confirmed: true }))
+      .rejects.toThrow('E_ABD_NO_BACKUP_DRIVE');
+    expect(calls('abd.dismiss')).toHaveLength(0);
+    expect(useAbdStore.getState().jobs[OAUTH.id]).toMatchObject({ jobId: 'abd-acc-1', finished: true });
+  });
+
+  it('keeps the new job\'s frame when it lands before the start answers', async () => {
+    h.start = vi.fn(async () => {
+      useAbdStore.getState().applyFrame(frame({ jobId: 'abd-acc-2', updatedMs: 2000 }));
+      return { jobId: 'abd-acc-2' };
+    });
+    useAbdStore.getState().applyFrame(frame({ finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    await abd.startJob({ accountId: OAUTH.id, previewId: 'p2', mode: 'archive_delete', confirmed: true });
+    expect(useAbdStore.getState().jobs[OAUTH.id].jobId).toBe('abd-acc-2');
+    expect(useAbdStore.getState().panel).toEqual({ accountId: OAUTH.id, minimized: false });
   });
 
   it('does not open a panel when the start is refused', async () => {

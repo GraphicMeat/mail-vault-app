@@ -1026,6 +1026,95 @@ async fn the_before_delete_check_reads_no_directory_unless_a_name_misses() {
     assert!(matches!(gone, Err(mailvault_core::abd::LocalError::DriveUnavailable(_))));
 }
 
+/// A mirror file renamed on the drive after the fallback map was read is
+/// found again: the map's stale entry makes the call read the folder once
+/// more, and a copy pass drops the map entirely.
+#[tokio::test]
+async fn a_mirror_file_renamed_since_the_fallback_listing_is_found_again() {
+    let dir = temp_dir("local-e5");
+    let mirror = temp_dir("mirror-e5");
+    let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+    s.abd.attach(ACCT, &mirror.to_string_lossy());
+    let local = DaemonLocal::new(Arc::clone(&s), ACCT, EMAIL);
+    let scans = || s.abd.test.fallback_scans.load(std::sync::atomic::Ordering::SeqCst);
+
+    let vault_cur = vault_files::cur_path(&dir, ACCT, "INBOX");
+    let mirror_cur = mirror.join(EMAIL).join("INBOX").join("cur");
+    std::fs::create_dir_all(&vault_cur).unwrap();
+    std::fs::create_dir_all(&mirror_cur).unwrap();
+    let name = vault_files::build_maildir_filename(2, &["archived".to_string()]);
+    let seen = vault_files::build_maildir_filename(2, &["archived".to_string(), "seen".to_string()]);
+    let flagged = vault_files::build_maildir_filename(2, &["archived".to_string(), "flagged".to_string()]);
+    std::fs::write(vault_cur.join(&name), raw("m2")).unwrap();
+    std::fs::write(mirror_cur.join(&seen), raw("m2")).unwrap();
+    let expected: HashMap<u32, String> = HashMap::from([(2, "m2@t.test".to_string())]);
+
+    let first = local.mirror_verify_paths("INBOX", &[(2, name.clone())], &expected).await.unwrap();
+    assert_eq!(first.ok, vec![2]);
+    assert_eq!(scans(), 1);
+    // Renamed again on the drive: the held map points at a file that is gone.
+    std::fs::rename(mirror_cur.join(&seen), mirror_cur.join(&flagged)).unwrap();
+    let again = local.mirror_verify_paths("INBOX", &[(2, name.clone())], &expected).await.unwrap();
+    assert_eq!(again.ok, vec![2], "found under its new name, not kept as missing forever");
+    assert_eq!(scans(), 2);
+
+    // A copy pass lands files the held map never saw: it is dropped.
+    let listing: HashMap<u32, PathBuf> = HashMap::from([(2, vault_cur.join(&name))]);
+    local.mirror_copy_verify("INBOX", &listing, &[2]).await.unwrap();
+    std::fs::rename(mirror_cur.join(&flagged), mirror_cur.join(&seen)).unwrap();
+    let after_copy = local.mirror_verify_paths("INBOX", &[(2, name)], &expected).await.unwrap();
+    assert_eq!(after_copy.ok, vec![2]);
+    assert_eq!(scans(), 3);
+}
+
+/// A message without a Message-ID is checked on the drive byte for byte
+/// against its vault copy, found by uid. Any non-empty file used to pass
+/// when the vault name had changed.
+#[tokio::test]
+async fn a_drive_copy_of_a_message_without_a_message_id_must_match_the_vault_bytes() {
+    let dir = temp_dir("local-b2");
+    let mirror = temp_dir("mirror-b2");
+    let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+    s.abd.attach(ACCT, &mirror.to_string_lossy());
+    let local = DaemonLocal::new(Arc::clone(&s), ACCT, EMAIL);
+
+    let vault_cur = vault_files::cur_path(&dir, ACCT, "INBOX");
+    let mirror_cur = mirror.join(EMAIL).join("INBOX").join("cur");
+    std::fs::create_dir_all(&vault_cur).unwrap();
+    std::fs::create_dir_all(&mirror_cur).unwrap();
+    let listed = |uid: u32| vault_files::build_maildir_filename(uid, &["archived".to_string()]);
+    let renamed = |uid: u32| vault_files::build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
+    let body = |t: &str| format!("Subject: {t}\r\n\r\nno id here {t}\r\n");
+    // 5: the vault file was renamed by a flag change; the drive holds another
+    //    message of the same length under the listed name.
+    std::fs::write(vault_cur.join(renamed(5)), body("aaaa")).unwrap();
+    std::fs::write(mirror_cur.join(listed(5)), body("bbbb")).unwrap();
+    // 6: the same bytes on both sides, the vault file renamed.
+    std::fs::write(vault_cur.join(renamed(6)), body("same")).unwrap();
+    std::fs::write(mirror_cur.join(listed(6)), body("same")).unwrap();
+    // 7: no vault copy at all.
+    std::fs::write(mirror_cur.join(listed(7)), body("orphan")).unwrap();
+
+    let files = vec![(5, listed(5)), (6, listed(6)), (7, listed(7))];
+    let v = local.mirror_verify_paths("INBOX", &files, &HashMap::new()).await.unwrap();
+    assert_eq!(v.mismatched, vec![5]);
+    assert_eq!(v.ok, vec![6]);
+    assert_eq!(v.missing, vec![7], "nothing to compare with is not proof");
+}
+
+/// A run that stopped because its state could not be saved is not settled
+/// as failed on disk: the last good save stays what the next start resumes.
+#[tokio::test]
+async fn a_run_stopped_by_a_failed_save_stays_resumable() {
+    let dir = temp_dir("unsaved");
+    let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+    let saved = abd_worker::finish_unsaved_for_test(&s, ACCT, EMAIL);
+    assert!(matches!(saved.status, JobStatus::Running { .. }), "the file still says running: {:?}", saved.status);
+    let frame = s.abd.handle(ACCT).expect("the handle stays").frame();
+    assert_eq!(frame["status"]["state"], json!("failed"), "the app is told: {frame}");
+    assert!(s.abd.handle(ACCT).unwrap().is_finished(), "this task is over");
+}
+
 #[tokio::test]
 async fn set_token_needs_an_account_a_token_and_an_expiry() {
     let dir = temp_dir("tok");

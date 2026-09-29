@@ -59,6 +59,9 @@ export class AccountPipeline {
     // Armed while the account's daily download limit is spent: the download-
     // ahead pass sleeps until the next UTC day (see `_pauseForLimit`).
     this._limitTimer = null;
+    // The mailbox the sleeping queue belongs to: a uid names a message only
+    // inside one mailbox, so the wake-up runs the queue there.
+    this._limitMailbox = null;
     this._activeSlots = 0;
     this._completed = 0;
     this._total = 0;
@@ -290,10 +293,20 @@ export class AccountPipeline {
 
     // Asleep until the daily download limit resets: what is new joins the
     // queue behind what is already waiting, and nothing is launched. The
-    // cascade to the other accounts is not held up by this one.
+    // cascade to the other accounts is not held up by this one. Uids of
+    // another mailbox can not join: they would be fetched from the sleeping
+    // queue's mailbox. The newest mailbox asked for replaces the queue (the
+    // other one is worked out again when it is next shown).
     if (this._limitTimer) {
-      const waiting = new Set(this._queue);
-      for (const uid of uids) if (!waiting.has(uid)) this._queue.push(uid);
+      if (mailbox !== this._limitMailbox) {
+        this._queue = [...uids];
+        this._retryQueue = [];
+        this._completed = 0;
+        this._limitMailbox = mailbox;
+      } else {
+        const waiting = new Set(this._queue);
+        for (const uid of uids) if (!waiting.has(uid)) this._queue.push(uid);
+      }
       this._total = this._completed + this._queue.length;
       this.onProgress(this.state);
       this.onComplete();
@@ -301,6 +314,7 @@ export class AccountPipeline {
     }
 
     this._phase = 'content';
+    this._limitMailbox = null; // a new pass: no queue from an earlier sleep is left
     this._queue = [...uids];
     this._retryQueue = [];
     this._retryDelay = 3000;
@@ -459,10 +473,25 @@ export class AccountPipeline {
       clearTimeout(this._retryTimer);
       this._retryTimer = null;
     }
+    this._limitMailbox = mailbox;
+    // Read when it fires: another mailbox's queue may have replaced this one meanwhile.
     this._limitTimer = setTimeout(() => {
       this._limitTimer = null;
-      this._resumeAfterLimit(mailbox);
+      this._resumeAfterLimit(this._limitMailbox);
     }, wait);
+  }
+
+  /**
+   * The account's download cap was switched off or its limit changed in
+   * Settings: stop sleeping now instead of at the next UTC day. If the day is
+   * still spent under the new limit, the first fetch is refused and the pass
+   * sleeps again. A pipeline that is paused meanwhile waits for `resume()`.
+   */
+  wakeFromLimit() {
+    if (!this._limitTimer || this._destroyed) return;
+    clearTimeout(this._limitTimer);
+    this._limitTimer = null;
+    this._resumeAfterLimit(this._limitMailbox);
   }
 
   _resumeAfterLimit(mailbox) {
@@ -600,11 +629,14 @@ export class AccountPipeline {
     // back online or switching accounts must not wake it early.
     if (this._limitTimer) return;
 
-    // Re-launch idle slots if we have work to do
+    // Re-launch idle slots if we have work to do. A queue that slept at the
+    // limit runs in its own mailbox, whatever the caller says ('INBOX' from
+    // an account switch or coming back online). Read when the slot starts: a
+    // new pass started right after this resume replaces the queue and clears it.
     if (this._phase === 'content' && this._queue.length > 0) {
       const slotsToLaunch = Math.min(this.concurrency - this._activeSlots, this._queue.length);
       for (let i = 0; i < slotsToLaunch; i++) {
-        setTimeout(() => this._workerLoop(i, mailbox), i * 100);
+        setTimeout(() => this._workerLoop(i, this._limitMailbox ?? mailbox), i * 100);
       }
     }
   }

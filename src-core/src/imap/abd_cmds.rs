@@ -307,8 +307,11 @@ pub async fn list_rows(
 }
 
 /// Message-IDs (normalized, no angle brackets) for `uids`, 500 per command.
-/// A uid the server did not answer is absent from the result; a message with no
-/// Message-ID header answers `None`.
+/// A uid the server did not answer is absent from the result (the caller
+/// decides what that means); a message with no Message-ID header answers
+/// `None`. A reply row the parser could not name (no uid, but a header or no
+/// attribute at all) fails the page (`page incomplete`) exactly as in
+/// `list_rows`: it is a message whose id would silently go missing.
 pub async fn message_ids(
     session: &mut ImapSession,
     mailbox: &str,
@@ -321,10 +324,22 @@ pub async fn message_ids(
     select_mailbox(session, mailbox).await?;
     for chunk in uids.chunks(500) {
         let command = format!("UID FETCH {} (UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])", compress_uid_ranges(chunk));
+        let mut nameless = 0usize;
         for f in fetch_to_tag(session, command).await? {
-            let Some(uid) = f.uid else { continue };
+            let Some(uid) = f.uid else {
+                if f.empty || f.header.is_some() {
+                    nameless += 1;
+                }
+                continue;
+            };
             let id = f.header.as_deref().and_then(crate::maildir::message_id_in);
             out.push((uid, id));
+        }
+        if nameless > 0 {
+            return Err(format!(
+                "abd_message_ids: {} FETCH item(s) named no UID (unparseable); page incomplete",
+                nameless
+            ));
         }
     }
     Ok(out)
@@ -394,6 +409,23 @@ pub async fn fetch_raw(session: &mut ImapSession, mailbox: &str, uid: u32) -> Re
 
 // ── Moving and expunging ─────────────────────────────────────────────────────
 
+/// The SELECT a destructive command runs under must still be the generation
+/// the job planned against (I5). `None` expected = no check (a caller without
+/// a recorded generation); a SELECT that reports none when one is expected is
+/// refused, never read as "unchanged".
+fn check_validity(mailbox: &str, got: Option<u32>, expect: Option<u32>) -> Result<(), String> {
+    match expect {
+        Some(want) if got != Some(want) => Err(format!(
+            "{}: UIDVALIDITY of {} is {:?}, the job expected {}; nothing was sent",
+            crate::abd::ops::VALIDITY_CHANGED,
+            mailbox,
+            got,
+            want
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// What a COPY/MOVE said it did (RFC 4315): the destination's UIDVALIDITY, the
 /// source uids that were copied and the uids they got, position for position.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -457,6 +489,10 @@ async fn run_copyuid(session: &mut ImapSession, command: String) -> Result<Optio
 ///   expunge left removes every `\Deleted` message in the folder, other
 ///   clients' included.
 ///
+/// `expect_validity`: when `Some`, the SELECT this command runs under must
+/// report exactly that UIDVALIDITY, or nothing is sent (the uids would name
+/// other messages). A SELECT that reports none refuses too.
+///
 /// Returns the COPYUID the server reported, if any.
 pub async fn move_uids_scoped(
     session: &mut ImapSession,
@@ -465,6 +501,7 @@ pub async fn move_uids_scoped(
     uids: &[u32],
     has_move: bool,
     has_uidplus: bool,
+    expect_validity: Option<u32>,
 ) -> Result<Option<CopyUid>, String> {
     if uids.is_empty() {
         return Ok(None);
@@ -472,7 +509,8 @@ pub async fn move_uids_scoped(
     if !has_move && !has_uidplus {
         return Err("This server has neither MOVE nor UIDPLUS: refusing to delete".to_string());
     }
-    select_mailbox(session, src).await?;
+    let mbox = select_mailbox(session, src).await?;
+    check_validity(src, mbox.uid_validity, expect_validity)?;
     let set = compress_uid_ranges(uids);
     let target = quote_mailbox(dst)?;
     if has_move {
@@ -488,11 +526,14 @@ pub async fn move_uids_scoped(
 /// on those uids, then `UID EXPUNGE` of the same set. Needs UIDPLUS (RFC 4315);
 /// without it the only expunge takes every `\Deleted` message in the folder, so
 /// this refuses instead.
+///
+/// `expect_validity` as in `move_uids_scoped`, checked on this SELECT.
 pub async fn expunge_exact(
     session: &mut ImapSession,
     mailbox: &str,
     uids: &[u32],
     has_uidplus: bool,
+    expect_validity: Option<u32>,
 ) -> Result<(), String> {
     if uids.is_empty() {
         return Ok(());
@@ -500,7 +541,8 @@ pub async fn expunge_exact(
     if !has_uidplus {
         return Err("UIDPLUS is required for an exact expunge; refusing to expunge".to_string());
     }
-    select_mailbox(session, mailbox).await?;
+    let mbox = select_mailbox(session, mailbox).await?;
+    check_validity(mailbox, mbox.uid_validity, expect_validity)?;
     let set = compress_uid_ranges(uids);
     run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", set), "STORE \\Deleted").await?;
     run_checked(session, format!("UID EXPUNGE {}", set), "UID EXPUNGE").await

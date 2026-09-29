@@ -345,6 +345,8 @@ impl ServerOps for GraphOps {
         folder: &FolderInfo,
         msgs: &[ListedMsg],
         trash: &FolderInfo,
+        // Graph has no UIDVALIDITY: its ids are the message's own.
+        _validity: Option<u32>,
     ) -> Result<MoveResult, OpsError> {
         let dest = trash.graph_id.clone().unwrap_or_else(|| "deleteditems".to_string());
         let mut moved = Vec::new();
@@ -373,6 +375,7 @@ impl ServerOps for GraphOps {
         trash: &FolderInfo,
         trash_uids: &[u32],
         expect: &[(u32, String)],
+        _validity: Option<u32>,
     ) -> Result<Vec<u32>, OpsError> {
         let mut done = Vec::new();
         let mut seen: HashSet<u32> = HashSet::new();

@@ -17,7 +17,7 @@ pub mod uidset;
 pub use engine::{plan_job, progress_frame, run, FrameInfo, RunExit};
 pub use ops::{
     Caps, Control, Env, Fetched, FolderInfo, ListPage, ListedMsg, LocalError, LocalStore, MoveResult, OpsError,
-    ServerOps, Verify,
+    ServerOps, StoreOutcome, Stored, Verify, VALIDITY_CHANGED,
 };
 pub use plan::{
     estimate_days, gmail_scope, in_scope, summarize, year_of, AllMailMap, FolderPlan, LocalCounts, PlanStore,

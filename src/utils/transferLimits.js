@@ -57,6 +57,17 @@ export function resolveDailyLimitBytes(limitConfig, isGmail, direction) {
   return { limitBytes: null, isProviderDefault: false };
 }
 
+/**
+ * Whether an account's background download cap changed in a way that can
+ * change what the daemon lets through today: the cap switched on or off, or a
+ * new download limit. The warning and the upload limit never stop a download.
+ * Takes the account's `transferLimits` entry before and after.
+ */
+export function downloadCapChanged(prev, next) {
+  return (prev?.capEnabled === true) !== (next?.capEnabled === true)
+    || (prev?.dailyDownLimitBytes ?? null) !== (next?.dailyDownLimitBytes ?? null);
+}
+
 const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 /**

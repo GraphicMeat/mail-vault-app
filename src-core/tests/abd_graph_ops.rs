@@ -499,7 +499,7 @@ async fn move_returns_the_new_deleted_items_id() {
     let f = folder("INBOX", "mv-f", FolderRole::Normal);
     let trash = folder("Trash", "mv-trash-id", FolderRole::Trash);
     let msgs = vec![listed(11, "mv-1", Some("a@x")), listed(12, "mv-2", Some("b@x"))];
-    let r = o.move_to_trash(&f, &msgs, &trash).await.unwrap();
+    let r = o.move_to_trash(&f, &msgs, &trash, None).await.unwrap();
     // mv-2 is a 404: it is not in `moved`, so the engine keeps it.
     assert_eq!(r.moved, vec![11]);
     assert_eq!(r.graph_new_ids, Some(vec![(11, "mv-new-1".to_string())]));
@@ -560,7 +560,7 @@ async fn permanent_delete_of_exactly_the_given_ids_and_only_when_the_message_id_
     let trash = folder("Trash", "ex-trash", FolderRole::Trash);
     o.remember("Trash", [(7, "ex-a".to_string()), (8, "ex-b".to_string()), (9, "ex-c".to_string()), (10, "ex-untouched".to_string())]);
     let expect = vec![(7, "a@x".to_string()), (8, "b@x".to_string()), (9, "c@x".to_string()), (99, "z@x".to_string())];
-    let done = o.expunge_exact(&trash, &[7, 8, 9, 99], &expect).await.unwrap();
+    let done = o.expunge_exact(&trash, &[7, 8, 9, 99], &expect, None).await.unwrap();
     assert_eq!(done, vec![7, 9]);
     let posts: Vec<String> =
         stub().log.lock().unwrap().iter().filter(|r| r.method == "POST" && r.path.contains("/ex-")).map(|r| r.path.clone()).collect();
@@ -580,7 +580,7 @@ async fn expunge_exact_propagates_a_throttle_so_the_retry_finishes_the_rest() {
     let mut o = ops();
     let trash = folder("Trash", "tl-trash", FolderRole::Trash);
     o.remember("Trash", [(1, "tl-a".to_string())]);
-    match o.expunge_exact(&trash, &[1], &[(1, "a@x".to_string())]).await {
+    match o.expunge_exact(&trash, &[1], &[(1, "a@x".to_string())], None).await {
         Err(OpsError::Throttled { retry_after_secs: Some(3), .. }) => {}
         other => panic!("expected a throttle with retry_after 3, got {other:?}"),
     }
@@ -696,7 +696,7 @@ async fn remember_plan_lets_present_and_expunge_find_messages_this_run_never_fet
     let trash = folder("Trash", "rp-trash", FolderRole::Trash);
     assert_eq!(o.present(&trash, &[4, 5]).await.unwrap(), vec![4, 5]);
     assert_eq!(seen("/me/messages/rp-").len(), 2, "both ids were looked up, none assumed");
-    let done = o.expunge_exact(&trash, &[5], &[(5, "b@x".to_string())]).await.unwrap();
+    let done = o.expunge_exact(&trash, &[5], &[(5, "b@x".to_string())], None).await.unwrap();
     assert_eq!(done, vec![5]);
     let posts: Vec<String> = seen("/me/messages/rp-").iter().filter(|r| r.method == "POST").map(|r| r.path.clone()).collect();
     assert_eq!(posts, vec!["/me/messages/rp-2/permanentDelete"]);
@@ -724,7 +724,7 @@ async fn a_refusal_a_retry_cannot_fix_reports_what_is_already_deleted() {
     let expect = vec![(1, "a@x".to_string()), (2, "b@x".to_string()), (3, "c@x".to_string())];
     // uid 1 is deleted for good, uid 2 is refused: the answer keeps uid 1 as done
     // instead of an Err that would count it as kept.
-    let done = o.expunge_exact(&trash, &[1, 2, 3], &expect).await.unwrap();
+    let done = o.expunge_exact(&trash, &[1, 2, 3], &expect, None).await.unwrap();
     assert_eq!(done, vec![1]);
     assert!(seen("ex2-c").is_empty(), "it stops at a refusal");
 }

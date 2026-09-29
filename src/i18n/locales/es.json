@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "La copia falló: haz clic para verlo",
   "sidebar.backupIncompleteClickView": "Copia incompleta: haz clic para verlo",
   "sidebar.backupOverdueClickView": "Copia atrasada: haz clic para verlo",
-  "sidebar.backupPausedAtDailyLimit": "Copia de seguridad en pausa por el límite diario — continúa después de medianoche UTC",
+  "sidebar.backupPausedAtDailyLimit": "Copia de seguridad en pausa por el límite diario. Continúa después de medianoche UTC",
   "sidebar.backupUpDate": "Copia al día",
   "sidebar.changeServer": "Cambiar de servidor",
   "sidebar.clickToSeeMore": "Toca para ver más →",

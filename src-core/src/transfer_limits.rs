@@ -212,6 +212,8 @@ pub struct BackgroundLimit {
     /// Look at the allowance once per this many messages a job fetches.
     pub check_every: usize,
     hit: Arc<Mutex<Option<Allowance>>>,
+    /// When `check` last found the day spent (this job's clock).
+    hit_at: Arc<Mutex<Option<i64>>>,
 }
 
 /// Messages between two looks at the allowance in a job. A look is a small
@@ -229,7 +231,13 @@ impl BackgroundLimit {
     }
 
     pub fn with_allowance(allowance: AllowanceFn, clock: Clock) -> Self {
-        Self { allowance, clock, check_every: DEFAULT_CHECK_EVERY, hit: Arc::new(Mutex::new(None)) }
+        Self {
+            allowance,
+            clock,
+            check_every: DEFAULT_CHECK_EVERY,
+            hit: Arc::new(Mutex::new(None)),
+            hit_at: Arc::new(Mutex::new(None)),
+        }
     }
 
     pub fn check_every(mut self, every: usize) -> Self {
@@ -248,6 +256,7 @@ impl BackgroundLimit {
         let spent = self.status().filter(Allowance::is_spent);
         if let Some(a) = spent {
             *self.hit.lock().unwrap_or_else(|p| p.into_inner()) = Some(a);
+            *self.hit_at.lock().unwrap_or_else(|p| p.into_inner()) = Some(self.clock.now_ms());
         }
         spent
     }
@@ -257,9 +266,13 @@ impl BackgroundLimit {
         *self.hit.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// When downloads may resume: the next UTC midnight on this job's clock.
+    /// When downloads may resume: the UTC midnight after the moment the limit
+    /// stopped this job (the day that was spent), else after now. Reading the
+    /// clock only when the final report is built would skip a whole day for a
+    /// limit hit just before midnight and reported just after.
     pub fn resume_after_ms(&self) -> i64 {
-        next_utc_midnight_ms(self.clock.now_ms())
+        let at = (*self.hit_at.lock().unwrap_or_else(|p| p.into_inner())).unwrap_or_else(|| self.clock.now_ms());
+        next_utc_midnight_ms(at)
     }
 }
 
@@ -380,6 +393,22 @@ mod tests {
         assert!(limit.check().is_none(), "the next UTC day starts with an empty tally");
         assert_eq!(limit.status().map(|a| a.remaining()), Some(100 * MB));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The limit is hit at 23:59:50 and the run's final report is built at
+    /// 00:00:10: the wait is until the midnight that follows the hit, not a
+    /// whole day more.
+    #[test]
+    fn the_resume_time_is_the_midnight_after_the_hit_not_after_the_report() {
+        let midnight = next_utc_midnight_ms(NOON);
+        let clock = Clock::pinned(midnight - 10_000);
+        let limit = BackgroundLimit::with_allowance(
+            Arc::new(|| Some(Allowance { limit_bytes: 10, used_bytes: 10 })),
+            clock.clone(),
+        );
+        assert!(limit.check().is_some());
+        clock.advance(20_000);
+        assert_eq!(limit.resume_after_ms(), midnight);
     }
 
     #[test]

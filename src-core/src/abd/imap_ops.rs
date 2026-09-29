@@ -378,9 +378,18 @@ impl ServerOps for ImapOps {
     async fn message_ids(&mut self, folder: &FolderInfo, uids: &[u32]) -> Result<Vec<(u32, Option<String>)>, OpsError> {
         let path = folder.path.clone();
         let uids = uids.to_vec();
-        with_session!(self, true, |s| {
-            imap::bounded("abd message-ids", 300, abd_cmds::message_ids(s, &path, &uids)).await
-        })
+        let mut tries = 0u32;
+        loop {
+            let r: Result<Vec<(u32, Option<String>)>, OpsError> = with_session!(self, true, |s| {
+                imap::bounded("abd message-ids", 300, abd_cmds::message_ids(s, &path, &uids)).await
+            });
+            match r {
+                // A row the parser could not name: asked again on a fresh
+                // session, never answered short.
+                Err(OpsError::Other(t)) if t.contains("page incomplete") && tries < CHUNK_RETRIES => tries += 1,
+                other => return other,
+            }
+        }
     }
 
     async fn uid_validity(&mut self, folder: &FolderInfo) -> Result<Option<u32>, OpsError> {
@@ -421,6 +430,7 @@ impl ServerOps for ImapOps {
         folder: &FolderInfo,
         msgs: &[ListedMsg],
         trash: &FolderInfo,
+        validity: Option<u32>,
     ) -> Result<MoveResult, OpsError> {
         let caps = self.caps().await?;
         if !caps.move_cmd && !caps.uidplus {
@@ -435,7 +445,7 @@ impl ServerOps for ImapOps {
             imap::bounded(
                 "abd move",
                 600,
-                abd_cmds::move_uids_scoped(s, &src, &dst, &uids, caps.move_cmd, caps.uidplus),
+                abd_cmds::move_uids_scoped(s, &src, &dst, &uids, caps.move_cmd, caps.uidplus, validity),
             )
             .await
         })?;
@@ -467,6 +477,7 @@ impl ServerOps for ImapOps {
         trash: &FolderInfo,
         trash_uids: &[u32],
         expect: &[(u32, String)],
+        validity: Option<u32>,
     ) -> Result<Vec<u32>, OpsError> {
         let caps = self.caps().await?;
         if !caps.uidplus {
@@ -492,7 +503,7 @@ impl ServerOps for ImapOps {
         let path = trash.path.clone();
         let set = matched.clone();
         with_session!(self, false, |s| {
-            imap::bounded("abd expunge", 600, abd_cmds::expunge_exact(s, &path, &set, true)).await
+            imap::bounded("abd expunge", 600, abd_cmds::expunge_exact(s, &path, &set, true, validity)).await
         })?;
         Ok(matched)
     }

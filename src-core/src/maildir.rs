@@ -467,6 +467,50 @@ pub fn verify_listed(
     (verified, missing, mismatched)
 }
 
+/// `verify_listed` for a caller about to delete the server's copy (the Archive
+/// & delete job). Where a Message-ID is expected it must be READ from the file
+/// and equal: a file whose header carries none, or another one, is
+/// `mismatched`; a file that cannot be read at all is `missing` (unproven, try
+/// again later). A uid with no expected id verifies on presence only, and the
+/// caller decides what that proves. `verify_listed` itself keeps its lenient
+/// rule for its other callers.
+pub fn verify_listed_strict(
+    cur_dir: &Path,
+    listing: &HashMap<u32, PathBuf>,
+    uids: &[u32],
+    expected_ids: &HashMap<u32, String>,
+) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    let mut verified: Vec<u32> = Vec::new();
+    let mut missing: Vec<u32> = Vec::new();
+    let mut mismatched: Vec<u32> = Vec::new();
+
+    for uid in uids {
+        let Some(path) = listing
+            .get(uid)
+            .and_then(|listed| find_listed_by_uid(cur_dir, *uid, listed))
+            .filter(|p| p.file_name().is_some_and(|n| carries_archived(&n.to_string_lossy())))
+        else {
+            missing.push(*uid);
+            continue;
+        };
+        let expected = expected_ids.get(uid).map(|id| normalize_message_id(id)).filter(|id| !id.is_empty());
+        let Some(want) = expected else {
+            verified.push(*uid);
+            continue;
+        };
+        let Some(text) = read_header_text(&path) else {
+            missing.push(*uid);
+            continue;
+        };
+        match header_value(&text, "message-id:").and_then(|v| message_id_of(&v)) {
+            Some(got) if got == want => verified.push(*uid),
+            _ => mismatched.push(*uid),
+        }
+    }
+
+    (verified, missing, mismatched)
+}
+
 /// The header section of an RFC 5322 message — everything before the first
 /// blank line, or the whole slice when there isn't one.
 pub(crate) fn header_section(bytes: &[u8]) -> &[u8] {
@@ -1878,6 +1922,45 @@ mod tests {
         assert!(verified.is_empty(), "a stale listed path must not verify on presence alone");
         assert!(missing.is_empty());
         assert_eq!(mismatched, vec![12]);
+    }
+
+    /// The Archive & delete job's check: an expected Message-ID must be READ
+    /// and equal. A file with no Message-ID header where one is expected is a
+    /// different message, never "no proof of a swap".
+    #[test]
+    fn the_strict_check_never_verifies_an_expected_id_it_cannot_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AS"), Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), &format!("13{INFO_PREFIX}AS"), None);
+        write_vault_msg(tmp.path(), &format!("14{INFO_PREFIX}AS"), Some("<other@host.test>"));
+        write_vault_msg(tmp.path(), &format!("15{INFO_PREFIX}AS"), None);
+        let listing = archived_file_map(tmp.path());
+        let expected = HashMap::from([
+            (12u32, "<a@host.test>".to_string()),
+            (13u32, "<b@host.test>".to_string()),
+            (14u32, "<c@host.test>".to_string()),
+            (16u32, "<d@host.test>".to_string()),
+        ]);
+
+        let (verified, missing, mismatched) = verify_listed_strict(tmp.path(), &listing, &[12, 13, 14, 15, 16], &expected);
+        assert_eq!(verified, vec![12, 15], "15 has no expected id: presence, the caller decides what that proves");
+        assert_eq!(missing, vec![16]);
+        assert_eq!(mismatched, vec![13, 14], "13 has no Message-ID where one is expected");
+
+        // The lenient check still reads 13 as verified: its other callers keep it.
+        let (lenient, _, _) = verify_listed(tmp.path(), &listing, &[13], Some(&expected));
+        assert_eq!(lenient, vec![13]);
+    }
+
+    #[test]
+    fn the_strict_check_follows_a_rename_and_reads_the_new_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), &format!("12{INFO_PREFIX}AFS"), Some("<a@host.test>"));
+        let listing = HashMap::from([(12u32, tmp.path().join(format!("12{INFO_PREFIX}AS")))]);
+        let expected = HashMap::from([(12u32, "a@host.test".to_string())]);
+        let (verified, missing, mismatched) = verify_listed_strict(tmp.path(), &listing, &[12], &expected);
+        assert_eq!(verified, vec![12]);
+        assert!(missing.is_empty() && mismatched.is_empty());
     }
 
     #[test]

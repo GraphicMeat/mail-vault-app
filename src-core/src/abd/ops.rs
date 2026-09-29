@@ -79,14 +79,21 @@ pub enum OpsError {
     Offline(String),
     /// The uid/id no longer exists on the server.
     Gone,
+    /// The folder's UIDVALIDITY under the command's own SELECT was not the
+    /// one the job expected (or the SELECT reported none): nothing was sent.
+    ValidityChanged(String),
     Other(String),
 }
+
+/// The marker a raw IMAP command puts in its error when the SELECT it ran
+/// under reports another UIDVALIDITY than the job expected.
+pub const VALIDITY_CHANGED: &str = "ABD_VALIDITY_CHANGED";
 
 impl OpsError {
     pub fn text(&self) -> String {
         match self {
             OpsError::ProviderLimit(t) | OpsError::TooManyConnections(t) | OpsError::SignIn(t) => t.clone(),
-            OpsError::Offline(t) | OpsError::Other(t) => t.clone(),
+            OpsError::Offline(t) | OpsError::Other(t) | OpsError::ValidityChanged(t) => t.clone(),
             OpsError::Throttled { text, .. } => text.clone(),
             OpsError::Gone => "gone".to_string(),
         }
@@ -108,6 +115,9 @@ impl OpsError {
 
     /// An IMAP error string as the engine should react to it.
     pub fn from_imap(err: &str) -> OpsError {
+        if err.contains(VALIDITY_CHANGED) {
+            return OpsError::ValidityChanged(err.to_string());
+        }
         OpsError::from_signal(classify_imap(err), None, err)
     }
 
@@ -136,20 +146,26 @@ pub trait ServerOps {
     async fn fetch(&mut self, folder: &FolderInfo, msg: &ListedMsg) -> Result<Fetched, OpsError>;
     /// Which of `uids` the folder still holds (tag-checked; IMAP UID SEARCH UID set).
     async fn present(&mut self, folder: &FolderInfo, uids: &[u32]) -> Result<Vec<u32>, OpsError>;
+    /// `validity`: the UIDVALIDITY `folder` must have under the SELECT the
+    /// move itself runs in (IMAP). Any other value, or none reported, refuses
+    /// with `ValidityChanged` before anything is sent (I5). Graph: `None`.
     async fn move_to_trash(
         &mut self,
         folder: &FolderInfo,
         msgs: &[ListedMsg],
         trash: &FolderInfo,
+        validity: Option<u32>,
     ) -> Result<MoveResult, OpsError>;
     /// Re-read Message-IDs of `trash_uids`, keep those matching `expect`, then
     /// STORE \Deleted + UID EXPUNGE exactly those. Returns the expunged uids.
     /// Err if the server lacks UIDPLUS. Graph: permanentDelete per id.
+    /// `validity` as for `move_to_trash`, checked on the expunge's own SELECT.
     async fn expunge_exact(
         &mut self,
         trash: &FolderInfo,
         trash_uids: &[u32],
         expect: &[(u32, String)],
+        validity: Option<u32>,
     ) -> Result<Vec<u32>, OpsError>;
     /// (message id, trash uid) for each id found in Trash.
     async fn find_in_trash(&mut self, trash: &FolderInfo, message_ids: &[String]) -> Result<Vec<(String, u32)>, OpsError>;
@@ -166,6 +182,24 @@ pub struct Verify {
     pub mismatched: Vec<u32>,
 }
 
+/// What `LocalStore::store_archived` found under the uid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreOutcome {
+    /// This call wrote the file.
+    Wrote,
+    /// An archived copy was already there, byte for byte what was fetched.
+    FoundSame,
+    /// An archived copy was already there with other bytes. It was kept as it
+    /// is; it proves nothing about the fetched message by itself.
+    FoundDifferent,
+}
+
+#[derive(Clone, Debug)]
+pub struct Stored {
+    pub path: PathBuf,
+    pub outcome: StoreOutcome,
+}
+
 #[derive(Debug)]
 pub enum LocalError {
     VaultUnavailable(String),
@@ -179,10 +213,18 @@ pub trait LocalStore {
     async fn archived_listing(&self, folder: &str) -> Result<HashMap<u32, PathBuf>, LocalError>;
     /// `archive::store_archived`: vault_files::store with flags store_flags(imap)
     /// (always `archived`), overwrite only a non-archived copy, custody entry.
-    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<PathBuf, LocalError>;
+    /// Says whether it wrote the file or found an archived copy (the same
+    /// bytes or not).
+    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<Stored, LocalError>;
+    /// The UIDVALIDITY the vault folder's files are keyed under
+    /// (`maildir::read_generation` of the mailbox dir); `None` when never
+    /// recorded. A file already on disk is adopted only under the plan's own.
+    async fn vault_generation(&self, folder: &str) -> Result<Option<u32>, LocalError>;
     async fn read_file(&self, path: &Path) -> Result<Vec<u8>, LocalError>;
     /// A per-file check against current disk (A flag on the current name and
-    /// the Message-ID), using `listing` only to find each uid's path.
+    /// the Message-ID), using `listing` only to find each uid's path. Strict
+    /// (`maildir::verify_listed_strict`): an expected Message-ID must be read
+    /// and equal; a uid with no expected id verifies on presence only.
     async fn verify_vault(
         &self,
         folder: &str,
@@ -191,9 +233,16 @@ pub trait LocalStore {
         expected: &HashMap<u32, String>,
     ) -> Result<Verify, LocalError>;
     /// Part B copy_uids_to_mirror (copy absent, verify all by Message-ID),
-    /// against a per-pass mirror listing held by the impl.
+    /// against a per-pass mirror listing held by the impl. The vault side is
+    /// found through `listing` (the job's archived listing of the folder), so
+    /// no batch lists the vault folder again.
     /// Err(DriveUnavailable) when the mirror root is missing/unwritable.
-    async fn mirror_copy_verify(&self, folder: &str, uids: &[u32]) -> Result<Verify, LocalError>;
+    async fn mirror_copy_verify(
+        &self,
+        folder: &str,
+        listing: &HashMap<u32, PathBuf>,
+        uids: &[u32],
+    ) -> Result<Verify, LocalError>;
     /// The before-delete re-check: open the mirror file for each (uid, vault
     /// file name) and compare Message-IDs. No read_dir unless a name misses.
     async fn mirror_verify_paths(

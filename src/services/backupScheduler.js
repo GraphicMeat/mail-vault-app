@@ -6,6 +6,7 @@ import { useMailStore } from '../stores/mailStore';
 import { hasValidCredentials, resolveServerAccount } from './authUtils';
 import { createSnapshotFromMaildir } from './snapshotService';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
+import { downloadCapChanged } from '../utils/transferLimits';
 import { t } from '../i18n/index.js';
 
 // Re-prompt the share-to-unlock panel at most weekly.
@@ -747,6 +748,25 @@ class BackupCoordinator {
       if (this._isScheduledRun(accountId)) this.queueBackup(accountId);
     }, Math.max(0, until - Date.now()));
     this._limitHolds.set(accountId, { until, timer });
+  }
+
+  /**
+   * Follow the daily download limits in Settings: an account held at the
+   * limit whose cap is switched off, or whose download limit changes, is
+   * released now instead of at the reset, and runs again at once if the
+   * schedule would run it (the same gates as the midnight re-queue). If the day
+   * is still spent under the new limit, the daemon stops it and it is held
+   * again. Returns the unsubscribe; the scheduler hook owns it.
+   */
+  watchTransferLimits() {
+    return useSettingsStore.subscribe((state, previous) => {
+      if (state.transferLimits === previous.transferLimits) return;
+      for (const accountId of [...this._limitHolds.keys()]) {
+        if (!downloadCapChanged(previous.transferLimits?.[accountId], state.transferLimits?.[accountId])) continue;
+        this._releaseLimitHold(accountId);
+        if (this._isScheduledRun(accountId)) this.queueBackup(accountId);
+      }
+    });
   }
 
   /** Whether an automatic run of this account is allowed right now: Premium, visible, scheduled. */

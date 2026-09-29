@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Archive, Check, AlertCircle, Minimize2, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAbdStore, selectPanelJob } from '../../stores/abdStore';
+import { useAccountStore } from '../../stores/accountStore';
 import * as abd from '../../services/abd';
 import { isFinished, isBackupMode, keptReasons } from '../../utils/abdFrame';
 import { formatBytes } from '../../utils/formatBytes';
@@ -46,6 +47,23 @@ function PanelBody({ job }) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
+  // A job the daemon could not read sends no email: name the account from the list.
+  const listedEmail = useAccountStore(s => (s.accounts || []).find(a => a.id === job.accountId)?.email);
+  const accountEmail = job.accountEmail || listedEmail || '';
+
+  // The footer swaps for the confirmation and back: focus goes with it, never to the page.
+  const cancelButton = useRef(null);
+  const keepRunningButton = useRef(null);
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    if (confirmingCancel) {
+      wasConfirming.current = true;
+      keepRunningButton.current?.focus();
+    } else if (wasConfirming.current) {
+      wasConfirming.current = false;
+      cancelButton.current?.focus();
+    }
+  }, [confirmingCancel]);
 
   const counts = job.counts || {};
   const finished = isFinished(job);
@@ -88,12 +106,12 @@ function PanelBody({ job }) {
                   : <Archive size={14} className="text-mail-accent-text" />}
             </div>
             <span className="font-medium text-mail-text text-sm truncate" data-testid="abd-panel-title">
-              {t(backup ? 'abd.panel.titleBackup' : 'abd.panel.title', { account: job.accountEmail })}
+              {t(backup ? 'abd.panel.titleBackup' : 'abd.panel.title', { account: accountEmail })}
             </span>
           </div>
           {!finished && (
             <Button variant="ghost" icon size="xs" className="hover:bg-mail-border" data-testid="abd-minimize"
-              onClick={() => useAbdStore.getState().minimize()} title={t('common.minimize')} aria-label={t('common.minimize')}>
+              onClick={() => useAbdStore.getState().minimize({ focusPill: true })} title={t('common.minimize')} aria-label={t('common.minimize')}>
               <Minimize2 size={14} className="text-mail-text-muted" />
             </Button>
           )}
@@ -151,7 +169,8 @@ function PanelBody({ job }) {
           <div className="px-4 py-3 bg-mail-danger/5 border-t border-mail-border" data-testid="abd-cancel-confirm">
             <p className="text-xs text-mail-text mb-2">{t('abd.action.cancelConfirm')}</p>
             <div className="flex gap-2">
-              <Button variant="secondary" size="xs" onClick={() => setConfirmingCancel(false)}>{t('abd.action.keepRunning')}</Button>
+              <Button ref={keepRunningButton} variant="secondary" size="xs" data-testid="abd-keep-running"
+                onClick={() => setConfirmingCancel(false)}>{t('abd.action.keepRunning')}</Button>
               <Button variant="danger" size="xs" data-testid="abd-cancel-yes" disabled={busy}
                 onClick={() => { setConfirmingCancel(false); run(abd.cancel); }}>{t('bulk.progress.yesStop')}</Button>
             </div>
@@ -169,7 +188,7 @@ function PanelBody({ job }) {
                 {t('abd.action.pause')}
               </Button>
             )}
-            <Button variant="ghost" size="xs" className="hover:text-mail-danger" data-testid="abd-cancel"
+            <Button ref={cancelButton} variant="ghost" size="xs" className="hover:text-mail-danger" data-testid="abd-cancel"
               onClick={() => setConfirmingCancel(true)}>
               {t('common.cancel')}
             </Button>

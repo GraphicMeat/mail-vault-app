@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "Échec de la sauvegarde — cliquez pour voir",
   "sidebar.backupIncompleteClickView": "Sauvegarde incomplète — cliquez pour voir",
   "sidebar.backupOverdueClickView": "Sauvegarde en retard — cliquez pour voir",
-  "sidebar.backupPausedAtDailyLimit": "Sauvegarde en pause à la limite quotidienne — reprise après minuit UTC",
+  "sidebar.backupPausedAtDailyLimit": "Sauvegarde en pause à la limite quotidienne. Reprise après minuit UTC",
   "sidebar.backupUpDate": "Sauvegarde à jour",
   "sidebar.changeServer": "Changer de serveur",
   "sidebar.clickToSeeMore": "Cliquez pour en voir plus →",

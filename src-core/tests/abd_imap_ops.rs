@@ -170,6 +170,20 @@ async fn message_ids_for_a_uid_set() {
     assert_eq!(got[&5], None, "a message with no Message-ID answers None");
 }
 
+/// A reply row the parser cannot name must fail the page: read as "no
+/// answer", the message's Message-ID would silently become unknown.
+#[tokio::test]
+async fn a_nameless_message_id_row_fails_instead_of_dropping_the_message() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(mailbox_of("INBOX", &["a", "b", "c"]))
+            .fault(Trigger::with("FETCH", "MESSAGE-ID"), Action::PoisonFetchUid(2)),
+    );
+    let mut ops = ops_for(&server);
+    let r = ops.message_ids(&info("INBOX", FolderRole::Normal), &[1, 2, 3]).await;
+    assert!(r.is_err(), "a short answer must never come back as Ok: {:?}", r);
+}
+
 #[tokio::test]
 async fn uid_validity_is_read_from_a_select() {
     let server = MockImap::start(Scenario::new().mailbox(mailbox_of("INBOX", &["a"]).with_uid_validity(4242)));
@@ -264,7 +278,7 @@ async fn gmail_move_to_trash_removes_all_copies() {
 
     // The All Mail uid of message 111, by X-GM-MSGID.
     assert_eq!(ops.locate(&all_mail, Some(111), None).await.unwrap(), vec![1]);
-    let r = ops.move_to_trash(&all_mail, &[listed(1)], &trash).await.unwrap();
+    let r = ops.move_to_trash(&all_mail, &[listed(1)], &trash, Some(1)).await.unwrap();
     assert_eq!(r.moved, vec![1]);
     assert_eq!(r.trash_uids, Some(vec![1]));
     assert_eq!(r.trash_validity, Some(1));
@@ -301,7 +315,7 @@ async fn move_to_trash_returns_copyuid_trash_uids() {
     assert_eq!(trash.role, FolderRole::Trash);
 
     let r = ops
-        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(2), listed(4)], &trash)
+        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(2), listed(4)], &trash, Some(1))
         .await
         .unwrap();
     assert_eq!(r.moved, vec![2, 4]);
@@ -323,7 +337,7 @@ async fn the_copy_store_uid_expunge_fallback_touches_only_the_moved_uids() {
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
     let r = ops
-        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1), listed(2)], &trash)
+        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1), listed(2)], &trash, Some(1))
         .await
         .unwrap();
     assert_eq!(r.moved, vec![1, 2]);
@@ -348,7 +362,7 @@ async fn move_without_uidplus_asks_the_server_which_uids_left() {
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
     let r = ops
-        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1), listed(3)], &trash)
+        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1), listed(3)], &trash, Some(1))
         .await
         .unwrap();
     assert_eq!(r.moved, vec![1, 3]);
@@ -370,7 +384,7 @@ async fn a_server_with_neither_move_nor_uidplus_is_refused_before_anything_is_se
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
     let err = ops
-        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1)], &trash)
+        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1)], &trash, Some(1))
         .await
         .expect_err("refused");
     assert!(matches!(err, OpsError::Other(_)) && err.text().contains("neither MOVE nor UIDPLUS"), "{err:?}");
@@ -380,7 +394,45 @@ async fn a_server_with_neither_move_nor_uidplus_is_refused_before_anything_is_se
     assert_eq!(uids(&server, "INBOX"), vec![1, 2]);
 }
 
+/// I5 on the MOVE's own SELECT: the folder was reissued since the job's last
+/// look, so the uids name other messages. Nothing destructive goes out.
+#[tokio::test]
+async fn a_move_under_another_uidvalidity_is_refused_before_anything_is_sent() {
+    for without_move in [false, true] {
+        let mut sc = Scenario::new().mailbox(mailbox_of("INBOX", &["a", "b"]).with_uid_validity(9)).mailbox(trash_box());
+        if without_move {
+            sc = sc.strict_caps().without_cap("MOVE");
+        }
+        let server = MockImap::start(sc);
+        let mut ops = ops_for(&server);
+        let trash = ops.trash().await.unwrap().unwrap();
+        let err = ops
+            .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(1)], &trash, Some(1))
+            .await
+            .expect_err("refused");
+        assert!(matches!(err, OpsError::ValidityChanged(_)), "{err:?}");
+        for cmd in ["MOVE", "COPY", "STORE", "EXPUNGE"] {
+            assert_eq!(server.count_commands(cmd), 0, "{cmd} must not have been sent (without MOVE: {without_move})");
+        }
+        assert_eq!(uids(&server, "INBOX"), vec![1, 2]);
+    }
+}
+
 // ── expunging ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn an_expunge_under_another_uidvalidity_is_refused() {
+    let mut trash = trash_box().with_uid_validity(9);
+    trash.add(Message::new(1, msg("x")));
+    let server = MockImap::start(Scenario::new().mailbox(mailbox_of("INBOX", &["a"])).mailbox(trash));
+    let mut ops = ops_for(&server);
+    let trash = ops.trash().await.unwrap().unwrap();
+    let err = ops.expunge_exact(&trash, &[1], &[(1, "x@t.test".to_string())], Some(1)).await.expect_err("refused");
+    assert!(matches!(err, OpsError::ValidityChanged(_)), "{err:?}");
+    assert_eq!(server.count_commands("EXPUNGE"), 0);
+    assert_eq!(server.count_commands("STORE"), 0);
+    assert_eq!(uids(&server, "Trash"), vec![1]);
+}
 
 /// Trash already holds mail someone else flagged \Deleted (uid 1) and mail
 /// they kept (uid 2); INBOX holds a, b, c.
@@ -397,12 +449,12 @@ async fn expunge_exact_leaves_other_trash_mail() {
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
     let moved = ops
-        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(2)], &trash)
+        .move_to_trash(&info("INBOX", FolderRole::Normal), &[listed(2)], &trash, Some(1))
         .await
         .unwrap();
     assert_eq!(moved.trash_uids, Some(vec![3]));
 
-    let gone = ops.expunge_exact(&trash, &[3], &[(3, "b@t.test".to_string())]).await.unwrap();
+    let gone = ops.expunge_exact(&trash, &[3], &[(3, "b@t.test".to_string())], Some(1)).await.unwrap();
     assert_eq!(gone, vec![3]);
     assert_eq!(uids(&server, "Trash"), vec![1, 2], "only the moved message left");
     let st = server.state();
@@ -418,7 +470,7 @@ async fn expunge_exact_skips_a_trash_uid_that_is_another_message() {
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
     // uid 2 is "keep", not the message the job moved.
-    let gone = ops.expunge_exact(&trash, &[2], &[(2, "b@t.test".to_string())]).await.unwrap();
+    let gone = ops.expunge_exact(&trash, &[2], &[(2, "b@t.test".to_string())], Some(1)).await.unwrap();
     assert!(gone.is_empty());
     assert_eq!(uids(&server, "Trash"), vec![1, 2]);
     assert_eq!(server.count_commands("EXPUNGE"), 0);
@@ -434,7 +486,7 @@ async fn expunge_exact_refuses_without_uidplus() {
     );
     let mut ops = ops_for(&server);
     let trash = ops.trash().await.unwrap().unwrap();
-    let err = ops.expunge_exact(&trash, &[1], &[(1, "x@t.test".to_string())]).await.expect_err("refused");
+    let err = ops.expunge_exact(&trash, &[1], &[(1, "x@t.test".to_string())], Some(1)).await.expect_err("refused");
     assert!(err.text().contains("UIDPLUS"), "{err:?}");
     assert_eq!(server.count_commands("EXPUNGE"), 0);
     assert_eq!(server.count_commands("STORE"), 0);
@@ -602,13 +654,13 @@ async fn a_move_is_never_resent_inside_one_call() {
     let trash = ops.trash().await.unwrap().unwrap();
     let inbox = info("INBOX", FolderRole::Normal);
 
-    let err = ops.move_to_trash(&inbox, &[listed(1)], &trash).await.expect_err("the connection dropped");
+    let err = ops.move_to_trash(&inbox, &[listed(1)], &trash, Some(1)).await.expect_err("the connection dropped");
     assert!(matches!(err, OpsError::Throttled { .. }), "{err:?}");
     assert_eq!(server.count_commands("UID MOVE"), 1, "not asked again behind the caller's back");
     assert_eq!(uids(&server, "INBOX"), vec![1, 2]);
 
     // The engine asks again; the session was discarded, so this reconnects.
-    let r = ops.move_to_trash(&inbox, &[listed(1)], &trash).await.expect("second ask");
+    let r = ops.move_to_trash(&inbox, &[listed(1)], &trash, Some(1)).await.expect("second ask");
     assert_eq!(r.moved, vec![1]);
     assert_eq!(server.count_commands("UID MOVE"), 2);
     assert_eq!(uids(&server, "INBOX"), vec![2]);
@@ -660,8 +712,9 @@ fn names(dir: &std::path::Path) -> Vec<String> {
 async fn store_archived_writes_the_a_flag_atomically_and_upserts_the_registry() {
     let v = vault();
     let raw = msg("solo").into_bytes();
-    let (path, entry) =
+    let (path, entry, outcome) =
         archive::store_archived(&v.ctx, "acc", "INBOX", 7, raw.clone(), &["\\Seen".to_string()], false).await.unwrap();
+    assert_eq!(outcome, StoreOutcome::Wrote);
 
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
     assert!(maildir::carries_archived(&name), "{name}");
@@ -688,15 +741,20 @@ async fn store_archived_writes_the_a_flag_atomically_and_upserts_the_registry() 
 async fn store_archived_never_overwrites_an_archived_copy() {
     let v = vault();
     let first = msg("first").into_bytes();
-    let (p1, _) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, first.clone(), &[], false).await.unwrap();
+    let (p1, _, o1) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, first.clone(), &[], false).await.unwrap();
+    assert_eq!(o1, StoreOutcome::Wrote);
     for listed_archived in [false, true] {
-        let (p2, _) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, msg("second").into_bytes(), &[], listed_archived)
+        let (p2, _, o2) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, msg("second").into_bytes(), &[], listed_archived)
             .await
             .unwrap();
         assert_eq!(p2, p1, "the archived copy is the one that is returned");
+        assert_eq!(o2, StoreOutcome::FoundDifferent, "another message's bytes: found, and says so");
     }
     assert_eq!(std::fs::read(&p1).unwrap(), first, "and it was not rewritten");
     assert_eq!(names(&cur_of(&v)).len(), 1);
+    // The very same bytes again: found, and provably the same message.
+    let (p3, _, o3) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, first.clone(), &[], false).await.unwrap();
+    assert_eq!((p3, o3), (p1, StoreOutcome::FoundSame));
 }
 
 #[tokio::test]
@@ -708,9 +766,10 @@ async fn store_archived_replaces_a_cache_copy() {
     assert_eq!(names(&cur_of(&v)).len(), 1);
 
     let raw = msg("fresh").into_bytes();
-    let (path, _) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, raw.clone(), &["\\Seen".to_string()], false)
+    let (path, _, outcome) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, raw.clone(), &["\\Seen".to_string()], false)
         .await
         .unwrap();
+    assert_eq!(outcome, StoreOutcome::Wrote, "a cache copy is replaced, not adopted");
     let after = names(&cur_of(&v));
     assert_eq!(after.len(), 1, "one file for the uid, not a cache copy beside an archive: {after:?}");
     assert!(maildir::carries_archived(&after[0]));
@@ -727,7 +786,7 @@ async fn a_fetched_body_stores_and_verifies_against_its_message_id() {
     assert_eq!(fetched.raw, st.find("INBOX").unwrap().by_uid(2).unwrap().raw);
 
     let v = vault();
-    let (path, _) = archive::store_archived(&v.ctx, "acc", "INBOX", 2, fetched.raw.clone(), &fetched.flags, false)
+    let (path, _, _) = archive::store_archived(&v.ctx, "acc", "INBOX", 2, fetched.raw.clone(), &fetched.flags, false)
         .await
         .unwrap();
     let cur = cur_of(&v);

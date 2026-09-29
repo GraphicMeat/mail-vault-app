@@ -7,6 +7,7 @@ import { graphFoldersToMailboxes, isGraphAccount } from './graphConfig';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { waitForSentMailboxPath, findSentMailboxPath, mergesSentIntoThreads } from '../utils/sentFolder';
 import { fetchPolicy, keepsBody } from '../utils/fetchPolicy';
+import { downloadCapChanged } from '../utils/transferLimits';
 
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
@@ -332,6 +333,24 @@ class EmailPipelineManager {
     for (const pipeline of this.pipelines.values()) {
       pipeline.resume('INBOX');
     }
+  }
+
+  /**
+   * Follow the daily download limits in Settings: when an account's cap is
+   * switched off or its download limit changes, a pass that sleeps at the
+   * limit wakes now instead of at the next UTC day. Returns the unsubscribe;
+   * the pipeline coordinator hook owns it.
+   */
+  watchTransferLimits() {
+    return useSettingsStore.subscribe((state, previous) => {
+      if (state.transferLimits === previous.transferLimits) return;
+      for (const [accountId, pipeline] of this.pipelines) {
+        if (pipeline._destroyed) continue;
+        if (downloadCapChanged(previous.transferLimits?.[accountId], state.transferLimits?.[accountId])) {
+          pipeline.wakeFromLimit();
+        }
+      }
+    });
   }
 
   /**

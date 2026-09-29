@@ -48,6 +48,9 @@ export function useBackupScheduler() {
 
     backupScheduler.initProgressListener();
 
+    // A cap switched off or a changed download limit releases a daily-limit hold now.
+    const stopLimitWatch = backupScheduler.watchTransferLimits();
+
     // ── Periodic idle check ────────────────────────────────────────────
 
     const idleInterval = setInterval(() => {
@@ -114,6 +117,7 @@ export function useBackupScheduler() {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      stopLimitWatch();
       backupScheduler.stopAll();
     };
   }, []);

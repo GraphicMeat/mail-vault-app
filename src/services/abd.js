@@ -110,11 +110,17 @@ export async function startJob(params) {
   if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) {
     throw new Error(t('errors.abdPremiumRequired'));
   }
-  // A finished job is kept on disk until dismissed (its result stays readable);
-  // the account holds one job at a time, so a new one clears the old one first.
-  if (isFinished(store().jobs[params.accountId])) await dismiss(params.accountId).catch(noop);
+  // A finished job is kept on disk until dismissed (its result stays readable).
+  // The daemon replaces it with the new job itself, so it is not dismissed
+  // here: a start that is refused leaves the old result where it was.
+  const previous = store().jobs[params.accountId];
+  const finishedJobId = isFinished(previous) ? previous.jobId : null;
   await pushToken(params.accountId);
   const started = await api.abdStart(params);
+  // Started: the old result is gone on the daemon's side too. The panel waits
+  // for the new job's first frame rather than showing it. Only while the old
+  // frame is still the one held: the new job's first frame may be here already.
+  if (finishedJobId && store().jobs[params.accountId]?.jobId === finishedJobId) store().removeJob(params.accountId);
   store().openPanel(params.accountId);
   // The first frame is on its way as an event; asking too seeds the card and the timers at once.
   refreshStatus(params.accountId).catch(noop);
@@ -161,7 +167,10 @@ export const attach = (accountId) => api.abdAttach(accountId);
 // ── Launch, reconnect, timers ───────────────────────────────────────────────
 
 let started = false;
-let watching = false;
+// `watchAbd`: how many callers follow the frames, the attach in flight or done, and its stop.
+let watchers = 0;
+let watchAttach = null;
+let watchStop = null;
 let unlisteners = [];
 let unsubscribe = null;
 let tokenTimer = null;
@@ -236,31 +245,60 @@ export async function initAbd() {
   syncTimers();
 }
 
+/** Attach the watch listeners once for every `watchAbd` caller; see there. */
+function attachWatch() {
+  const attaching = (async () => {
+    const off = [];
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      off.push(await listen('abd-progress', e => store().applyFrame(e.payload)));
+      off.push(await listen('abd-preview', e => store().applyPreview(e.payload)));
+    } catch { /* web dev mode: no Tauri events */ }
+    const stop = () => off.forEach(fn => { try { fn(); } catch { /* already gone */ } });
+    // Everyone left (or a test reset) while this attached: take them down again.
+    if (watchAttach !== attaching) stop();
+    else watchStop = stop;
+  })();
+  return attaching;
+}
+
+function detachWatch() {
+  watchStop?.();
+  watchStop = null;
+  watchAttach = null;
+}
+
 /**
  * A window other than the main one (Settings opened on its own) that shows a
  * job's card: follow the frames, but leave the timers, the drive and the panel
  * to the main window. Returns a stop function.
+ *
+ * The callers share one set of listeners, counted: a second caller (another
+ * card, or React StrictMode's mount, cleanup, mount) is never left without
+ * them, and they come down when the last caller stops.
  */
 export async function watchAbd() {
-  if (started || watching) return noop;
-  watching = true;
-  let stop = noop;
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    const off = [
-      await listen('abd-progress', e => store().applyFrame(e.payload)),
-      await listen('abd-preview', e => store().applyPreview(e.payload)),
-    ];
-    stop = () => { watching = false; off.forEach(fn => { try { fn(); } catch { /* already gone */ } }); };
-  } catch { watching = false; }
+  if (started) return noop;
+  watchers += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    watchers -= 1;
+    if (watchers === 0) detachWatch();
+  };
+  if (!watchAttach) watchAttach = attachWatch();
+  // Listeners first, then the ask: the daemon drops an event nobody is subscribed to.
+  await watchAttach;
   refreshStatus().catch(noop);
-  return stop;
+  return release;
 }
 
 /** For tests: forget everything `initAbd` set up. */
 export function __resetAbdForTests() {
   started = false;
-  watching = false;
+  watchers = 0;
+  detachWatch();
   for (const stop of unlisteners) { try { stop?.(); } catch { /* already gone */ } }
   unlisteners = [];
   unsubscribe?.();
@@ -270,5 +308,5 @@ export function __resetAbdForTests() {
   tokenTimer = null;
   driveTimer = null;
   tokenFlights.clear();
-  useAbdStore.setState({ jobs: {}, previews: {}, panel: null });
+  useAbdStore.setState({ jobs: {}, previews: {}, panel: null, focusPill: false });
 }

@@ -11,6 +11,11 @@ const svc = vi.hoisted(() => ({
   dismiss: vi.fn(async () => ({})),
 }));
 vi.mock('../../../services/abd', () => svc);
+const h = vi.hoisted(() => ({ accounts: [] }));
+vi.mock('../../../stores/accountStore', () => ({
+  useAccountStore: (selector) => selector({ accounts: h.accounts }),
+  getAccounts: () => h.accounts,
+}));
 
 import { AbdProgressPanel } from '../AbdProgressPanel';
 import { AbdPill } from '../AbdPill';
@@ -38,7 +43,8 @@ const show = (over, { minimized = false } = {}) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useAbdStore.setState({ jobs: {}, previews: {}, panel: null });
+  h.accounts = [];
+  useAbdStore.setState({ jobs: {}, previews: {}, panel: null, focusPill: false });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -49,6 +55,18 @@ describe('panel', () => {
     cleanup();
     show({ mode: 'archive_delete' });
     expect(screen.getByTestId('abd-panel-title').textContent).toBe(t('abd.panel.title', { account: 'luke@mock.test' }));
+  });
+
+  it('names the account from the account list when the frame carries no email (a job it could not read)', () => {
+    h.accounts = [{ id: 'acc', email: 'luke@mock.test' }];
+    show({ accountEmail: null });
+    expect(screen.getByTestId('abd-panel-title').textContent).toBe(t('abd.panel.titleBackup', { account: 'luke@mock.test' }));
+  });
+
+  it('never names the account "null" when it is not in the list either', () => {
+    show({ accountEmail: null });
+    expect(screen.getByTestId('abd-panel-title').textContent).toBe(t('abd.panel.titleBackup', { account: '' }));
+    expect(screen.getByTestId('abd-panel-title').textContent).not.toContain('null');
   });
 
   it('counts each phase against the scoped total', () => {
@@ -179,6 +197,20 @@ describe('minimize and the pill', () => {
     expect(useAbdStore.getState().jobs.acc).toBeTruthy();
   });
 
+  it('Minimize hands keyboard focus to the pill', () => {
+    show();
+    screen.getByTestId('abd-minimize').focus();
+    fireEvent.click(screen.getByTestId('abd-minimize'));
+    expect(document.activeElement).toBe(screen.getByTestId('abd-pill-restore'));
+    expect(useAbdStore.getState().focusPill).toBe(false);
+  });
+
+  it('a pill that appears by itself (a job started elsewhere) takes no focus', () => {
+    show(undefined, { minimized: true });
+    expect(screen.getByTestId('abd-pill')).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('renders nothing when there is no panel', () => {
     useAbdStore.setState({ jobs: { acc: frame() }, panel: null });
     render(<Host />);
@@ -213,6 +245,16 @@ describe('pause, resume, cancel', () => {
     fireEvent.click(screen.getByTestId('abd-cancel'));
     fireEvent.click(screen.getByTestId('abd-cancel-yes'));
     await waitFor(() => expect(svc.cancel).toHaveBeenCalledWith('acc'));
+  });
+
+  it('Cancel moves focus to Keep running, and Keep running gives it back to Cancel', () => {
+    show();
+    screen.getByTestId('abd-cancel').focus();
+    fireEvent.click(screen.getByTestId('abd-cancel'));
+    expect(document.activeElement).toBe(screen.getByTestId('abd-keep-running'));
+    fireEvent.click(screen.getByTestId('abd-keep-running'));
+    expect(screen.queryByTestId('abd-cancel-confirm')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('abd-cancel'));
   });
 
   it('shows the daemon\'s refusal instead of swallowing it', async () => {

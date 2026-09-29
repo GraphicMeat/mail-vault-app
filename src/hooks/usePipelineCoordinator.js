@@ -85,6 +85,9 @@ export function usePipelineCoordinator() {
     };
   }, []);
 
+  // A cap switched off or a changed download limit wakes a pass that sleeps at the limit.
+  useEffect(() => pipelineManager.watchTransferLimits(), []);
+
   // Auto-cleanup rules — run once after initial sync, then check hourly
   const cleanupRanRef = useRef(false);
   useEffect(() => {

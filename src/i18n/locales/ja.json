@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "バックアップ失敗 — クリックで表示",
   "sidebar.backupIncompleteClickView": "バックアップ未完了 — クリックで表示",
   "sidebar.backupOverdueClickView": "バックアップ期限超過 — クリックで表示",
-  "sidebar.backupPausedAtDailyLimit": "1 日の上限でバックアップを一時停止中 — UTC の午前 0 時以降に再開します",
+  "sidebar.backupPausedAtDailyLimit": "1 日の上限でバックアップを一時停止中。UTC の午前 0 時以降に再開します",
   "sidebar.backupUpDate": "バックアップは最新です",
   "sidebar.changeServer": "サーバーを変更",
   "sidebar.clickToSeeMore": "詳しく見る →",

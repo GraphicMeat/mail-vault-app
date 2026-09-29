@@ -2172,6 +2172,34 @@ pub fn copy_uids_to_mirror_listed(
     uids: &[u32],
     listing: &mut MirrorListing,
 ) -> Result<MirrorCopyOutcome, String> {
+    if uids.is_empty() {
+        return Ok(MirrorCopyOutcome::default());
+    }
+    if !mirror_root.is_dir() {
+        return Err("Backup folder unavailable".to_string());
+    }
+    let vault_cur = crate::vault_files::cur_path(vault_root, account_id, mailbox);
+    let wanted: HashSet<u32> = uids.iter().copied().collect();
+    let sources = vault_sources(&vault_cur, &wanted);
+    copy_uids_to_mirror_from(vault_root, mirror_root, account_id, email, mailbox, uids, listing, &sources)
+}
+
+/// `copy_uids_to_mirror_listed` with the vault side given by the caller: the
+/// file per uid from a listing it already holds (the Archive & delete job's
+/// archived listing of the folder, kept across batches), so no call lists the
+/// vault folder. A uid the map lacks is `missing`; a listed path renamed
+/// since (a flag change) is resolved by uid once more, as with a fresh listing.
+#[allow(clippy::too_many_arguments)]
+pub fn copy_uids_to_mirror_from(
+    vault_root: &Path,
+    mirror_root: &Path,
+    account_id: &str,
+    email: &str,
+    mailbox: &str,
+    uids: &[u32],
+    listing: &mut MirrorListing,
+    sources: &std::collections::HashMap<u32, PathBuf>,
+) -> Result<MirrorCopyOutcome, String> {
     let mut out = MirrorCopyOutcome::default();
     if uids.is_empty() {
         return Ok(out);
@@ -2186,7 +2214,6 @@ pub fn copy_uids_to_mirror_listed(
     let vault_cur = crate::vault_files::cur_path(vault_root, account_id, mailbox);
     let mut seen: HashSet<u32> = HashSet::new();
     let wanted: Vec<u32> = uids.iter().copied().filter(|u| seen.insert(*u)).collect();
-    let sources = vault_sources(&vault_cur, &seen);
 
     for uid in wanted {
         let Some(src) = sources.get(&uid) else {
@@ -2297,7 +2324,9 @@ fn copy_one_to_mirror(
     // step; a second writer landing this exact name in between is replaced. The
     // only other writers are this app's own archive and backup runs, which write
     // the same bytes under the same name.
-    if let Err(e) = crate::fsx::write_atomic(&dst, &bytes) {
+    // Durable, not just atomic: the server copy is deleted on the strength of
+    // this file, so it must be on the drive, not in the page cache.
+    if let Err(e) = write_durable(&dst, &bytes) {
         warn!("backup copy: write to the backup folder failed for uid {}: {}", uid, e);
         return CopyOne::Failed;
     }
@@ -2308,6 +2337,61 @@ fn copy_one_to_mirror(
     }
     listing.files.insert(uid, dst);
     CopyOne::Copied
+}
+
+/// Write `bytes` to `dst` so that it survives a power cut or an unplugged
+/// drive once this returns: a temp dotfile beside it, `sync_all` (a full
+/// flush to the device on macOS), rename into place, then a sync of the
+/// folder so the rename itself is on disk. Only the mirror copy a server
+/// delete rests on uses it; `fsx::write_atomic` stays as it is for everyone
+/// else. A sync a filesystem does not support (a full flush on some network
+/// shares and FUSE mounts, a folder sync on FAT/exFAT drives and on Windows,
+/// where a folder cannot be opened this way) is skipped: that drive gets what
+/// it got before, never a refusal of every copy. A real I/O error still fails.
+fn sync_unsupported(e: &std::io::Error) -> bool {
+    matches!(e.kind(), std::io::ErrorKind::InvalidInput | std::io::ErrorKind::Unsupported)
+        || e.raw_os_error() == Some(25) // ENOTTY
+}
+
+fn write_durable(dst: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = dst
+        .file_name()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "write_durable: path has no file name"))?;
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let mut tmp_name = std::ffi::OsString::from(".");
+    tmp_name.push(name);
+    tmp_name.push(format!(".tmp-{}-{}", std::process::id(), seq));
+    let tmp = dst.with_file_name(tmp_name);
+    let written = (|| {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        match f.sync_all() {
+            Err(e) if sync_unsupported(&e) => {
+                warn!("backup copy: this drive does not support a full sync ({e}); written without it");
+                Ok(())
+            }
+            other => other,
+        }
+    })();
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&tmp, dst) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    #[cfg(unix)]
+    if let Some(dir) = dst.parent() {
+        if let Err(e) = std::fs::File::open(dir).and_then(|d| d.sync_all()) {
+            if !sync_unsupported(&e) {
+                return Err(e);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Whether `copy` holds the message `src` holds: same length and same
@@ -3422,6 +3506,64 @@ mod tests {
         assert_eq!(out.copied, vec![1]);
         assert_eq!(listing.loads(), 2);
         assert!(!listing.contains(99));
+    }
+
+    /// A caller that already holds the vault folder's listing (the Archive &
+    /// delete job) passes it: no batch lists the vault folder again, and only
+    /// what that listing names is a source.
+    #[test]
+    fn copy_uids_to_mirror_from_takes_the_callers_vault_listing() {
+        let fx = CopyFx::new();
+        let one = fx.vault_msg(1, "a@x", "first");
+        fx.vault_msg(2, "b@x", "second");
+        let sources: std::collections::HashMap<u32, PathBuf> = std::collections::HashMap::from([(1, one)]);
+        let mut listing = MirrorListing::new();
+
+        let out = copy_uids_to_mirror_from(fx.vault.path(), fx.mirror.path(), ACCT, MAIL, BOX, &[1, 2], &mut listing, &sources)
+            .unwrap();
+
+        assert_eq!(out.copied, vec![1]);
+        assert_eq!(out.missing, vec![2], "uid 2 is not in the caller's listing, so the vault folder was not read for it");
+        assert_eq!(fx.mirror_names().len(), 1);
+    }
+
+    #[test]
+    fn a_listed_vault_path_renamed_since_is_resolved_by_uid() {
+        let fx = CopyFx::new();
+        let stale = fx.vault_msg(1, "a@x", "first");
+        let renamed = fx.vault_file(1, &["archived", "flagged", "seen"], "a@x", "first");
+        std::fs::remove_file(&stale).unwrap();
+        let sources: std::collections::HashMap<u32, PathBuf> = std::collections::HashMap::from([(1, stale)]);
+        let mut listing = MirrorListing::new();
+
+        let out = copy_uids_to_mirror_from(fx.vault.path(), fx.mirror.path(), ACCT, MAIL, BOX, &[1], &mut listing, &sources)
+            .unwrap();
+
+        assert_eq!(out.copied, vec![1]);
+        assert_eq!(fx.mirror_names(), vec![renamed.file_name().unwrap().to_string_lossy().to_string()]);
+    }
+
+    #[test]
+    fn a_sync_the_filesystem_does_not_support_is_not_a_failed_copy() {
+        assert!(sync_unsupported(&std::io::Error::from(std::io::ErrorKind::Unsupported)));
+        assert!(sync_unsupported(&std::io::Error::from(std::io::ErrorKind::InvalidInput)));
+        assert!(sync_unsupported(&std::io::Error::from_raw_os_error(25)));
+        assert!(!sync_unsupported(&std::io::Error::from_raw_os_error(5)), "EIO is a real failure");
+    }
+
+    /// The drive copy is what the server delete rests on: it is written to a
+    /// temp dotfile, synced, renamed, and leaves nothing else behind.
+    #[test]
+    fn write_durable_lands_the_bytes_and_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let dst = dir.path().join("7:2,AS.eml");
+        write_durable(&dst, b"Message-ID: <d@x>\r\n\r\nbody").unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"Message-ID: <d@x>\r\n\r\nbody");
+        let names: Vec<String> =
+            std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(names, vec!["7:2,AS.eml".to_string()]);
+        // A folder that is not there fails, and leaves nothing either.
+        assert!(write_durable(&dir.path().join("gone").join("x.eml"), b"x").is_err());
     }
 
     #[test]

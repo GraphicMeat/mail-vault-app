@@ -689,6 +689,27 @@ describe('BulkOperationsModal', () => {
       expect(onConfirm).toHaveBeenCalledWith({ action: 'archive_backup_delete', uids: [5, 4, 1] });
     });
 
+    it('disables Confirm with "Choose a backup folder first" when the backup folder went away while minimized', async () => {
+      backupState.billingProfile = PREMIUM;
+      backupState.externalBackupLocation = { status: 'ready' };
+      const onConfirm = await openToStep2();
+      fireEvent.click(backUpOption());
+      expect(screen.getByTestId('bulk-step2-confirm').disabled).toBe(false);
+      // The folder is removed in Settings while the modal is minimized (the action is kept in the session).
+      cleanup();
+      backupState.externalBackupLocation = null;
+      const again = vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={again} />);
+      await waitFor(() => expect(screen.getByTestId('bulk-step2-confirm')).toBeTruthy());
+
+      expect(screen.getByTestId('bulk-step2-confirm').disabled).toBe(true);
+      expect(screen.getByTestId('bulk-action-needs-backup').textContent).toBe('Choose a backup folder first');
+      fireEvent.click(screen.getByTestId('bulk-step2-confirm'));
+      expect(screen.queryByTestId('bulk-delete-confirm')).toBeNull();
+      expect(again).not.toHaveBeenCalled();
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
     it('Premium Archive & Delete still confirms as archive_and_delete', async () => {
       backupState.billingProfile = PREMIUM;
       const onConfirm = await openToStep2();

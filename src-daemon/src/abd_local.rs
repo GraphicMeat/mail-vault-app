@@ -4,20 +4,22 @@
 //! - Vault writes go through `archive::store_archived` (mailbox lock + the
 //!   daemon's write gate, registry upsert) and then a custody append.
 //! - The engine lists a folder's archived files once; every batch is verified
-//!   against that listing with `maildir::verify_listed` (a per-file check on
-//!   current disk), so no directory is read per batch.
-//! - The mirror is copied with `backup::copy_uids_to_mirror_listed` against one
-//!   `MirrorListing` per folder. The before-delete re-check opens the mirror
-//!   file by its predictable name; only a name that misses reads the folder,
-//!   once (the drive's `read_dir` is the slowest disk access the app makes).
+//!   against that listing with `maildir::verify_listed_strict` (a per-file
+//!   check on current disk: an expected Message-ID must be read and equal), so
+//!   no directory is read per batch.
+//! - The mirror is copied with `backup::copy_uids_to_mirror_from` against one
+//!   `MirrorListing` per folder and the engine's own vault listing. The
+//!   before-delete re-check opens the mirror file by its predictable name;
+//!   only a name that misses reads the folder, once per copy pass (the drive's
+//!   `read_dir` is the slowest disk access the app makes).
 //! - Nothing here holds a lock across an `.await`. Disk work runs on the
 //!   runtime's blocking pool.
 
 use crate::handlers::archive::archive_ctx;
 use crate::handlers::common;
 use crate::server::DaemonState;
-use mailvault_core::abd::{Fetched, LocalError, LocalStore, Verify};
-use mailvault_core::backup::{copy_uids_to_mirror_listed, MirrorListing};
+use mailvault_core::abd::{Fetched, LocalError, LocalStore, StoreOutcome, Stored, Verify};
+use mailvault_core::backup::{copy_uids_to_mirror_from, MirrorListing};
 use mailvault_core::{archive, graph_ledger, header_cache, maildir, vault_files};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -34,7 +36,9 @@ pub(crate) struct DaemonLocal {
     email: String,
     /// One listing per mirror folder, held across batches (Part B's contract).
     mirror_listings: Mutex<HashMap<String, MirrorListing>>,
-    /// The fallback listing for a folder whose mirror name missed, read once.
+    /// The fallback listing for a folder whose mirror name missed. Dropped by
+    /// every copy pass (a file copied since is not in it), and read again
+    /// once when an entry it holds is gone (renamed since).
     mirror_maps: Mutex<HashMap<String, HashMap<u32, PathBuf>>>,
 }
 
@@ -93,12 +97,17 @@ impl LocalStore for DaemonLocal {
         common::blocking(move || maildir::archived_file_map(&cur)).await.map_err(LocalError::Io)
     }
 
-    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<PathBuf, LocalError> {
+    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<Stored, LocalError> {
         let root = self.vault()?;
         let ctx = archive_ctx(&self.state, root);
-        let (path, entry) = archive::store_archived(&ctx, &self.account_id, folder, uid, f.raw, &f.flags, false)
+        let (path, entry, outcome) = archive::store_archived(&ctx, &self.account_id, folder, uid, f.raw, &f.flags, false)
             .await
             .map_err(vault_error)?;
+        if outcome == StoreOutcome::FoundDifferent {
+            // The file under the uid holds other bytes: a custody row naming
+            // the fetched message would describe a file that is not it.
+            return Ok(Stored { path, outcome });
+        }
         // The custody row of an archived copy. The file is already stored and
         // registered: a custody failure is logged, never a reason to store
         // (or download) the message again.
@@ -109,7 +118,13 @@ impl LocalStore for DaemonLocal {
             Ok(Ok(_)) => {}
             Ok(Err(e)) | Err(e) => warn!("abd: custody row for UID {uid} not written: {e}"),
         }
-        Ok(path)
+        Ok(Stored { path, outcome })
+    }
+
+    async fn vault_generation(&self, folder: &str) -> Result<Option<u32>, LocalError> {
+        let root = self.vault()?;
+        let cur = vault_files::cur_path(&root, &self.account_id, folder);
+        common::blocking(move || cur.parent().and_then(maildir::read_generation)).await.map_err(LocalError::Io)
     }
 
     async fn read_file(&self, path: &Path) -> Result<Vec<u8>, LocalError> {
@@ -133,22 +148,32 @@ impl LocalStore for DaemonLocal {
         let sub: HashMap<u32, PathBuf> = uids.iter().filter_map(|u| listing.get(u).map(|p| (*u, p.clone()))).collect();
         let (uids, expected) = (uids.to_vec(), expected.clone());
         common::blocking(move || {
-            let (ok, missing, mismatched) = maildir::verify_listed(&cur, &sub, &uids, Some(&expected));
+            let (ok, missing, mismatched) = maildir::verify_listed_strict(&cur, &sub, &uids, &expected);
             Verify { ok, missing, mismatched }
         })
         .await
         .map_err(LocalError::Io)
     }
 
-    async fn mirror_copy_verify(&self, folder: &str, uids: &[u32]) -> Result<Verify, LocalError> {
+    async fn mirror_copy_verify(
+        &self,
+        folder: &str,
+        vault_listing: &HashMap<u32, PathBuf>,
+        uids: &[u32],
+    ) -> Result<Verify, LocalError> {
         let vault = self.vault()?;
         let mirror = self.mirror_root()?;
+        // Files land on the drive now: a fallback map read before is stale.
+        lock(&self.mirror_maps).remove(folder);
         let mut listing = lock(&self.mirror_listings).remove(folder).unwrap_or_default();
+        // Only the batch's own entries cross to the blocking thread.
+        let sources: HashMap<u32, PathBuf> =
+            uids.iter().filter_map(|u| vault_listing.get(u).map(|p| (*u, p.clone()))).collect();
         let (account, email, mailbox, wanted) =
             (self.account_id.clone(), self.email.clone(), folder.to_string(), uids.to_vec());
         let mirror_for_job = mirror.clone();
         let job = common::blocking(move || {
-            let r = copy_uids_to_mirror_listed(&vault, &mirror_for_job, &account, &email, &mailbox, &wanted, &mut listing);
+            let r = copy_uids_to_mirror_from(&vault, &mirror_for_job, &account, &email, &mailbox, &wanted, &mut listing, &sources);
             (r, listing)
         });
         let (result, listing) = match tokio::time::timeout(MIRROR_BUDGET, job).await {
@@ -189,16 +214,21 @@ impl LocalStore for DaemonLocal {
         let counter = Arc::clone(&self.state);
         let job = common::blocking(move || {
             let mut map = cached;
+            // Whether `map` was read in this call: a map from an earlier call
+            // whose entry is gone (renamed since) is read once more.
+            let mut fresh = false;
             let mut v = Verify { ok: Vec::new(), missing: Vec::new(), mismatched: Vec::new() };
             for (uid, name) in &files {
                 let name_eml = if name.ends_with(".eml") { name.clone() } else { format!("{name}.eml") };
                 let mut path = cur.join(&name_eml);
                 if !path.is_file() {
                     // A flag rename on the drive side: one listing of the folder, kept for the pass.
-                    if map.is_none() {
+                    let stale_entry = map.as_ref().is_some_and(|m| m.get(uid).is_some_and(|p| !p.is_file()));
+                    if map.is_none() || (stale_entry && !fresh) {
                         #[cfg(test)]
                         counter.abd.test.fallback_scans.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                         map = Some(maildir::mirror_file_map(&cur));
+                        fresh = true;
                     }
                     match map.as_ref().and_then(|m| m.get(uid)).filter(|p| p.is_file()) {
                         Some(p) => path = p.clone(),
@@ -213,16 +243,17 @@ impl LocalStore for DaemonLocal {
                         Some(got) if &got == want => v.ok.push(*uid),
                         _ => v.mismatched.push(*uid),
                     },
-                    // No Message-ID to compare: the same length as the vault copy.
-                    None => {
-                        let mine = std::fs::metadata(&path).map(|m| m.len()).ok();
-                        let theirs = std::fs::metadata(vault_cur.join(&name_eml)).map(|m| m.len()).ok();
-                        match (mine, theirs) {
-                            (Some(a), Some(b)) if a == b => v.ok.push(*uid),
-                            (Some(a), None) if a > 0 => v.ok.push(*uid),
-                            _ => v.mismatched.push(*uid),
-                        }
-                    }
+                    // No Message-ID to compare: byte for byte against the
+                    // vault copy, found by uid (a flag change may have renamed
+                    // it). No vault copy to compare with is not proof.
+                    None => match maildir::find_listed_by_uid(&vault_cur, *uid, &vault_cur.join(name)) {
+                        None => v.missing.push(*uid),
+                        Some(src) => match (std::fs::read(&path), std::fs::read(&src)) {
+                            (Ok(a), Ok(b)) if !a.is_empty() && a == b => v.ok.push(*uid),
+                            (Ok(_), Ok(_)) => v.mismatched.push(*uid),
+                            _ => v.missing.push(*uid),
+                        },
+                    },
                 }
             }
             (v, map)

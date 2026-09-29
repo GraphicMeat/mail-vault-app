@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "备份失败——点击查看",
   "sidebar.backupIncompleteClickView": "备份未完成——点击查看",
   "sidebar.backupOverdueClickView": "备份已逾期——点击查看",
-  "sidebar.backupPausedAtDailyLimit": "备份已在每日限额处暂停 — UTC 午夜之后继续",
+  "sidebar.backupPausedAtDailyLimit": "备份已在每日限额处暂停。UTC 午夜之后继续",
   "sidebar.backupUpDate": "备份已是最新",
   "sidebar.changeServer": "更换服务器",
   "sidebar.clickToSeeMore": "点击查看更多 →",

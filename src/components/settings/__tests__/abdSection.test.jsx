@@ -186,6 +186,17 @@ describe('a job on the account', () => {
 });
 
 describe('a Settings window of its own', () => {
+  afterEach(() => { delete document.body.dataset.auxiliaryWindow; });
+
+  it('offers no Show progress there: the panel lives in the main window only', () => {
+    // main.jsx marks the Settings window this way before it renders.
+    document.body.dataset.auxiliaryWindow = 'settings';
+    useAbdStore.setState({ jobs: { [LUKE.id]: job() } });
+    render(<AbdSection />);
+    expect(screen.getByTestId('abd-job-line').textContent).toContain(t('settings.backup.abd.jobRunning'));
+    expect(screen.queryByTestId('abd-show-progress')).toBeNull();
+  });
+
   it('follows the job frames while it is open and stops when it closes', async () => {
     const stop = vi.fn();
     svc.watchAbd.mockResolvedValueOnce(stop);

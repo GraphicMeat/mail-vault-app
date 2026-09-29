@@ -8,8 +8,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup } from '@testing-library/react';
 
+const stopLimitWatch = vi.hoisted(() => vi.fn());
 const scheduler = vi.hoisted(() => ({
   initProgressListener: vi.fn(),
+  watchTransferLimits: vi.fn(() => stopLimitWatch),
   tick: vi.fn(),
   checkAndQueueDue: vi.fn(),
   onSleep: vi.fn(),
@@ -33,6 +35,7 @@ describe('useBackupScheduler heartbeat', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     Object.values(scheduler).forEach(fn => fn.mockClear());
+    stopLimitWatch.mockClear();
   });
   afterEach(() => {
     cleanup();
@@ -43,6 +46,14 @@ describe('useBackupScheduler heartbeat', () => {
     renderHook(() => useBackupScheduler());
     for (let i = 0; i < 10; i++) tickAfter(75_000);
     expect(scheduler.onSleep).not.toHaveBeenCalled();
+  });
+
+  it('follows the daily limit settings while mounted, and stops following them on unmount', () => {
+    const { unmount } = renderHook(() => useBackupScheduler());
+    expect(scheduler.watchTransferLimits).toHaveBeenCalledTimes(1);
+    expect(stopLimitWatch).not.toHaveBeenCalled();
+    unmount();
+    expect(stopLimitWatch).toHaveBeenCalledTimes(1);
   });
 
   it('still pauses and resumes the coordinator across a real sleep', () => {

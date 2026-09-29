@@ -273,6 +273,32 @@ async fn allowance_left(state: &Arc<DaemonState>, account_id: &str, host: &str) 
     .unwrap_or((0, false))
 }
 
+/// The look a sweep takes before the credentials are read, on what is known
+/// without the host: `Some(by_limit)` when the account is spent for today.
+/// The provider's own stop rests it. With the daily limit ON, a limit the user
+/// typed decides; with the field empty, Gmail's default needs the host, so
+/// the answer waits for `hoard_account` (Hoarder's built-in budget must not
+/// stand in for the user's limit here). With the limit OFF, the built-in budget.
+async fn spent_before_credentials(state: &Arc<DaemonState>, account_id: &str) -> Option<bool> {
+    let (st, acct) = (Arc::clone(state), account_id.to_string());
+    blocking(move || {
+        if st.hoarder_worker.provider_stopped(&st.app_dir, &acct, now_ms()) {
+            return Some(false);
+        }
+        let cap_on = transfer_limits::read_limits(&st.app_dir, &acct).map_or(false, |l| l.cap_enabled);
+        if cap_on {
+            return match transfer_limits::background_allowance_at(&st.app_dir, &acct, "", st.clock.now_ms()) {
+                Some(0) => Some(true),
+                _ => None,
+            };
+        }
+        (st.hoarder_worker.budget_left(&st.app_dir, &acct, now_ms()) == 0).then_some(false)
+    })
+    .await
+    // A blocking thread that never answered is not a licence to download.
+    .unwrap_or(Some(false))
+}
+
 /// Why a pass stopped an account for the day: `by_limit` is the user's limit.
 fn spent_reason(by_limit: bool) -> &'static str {
     if by_limit { "daily_limit_reached" } else { "daily_budget_spent" }
@@ -332,10 +358,10 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) -> bool {
         }
         // Before the credentials are read (so a spent day never touches the
         // keychain), on what is known without the host: the rested-for-the-day
-        // mark, Hoarder's own budget, a limit the user typed. Gmail's default
-        // limit needs the host and is checked inside `hoard_account`.
-        let (left, by_limit) = allowance_left(state, &account_id, "").await;
-        if left == 0 {
+        // mark, a limit the user typed, and (limit OFF) Hoarder's own budget.
+        // Gmail's default limit needs the host and is checked inside
+        // `hoard_account`.
+        if let Some(by_limit) = spent_before_credentials(state, &account_id).await {
             info!("[hoard] {account_id}: skipped_reason={}", spent_reason(by_limit));
             continue;
         }
@@ -1022,6 +1048,40 @@ mod tests {
         // The provider's own bandwidth stop rests the account whatever the cap says.
         s.hoarder_worker.exhaust(&dir, ACCT, now_ms());
         assert_eq!(allowance_left(&s, ACCT, "imap.gmail.com").await, (0, false));
+    }
+
+    /// Limit ON, field empty, Hoarder's own 1,000 MiB spent: the look before
+    /// the credentials (no host yet, so no Gmail default) must not stop the
+    /// account on Hoarder's budget. It goes on to `hoard_account`, which knows
+    /// the host and applies the right limit.
+    #[tokio::test]
+    async fn a_sweep_with_the_limit_on_and_the_field_empty_does_not_stop_on_the_built_in_budget() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let mock = MockImap::start(Scenario::new().mailbox(folder("INBOX", 1..=3)));
+        let (dir, s) = state();
+        let account = json!({
+            "id": ACCT, "email": "user@example.com", "password": "hunter2",
+            "imapHost": mock.host(), "imapPort": mock.port(),
+        })
+        .to_string();
+        let creds = dir.join("credentials.json");
+        std::fs::write(&creds, json!({ ACCT: account }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+
+        hoarder_with_limit(&dir, true, None);
+        s.hoarder_worker.spend(&dir, ACCT, DAILY_BYTES, now_ms());
+        assert_eq!(spent_before_credentials(&s, ACCT).await, None);
+        let worked = sweep(&s).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(worked, "the account was stopped on Hoarder's own budget before its host was known");
+
+        // Limit OFF: the built-in budget still rests the account up front.
+        hoarder_with_limit(&dir, false, None);
+        assert_eq!(spent_before_credentials(&s, ACCT).await, Some(false));
+        // Limit ON with a typed limit that is spent: skipped for the limit.
+        hoarder_with_limit(&dir, true, Some(MIB));
+        spend_today(&dir, MIB);
+        assert_eq!(spent_before_credentials(&s, ACCT).await, Some(true));
     }
 
     /// The pass skips the account while the allowance is 0, without a single

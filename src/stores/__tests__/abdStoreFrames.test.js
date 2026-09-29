@@ -21,10 +21,19 @@ describe('applyFrame', () => {
     expect(s().jobs.a.counts.deleted).toBe(8);
   });
 
-  it('takes a new job of the same account whatever its timestamp', () => {
-    s().applyFrame(frame({ updatedMs: 500 }));
-    s().applyFrame(frame({ jobId: 'abd-a-2', updatedMs: 5 }));
+  it('takes a new job of the same account whose frame is newer', () => {
+    s().applyFrame(frame({ updatedMs: 500, finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    s().applyFrame(frame({ jobId: 'abd-a-2', updatedMs: 600 }));
     expect(s().jobs.a.jobId).toBe('abd-a-2');
+    expect(s().jobs.a.finished).toBe(false);
+  });
+
+  it('drops a late frame of an older job once a newer job holds the account', () => {
+    // A status reply asked for before the new job started lands after its first frame.
+    s().applyFrame(frame({ jobId: 'abd-a-2', updatedMs: 600 }));
+    s().applyFrame(frame({ jobId: 'abd-a-1', updatedMs: 500, finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    expect(s().jobs.a.jobId).toBe('abd-a-2');
+    expect(s().jobs.a.finished).toBe(false);
   });
 
   it('never brings a finished job back to life', () => {
@@ -87,6 +96,35 @@ describe('panel', () => {
     s().openPanel('a');
     s().removeJob('a');
     expect(s().jobs).toEqual({});
+    expect(s().panel).toBeNull();
+  });
+
+  it('removeJob hands the pill to another account\'s unfinished job', () => {
+    s().applyFrame(frame({ updatedMs: 1, finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    s().applyFrame(frame({ jobId: 'abd-b-1', accountId: 'b', accountEmail: 'b@x.test', status: { state: 'waiting', reason: 'daily_limit', untilMs: 1 } }));
+    s().openPanel('a');
+    s().removeJob('a');
+    expect(s().panel).toEqual({ accountId: 'b', minimized: true });
+  });
+
+  it('removeJob of another account leaves the open panel alone', () => {
+    s().applyFrame(frame({ finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    s().applyFrame(frame({ jobId: 'abd-b-1', accountId: 'b', accountEmail: 'b@x.test' }));
+    s().openPanel('b');
+    s().removeJob('a');
+    expect(s().panel).toEqual({ accountId: 'b', minimized: false });
+  });
+
+  it('closePanel hands the pill to another account\'s unfinished job, or closes', () => {
+    s().applyFrame(frame());
+    s().applyFrame(frame({ jobId: 'abd-b-1', accountId: 'b', accountEmail: 'b@x.test' }));
+    s().openPanel('a');
+    s().closePanel();
+    expect(s().panel).toEqual({ accountId: 'b', minimized: true });
+    // A finished job of another account gets no pill.
+    s().applyFrame(frame({ jobId: 'abd-b-1', accountId: 'b', accountEmail: 'b@x.test', updatedMs: 99, finished: true, outcome: 'completed', status: { state: 'completed' } }));
+    s().openPanel('a');
+    s().closePanel();
     expect(s().panel).toBeNull();
   });
 

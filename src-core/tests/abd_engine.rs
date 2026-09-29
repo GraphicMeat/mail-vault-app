@@ -736,6 +736,238 @@ async fn a_folder_that_changed_before_the_run_is_left_alone() {
     assert_eq!(rig.server.uids_in("INBOX").len(), 4);
 }
 
+// ── proof before a delete (review E1) ───────────────────────────────────────
+
+#[tokio::test]
+async fn an_archived_file_without_the_expected_message_id_is_not_trusted() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 2);
+    // Another message, with no Message-ID header at all, sits at uid 1.
+    rig.local.put_vault("INBOX", 1, raw_no_id("an imposter", 100), true);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMismatch), vec![1]);
+    assert_eq!(rig.server.uids_in("INBOX"), vec![1], "no proof, no delete");
+    assert_eq!(rig.server.ids_in("Trash"), vec!["INBOX-2@t"]);
+}
+
+/// The reviewer's scenario: the folder was reissued, an archived file of the
+/// OLD generation sits at the uid the new message now has, and the new
+/// message has no Message-ID. Emptying mode would remove it for good.
+#[tokio::test]
+async fn a_reissued_folder_never_adopts_an_old_file_for_a_message_without_a_message_id() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrashAndEmpty);
+    rig.server.folder_mut("INBOX").validity = 2;
+    let uid = rig.server.add_raw("INBOX", raw_no_id("the new message", 50), day());
+    assert_eq!(uid, 1);
+    let old = raw_no_id("a message of the old generation", 80);
+    rig.local.put_vault("INBOX", 1, old.clone(), true);
+    rig.local.set_generation("INBOX", Some(1));
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(rig.server.uids_in("INBOX"), vec![1], "the never-archived message stays on the server");
+    assert!(rig.sh.cmds_named("move").is_empty());
+    assert!(rig.sh.cmds_named("expunge").is_empty());
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMismatch), vec![1]);
+    assert_eq!(rig.local.vault.borrow()["INBOX"][&1].raw, old, "the old file is left as it was");
+    assert!(!rig.folder_state("INBOX").vault_ok.contains(1));
+}
+
+#[tokio::test]
+async fn a_file_at_the_uid_of_a_message_without_a_message_id_is_proof_only_byte_for_byte() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    let same = raw_no_id("stored by a run that was killed", 40);
+    rig.server.add_raw("INBOX", same.clone(), day());
+    rig.server.add_raw("INBOX", raw_no_id("the server's message", 40), day() + 1000);
+    rig.local.put_vault("INBOX", 1, same, true);
+    rig.local.put_vault("INBOX", 2, raw_no_id("some other message", 40), true);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    // Neither is adopted by its uid: both are fetched and compared.
+    assert_eq!(rig.server.fetch_count[&("INBOX".to_string(), 1)], 1);
+    assert_eq!(rig.server.fetch_count[&("INBOX".to_string(), 2)], 1);
+    let found = rig.local.found.borrow().clone();
+    assert!(found.contains(&("INBOX".to_string(), 1, StoreOutcome::FoundSame)), "{found:?}");
+    assert!(found.contains(&("INBOX".to_string(), 2, StoreOutcome::FoundDifferent)), "{found:?}");
+    assert_eq!(rig.server.uids_in("INBOX"), vec![2]);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMismatch), vec![2]);
+    assert_eq!(rig.folder_state("INBOX").deleted.iter().collect::<Vec<u32>>(), vec![1]);
+}
+
+#[tokio::test]
+async fn a_message_without_a_message_id_is_deleted_once_this_run_wrote_its_file() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    rig.server.add_raw("INBOX", raw_no_id("no id", 30), day());
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert!(rig.server.uids_in("INBOX").is_empty());
+    assert_eq!(rig.server.folder("Trash").msgs.len(), 1);
+    assert_eq!(rig.local.stores.borrow().len(), 1);
+}
+
+/// A file already on disk is adopted by its uid only when the vault folder is
+/// keyed under the plan's UIDVALIDITY; otherwise the message is fetched again
+/// and only the very same bytes count.
+#[tokio::test]
+async fn a_file_of_another_vault_generation_is_fetched_again_not_adopted() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 2);
+    let exact = rig.server.folder("INBOX").msgs[&1].raw.clone();
+    rig.local.put_vault("INBOX", 1, exact, true);
+    rig.local.put_vault("INBOX", 2, raw_msg("INBOX-2@t", 999), true); // same id, other bytes
+    rig.local.set_generation("INBOX", None); // never stamped
+    rig.select(&["INBOX"]);
+    assert_eq!(rig.plan().await, RunExit::Completed);
+    assert!(rig.folder_state("INBOX").vault_ok.is_empty(), "nothing adopted at plan time");
+    assert_eq!(rig.run().await, RunExit::Completed);
+    assert_eq!(rig.server.fetch_count[&("INBOX".to_string(), 1)], 1);
+    assert_eq!(rig.server.uids_in("INBOX"), vec![2], "other bytes under an unknown generation prove nothing");
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMismatch), vec![2]);
+}
+
+#[tokio::test]
+async fn a_message_id_the_server_did_not_answer_fails_the_plan() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 3);
+    rig.server.unanswered_ids = vec![2];
+    rig.select(&["INBOX"]);
+    match rig.plan().await {
+        RunExit::Failed(e) => assert!(e.contains("Message-IDs"), "{e}"),
+        other => panic!("a silent None would have planned uid 2 with no Message-ID: {other:?}"),
+    }
+    assert!(rig.env.plan_saves.borrow().is_empty());
+    assert_eq!(rig.sh.cmds_named("message_ids").len(), 2, "asked once more before giving up");
+    assert_eq!(rig.server.uids_in("INBOX").len(), 3);
+}
+
+#[tokio::test]
+async fn a_message_gone_before_its_message_id_was_read_is_left_out_of_the_plan() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 3);
+    rig.select(&["INBOX"]);
+    let preview = rig.server.preview("p1");
+    rig.server.folder_mut("INBOX").msgs.remove(&2); // another client deleted it
+    let exit = plan_job(&mut rig.job, &preview, &mut rig.plans, &mut rig.server, &rig.local, &rig.env, &rig.ctl).await;
+    assert_eq!(exit, RunExit::Completed);
+    assert_eq!(rig.plans.get("plan-000.json").unwrap().uids, vec![1, 3]);
+    assert_eq!(rig.folder_state("INBOX").scoped, 2);
+    assert_eq!(rig.run().await, RunExit::Completed);
+    assert!(rig.server.uids_in("INBOX").is_empty());
+}
+
+// ── UIDVALIDITY fails closed (review E2) ────────────────────────────────────
+
+#[tokio::test]
+async fn an_unreadable_uidvalidity_deletes_nothing() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 3);
+    rig.select(&["INBOX"]);
+    rig.server.faults.push(
+        Fault::new("uid_validity", OpsError::Other("NO [UNAVAILABLE] try later".to_string())).folder("INBOX").times(usize::MAX),
+    );
+    done(&mut rig).await;
+    assert_eq!(rig.local.vault_uids("INBOX").len(), 3, "the archive part still ran");
+    assert!(rig.sh.cmds_named("move").is_empty(), "an unreadable generation is never read as unchanged");
+    assert_eq!(rig.server.uids_in("INBOX").len(), 3);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::ServerChanged).len(), 3);
+    let asked = rig.sh.cmds_named("uid_validity").len();
+    assert!(asked >= 1 + 3, "read again before giving up on the folder: {asked}");
+}
+
+#[tokio::test]
+async fn a_reissue_between_the_check_and_the_move_is_refused_by_the_moves_own_select() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrashAndEmpty);
+    seed(&mut rig, "INBOX", 3);
+    rig.select(&["INBOX"]);
+    rig.server.bump_validity_before_move = Some(1);
+    done(&mut rig).await;
+    assert_eq!(rig.server.moves_done, 0, "nothing moved");
+    assert_eq!(rig.server.uids_in("INBOX").len(), 3);
+    assert!(rig.server.folder("Trash").msgs.is_empty());
+    let fs = rig.folder_state("INBOX");
+    assert!(fs.stale);
+    assert!(fs.deleted.is_empty());
+    assert!(fs.deleting.is_none(), "a refused command leaves no intent behind");
+    assert_eq!(kept(&rig, "INBOX", KeptReason::ServerChanged).len(), 3);
+}
+
+#[tokio::test]
+async fn an_unreadable_trash_uidvalidity_empties_nothing() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrashAndEmpty);
+    seed(&mut rig, "INBOX", 3);
+    rig.select(&["INBOX"]);
+    rig.server.faults.push(
+        Fault::new("uid_validity", OpsError::Other("NO [UNAVAILABLE]".to_string())).folder("Trash").times(usize::MAX),
+    );
+    done(&mut rig).await;
+    assert_eq!(rig.server.folder("Trash").msgs.len(), 3, "moved, not emptied");
+    assert!(rig.sh.cmds_named("expunge").is_empty());
+    assert_eq!(kept(&rig, "INBOX", KeptReason::NotEmptied).len(), 3);
+    assert_eq!(rig.folder_state("INBOX").deleted.len(), 3);
+}
+
+#[tokio::test]
+async fn an_expunge_under_another_trash_generation_is_refused_by_its_own_select() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrashAndEmpty);
+    seed(&mut rig, "INBOX", 2);
+    rig.select(&["INBOX"]);
+    // The Trash is reissued after the engine read its generation, right
+    // before the expunge's own SELECT.
+    rig.server.bump_trash_validity_before_expunge = true;
+    done(&mut rig).await;
+    let exp = rig.sh.cmds_named("expunge");
+    assert!(!exp.is_empty(), "the expunge was asked");
+    assert!(rig.server.expunges.is_empty(), "and refused before anything was removed");
+    assert_eq!(rig.server.folder("Trash").msgs.len(), 2);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::NotEmptied).len(), 2);
+    assert!(rig.folder_state("INBOX").emptied.is_empty());
+}
+
+#[tokio::test]
+async fn a_ticked_trash_batch_records_the_trash_generation() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrashAndEmpty);
+    seed(&mut rig, "Trash", 2);
+    rig.select(&["Trash"]);
+    done(&mut rig).await;
+    let recorded: Vec<Option<u32>> = rig
+        .env
+        .saves
+        .borrow()
+        .iter()
+        .flat_map(|j| j.folders.iter().flat_map(|f| f.trash_pending.iter().map(|t| t.trash_validity)).collect::<Vec<_>>())
+        .collect();
+    assert!(!recorded.is_empty());
+    assert!(recorded.iter().all(|v| *v == Some(1)), "{recorded:?}");
+    assert!(rig.server.ids_in("Trash").is_empty());
+}
+
+/// R4 on an unreadable generation: `present` there would answer about other
+/// messages and record them deleted (and, emptying, look for them in Trash).
+#[tokio::test]
+async fn a_persisted_intent_is_never_reconciled_against_an_unreadable_generation() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AfterAll, DeleteMode::MoveToTrashAndEmpty);
+    seed(&mut rig, "INBOX", 4);
+    rig.select(&["INBOX"]);
+    assert_eq!(rig.plan().await, RunExit::Completed);
+    rig.env.crash_when(|job, _| job.folders.iter().any(|f| !f.deleted.is_empty()));
+    assert!(matches!(rig.run().await, RunExit::Failed(_)));
+    rig.restart_from_last_save();
+    assert!(rig.folder_state("INBOX").deleting.is_some());
+    rig.server.faults.push(
+        Fault::new("uid_validity", OpsError::Other("NO [UNAVAILABLE]".to_string())).folder("INBOX").times(usize::MAX),
+    );
+    let mark = rig.sh.timeline.borrow().len();
+    assert_eq!(rig.run().await, RunExit::Completed);
+    assert!(rig.sh.cmds_named("present").iter().all(|(n, _)| *n < mark), "no presence check in an unknown generation");
+    assert!(rig.sh.cmds_named("expunge").is_empty());
+    assert!(rig.sh.cmds_named("find_in_trash").is_empty());
+    let fs = rig.folder_state("INBOX");
+    assert!(fs.deleted.is_empty(), "nothing is recorded deleted on an unknown generation");
+    assert!(fs.deleting.is_none());
+    assert!(fs.stale);
+    assert_eq!(rig.server.folder("Trash").msgs.len(), 4, "the moved mail is left in Trash");
+}
+
 // ── delete modes ────────────────────────────────────────────────────────────
 
 #[tokio::test]

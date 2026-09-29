@@ -713,8 +713,11 @@ pub fn custody_entry_from_raw(uid: u32, raw: &[u8], flags: &[String]) -> serde_j
 ///
 /// Never overwrites an archived copy: if one is already there (found under the
 /// mailbox lock, whatever the caller's listing said) its path comes back and
-/// nothing is written. A working-cache copy of the uid (no `A`) is replaced,
-/// and its file removed, so the folder never holds two files for one uid.
+/// nothing is written. The outcome says which: `Wrote`, or found with the very
+/// bytes fetched (`FoundSame`, proof it is this message) or with other bytes
+/// (`FoundDifferent`, proof of nothing: uids are per generation). A
+/// working-cache copy of the uid (no `A`) is replaced, and its file removed,
+/// so the folder never holds two files for one uid.
 ///
 /// Built on `vault_files::store` under the mailbox lock and the write gate,
 /// on the blocking pool (the lock order `fetch_and_store` uses). The mailbox
@@ -729,7 +732,8 @@ pub async fn store_archived(
     raw: Vec<u8>,
     imap_flags: &[String],
     _listed_archived: bool,
-) -> Result<(std::path::PathBuf, serde_json::Value), String> {
+) -> Result<(std::path::PathBuf, serde_json::Value, crate::abd::StoreOutcome), String> {
+    use crate::abd::StoreOutcome;
     let root = ctx.root.clone();
     let gate = Arc::clone(&ctx.gate);
     let registry = Arc::clone(&ctx.registry);
@@ -737,7 +741,7 @@ pub async fn store_archived(
     let flags = crate::vault_flags::store_flags(imap_flags);
     let server_flags: Vec<String> = imap_flags.to_vec();
 
-    tokio::task::spawn_blocking(move || -> Result<(std::path::PathBuf, serde_json::Value), String> {
+    tokio::task::spawn_blocking(move || -> Result<(std::path::PathBuf, serde_json::Value, StoreOutcome), String> {
         let cur_dir = vault_files::cur_path(&root, &account_key, &mailbox_owned);
         let entry = custody_entry_from_raw(uid, &raw, &server_flags);
 
@@ -746,7 +750,7 @@ pub async fn store_archived(
         // not used; a `None` (cannot be verified) only means `store` scans.
         let _ = registry.resolve(&root, &account_key, &mailbox_owned, uid);
 
-        let mut written: Option<std::path::PathBuf> = None;
+        let mut written: Option<(std::path::PathBuf, StoreOutcome)> = None;
         registry.serialized(&account_key, &mailbox_owned, || {
             gate(&mut || {
                 // An archived copy already there is the one to keep.
@@ -756,16 +760,20 @@ pub async fn store_archived(
                     None => archived_name_by_scan(&cur_dir, uid),
                 };
                 if let Some(name) = existing {
-                    written = Some(cur_dir.join(name));
+                    let path = cur_dir.join(name);
+                    // Read under the lock: the comparison is about this file.
+                    let same = std::fs::read(&path).map_or(false, |held| held == raw);
+                    let outcome = if same { StoreOutcome::FoundSame } else { StoreOutcome::FoundDifferent };
+                    written = Some((path, outcome));
                     return Ok(());
                 }
                 vault_files::store(&registry, &root, &account_key, &mailbox_owned, uid, &raw, &flags, true)?;
-                written = Some(cur_dir.join(vault_files::build_maildir_filename(uid, &flags)));
+                written = Some((cur_dir.join(vault_files::build_maildir_filename(uid, &flags)), StoreOutcome::Wrote));
                 Ok(())
             })
         })?;
-        let path = written.ok_or_else(|| format!("store UID {uid}: the write gate ran nothing"))?;
-        Ok((path, entry))
+        let (path, outcome) = written.ok_or_else(|| format!("store UID {uid}: the write gate ran nothing"))?;
+        Ok((path, entry, outcome))
     })
     .await
     .map_err(|e| format!("store UID {uid} panicked: {e}"))?

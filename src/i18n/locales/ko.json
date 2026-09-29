@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "백업 실패 — 클릭해서 보기",
   "sidebar.backupIncompleteClickView": "백업 미완료 — 클릭해서 보기",
   "sidebar.backupOverdueClickView": "백업 지연 — 클릭해서 보기",
-  "sidebar.backupPausedAtDailyLimit": "일일 한도로 백업 일시정지됨 — UTC 자정 이후 이어서 진행됩니다",
+  "sidebar.backupPausedAtDailyLimit": "일일 한도로 백업 일시정지됨. UTC 자정 이후 이어서 진행됩니다",
   "sidebar.backupUpDate": "백업 최신 상태",
   "sidebar.changeServer": "서버 변경",
   "sidebar.clickToSeeMore": "자세히 보기 →",

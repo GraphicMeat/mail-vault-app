@@ -562,6 +562,107 @@ describe('AccountPipeline download-ahead at the daily limit', () => {
     pipeline.destroy();
   });
 
+  // A uid names a message only inside one mailbox. Merging another folder's
+  // uids into the sleeping queue ran them against the first folder at reset.
+  it('uids of another mailbox that arrive while it sleeps replace the queue, and run in that mailbox after the reset', async () => {
+    api.fetchEmailLight.mockResolvedValue({});
+    api.fetchEmailLight
+      .mockRejectedValueOnce(new Error('connection reset')) // uid 1: an ordinary failure, parked for a retry
+      .mockRejectedValueOnce(limitError(Date.now() + HOUR)); // uid 2: the limit
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2, 3], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(2);
+    expect(pipeline._retryQueue).toEqual([1]);
+
+    pipeline.startContentCaching([7, 8], 'Archive');
+    expect(pipeline._queue).toEqual([7, 8]);
+    expect(pipeline._retryQueue).toEqual([]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(HOUR + 60_000);
+    expect(api.fetchEmailLight.mock.calls.slice(2).map(c => [c[1], c[2]])).toEqual([[7, 'Archive'], [8, 'Archive']]);
+    expect(pipeline._phase).toBe('done');
+    pipeline.destroy();
+  });
+
+  it('uids of the same mailbox still join the sleeping queue (negative control)', async () => {
+    api.fetchEmailLight.mockResolvedValue({});
+    api.fetchEmailLight.mockRejectedValueOnce(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'Archive');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    pipeline.startContentCaching([2, 9], 'Archive');
+    expect(pipeline._queue).toEqual([1, 2, 9]);
+    await vi.advanceTimersByTimeAsync(HOUR + 60_000);
+    expect(api.fetchEmailLight.mock.calls.slice(1).map(c => [c[1], c[2]])).toEqual([[1, 'Archive'], [2, 'Archive'], [9, 'Archive']]);
+    pipeline.destroy();
+  });
+
+  // The reset (or a wake from Settings) can come while another account is
+  // active or the app is offline; `onAccountSwitch` and `resumeAll` then
+  // resume with 'INBOX', which must not redirect a queue that slept elsewhere.
+  it.each([
+    ['the reset passes', async () => { await vi.advanceTimersByTimeAsync(HOUR + 60_000); }],
+    ['Settings wake it', async (pipeline) => { pipeline.wakeFromLimit(); await vi.advanceTimersByTimeAsync(1000); }],
+  ])('a pass paused while asleep runs its queue in its own mailbox on resume (%s)', async (_label, wake) => {
+    api.fetchEmailLight.mockResolvedValue({});
+    api.fetchEmailLight.mockRejectedValueOnce(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'Archive');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    pipeline.pause();
+    await wake(pipeline);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+
+    pipeline.resume('INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight.mock.calls.slice(1).map(c => [c[1], c[2]])).toEqual([[1, 'Archive'], [2, 'Archive']]);
+    pipeline.destroy();
+  });
+
+  // Turning the cap off or raising the limit in Settings releases the sleep
+  // at once instead of at the next UTC day.
+  it('wakeFromLimit ends the sleep now and finishes the queue in its mailbox', async () => {
+    api.fetchEmailLight.mockResolvedValue({});
+    api.fetchEmailLight.mockRejectedValueOnce(limitError(Date.now() + 5 * HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'Archive');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+
+    pipeline.wakeFromLimit();
+    expect(pipeline._limitTimer).toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(api.fetchEmailLight.mock.calls.map(c => [c[1], c[2]])).toEqual([[1, 'Archive'], [1, 'Archive'], [2, 'Archive']]);
+    expect(pipeline._phase).toBe('done');
+    // The old reset timer is gone: nothing is fetched again at the reset.
+    await vi.advanceTimersByTimeAsync(6 * HOUR);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(3);
+    pipeline.destroy();
+  });
+
+  it('wakeFromLimit does nothing to a pipeline that is not asleep, or is destroyed', async () => {
+    api.fetchEmailLight.mockResolvedValue({});
+    const idle = new AccountPipeline(account, { concurrency: 1 });
+    idle.wakeFromLimit();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight).not.toHaveBeenCalled();
+
+    api.fetchEmailLight.mockRejectedValueOnce(limitError(Date.now() + HOUR));
+    const gone = new AccountPipeline(account, { concurrency: 1 });
+    gone.startContentCaching([1], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+    gone.destroy();
+    gone.wakeFromLimit();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+  });
+
   it('a destroyed pipeline never wakes up', async () => {
     api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + HOUR));
     const pipeline = new AccountPipeline(account, { concurrency: 1 });

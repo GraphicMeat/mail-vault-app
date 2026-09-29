@@ -1,5 +1,15 @@
 import { create } from 'zustand';
-import { isFinished } from '../utils/abdFrame';
+import { isFinished, isUnfinished } from '../utils/abdFrame';
+
+/**
+ * The panel once the one it showed is gone: another account's unfinished job
+ * as a pill (it may wait hours for its daily limit, and no frame of it may come
+ * to claim the corner meanwhile), or nothing.
+ */
+const pillAfter = (jobs, goneAccountId) => {
+  const next = Object.values(jobs).find(f => f.accountId !== goneAccountId && isUnfinished(f));
+  return next ? { accountId: next.accountId, minimized: true } : null;
+};
 
 /**
  * Archive & delete jobs (part-d design 6.1). Ephemeral: the daemon owns every
@@ -13,26 +23,31 @@ import { isFinished } from '../utils/abdFrame';
  *             the setup screen's listing run (`abd-preview` events)
  * - panel:    { accountId, minimized } | null  the one progress panel, in the
  *             main window; closing Settings never touches it
+ * - focusPill: true from a Minimize click until the pill has taken focus. A
+ *             pill that appears on its own (a job started elsewhere) never does.
  */
 export const useAbdStore = create((set, get) => ({
   jobs: {},
   previews: {},
   panel: null,
+  focusPill: false,
 
   /**
    * A frame from the `abd-progress` event or an `abd.status` reply. Listeners
    * are attached before the status ask, so an old reply can land after a
-   * newer live frame: a frame older than the one held for the same job is
-   * dropped, and a finished job is never brought back to life.
+   * newer live frame: a frame older than the one held for the account is
+   * dropped, whichever job it is of (an old job's late reply must not replace
+   * the new job that took its place), and a finished job is never brought
+   * back to life. A new job's frames are newer, so they replace the old job.
    */
   applyFrame: (frame) => {
     const accountId = frame?.accountId;
     if (!accountId) return;
     const { jobs, panel } = get();
     const held = jobs[accountId];
-    if (held && held.jobId === frame.jobId) {
+    if (held) {
       if ((frame.updatedMs ?? 0) < (held.updatedMs ?? 0)) return;
-      if (isFinished(held) && !isFinished(frame)) return;
+      if (held.jobId === frame.jobId && isFinished(held) && !isFinished(frame)) return;
     }
     const next = { jobs: { ...jobs, [accountId]: frame } };
     if (!isFinished(frame) && !panel) {
@@ -57,7 +72,7 @@ export const useAbdStore = create((set, get) => ({
     const { jobs, panel } = get();
     if (!(accountId in jobs)) return;
     const { [accountId]: _gone, ...rest } = jobs;
-    set({ jobs: rest, panel: panel?.accountId === accountId ? null : panel });
+    set({ jobs: rest, panel: panel?.accountId === accountId ? pillAfter(rest, accountId) : panel });
   },
 
   beginPreview: (accountId, previewId) => set({
@@ -94,9 +109,11 @@ export const useAbdStore = create((set, get) => ({
   },
 
   openPanel: (accountId) => set({ panel: { accountId, minimized: false } }),
-  minimize: () => { const p = get().panel; if (p) set({ panel: { ...p, minimized: true } }); },
+  /** `focusPill`: the person pressed Minimize, so keyboard focus follows the panel into its pill. */
+  minimize: ({ focusPill = false } = {}) => { const p = get().panel; if (p) set({ panel: { ...p, minimized: true }, focusPill }); },
+  pillFocused: () => set({ focusPill: false }),
   restore: () => { const p = get().panel; if (p) set({ panel: { ...p, minimized: false } }); },
-  closePanel: () => set({ panel: null }),
+  closePanel: () => set({ panel: pillAfter(get().jobs, get().panel?.accountId) }),
 }));
 
 /** The job the panel shows, or null. */

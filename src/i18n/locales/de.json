@@ -2685,7 +2685,7 @@
   "sidebar.backupFailedClickView": "Sicherung fehlgeschlagen — zum Ansehen klicken",
   "sidebar.backupIncompleteClickView": "Sicherung unvollständig — zum Ansehen klicken",
   "sidebar.backupOverdueClickView": "Sicherung überfällig — zum Ansehen klicken",
-  "sidebar.backupPausedAtDailyLimit": "Backup am Tageslimit pausiert — wird nach Mitternacht UTC fortgesetzt",
+  "sidebar.backupPausedAtDailyLimit": "Backup am Tageslimit pausiert. Wird nach Mitternacht UTC fortgesetzt",
   "sidebar.backupUpDate": "Sicherung aktuell",
   "sidebar.changeServer": "Server wechseln",
   "sidebar.clickToSeeMore": "Für mehr klicken →",

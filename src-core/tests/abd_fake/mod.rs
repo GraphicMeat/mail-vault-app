@@ -90,6 +90,11 @@ pub fn year_bounds(offset_secs: i32, from: i32, to: i32) -> Vec<YearBounds> {
         .collect()
 }
 
+/// A message with no Message-ID header at all.
+pub fn raw_no_id(subject: &str, pad: usize) -> Vec<u8> {
+    format!("Subject: {subject}\r\n\r\n{}", "x".repeat(pad)).into_bytes()
+}
+
 pub fn raw_msg(id: &str, pad: usize) -> Vec<u8> {
     format!("Message-ID: <{id}>\r\nSubject: s\r\n\r\n{}", "x".repeat(pad)).into_bytes()
 }
@@ -130,6 +135,8 @@ pub struct FakeFolder {
 pub struct Fault {
     pub op: &'static str,
     pub uid: Option<u32>,
+    /// Only calls about this folder.
+    pub folder: Option<String>,
     /// Matching calls to let pass before the fault starts.
     pub skip: usize,
     pub times: usize,
@@ -140,7 +147,11 @@ pub struct Fault {
 
 impl Fault {
     pub fn new(op: &'static str, err: OpsError) -> Fault {
-        Fault { op, uid: None, skip: 0, times: 1, err, execute_first: false }
+        Fault { op, uid: None, folder: None, skip: 0, times: 1, err, execute_first: false }
+    }
+    pub fn folder(mut self, f: &str) -> Fault {
+        self.folder = Some(f.to_string());
+        self
     }
     pub fn times(mut self, n: usize) -> Fault {
         self.times = n;
@@ -179,6 +190,15 @@ pub struct FakeServer {
     pub next_gm: u64,
     /// Answer COPYUID with the destination uids in reverse order.
     pub scramble_copyuid: bool,
+    /// Reissue the source folder (UIDVALIDITY + 1) right before the nth
+    /// move reaches it: after the engine's own check, before the command.
+    pub bump_validity_before_move: Option<usize>,
+    pub moves_asked: usize,
+    /// Reissue the Trash (UIDVALIDITY + 1) right before an expunge reaches it.
+    pub bump_trash_validity_before_expunge: bool,
+    /// Uids `message_ids` leaves out of its answer (a reply row the server
+    /// never sent), though the message is there.
+    pub unanswered_ids: Vec<u32>,
 }
 
 impl FakeServer {
@@ -201,6 +221,10 @@ impl FakeServer {
             released: 0,
             next_gm: 1000,
             scramble_copyuid: false,
+            bump_validity_before_move: None,
+            moves_asked: 0,
+            bump_trash_validity_before_expunge: false,
+            unanswered_ids: Vec::new(),
         }
     }
 
@@ -261,6 +285,15 @@ impl FakeServer {
             uid,
             FakeMsg { raw: raw_msg(id, pad), flags: vec!["\\Seen".to_string()], internal_ms, gm_msgid: None, unlabelled: false, graph_id },
         );
+        uid
+    }
+
+    /// A message with exactly these bytes; returns its uid.
+    pub fn add_raw(&mut self, folder: &str, raw: Vec<u8>, internal_ms: i64) -> u32 {
+        let f = self.folder_mut(folder);
+        let uid = f.next_uid;
+        f.next_uid += 1;
+        f.msgs.insert(uid, FakeMsg { raw, flags: vec![], internal_ms, gm_msgid: None, unlabelled: false, graph_id: None });
         uid
     }
 
@@ -356,6 +389,11 @@ impl FakeServer {
             }
             if let Some(u) = f.uid {
                 if !uids.contains(&u) {
+                    continue;
+                }
+            }
+            if let Some(p) = &f.folder {
+                if p != folder {
                     continue;
                 }
             }
@@ -476,7 +514,11 @@ impl ServerOps for FakeServer {
     async fn message_ids(&mut self, folder: &FolderInfo, uids: &[u32]) -> Result<Vec<(u32, Option<String>)>, OpsError> {
         self.enter("message_ids", &folder.path, uids)?;
         let f = self.folder(&folder.path);
-        Ok(uids.iter().filter_map(|u| f.msgs.get(u).map(|m| (*u, m.message_id()))).collect())
+        Ok(uids
+            .iter()
+            .filter(|u| !self.unanswered_ids.contains(*u))
+            .filter_map(|u| f.msgs.get(u).map(|m| (*u, m.message_id())))
+            .collect())
     }
 
     async fn uid_validity(&mut self, folder: &FolderInfo) -> Result<Option<u32>, OpsError> {
@@ -520,9 +562,28 @@ impl ServerOps for FakeServer {
         Ok(uids.iter().copied().filter(|u| f.msgs.contains_key(u)).collect())
     }
 
-    async fn move_to_trash(&mut self, folder: &FolderInfo, msgs: &[ListedMsg], trash: &FolderInfo) -> Result<MoveResult, OpsError> {
+    async fn move_to_trash(
+        &mut self,
+        folder: &FolderInfo,
+        msgs: &[ListedMsg],
+        trash: &FolderInfo,
+        validity: Option<u32>,
+    ) -> Result<MoveResult, OpsError> {
         let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
         let late = self.enter("move", &folder.path, &uids)?;
+        self.moves_asked += 1;
+        if self.bump_validity_before_move == Some(self.moves_asked) {
+            self.folder_mut(&folder.path).validity += 1;
+        }
+        // The command's own SELECT (I5): another generation refuses it.
+        if self.provider != Provider::Graph {
+            let now = self.folder(&folder.path).validity;
+            if let Some(want) = validity {
+                if now != want {
+                    return Err(OpsError::ValidityChanged(format!("{VALIDITY_CHANGED}: {now} is not {want}")));
+                }
+            }
+        }
         let r = self.do_move(folder, msgs, &trash.path);
         match late {
             Some(err) => Err(err),
@@ -530,10 +591,26 @@ impl ServerOps for FakeServer {
         }
     }
 
-    async fn expunge_exact(&mut self, trash: &FolderInfo, trash_uids: &[u32], expect: &[(u32, String)]) -> Result<Vec<u32>, OpsError> {
+    async fn expunge_exact(
+        &mut self,
+        trash: &FolderInfo,
+        trash_uids: &[u32],
+        expect: &[(u32, String)],
+        validity: Option<u32>,
+    ) -> Result<Vec<u32>, OpsError> {
         self.enter("expunge", &trash.path, trash_uids)?;
         if !self.caps.uidplus {
             return Err(OpsError::Other("UIDPLUS is required for an exact expunge".to_string()));
+        }
+        if self.bump_trash_validity_before_expunge {
+            self.bump_trash_validity_before_expunge = false;
+            self.folder_mut(&trash.path).validity += 1;
+        }
+        if let Some(want) = validity {
+            let now = self.folder(&trash.path).validity;
+            if now != want {
+                return Err(OpsError::ValidityChanged(format!("{VALIDITY_CHANGED}: {now} is not {want}")));
+            }
         }
         let mut done = Vec::new();
         let f = self.folder_mut(&trash.path);
@@ -603,6 +680,12 @@ pub struct FakeLocal {
     pub before_verify: RefCell<Option<(usize, Box<dyn Fn(&FakeLocal)>)>>,
     /// Run once, just before the first mirror_verify_paths call.
     pub before_mirror_path_check: RefCell<Option<Box<dyn Fn(&FakeLocal)>>>,
+    /// The generation each vault folder is keyed under; a folder not named
+    /// here answers `default_generation` (the fake server's first UIDVALIDITY).
+    pub generation: RefCell<HashMap<String, Option<u32>>>,
+    pub default_generation: Cell<Option<u32>>,
+    /// (folder, uid) of every store that found an archived copy already there.
+    pub found: RefCell<Vec<(String, u32, StoreOutcome)>>,
 }
 
 impl FakeLocal {
@@ -625,7 +708,14 @@ impl FakeLocal {
             remove_mirror_before_path_check: RefCell::new(None),
             before_verify: RefCell::new(None),
             before_mirror_path_check: RefCell::new(None),
+            generation: RefCell::new(HashMap::new()),
+            default_generation: Cell::new(Some(1)),
+            found: RefCell::new(Vec::new()),
         }
+    }
+
+    pub fn set_generation(&self, folder: &str, g: Option<u32>) {
+        self.generation.borrow_mut().insert(folder.to_string(), g);
     }
 
     pub fn path_of(folder: &str, name: &str) -> PathBuf {
@@ -699,20 +789,32 @@ impl LocalStore for FakeLocal {
         Ok(out)
     }
 
-    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<PathBuf, LocalError> {
+    async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<Stored, LocalError> {
         self.log("store_archived", folder);
         if self.vault_gone.get() {
             return Err(LocalError::VaultUnavailable("vault folder is gone".to_string()));
         }
         let mut vault = self.vault.borrow_mut();
         let m = vault.entry(folder.to_string()).or_default();
-        if m.get(&uid).map_or(false, |r| r.archived) {
-            return Err(LocalError::Io("an archived copy already exists".to_string()));
+        // As `archive::store_archived`: an archived copy is never overwritten;
+        // what is there comes back, saying whether it holds these bytes.
+        if let Some(r) = m.get(&uid).filter(|r| r.archived) {
+            let outcome = if r.raw == f.raw { StoreOutcome::FoundSame } else { StoreOutcome::FoundDifferent };
+            self.found.borrow_mut().push((folder.to_string(), uid, outcome));
+            return Ok(Stored { path: FakeLocal::path_of(folder, &r.name), outcome });
         }
         let name = format!("{uid}.eml:2,A");
         m.insert(uid, FileRec { name: name.clone(), raw: f.raw, archived: true });
         self.stores.borrow_mut().push((folder.to_string(), uid));
-        Ok(FakeLocal::path_of(folder, &name))
+        Ok(Stored { path: FakeLocal::path_of(folder, &name), outcome: StoreOutcome::Wrote })
+    }
+
+    async fn vault_generation(&self, folder: &str) -> Result<Option<u32>, LocalError> {
+        self.log("vault_generation", folder);
+        if self.vault_gone.get() {
+            return Err(LocalError::VaultUnavailable("vault folder is gone".to_string()));
+        }
+        Ok(self.generation.borrow().get(folder).copied().unwrap_or(self.default_generation.get()))
     }
 
     async fn read_file(&self, path: &Path) -> Result<Vec<u8>, LocalError> {
@@ -754,20 +856,25 @@ impl LocalStore for FakeLocal {
                 .get(u)
                 .and_then(|p| vault.get(folder).and_then(|m| m.get(u)).filter(|r| FakeLocal::path_of(folder, &r.name) == *p));
             match rec {
-                Some(r) if r.archived => {
-                    let have = msgid_of(&r.raw);
-                    match (expected.get(u), have) {
-                        (Some(e), Some(h)) if *e != h => v.mismatched.push(*u),
-                        _ => v.ok.push(*u),
-                    }
-                }
+                // Strict, as `maildir::verify_listed_strict`: an expected id
+                // must be read and equal; no expected id is presence only.
+                Some(r) if r.archived => match (expected.get(u), msgid_of(&r.raw)) {
+                    (Some(e), Some(h)) if *e == h => v.ok.push(*u),
+                    (Some(_), _) => v.mismatched.push(*u),
+                    (None, _) => v.ok.push(*u),
+                },
                 _ => v.missing.push(*u),
             }
         }
         Ok(v)
     }
 
-    async fn mirror_copy_verify(&self, folder: &str, uids: &[u32]) -> Result<Verify, LocalError> {
+    async fn mirror_copy_verify(
+        &self,
+        folder: &str,
+        listing: &HashMap<u32, PathBuf>,
+        uids: &[u32],
+    ) -> Result<Verify, LocalError> {
         self.log("mirror_copy_verify", folder);
         self.mirror_copy_calls.set(self.mirror_copy_calls.get() + 1);
         if self.drive_gone.get() {
@@ -777,7 +884,8 @@ impl LocalStore for FakeLocal {
         let mut mirror = self.mirror.borrow_mut();
         let mut v = Verify { ok: vec![], missing: vec![], mismatched: vec![] };
         for u in uids {
-            let src = vault.get(folder).and_then(|m| m.get(u)).filter(|r| r.archived);
+            // The vault side is found through the caller's listing only.
+            let src = listing.get(u).and_then(|_| vault.get(folder).and_then(|m| m.get(u))).filter(|r| r.archived);
             match src {
                 None => v.missing.push(*u),
                 Some(r) => {
@@ -816,14 +924,21 @@ impl LocalStore for FakeLocal {
             return Err(LocalError::DriveUnavailable("the backup drive is not connected".to_string()));
         }
         let mirror = self.mirror.borrow();
+        let vault = self.vault.borrow();
         let mut v = Verify { ok: vec![], missing: vec![], mismatched: vec![] };
         for (u, name) in files {
             let rec = mirror.get(folder).and_then(|m| m.get(u)).filter(|r| r.name == *name);
             match rec {
                 None => v.missing.push(*u),
                 Some(r) => match (expected.get(u), msgid_of(&r.raw)) {
-                    (Some(e), Some(h)) if *e != h => v.mismatched.push(*u),
-                    _ => v.ok.push(*u),
+                    (Some(e), Some(h)) if *e == h => v.ok.push(*u),
+                    (Some(_), _) => v.mismatched.push(*u),
+                    // No Message-ID: the same bytes as the vault copy, or not proven.
+                    (None, _) => match vault.get(folder).and_then(|m| m.get(u)) {
+                        Some(src) if src.raw == r.raw => v.ok.push(*u),
+                        Some(_) => v.mismatched.push(*u),
+                        None => v.missing.push(*u),
+                    },
                 },
             }
         }

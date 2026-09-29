@@ -845,13 +845,24 @@ impl Rt {
         }
     }
 
-    /// The engine settled the job (status saved, terminal frame sent). If a
-    /// failed save left it unsettled, settle it in memory and say so.
+    /// The engine settled the job (status saved, terminal frame sent). A run
+    /// the engine stopped because a save failed is NOT settled on disk: the
+    /// last good save (a persisted delete intent, Trash batches still to
+    /// empty) is what the next start resumes and reconciles. The app is told
+    /// it failed; the file keeps saying where it stood.
     fn finish(&self, job: &mut JobFile, exit: RunExit) {
         if !job.status.is_finished() {
             let status = match exit {
                 RunExit::Cancelled => JobStatus::Cancelled,
-                RunExit::Failed(e) => JobStatus::Failed { error: e },
+                RunExit::Failed(e) => {
+                    warn!("abd: {}: stopped without a save ({e}); the next start resumes it", job.account_id);
+                    let mut shown = job.clone();
+                    shown.status = JobStatus::Failed { error: e };
+                    shown.updated_ms = self.state.clock.now_ms();
+                    self.env.emit_job(&shown);
+                    self.handle.finished.store(true, SeqCst);
+                    return;
+                }
                 _ => JobStatus::Completed,
             };
             end_job(&self.state, &self.handle, &self.env, job, status);
@@ -933,6 +944,34 @@ impl Rt {
         }
         *lock(&self.handle.parked) = None;
     }
+}
+
+/// Test only: `Rt::finish` of a running job whose engine stopped on a failed
+/// save. Returns the job file as it is on disk afterwards.
+#[cfg(test)]
+pub(crate) fn finish_unsaved_for_test(state: &Arc<DaemonState>, account: &str, email: &str) -> JobFile {
+    use mailvault_core::abd::{DateScope, DeleteMode, NewJob, Phase, Provider, Scope, Timing};
+    let mut job = JobFile::create(NewJob {
+        account_id: account.to_string(),
+        account_email: email.to_string(),
+        host: "imap.example.test".to_string(),
+        provider: Provider::Imap,
+        mode: Mode::ArchiveDelete,
+        timing: Timing::AfterAll,
+        delete_mode: DeleteMode::MoveToTrashAndEmpty,
+        scope: Scope { folders: vec!["INBOX".to_string()], dates: DateScope::All, date_choice: "all".to_string(), year_bounds: vec![] },
+        now_ms: state.clock.now_ms(),
+    });
+    job.status = JobStatus::Running { phase: Phase::Delete };
+    let handle = JobHandle::new(&job);
+    lock(&state.abd.jobs).insert(account.to_string(), Arc::clone(&handle));
+    let env = DaemonEnv::new(state, &handle, &job, false).expect("job dir");
+    env.save(&job).expect("the last good save");
+    let local = DaemonLocal::new(Arc::clone(state), account, email);
+    let rt = Rt { state: Arc::clone(state), handle, env, local, kind: Kind::Password, used_seq: Cell::new(0) };
+    rt.finish(&mut job, RunExit::Failed("could not save the job: disk full".to_string()));
+    let dir = jobfile::job_dir(&state.app_dir, account).expect("job dir");
+    jobfile::load_job(&dir).expect("readable").expect("still there")
 }
 
 // ── The dry run ─────────────────────────────────────────────────────────────
