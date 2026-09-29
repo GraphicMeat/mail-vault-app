@@ -20,9 +20,9 @@
 //!
 //! Recomputed on every request, never cached: nothing to invalidate, and the
 //! cost is bounded instead. It runs on a thread of its own at background
-//! QoS. The cache is read one index seek or one page of `CACHE_CHUNK` uids
-//! per custody unit, never a whole folder under the lock every foreground
-//! header read waits on. The vault side is the registry's uid list (one `cur/`
+//! QoS. The cache is read one index seek, one page of `CACHE_CHUNK` uids or
+//! the account's folder meta rows per custody unit, never a whole folder
+//! under the lock every foreground header read waits on. The vault side is the registry's uid list (one `cur/`
 //! listing per folder per daemon session, names and stats only), and the
 //! difference is a merge over the two sorted lists (`vault_gap::Gap`). It
 //! writes nothing: not the vault, not the cache (the registry keeps its own
@@ -53,7 +53,7 @@ use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use mailvault_core::vault_gap::Gap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tracing::warn;
@@ -90,13 +90,16 @@ enum Unknown {
 /// custody, registry).
 fn gap(state: &DaemonState, account_id: &str, chunk: usize, now_ms: i64) -> Result<Vec<Folder>, Unknown> {
     let chunk = chunk.max(1);
-    let mut mailboxes: Vec<String> = Vec::new();
-    loop {
-        let after = mailboxes.last().map(String::as_str);
-        match crate::custody::with_conn(state, |c| cache::next_mailbox_with_headers(c, account_id, after)).map_err(Unknown::Cache)? {
-            Some(mailbox) => mailboxes.push(mailbox),
-            None => break,
-        }
+    // Every folder with rows (one seek each), plus every folder the sync
+    // counted whose rows are gone: `partial` below, never silently absent.
+    let mut mailboxes: BTreeSet<String> =
+        crate::custody::with_conn(state, |c| cache::mailboxes_with_meta(c, account_id)).map_err(Unknown::Cache)?.into_iter().collect();
+    let mut after: Option<String> = None;
+    while let Some(mailbox) =
+        crate::custody::with_conn(state, |c| cache::next_mailbox_with_headers(c, account_id, after.as_deref())).map_err(Unknown::Cache)?
+    {
+        after = Some(mailbox.clone());
+        mailboxes.insert(mailbox);
     }
     if mailboxes.is_empty() && !crate::custody::with_conn(state, |c| cache::knows_account(c, account_id)).map_err(Unknown::Cache)? {
         return Err(Unknown::Account);
@@ -489,6 +492,8 @@ mod tests {
         cache_rows(&r.s, "INBOX", &undated(&[1, 2, 3]), json!({"syncTotalEmails": 10, "syncUidNext": 11}));
         cache_rows(&r.s, "Late", &undated(&[1, 2, 9]), json!({"syncTotalEmails": 3, "syncUidNext": 4}));
         cache_rows(&r.s, "Sent", &undated(&[1, 2]), json!({"syncTotalEmails": 2, "syncUidNext": 3}));
+        // Counted by the sync, every row since gone (a wipe, a refill part way).
+        cache_rows(&r.s, "Trash", &[], json!({"syncTotalEmails": 5, "syncUidNext": 6}));
         cached(&r.s, "Work", [5]);
         in_vault(&r.s, "INBOX", &[1]);
         in_vault(&r.s, "Late", &[1, 2, 9]);
@@ -499,7 +504,12 @@ mod tests {
         assert_eq!(got["partial"], json!(true));
         assert_eq!(
             by_mailbox(&got),
-            vec![("INBOX".to_string(), 2, true), ("Late".to_string(), 0, true), ("Work".to_string(), 1, false)]
+            vec![
+                ("INBOX".to_string(), 2, true),
+                ("Late".to_string(), 0, true),
+                ("Trash".to_string(), 0, true),
+                ("Work".to_string(), 1, false),
+            ]
         );
     }
 

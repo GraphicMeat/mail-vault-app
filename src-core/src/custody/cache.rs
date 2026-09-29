@@ -493,6 +493,15 @@ pub fn knows_account(conn: &Connection, account: &str) -> Result<bool, String> {
     .map_err(err)
 }
 
+/// Every mailbox of `account` with a meta row: one per folder a sync or the
+/// app recorded, rows or not. A folder the sync counted but whose rows are
+/// gone (a wipe, a refill part way) is only here.
+pub fn mailboxes_with_meta(conn: &Connection, account: &str) -> Result<Vec<String>, String> {
+    let mut stmt = conn.prepare_cached("SELECT mailbox_path FROM header_cache_meta WHERE account_id=?1").map_err(err)?;
+    let rows = stmt.query_map([account], |r| r.get::<_, String>(0)).map_err(err)?.collect::<Result<Vec<_>, _>>().map_err(err);
+    rows
+}
+
 /// The first mailbox of `account` after `after` (by name) that holds a header
 /// row: one index seek, so walking every mailbox of a large account holds the
 /// custody lock one short step at a time, never for a scan of its rows.
@@ -1264,6 +1273,20 @@ mod tests {
         }
         assert_eq!(seen, vec!["A/B", "Archive", "INBOX"]);
         assert_eq!(next_mailbox_with_headers(&c, "nobody", None).unwrap(), None);
+    }
+
+    /// A folder the sync counted whose rows are gone still has its meta row:
+    /// the meta list names it, the row walk cannot.
+    #[test]
+    fn mailboxes_with_meta_names_a_counted_folder_that_holds_no_row() {
+        let (_t, c) = store();
+        save_headers(&c, "a", "INBOX", r#"{"emails": [{"uid": 1}], "syncTotalEmails": 1}"#).unwrap();
+        save_headers(&c, "a", "Wiped", r#"{"emails": [], "syncTotalEmails": 5, "syncUidNext": 6}"#).unwrap();
+        save_headers(&c, "b", "Other", r#"{"emails": []}"#).unwrap();
+        let mut got = mailboxes_with_meta(&c, "a").unwrap();
+        got.sort();
+        assert_eq!(got, vec!["INBOX", "Wiped"]);
+        assert_eq!(next_mailbox_with_headers(&c, "a", Some("INBOX")).unwrap(), None, "no row walk reaches Wiped");
     }
 
     /// A header row, a folder's meta alone (a synced empty folder) or a folder
