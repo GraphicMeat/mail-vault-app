@@ -1159,12 +1159,12 @@ mod tests {
     use mock_imap::{Action, Mailbox, Message, MockImap, Scenario, Trigger};
     use tokio::sync::broadcast;
 
-    const DATE: &str = "Tue, 05 Mar 2019 09:15:00 +0100";
+    pub(super) const DATE: &str = "Tue, 05 Mar 2019 09:15:00 +0100";
     const ALL_MAIL: &str = "[Gmail]/All Mail";
 
     // ---- units ----
 
-    fn fast() -> Tuning {
+    pub(super) fn fast() -> Tuning {
         Tuning {
             backoff_base: Duration::from_millis(40),
             backoff_max: Duration::from_millis(200),
@@ -1291,16 +1291,16 @@ mod tests {
 
     // ---- jobs over the mock server ----
 
-    struct Rig {
-        server: MockImap,
-        s: Arc<DaemonState>,
-        rx: broadcast::Receiver<Arc<str>>,
-        files: tempfile::TempDir,
-        _vault: tempfile::TempDir,
-        _app: tempfile::TempDir,
+    pub(super) struct Rig {
+        pub(super) server: MockImap,
+        pub(super) s: Arc<DaemonState>,
+        pub(super) rx: broadcast::Receiver<Arc<str>>,
+        pub(super) files: tempfile::TempDir,
+        pub(super) _vault: tempfile::TempDir,
+        pub(super) _app: tempfile::TempDir,
     }
 
-    fn config(server: &MockImap) -> ImapConfig {
+    pub(super) fn config(server: &MockImap) -> ImapConfig {
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         serde_json::from_value(json!({
             "email": "user@example.com",
@@ -1311,7 +1311,7 @@ mod tests {
         .unwrap()
     }
 
-    fn setup(scenario: Scenario, tuning: Tuning) -> Rig {
+    pub(super) fn setup(scenario: Scenario, tuning: Tuning) -> Rig {
         let server = MockImap::start(scenario);
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
@@ -1323,7 +1323,7 @@ mod tests {
 
     /// A Gmail-shaped server: INBOX holding uids 1 to 4, Sent Mail, All Mail
     /// (`\All`) and Work.
-    fn gmail() -> Scenario {
+    pub(super) fn gmail() -> Scenario {
         let mut inbox = Mailbox::new("INBOX");
         for uid in 1..=4 {
             inbox.add(Message::new(uid, format!("Message-ID: <old{uid}@x>\r\nSubject: old {uid}\r\nDate: {DATE}\r\n\r\nold")));
@@ -1335,20 +1335,20 @@ mod tests {
             .mailbox(Mailbox::new("Work"))
     }
 
-    fn msg(id: &str, subject: &str) -> Vec<u8> {
+    pub(super) fn msg(id: &str, subject: &str) -> Vec<u8> {
         format!("Message-ID: <{id}>\r\nSubject: {subject}\r\nDate: {DATE}\r\n\r\nbody of {subject}").into_bytes()
     }
 
     /// A chat or a draft: no Message-ID.
-    fn idless(subject: &str) -> Vec<u8> {
+    pub(super) fn idless(subject: &str) -> Vec<u8> {
         format!("Subject: {subject}\r\nDate: {DATE}\r\n\r\nbody of {subject}").into_bytes()
     }
 
-    fn labelled(id: &str, subject: &str, labels: &str) -> Vec<u8> {
+    pub(super) fn labelled(id: &str, subject: &str, labels: &str) -> Vec<u8> {
         format!("X-Gmail-Labels: {labels}\r\nMessage-ID: <{id}>\r\nSubject: {subject}\r\nDate: {DATE}\r\n\r\nbody of {subject}").into_bytes()
     }
 
-    fn mbox_bytes(messages: &[Vec<u8>]) -> Vec<u8> {
+    pub(super) fn mbox_bytes(messages: &[Vec<u8>]) -> Vec<u8> {
         let mut out = Vec::new();
         for m in messages {
             out.extend_from_slice(b"From x@y Mon Jan  1 00:00:00 2026\n");
@@ -1358,17 +1358,17 @@ mod tests {
         out
     }
 
-    fn mbox(rig: &Rig, messages: &[Vec<u8>]) -> PathBuf {
+    pub(super) fn mbox(rig: &Rig, messages: &[Vec<u8>]) -> PathBuf {
         let path = rig.files.path().join(format!("{}.mbox", uuid::Uuid::new_v4()));
         std::fs::write(&path, mbox_bytes(messages)).unwrap();
         path
     }
 
-    async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
+    pub(super) async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         handle_request_for_test(s, method, params).await
     }
 
-    fn ok(resp: RpcResponse) -> Value {
+    pub(super) fn ok(resp: RpcResponse) -> Value {
         match (resp.result, resp.error) {
             (Some(v), None) => v,
             (_, e) => panic!("refused: {e:?}"),
@@ -1383,18 +1383,18 @@ mod tests {
         json!({"sourcePath": path.to_string_lossy(), "accountId": "acct1", "mode": "server", "mailbox": "INBOX", "useLabels": labels, "fallbackMailbox": ALL_MAIL})
     }
 
-    async fn start(rig: &Rig, path: &Path, labels: bool) -> String {
+    pub(super) async fn start(rig: &Rig, path: &Path, labels: bool) -> String {
         let started = ok(call(&rig.s, "import_mbox", start_params(path, labels)).await);
         assert_eq!(started["started"], json!(true));
         started["jobId"].as_str().expect("a job id").to_string()
     }
 
-    async fn control(rig: &Rig, method: &str, job: &str) -> Value {
+    pub(super) async fn control(rig: &Rig, method: &str, job: &str) -> Value {
         ok(call(&rig.s, method, json!({"jobId": job})).await)
     }
 
     /// The next progress event `want` accepts.
-    async fn next(rx: &mut broadcast::Receiver<Arc<str>>, want: impl Fn(&Value) -> bool) -> Value {
+    pub(super) async fn next(rx: &mut broadcast::Receiver<Arc<str>>, want: impl Fn(&Value) -> bool) -> Value {
         let wait = async {
             loop {
                 match rx.recv().await {
@@ -1425,12 +1425,12 @@ mod tests {
         }
     }
 
-    async fn status_of(rig: &Rig, job: &str) -> Value {
+    pub(super) async fn status_of(rig: &Rig, job: &str) -> Value {
         let all = ok(call(&rig.s, "mbox_upload_status", json!({})).await);
         all["jobs"].as_array().expect("a list").iter().find(|j| j["jobId"] == job).cloned().unwrap_or(Value::Null)
     }
 
-    async fn wait_until_uploaded(rig: &Rig, job: &str, n: u64) {
+    pub(super) async fn wait_until_uploaded(rig: &Rig, job: &str, n: u64) {
         for _ in 0..2000 {
             if status_of(rig, job).await["uploadedCount"].as_u64().unwrap_or(0) >= n {
                 return;
@@ -1440,7 +1440,7 @@ mod tests {
         panic!("job {job} never uploaded {n}");
     }
 
-    async fn wait_until_not_live(rig: &Rig, job: &str) {
+    pub(super) async fn wait_until_not_live(rig: &Rig, job: &str) {
         for _ in 0..2000 {
             if status_of(rig, job).await["live"] != json!(true) {
                 return;
@@ -1450,7 +1450,7 @@ mod tests {
         panic!("job {job} never ended");
     }
 
-    fn subjects(server: &MockImap, mailbox: &str) -> Vec<String> {
+    pub(super) fn subjects(server: &MockImap, mailbox: &str) -> Vec<String> {
         let state = server.state();
         let Some(mb) = state.find(mailbox) else { return Vec::new() };
         mb.messages
@@ -1467,7 +1467,7 @@ mod tests {
         lock(&rig.s.mbox_uploads.ran).iter().rev().find(|j| j.id == job).cloned().expect("a run")
     }
 
-    fn slow_appends(ms: u64) -> Scenario {
+    pub(super) fn slow_appends(ms: u64) -> Scenario {
         gmail().fault(Trigger::on("APPEND"), Action::Delay(Duration::from_millis(ms)))
     }
 
@@ -1863,3 +1863,9 @@ mod tests {
         assert_eq!(rig.server.count_commands("APPEND"), 3);
     }
 }
+
+/// What only shows across the three import modes (restore to the server,
+/// into the existing folders, as a separate folder): the rig above, reused.
+#[cfg(test)]
+#[path = "mbox_cross_mode_tests.rs"]
+mod cross_mode_tests;
