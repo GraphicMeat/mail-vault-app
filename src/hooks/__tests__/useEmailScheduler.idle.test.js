@@ -597,7 +597,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     // That inbox's own list recounts it, from rows fresher than its cache.
     it('leaves the inbox on screen to its list', async () => {
       useSnoozeStore.setState({ rows: [] });
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false });
+      // mailboxScope: beforeEach merges, and a subtree case earlier leaves one.
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null });
 
       renderHook(() => useEmailScheduler());
       await flush();
