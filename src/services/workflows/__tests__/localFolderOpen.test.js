@@ -239,6 +239,24 @@ describe('opening a local folder', () => {
     expect(useMailStore.getState().localFolders[ACCOUNT.id]).toEqual([FOLDER]);
   });
 
+  it('never makes a click on a server folder wait on the local listing', async () => {
+    let answer;
+    api.listLocalFolders.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    prime();
+    const opened = useMailStore.getState().activateAccount(ACCOUNT.id, 'Archive');
+    const verdict = await Promise.race([
+      opened.then(() => 'opened'),
+      new Promise(resolve => setTimeout(() => resolve('waiting on the listing'), 1000)),
+    ]);
+    answer([FOLDER]);
+    await opened;
+
+    expect(verdict).toBe('opened');
+    expect(useMailStore.getState().activeMailbox).toBe('Archive');
+    // The listing still lands, for the sidebar.
+    await vi.waitFor(() => expect(useMailStore.getState().localFolders[ACCOUNT.id]).toEqual([FOLDER]));
+  });
+
   it('still falls back to INBOX for a folder that is neither on the server nor local', async () => {
     prime();
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'Gone');

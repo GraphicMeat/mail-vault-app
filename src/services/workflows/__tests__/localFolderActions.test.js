@@ -112,6 +112,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { canSnooze } = await import('../snooze');
 const { purgeEverywhere } = await import('../messageMutations');
+const { resolveMessageBody } = await import('../../export/bodyResolver');
 const { buildSearchTargets } = await import('../../searchTargets');
 
 const ACCOUNT = { id: 'acct-a', email: 'a@mock.test', password: 'pw' };
@@ -191,6 +192,28 @@ describe('a message in a local folder', () => {
       ACCOUNT.id, NAME, ACCOUNT.email, [{ uid: 7, flags: ['\\Seen'], on: true }]));
     expect(api.updateEmailFlags).not.toHaveBeenCalled();
     expect(useMailStore.getState().selectedEmail?.subject).toBe(ROW.subject);
+  });
+
+  it('is never fetched from a server when the vault cannot serve it, nor are its neighbours prefetched from one', async () => {
+    const OLDER = { ...ROW, uid: 8, messageId: '<imported-8@example.test>', date: '2026-01-04T10:00:00Z' };
+    prime({ localEmails: [{ ...ROW }, { ...OLDER }], savedEmailIds: new Set([7, 8]), archivedEmailIds: new Set([7, 8]) });
+    // uid 7: no vault copy answers; uid 8: a light row with no body yet.
+    m.getLocalEmailLight.mockImplementation(async (accountId, mailbox, uid) => (uid === 8 ? { ...OLDER } : null));
+
+    await useMailStore.getState().selectEmail(7, 'local');
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(api.fetchEmailLight).not.toHaveBeenCalled();
+    expect(useMailStore.getState().selectedEmail?._bodyError).toBeTruthy();
+  });
+
+  it('gives an export or a chat view no server fallback either', async () => {
+    prime();
+    m.getLocalEmailLight.mockResolvedValue(null);
+    const answer = await resolveMessageBody({ ...ROW, _accountId: ACCOUNT.id, _mailbox: NAME }, useMailStore.getState());
+
+    expect(answer.ok).toBe(false);
+    expect(api.fetchEmailLight).not.toHaveBeenCalled();
   });
 
   it('goes to the deleted bin when deleted: the local-only path, no server delete, no journal', async () => {

@@ -76,13 +76,13 @@ async function fetchAccountMailboxes(account) {
  * loadMailboxes — two-stream folder loading for activateAccount.
  */
 async function loadMailboxes(accountId, account, requestedMailbox, signal, useMailStoreRef, { isBackgroundRefresh = false } = {}) {
-  // The account's vault-only folders are read beside its cached server list:
-  // both decide whether the requested folder exists before anything below
-  // falls back to INBOX. They stay out of `mailboxes` (see localFolders).
-  const [cachedEntry] = await Promise.all([
-    db.getCachedMailboxEntry(accountId).catch(() => null),
-    loadLocalFolders(accountId),
-  ]);
+  // The account's vault-only folders (kept out of `mailboxes`, see
+  // localFolders). Read on every activation, but awaited only below, when the
+  // requested folder is not a server folder the cache knows: the one case the
+  // INBOX fallback has to ask about. A click on a server folder never waits
+  // on the listing (a marker read per folder, on what may be a slow drive).
+  const localRead = loadLocalFolders(accountId);
+  const cachedEntry = await db.getCachedMailboxEntry(accountId).catch(() => null);
   if (signal.aborted) return null;
   const isLocal = (path) => isLocalMailbox(useMailStoreRef.getState().localFolders, accountId, path);
 
@@ -113,6 +113,10 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
   };
   collectPaths(localMailboxes);
 
+  if (effectiveMailbox !== 'INBOX' && !allPaths.has(effectiveMailbox)) {
+    await localRead;
+    if (signal.aborted) return null;
+  }
   if (effectiveMailbox !== 'INBOX' && !allPaths.has(effectiveMailbox) && !isLocal(effectiveMailbox)) {
     console.warn(`[loadMailboxes] Mailbox "${effectiveMailbox}" not found in cache, falling back to INBOX`);
     effectiveMailbox = 'INBOX';

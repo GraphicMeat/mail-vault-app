@@ -201,6 +201,8 @@ export async function _prefetchAdjacentEmails(currentUid) {
         continue;
       }
 
+      // A vault-only folder has no server to prefetch from.
+      if (isLocalMailbox(get().localFolders, prefetchAccountId, prefetchMailbox)) continue;
       const account = get().accounts.find(a => a.id === prefetchAccountId);
       if (!account) break;
 
@@ -601,6 +603,10 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // copy that failed the check above leaves nothing to render. Throwing
       // hands the catch below its header-only path, which shows the row with
       // an explicit body error — the one honest option left.
+      throw new Error(t('errors.noLocalCopyUidMismatch'));
+    } else if (isLocalMailbox(get().localFolders, accountId, mailbox)) {
+      // Nor does a vault-only folder (an MBOX import kept on this computer):
+      // no server holds it, so the vault's copy is the only body there is.
       throw new Error(t('errors.noLocalCopyUidMismatch'));
     } else if (account && isGraphAccount(account)) {
       // 3a. Graph API: fetch full message by Graph message ID

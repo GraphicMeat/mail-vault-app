@@ -4,6 +4,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hydrateInlineImages } from '../attachmentUtils';
 import { getGraphMessageId, graphMessageToEmail } from '../../stores/mailStore';
 import { resolveEmailLocation, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
+import { isLocalMailbox } from '../workflows/mailboxTree';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
 
@@ -43,6 +44,10 @@ export async function resolveMessageBody(header, store, { onVaultMiss } = {}) {
   // The vault has no copy: the body comes from the server (the thread and chat
   // views show the index snippet from here on, useChatBodyLoader).
   try { onVaultMiss?.(); } catch { /* a view's hook never fails the read */ }
+
+  // A vault-only folder (an MBOX import kept on this computer) has no server
+  // copy to fall back to.
+  if (isLocalMailbox(store.localFolders, accountId, mailbox)) return { ok: false, reason: t('svc.bodyResolver.found') };
 
   const account = store.accounts.find(a => a.id === accountId) || null;
   if (!account) return { ok: false, reason: t('svc.bodyResolver.accountUnavailable') };
