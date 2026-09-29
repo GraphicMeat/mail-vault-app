@@ -107,6 +107,11 @@ const SIGNATURES = QUICK_ACTION_PRESETS.map(({ id, surfaces }) => {
 
 /** The id of the preset the scope shows exactly, or null for a custom set. */
 export function activeQuickActionPreset(value, scope = null) {
-  const current = signature(name => resolveQuickActions(value, name, scope).config);
+  // Normalized like each preset: a surface never saved resolves to the raw
+  // default, whose move entry lacks the `params: {}` a saved one carries.
+  const { defaults } = normalizeQuickActions({
+    defaults: Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [name, resolveQuickActions(value, name, scope).config])),
+  });
+  const current = signature(name => defaults[name]);
   return SIGNATURES.find(([, preset]) => preset === current)?.[0] ?? null;
 }

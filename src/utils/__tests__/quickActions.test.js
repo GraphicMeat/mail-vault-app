@@ -385,6 +385,14 @@ describe('quick action presets', () => {
     expect(activeQuickActionPreset({ ...gmail, defaults: { ...gmail.defaults, row: fewer } })).toBeNull();
   });
 
+  // A surface never saved resolves to the raw default (hydrated settings that
+  // hold only the row, or none): still MailVault's set.
+  it('names MailVault for settings that never saved a surface', () => {
+    expect(activeQuickActionPreset({})).toBe('mailvault');
+    expect(activeQuickActionPreset({ defaults: { row: DEFAULT_QUICK_ACTIONS.defaults.row } })).toBe('mailvault');
+    expect(activeQuickActionPreset({ defaults: { row: preset('gmail').surfaces.row } })).toBeNull();
+  });
+
   it('compares a view that overrides one surface against its own set of three', () => {
     const gmail = applyQuickActionPreset(normalizeQuickActions({}), null, 'gmail');
     // The row alone is overridden, with the preset's own row: still Gmail.
