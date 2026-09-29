@@ -15,6 +15,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { composeSenderName } from './utils/sendAsSuggestions';
 import { currentListView } from './stores/viewStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
@@ -437,7 +438,12 @@ function App() {
         const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
         if (!account) throw new Error(tr('compose.noAccountSelected'));
         const replyTo = snapshot._replyTo || null;
-        const settings = { displayName: useSettingsStore.getState().getDisplayName(snapshot._accountId) || account.name || account.email };
+        const prefs = useSettingsStore.getState();
+        // A detached window's send: the name of the alias it leaves from, else the account's.
+        const settings = { displayName: composeSenderName({
+          account, fromAddress: snapshot._fromAddress, displayName: prefs.getDisplayName(account.id),
+          aliases: prefs.aliases?.[account.id], sendAsAddress: prefs.sendAsAddresses?.[account.id],
+        }) };
         if (scheduled) {
           await scheduleCompose({ snapshot, account, settings });
           return;
@@ -493,9 +499,11 @@ function App() {
   // A compose window of its own was handed the billing profile, font and text
   // size at detach; a change made here afterwards has to reach it too.
   useEffect(() => useSettingsStore.subscribe((state, prev) => {
-    if (['billingProfile', 'appFont', 'textScale'].some(key => state[key] !== prev[key])) {
-      const { billingProfile, appFont, textScale } = state;
-      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale });
+    // Aliases too: a compose window's "Add address..." sends the user to
+    // Settings here, and the address they add belongs in that window's From row.
+    if (['billingProfile', 'appFont', 'textScale', 'aliases', 'sendAsAddresses'].some(key => state[key] !== prev[key])) {
+      const { billingProfile, appFont, textScale, aliases, sendAsAddresses } = state;
+      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale, aliases, sendAsAddresses });
     }
   }), []);
 
@@ -586,7 +594,8 @@ function App() {
   const settingsRequest = useMailStore(s => s.settingsRequest);
   useEffect(() => {
     if (!settingsRequest) return;
-    openSettings({ tab: settingsRequest.tab });
+    const { tab, accountId, section } = settingsRequest;
+    openSettings({ tab, accountId, section });
     useMailStore.getState().clearSettingsRequest();
   }, [settingsRequest, openSettings]);
 
@@ -1024,7 +1033,8 @@ function App() {
         useMailStore.setState({
           connectionStatus: 'error',
           connectionError: event.payload,
-          connectionErrorType: 'serverError'
+          connectionErrorType: 'serverError',
+          connectionErrorCode: null,
         });
       }).then(fn => {
         if (!active) fn(); // unmounted before listener ready — detach immediately
@@ -1044,7 +1054,10 @@ function App() {
       listen('open-settings', ({ payload }) => {
         if (typeof payload?.tab !== 'string') { openSettings(); return; }
         void WebviewWindow.getByLabel('main').then(window => window?.setFocus()).catch(() => {});
-        openSettings({ tab: payload.tab });
+        // A compose window's "Add address..." names the account and its Aliases section.
+        const accountId = typeof payload.accountId === 'string' ? payload.accountId : undefined;
+        const section = typeof payload.section === 'string' ? payload.section : undefined;
+        openSettings({ tab: payload.tab, accountId, section });
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;

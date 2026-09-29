@@ -128,6 +128,11 @@ export const createAccountSlice = (set, get) => ({
   connectionStatus: 'disconnected',
   connectionError: null,
   connectionErrorType: null,
+  // The daemon's errorCode for a 'serverError' (what the failed sync ran
+  // into: dns, refused, blocked_or_timeout, tls, auth, throttled, ...). Read
+  // only alongside connectionErrorType 'serverError', and every writer of
+  // that type writes this too, null when there is no code.
+  connectionErrorCode: null,
 
   // Unified inbox mode
   unifiedInbox: false,

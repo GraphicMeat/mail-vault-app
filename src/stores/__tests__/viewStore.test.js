@@ -82,6 +82,23 @@ describe('saved views', () => {
     }]);
   });
 
+  // "To me" and "not from me" run in the daemon, which only knows what this
+  // payload says is the account's own.
+  it('tells the daemon every alias the account sends as, besides its login', async () => {
+    useSettingsStore.setState({
+      sendAsAddresses: { 'acct-1': 'desk@x.test' },
+      aliases: { 'acct-1': [{ address: 'desk@x.test', name: 'Desk', source: 'manual' }, { address: 'ME@x.test', name: '', source: 'manual' }, { address: 'sales@x.test', name: '', source: 'provider' }] },
+    });
+    try {
+      harness.daemonCall.mockResolvedValueOnce({ available: true, rows: [], total: 0 });
+      await useViewStore.getState().openView(STARRED);
+      const [, params] = harness.daemonCall.mock.calls[0];
+      expect(params.accounts[0].aliases).toEqual(['desk@x.test', 'sales@x.test']);
+    } finally {
+      useSettingsStore.setState({ sendAsAddresses: {}, aliases: {} });
+    }
+  });
+
   it('shows the rows it got through the list the search already uses', async () => {
     harness.daemonCall.mockResolvedValueOnce({ available: true, rows: [row(1), row(2)], total: 2 });
     await useViewStore.getState().openView(STARRED);

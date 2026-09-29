@@ -114,6 +114,15 @@ describe('Insights canonical activity', () => {
     expect(query(model).senders.map(s => [s.address, s.count])).toEqual([['ana@example.test', 1]]);
   });
 
+  it('knows a dotted Gmail login in a header written without the dots', () => {
+    const accounts = [{ id: A, email: 'j.doe@gmail.com' }];
+    const model = build([copy({ from: { address: 'jdoe@gmail.com' },
+      mailbox: 'Archive', specialUse: '\\Archive', to: [{ address: 'ana@example.test' }],
+    })], { accounts, ownAddressesByAccount: {} });
+    expect(query(model).totals.sent).toBe(1);
+    expect(query(model).totals.received).toBe(0);
+  });
+
   it.each([
     { mailbox: 'Custom', specialUse: '\\Sent' },
     { mailbox: 'Custom', specialUse: null, origin: 'local_sent' },

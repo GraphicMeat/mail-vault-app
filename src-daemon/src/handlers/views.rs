@@ -24,6 +24,10 @@ struct Account {
     /// The account's own address, for "addressed to me" / "not from me".
     #[serde(default)]
     address: String,
+    /// Its other own addresses (default From, aliases), which count for
+    /// "addressed to me" / "not from me" as the login does.
+    #[serde(default)]
+    aliases: Vec<String>,
     /// Server paths, so a row can name the mailbox it came from rather than
     /// the vault directory it is stored in.
     #[serde(default)]
@@ -245,8 +249,20 @@ fn narrows_by_metadata(def: &ViewDef) -> bool {
     !def.tags.is_empty() || !def.fields.is_empty()
 }
 
+/// The login and every alias, lowercased, deduped, blanks dropped.
+fn own_addresses(account: &Account) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for raw in std::iter::once(&account.address).chain(account.aliases.iter()) {
+        let address = raw.trim().to_lowercase();
+        if !address.is_empty() && !out.contains(&address) {
+            out.push(address);
+        }
+    }
+    out
+}
+
 fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<String>>, now: i64) -> SearchRequest {
-    let address = account.address.trim().to_lowercase();
+    let own = own_addresses(account);
     let (date_from, date_to) = views::date_window(def, now);
     SearchRequest {
         account_id: account.account_id.clone(),
@@ -267,8 +283,8 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         unread: def.unread,
         starred: def.starred,
         answered: def.answered,
-        to_any: (def.to_me && !address.is_empty()).then(|| vec![address.clone()]).unwrap_or_default(),
-        from_none: (def.not_from_me && !address.is_empty()).then(|| vec![address]).unwrap_or_default(),
+        to_any: if def.to_me { own.clone() } else { Vec::new() },
+        from_none: if def.not_from_me { own } else { Vec::new() },
         exclude_terms: Vec::new(),
         // A tag or field filter with no identities behind it matches nothing,
         // which is the correct answer for a tag nobody has used.
@@ -513,6 +529,24 @@ mod tests {
         assert!(flags_of(2).contains(&"\\Seen".to_owned()), "{:?}", flags_of(2));
         // The other way round: indexed starred, the server has since dropped the star.
         assert!(!flags_of(1).contains(&"\\Flagged".to_owned()), "{:?}", flags_of(1));
+    }
+
+    /// "Addressed to me" and "not from me" mean every address the account
+    /// owns: mail to an alias is to you, and mail sent from one is yours.
+    #[test]
+    fn to_me_and_not_from_me_cover_every_alias() {
+        let account: Account = serde_json::from_value(json!({
+            "accountId": "a", "address": "Me@x.test", "aliases": ["Desk@x.test", "me@x.test", " "]
+        }))
+        .unwrap();
+        let def = ViewDef { to_me: true, not_from_me: true, ..Default::default() };
+        let request = request_for(&def, &account, &HashMap::new(), 0);
+        assert_eq!(request.to_any, vec!["me@x.test".to_string(), "desk@x.test".to_string()]);
+        assert_eq!(request.from_none, request.to_any);
+
+        // An app that sends no aliases still gets the login alone.
+        let bare: Account = serde_json::from_value(json!({ "accountId": "a", "address": "me@x.test" })).unwrap();
+        assert_eq!(request_for(&def, &bare, &HashMap::new(), 0).to_any, vec!["me@x.test".to_string()]);
     }
 
     /// "Download attachments" on a view: only the messages it finds that carry

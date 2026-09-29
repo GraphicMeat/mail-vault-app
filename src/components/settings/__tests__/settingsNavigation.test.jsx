@@ -8,9 +8,14 @@ import { useThemeStore } from '../../../stores/themeStore';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { SettingsPage } from '../../SettingsPage';
+import { t } from '../../../i18n';
 
 // Account settings stay real; reading cached folders is the disk boundary.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
+// The Aliases section asks the daemon for the account's aliases when it opens.
+vi.mock('../../../services/aliasDiscovery', () => ({
+  refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
+}));
 
 beforeEach(() => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })));
@@ -157,6 +162,17 @@ describe('settings page search', () => {
     fireEvent.click(nav.getByRole('button', { name: /^Email Signature/ }));
     expect(screen.getByRole('tab', { name: 'Profile', exact: true }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Email Signature' })).toBeTruthy();
+  });
+
+  it.each(['alias', 'send as', 'proxy'])('finds the account aliases by "%s" and opens Accounts > Aliases', async term => {
+    useMailStore.setState({ accounts: [{ id: 'studio', name: 'Studio', email: 'studio@example.test', password: 'saved', imapHost: 'imap.example.test' }], activeAccountId: 'studio' });
+    render(<SettingsPage onClose={() => {}} />);
+    const nav = within(screen.getByRole('navigation', { name: 'Settings' }));
+    fireEvent.change(nav.getByRole('textbox', { name: 'Find a setting' }), { target: { value: term } });
+    fireEvent.click(nav.getAllByRole('button', { name: new RegExp(`^${t('settings.accounts.aliases.addAddress')}`) })[0]);
+    expect(screen.getByRole('tab', { name: t('settings.accounts.sectionAliases'), exact: true }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('alias-add-input')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('aliases-status').getAttribute('data-status')).toBe('unsupported'));
   });
 
   it('reopens the searched account section after manual tab changes, including repeated searches', () => {

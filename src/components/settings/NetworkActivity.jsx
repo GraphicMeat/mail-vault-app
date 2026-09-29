@@ -24,6 +24,7 @@ const PURPOSE_KEYS = {
   'release notes': 'netActivity.purposes.releaseNotes',
   'connectivity check': 'netActivity.purposes.connectivityCheck',
   'account setup': 'netActivity.purposes.accountSetup',
+  'alias lookup': 'netActivity.purposes.aliasLookup',
   export: 'common.export',
 };
 const RESULT_KEYS = { ok: 'netActivity.ok', cancelled: 'netActivity.cancelled' };

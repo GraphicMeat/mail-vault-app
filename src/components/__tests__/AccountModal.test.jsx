@@ -165,3 +165,53 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
   });
 });
+
+// A pass says what it reached, under the form, in the moment before the modal
+// closes: the server, how many messages the Inbox holds and the address mail
+// will leave as. It never holds the flow up: onSuccess still fires on time.
+describe('AccountModal: what the connection test reached', () => {
+  const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890, email: TYPED_EMAIL };
+
+  beforeEach(() => {
+    mockAddAccount.mockReset();
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1', state: 'state-1' });
+    mockExchangeOAuth2Code.mockReset().mockResolvedValue(SIGNED_IN);
+    vi.spyOn(window, 'open').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  async function addWith(connectionCheck) {
+    mockAddAccount.mockResolvedValue({ id: 'acct-9', email: TYPED_EMAIL, connectionCheck });
+    await openGmailStep2();
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+    await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
+    await screen.findByText('Connected!');
+  }
+
+  it('names the server, the Inbox count (grouped) and the send-as address', async () => {
+    await addWith({ host: 'imap.gmail.com', messageCount: 1204, fromAddress: 'alias@example.test' });
+    expect(screen.getByText(
+      'Connected to imap.gmail.com. 1,204 messages in your Inbox. Mail will be sent as alias@example.test.'
+    )).toBeTruthy();
+  });
+
+  it('says "message" for one', async () => {
+    await addWith({ host: 'imap.gmail.com', messageCount: 1, fromAddress: TYPED_EMAIL });
+    expect(screen.getByText(`Connected to imap.gmail.com. 1 message in your Inbox. Mail will be sent as ${TYPED_EMAIL}.`)).toBeTruthy();
+  });
+
+  it('leaves the count out when the test could not read it', async () => {
+    await addWith({ host: 'imap.gmail.com', messageCount: null, fromAddress: TYPED_EMAIL });
+    expect(screen.getByText(`Connected to imap.gmail.com. Mail will be sent as ${TYPED_EMAIL}.`)).toBeTruthy();
+    expect(screen.queryByText(/in your Inbox/)).toBeNull();
+  });
+
+  it('shows no summary when the test reported none (Outlook through Graph)', async () => {
+    await addWith(null);
+    expect(screen.queryByText(/Connected to /)).toBeNull();
+  });
+});

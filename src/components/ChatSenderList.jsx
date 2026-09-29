@@ -13,7 +13,7 @@ import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { useSettingsStore } from '../stores/settingsStore';
-import { ownAddresses } from '../stores/slices/unifiedHelpers';
+import { viewOwnAddresses } from '../stores/slices/unifiedHelpers';
 import { useT } from '../i18n/index.js';
 
 const INITIAL_VISIBLE = 50;
@@ -33,16 +33,17 @@ export function ChatSenderList({ onSelectSender }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const scrollContainerRef = useRef(null);
 
-  // Every address that is "you" — the login plus any send-as override, of the
-  // active account or, in All inboxes, of every visible account. Without them
-  // your own sent mail reads as a stranger's and gets grouped under the wrong
-  // correspondent.
+  // Every address that is "you": the login, the default From and every
+  // alias, of the active account or, in All inboxes, of every visible account.
+  // Without them your own sent mail reads as a stranger's and gets grouped
+  // under the wrong correspondent.
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const aliases = useSettingsStore(s => s.aliases);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const userEmail = useMemo(
-    () => ownAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts),
-    [accounts, activeAccountId, activeMailbox, sendAsAddresses, hiddenAccounts],
+    () => viewOwnAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts, aliases),
+    [accounts, activeAccountId, activeMailbox, sendAsAddresses, hiddenAccounts, aliases],
   );
 
   // Get merged emails — parent ChatViewWrapper subscribes to underlying state slices

@@ -78,6 +78,14 @@
         "@type": "Answer",
         "text": "O MailVault mantém uma cópia da lista de pastas no disco, então as pastas aparecem imediatamente quando você abre uma conta, e atualiza essa lista do servidor no máximo uma vez a cada dez minutos. Se você criar, renomear ou excluir uma pasta no webmail ou em outro cliente, o MailVault detecta a mudança na próxima vez que você abrir essa conta ou clicar numa pasta na barra lateral, depois que os dez minutos tiverem passado — assim, uma nova pasta normalmente aparece em até dez minutos. Reiniciar o app não o torna mais rápido, pois a lista em cache fica no disco e sobrevive a um reinício. O botão Atualizar recarrega as mensagens da pasta que você está lendo; a lista de pastas segue sua própria verificação de dez minutos. Subpastas não precisam de configuração: o MailVault desenha a hierarquia a partir dos caminhos informados pelo servidor, então uma nova subpasta aparece dentro de sua pasta mãe, e as pastas de contas que você não está vendo são atualizadas em segundo plano no mesmo intervalo."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quando uma conexão com um servidor de e-mail falha de um jeito que aponta para a rede, o MailVault verifica a internet por conta própria e só mostra Sem conexão com a internet quando nada responde. Seus e-mails continuam legíveis neste computador, a sincronização em segundo plano pausa e o aviso some sozinho assim que a verificação dá certo. Antes, a verificação consultava três servidores DNS públicos apenas na porta DNS, que muitas redes corporativas, VPNs e provedores de internet bloqueiam. Agora ela também tenta esses servidores na porta 443 e os seus próprios servidores de e-mail, e basta um responder para você estar online; servidores de e-mail neste computador ou na sua rede local, como o Proton Mail Bridge, ficam de fora. Se a internet funciona mas um firewall ou VPN bloqueia a porta de um servidor de e-mail, o MailVault não diz que a internet caiu: ele indica o servidor e a porta que não responderam, por exemplo imap.example.com, porta 993, para a sua equipe de TI liberar. Seja o que for que o aviso diga, abrir ou excluir uma mensagem continua funcionando."
+      }
     }
   ]
 }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Subpastas não precisam de configuração.</strong> O MailVault monta a árvore a partir dos caminhos informados pelo servidor, então uma nova subpasta aparece dentro de sua pasta mãe, com o nome e a posição certos. As contas que você não está lendo são atualizadas em segundo plano no mesmo intervalo, algumas por vez, então trocar para uma delas raramente mostra uma lista desatualizada.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>O que faz o aviso aparecer.</strong> Quando uma conexão com um servidor de e-mail falha de um jeito que aponta para a rede, o MailVault verifica a internet por conta própria e só mostra <strong>Sem conexão com a internet</strong> quando nada responde. Enquanto o aviso está na tela, seus e-mails continuam aí: o MailVault mostra o que já está salvo neste computador, pausa a sincronização em segundo plano e tira o aviso sozinho assim que a verificação dá certo. <strong>Verificar de novo</strong> faz a verificação na hora.
+              </p>
+              <p>
+                <strong>Agora a verificação também inclui os seus próprios servidores de e-mail.</strong> Antes, ela consultava três servidores DNS públicos apenas na porta DNS. Muitas redes corporativas, VPNs e provedores de internet bloqueiam essa porta, então nessas redes o aviso aparecia enquanto todo o resto funcionava. Agora ela também tenta esses servidores na porta 443, a que os sites seguros usam, e também os seus próprios servidores de e-mail: basta um deles responder para você estar online. Servidores de e-mail neste computador ou na sua rede local, como o Proton Mail Bridge, ficam de fora, porque respondem mesmo quando a internet caiu. Cada conexão que a verificação faz aparece em Configurações &rarr; Privacidade e segurança &rarr; Atividade de rede.
+              </p>
+              <p>
+                <strong>Uma porta bloqueada aparece de outro jeito.</strong> Se a internet funciona mas um firewall ou VPN bloqueia a porta de um servidor de e-mail, o MailVault não diz que a internet caiu. Ele indica o servidor e a porta que não responderam, por exemplo “Sem resposta de imap.example.com, porta 993”, e diz que um firewall ou VPN pode estar bloqueando a porta. Ao adicionar uma conta que não consegue se conectar, você vê o mesmo. Passe esse nome de servidor e essa porta para a sua equipe de TI liberar, ou tente outra rede.
+              </p>
+              <p>
+                <strong>Nada do que você pede fica travado.</strong> Seja o que for que o aviso diga, abrir ou excluir uma mensagem continua funcionando, porque um diagnóstico errado nunca deve impedir você de acessar seus próprios e-mails.
               </p>
             </div>
         </article>

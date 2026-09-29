@@ -84,7 +84,15 @@
       "name": "我可以用与登录地址不同的地址发信吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。在 设置 → 账户 中为该账户填写「以此地址发信」字段，留空则使用你的登录地址发信。只有外发邮件的 From 地址会变——你的用户名和密码保持不变，MailVault 仍然以你设置的账户登录 IMAP 和 SMTP，而且不会添加 Reply-To 头。MailVault 会给出它在你自己的邮件里见过的地址，「验证」按钮会从该地址发出一封测试邮件，让你确认服务商接受它。该地址必须是你的服务商允许这个登录身份发信的别名：Fastmail 接受账户下的任意别名，Gmail 需要在 Gmail 设置的「Send mail as」中添加，Microsoft 365 需要 Send As 权限。"
+        "text": "可以。在 设置 → 账户 → 别名 中把该地址添加为账户的别名，写信时在发件人一栏选中它，或把它设为默认。用户名和密码不变，MailVault 仍以你设置的账户登录 IMAP 和 SMTP，也不会添加 Reply-To 标头。该地址必须是服务商允许这个登录身份用来发信的地址。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "如何用别名发信？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "打开 设置 → 账户，选中账户，进入它的别名部分，这里列出该账户用来发信的所有地址：先是登录地址，然后是各个别名。对于用 Google 登录的 Google 账户，MailVault 会获取 Gmail 允许你用来发信的地址。对于其他服务商，MailVault 会推荐它在你自己的邮件里见过的地址，也就是你发过信的地址和你收信的地址，你也可以手动添加任何地址。给每个别名起一个收件人看到的名称，并选择新邮件默认从哪个地址发出。验证会从别名发送一封测试邮件，让你看看服务商是否接受。服务商必须允许该地址：在 Fastmail 中，先把它添加为别名或身份；在 Gmail 中，在 设置 → 帐号和导入 → 用这个地址发送邮件 中添加；对于 Microsoft 365 和 Outlook.com，别名在 Microsoft 账户中添加。改变的只有发件地址和名称，也不会添加 Reply-To 标头，所以回复会回到该别名。"
       }
     }
   ]
@@ -247,19 +255,34 @@
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以用与登录地址不同的地址发信吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">可以。打开<strong>设置 &rarr; 账户</strong>，选中账户，填写<strong>发件身份</strong>。留空就用你的登录地址发信。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。</p>
-              <p class="mb-4">变的只有外发邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。你的用户名和密码原封不动，MailVault 仍然以你设置的那个账户登录 IMAP 和 SMTP，而且<strong>不会添加 Reply-To 头</strong> &mdash; 回信会寄到你用来发信的那个地址。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">查找并验证地址：</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>建议</strong> &mdash; MailVault 会给出它在你自己的邮件里见过的地址：你以前用来发过信的，以及别人寄给你的邮件所落到的那些地址。</li>
-                <li><strong>验证</strong> &mdash; 用这个地址发一封测试邮件，默认寄到你自己的邮箱，这样你在真正依赖它之前就能确认服务商接受它。</li>
-                <li><strong>如果被拒绝</strong> &mdash; 这个地址必须是你的服务商允许该登录身份用来发信的别名或身份。Fastmail 接受账户上的任何别名；Gmail 需要先在 Gmail 设置的“以此地址发送邮件”里添加该地址；Microsoft 365 则需要管理员授予 Send As 权限。</li>
-              </ul>
-              <p>别名是在你的邮件服务商那里配置的，不在 MailVault 里 &mdash; MailVault 只会以服务商已经授权的地址发信。</p>
+              <p class="mb-4">可以。按照<a href="#send-from-an-alias" class="text-primary-500 hover:underline">如何用别名发信？</a>中的说明把该地址添加为账户的别名，写信时在发件人一栏选中它，或把它设为默认。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。</p>
+              <p>变的只有外发邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。你的用户名和密码原封不动，MailVault 仍然以你设置的那个账户登录 IMAP 和 SMTP，而且<strong>不会添加 Reply-To 头</strong> &mdash; 回信会寄到你用来发信的那个地址。</p>
             </div>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/compose-email-light-1440.webp" srcset="/screenshots/zh/compose-email-light-720.webp 720w, /screenshots/zh/compose-email-light-1440.webp 1440w, /screenshots/zh/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
+        </article>
+
+        <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何用别名发信？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">打开<strong>设置 &rarr; 账户</strong>，选中账户，进入它的<strong>别名</strong>部分。这里列出该账户用来发信的所有地址：先是登录地址，然后是各个别名。新邮件发件人一栏中的<strong>添加地址</strong>链接也会打开同一部分。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">添加和设置别名：</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Google 账户</strong>：如果你是用 Google 登录的，MailVault 会获取 Gmail 允许你用来发信的地址并列出来。</li>
+                <li><strong>其他服务商</strong>：MailVault 会推荐它在你自己的邮件里见过的地址，也就是你发过信的地址和你收信的地址。你也可以手动添加任何地址。</li>
+                <li><strong>名称</strong>：给每个别名起一个收件人看到的名称。从该别名发出的邮件会使用这个名称。</li>
+                <li><strong>默认</strong>：选择新邮件默认从哪个地址发出。</li>
+                <li><strong>验证</strong>：从该别名发送一封测试邮件，让你在正式使用前看看服务商是否接受。</li>
+              </ul>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">服务商必须允许该地址：</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Fastmail</strong>：先在 Fastmail 中把该地址添加为别名或身份。</li>
+                <li><strong>Gmail</strong>：在 Gmail 的<strong>设置 &rarr; 帐号和导入 &rarr; 用这个地址发送邮件</strong>中添加。</li>
+                <li><strong>Microsoft 365 和 Outlook.com</strong>：别名在 Microsoft 账户中添加，由你自己添加，或者对于工作或学校账户，由管理员添加。</li>
+              </ul>
+              <p>改变的只有发件地址和名称。MailVault 仍以你设置的账户登录，并且<strong>不会添加 Reply-To 标头</strong>，所以回复会回到该别名。</p>
+            </div>
         </article>
 
       </div>

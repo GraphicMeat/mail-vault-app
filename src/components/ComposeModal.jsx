@@ -14,7 +14,7 @@ import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { withoutSnippet } from '../utils/withoutSnippet';
-import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
+import { composeIdentities, composeSenderName, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -112,8 +112,9 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // Only a FILE drag arms the drop zones — dragging selected text inside the
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+const NO_ALIASES = {};
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onSend }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend }) {
   const t = useT();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
@@ -135,8 +136,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
   // Subscribed (not read through the getter) so the From row re-renders when
-  // the override changes while compose is open.
+  // the default From or an alias changes while compose is open.
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const aliasesByAccount = useSettingsStore(s => s.aliases) || NO_ALIASES;
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
   const spellcheckEnabled = useSettingsStore(s => s.spellcheckEnabled ?? true);
@@ -166,18 +168,24 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [selectedAccountId, setSelectedAccountId] = useState(initialIdentity.accountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
   const composeSendAs = sendAsAddresses?.[selectedAccountId] || '';
-  // Addresses each account has provably sent as, mined from its Sent cache.
-  const [sentAsByAccount, setSentAsByAccount] = useState({});
   // '' = whatever the selected account sends as by default.
   const [pickedFrom, setPickedFrom] = useState(initialIdentity.address);
   // Not memo'd: `accounts` is a fresh array every render anyway.
-  let identities = composeIdentities(accounts, sendAsAddresses, sentAsByAccount);
-  // A restored/remembered From may not be minable yet (async) or any more —
-  // the row must still show the address the message will actually leave from.
+  let identities = composeIdentities(accounts, sendAsAddresses, aliasesByAccount);
+  // A restored/remembered From may be an alias since removed: the row must
+  // still show the address the message will actually leave from.
   if (pickedFrom && !identities.some(i => i.accountId === selectedAccountId && i.address.toLowerCase() === pickedFrom.toLowerCase())) {
-    identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom }];
+    identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom, name: '' }];
   }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
+  // The name the From header carries: the chosen alias's, else the account's.
+  const senderNameFor = (account, fromAddress) => composeSenderName({
+    account,
+    fromAddress,
+    displayName: getDisplayName(account?.id),
+    aliases: aliasesByAccount?.[account?.id],
+    sendAsAddress: sendAsAddresses?.[account?.id],
+  });
   const actionReplyTo = replyTo || initialData?._replyTo || null;
 
   const [sending, setSending] = useState(false);
@@ -502,8 +510,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     // Every identity of every account: replying to a message *I* sent (from
     // any account or alias) must target its recipients, not me — and
     // reply-all must never re-add one of my own aliases.
-    // ponytail: identities mined async from Sent may not have landed yet;
-    // logins + configured send-as (the common self-reply cases) always have.
     const ownAddresses = identities.map(i => i.address);
 
     if (mode === 'reply' || mode === 'replyAll') {
@@ -579,19 +585,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       return { ...prev, body };
     });
   }, [selectedAccountId]);
-
-  // Mine each account's Sent cache so the From list offers every address the
-  // mailbox can actually send from, not just its login.
-  useEffect(() => {
-    let cancelled = false;
-    for (const acc of rawAccounts || []) {
-      suggestSendAsAddresses(acc).then(list => {
-        if (cancelled || !list.length) return;
-        setSentAsByAccount(prev => ({ ...prev, [acc.id]: list }));
-      });
-    }
-    return () => { cancelled = true; };
-  }, [rawAccounts]);
 
   const handleChange = (e) => {
     if (detaching) return;
@@ -788,6 +781,17 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     setShowTemplates(false);
   };
 
+  // "Add address..." beside From: aliases are added in Settings > Accounts >
+  // Aliases. A compose window of its own asks the main window (ComposeWindow);
+  // in the app the draft goes to its bubble first, so Settings is not hidden
+  // behind it, and comes back with the new address in the From row.
+  const openAliases = async () => {
+    if (detaching) return;
+    if (onOpenAliases) { onOpenAliases(selectedAccountId); return; }
+    await handleMinimize();
+    useMailStore.getState().requestSettingsTab('accounts', { accountId: selectedAccountId, section: 'aliases' });
+  };
+
   const upgrade = () => {
     setShowSchedulePicker(false);
     // A compose window of its own has no Settings: ComposeWindow routes this
@@ -816,7 +820,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       // A copy: the route's fields must not stick to this window's snapshot
       // if the send fails and the window stays open.
       const snapshot = { ...latestSnapshotRef.current(), _composeDelay: delay, ...(draft && { _scheduleDraft: draft }) };
-      const settings = { displayName: getDisplayName(snapshot._accountId) || selectedAccount.name || selectedAccount.email };
+      const settings = { displayName: senderNameFor(selectedAccount, snapshot._fromAddress) };
       if (draft) {
         if (onSchedule) await onSchedule(snapshot);
         else {
@@ -993,7 +997,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             mailbox: draftMailboxRef.current,
             uid: draftUidRef.current,
             fromAddress: composeFrom,
-            displayName: getDisplayName(selectedAccountId) || selectedAccount.name || selectedAccount.email,
+            displayName: senderNameFor(selectedAccount, composeFrom),
             payload,
             snippet: text,
             hasAttachments: attachments.length > 0,
@@ -1357,8 +1361,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             </p>
           )}
           <div className="compose-addresses px-5 py-3 space-y-1 border-b border-mail-border">
-            {/* From — shown whenever there is a choice to make, which on a
-                single account means it has an override or a mined alias. */}
+            {/* From: every account's login, default From and aliases, each
+                alias under its own name. */}
             {identities.length > 0 && (
               <div className="flex items-center gap-2">
                 <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.from')}</label>
@@ -1381,14 +1385,15 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                       // override set, would show both addresses at once.
                       const named = acc.name && acc.name !== acc.email;
                       if (ids.length === 1) {
-                        const label = named ? `${acc.name} <${ids[0].address}>` : ids[0].address;
+                        const name = ids[0].name || (named ? acc.name : '');
+                        const label = name ? `${name} <${ids[0].address}>` : ids[0].address;
                         return <option key={acc.id} value={ids[0].key}>{label}</option>;
                       }
                       // The native optgroup indents the addresses under the account.
                       return (
                         <optgroup key={acc.id} label={named ? acc.name : acc.email}>
                           {ids.map(i => (
-                            <option key={i.key} value={i.key}>{i.address}</option>
+                            <option key={i.key} value={i.key}>{i.name ? `${i.name} <${i.address}>` : i.address}</option>
                           ))}
                         </optgroup>
                       );
@@ -1397,6 +1402,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                   <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2
                                                      text-mail-text-muted pointer-events-none" />
                 </div>
+                {/* A native <select> cannot hold an action, so it sits beside it. */}
+                <button type="button" onClick={openAliases} data-testid="compose-add-address"
+                  title={t('compose.addAddressHint')}
+                  className="flex-shrink-0 text-xs text-mail-accent-text hover:underline whitespace-nowrap">
+                  {t('compose.addAddress')}
+                </button>
               </div>
             )}
 

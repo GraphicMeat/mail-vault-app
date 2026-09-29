@@ -78,6 +78,14 @@
         "@type": "Answer",
         "text": "MailVault bewahrt eine Kopie deiner Ordnerliste auf der Festplatte auf, sodass Ordner sofort erscheinen, wenn du ein Konto öffnest, und aktualisiert die Liste vom Server höchstens alle zehn Minuten. Wenn du einen Ordner in Webmail oder einem anderen Mailprogramm erstellst, umbenennst oder löschst, übernimmt MailVault die Änderung beim nächsten Öffnen des Kontos oder wenn du nach Ablauf der zehn Minuten in der Seitenleiste auf einen Ordner klickst — ein neuer Ordner erscheint also normalerweise innerhalb von zehn Minuten. Ein Neustart der App macht es nicht schneller, weil die zwischengespeicherte Liste auf der Festplatte liegt und einen Neustart übersteht. Die Schaltfläche Aktualisieren lädt die Nachrichten im gerade gelesenen Ordner neu; die Ordnerliste folgt ihrem eigenen Zehn-Minuten-Rhythmus. Unterordner brauchen keine Einrichtung: MailVault zeichnet die Hierarchie aus den vom Server gemeldeten Pfaden, sodass ein neuer Unterordner unter seinem übergeordneten Ordner erscheint. Ordner von Konten, die du gerade nicht ansiehst, werden nach demselben Zeitplan im Hintergrund aktualisiert."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault meldet „Keine Internetverbindung“, aber mein Internet funktioniert. Warum?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Wenn eine Verbindung zu einem Mailserver so scheitert, dass es nach dem Netzwerk aussieht, prüft MailVault das Internet selbst und zeigt Keine Internetverbindung nur, wenn nichts antwortet. Deine Mail bleibt auf diesem Computer lesbar, die Synchronisierung im Hintergrund pausiert, und das Banner verschwindet von selbst, sobald die Prüfung gelingt. Früher fragte die Prüfung nur drei öffentliche DNS-Server auf dem DNS-Port, den viele Firmennetzwerke, VPNs und Internetanbieter blockieren. Jetzt versucht sie diese Server auch auf Port 443 und deine eigenen Mailserver, und sobald einer antwortet, bist du online; Mailserver auf diesem Computer oder in deinem lokalen Netzwerk, etwa Proton Mail Bridge, bleiben außen vor. Funktioniert das Internet, aber eine Firewall oder ein VPN blockiert den Port eines Mailservers, sagt MailVault nicht, dass das Internet weg ist: Es nennt den Server und den Port, die nicht geantwortet haben, zum Beispiel imap.example.com, Port 993, damit dein IT-Team ihn freigeben kann. Was das Banner auch sagt, eine Nachricht öffnen oder löschen funktioniert weiterhin."
+      }
     }
   ]
 }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Unterordner brauchen keine Einrichtung.</strong> MailVault erstellt den Baum aus den vom Server gemeldeten Pfaden, sodass ein neuer Unterordner mit dem richtigen Namen und an der richtigen Stelle unter seinem übergeordneten Ordner erscheint. Konten, die du gerade nicht liest, werden nach demselben Zeitplan im Hintergrund aktualisiert, immer ein paar gleichzeitig; beim Wechsel zu einem siehst du daher selten eine veraltete Liste.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault meldet „Keine Internetverbindung“, aber mein Internet funktioniert. Warum?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Was das Banner auslöst.</strong> Wenn eine Verbindung zu einem Mailserver so scheitert, dass es nach dem Netzwerk aussieht, prüft MailVault das Internet selbst und zeigt <strong>Keine Internetverbindung</strong> nur, wenn nichts antwortet. Solange das Banner zu sehen ist, ist deine Mail weiter da: MailVault zeigt, was schon auf diesem Computer gespeichert ist, pausiert die Synchronisierung im Hintergrund und blendet das Banner von selbst aus, sobald die Prüfung gelingt. <strong>Erneut prüfen</strong> startet die Prüfung sofort.
+              </p>
+              <p>
+                <strong>Die Prüfung umfasst jetzt auch deine eigenen Mailserver.</strong> Früher fragte sie nur drei öffentliche DNS-Server auf dem DNS-Port. Viele Firmennetzwerke, VPNs und Internetanbieter blockieren diesen Port, daher erschien das Banner dort, obwohl alles andere funktionierte. Jetzt versucht sie diese Server auch auf Port 443, dem Port sicherer Websites, und zusätzlich deine eigenen Mailserver: Sobald einer davon antwortet, bist du online. Mailserver auf diesem Computer oder in deinem lokalen Netzwerk, etwa Proton Mail Bridge, bleiben außen vor, weil sie auch ohne Internet antworten. Jede Verbindung, die die Prüfung aufbaut, steht unter Einstellungen &rarr; Datenschutz &amp; Sicherheit &rarr; Netzwerkaktivität.
+              </p>
+              <p>
+                <strong>Ein blockierter Port sieht anders aus.</strong> Wenn das Internet funktioniert, aber eine Firewall oder ein VPN den Port eines Mailservers blockiert, sagt MailVault nicht, dass das Internet weg ist. Es nennt den Server und den Port, die nicht geantwortet haben, zum Beispiel „Keine Antwort von imap.example.com, Port 993“, und sagt, dass eine Firewall oder ein VPN ihn blockieren könnte. Beim Hinzufügen eines Kontos, das keine Verbindung bekommt, steht dasselbe. Gib diesen Servernamen und Port an dein IT-Team weiter, damit es ihn freigibt, oder versuche es in einem anderen Netzwerk.
+              </p>
+              <p>
+                <strong>Nichts, worum du bittest, wird zurückgehalten.</strong> Was das Banner auch sagt, eine Nachricht öffnen oder löschen funktioniert weiterhin, denn ein falsches Urteil darf dich nie aus deiner eigenen Mail aussperren.
               </p>
             </div>
         </article>

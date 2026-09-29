@@ -221,9 +221,14 @@ export const settingSearchGroups = [
   ] },
   { id: 'accounts', section: 'profile', sectionKey: 'settings.accounts.sectionProfile', settings: [
     ['settings.accounts.displayName', 'name sender from identity'],
-    ['settings.accounts.sendMail', 'send as alias address identity'],
     ['settings.accounts.emailSignature', 'signature email sign off footer'],
     ['settings.accounts.enableSignature', 'signature enable toggle on off'],
+  ] },
+  { id: 'accounts', section: 'aliases', sectionKey: 'settings.accounts.sectionAliases', settings: [
+    ['settings.accounts.aliases.listTitle', 'aliases list send as alias address addresses identity from proxy look for find'],
+    ['settings.accounts.aliases.addAddress', 'add new alias send as address identity from proxy'],
+    ['settings.accounts.aliases.defaultAddress', 'default from send mail as alias address identity sending'],
+    ['settings.accounts.aliases.nameLabel', 'alias name display name send as identity from sender proxy'],
   ] },
   { id: 'accounts', section: 'connection', sectionKey: 'settings.accounts.sectionConnection', settings: [
     ['settings.accounts.password', 'password update reset authentication login reconnect oauth'],
@@ -500,7 +505,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
     : activeTab === 'mail-preferences'
       ? { behavior: 'generalSettings.behavior', notifications: 'settings.notifications.notifications', shortcuts: 'shortcuts.keyboardShortcuts', fields: 'fields.section' }[generalSubTab]
       : activeTab === 'accounts'
-        ? { profile: 'settings.accounts.sectionProfile', connection: 'settings.accounts.sectionConnection', advanced: 'settings.accounts.sectionAdvanced' }[accountSection]
+        ? { profile: 'settings.accounts.sectionProfile', aliases: 'settings.accounts.sectionAliases', connection: 'settings.accounts.sectionConnection', advanced: 'settings.accounts.sectionAdvanced' }[accountSection]
         : host && host.labelKey !== currentTab.labelKey ? currentTab.labelKey : null;
   const navigationLabel = subView === 'config'
     ? t('settingsPage.tabSettings', { tab: currentTab ? t(currentTab.labelKey) : '' })

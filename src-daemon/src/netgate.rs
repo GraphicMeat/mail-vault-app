@@ -26,6 +26,13 @@ use tracing::{info, warn};
 /// Injection point for tests — see `NetGate::with_probe`.
 pub type Probe = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
+/// The user's mail servers, as `(host, port)`: see `NetGate::register_host`.
+type Hosts = Arc<std::sync::Mutex<Vec<(String, u16)>>>;
+
+/// Most mail hosts a probe dials besides the resolvers. Every one is a dial
+/// (and a lookup) per probe, and one reachable host is all a probe needs.
+const MAX_HOSTS: usize = 32;
+
 /// Concurrent failures share one probe: a verdict this fresh is reused rather
 /// than re-dialled. Nine accounts failing together cost one probe, not nine.
 const PROBE_TTL: Duration = Duration::from_secs(2);
@@ -47,17 +54,18 @@ pub struct NetGate {
     probe_ttl: Duration,
     recovery_min: Duration,
     recovery_max: Duration,
+    /// The mail servers the syncs passing through use. The real probe dials
+    /// them alongside the resolvers, read at probe time, so a network that
+    /// blocks the resolvers but reaches the user's own server reads as online.
+    hosts: Hosts,
 }
 
 impl NetGate {
-    /// The real gate: probes the internet.
+    /// The real gate: probes the internet, and the registered mail hosts.
     pub fn new() -> Arc<Self> {
-        Arc::new(Self::build(
-            Arc::new(|| Box::pin(net::probe_internet())),
-            PROBE_TTL,
-            RECOVERY_MIN,
-            RECOVERY_MAX,
-        ))
+        let hosts: Hosts = Arc::default();
+        let probe = registry_probe(Arc::clone(&hosts), |extra| Box::pin(net::probe_internet_with(extra)));
+        Arc::new(Self { hosts, ..Self::build(probe, PROBE_TTL, RECOVERY_MIN, RECOVERY_MAX) })
     }
 
     /// A gate driven by a caller-supplied probe, with the waits collapsed.
@@ -83,7 +91,30 @@ impl NetGate {
             probe_ttl,
             recovery_min,
             recovery_max,
+            hosts: Arc::default(),
         }
+    }
+
+    /// Remember a mail server for the probe. Fed by every sync, so the
+    /// watchdog knows the user's servers even while the gate is shut and every
+    /// sync short-circuits. Deduplicated without regard to case, capped at
+    /// `MAX_HOSTS`, and a host that answers without the internet (a local
+    /// bridge, a LAN server) is refused: it would hold the gate open forever.
+    pub fn register_host(&self, host: &str, port: u16) {
+        let host = host.trim().trim_end_matches('.').trim_start_matches('[').trim_end_matches(']').to_ascii_lowercase();
+        if port == 0 || !worth_probing(&host) {
+            return;
+        }
+        let mut hosts = self.hosts.lock().unwrap_or_else(|p| p.into_inner());
+        if hosts.len() >= MAX_HOSTS || hosts.iter().any(|(h, p)| *h == host && *p == port) {
+            return;
+        }
+        hosts.push((host, port));
+    }
+
+    #[cfg(test)]
+    pub fn registered_hosts(&self) -> Vec<(String, u16)> {
+        self.hosts.lock().unwrap_or_else(|p| p.into_inner()).to_vec()
     }
 
     pub fn is_online(&self) -> bool {
@@ -163,6 +194,30 @@ impl NetGate {
                 }
             }
         });
+    }
+}
+
+/// A probe that hands `dial` the registered hosts as they are when it runs,
+/// not as they were when the gate was built.
+fn registry_probe<F>(hosts: Hosts, dial: F) -> Probe
+where
+    F: Fn(Vec<(String, u16)>) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync + 'static,
+{
+    Arc::new(move || {
+        let extra = hosts.lock().unwrap_or_else(|p| p.into_inner()).to_vec();
+        dial(extra)
+    })
+}
+
+/// Whether an answer from `host` says anything about the internet.
+fn worth_probing(host: &str) -> bool {
+    if host.is_empty() || host.contains(char::is_whitespace) || host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") {
+        return false;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => !(ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified()),
+        Ok(std::net::IpAddr::V6(ip)) => !(ip.is_loopback() || ip.is_unspecified()),
+        Err(_) => true,
     }
 }
 
@@ -304,6 +359,77 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(gate.is_online(), "watchdog never reopened the gate");
+    }
+
+    // ── Mail host registry ──────────────────────────────────────────────
+    // A network that blocks the resolvers' ports (corporate firewalls, VPNs)
+    // still reaches the user's own mail server: the probe dials those too.
+
+    #[test]
+    fn registered_hosts_are_deduplicated_without_regard_to_case() {
+        let gate = NetGate::with_probe(MockNet::new(true).probe());
+        gate.register_host("imap.gmail.com", 993);
+        gate.register_host("IMAP.Gmail.com", 993);
+        gate.register_host("imap.gmail.com.", 993);
+        gate.register_host("imap.gmail.com", 143); // another port is another dial
+        assert_eq!(
+            gate.registered_hosts(),
+            vec![("imap.gmail.com".to_string(), 993), ("imap.gmail.com".to_string(), 143)]
+        );
+    }
+
+    #[test]
+    fn the_registry_is_capped() {
+        let gate = NetGate::with_probe(MockNet::new(true).probe());
+        for i in 0..(MAX_HOSTS + 8) {
+            gate.register_host(&format!("imap{i}.example.test"), 993);
+        }
+        assert_eq!(gate.registered_hosts().len(), MAX_HOSTS);
+    }
+
+    /// A Proton bridge on 127.0.0.1 or a server on the LAN answers with the
+    /// uplink down: dialling it would hold the gate open forever.
+    #[test]
+    fn a_host_that_answers_without_the_internet_is_never_registered() {
+        let gate = NetGate::with_probe(MockNet::new(true).probe());
+        for host in ["", "  ", "localhost", "bridge.localhost", "mail.local", "127.0.0.1", "::1", "[::1]", "0.0.0.0", "192.168.1.10", "10.0.0.2", "172.16.4.1", "169.254.1.1"] {
+            gate.register_host(host, 1143);
+        }
+        gate.register_host("imap.example.test", 0);
+        assert!(gate.registered_hosts().is_empty(), "{:?}", gate.registered_hosts());
+
+        gate.register_host("203.0.113.7", 993); // a public literal is fine
+        assert_eq!(gate.registered_hosts(), vec![("203.0.113.7".to_string(), 993)]);
+    }
+
+    /// The real probe path: resolvers that nothing answers (a fake, closed
+    /// loopback port stands in for them, no public dial), and a mail host that
+    /// does. Registered after the gate was built, so this also proves the
+    /// registry is read when the probe runs.
+    #[tokio::test]
+    async fn the_probe_dials_the_registered_mail_hosts() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let open = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = open.local_addr().unwrap().port();
+
+        let hosts: Hosts = Arc::default();
+        let probe = registry_probe(Arc::clone(&hosts), move |extra| {
+            let mut all = vec![("127.0.0.1".to_string(), closed)];
+            all.extend(extra);
+            Box::pin(async move { net::probe(&all).await })
+        });
+        let gate = NetGate {
+            hosts,
+            ..NetGate::build(probe, Duration::ZERO, Duration::from_millis(5), Duration::from_millis(20))
+        };
+
+        assert!(!gate.confirm_online().await, "only the blocked resolvers so far");
+
+        // Loopback straight into the registry: `register_host` refuses it by
+        // design, and a unit test must not dial a real server.
+        gate.hosts.lock().unwrap().push(("localhost".to_string(), port));
+        assert!(gate.confirm_online().await, "the user's own server answering is proof enough");
+        assert!(gate.is_online());
     }
 
     #[tokio::test]

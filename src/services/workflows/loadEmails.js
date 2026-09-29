@@ -849,7 +849,8 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         emails: previousEmails ?? get().emails,
         connectionStatus: 'error',
         connectionError: errorMessage,
-        connectionErrorType: errorType
+        connectionErrorType: errorType,
+        connectionErrorCode: null,
       });
       get().updateSortedEmails();
 
@@ -1019,6 +1020,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
         connectionStatus: 'error',
         connectionError: errorMessage,
         connectionErrorType: errorType,
+        connectionErrorCode: null,
       });
       get().updateSortedEmails();
     }

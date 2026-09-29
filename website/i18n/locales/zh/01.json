@@ -175,8 +175,6 @@
   "12866a4f8630": "用户名：你的 Proton 邮箱地址",
   "93ac7f32681b": "密码：第 3 步中 Bridge 生成的密码",
   "082783169c8d": "我可以用与登录地址不同的地址发信吗？",
-  "7840e76f6d10": "查找并验证地址：",
-  "076e0b1b8fe5": "别名是在你的邮件服务商那里配置的，不在 MailVault 里 &mdash; MailVault 只会以服务商已经授权的地址发信。",
   "5596c13ff9c1": "系统要求是什么？",
   "cb15e1d10b22": "MailVault 需要 macOS 11（Big Sur）或更高版本，在 Intel 和 Apple Silicon 上都原生运行。Linux 上提供 .deb、AppImage、Snap 和 Flatpak，适用于 Ubuntu 22.04+ / Debian 12+。它常驻菜单栏，窗口关闭后仍会继续同步。",
   "da01f86c0297": "附件是怎么处理的？",

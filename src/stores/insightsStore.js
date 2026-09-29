@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useMailStore } from './mailStore';
-import { useSettingsStore } from './settingsStore';
+import { useSettingsStore, selectOwnAddressesByAccount } from './settingsStore';
 import * as api from '../services/insightsApi';
 import { createInsightsSession } from '../services/insightsSession';
 import { cancelInsightsSelection } from '../services/workflows/selectEmail';
@@ -9,7 +9,8 @@ import { normalizeInsightsPreferences, insightsDateRange } from '../utils/insigh
 const defaults = {
   cancelSelection: cancelInsightsSelection,
   getAccounts: () => useMailStore.getState().accounts,
-  getOwnAddresses: () => Object.fromEntries(Object.entries(useSettingsStore.getState().sendAsAddresses || {}).map(([id, address]) => [id, [address]])),
+  // Login, default From and every alias of each account (settingsStore).
+  getOwnAddresses: () => selectOwnAddressesByAccount(useSettingsStore.getState(), useMailStore.getState().accounts),
   getPreferences: () => useSettingsStore.getState().insightsPreferences,
   savePreferences: value => useSettingsStore.getState().setInsightsPreferences(value),
   now: () => new Date(), timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,

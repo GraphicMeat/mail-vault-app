@@ -61,6 +61,7 @@ export function serverVerifiedPatch(extra = {}) {
     connectionStatus: 'connected',
     connectionError: null,
     connectionErrorType: null,
+    connectionErrorCode: null,
     suspectEmptyServerData: null,
     loading: false,
     loadingMore: false,

@@ -18,8 +18,9 @@ export default function InsightsPage({onClose,onComposeReply}) {
   const t = useT();
   const state=useInsightsStore();
   const accounts=useMailStore(s=>s.accounts);
-  const aliases=useSettingsStore(s=>s.sendAsAddresses);
-  const accountSignature=JSON.stringify([accounts.map(({id,email,sentFolderOverride})=>({id,email,sentFolderOverride})),aliases]);
+  const sendAs=useSettingsStore(s=>s.sendAsAddresses);
+  const aliases=useSettingsStore(s=>s.aliases);
+  const accountSignature=JSON.stringify([accounts.map(({id,email,sentFolderOverride})=>({id,email,sentFolderOverride})),sendAs,aliases]);
   const lastAccountSignature=useRef(accountSignature);
   useEffect(()=>{
     if(lastAccountSignature.current!==accountSignature){lastAccountSignature.current=accountSignature;void useInsightsStore.getState().refresh();}

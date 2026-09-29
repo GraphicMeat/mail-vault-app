@@ -88,10 +88,6 @@ vi.mock('../../services/db', () => ({
   saveAccount: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/authUtils', () => ({ ensureFreshToken: vi.fn(async (a) => a) }));
-vi.mock('../../utils/sendAsSuggestions', async (orig) => ({
-  ...(await orig()),
-  suggestSendAsAddresses: vi.fn().mockResolvedValue([]),
-}));
 
 const account = { id: 'acct-1', email: 'me@example.test', name: 'Me' };
 const mail = {
@@ -170,6 +166,7 @@ beforeEach(() => {
   mail.sentEmails = [];
   mail.emails = [];
   settings.sendAsAddresses = {};
+  settings.aliases = {};
   settings.lastComposeIdentity = null;
   settings.composeContextVisible = true;
   settings.composeOpenMode = undefined;
@@ -201,6 +198,56 @@ describe('the quoted original in a reply', () => {
 
     await waitFor(() => expect(onQueueSend).toHaveBeenCalled());
     expect(onQueueSend.mock.calls[0][0]._fromAddress).toBe('alias@example.test');
+  });
+
+  // The From row lists the account's aliases by name, and a message leaves
+  // under the name of the alias it is sent from.
+  it('sends under the chosen alias\'s name, and under the account\'s name once From changes back', async () => {
+    settings.aliases = { 'acct-1': [{ address: 'desk@example.test', name: 'Front Desk', source: 'provider' }] };
+    settings.sendAsAddresses = { 'acct-1': 'desk@example.test' };
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+
+    await screen.findByTestId('compose-from');
+    expect(screen.getByRole('option', { name: 'Front Desk <desk@example.test>' })).not.toBeNull();
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
+    expect(buildOutgoingMime.mock.calls[0][0]).toMatchObject({ name: 'Front Desk', fromEmail: 'desk@example.test' });
+    cleanup();
+
+    buildOutgoingMime.mockClear();
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: 'acct-1 me@example.test' } });
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
+    expect(buildOutgoingMime.mock.calls[0][0].name).toBe('Me');
+    expect(buildOutgoingMime.mock.calls[0][0].fromEmail).toBeUndefined();
+  });
+
+  // Adding an alias happens in Settings > Accounts > Aliases; the From row
+  // links there, for the account the message is from.
+  it('links from the From row to the account\'s aliases, keeping the draft', async () => {
+    const onMinimize = vi.fn();
+    const onSaveState = vi.fn();
+    mail.requestSettingsTab = vi.fn();
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={onMinimize} onSaveState={onSaveState} />);
+    await screen.findByTestId('compose-from');
+    fireEvent.click(screen.getByTestId('compose-add-address'));
+    await waitFor(() => expect(mail.requestSettingsTab).toHaveBeenCalledWith('accounts', { accountId: 'acct-1', section: 'aliases' }));
+    expect(onSaveState).toHaveBeenCalled();
+    expect(onMinimize).toHaveBeenCalled();
+    delete mail.requestSettingsTab;
+  });
+
+  it('leaves the link to a compose window\'s own owner when it has one', async () => {
+    const onOpenAliases = vi.fn();
+    mail.requestSettingsTab = vi.fn();
+    render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onOpenAliases={onOpenAliases} />);
+    fireEvent.click(await screen.findByTestId('compose-add-address'));
+    await waitFor(() => expect(onOpenAliases).toHaveBeenCalledWith('acct-1'));
+    expect(mail.requestSettingsTab).not.toHaveBeenCalled();
+    delete mail.requestSettingsTab;
   });
 
   it('freezes editing and Escape while a detached window request is pending, then recovers on failure', async () => {

@@ -13,6 +13,8 @@ import {
 } from '../utils/quickActions';
 import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
+import { ownAddresses } from '../utils/ownAddresses';
+import { addAliasToList, mergeDiscovery } from '../utils/aliasDiscovery';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -337,7 +339,53 @@ export function migrateSettings(persisted, version) {
   // including whoever already answered at v11 or v12. Older settings got the
   // offer from v11 above, and a seed (version 4, false) stays unasked.
   if (version >= 11 && version < 13) next = { ...next, searchIndexReindexOffer: true };
+  // v13 -> v14: accounts hold a list of aliases, and `sendAsAddresses` is only
+  // the default From. A default From saved before is the one alias the user
+  // had, so it joins that account's list (see legacyAliasesPatch).
+  if (version < 14) next = { ...next, ...legacyAliasesPatch(next) };
   return next;
+}
+
+/**
+ * The `aliases` a pre-v14 blob gains: every non-empty default From that the
+ * account's list does not hold yet, as a manual alias. The login is unknown
+ * here, so a default From that was the login becomes an alias too; the next
+ * discovery for the account (mergeDiscovery) drops it. Empty when there is
+ * nothing to add, so settings with no default From come through unchanged.
+ */
+function legacyAliasesPatch(persisted) {
+  const pointers = persisted?.sendAsAddresses;
+  if (!pointers || typeof pointers !== 'object') return {};
+  let aliases = persisted.aliases && typeof persisted.aliases === 'object' ? persisted.aliases : {};
+  let changed = false;
+  for (const [accountId, pointer] of Object.entries(pointers)) {
+    const address = typeof pointer === 'string' ? pointer.trim() : '';
+    if (!address) continue;
+    const list = Array.isArray(aliases[accountId]) ? aliases[accountId] : [];
+    if (list.some(a => (a?.address || '').trim().toLowerCase() === address.toLowerCase())) continue;
+    aliases = { ...aliases, [accountId]: [...list, { address, name: '', source: 'manual' }] };
+    changed = true;
+  }
+  return changed ? { aliases } : {};
+}
+
+/**
+ * Every address that is the user on one account: its login, its default From
+ * and its aliases (utils/ownAddresses.js). The one list every "is this mine"
+ * check should take.
+ */
+export function selectOwnAddresses(state, account) {
+  const id = account?.id;
+  return ownAddresses({
+    account,
+    sendAsAddress: id ? state?.sendAsAddresses?.[id] : '',
+    aliases: id ? state?.aliases?.[id] : [],
+  });
+}
+
+/** `{ [accountId]: ownAddresses }` for every account given. */
+export function selectOwnAddressesByAccount(state, accounts = []) {
+  return Object.fromEntries((accounts || []).filter(a => a?.id).map(a => [a.id, selectOwnAddresses(state, a)]));
 }
 
 export const useSettingsStore = create(
@@ -389,7 +437,12 @@ export const useSettingsStore = create(
 
       // Display settings
       displayNames: {}, // { [accountId]: string }
-      sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
+      sendAsAddresses: {}, // { [accountId]: string }, the default From: '' = the login, else the login or one of the account's aliases
+      // { [accountId]: { address, name, source }[] }, source 'provider' | 'detected' | 'manual'
+      // (utils/aliasDiscovery.js). Never holds the login.
+      aliases: {},
+      // { [accountId]: string[] }: lowercased aliases the user removed; discovery never adds them back.
+      dismissedAliases: {},
       lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; a new compose keeps the address when it is reading that same account
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
@@ -969,6 +1022,88 @@ export const useSettingsStore = create(
         return get().sendAsAddresses?.[accountId] || '';
       },
 
+      // Aliases: the addresses an account may send as besides its login.
+      // `loginEmail` leaves the login out, for a list saved before the login
+      // was known (legacyAliasesPatch).
+      getAliases: (accountId, loginEmail = '') => {
+        const login = (loginEmail || '').trim().toLowerCase();
+        const list = get().aliases?.[accountId] || [];
+        return login ? list.filter(a => (a?.address || '').trim().toLowerCase() !== login) : list;
+      },
+
+      // Returns { ok: true, alias } or { ok: false, reason: 'invalid' | 'login' | 'duplicate' }.
+      // Adding an alias by hand takes it off the dismissed list.
+      addAlias: (accountId, alias, loginEmail = '') => {
+        if (!accountId) return { ok: false, reason: 'invalid' };
+        const result = addAliasToList({ aliases: get().aliases?.[accountId] || [], loginEmail, alias });
+        if (!result.ok) return result;
+        const k = result.alias.address.toLowerCase();
+        set(state => ({
+          aliases: { ...state.aliases, [accountId]: result.aliases },
+          dismissedAliases: {
+            ...state.dismissedAliases,
+            [accountId]: (state.dismissedAliases?.[accountId] || []).filter(d => d !== k),
+          },
+        }));
+        return { ok: true, alias: result.alias };
+      },
+
+      // Only the name can change: an alias with another address is another alias.
+      updateAlias: (accountId, address, patch = {}) => {
+        const k = (address || '').trim().toLowerCase();
+        const list = get().aliases?.[accountId] || [];
+        const index = list.findIndex(a => (a?.address || '').trim().toLowerCase() === k);
+        if (!k || index < 0) return false;
+        const next = [...list];
+        if (typeof patch.name === 'string') next[index] = { ...next[index], name: patch.name.trim() };
+        set(state => ({ aliases: { ...state.aliases, [accountId]: next } }));
+        return true;
+      },
+
+      // Removed for good: discovery skips it from now on. A default From that
+      // pointed at it falls back to the login.
+      removeAlias: (accountId, address) => {
+        const k = (address || '').trim().toLowerCase();
+        if (!accountId || !k) return;
+        set(state => {
+          const dismissed = state.dismissedAliases?.[accountId] || [];
+          const pointer = (state.sendAsAddresses?.[accountId] || '').trim().toLowerCase();
+          return {
+            aliases: {
+              ...state.aliases,
+              [accountId]: (state.aliases?.[accountId] || []).filter(a => (a?.address || '').trim().toLowerCase() !== k),
+            },
+            dismissedAliases: { ...state.dismissedAliases, [accountId]: dismissed.includes(k) ? dismissed : [...dismissed, k] },
+            ...(pointer === k ? { sendAsAddresses: { ...state.sendAsAddresses, [accountId]: '' } } : {}),
+          };
+        });
+      },
+
+      // Keep what one `aliases.discover` answer adds (utils/aliasDiscovery.js
+      // has the rules). Returns { added, suggestions, providerStatus };
+      // suggestions are the caller's to offer, never stored.
+      applyDiscovery: (accountId, loginEmail, result) => {
+        const state = get();
+        const current = state.aliases?.[accountId] || [];
+        const merged = mergeDiscovery({
+          aliases: current,
+          dismissed: state.dismissedAliases?.[accountId] || [],
+          loginEmail,
+          displayName: state.displayNames?.[accountId] || '',
+          result,
+        });
+        // A lookup that finds nothing new writes nothing: every list that
+        // reads the aliases would redraw, and the settings file be rewritten.
+        const changed = merged.aliases.length !== current.length || merged.aliases.some((a, i) => a !== current[i]);
+        if (accountId && (changed || merged.displayName)) {
+          set(latest => ({
+            ...(changed ? { aliases: { ...latest.aliases, [accountId]: merged.aliases } } : {}),
+            ...(merged.displayName ? { displayNames: { ...latest.displayNames, [accountId]: merged.displayName } } : {}),
+          }));
+        }
+        return { added: merged.added, suggestions: merged.suggestions, providerStatus: merged.providerStatus };
+      },
+
       setLastComposeIdentity: (accountId, address) => {
         set({ lastComposeIdentity: { accountId, address: (address || '').trim() } });
       },
@@ -1409,6 +1544,8 @@ export const useSettingsStore = create(
           signatures: {},
           displayNames: {},
           sendAsAddresses: {},
+          aliases: {},
+          dismissedAliases: {},
           lastComposeIdentity: null,
           accountColors: {},
           defaultSignatureEnabled: true,
@@ -1516,7 +1653,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 13,
+      version: 14,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

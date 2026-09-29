@@ -61,6 +61,7 @@ const ALLOWLIST = new Set([
   'email.original.attachments', 'account.emailAddress', 'common.premium', 'settings.billing.monthly', 'settings.billing.yearly',
   'settings.behavior.afterDeleting', 'notifyPolicy.allowlist.placeholder', 'settings.sendAs.sendTest',
   'settings.storage.account', 'settings.storage.action', 'settings.storage.olderThan',
+  'settings.accounts.aliases.addName', // the add-alias row's optional name, found as settings.accounts.aliases.addAddress
   // generic reused strings, too generic to be a distinguishing search result
   'settings.appearance.custom', 'common.from', 'common.folder', 'workspace.selectMessage',
   'premium.list.included', 'premium.list.locked', 'premium.list.title',

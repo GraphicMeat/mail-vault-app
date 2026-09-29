@@ -4,6 +4,7 @@ import { useMailStore } from './mailStore';
 import { useSearchStore } from './searchStore.js';
 import { useFieldStore } from './fieldStore';
 import { useSettingsStore } from './settingsStore';
+import { ownAddresses } from '../utils/ownAddresses';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
@@ -88,9 +89,16 @@ export function accountPayload(account, mail) {
     const use = box.specialUse || box.special_use;
     if (use && !specialUse[use]) specialUse[use] = box.path;
   }
+  // The default From and every alias: "to me", "not from me" and Notes to
+  // Self count them as the account's own, like the login.
+  const login = (account.email || '').trim().toLowerCase();
+  const settings = useSettingsStore.getState?.() || {};
+  const aliases = ownAddresses({ account, sendAsAddress: settings.sendAsAddresses?.[account.id], aliases: settings.aliases?.[account.id] })
+    .filter(address => address.toLowerCase() !== login);
   return {
     accountId: account.id,
     address: account.email || '',
+    ...(aliases.length ? { aliases } : {}),
     // Local folders by display name too, so the daemon names their hits the
     // way their lists do (see searchTargets).
     knownMailboxes: [...boxes.map(box => box.path).filter(Boolean), ...(mail.localFolders?.[account.id] || []).map(f => f.name)],

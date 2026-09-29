@@ -94,6 +94,18 @@ describe('applySettings', () => {
     expect(h.flush).toHaveBeenCalledTimes(1);
   });
 
+  it('carries each account\'s aliases and removed aliases along, re-keyed', async () => {
+    h.settings.aliases = { A: [{ address: 'a-desk@example.test', name: 'Desk', source: 'manual' }] };
+    h.settings.dismissedAliases = { A: ['a-old@example.test'], B: ['b-old@example.test'] };
+    const snap = collectSettings(['A']);
+    expect(snap.accountSettings.aliases).toEqual({ A: [{ address: 'a-desk@example.test', name: 'Desk', source: 'manual' }] });
+    expect(snap.accountSettings.dismissedAliases).toEqual({ A: ['a-old@example.test'] });
+
+    await applySettings(snap, { A: 'A2' }, { applyGlobal: false });
+    expect(h.settings.aliases.A2).toEqual([{ address: 'a-desk@example.test', name: 'Desk', source: 'manual' }]);
+    expect(h.settings.dismissedAliases.A2).toEqual(['a-old@example.test']);
+  });
+
   it('never maps an id through an inherited property of idMap', async () => {
     const snap = { accountSettings: { signatures: { constructor: { html: 'proto sig' }, toString: { html: 'x' } } } };
     await applySettings(snap, {}, { applyGlobal: false });

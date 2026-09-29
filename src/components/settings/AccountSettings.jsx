@@ -6,9 +6,8 @@ import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, ha
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
 import { findSentMailboxPath } from '../../utils/sentFolder';
-import { suggestSendAsAddresses } from '../../utils/sendAsSuggestions';
 import { isFastmailAccount } from '../AccountModal.jsx';
-import { SendAsVerifyModal } from './SendAsVerifyModal';
+import { AliasesSection } from './AliasesSection';
 import { Send } from 'lucide-react';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
@@ -37,7 +36,9 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
-import { T } from '../../i18n/T.jsx';
+
+// The sub-sections of an account's settings, in tab order.
+const ACCOUNT_SECTIONS = ['profile', 'aliases', 'connection', 'advanced'];
 
 function SavedBadge({ visible }) {
   const t = useT();
@@ -91,8 +92,6 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     displayNames,
     setDisplayName,
     getDisplayName,
-    setSendAsAddress,
-    getSendAsAddress,
     getOrderedAccounts,
     setAccountOrder,
     accountColors,
@@ -105,13 +104,10 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   } = useSettingsStore();
 
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
-  const [section, setSection] = useState(['profile', 'connection', 'advanced'].includes(initialSection) ? initialSection : 'profile');
+  const [section, setSection] = useState(ACCOUNT_SECTIONS.includes(initialSection) ? initialSection : 'profile');
   const panelRef = useRef(null);
   const [signatureHtml, setSignatureHtml] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
-  const [sendAs, setSendAs] = useState('');
-  const [sendAsSuggestions, setSendAsSuggestions] = useState([]);
-  const [verifyOpen, setVerifyOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [autoSaved, setAutoSaved] = useState(false);
   const autoSaveTimer = useRef(null);
@@ -144,8 +140,6 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     : isActiveAccount && connectionStatus === 'connecting' ? t('sidebar.connecting')
     : isActiveAccount ? t('settings.accounts.disconnected')
     : t('settings.accounts.inactiveStatus');
-  // Shape check only — whether the server will accept it is what Verify answers.
-  const sendAsIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendAs.trim());
   const invoke = window.__TAURI__?.core?.invoke;
 
   const changeSection = value => {
@@ -154,7 +148,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   };
 
   useEffect(() => {
-    if (['profile', 'connection', 'advanced'].includes(initialSection)) setSection(initialSection);
+    if (ACCOUNT_SECTIONS.includes(initialSection)) setSection(initialSection);
   }, [initialSection]);
 
   useEffect(() => {
@@ -176,33 +170,17 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       const sig = getSignature(selectedAccountId);
       setSignatureHtml(sig.html || textToHtml(sig.text || ''));
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
-      setSendAs(getSendAsAddress(selectedAccountId) || '');
       setShowRemoveConfirm(false);
       setEditingPassword(false);
       setNewPassword('');
-      setVerifyOpen(false);
     }
   }, [selectedAccountId]);
 
-  // Alias candidates mined from this account's cached Sent headers. Providers
-  // give us no alias list under the credentials we hold, so these are
-  // suggestions — the SMTP server stays the authority (that's what Verify is
-  // for).
-  useEffect(() => {
-    let cancelled = false;
-    setSendAsSuggestions([]);
-    if (!selectedAccount) return undefined;
-    suggestSendAsAddresses(selectedAccount).then(list => {
-      if (!cancelled) setSendAsSuggestions(list);
-    });
-    return () => { cancelled = true; };
-  }, [selectedAccountId]);
-
   // Autosave display name + signature — no Save button
-  const pendingEdits = useRef({ html: '', name: '', sendAs: '' });
-  pendingEdits.current = { html: signatureHtml, name: accountDisplayName, sendAs };
+  const pendingEdits = useRef({ html: '', name: '' });
+  pendingEdits.current = { html: signatureHtml, name: accountDisplayName };
 
-  const persistAccountSettings = (accountId, rawHtml, name, sendAsValue = '') => {
+  const persistAccountSettings = (accountId, rawHtml, name) => {
     if (!accountId) return;
     const sig = getSignature(accountId);
     const text = htmlToText(rawHtml);
@@ -210,11 +188,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     const html = hasContent ? rawHtml : '';
     const nameChanged = (getDisplayName(accountId) || '') !== name;
     const sigChanged = (sig.html || '') !== html || (sig.text || '') !== text;
-    const trimmedSendAs = (sendAsValue || '').trim();
-    const sendAsChanged = (getSendAsAddress(accountId) || '') !== trimmedSendAs;
-    if (!nameChanged && !sigChanged && !sendAsChanged) return;
+    if (!nameChanged && !sigChanged) return;
 
-    if (sendAsChanged) setSendAsAddress(accountId, trimmedSendAs);
     if (nameChanged) setDisplayName(accountId, name);
     if (sigChanged) {
       setSignature(accountId, {
@@ -235,11 +210,11 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     const accountId = selectedAccountId;
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(
-      () => persistAccountSettings(accountId, signatureHtml, accountDisplayName, sendAs),
+      () => persistAccountSettings(accountId, signatureHtml, accountDisplayName),
       400
     );
     return () => clearTimeout(autoSaveTimer.current);
-  }, [signatureHtml, accountDisplayName, sendAs, selectedAccountId]);
+  }, [signatureHtml, accountDisplayName, selectedAccountId]);
 
   // Flush pending edits when switching accounts or leaving Settings
   useEffect(() => {
@@ -249,8 +224,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       persistAccountSettings(
         accountId,
         pendingEdits.current.html,
-        pendingEdits.current.name,
-        pendingEdits.current.sendAs
+        pendingEdits.current.name
       );
     };
   }, [selectedAccountId]);
@@ -523,6 +497,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
             <SettingsTabs value={section} onChange={changeSection} label={t('settings.accounts.preferences')}
               tabs={[
                 { id: 'profile', label: t('settings.accounts.sectionProfile') },
+                { id: 'aliases', label: t('settings.accounts.sectionAliases') },
                 { id: 'connection', label: t('settings.accounts.sectionConnection') },
                 { id: 'advanced', label: t('settings.accounts.sectionAdvanced') },
               ]}>
@@ -566,65 +541,6 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                               focus:border-mail-accent transition-all"
                   />
                 </div>
-
-                {/* Send mail as */}
-                <div>
-                  <label className="block text-sm font-medium text-mail-text mb-2">
-                    {t('settings.accounts.sendMail')}
-                  </label>
-                  <p className="text-sm text-mail-text-muted mb-2">
-                    <T k="settings.accounts.addressUsedFromHeaderSending"
-                       vars={{ email: selectedAccount.email }}
-                       parts={[(s) => <span className="font-mono">{s}</span>]} />
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <input aria-label={t('settings.accounts.sendMail')}
-                      type="email"
-                      value={sendAs}
-                      onChange={(e) => setSendAs(e.target.value)}
-                      placeholder={selectedAccount.email}
-                      list={`send-as-suggestions-${selectedAccountId}`}
-                      data-testid="send-as-input"
-                      className="flex-1 min-w-0 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                                text-mail-text placeholder-mail-text-muted
-                                focus:border-mail-accent transition-all"
-                    />
-                    <datalist id={`send-as-suggestions-${selectedAccountId}`}>
-                      {sendAsSuggestions.map(s => (
-                        <option key={s.address} value={s.address} />
-                      ))}
-                    </datalist>
-                    <button
-                      onClick={() => setVerifyOpen(true)}
-                      disabled={!sendAsIsValid}
-                      data-testid="send-as-verify-btn"
-                      className="px-4 py-2.5 rounded-lg text-sm border border-mail-border
-                                text-mail-text hover:bg-mail-surface-hover transition-colors
-                                disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={sendAsIsValid ? t('settings.accounts.sendTestMessageAddress') : t('settings.accounts.enterValidAddressFirst')}
-                    >
-                      {t('settings.accounts.verify')}
-                    </button>
-                  </div>
-                  {sendAsSuggestions.length > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="send-as-suggestions">
-                      <span className="text-xs text-mail-text-muted">{t('settings.accounts.veSent')}</span>
-                      {sendAsSuggestions.map(s => (
-                        <button
-                          key={s.address}
-                          onClick={() => setSendAs(s.address)}
-                          className="text-xs font-mono px-2 py-1 rounded-md border border-mail-border
-                                    text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover
-                                    transition-colors"
-                          title={t('settings.accounts.haveSentAddressBefore')}
-                        >
-                          {s.address}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
               </div>
             </div>
 
@@ -676,6 +592,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
             </div>
 
               </>}
+              {section === 'aliases' && (
+                <AliasesSection account={selectedAccount} displayName={accountDisplayName} />
+              )}
               {section === 'connection' && <>
                 {hasConnectionError && connectionError && (
                   <details className="account-settings-error-details" key={selectedAccountId}>
@@ -1093,16 +1012,6 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
           </div>
         )}
       </div>
-
-      {verifyOpen && selectedAccount && (
-        <SendAsVerifyModal
-          isOpen={verifyOpen}
-          account={selectedAccount}
-          sendAsAddress={sendAs.trim()}
-          displayName={accountDisplayName}
-          onClose={() => setVerifyOpen(false)}
-        />
-      )}
 
       {billingWarning && (
         <Toast

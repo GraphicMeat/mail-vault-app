@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { _collectContactFolderPaths, formatContact } from '../contactsIndex';
+import { _collectContactFolderPaths, formatContact, buildContactsIndex } from '../contactsIndex';
 
 describe('formatContact', () => {
   it('renders name and address', () => {
@@ -141,5 +141,20 @@ describe('_collectContactFolderPaths', () => {
     const paths = _collectContactFolderPaths(tree);
     expect(paths).toContain('Real');
     expect(paths).not.toContain('Placeholder');
+  });
+});
+
+describe('buildContactsIndex', () => {
+  it('leaves out every address that is the user, aliases included', () => {
+    const index = buildContactsIndex(
+      [{ accountId: 'a1', emails: [{
+        uid: 1,
+        from: { address: 'Desk@example.test', name: 'Front Desk' },
+        to: [{ address: 'friend@example.com' }, { address: 'me@example.test' }],
+      }] }],
+      [{ id: 'a1', email: 'me@example.test' }],
+      ['me@example.test', 'desk@example.test'],
+    );
+    expect(index.all.map(c => c.address)).toEqual(['friend@example.com']);
   });
 });

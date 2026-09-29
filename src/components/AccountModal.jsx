@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
 import { normalizeEmailIdentity } from '../utils/emailIdentity';
+import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
 
 // Common email provider configurations
@@ -150,6 +151,9 @@ export function AccountModal({ onClose, onSuccess }) {
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  // What the connection test reached ({ host, messageCount, fromAddress }),
+  // shown with the success line; null for an Outlook account through Graph.
+  const [connectionCheck, setConnectionCheck] = useState(null);
   const [detectedProvider, setDetectedProvider] = useState(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -511,8 +515,9 @@ export function AccountModal({ onClose, onSuccess }) {
         imapPort: accountData.imapPort,
         authType: accountData.authType || 'password'
       });
-      await addAccount(accountData);
+      const added = await addAccount(accountData);
       console.log('[AccountModal] addAccount completed successfully');
+      setConnectionCheck(added?.connectionCheck || null);
       setSuccess(true);
       setTimeout(() => {
         // A caller that wants to know the account actually landed passes
@@ -980,8 +985,22 @@ export function AccountModal({ onClose, onSuccess }) {
                   className="flex items-center gap-2 p-3 bg-mail-success/10 border border-mail-success/20
                             rounded-lg text-sm text-mail-success"
                 >
-                  <Check size={16} />
-                  {t('account.accountAddedSuccessfully')}
+                  <Check size={16} className="flex-shrink-0 self-start mt-0.5" />
+                  <div className="min-w-0">
+                    <p>{t('account.accountAddedSuccessfully')}</p>
+                    {connectionCheck?.host && (
+                      <p className="mt-1 text-xs text-mail-text-muted break-words">
+                        {typeof connectionCheck.messageCount === 'number'
+                          ? t('account.connectionSummaryWithCount', {
+                            count: connectionCheck.messageCount,
+                            messages: formatCount(connectionCheck.messageCount),
+                            host: connectionCheck.host,
+                            address: connectionCheck.fromAddress,
+                          })
+                          : t('account.connectionSummary', { host: connectionCheck.host, address: connectionCheck.fromAddress })}
+                      </p>
+                    )}
+                  </div>
                 </motion.div>
               )}
 

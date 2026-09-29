@@ -9,6 +9,10 @@ import { t } from '../../../i18n';
 
 // These account preferences remain real; only disk/network reads are isolated.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
+// Opening Aliases asks the daemon for the account's aliases.
+vi.mock('../../../services/aliasDiscovery', () => ({
+  refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
+}));
 
 const accounts = [
   { id: 'studio', name: 'Studio', email: 'studio@example.test', password: 'saved-password', imapHost: 'imap.example.test' },
@@ -17,7 +21,7 @@ const accounts = [
 const tab = key => screen.getByRole('tab', { name: t(`settings.accounts.section${key}`) });
 
 beforeEach(() => {
-  useSettingsStore.setState({ signatures: {}, displayNames: {}, sendAsAddresses: {}, accountColors: {}, accountOrder: [], hiddenAccounts: {} });
+  useSettingsStore.setState({ signatures: {}, displayNames: {}, sendAsAddresses: {}, aliases: {}, dismissedAliases: {}, accountColors: {}, accountOrder: [], hiddenAccounts: {} });
   useMailStore.setState({ accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', mailboxes: [], connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -35,6 +39,28 @@ it('keeps identity visible while revealing only the chosen category', () => {
   fireEvent.click(tab('Advanced'));
   expect(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Account order' })).toBeNull();
+});
+
+it('keeps aliases in their own section between Profile and Connection', async () => {
+  render(<AccountSettings accounts={accounts} />);
+  expect(screen.getAllByRole('tab').map(el => el.textContent))
+    .toEqual(['Profile', 'Aliases', 'Connection', 'Advanced'].map(key => t(`settings.accounts.section${key}`)));
+  // Profile holds the name and signature only.
+  expect(screen.queryByTestId('aliases-section')).toBeNull();
+  expect(screen.queryByTestId('send-as-input')).toBeNull();
+  fireEvent.click(tab('Aliases'));
+  expect(screen.getByTestId('aliases-section')).toBeTruthy();
+  expect(screen.getByText(t('settings.accounts.aliasesIntro'))).toBeTruthy();
+  expect(screen.getAllByTestId('alias-row')[0].getAttribute('data-address')).toBe('studio@example.test');
+  expect(screen.queryByRole('textbox', { name: t('settings.accounts.displayName') })).toBeNull();
+  await act(async () => {});
+});
+
+it('opens Aliases for the account a deep link names', async () => {
+  render(<AccountSettings accounts={accounts} initialAccountId="personal" initialSection="aliases" />);
+  expect(tab('Aliases').getAttribute('aria-selected')).toBe('true');
+  expect(screen.getAllByTestId('alias-row')[0].getAttribute('data-address')).toBe('personal@example.test');
+  await act(async () => {});
 });
 
 it('uses explicit buttons for signature and account visibility', () => {

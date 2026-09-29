@@ -5,6 +5,7 @@
 //! of depending on Tauri's AppHandle.
 
 pub mod ai;
+pub mod aliases;
 pub mod app_db;
 pub mod archive;
 pub mod autostart;

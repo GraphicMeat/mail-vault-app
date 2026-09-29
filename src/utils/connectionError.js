@@ -45,7 +45,7 @@ const RULES = () => ([
   {
     match: (s) => s.includes('certificate') || s.includes('tls') || s.includes('ssl')
       || s.includes('handshake'),
-    problem: t('errors.conn.serverSSecurityCertificateCould'),
+    problemKey: 'errors.conn.serverSSecurityCertificateCould',
     recoveryKey: 'errors.conn.recovery.checkEncryptionSettingMatchesPort',
   },
   {
@@ -56,6 +56,76 @@ const RULES = () => ([
   },
 ]);
 
+// The daemon's `errorCode` (mailvault_core::net::classify_connection_error),
+// which a failed connection test carries (api.js). When it is there it picks
+// the message and the string rules above are not consulted: the daemon saw
+// the failure, this file only sees its text. "other" has no entry, so the
+// text rules still get a go.
+const BY_CODE = {
+  dns: {
+    problemKey: 'errors.conn.problem.serverNameCouldFound',
+    recoveryKey: 'errors.conn.recovery.checkSpellingImapHostUse',
+  },
+  refused: {
+    problemKey: 'errors.conn.problem.serverRefusedConnectionPort',
+    recoveryKey: 'errors.conn.recovery.mostServersUse993Ssl',
+  },
+  blocked_or_timeout: {
+    problemKey: 'errors.conn.problem.portBlocked',
+    recoveryKey: 'errors.conn.recovery.askItToOpenPort',
+  },
+  tls: {
+    problemKey: 'errors.conn.serverSSecurityCertificateCould',
+    recoveryKey: 'errors.conn.recovery.checkEncryptionSettingMatchesPort',
+  },
+  auth: {
+    problemKey: 'errors.conn.problem.serverRejectedEmailAddressPassword',
+    recoveryKey: 'errors.conn.recovery.checkBothTyposIfProvider',
+  },
+  throttled: {
+    problemKey: 'errors.conn.problem.providerThrottling',
+    recoveryKey: 'errors.conn.recovery.waitCloseOtherMailApps',
+  },
+  offline: {
+    problemKey: 'errors.conn.problem.computerOnline',
+    recoveryKey: 'errors.conn.recovery.reconnectInternetTryAgain',
+  },
+};
+
+// A blocked port with no host to name: the timeout wording, which already
+// mentions a firewall or VPN.
+const BLOCKED_NO_HOST = {
+  problemKey: 'errors.conn.problem.serverDidAnswerTime',
+  recoveryKey: 'errors.conn.recovery.checkHostPortThenTry',
+};
+
+// The sidebar's one-line notice for a failed sync, by the same code. The
+// notice sits under the account, so it names the host and port itself.
+const STATUS_BY_CODE = {
+  dns: 'sidebar.conn.dns',
+  refused: 'sidebar.conn.refused',
+  blocked_or_timeout: 'sidebar.conn.blocked',
+  tls: 'sidebar.conn.tls',
+  auth: 'sidebar.conn.auth',
+  throttled: 'sidebar.conn.throttled',
+  offline: 'sidebar.noInternet',
+};
+
+/**
+ * The sidebar notice for a sync that failed with the daemon's `errorCode`.
+ * @param {string|null|undefined} code
+ * @param {{ imapHost?: string, imapPort?: number|string }} [account]
+ * @returns {{ key: string, params: object }|null}  null for "other" and no
+ *   code: the caller keeps its generic notice.
+ */
+export function connectionFailureStatus(code, account) {
+  const key = STATUS_BY_CODE[code];
+  if (!key) return null;
+  const host = account?.imapHost;
+  if (code === 'blocked_or_timeout' && !host) return { key: 'sidebar.conn.blockedNoHost', params: {} };
+  return { key, params: { host, port: account?.imapPort || 993 } };
+}
+
 /**
  * @param {unknown} err  whatever the Tauri command or store rejected with
  * @returns {{ message: string, detail: string|null }}
@@ -65,6 +135,14 @@ const RULES = () => ([
  */
 export function describeConnectionError(err) {
   const raw = (typeof err === 'string' ? err : err?.message || String(err ?? '')).trim();
+
+  const byCode = BY_CODE[err?.errorCode];
+  if (byCode) {
+    const rule = err.errorCode === 'blocked_or_timeout' && !err.host ? BLOCKED_NO_HOST : byCode;
+    const vars = { host: err.host, port: err.port };
+    return { message: `${t(rule.problemKey, vars)} ${t(rule.recoveryKey, vars)}`, detail: raw || null };
+  }
+
   if (!raw) {
     return { message: t('errors.conn.couldReachMailServerCheck'), detail: null };
   }

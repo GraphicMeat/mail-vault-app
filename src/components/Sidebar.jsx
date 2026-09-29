@@ -34,6 +34,7 @@ import { useKeychainGateStore } from '../stores/keychainGateStore';
 import { usePortableStore } from '../stores/portableStore';
 import { PortableBadge } from './PortableIndicators';
 import { mailboxLabel } from '../utils/imapUtf7';
+import { connectionFailureStatus } from '../utils/connectionError';
 import {
   Inbox,
   Network,
@@ -346,14 +347,21 @@ const noticeMotion = {
 
 /** A readable status and the next useful action. Technical repair lives in Details. */
 export const ConnectionErrorCard = memo(function ConnectionErrorCard({
-  account, connectionErrorType, activeMailbox, activateAccount,
+  account, connectionErrorType, connectionErrorCode, activeMailbox, activateAccount,
   setShowErrorModal, onOpenAccounts, wrapperClassName = '',
 }) {
   const t = useT();
-  const needsPassword = connectionErrorType === 'passwordMissing';
-  const needsSignIn = connectionErrorType === 'oauthExpired';
-  const statusKey = needsPassword ? 'sidebar.passwordMissing'
-    : needsSignIn ? 'sidebar.signInRequired'
+  // The daemon's errorCode says what a failed sync ran into. Only a
+  // serverError carries one; any other type keeps its own notice.
+  const failure = connectionErrorType === 'serverError'
+    ? connectionFailureStatus(connectionErrorCode, account) : null;
+  const signInRejected = connectionErrorType === 'serverError' && connectionErrorCode === 'auth';
+  const isOAuth = account?.authType === 'oauth2';
+  const needsPassword = connectionErrorType === 'passwordMissing' || (signInRejected && !isOAuth);
+  const needsSignIn = connectionErrorType === 'oauthExpired' || (signInRejected && isOAuth);
+  const statusKey = failure ? failure.key
+    : connectionErrorType === 'passwordMissing' ? 'sidebar.passwordMissing'
+    : connectionErrorType === 'oauthExpired' ? 'sidebar.signInRequired'
     : connectionErrorType === 'offline' ? 'sidebar.noInternet'
     : connectionErrorType === 'outlookOAuth' ? 'sidebar.microsoftIssue'
     : connectionErrorType === 'timeout' ? 'sidebar.timedOut'
@@ -364,7 +372,7 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
 
   return (
     <div className={`sidebar-connection-notice ${wrapperClassName}`}>
-      <p role="status"><AlertCircle size={13} aria-hidden="true" /><span>{t(statusKey)}</span></p>
+      <p role="status"><AlertCircle size={13} aria-hidden="true" /><span>{t(statusKey, failure?.params)}</span></p>
       <div className="sidebar-connection-actions">
         <Button variant="link" size="xs" onClick={repair}>
           {t(needsPassword ? 'sidebar.enterPassword' : needsSignIn ? 'sidebar.reconnect' : 'common.retry')}
@@ -543,6 +551,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const connectionStatus = useAccountStore(s => s.connectionStatus);
   const connectionError = useAccountStore(s => s.connectionError);
   const connectionErrorType = useAccountStore(s => s.connectionErrorType);
+  const connectionErrorCode = useAccountStore(s => s.connectionErrorCode);
   const suspectEmptyServerData = useSyncStore(s => s.suspectEmptyServerData);
   const totalEmails = useMessageListStore(s => s.totalEmails);
   const cachedCount = useMessageListStore(s => s.cachedCount);
@@ -1170,6 +1179,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {showError && connectionStatus === 'error' && (
           <motion.div key="connection-error" {...noticeMotion}>
             <ConnectionErrorCard account={account} connectionErrorType={connectionErrorType}
+              connectionErrorCode={connectionErrorCode}
               activeMailbox={activeMailbox} activateAccount={retryConnection}
               setShowErrorModal={setShowErrorModal} onOpenAccounts={onOpenAccounts} />
           </motion.div>

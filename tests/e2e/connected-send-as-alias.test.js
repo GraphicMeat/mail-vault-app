@@ -9,6 +9,10 @@
  * that is where the From header is decided, so it is the real proof. The verify
  * flow's failure path addresses `SEND_REFUSED_TO`, which the harness's mock
  * SMTP server answers 550.
+ *
+ * Aliases live in Settings > Accounts > Aliases: the cases there add, name and
+ * default an alias through the section's own controls (`data-testid` hooks),
+ * then build the MIME the way compose would send from that default.
  */
 
 import {
@@ -53,7 +57,7 @@ describe('Connected Send-As Alias', function () {
   const readSendAs = (accountId) => browser.execute((id) =>
     window.__SETTINGS_STORE__.getState().getSendAsAddress(id), accountId);
 
-  // Both the settings suggestions and the compose From list mine this cache.
+  // The daemon's alias lookup (`aliases.discover`) reads the From of this cache.
   const SEEDED = 'previously-used@mock.test';
 
   /**
@@ -124,7 +128,7 @@ describe('Connected Send-As Alias', function () {
   });
 
   afterEach(async function () {
-    await setSendAs(account.id, '');
+    await clearAliases(account.id);
   });
 
   describe('outgoing MIME', function () {
@@ -179,120 +183,159 @@ describe('Connected Send-As Alias', function () {
     });
   });
 
-  describe('settings field', function () {
+  const ALIAS_NAME = 'Front Desk';
+
+  /**
+   * Aliases persist in settings, and the sibling compose specs count the From
+   * options: every case leaves the account with no aliases, nothing dismissed
+   * and the login as its default From. `removeAlias` alone would leave the
+   * address on the dismissed list, which discovery then skips.
+   */
+  const clearAliases = (accountId) => browser.execute((id) => {
+    const state = window.__SETTINGS_STORE__.getState();
+    window.__SETTINGS_STORE__.setState({
+      aliases: { ...state.aliases, [id]: [] },
+      dismissedAliases: { ...state.dismissedAliases, [id]: [] },
+      sendAsAddresses: { ...state.sendAsAddresses, [id]: '' },
+    });
+  }, accountId);
+
+  const readAliases = (accountId) => browser.execute((id) =>
+    JSON.parse(JSON.stringify(window.__SETTINGS_STORE__.getState().aliases?.[id] || [])), accountId);
+
+  const rowSelector = (address) => `[data-testid="alias-row"][data-address="${address}"]`;
+
+  /** Set an input's value the way React hears typing. */
+  const typeInto = (selector, value) => browser.execute((sel, v) => {
+    const input = document.querySelector(sel);
+    if (!input) return false;
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, v);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }, selector, value);
+
+  const click = (selector) => browser.execute((sel) => {
+    const el = document.querySelector(sel);
+    if (!el || el.disabled) return false;
+    el.click();
+    return true;
+  }, selector);
+
+  /** Settings > Accounts > Aliases, for the first account. */
+  async function openAliases() {
+    await openSettings();
+    await clickSettingsNav('Accounts');
+    expect(await clickSettingsNav('Aliases')).toBe(true);
+    await browser.waitUntil(() => browser.execute((login) =>
+      document.querySelector('[data-testid="alias-row"][data-login="true"]')?.getAttribute('data-address') === login,
+    account.email), { timeout: 5000, interval: 100, timeoutMsg: `Aliases did not open on ${account.email}` });
+  }
+
+  /** Type an address into the add row and press Add. */
+  async function addAliasByHand(address) {
+    expect(await typeInto('[data-testid="alias-add-input"]', address)).toBe(true);
+    await browser.waitUntil(() => click('[data-testid="alias-add-btn"]'), {
+      timeout: 5000, interval: 100, timeoutMsg: 'Add stayed disabled after typing an address',
+    });
+  }
+
+  describe('aliases section', function () {
     beforeEach(async function () {
-      await openSettings();
-      await clickSettingsNav('Accounts');
+      await clearAliases(account.id);
     });
 
     afterEach(async function () {
       await closeSettings();
+      await clearAliases(account.id);
     });
 
-    it('persists what the user types and clears back to the login address', async function () {
-      const typed = await browser.execute((value) => {
-        const input = document.querySelector('[data-testid="send-as-input"]');
-        if (!input) return false;
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        setter.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      }, ALIAS);
-      expect(typed).toBe(true);
+    it('adds an alias, names it and makes it the default From, which the outgoing MIME carries', async function () {
+      await openAliases();
+      await addAliasByHand(ALIAS);
+      await browser.waitUntil(() => browser.execute((sel) => !!document.querySelector(sel), rowSelector(ALIAS)), {
+        timeout: 5000, interval: 100, timeoutMsg: 'the added alias never showed in the list',
+      });
+      // Opening the section also looks for aliases; only the typed one matters here.
+      expect((await readAliases(account.id)).filter(a => a.address === ALIAS).map(a => a.source)).toEqual(['manual']);
+      expect(await browser.execute(() => !!document.querySelector('[data-testid="aliases-empty"]'))).toBe(false);
 
-      // Autosave is debounced at 400ms.
+      // The name autosaves a moment after typing stops.
+      expect(await typeInto(`${rowSelector(ALIAS)} [data-testid="alias-name-input"]`, ALIAS_NAME)).toBe(true);
+      await browser.waitUntil(async () => (await readAliases(account.id)).find(a => a.address === ALIAS)?.name === ALIAS_NAME, {
+        timeout: 5000, interval: 200, timeoutMsg: 'the alias name was never saved',
+      });
+
+      expect(await click(`${rowSelector(ALIAS)} [data-testid="alias-default-radio"]`)).toBe(true);
       await browser.waitUntil(async () => (await readSendAs(account.id)) === ALIAS, {
-        timeout: 10_000,
-        interval: 200,
-        timeoutMsg: 'send-as address was never persisted',
+        timeout: 5000, interval: 100, timeoutMsg: 'choosing the alias did not make it the default From',
       });
+      expect(await browser.execute((sel) => document.querySelector(`${sel} [data-testid="alias-default-radio"]`)?.checked,
+        rowSelector(account.email))).toBe(false);
 
-      // Reopening the tab must show the stored value, not an empty field.
-      await clickSettingsNav('General');
-      await clickSettingsNav('Accounts');
-      await browser.waitUntil(() => browser.execute(address =>
-        document.querySelector('[data-testid="send-as-input"]')?.value === address, ALIAS), {
-        timeout: 5000, interval: 100, timeoutMsg: 'Saved send-as address did not load when reopening Accounts',
-      });
+      // What compose hands the sender for a message from the default From:
+      // that address, under the alias's own name (composeSenderName).
+      const pointer = await readSendAs(account.id);
+      const name = (await readAliases(account.id)).find(a => a.address === pointer)?.name;
+      const { headers } = await buildHeaders(account, { fromEmail: pointer, name });
+      const from = headerLine(headers, 'From');
+      expect(from).toContain(ALIAS_NAME);
+      expect(from).toContain(`<${ALIAS}>`);
+      expect(headers.toLowerCase()).not.toContain(account.email.toLowerCase());
     });
 
-    it('disables Verify until the address is a plausible mailbox', async function () {
-      const disabledFor = async (value) => {
-        await browser.execute((v) => {
-          const input = document.querySelector('[data-testid="send-as-input"]');
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(input, v);
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        }, value);
-        await browser.pause(150);
-        return browser.execute(() =>
-          document.querySelector('[data-testid="send-as-verify-btn"]')?.disabled);
-      };
-
-      expect(await disabledFor('')).toBe(true);
-      expect(await disabledFor('not-an-address')).toBe(true);
-      expect(await disabledFor(ALIAS)).toBe(false);
+    it('says why an address cannot be added', async function () {
+      await openAliases();
+      await addAliasByHand(account.email.toUpperCase());
+      await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[data-testid="alias-add-error"]')), {
+        timeout: 5000, interval: 100, timeoutMsg: 'adding the login address gave no reason',
+      });
+      expect((await readAliases(account.id)).some(a => a.address.toLowerCase() === account.email.toLowerCase())).toBe(false);
     });
-  });
 
-  describe('suggestions', function () {
-    it('offers an address this mailbox has already sent as', async function () {
-      const seeded = SEEDED;
-      expect((await seedSentCache()).ok).toBe(true);
-
-      await openSettings();
-      await clickSettingsNav('Accounts');
-
-      const chips = () => browser.execute(() =>
-        [...document.querySelectorAll('[data-testid="send-as-suggestions"] button')]
-          .map(b => b.textContent.trim()));
-
-      // The suggestion list is computed once per account selection, and a
-      // background Sent sync can rewrite the cache underneath us — so re-seed
-      // and re-enter the tab rather than polling a value that cannot change.
+    it('lists an address this mailbox has sent as, found in its own mail', async function () {
+      // `aliases.discover` reads the From of the cached Sent headers. A
+      // background Sent sync can rewrite that cache underneath us, so re-seed
+      // and look again rather than wait on a value that cannot change.
+      await openAliases();
       let found = false;
       for (let attempt = 0; attempt < 5 && !found; attempt++) {
-        found = (await chips()).includes(seeded);
-        if (found) break;
-        await seedSentCache();
-        await clickSettingsNav('General');
-        await clickSettingsNav('Accounts');
-        await browser.pause(600);
-        found = (await chips()).includes(seeded);
+        expect((await seedSentCache()).ok).toBe(true);
+        await browser.waitUntil(() => click('[data-testid="aliases-refresh-btn"]'), {
+          timeout: 20_000, interval: 250, timeoutMsg: 'Look for aliases stayed busy',
+        });
+        // Let the click render its spinner before waiting for it to go.
+        await browser.pause(300);
+        await browser.waitUntil(() => browser.execute(() =>
+          document.querySelector('[data-testid="aliases-status"]')?.getAttribute('data-status') !== 'running'), {
+          timeout: 30_000, interval: 250, timeoutMsg: 'the alias lookup never finished',
+        });
+        found = await browser.execute((sel) => !!document.querySelector(sel), rowSelector(SEEDED));
       }
-      if (!found) {
-        throw new Error(`send-as suggestions never offered ${seeded}; saw ${JSON.stringify(await chips())}`);
-      }
+      if (!found) throw new Error(`Aliases never listed ${SEEDED}; saw ${JSON.stringify(await readAliases(account.id))}`);
 
-      // Never suggest the login address — it is what the blank field already means.
-      expect(await chips()).not.toContain(account.email);
-
-      // Clicking a suggestion fills the field.
-      await browser.execute((wanted) => {
-        for (const b of document.querySelectorAll('[data-testid="send-as-suggestions"] button')) {
-          if (b.textContent.trim() === wanted) { b.click(); return; }
-        }
-      }, seeded);
-      await browser.pause(200);
-      const value = await browser.execute(() =>
-        document.querySelector('[data-testid="send-as-input"]')?.value || '');
-      expect(value).toBe(seeded);
-
-      await closeSettings();
+      expect(await browser.execute((sel) => document.querySelector(`${sel} [data-testid="alias-source-badge"]`)?.textContent,
+        rowSelector(SEEDED))).toBe('Seen in your mail');
+      // The mock account signs in with a password: no provider list to ask.
+      expect(await browser.execute(() =>
+        document.querySelector('[data-testid="aliases-status"]')?.getAttribute('data-status'))).toBe('unsupported');
+      // The login is listed once, as the login.
+      expect(await browser.execute((login) =>
+        document.querySelectorAll(`[data-testid="alias-row"][data-address="${login}"]`).length, account.email)).toBe(1);
+      // Not asserted here: a suggestion from mail delivered to an alias. The
+      // daemon reads `Delivered-To` from the Inbox .eml files in the vault,
+      // and seeding one there has no cheap route through this harness; the
+      // component spec (AliasesSection.test.jsx) covers suggestions.
     });
-  });
 
-  describe('verify button', function () {
-    it('reports the server error instead of claiming success', async function () {
+    it('reports the server error from Verify instead of claiming success', async function () {
       // Addressed to the one recipient the mock SMTP server refuses, so the
-      // submission must fail — the assertion is that the failure surfaces in
+      // submission must fail: the assertion is that the failure surfaces in
       // the modal rather than being swallowed or reported as verified.
-      await setSendAs(account.id, ALIAS);
-      await openSettings();
-      await clickSettingsNav('Accounts');
-
-      await browser.execute(() =>
-        document.querySelector('[data-testid="send-as-verify-btn"]')?.click());
+      await openAliases();
+      await addAliasByHand(ALIAS);
+      await browser.waitUntil(() => click(`${rowSelector(ALIAS)} [data-testid="alias-verify-btn"]`), {
+        timeout: 5000, interval: 100, timeoutMsg: 'the alias row has no Verify button',
+      });
       await browser.pause(400);
 
       const modalState = await browser.execute(() => {
@@ -304,11 +347,11 @@ describe('Connected Send-As Alias', function () {
         };
       });
       expect(modalState).not.toBe(null);
-      // Defaults to the user's own mailbox — the safest place for a test message.
+      // Defaults to the user's own mailbox, the safest place for a test message.
       expect(modalState.recipient).toBe(account.email);
       expect(modalState.text).toContain(ALIAS);
 
-      // Re-address it at the refused recipient — any other address is delivered
+      // Re-address it at the refused recipient: any other address is delivered
       // now, and a delivered test message would verify instead of failing.
       const readdressed = await browser.execute((to) => {
         const el = document.querySelector('[data-testid="send-as-verify-recipient"]');
@@ -345,7 +388,6 @@ describe('Connected Send-As Alias', function () {
         !document.querySelector('[data-testid="send-as-verify-modal"]')), {
         timeout: 5000, interval: 100, timeoutMsg: 'Verify dialog did not close',
       });
-      await closeSettings();
     });
   });
 
@@ -428,21 +470,19 @@ describe('Connected Send-As Alias', function () {
       await closeCompose();
     });
 
-    it('lists an address this mailbox has sent as before', async function () {
-      expect((await seedSentCache()).ok).toBe(true);
+    it('links from the From row to Settings > Accounts > Aliases', async function () {
       await openCompose();
-
-      // The Sent cache is mined after mount, so the option arrives late.
-      await browser.waitUntil(async () => {
-        const from = await fromSelect();
-        return !!from && from.options.some(o => o.text === SEEDED);
-      }, {
-        timeout: 10_000,
-        interval: 300,
-        timeoutMsg: `compose From never offered ${SEEDED} — the mined Sent addresses did not reach the selector`,
+      await browser.waitUntil(() => click('[data-testid="compose-add-address"]'), {
+        timeout: 5000, interval: 100, timeoutMsg: 'the From row has no Add address link',
       });
-
-      await closeCompose();
+      await browser.waitUntil(() => browser.execute(() => {
+        const root = document.querySelector('[data-testid="settings-page"][role="dialog"]');
+        return !!root && [...root.querySelectorAll('[role="tab"][aria-selected="true"]')]
+          .some(tab => tab.textContent.trim() === 'Aliases');
+      }), { timeout: 5000, interval: 100, timeoutMsg: 'Add address did not open Settings > Accounts > Aliases' });
+      expect(await browser.execute(() =>
+        document.querySelector('[data-testid="alias-row"][data-login="true"]')?.getAttribute('data-address'))).toBe(account.email);
+      await closeSettings();
     });
   });
 });

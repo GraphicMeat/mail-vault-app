@@ -84,7 +84,15 @@
       "name": "로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "가능합니다. 설정 → 계정에서 해당 계정의 Send Mail As 항목을 채우거나, 비워 두면 로그인 주소로 발송됩니다. 바뀌는 것은 보내는 메일의 From 주소뿐입니다 — 사용자 이름과 비밀번호는 그대로이고, MailVault는 설정한 계정 그대로 IMAP과 SMTP에 로그인하며, Reply-To 헤더는 추가되지 않습니다. MailVault는 사용자의 메일에서 이미 확인한 주소를 제안하고, 확인 버튼을 누르면 그 주소로 테스트 메일을 한 통 보내 제공업체가 받아들이는지 확인할 수 있습니다. 그 주소는 해당 로그인으로 발송이 허용된 별칭이어야 합니다. Fastmail은 계정에 등록된 모든 별칭을 허용하고, Gmail은 Gmail 설정의 \"Send mail as\"에 등록해야 하며, Microsoft 365는 Send As 권한이 필요합니다."
+        "text": "가능합니다. 설정 → 계정 → 별칭에서 주소를 계정의 별칭으로 추가한 뒤, 메일을 쓸 때 보낸 사람 줄에서 고르거나 기본으로 지정하십시오. 사용자 이름과 비밀번호는 그대로이고, MailVault는 설정한 계정으로 IMAP과 SMTP에 계속 로그인하며, Reply-To 헤더는 추가되지 않습니다. 그 주소는 제공업체가 그 로그인으로 보낼 수 있게 허용한 주소여야 합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "별칭으로 보내려면 어떻게 합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "설정 → 계정을 열어 계정을 고른 다음 별칭 섹션으로 가십시오. 계정이 보내는 데 쓰는 모든 주소가 로그인 주소부터, 이어서 각 별칭 순으로 나옵니다. Google로 로그인한 Google 계정이라면 MailVault가 Gmail에서 보낼 수 있게 허용된 주소를 가져옵니다. 다른 제공업체라면 MailVault가 보낸 적 있는 주소와 메일이 도착하는 주소 등 사용자의 메일에서 찾은 주소를 제안하며, 어떤 주소든 직접 추가할 수 있습니다. 각 별칭에 받는 사람이 볼 이름을 붙이고, 새 메시지를 어느 주소로 시작할지 고르십시오. 확인은 별칭에서 테스트 메시지를 한 통 보내 제공업체가 받아 주는지 알려 줍니다. 제공업체가 그 주소를 허용해야 합니다. Fastmail에서는 먼저 별칭이나 신원으로 추가하고, Gmail에서는 설정 → 계정 및 가져오기 → Send mail as에서 추가하며, Microsoft 365와 Outlook.com에서는 Microsoft 계정에서 별칭을 추가합니다. 바뀌는 것은 보내는 주소와 이름뿐이고 Reply-To 헤더는 추가되지 않으므로, 답장은 별칭으로 돌아옵니다."
       }
     }
   ]
@@ -247,19 +255,34 @@
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">가능합니다. <strong>설정 &rarr; 계정</strong>을 열어 계정을 고른 다음 <strong>Send Mail As</strong>를 채우십시오. 비워 두면 로그인 주소로 보냅니다. Fastmail을 비롯해, 로그인하는 주소와 남에게 알려 주는 주소가 다른 제공업체에서 흔한 설정입니다.</p>
-              <p class="mb-4">바뀌는 것은 보내는 메일의 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 주소뿐입니다. 사용자 이름과 비밀번호는 그대로이고, MailVault는 여전히 설정해 둔 계정으로 IMAP과 SMTP에 로그인하며, <strong>Reply-To 헤더는 추가되지 않습니다</strong> &mdash; 답장은 보낼 때 쓴 주소로 갑니다.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">주소를 찾고 확인하는 방법:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>추천</strong> &mdash; MailVault는 이미 사용자 메일에서 본 주소를 제안합니다. 전에 그 주소로 보낸 적이 있는 것, 그리고 사용자에게 온 메일이 도착하는 주소입니다.</li>
-                <li><strong>확인</strong> &mdash; 그 주소로 시험 메일 한 통을 보냅니다. 기본값은 자기 메일함이며, 믿고 쓰기 전에 제공업체가 그 주소를 받아 주는지 확인할 수 있습니다.</li>
-                <li><strong>거부당한다면</strong> &mdash; 그 주소는 제공업체가 그 로그인으로 보낼 수 있게 허용한 별칭이나 신원이어야 합니다. Fastmail은 계정의 어떤 별칭이든 받아 줍니다. Gmail은 Gmail 설정의 "Send mail as"에 주소를 추가해야 하고, Microsoft 365는 관리자가 준 Send As 권한이 필요합니다.</li>
-              </ul>
-              <p>별칭은 MailVault가 아니라 이메일 제공업체 쪽에서 설정합니다 &mdash; MailVault는 제공업체가 이미 승인한 주소로 보낼 뿐입니다.</p>
+              <p class="mb-4">가능합니다. <a href="#send-from-an-alias" class="text-primary-500 hover:underline">별칭으로 보내려면 어떻게 합니까?</a>에 나온 대로 주소를 계정의 별칭으로 추가한 뒤, 메일을 쓸 때 보낸 사람 줄에서 고르거나 기본으로 지정하십시오. Fastmail을 비롯해, 로그인하는 주소와 남에게 알려 주는 주소가 다른 제공업체에서 흔한 설정입니다.</p>
+              <p>바뀌는 것은 보내는 메일의 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 주소뿐입니다. 사용자 이름과 비밀번호는 그대로이고, MailVault는 여전히 설정해 둔 계정으로 IMAP과 SMTP에 로그인하며, <strong>Reply-To 헤더는 추가되지 않습니다</strong> &mdash; 답장은 보낼 때 쓴 주소로 갑니다.</p>
             </div>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/compose-email-720.webp 720w, /screenshots/ko/compose-email-1440.webp 1440w, /screenshots/ko/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/compose-email-light-1440.webp" srcset="/screenshots/ko/compose-email-light-720.webp 720w, /screenshots/ko/compose-email-light-1440.webp 1440w, /screenshots/ko/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서식 있는 편집을 갖춘 MailVault 작성·답장 창" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
+        </article>
+
+        <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">별칭으로 보내려면 어떻게 합니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><strong>설정 &rarr; 계정</strong>을 열어 계정을 고른 다음 <strong>별칭</strong> 섹션으로 가십시오. 계정이 보내는 데 쓰는 모든 주소가 로그인 주소부터, 이어서 각 별칭 순으로 나옵니다. 새 메시지의 보낸 사람 줄에 있는 <strong>주소 추가</strong> 링크도 같은 섹션을 엽니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">별칭 추가와 설정:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Google 계정</strong>: Google로 로그인했다면 MailVault가 Gmail에서 보낼 수 있게 허용된 주소를 가져와 목록으로 보여 줍니다.</li>
+                <li><strong>다른 제공업체</strong>: MailVault가 보낸 적 있는 주소와 메일이 도착하는 주소 등 사용자의 메일에서 찾은 주소를 제안합니다. 어떤 주소든 직접 추가할 수도 있습니다.</li>
+                <li><strong>이름</strong>: 각 별칭에 받는 사람이 볼 이름을 붙이십시오. 별칭에서 보낸 메일은 그 이름으로 나갑니다.</li>
+                <li><strong>기본</strong>: 새 메시지를 어느 주소로 시작할지 고르십시오.</li>
+                <li><strong>확인</strong>: 별칭에서 테스트 메시지를 한 통 보내, 믿고 쓰기 전에 제공업체가 받아 주는지 알 수 있습니다.</li>
+              </ul>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">제공업체가 그 주소를 허용해야 합니다:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Fastmail</strong>: 먼저 Fastmail에서 주소를 별칭이나 신원으로 추가하십시오.</li>
+                <li><strong>Gmail</strong>: Gmail의 <strong>설정 &rarr; 계정 및 가져오기 &rarr; Send mail as</strong>에서 추가하십시오.</li>
+                <li><strong>Microsoft 365와 Outlook.com</strong>: 별칭은 Microsoft 계정에서 추가합니다. 직접 추가하거나, 회사 또는 학교 계정이라면 관리자가 추가합니다.</li>
+              </ul>
+              <p>바뀌는 것은 보내는 주소와 이름뿐입니다. MailVault는 설정한 계정으로 계속 로그인하며, <strong>Reply-To 헤더는 추가되지 않으므로</strong> 답장은 별칭으로 돌아옵니다.</p>
+            </div>
         </article>
 
       </div>

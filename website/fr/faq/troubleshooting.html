@@ -78,6 +78,14 @@
         "@type": "Answer",
         "text": "MailVault garde une copie de votre liste de dossiers sur le disque : les dossiers apparaissent donc instantanément lorsque vous ouvrez un compte, et cette liste est actualisée depuis le serveur au plus une fois toutes les dix minutes. Si vous créez, renommez ou supprimez un dossier dans le webmail ou un autre client, MailVault détecte le changement la prochaine fois qu’il ouvre ce compte ou que vous cliquez sur un dossier dans la barre latérale, une fois les dix minutes écoulées — un nouveau dossier apparaît donc normalement dans les dix minutes. Redémarrer l’application ne l’accélère pas, car la liste en cache est stockée sur le disque et survit au redémarrage. Le bouton Actualiser recharge les messages du dossier que vous lisez ; la liste des dossiers suit son propre contrôle toutes les dix minutes. Les sous-dossiers ne demandent aucune configuration : MailVault dessine la hiérarchie à partir des chemins signalés par le serveur ; un nouveau sous-dossier apparaît sous son parent, et les dossiers des comptes que vous ne consultez pas sont actualisés en arrière-plan selon le même rythme."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault affiche « Pas de connexion internet », mais mon internet fonctionne. Pourquoi ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quand une connexion à un serveur de messagerie échoue d'une façon qui met en cause le réseau, MailVault vérifie lui-même l'accès à internet et n'affiche Pas de connexion internet que si rien ne répond. Votre courrier reste lisible sur cet ordinateur, la synchronisation en arrière-plan se met en pause et la bannière disparaît d'elle-même dès que la vérification réussit. La vérification interrogeait auparavant trois serveurs DNS publics sur le seul port DNS, que bloquent de nombreux réseaux d'entreprise, VPN et fournisseurs d'accès. Elle essaie désormais aussi ces serveurs sur le port 443 ainsi que vos propres serveurs de messagerie, et une seule réponse suffit pour que vous soyez en ligne ; les serveurs de messagerie sur cet ordinateur ou votre réseau local, comme Proton Mail Bridge, sont exclus. Si internet fonctionne mais qu'un pare-feu ou un VPN bloque le port d'un serveur de messagerie, MailVault ne dit pas qu'internet est coupé : il nomme le serveur et le port qui n'ont pas répondu, par exemple imap.example.com, port 993, pour que votre service informatique puisse l'autoriser. Quoi que dise la bannière, ouvrir ou supprimer un message fonctionne toujours."
+      }
     }
   ]
 }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Les sous-dossiers ne demandent aucune configuration.</strong> MailVault construit l’arborescence à partir des chemins signalés par le serveur ; un nouveau sous-dossier apparaît donc sous son parent, avec le bon nom et au bon endroit. Les comptes que vous ne consultez pas sont actualisés en arrière-plan selon le même rythme, quelques-uns à la fois ; passer à l’un d’eux affiche donc rarement une liste obsolète.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault affiche « Pas de connexion internet », mais mon internet fonctionne. Pourquoi ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Ce qui fait apparaître la bannière.</strong> Quand une connexion à un serveur de messagerie échoue d'une façon qui met en cause le réseau, MailVault vérifie lui-même l'accès à internet et n'affiche <strong>Pas de connexion internet</strong> que si rien ne répond. Tant que la bannière est affichée, votre courrier est toujours là : MailVault montre ce qui est déjà enregistré sur cet ordinateur, met en pause la synchronisation en arrière-plan et retire la bannière de lui-même dès que la vérification réussit. <strong>Réessayer</strong> relance la vérification tout de suite.
+              </p>
+              <p>
+                <strong>La vérification porte désormais aussi sur vos propres serveurs de messagerie.</strong> Elle interrogeait auparavant trois serveurs DNS publics sur le seul port DNS. De nombreux réseaux d'entreprise, VPN et fournisseurs d'accès bloquent ce port, si bien que la bannière s'y affichait alors que tout le reste fonctionnait. Elle essaie désormais aussi ces serveurs sur le port 443, celui des sites web sécurisés, ainsi que vos propres serveurs de messagerie : une seule réponse suffit pour que vous soyez en ligne. Les serveurs de messagerie sur cet ordinateur ou votre réseau local, comme Proton Mail Bridge, sont exclus, car ils répondent même quand internet est coupé. Chaque connexion de la vérification est listée dans Paramètres &rarr; Confidentialité et sécurité &rarr; Activité réseau.
+              </p>
+              <p>
+                <strong>Un port bloqué, c'est différent.</strong> Si internet fonctionne mais qu'un pare-feu ou un VPN bloque le port d'un serveur de messagerie, MailVault ne dit pas qu'internet est coupé. Il nomme le serveur et le port qui n'ont pas répondu, par exemple « Aucune réponse de imap.example.com, port 993 », et indique qu'un pare-feu ou un VPN le bloque peut-être. L'ajout d'un compte qui ne parvient pas à se connecter affiche la même chose. Transmettez ce nom de serveur et ce port à votre service informatique pour qu'il l'autorise, ou essayez un autre réseau.
+              </p>
+              <p>
+                <strong>Rien de ce que vous demandez n'est bloqué.</strong> Quoi que dise la bannière, ouvrir ou supprimer un message fonctionne toujours, car un mauvais diagnostic ne doit jamais vous empêcher d'accéder à votre propre courrier.
               </p>
             </div>
         </article>

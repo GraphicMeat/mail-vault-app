@@ -84,7 +84,15 @@
         "name": "Can I send from a different address than the one I log in with?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. In Settings → Accounts, fill in the Send Mail As field for the account, or leave it blank to send from your login address. Only the From address on outgoing mail changes — your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail, and a Verify button sends a single test message from the address so you can confirm your provider accepts it. The address must be an alias your provider lets that login send from: Fastmail accepts any alias on the account, Gmail requires it under \"Send mail as\" in Gmail settings, and Microsoft 365 requires Send As permission."
+          "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I send from an alias?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
         }
       }
     ]
@@ -247,19 +255,34 @@
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I send from a different address than the one I log in with?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Yes. Open <strong>Settings &rarr; Accounts</strong>, pick the account, and fill in <strong>Send Mail As</strong>. Leave it blank to send from your login address. This is common on Fastmail and on any provider where the address you sign in with is not the address you hand out.</p>
-              <p class="mb-4">Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in to IMAP and SMTP as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Finding and checking the address:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Suggestions</strong> &mdash; MailVault offers addresses it has already seen in your own mail: ones you have sent as before, and ones that mail addressed to you arrives on.</li>
-                <li><strong>Verify</strong> &mdash; sends a single test message from the address, to your own mailbox by default, so you can confirm your provider accepts it before you rely on it.</li>
-                <li><strong>If it is refused</strong> &mdash; the address has to be an alias or identity your provider lets that login send from. Fastmail accepts any alias on the account; Gmail needs the address added under "Send mail as" in Gmail settings, and Microsoft 365 needs Send As permission from an administrator.</li>
-              </ul>
-              <p>Aliases are configured with your email provider, not in MailVault &mdash; MailVault sends as an address your provider has already authorised.</p>
+              <p class="mb-4">Yes. Add the address as an alias of the account, as described in <a href="#send-from-an-alias" class="text-primary-500 hover:underline">How do I send from an alias?</a>, then pick it in the From row when you write, or make it the default. This is common on Fastmail and on any provider where the address you sign in with is not the address you hand out.</p>
+              <p>Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in to IMAP and SMTP as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
             </div>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/compose-email-720.webp 720w, /screenshots/compose-email-1440.webp 1440w, /screenshots/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/compose-email-light-1440.webp" srcset="/screenshots/compose-email-light-720.webp 720w, /screenshots/compose-email-light-1440.webp 1440w, /screenshots/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault compose and reply modal with rich text editing" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
+        </article>
+
+        <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I send from an alias?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Open <strong>Settings &rarr; Accounts</strong>, pick the account and go to its <strong>Aliases</strong> section. It lists every address the account sends from: its login address first, then each alias. The <strong>Add address</strong> link in the From row of a new message opens the same section.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Adding and setting up an alias:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Google accounts</strong>: if you signed in with Google, MailVault fetches the addresses Gmail lets you send as and lists them for you.</li>
+                <li><strong>Other providers</strong>: MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at. You can also add any address by hand.</li>
+                <li><strong>Name</strong>: give each alias the name recipients should see. Mail sent from the alias goes out under that name.</li>
+                <li><strong>Default</strong>: choose which address new messages start from.</li>
+                <li><strong>Verify</strong>: sends one test message from the alias, so you can see whether your provider accepts it before you rely on it.</li>
+              </ul>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Your provider has to allow the address:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Fastmail</strong>: add the address as an alias or identity in Fastmail first.</li>
+                <li><strong>Gmail</strong>: add it in Gmail under <strong>Settings &rarr; Accounts and Import &rarr; Send mail as</strong>.</li>
+                <li><strong>Microsoft 365 and Outlook.com</strong>: aliases are added in the Microsoft account, by you or, on a work or school account, by your administrator.</li>
+              </ul>
+              <p>Only the From address and name change. MailVault still signs in as the account you set up, and <strong>no Reply-To header is added</strong>, so replies come back to the alias.</p>
+            </div>
         </article>
 
       </div>

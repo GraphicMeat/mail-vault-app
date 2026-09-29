@@ -78,6 +78,14 @@
         "@type": "Answer",
         "text": "MailVault conserva su disco una copia dell'elenco delle cartelle, così le cartelle compaiono subito quando apri un account, e aggiorna l'elenco dal server al massimo una volta ogni dieci minuti. Se crei, rinomini o elimini una cartella nella webmail o in un altro client, MailVault rileva la modifica alla successiva apertura dell'account o quando fai clic su una cartella nella barra laterale, dopo che sono trascorsi dieci minuti — quindi una nuova cartella compare di norma entro dieci minuti. Riavviare l'app non la rende più veloce, perché l'elenco memorizzato è sul disco e sopravvive al riavvio. Il pulsante Aggiorna ricarica i messaggi della cartella che stai leggendo; l'elenco delle cartelle segue il proprio controllo ogni dieci minuti. Le sottocartelle non richiedono configurazione: MailVault disegna la gerarchia dai percorsi segnalati dal server, così una nuova sottocartella compare sotto la cartella madre e le cartelle degli account che non stai guardando vengono aggiornate in background secondo lo stesso programma."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault dice “Nessuna connessione a internet”, ma la mia connessione funziona. Perché?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quando una connessione a un server di posta non riesce in un modo che fa pensare alla rete, MailVault controlla da solo internet e mostra Nessuna connessione a internet solo se non risponde nulla. La tua posta resta leggibile da questo computer, la sincronizzazione in background si mette in pausa e il banner sparisce da solo appena il controllo riesce. Prima il controllo interrogava tre server DNS pubblici solo sulla porta DNS, che molte reti aziendali, VPN e provider internet bloccano. Ora prova quei server anche sulla porta 443 e i tuoi server di posta, e basta che uno risponda perché tu sia online; i server di posta su questo computer o sulla tua rete locale, come Proton Mail Bridge, sono esclusi. Se internet funziona ma un firewall o una VPN blocca la porta usata da un server di posta, MailVault non dice che internet non c'è: indica il server e la porta che non hanno risposto, per esempio imap.example.com, porta 993, così il tuo reparto IT può consentirla. Qualunque cosa dica il banner, aprire o eliminare un messaggio funziona comunque."
+      }
     }
   ]
 }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Le sottocartelle non richiedono configurazione.</strong> MailVault costruisce l'albero dai percorsi segnalati dal server, quindi una nuova sottocartella compare sotto la sua cartella madre con il nome e la posizione corretti. Gli account che non stai leggendo vengono aggiornati in background secondo lo stesso programma, un paio alla volta, così passando a uno di essi raramente vedrai un elenco non aggiornato.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault dice “Nessuna connessione a internet”, ma la mia connessione funziona. Perché?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Cosa fa comparire il banner.</strong> Quando una connessione a un server di posta non riesce in un modo che fa pensare alla rete, MailVault controlla da solo internet e mostra <strong>Nessuna connessione a internet</strong> solo se non risponde nulla. Finché il banner è visibile, la tua posta è ancora lì: MailVault mostra ciò che è già salvato su questo computer, mette in pausa la sincronizzazione in background e toglie il banner da solo appena il controllo riesce. <strong>Controlla di nuovo</strong> esegue subito il controllo.
+              </p>
+              <p>
+                <strong>Ora controlla anche i tuoi server di posta.</strong> Prima il controllo interrogava tre server DNS pubblici solo sulla porta DNS. Molte reti aziendali, VPN e provider internet bloccano quella porta, quindi su quelle reti il banner compariva mentre tutto il resto funzionava. Ora prova quei server anche sulla porta 443, quella dei siti web sicuri, e in più i tuoi server di posta: basta che uno risponda perché tu sia online. I server di posta su questo computer o sulla tua rete locale, come Proton Mail Bridge, sono esclusi, perché rispondono anche quando internet non c'è. Ogni connessione del controllo è elencata in Impostazioni &rarr; Privacy e sicurezza &rarr; Attività di rete.
+              </p>
+              <p>
+                <strong>Una porta bloccata si presenta diversamente.</strong> Se internet funziona ma un firewall o una VPN blocca la porta usata da un server di posta, MailVault non dice che internet non c'è. Indica il server e la porta che non hanno risposto, per esempio “Nessuna risposta da imap.example.com, porta 993”, e dice che un firewall o una VPN potrebbe bloccarla. Aggiungendo un account che non riesce a connettersi vedi lo stesso messaggio. Passa quel nome di server e quella porta al tuo reparto IT perché la consenta, oppure prova un'altra rete.
+              </p>
+              <p>
+                <strong>Nulla di ciò che chiedi viene bloccato.</strong> Qualunque cosa dica il banner, aprire o eliminare un messaggio funziona comunque, perché una diagnosi sbagliata non deve mai chiuderti fuori dalla tua posta.
               </p>
             </div>
         </article>

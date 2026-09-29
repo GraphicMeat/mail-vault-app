@@ -5,7 +5,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, ownAddresses } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, viewOwnAddresses } from '../stores/slices/unifiedHelpers';
 import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
@@ -234,20 +234,19 @@ function EmailListComponent({ stacked = false }) {
   const getChatEmails = useMessageListStore(s => s.getChatEmails);
   const getSentMailboxPath = useMessageListStore(s => s.getSentMailboxPath);
   const refreshBackedUpUids = useMessageListStore(s => s.refreshBackedUpUids);
-  const activeAccountEmail = useAccountStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
   // Whether this list threads Sent in: an account's INBOX, or All inboxes
   // showing INBOX (every account's INBOX at once).
   const mergesSent = useAccountStore(mergesSentIntoThreads);
   const accounts = useAccountStore(s => s.accounts);
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
+  const aliases = useSettingsStore(s => s.aliases);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
-  // "You", for sender grouping. All inboxes holds every visible account's mail,
-  // so a reply from any of them is yours, not a correspondent's.
+  // "You", for sender grouping: the login, default From and aliases of the
+  // account on screen. All inboxes holds every visible account's mail, so a
+  // reply from any of them is yours, not a correspondent's.
   const userAddress = useMemo(
-    () => (activeMailbox === 'UNIFIED'
-      ? ownAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts)
-      : activeAccountEmail),
-    [activeMailbox, accounts, activeAccountId, sendAsAddresses, hiddenAccounts, activeAccountEmail],
+    () => viewOwnAddresses({ accounts, activeAccountId, activeMailbox }, sendAsAddresses, hiddenAccounts, aliases),
+    [activeMailbox, accounts, activeAccountId, sendAsAddresses, hiddenAccounts, aliases],
   );
 
   // Shared row props — subscribed once in parent, passed to all rows via props

@@ -70,10 +70,6 @@ vi.mock('../../services/db', () => ({
   saveAccount: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/authUtils', () => ({ ensureFreshToken: vi.fn(async (a) => a) }));
-vi.mock('../../utils/sendAsSuggestions', async (orig) => ({
-  ...(await orig()),
-  suggestSendAsAddresses: vi.fn().mockResolvedValue([]),
-}));
 
 const account = { id: 'acct-1', email: 'me@example.test', name: 'Me' };
 const mail = {

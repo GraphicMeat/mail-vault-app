@@ -625,8 +625,9 @@ describe('isFromUser — edge cases', () => {
 
   it('handles from address with whitespace', () => {
     const email = { from: { address: ' me@example.com ' } };
-    // Current implementation doesn't trim, so this won't match
-    expect(isFromUser(email, 'me@example.com')).toBe(false);
+    // Own-address matching trims and case-folds (ownAddresses.js), so stray
+    // whitespace from a header does not make the user a stranger.
+    expect(isFromUser(email, 'me@example.com')).toBe(true);
   });
 
   it('handles missing from.address', () => {

@@ -78,6 +78,14 @@ describe('Network Activity', () => {
     expect(screen.getByTestId('net-row').textContent).toContain('person@example.test');
   });
 
+  // The daemon's `aliases.discover` asks Gmail for the send-as list.
+  it('words the send-as alias lookup', async () => {
+    await mount([ev({ host: 'gmail.googleapis.com', protocol: 'https', port: 443, purpose: 'alias lookup', account: 'person@example.test' })]);
+    const row = screen.getByTestId('net-row');
+    expect(row.textContent).toContain('Alias lookup');
+    expect(row.textContent).not.toContain('alias lookup');
+  });
+
   // An update check or a model download is no account's: said, not left blank.
   it('says a connection is not tied to an account, on screen and in Copy as text', async () => {
     await mount([ev({ host: 'app.test', protocol: 'https', purpose: 'AI model', account: null })]);

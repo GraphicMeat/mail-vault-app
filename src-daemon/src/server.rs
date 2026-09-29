@@ -630,6 +630,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::net_activity::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::aliases::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -927,7 +930,9 @@ mod tests {
             // connection error, never on the gate text this test checks for.
             ("imap_get_mailboxes", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
             // Task 5.4b: same reasoning, write-path family. Bogus host/port
-            // so this fails fast on a connection error too, never a success.
+            // so this fails fast on a connection error too. A failed test is
+            // a `success:false` result (no RPC error, so `err_message` is
+            // empty), which still never contains the gate text.
             ("imap_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
             // Task 5.5: SMTP is its own flat family, same reasoning — a live
             // SMTP probe has nothing to do with the vault gate. `imapHost` is
