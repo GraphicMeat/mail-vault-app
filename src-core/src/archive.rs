@@ -24,6 +24,7 @@ use tokio::task::JoinSet;
 use tracing::{info, warn};
 
 use crate::imap::{self, ImapConfig, ImapPool};
+use crate::transfer_limits::BackgroundLimit;
 use crate::vault_files;
 use crate::vault_registry::VaultRegistry;
 
@@ -155,7 +156,7 @@ pub async fn run(
     cancel: Arc<AtomicBool>,
     background: bool,
 ) -> Result<ArchiveProgress, String> {
-    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive", background).await
+    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive", background, None).await
 }
 
 pub async fn run_with_backup(
@@ -180,6 +181,13 @@ pub async fn run_with_backup(
     // hold every priority session and queue the message the user clicks.
     // A save the user asked for right now stays on the priority lane.
     background: bool,
+    // The daily download limit, for a run that is background work (a backup).
+    // Looked at before the first message and then once per `check_every`
+    // messages; when the day's allowance is spent the run stops the way a
+    // cancel does, and `limit.hit()` tells the caller it was the limit (not
+    // the user, and not the provider's own bandwidth cut-off) that ended it.
+    // `None` (a manual archive) never stops for it.
+    limit: Option<BackgroundLimit>,
 ) -> Result<ArchiveProgress, String> {
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
@@ -203,6 +211,8 @@ pub async fn run_with_backup(
     let last_err_msg: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
     // How the backup drive is actually behaving, shared by every task in this run.
     let pace = Arc::new(DrivePace::default());
+    // Messages that reached the fetch step, for the limit's every-N look.
+    let started = Arc::new(AtomicUsize::new(0));
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
     // The IMAP pool lives on ctx (injected: the app's managed state or the
@@ -255,6 +265,8 @@ pub async fn run_with_backup(
         let ext_failures = Arc::clone(&ext_failures);
         let last_err_msg = Arc::clone(&last_err_msg);
         let pace = Arc::clone(&pace);
+        let limit = limit.clone();
+        let started = Arc::clone(&started);
         let listed = vault_listing.get(&uid).cloned();
         let in_mirror = mirror_uids.contains(&uid);
 
@@ -263,6 +275,21 @@ pub async fn run_with_backup(
 
             if cancel.load(Ordering::Relaxed) {
                 return None;
+            }
+
+            // The daily limit. The look is two small reads, so it runs on a
+            // blocking thread; the message that finds it spent is not fetched,
+            // and setting `cancel` ends every sibling task the same way.
+            if let Some(limit) = limit {
+                let n = started.fetch_add(1, Ordering::Relaxed);
+                if n % limit.check_every.max(1) == 0 {
+                    let spent = tokio::task::spawn_blocking(move || limit.check()).await.ok().flatten();
+                    if spent.is_some() {
+                        cancel.store(true, Ordering::Relaxed);
+                        warn!("archive_emails: daily download limit reached — stopping run");
+                        return None;
+                    }
+                }
             }
 
             // The drive is struggling. Hammering it harder is how a backup ends

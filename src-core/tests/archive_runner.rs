@@ -234,6 +234,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
         false, // remove_existing
         "archive",
         false,
+        None,
     )
     .await
     .expect("run does not error");
@@ -380,4 +381,92 @@ async fn a_background_archive_does_not_queue_the_message_you_click() {
 
     cancel.store(true, Ordering::Relaxed);
     run.await.expect("archive task").expect("archive run");
+}
+
+// ── (e) the daily download limit stops a background run, once ───────────────
+
+/// A background run (a backup) looks at the day's allowance before each
+/// message it starts (`check_every` 1 here) and stops the way a cancel does
+/// the moment it is spent. The script lets the first two looks through, so
+/// exactly two messages are stored; `hit()` is how the caller tells the limit
+/// from a user cancel.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_spent_daily_limit_stops_a_background_run_after_the_messages_it_allowed() {
+    use mailvault_core::transfer_limits::{Allowance, BackgroundLimit, Clock};
+    use std::sync::atomic::AtomicUsize;
+
+    let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 6)));
+    let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::new(pool()),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
+    });
+
+    let looks = Arc::new(AtomicUsize::new(0));
+    let script = Arc::clone(&looks);
+    let limit = BackgroundLimit::with_allowance(
+        Arc::new(move || {
+            let n = script.fetch_add(1, Ordering::SeqCst);
+            Some(Allowance { limit_bytes: 100, used_bytes: if n < 2 { 0 } else { 100 } })
+        }),
+        Clock::pinned(1_773_144_000_000),
+    )
+    .check_every(1);
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let result = archive::run_with_backup(
+        ctx,
+        "acct".to_string(),
+        account_json(&server),
+        "INBOX".to_string(),
+        vec![1, 2, 3, 4, 5, 6],
+        Arc::clone(&cancel),
+        None,
+        None,
+        false,
+        "backup",
+        true,
+        Some(limit.clone()),
+    )
+    .await
+    .expect("run does not error");
+
+    assert_eq!(result.completed, 2, "only the messages let through before the limit were fetched");
+    assert_eq!(result.errors, 0, "stopping at the limit is not a failed message");
+    assert!(!result.bandwidth_limited, "the provider did not stop this run; the user's limit did");
+    assert!(cancel.load(Ordering::SeqCst), "the run stops the way a cancel does");
+    assert_eq!(limit.hit().map(|a| a.limit_bytes), Some(100));
+    assert_eq!(file_names(&cur_dir(root.path(), "acct", "INBOX")).len(), 2);
+}
+
+/// Without a limit nothing about a run changes: a manual archive never stops
+/// for the daily allowance.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_without_a_limit_fetches_everything() {
+    let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 4)));
+    let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::new(pool()),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
+    });
+    let result = archive::run(
+        ctx,
+        "acct".to_string(),
+        account_json(&server),
+        "INBOX".to_string(),
+        vec![1, 2, 3, 4],
+        Arc::new(AtomicBool::new(false)),
+        false,
+    )
+    .await
+    .expect("run does not error");
+    assert_eq!(result.completed, 4);
 }

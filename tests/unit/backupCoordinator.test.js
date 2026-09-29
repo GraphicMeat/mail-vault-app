@@ -94,7 +94,7 @@ vi.mock('../../src/services/snapshotService', () => ({
 // Destructured off a dynamic import on purpose: a named static import of an
 // export the module does not have yet is a link error that kills every test in
 // the file, which is not the RED we want to read.
-const { backupScheduler, State, computeNextEligibleTime, BACKUP_STALL_MS, terminalFrameToResult } = await import(
+const { backupScheduler, State, computeNextEligibleTime, BACKUP_STALL_MS, terminalFrameToResult, LIMIT_RESUME_MARGIN_MS } = await import(
   '../../src/services/backupScheduler'
 );
 const api = await import('../../src/services/api');
@@ -1638,5 +1638,122 @@ describe('BackupCoordinator - manual trigger edge cases', () => {
 
     expect(mockSetQueue.mock.calls[0][0]).toEqual(['acc-1', 'acc-2']);
     await settle();
+  });
+});
+
+// A run that stops at the account's daily download limit is neither a failure
+// nor a cancel: it keeps its resume position, says so on the card, is not run
+// again before the reset, and runs again right after it (UTC midnight, which
+// the daemon's terminal frame carries as `resume_after_ms`).
+describe('BackupCoordinator — stopped at the daily download limit', () => {
+  const HOUR = 3600_000;
+
+  beforeEach(() => {
+    resetCoordinator();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date('2030-01-05T20:00:00Z'));
+  });
+  afterEach(() => {
+    backupScheduler.stopAll();
+    vi.useRealTimers();
+  });
+
+  const limitFrame = (over = {}) => ({
+    emails_backed_up: 12,
+    success: false,
+    cancelled: true,
+    completed_folders: 2,
+    stop_reason: 'limit_reached',
+    limit_bytes: 2000 * 1024 * 1024,
+    resume_after_ms: Date.now() + 4 * HOUR, // 2030-01-06T00:00:00Z
+    ...over,
+  });
+
+  it('the terminal frame carries the reason, the limit and the reset time to the run', () => {
+    const result = terminalFrameToResult({
+      account_id: 'acc-1', active: false, cancelled: true, success: false, completed_folders: 2,
+      stop_reason: 'limit_reached', limit_bytes: 42, resume_after_ms: 99,
+    });
+    expect(result).toMatchObject({ cancelled: true, stop_reason: 'limit_reached', limit_bytes: 42, resume_after_ms: 99 });
+    // An ordinary frame carries none of it.
+    expect(terminalFrameToResult({ active: false, cancelled: true })).toMatchObject({ stop_reason: null, limit_bytes: null, resume_after_ms: null });
+  });
+
+  it('keeps the checkpoint, words the stop for the card, and is neither a failure nor a history entry', async () => {
+    api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(backupScheduler._checkpoints.get('acc-1')).toBe(2);
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', {
+      lastStatus: 'limit',
+      lastError: t('svc.backupScheduler.stoppedAtDailyLimit', { limit: 2000 }),
+    });
+    expect(mockSettingsState.addBackupHistoryEntry).not.toHaveBeenCalled();
+    expect(backupScheduler._retryCount.has('acc-1')).toBe(false);
+    expect(backupScheduler.isRunning('acc-1')).toBe(false);
+  });
+
+  it('does not run the account again before the reset, then runs it from its checkpoint right after', async () => {
+    api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+
+    // Every automatic path re-queues through queueBackup: held until the reset.
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(2 * HOUR);
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(HOUR + 59 * 60_000);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+
+    // Past midnight UTC (+ the margin) the account is queued by its own timer.
+    api.backupRunAccount.mockImplementationOnce(finishWith({ emails_backed_up: 7, success: true, completed_folders: 9 }));
+    await vi.advanceTimersByTimeAsync(60_000 + LIMIT_RESUME_MARGIN_MS);
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    expect(api.backupRunAccount).toHaveBeenLastCalledWith('acc-1', expect.any(String), null, 2);
+    expect(backupScheduler._checkpoints.has('acc-1')).toBe(false);
+    expect(backupScheduler._limitHolds.size).toBe(0);
+  });
+
+  it('resolves a manual run as limit_reached, with the words and the reset time', async () => {
+    const resumeAfterMs = Date.now() + 4 * HOUR;
+    api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame({ resume_after_ms: resumeAfterMs })));
+
+    const manual = backupScheduler.triggerManualBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(await manual).toEqual({
+      status: 'limit_reached',
+      message: t('svc.backupScheduler.stoppedAtDailyLimit', { limit: 2000 }),
+      resumeAfterMs,
+    });
+  });
+
+  it('a manual backup is not held: it asks the daemon, which knows whether the day is still spent', async () => {
+    api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    api.backupRunAccount.mockImplementationOnce(finishWith({ emails_backed_up: 1, success: true }));
+    const manual = backupScheduler.triggerManualBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    expect(await manual).toMatchObject({ status: 'success' });
+  });
+
+  it('stopAll drops the hold and its timer', async () => {
+    api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(backupScheduler._limitHolds.size).toBe(1);
+
+    backupScheduler.stopAll();
+    expect(backupScheduler._limitHolds.size).toBe(0);
+    await vi.advanceTimersByTimeAsync(5 * HOUR);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
   });
 });

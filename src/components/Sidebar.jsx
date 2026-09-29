@@ -166,6 +166,8 @@ function BackupStatusIcon({ accountId, onClick }) {
   const isSuccess = backupState?.lastStatus === 'success';
   // Partial run: the vault got most of it, but something did not arrive.
   const isDegraded = backupState?.lastStatus === 'degraded';
+  // Stopped at the daily download limit: healthy, carries on after midnight UTC.
+  const isLimitPaused = backupState?.lastStatus === 'limit';
   const lastBackup = backupState?.lastBackupTime || 0;
   const neverBackedUp = lastBackup === 0;
 
@@ -178,13 +180,14 @@ function BackupStatusIcon({ accountId, onClick }) {
   // Show a healthy status if the last backup succeeded — even if slightly overdue, it means the backup
   // ran fine and the scheduler just hasn't had a chance to run again yet.
   // Show amber only for failures, never-backed-up, or overdue WITHOUT a success status.
-  const showWarning = isFailed || isDegraded || neverBackedUp || (isOverdue && !isSuccess);
+  const showWarning = !isLimitPaused && (isFailed || isDegraded || neverBackedUp || (isOverdue && !isSuccess));
 
   const icon = showWarning
     ? <AlertCircle size={12} aria-hidden="true" />
     : <CheckCircle2 size={12} aria-hidden="true" />;
 
-  const title = isFailed ? t('sidebar.backupFailedClickView')
+  const title = isLimitPaused ? t('sidebar.backupPausedAtDailyLimit')
+    : isFailed ? t('sidebar.backupFailedClickView')
     : isDegraded ? t('sidebar.backupIncompleteClickView')
     : neverBackedUp ? t('sidebar.neverBackedUpClickConfigure')
     : isOverdue && !isSuccess ? t('sidebar.backupOverdueClickView')

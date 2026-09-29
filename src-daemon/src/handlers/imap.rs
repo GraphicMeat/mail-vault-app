@@ -230,6 +230,30 @@ pub(crate) fn opened_intent(params: &Value) -> bool {
     params.get("intent").and_then(Value::as_str) != Some("backfill")
 }
 
+/// The `limitReached` answer of `imap_get_email_light` for a download-ahead
+/// fetch (`intent: backfill`) when the account's daily download limit is spent
+/// for the UTC day, else `None`. Needs the app's account id (the limit is
+/// keyed by it); a call without one cannot be judged and goes through.
+/// Shape: `{success: false, limitReached: true, limitBytes, resumeAfterMs,
+/// uid, mailbox}`, `resumeAfterMs` being the next UTC midnight in epoch ms.
+async fn backfill_refusal(state: &Arc<DaemonState>, account_id: Option<&str>, host: &str, uid: u32, mailbox: &str) -> Option<Value> {
+    let account_id = account_id?.to_string();
+    let (app_dir, host, now) = (state.app_dir.clone(), host.to_string(), state.clock.now_ms());
+    let status = blocking(move || mailvault_core::transfer_limits::background_status_at(&app_dir, &account_id, &host, now))
+        .await
+        .ok()
+        .flatten()
+        .filter(|a| a.is_spent())?;
+    Some(json!({
+        "success": false,
+        "limitReached": true,
+        "limitBytes": status.limit_bytes,
+        "resumeAfterMs": mailvault_core::transfer_limits::next_utc_midnight_ms(now),
+        "uid": uid,
+        "mailbox": mailbox,
+    }))
+}
+
 /// Ported from `commands.rs` verbatim: a pooled socket the peer closed while
 /// it sat idle answers its first command with a connection-lost error, which
 /// reads to the user as the server refusing a message that's sitting right
@@ -462,6 +486,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // whole message bodies.
             let use_background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let opened = opened_intent(params);
+            // The daily download limit governs the download-ahead pipeline
+            // (`intent: backfill`), which is background work: once the day's
+            // allowance is spent the answer is a typed `limitReached` payload
+            // (like `gone`, not an RPC error) and the app pauses caching until
+            // the reset. A message the user opened, exported or was announced
+            // by IDLE (`cache_arrivals`) is everyday mail: never refused here.
+            if !opened {
+                if let Some(refusal) = backfill_refusal(state, account_id.as_deref(), &account.host, uid, &mailbox).await {
+                    return Some(RpcResponse::success(id, refusal));
+                }
+            }
             let mb_clone = mailbox.clone();
             let started = std::time::Instant::now();
             // Written through by `checkout` (permit/connect/reuse) and by
@@ -1151,6 +1186,113 @@ mod tests {
         }
         let files = cached_files(&dir);
         assert_eq!(files.len(), 3, "{files:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+
+    // ── The daily download limit: download-ahead is refused, opening is not ──
+
+    const NOON: i64 = 1_773_144_000_000; // 2026-03-10T12:00:00Z
+    const MIB: u64 = 1024 * 1024;
+
+    /// Hoarder mode (every body is kept, so `cached` is about the limit and not
+    /// the window) with a 1 MiB daily limit ON for `acc1`, all of it spent on
+    /// the UTC day the state's clock is stopped at.
+    fn spent_limit(dir: &std::path::Path, s: &Arc<DaemonState>) {
+        s.clock.set(NOON);
+        write_settings(dir, json!({
+            "fetchMode": "hoarder",
+            "transferLimits": {"acc1": {"capEnabled": true, "dailyDownLimitBytes": MIB}},
+        }));
+        mailvault_core::app_db::with(dir, |c| mailvault_core::app_db::stats::add(c, "acc1", "2026-03-10", "daemon", MIB, 0)).unwrap();
+    }
+
+    fn light_params(server: &MockImap, uid: u32, intent: Option<&str>) -> Value {
+        let mut params = json!({"account": account_json(server), "uid": uid, "mailbox": "INBOX", "accountId": "acc1"});
+        if let Some(intent) = intent {
+            params["intent"] = json!(intent);
+        }
+        params
+    }
+
+    #[tokio::test]
+    async fn download_ahead_is_refused_at_the_limit_but_an_opened_message_is_not() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let (dir, s) = light_state();
+        spent_limit(&dir, &s);
+
+        // Download-ahead: a typed success-shaped payload, no server contact.
+        let resp = call(&s, "imap_get_email_light", light_params(&server, 1, Some("backfill"))).await;
+        let refused = resp.result.expect("limitReached is a payload, not an RPC error");
+        assert_eq!(refused["success"], json!(false));
+        assert_eq!(refused["limitReached"], json!(true));
+        assert_eq!(refused["limitBytes"], json!(MIB));
+        assert_eq!(refused["resumeAfterMs"], json!(NOON + 12 * 60 * 60 * 1000), "the next UTC midnight");
+        assert_eq!(refused["uid"], json!(1));
+        assert_eq!(refused["mailbox"], json!("INBOX"));
+        assert_eq!(server.count_commands("BODY.PEEK[]"), 0, "a refused fetch sends the server nothing");
+        assert!(cached_files(&dir).is_empty());
+
+        // The same message, opened (no intent) or exported: everyday mail.
+        for (uid, intent) in [(1, None), (2, Some("export"))] {
+            let resp = call(&s, "imap_get_email_light", light_params(&server, uid, intent)).await;
+            let opened = resp.result.expect("success");
+            assert_eq!(opened["success"], json!(true), "uid {uid} intent {intent:?} is never refused");
+            assert_eq!(opened["cached"], json!(true));
+        }
+        assert_eq!(cached_files(&dir).len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn download_ahead_carries_on_after_the_clock_crosses_utc_midnight_and_with_the_cap_off() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let (dir, s) = light_state();
+        spent_limit(&dir, &s);
+
+        let refused = call(&s, "imap_get_email_light", light_params(&server, 1, Some("backfill"))).await.result.unwrap();
+        assert_eq!(refused["limitReached"], json!(true));
+
+        // Past midnight the day's tally is empty.
+        s.clock.advance(13 * 60 * 60 * 1000);
+        let next = call(&s, "imap_get_email_light", light_params(&server, 1, Some("backfill"))).await.result.unwrap();
+        assert_eq!(next["success"], json!(true));
+        assert_eq!(next["cached"], json!(true));
+
+        // The cap switched off (same clock, same spent day): nothing is refused.
+        s.clock.set(NOON);
+        write_settings(&dir, json!({
+            "fetchMode": "hoarder",
+            "transferLimits": {"acc1": {"capEnabled": false, "dailyDownLimitBytes": MIB}},
+        }));
+        let off = call(&s, "imap_get_email_light", light_params(&server, 2, Some("backfill"))).await.result.unwrap();
+        assert_eq!(off["success"], json!(true));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// IDLE arrivals are everyday mail: `cache_arrivals` fetches and keeps
+    /// them however spent the day's limit is.
+    #[tokio::test]
+    async fn idle_arrivals_are_cached_even_when_the_limit_is_spent() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let (dir, s) = light_state();
+        spent_limit(&dir, &s);
+        let account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": {
+                "email": "user@example.com", "password": "hunter2",
+                "imapHost": server.host(), "imapPort": server.port(),
+            }
+        }))
+        .unwrap();
+
+        cache_arrivals(&s, &account, "INBOX", &[1, 2]).await;
+
+        assert_eq!(cached_files(&dir).len(), 2, "both arrivals were downloaded and kept");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

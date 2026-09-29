@@ -60,6 +60,7 @@ use tracing::{info, warn};
 use crate::archive::{self, ArchiveCtx};
 use crate::imap::{self, ImapConfig, ImapPool};
 use crate::net_activity;
+use crate::transfer_limits::BackgroundLimit;
 use crate::vault_flags::{Applied, FlagChange};
 use crate::vault_registry::VaultRegistry;
 
@@ -108,6 +109,38 @@ pub struct BackupProgress {
     /// Field-for-field with `BackupResult::external_copy_failed_count`.
     #[serde(default)]
     pub external_copy_failed_count: usize,
+    /// Why a run ended early when it was not the user or a failure: today only
+    /// [`STOP_LIMIT_REACHED`], the user's daily download limit. Carried on the
+    /// terminal frame (with `cancelled: true`, so the app's resume checkpoint
+    /// keeps working); absent otherwise. snake_case like every other field of
+    /// this frame, whatever the sibling `archive-progress` frame does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<&'static str>,
+    /// With `stop_reason`: the daily limit that was spent, in bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_bytes: Option<u64>,
+    /// With `stop_reason`: the next UTC midnight, epoch ms. The app runs the
+    /// account again after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_after_ms: Option<u64>,
+}
+
+/// `BackupProgress::stop_reason` of a run that stopped at the user's daily
+/// download limit.
+pub const STOP_LIMIT_REACHED: &str = "limit_reached";
+
+/// Marks a terminal frame as a stop at the daily limit. `cancelled` stays true
+/// (the app's checkpoint branch keys off it); `last_error` is left for real
+/// errors only, the app words the stop itself from the limit.
+fn stopped_at_limit(mut progress: BackupProgress, limit: &BackgroundLimit) -> BackupProgress {
+    if let Some(hit) = limit.hit() {
+        progress.stop_reason = Some(STOP_LIMIT_REACHED);
+        progress.limit_bytes = Some(hit.limit_bytes);
+        progress.resume_after_ms = Some(limit.resume_after_ms().max(0) as u64);
+        progress.cancelled = true;
+        progress.success = false;
+    }
+    progress
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
@@ -191,6 +224,9 @@ fn terminal_backup_progress(
             None
         },
         external_copy_failed_count: total_ext_failures,
+        stop_reason: None,
+        limit_bytes: None,
+        resume_after_ms: None,
     }
 }
 
@@ -238,6 +274,13 @@ pub struct BackupRunContext {
     /// caller closes over them instead of threading five args through every
     /// call site.
     pub apply_flags: Arc<dyn Fn(&str, &[FlagChange]) -> Result<Applied, String> + Send + Sync>,
+    /// The user's daily download limit for this account, or `None` to run
+    /// without one. A backup is background work: it looks at the allowance
+    /// before it lists anything and every `check_every` messages after, and
+    /// ends the run with a `limit_reached` terminal frame when it is spent.
+    /// Build one per run (it remembers what stopped it). IMAP only: Graph
+    /// traffic is not wire-counted, so there is nothing to compare.
+    pub limit: Option<BackgroundLimit>,
 }
 
 // ── Core backup runner ───────────────────────────────────────────────────────
@@ -262,6 +305,34 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     let pool: &ImapPool = &ctx.archive_ctx.pool;
     let account = &ctx.account;
     let account_id = &ctx.account_id;
+
+    // A day whose allowance is already spent costs no bytes at all: not even
+    // the folder LIST. The resume position is the one the caller handed in.
+    if let Some(limit) = ctx.limit.as_ref() {
+        let spent = {
+            let limit = limit.clone();
+            tokio::task::spawn_blocking(move || limit.check()).await.map_err(|e| format!("daily limit check panicked: {e}"))?
+        };
+        if spent.is_some() {
+            info!("backup: {} — daily download limit already spent, not starting", account.email);
+            (ctx.on_progress)(stopped_at_limit(
+                terminal_backup_progress(account_id, true, ctx.skip_folders, ctx.skip_folders, 0, 0, 0, None),
+                limit,
+            ));
+            return Ok(BackupResult {
+                emails_backed_up: 0,
+                errors: 0,
+                duration_secs: start.elapsed().as_secs_f64(),
+                success: false,
+                error_message: None,
+                cancelled: true,
+                completed_folders: ctx.skip_folders,
+                external_copy_ok: true,
+                external_copy_error: None,
+                external_copy_failed_count: 0,
+            });
+        }
+    }
 
     // List all mailboxes
     let mailboxes = {
@@ -321,6 +392,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 active: true, last_error: None, missing_in_folder: 0, cancelled: false, success: true,
                 external_copy_ok: total_ext_failures == 0, external_copy_error: None,
                 external_copy_failed_count: total_ext_failures,
+                stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
         }
         if ctx.cancel.load(Ordering::Relaxed) { cancelled = true; break; }
@@ -341,7 +413,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     // carries a few lines below — Task 7a: the RPC return value is
     // fire-and-forget dropped by the daemon, so this frame is the only place
     // JS can read it from.
-    (ctx.on_progress)(terminal_backup_progress(
+    let mut terminal = terminal_backup_progress(
         account_id,
         cancelled,
         total_folders,
@@ -350,12 +422,21 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         total_errors,
         total_ext_failures,
         error_message.clone(),
-    ));
+    );
+    // The daily download limit ended this run (its allowance was spent at a
+    // check inside a folder): same `cancelled` checkpoint semantics, plus the
+    // reason and when to come back.
+    let stopped_by_limit = ctx.limit.as_ref().is_some_and(|l| l.hit().is_some());
+    if let Some(limit) = ctx.limit.as_ref() {
+        terminal = stopped_at_limit(terminal, limit);
+    }
+    let cancelled = cancelled || stopped_by_limit;
+    (ctx.on_progress)(terminal);
 
     let duration = start.elapsed().as_secs_f64();
     info!(
         "backup: {} for {} — {} new emails backed up, {} errors, {:.1}s{} (folders: {}/{})",
-        if cancelled { "cancelled" } else { "completed" },
+        if stopped_by_limit { "stopped at the daily limit" } else if cancelled { "cancelled" } else { "completed" },
         account.email,
         total_backed_up,
         total_errors,
@@ -480,6 +561,17 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
     if ctx.cancel.load(Ordering::Relaxed) {
         return Ok(ImapFolderOutcome { index, mailbox, completed: false, backed_up: 0, errors: 0, external_failures: 0, bandwidth_limited: false, last_error: None });
     }
+    // The daily limit, before this folder's listing (a 100k-message All Mail
+    // is ~4 MB of flags before a single body): a day already spent by the
+    // folders before it ends the run here.
+    if let Some(limit) = ctx.limit.clone() {
+        let spent = tokio::task::spawn_blocking(move || limit.check())
+            .await.map_err(|e| format!("daily limit check panicked: {e}"))?;
+        if spent.is_some() {
+            ctx.cancel.store(true, Ordering::Relaxed);
+            return Ok(ImapFolderOutcome { index, mailbox, completed: false, backed_up: 0, errors: 0, external_failures: 0, bandwidth_limited: false, last_error: None });
+        }
+    }
     let server_flags = {
         let mut guard = pool.get_background(account).await?;
         let result = imap::bounded(
@@ -510,6 +602,7 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
         let archived = archive::run_with_backup(
             Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox.clone(), missing,
             Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup", false,
+            ctx.limit.clone(),
         ).await?;
         out.backed_up = archived.completed;
         out.errors = archived.errors;
@@ -850,6 +943,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
             external_copy_ok: total_ext_failures == 0,
             external_copy_error: None,
             external_copy_failed_count: total_ext_failures,
+            stop_reason: None, limit_bytes: None, resume_after_ms: None,
         });
     }
 
@@ -969,6 +1063,7 @@ async fn run_graph_backup_parallel(
                 total_emails: backed + errors, completed_emails: backed, errors, active: true, last_error: None,
                 missing_in_folder: 0, cancelled: false, success: true, external_copy_ok: external_failures == 0,
                 external_copy_error: None, external_copy_failed_count: external_failures,
+                stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
         }
     }

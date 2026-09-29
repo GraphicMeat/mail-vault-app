@@ -9,10 +9,8 @@ use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
 use mailvault_core::net::{self, ConnectionFailure};
-use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -123,9 +121,6 @@ pub struct SyncEngine {
     /// process so an unfetchable mailbox can't retry in a loop — but NOT
     /// reported as `backfilling`, or the app would wait on it forever.
     backfill_gave_up: Mutex<HashSet<String>>,
-    /// `account_id` → UTC day whose cap we already logged, so a capped account
-    /// costs one log line a day instead of one per sync tick.
-    cap_logged: Mutex<HashMap<String, String>>,
     /// Shut while the host has no connectivity — every sync short-circuits
     /// rather than dialling nine accounts into a dead socket.
     net: Arc<NetGate>,
@@ -195,7 +190,6 @@ impl SyncEngine {
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
             net,
-            cap_logged: Mutex::new(HashMap::new()),
             mailbox_aliases: Mutex::new(HashMap::new()),
             sync_locks: Mutex::new(HashMap::new()),
             vault_closed,
@@ -317,48 +311,6 @@ impl SyncEngine {
         (gen, records)
     }
 
-    /// `Some(reason)` when this account has spent its daily transfer allowance
-    /// and must not sync again until the next UTC day. `None` = go ahead.
-    async fn transfer_cap_reached(&self, account: &SyncAccount) -> Option<String> {
-        // Two settings/stats file reads: small, but still disk, so they go to
-        // a blocking thread together rather than onto a tokio worker.
-        let (limits, used) = {
-            let app_dir = self.app_dir.clone();
-            let account_id = account.id.clone();
-            tokio::task::spawn_blocking(move || {
-                let limits = read_transfer_limits(&app_dir, &account_id);
-                let used = transfer_stats::usage_today(&app_dir, &account_id);
-                (limits, used)
-            })
-            .await
-            .ok()?
-        };
-        let limits = limits?;
-        if !limits.cap_enabled {
-            return None;
-        }
-        let (default_down, default_up) = default_limits(&account.imap_config.host);
-        let down_limit = limits.daily_down_limit_bytes.or(default_down);
-        let up_limit = limits.daily_up_limit_bytes.or(default_up);
-
-        let over_down = down_limit.is_some_and(|l| used.down >= l);
-        let over_up = up_limit.is_some_and(|l| used.up >= l);
-        if !over_down && !over_up {
-            return None;
-        }
-
-        let reason = format!(
-            "Daily transfer cap reached ({} MB down / {} MB up today) — sync paused until the next UTC day",
-            used.down / MB,
-            used.up / MB,
-        );
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        if self.cap_logged.lock().await.insert(account.id.clone(), today.clone()) != Some(today) {
-            warn!("[sync] {} for {}", reason, account.email);
-        }
-        Some(reason)
-    }
-
     /// Issue a ticket for a sync that is about to start.
     ///
     /// Sync callable on purpose: the RPC handler takes the ticket *before* it
@@ -453,31 +405,13 @@ impl SyncEngine {
             };
         }
 
-        // Soft daily cap: skip the account entirely rather than spend the
-        // remaining allowance. Resets on its own at the next UTC day.
-        if let Some(reason) = self.transfer_cap_reached(account).await {
-            // Record it too, or `sync.status` reports whatever the last real
-            // sync left behind and the cap is invisible to the app.
-            self.states.lock().await.insert(account_id.clone(), SyncState {
-                account_id: account_id.clone(),
-                status: SyncStatus::Error,
-                last_sync: Some(unix_now()),
-                last_error: Some(reason.clone()),
-                new_emails: 0,
-                total_emails: 0,
-            });
-            return SyncResult {
-                account_id: account_id.clone(),
-                mailbox: mailbox.to_string(),
-                new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(reason), offline: false, error_code: None,
-                arrival_uids: Vec::new(), announced: false,
-            };
-        }
-
+        // The daily download limit does not gate this: it governs background
+        // downloads only (backup, Hoarder, download-ahead — see
+        // `mailvault_core::transfer_limits`). Everyday mail always syncs.
+        //
         // One sync at a time per (account, mailbox) — see `sync_locks`. Taken
-        // after the two early returns so an offline or capped account answers
-        // straight away instead of queueing behind a live fetch.
+        // after the early return so an offline account answers straight away
+        // instead of queueing behind a live fetch.
         let folder_lock = {
             let mut locks = self.sync_locks.lock().await;
             Arc::clone(
@@ -1312,49 +1246,6 @@ impl SyncEngine {
     }
 }
 
-// ── Soft daily transfer cap ─────────────────────────────────────────────────
-
-const MB: u64 = 1024 * 1024;
-
-/// Per-account transfer settings, read straight out of the app's persisted
-/// settings blob (`<app_data_dir>/frontend-settings.json`) at
-/// `["mailvault-settings"].state.transferLimits[accountId]`. The app already
-/// writes that file on every settings change — no new sync mechanism needed.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TransferLimits {
-    #[serde(default)]
-    cap_enabled: bool,
-    #[serde(default)]
-    daily_down_limit_bytes: Option<u64>,
-    #[serde(default)]
-    daily_up_limit_bytes: Option<u64>,
-}
-
-/// Gmail suspends accounts that pass 2500 MB down / 500 MB up in a day. No
-/// other provider publishes a number, so everyone else defaults to unlimited.
-fn default_limits(host: &str) -> (Option<u64>, Option<u64>) {
-    let host = host.to_ascii_lowercase();
-    if host.contains("gmail") || host.contains("googlemail") {
-        (Some(2500 * MB), Some(500 * MB))
-    } else {
-        (None, None)
-    }
-}
-
-/// `None` when the settings file, the map, or this account's entry is missing —
-/// i.e. the cap is off, which is the default.
-fn read_transfer_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimits> {
-    let raw = fs::read_to_string(app_dir.join("frontend-settings.json")).ok()?;
-    let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let entry = settings
-        .get("mailvault-settings")?
-        .get("state")?
-        .get("transferLimits")?
-        .get(account_id)?;
-    serde_json::from_value(entry.clone()).ok()
-}
-
 // ── One cache step, on a blocking thread ────────────────────────────────────
 //
 // `sync_mailbox` and `backfill_with_session` are async tasks on the daemon's
@@ -1649,6 +1540,8 @@ const MAX_LIVE_TICKETS: usize = 64;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::transfer_limits::MB;
+    use std::fs;
 
     #[test]
     fn test_sync_result_serialization() {
@@ -1942,67 +1835,45 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// The cap must read both the settings blob the app writes and the stat
-    /// files, and must stay out of the way until it is switched on and spent.
+    /// The daily download limit governs background downloads (backup, Hoarder,
+    /// download-ahead), never the regular mail sync: a spent limit must leave
+    /// new mail arriving. (Until 2026-09-29 it paused the sync itself, so a
+    /// user who set 2,000 MB to protect everyday mail lost exactly that.)
     #[tokio::test]
-    async fn transfer_cap_skips_the_account_only_once_the_limit_is_spent() {
+    async fn a_spent_daily_limit_does_not_stop_the_regular_sync() {
         let dir = scratch_dir("transfer_cap");
         let engine = engine_for(&dir);
-        let account: SyncAccount = serde_json::from_value(serde_json::json!({
-            "id": "acc1",
-            "email": "user@example.com",
-            "imapConfig": { "email": "user@example.com", "imapHost": "imap.example.com" }
-        }))
-        .unwrap();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        let account = account_for(&server);
 
-        // No settings file at all → cap off.
-        assert!(engine.transfer_cap_reached(&account).await.is_none());
-
-        // 200 MB down already spent today, in the daemon's own rows.
+        // 200 MB down already spent today, against a 100 MB limit that is ON.
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         mailvault_core::app_db::with(&dir, |c| {
-            mailvault_core::app_db::stats::add(c, "acc1", &today, "daemon", 209_715_200, 0)
+            mailvault_core::app_db::stats::add(c, "acc1", &today, "daemon", 200 * MB, 0)
         })
         .unwrap();
-
-        let settings = |cap_enabled: bool, limit_mb: u64| {
+        fs::write(
+            dir.join("frontend-settings.json"),
             serde_json::json!({
                 "mailvault-settings": { "state": { "transferLimits": { "acc1": {
-                    "capEnabled": cap_enabled,
-                    "dailyDownLimitBytes": limit_mb * MB,
+                    "capEnabled": true,
+                    "dailyDownLimitBytes": 100 * MB,
                 }}}}
             })
-            .to_string()
-        };
-
-        fs::write(dir.join("frontend-settings.json"), settings(false, 100)).unwrap();
-        assert!(
-            engine.transfer_cap_reached(&account).await.is_none(),
-            "usage over the limit must not matter while the cap is disabled"
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            mailvault_core::transfer_limits::background_allowance(&dir, "acc1", "imap.example.com"),
+            Some(0),
+            "the fixture must really be over the limit, or this proves nothing"
         );
 
-        fs::write(dir.join("frontend-settings.json"), settings(true, 500)).unwrap();
-        assert!(
-            engine.transfer_cap_reached(&account).await.is_none(),
-            "200 MB used is under a 500 MB cap"
-        );
-
-        fs::write(dir.join("frontend-settings.json"), settings(true, 100)).unwrap();
-        assert!(engine.transfer_cap_reached(&account).await.is_some());
-
-        // The gate must actually stop the sync — no IMAP server is running here,
-        // so the error proves it returned before connecting.
         let result = engine.sync_account(&account, "INBOX").await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("Daily transfer cap reached"));
+        assert!(result.success, "sync stopped at the limit: {:?}", result.error);
+        assert_eq!(cached_count(&engine, "INBOX"), 10, "the mail arrived past the limit");
 
         let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn gmail_gets_a_default_daily_limit_and_nobody_else_does() {
-        assert_eq!(default_limits("imap.gmail.com"), (Some(2500 * MB), Some(500 * MB)));
-        assert_eq!(default_limits("imap.hostinger.com"), (None, None));
     }
 
     #[test]
@@ -3588,32 +3459,26 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// A capped sync returns before it connects. It still has to finish its
-    /// ticket — the app is blocked on it — and the cap has to reach
-    /// `sync.status`, which the early return never touched.
+    /// A sync past a spent daily limit is an ordinary sync: it finishes its
+    /// ticket with a normal result and leaves no error behind in `sync.status`.
     #[tokio::test]
-    async fn a_cap_blocked_sync_finishes_its_ticket_and_records_the_error() {
+    async fn a_sync_past_the_daily_limit_finishes_its_ticket_normally() {
         let dir = scratch_dir("cap_ticket");
         let engine = engine_for(&dir);
-        let account: SyncAccount = serde_json::from_value(serde_json::json!({
-            "id": "acc1",
-            "email": "user@example.com",
-            "imapConfig": { "email": "user@example.com", "imapHost": "imap.example.com" }
-        }))
-        .unwrap();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
+        let account = account_for(&server);
 
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        fs::create_dir_all(dir.join("transfer_stats")).unwrap();
-        fs::write(
-            dir.join("transfer_stats").join("acc1.daemon.json"),
-            format!(r#"{{"days":{{"{}":{{"down":209715200,"up":0}}}}}}"#, today),
-        )
+        mailvault_core::app_db::with(&dir, |c| {
+            mailvault_core::app_db::stats::add(c, "acc1", &today, "daemon", 200 * MB, 0)
+        })
         .unwrap();
         fs::write(
             dir.join("frontend-settings.json"),
             serde_json::json!({
                 "mailvault-settings": { "state": { "transferLimits": { "acc1": {
                     "capEnabled": true,
+                    "warnEnabled": true,
                     "dailyDownLimitBytes": 100 * MB,
                 }}}}
             })
@@ -3624,16 +3489,12 @@ mod tests {
         let ticket = engine.begin("acc1", "INBOX");
         engine.run_ticket(ticket, &account, "INBOX").await;
 
-        let result = engine
-            .wait_for_ticket(ticket, 1000)
-            .await
-            .expect("a capped sync must finish its ticket, not time out");
-        assert!(!result.success);
-        assert!(result.error.unwrap_or_default().contains("Daily transfer cap"));
+        let result = engine.wait_for_ticket(ticket, 1000).await.expect("the ticket must resolve");
+        assert!(result.success, "unexpected error: {:?}", result.error);
 
-        let state = engine.get_state("acc1").await.expect("the cap must record a state");
-        assert_eq!(state.status, SyncStatus::Error);
-        assert!(state.last_error.unwrap_or_default().contains("Daily transfer cap"));
+        let state = engine.get_state("acc1").await.expect("a sync records a state");
+        assert_eq!(state.status, SyncStatus::Idle);
+        assert!(state.last_error.is_none(), "no cap error may reach sync.status: {:?}", state.last_error);
 
         let _ = fs::remove_dir_all(&dir);
     }

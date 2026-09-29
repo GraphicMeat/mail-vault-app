@@ -41,6 +41,7 @@ use crate::handlers::vault_flags as vault_flags_handler;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::backup::{self, BackupProgress, BackupRunContext};
+use mailvault_core::transfer_limits::BackgroundLimit;
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use serde_json::Value;
 
@@ -116,6 +117,9 @@ pub(crate) fn failed_frame(account_id: &str, error: String) -> BackupProgress {
         external_copy_ok: false,
         external_copy_error: None,
         external_copy_failed_count: 0,
+        stop_reason: None,
+        limit_bytes: None,
+        resume_after_ms: None,
     }
 }
 
@@ -174,6 +178,13 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         })
     };
 
+    // The user's daily download limit governs this run (backup is background
+    // work). Graph traffic is not wire-counted, so a Graph run has no limit.
+    let is_graph = account.oauth2_transport.as_deref() == Some("graph");
+    let limit = (!is_graph).then(|| {
+        BackgroundLimit::for_account(state.app_dir.clone(), account_id.clone(), account.host.clone(), state.clock.clone())
+    });
+
     let ctx = BackupRunContext {
         account_id: account_id.clone(),
         account_json,
@@ -186,12 +197,8 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         archive_ctx,
         on_progress,
         apply_flags,
+        limit,
     };
-
-    // Same dispatch `src-tauri/src/backup.rs`'s `run_account_backup`
-    // (~line 618-621) does today, checked before the context is moved into
-    // whichever runner gets it.
-    let is_graph = ctx.account.oauth2_transport.as_deref() == Some("graph");
 
     let state2 = Arc::clone(state);
     let run_account_id = account_id.clone();

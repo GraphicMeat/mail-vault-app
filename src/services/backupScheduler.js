@@ -65,7 +65,27 @@ export function terminalFrameToResult(p = {}) {
     external_copy_ok: p.external_copy_ok !== false,
     external_copy_error: p.external_copy_error || null,
     external_copy_failed_count: p.external_copy_failed_count || 0,
+    // Set (with `cancelled: true`) when the run stopped because the account's
+    // daily download limit was spent: 'limit_reached', the limit in bytes and
+    // the next UTC midnight in epoch ms (src-core/src/backup.rs
+    // `BackupProgress::stop_reason`). snake_case like the rest of the frame.
+    stop_reason: p.stop_reason || null,
+    limit_bytes: p.limit_bytes ?? null,
+    resume_after_ms: p.resume_after_ms ?? null,
   };
+}
+
+/** `BackupProgress::stop_reason` of a run that stopped at the daily download limit. */
+export const STOP_LIMIT_REACHED = 'limit_reached';
+
+/** Slack after the daemon's UTC midnight before a held account runs again. */
+export const LIMIT_RESUME_MARGIN_MS = 30_000;
+
+/** "Stopped at your daily limit of X MB. Continues after midnight UTC." */
+export function limitStopMessage(limitBytes) {
+  return t('svc.backupScheduler.stoppedAtDailyLimit', {
+    limit: Number.isFinite(limitBytes) ? Math.round(limitBytes / (1024 * 1024)) : '',
+  });
 }
 
 /**
@@ -95,6 +115,7 @@ class BackupCoordinator {
     this._lastProgressAt = 0;        // last backup-progress / archive-progress event
     this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
     this._flushTimer = null;         // trailing flush for the progress throttle
+    this._limitHolds = new Map();    // accountId -> { until, timer }: stopped at the daily limit, runs again after `until`
   }
 
   // ── Lifecycle transitions ──────────────────────────────────────────────
@@ -144,6 +165,10 @@ class BackupCoordinator {
   /** Queue automatic backup for an account (called by idle check) */
   queueBackup(accountId) {
     if (this._running.get(accountId)) return;
+    // Stopped at its daily download limit and not yet past the reset: every
+    // automatic path (idle check, retry, wake) lands here, and a run before
+    // midnight would only stop again at once.
+    if (this._isHeldForLimit(accountId)) return;
     if (this._queue.includes(accountId)) return;
     this._queue.push(accountId);
     this._publishQueue();
@@ -187,6 +212,7 @@ class BackupCoordinator {
     this._publishQueue();
     this._manualIds.clear();
     this._checkpoints.clear();
+    for (const accountId of [...this._limitHolds.keys()]) this._releaseLimitHold(accountId);
     // Nothing queued here will ever reach a terminal path, so every promise a
     // click is still holding resolves now rather than dangling with its button.
     for (const accountId of [...this._manualResolvers.keys()]) {
@@ -480,6 +506,23 @@ class BackupCoordinator {
         return;
       }
 
+      // Stopped at the account's daily download limit: not a failure and not a
+      // cancel. Keep the resume position, say so on the card, and run again
+      // after the reset (UTC midnight, the frame says when).
+      if (result.cancelled && result.stop_reason === STOP_LIMIT_REACHED) {
+        this._checkpoints.set(accountId, result.completed_folders || 0);
+        this._stalled.delete(accountId);
+        const message = limitStopMessage(result.limit_bytes);
+        const resumeAfterMs = Number.isFinite(result.resume_after_ms) ? result.resume_after_ms : null;
+        console.log(`[backup] ${account.email} stopped at its daily download limit — checkpoint ${result.completed_folders}, resumes after ${resumeAfterMs ? new Date(resumeAfterMs).toISOString() : 'the reset'}`);
+        useSettingsStore.getState().updateBackupState(accountId, { lastStatus: 'limit', lastError: message });
+        this._holdForLimit(accountId, resumeAfterMs);
+        this._retryCount.delete(accountId);
+        this._running.set(accountId, false);
+        this._resolveManual(accountId, { status: 'limit_reached', message, resumeAfterMs });
+        return;
+      }
+
       // Track checkpoint for potential resume
       if (result.cancelled) {
         this._checkpoints.set(accountId, result.completed_folders || 0);
@@ -507,6 +550,7 @@ class BackupCoordinator {
 
       // Completed — clear checkpoint
       this._checkpoints.delete(accountId);
+      this._releaseLimitHold(accountId);
 
       const externalDegraded = result.external_copy_ok === false;
       // Messages the server refused. The run still saved everything else, so
@@ -677,6 +721,41 @@ class BackupCoordinator {
     }
     this._retryCount.delete(accountId);
     this._resolveManual(accountId, { status: 'failed', message });
+  }
+
+  // ── Daily download limit ───────────────────────────────────────────────
+
+  /**
+   * Hold an account whose run stopped at the daily limit: no automatic run
+   * before `resumeAfterMs`, then one timer queues it. Held in memory only,
+   * like the checkpoints: a restart just runs the account again, and the
+   * daemon stops it at once if the day is still spent.
+   */
+  _holdForLimit(accountId, resumeAfterMs) {
+    this._releaseLimitHold(accountId);
+    const until = (resumeAfterMs ?? Math.floor(Date.now() / 86_400_000 + 1) * 86_400_000) + LIMIT_RESUME_MARGIN_MS;
+    const timer = setTimeout(() => {
+      this._limitHolds.delete(accountId);
+      this.queueBackup(accountId);
+    }, Math.max(0, until - Date.now()));
+    this._limitHolds.set(accountId, { until, timer });
+  }
+
+  _isHeldForLimit(accountId) {
+    const hold = this._limitHolds.get(accountId);
+    if (!hold) return false;
+    if (Date.now() >= hold.until) {
+      this._releaseLimitHold(accountId);
+      return false;
+    }
+    return true;
+  }
+
+  _releaseLimitHold(accountId) {
+    const hold = this._limitHolds.get(accountId);
+    if (!hold) return;
+    clearTimeout(hold.timer);
+    this._limitHolds.delete(accountId);
   }
 
   _isPaused() {

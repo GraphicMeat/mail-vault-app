@@ -43,6 +43,7 @@ pub mod dns;
 pub mod unsubscribe;
 pub mod smtp;
 pub mod spellcheck;
+pub mod transfer_limits;
 pub mod transfer_stats;
 pub mod transfer;
 pub mod net;

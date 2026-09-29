@@ -195,6 +195,10 @@ pub struct DaemonState {
     /// The Hoarder worker's wake signal and daily download budget (Track H4):
     /// `storage.fetch_mode_changed` and a sync that found new mail poke it.
     pub hoarder_worker: crate::hoarder_worker::HoarderWorkerState,
+    /// The UTC clock every daily-download-limit check reads
+    /// (`mailvault_core::transfer_limits`): the wall clock in production; a
+    /// test moves it across midnight to see a stopped job carry on.
+    pub clock: mailvault_core::transfer_limits::Clock,
     /// Server fallback for a message the vault has no copy of, and the
     /// in-memory copies On Demand keeps (`raw_message`, Track H3c).
     pub(crate) raw_messages: crate::raw_message::RawMessages,
@@ -821,6 +825,7 @@ impl DaemonState {
             auto_tag_worker,
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
             hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),
+            clock: mailvault_core::transfer_limits::Clock::system(),
             raw_messages: Default::default(),
             import_rehome_running: Default::default(),
             mbox_uploads: Default::default(),

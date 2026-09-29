@@ -359,20 +359,29 @@ pub fn read_all(app_dir: &Path) -> BTreeMap<String, AccountStats> {
 }
 
 /// Today's usage for one account across both processes' files plus this
-/// process's unflushed bytes. Used by the daemon's soft daily cap.
+/// process's unflushed bytes. Used by the daemon's daily-limit checks.
 pub fn usage_today(app_dir: &Path, account_id: &str) -> DayBucket {
-    let today = today_key();
+    usage_on(app_dir, account_id, &today_key())
+}
+
+/// `usage_today` for the UTC day `day` (`YYYY-MM-DD`). The unflushed bytes of
+/// this process are today's, so they are added only when `day` is today: a
+/// clock a test (or the daily-limit checks) moves to another day reads that
+/// day's stored rows alone.
+pub fn usage_on(app_dir: &Path, account_id: &str, day: &str) -> DayBucket {
     let mut total = DayBucket::default();
     if let Ok((down, up)) = crate::app_db::with(app_dir, |conn| {
-        Ok(crate::app_db::stats::day_total(conn, account_id, &today))
+        Ok(crate::app_db::stats::day_total(conn, account_id, day))
     }) {
         total.add(DayBucket { down, up });
     }
-    if let Some(pending) = global()
-        .pending_by_id(&account_ids(app_dir))
-        .get(account_id)
-    {
-        total.add(*pending);
+    if day == today_key() {
+        if let Some(pending) = global()
+            .pending_by_id(&account_ids(app_dir))
+            .get(account_id)
+        {
+            total.add(*pending);
+        }
     }
     total
 }

@@ -14,6 +14,9 @@ import { _pruneIfGone } from './workflows/messageMutations';
 
 export { hasValidCredentials };
 
+/** Slack after the daemon's UTC midnight before the first fetch of a new day. */
+const LIMIT_RESUME_MARGIN_MS = 5000;
+
 /**
  * The two fields the content phase ever reads off a loaded header set.
  *
@@ -53,6 +56,9 @@ export class AccountPipeline {
     this._retryQueue = [];
     this._retryTimer = null;
     this._retryDelay = 3000;
+    // Armed while the account's daily download limit is spent: the download-
+    // ahead pass sleeps until the next UTC day (see `_pauseForLimit`).
+    this._limitTimer = null;
     this._activeSlots = 0;
     this._completed = 0;
     this._total = 0;
@@ -282,6 +288,18 @@ export class AccountPipeline {
       return;
     }
 
+    // Asleep until the daily download limit resets: what is new joins the
+    // queue behind what is already waiting, and nothing is launched. The
+    // cascade to the other accounts is not held up by this one.
+    if (this._limitTimer) {
+      const waiting = new Set(this._queue);
+      for (const uid of uids) if (!waiting.has(uid)) this._queue.push(uid);
+      this._total = this._completed + this._queue.length;
+      this.onProgress(this.state);
+      this.onComplete();
+      return;
+    }
+
     this._phase = 'content';
     this._queue = [...uids];
     this._retryQueue = [];
@@ -313,7 +331,7 @@ export class AccountPipeline {
 
     const isGraph = isGraphAccount(this.account);
 
-    while (!this._destroyed && !this._paused) {
+    while (!this._destroyed && !this._paused && !this._limitTimer) {
       const uid = this._queue.shift();
       if (uid === undefined) break; // queue empty, slot goes idle
 
@@ -360,6 +378,16 @@ export class AccountPipeline {
         this._retryDelay = 3000; // reset on success
         this.onProgress(this.state);
       } catch (error) {
+        // The daemon refused the fetch: today's daily download limit is spent.
+        // The message is fine and every other one would be refused too, so
+        // nothing is retried and nothing is lost: the uid goes back to the
+        // front and the whole pass sleeps until the limit resets.
+        if (error?.limitReached) {
+          this._queue.unshift(uid);
+          this._pauseForLimit(error.resumeAfterMs, mailbox);
+          break;
+        }
+
         // The server proved this uid is gone (MessageGoneError). Retrying only
         // re-asks the same question the fetch just answered: UID 46856 was
         // refetched 47 times this way, background lane, ~40s of Gmail each,
@@ -390,6 +418,18 @@ export class AccountPipeline {
 
     this._activeSlots--;
 
+    // Asleep for the daily limit: neither "done" nor a retry. The last slot out
+    // hands the cascade on (other accounts have limits of their own) and goes
+    // idle; the queue, and the timer that restarts it, stay.
+    if (this._limitTimer) {
+      if (this._activeSlots === 0 && !this._destroyed) {
+        this._phase = 'idle';
+        this.onProgress(this.state);
+        this.onComplete();
+      }
+      return;
+    }
+
     // Last slot to finish checks if we need retries or are done
     if (this._activeSlots === 0 && !this._destroyed) {
       if (this._queue.length === 0 && this._retryQueue.length > 0) {
@@ -400,6 +440,43 @@ export class AccountPipeline {
       } else if (this._queue.length === 0 && this._retryQueue.length === 0) {
         this._finish(mailbox);
       }
+    }
+  }
+
+  /**
+   * Sleep until the account's daily download limit resets. One timer for the
+   * whole pipeline however many slots hit the limit; `resumeAfterMs` is the
+   * daemon's next UTC midnight (epoch ms), a few seconds of margin on top so
+   * the day has certainly turned over when the first fetch goes out again.
+   */
+  _pauseForLimit(resumeAfterMs, mailbox) {
+    if (this._limitTimer || this._destroyed) return;
+    const fallback = Math.floor(Date.now() / 86_400_000 + 1) * 86_400_000;
+    const at = Number.isFinite(resumeAfterMs) ? resumeAfterMs : fallback;
+    const wait = Math.max(0, at - Date.now()) + LIMIT_RESUME_MARGIN_MS;
+    console.log(`[Pipeline:${this.account.email}] Daily download limit reached — download-ahead sleeps ${Math.round(wait / 60000)} min`);
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+    this._limitTimer = setTimeout(() => {
+      this._limitTimer = null;
+      this._resumeAfterLimit(mailbox);
+    }, wait);
+  }
+
+  _resumeAfterLimit(mailbox) {
+    if (this._destroyed) return;
+    this._queue = [...this._retryQueue, ...this._queue];
+    this._retryQueue = [];
+    if (this._queue.length === 0) return;
+    this._phase = 'content';
+    this.onProgress(this.state);
+    // Paused meanwhile (offline, another account active): `resume()` launches.
+    if (this._paused) return;
+    const slots = Math.min(this.concurrency - this._activeSlots, this._queue.length);
+    for (let i = 0; i < slots; i++) {
+      setTimeout(() => this._workerLoop(i, mailbox), i * 100);
     }
   }
 
@@ -519,6 +596,10 @@ export class AccountPipeline {
     if (!this._paused) return;
     this._paused = false;
 
+    // The daily limit's own timer restarts a pass that slept for it; coming
+    // back online or switching accounts must not wake it early.
+    if (this._limitTimer) return;
+
     // Re-launch idle slots if we have work to do
     if (this._phase === 'content' && this._queue.length > 0) {
       const slotsToLaunch = Math.min(this.concurrency - this._activeSlots, this._queue.length);
@@ -537,6 +618,10 @@ export class AccountPipeline {
     if (this._retryTimer) {
       clearTimeout(this._retryTimer);
       this._retryTimer = null;
+    }
+    if (this._limitTimer) {
+      clearTimeout(this._limitTimer);
+      this._limitTimer = null;
     }
     this._phase = 'idle';
     this._graphIdMap = null;

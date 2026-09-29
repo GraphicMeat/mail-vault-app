@@ -29,6 +29,7 @@ use crate::server::DaemonState;
 use futures::FutureExt;
 use mailvault_core::custody::cache;
 use mailvault_core::search_index::text::vault_dir_name;
+use mailvault_core::transfer_limits;
 use mailvault_core::vault_files;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -48,6 +49,12 @@ use tracing::{info, warn};
 // provider says its bandwidth limit is hit. Listings count against it too
 // (estimated, `LISTING_BYTES_PER_UID`). A 10 GB mailbox takes ~10 days;
 // per-provider budgets if non-Gmail users find that slow.
+// The user's own daily download limit (Settings > Data usage, "Pause
+// background downloads at daily limit") replaces DAILY_BYTES while it is ON:
+// the account's allowance for the day is then what is left of that limit
+// (`transfer_limits::background_allowance_at`, every byte on the wire counted,
+// Hoarder's own included), and a pass skips the account while it is 0. With
+// the limit OFF nothing changes: DAILY_BYTES per account.
 // Gmail labels are folders: when a folder carries `\All` (All Mail), the
 // `\Flagged` (Starred) and `\Important` folders, strict subsets of it, are
 // skipped, and All Mail goes last so INBOX and the user's labels come first.
@@ -93,6 +100,11 @@ const DISABLE_ENV: &str = "MAILVAULT_DISABLE_HOARDER";
 struct DayBudget {
     since_ms: i64,
     used: u64,
+    /// The provider itself said its bandwidth limit is hit today (`exhaust`).
+    /// Rests the account for the day even when the user's own limit would
+    /// still leave room. Absent in files written before it existed.
+    #[serde(default)]
+    provider_stopped: bool,
 }
 
 impl DayBudget {
@@ -100,7 +112,7 @@ impl DayBudget {
     /// starts one early.
     fn roll(&mut self, now_ms: i64) {
         if now_ms.saturating_sub(self.since_ms) >= DAY_MS {
-            *self = Self { since_ms: now_ms, used: 0 };
+            *self = Self { since_ms: now_ms, used: 0, provider_stopped: false };
         }
     }
 }
@@ -214,7 +226,15 @@ impl HoarderWorkerState {
 
     /// The provider said its bandwidth limit is hit: rest until the day rolls over.
     fn exhaust(&self, app_dir: &Path, account_id: &str, now_ms: i64) {
-        self.with_budget(app_dir, account_id, now_ms, |b| b.used = b.used.max(DAILY_BYTES));
+        self.with_budget(app_dir, account_id, now_ms, |b| {
+            b.used = b.used.max(DAILY_BYTES);
+            b.provider_stopped = true;
+        });
+    }
+
+    /// The provider stopped this account today (see `exhaust`).
+    fn provider_stopped(&self, app_dir: &Path, account_id: &str, now_ms: i64) -> bool {
+        self.with_budget(app_dir, account_id, now_ms, |b| b.provider_stopped)
     }
 
     fn complete(&self, account_id: &str, mailbox: &str) -> Option<Complete> {
@@ -226,6 +246,36 @@ impl HoarderWorkerState {
         let mut complete = self.complete.lock().unwrap_or_else(|e| e.into_inner());
         complete.insert((account_id.to_string(), mailbox.to_string()), done);
     }
+}
+
+/// What one account may still download today, and whether the user's own daily
+/// limit (rather than Hoarder's built-in `DAILY_BYTES`) is what says so.
+///
+/// Limit ON: what is left of it (0 once spent). Limit OFF: `DAILY_BYTES` less
+/// what Hoarder has spent. Either way a provider-side bandwidth stop rests the
+/// account for the day. `host` is the IMAP host, which decides Gmail's default
+/// limit; before the credentials are read it is `""`, and only a limit the
+/// user typed applies. Reads the settings and stats files, so it runs on a
+/// blocking thread.
+async fn allowance_left(state: &Arc<DaemonState>, account_id: &str, host: &str) -> (u64, bool) {
+    let (st, acct, host) = (Arc::clone(state), account_id.to_string(), host.to_string());
+    blocking(move || {
+        if st.hoarder_worker.provider_stopped(&st.app_dir, &acct, now_ms()) {
+            return (0, false);
+        }
+        match transfer_limits::background_allowance_at(&st.app_dir, &acct, &host, st.clock.now_ms()) {
+            Some(left) => (left, true),
+            None => (st.hoarder_worker.budget_left(&st.app_dir, &acct, now_ms()), false),
+        }
+    })
+    .await
+    // A blocking thread that never answered is not a licence to download.
+    .unwrap_or((0, false))
+}
+
+/// Why a pass stopped an account for the day: `by_limit` is the user's limit.
+fn spent_reason(by_limit: bool) -> &'static str {
+    if by_limit { "daily_limit_reached" } else { "daily_budget_spent" }
 }
 
 pub(crate) fn start(state: Arc<DaemonState>) {
@@ -280,8 +330,13 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) -> bool {
         if !hoarding(state, &account_id).await {
             continue;
         }
-        if state.hoarder_worker.budget_left(&state.app_dir, &account_id, now_ms()) == 0 {
-            info!("[hoard] {account_id}: skipped_reason=daily_budget_spent");
+        // Before the credentials are read (so a spent day never touches the
+        // keychain), on what is known without the host: the rested-for-the-day
+        // mark, Hoarder's own budget, a limit the user typed. Gmail's default
+        // limit needs the host and is checked inside `hoard_account`.
+        let (left, by_limit) = allowance_left(state, &account_id, "").await;
+        if left == 0 {
+            info!("[hoard] {account_id}: skipped_reason={}", spent_reason(by_limit));
             continue;
         }
         let config = match credentials::resolve_account_credentials_quiet(&account_id).await {
@@ -365,8 +420,9 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
     if !hoarding(state, account_id).await {
         return Err("policy_off".into());
     }
-    if state.hoarder_worker.budget_left(&state.app_dir, account_id, now_ms()) == 0 {
-        return Err("daily_budget_spent".into());
+    let (left, by_limit) = allowance_left(state, account_id, &config.host).await;
+    if left == 0 {
+        return Err(spent_reason(by_limit).into());
     }
     let list = state.imap_pool.run_read(config, false, |mut session| async move {
         let boxes = imap::list_mailboxes(&mut session).await?;
@@ -418,8 +474,9 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
         if !hoarding(state, account_id).await {
             return Err("policy_changed".into());
         }
-        if state.hoarder_worker.budget_left(&state.app_dir, account_id, now_ms()) == 0 {
-            return Err("daily_budget_spent".into());
+        let (left, by_limit) = allowance_left(state, account_id, &config.host).await;
+        if left == 0 {
+            return Err(spent_reason(by_limit).into());
         }
         if hoard_mailbox(state, config, account_id, mailbox, listing, status, out).await? {
             if let Some(status) = status {
@@ -514,8 +571,9 @@ async fn hoard_mailbox(
             return Err("policy_changed".into());
         }
         for &uid in batch {
-            if state.hoarder_worker.budget_left(&state.app_dir, account_id, now_ms()) == 0 {
-                return Err("daily_budget_spent".into());
+            let (left, by_limit) = allowance_left(state, account_id, &config.host).await;
+            if left == 0 {
+                return Err(spent_reason(by_limit).into());
             }
             let fetch = state.imap_pool.run_read(config, false, |mut session| {
                 let mb = mailbox.to_string();
@@ -916,5 +974,97 @@ mod tests {
         assert_eq!(mock.count_commands("Important"), 0);
         let selects: Vec<String> = mock.commands().into_iter().filter(|c| c.to_uppercase().contains(" SELECT ")).collect();
         assert!(selects.last().is_some_and(|c| c.contains("All Mail")), "{selects:?}");
+    }
+
+    // ── The user's daily download limit ─────────────────────────────────────
+
+    const MIB: u64 = 1024 * 1024;
+
+    /// Hoarder settings (Premium) with the account's `transferLimits` entry.
+    fn hoarder_with_limit(dir: &Path, cap_enabled: bool, limit_bytes: Option<u64>) {
+        let mut entry = json!({"capEnabled": cap_enabled});
+        if let Some(bytes) = limit_bytes {
+            entry["dailyDownLimitBytes"] = json!(bytes);
+        }
+        write_settings(
+            dir,
+            json!({"fetchMode": "hoarder", "localCacheDurationMonths": 12, "fetchModePremium": true, "transferLimits": {ACCT: entry}}),
+        );
+    }
+
+    fn spend_today(dir: &Path, bytes: u64) {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        mailvault_core::app_db::with(dir, |c| mailvault_core::app_db::stats::add(c, ACCT, &today, "daemon", bytes, 0)).unwrap();
+    }
+
+    /// Limit ON: the day's allowance is what is left of the user's limit, not
+    /// Hoarder's own 1,000 MiB. Limit OFF: the built-in budget, as before.
+    #[tokio::test]
+    async fn the_allowance_follows_the_users_limit_while_it_is_on_and_the_built_in_budget_while_it_is_off() {
+        let (dir, s) = state();
+
+        hoarder_with_limit(&dir, false, Some(5 * MIB));
+        assert_eq!(allowance_left(&s, ACCT, "imap.example.com").await, (DAILY_BYTES, false), "cap off: 1,000 MiB");
+
+        hoarder_with_limit(&dir, true, Some(5 * MIB));
+        spend_today(&dir, 3 * MIB);
+        assert_eq!(allowance_left(&s, ACCT, "imap.example.com").await, (2 * MIB, true), "cap on: 5 MiB less the 3 MiB spent");
+
+        // A limit above the built-in budget lifts it (2 x DAILY_BYTES here).
+        hoarder_with_limit(&dir, true, Some(2 * DAILY_BYTES + 3 * MIB));
+        assert_eq!(allowance_left(&s, ACCT, "imap.example.com").await, (2 * DAILY_BYTES, true));
+
+        // Cap on, field empty: Gmail's default (2,000 MB), nothing off Gmail.
+        hoarder_with_limit(&dir, true, None);
+        assert_eq!(allowance_left(&s, ACCT, "imap.gmail.com").await, (2000 * MIB - 3 * MIB, true));
+        assert_eq!(allowance_left(&s, ACCT, "imap.example.com").await, (DAILY_BYTES, false), "no limit applies: the built-in budget");
+
+        // The provider's own bandwidth stop rests the account whatever the cap says.
+        s.hoarder_worker.exhaust(&dir, ACCT, now_ms());
+        assert_eq!(allowance_left(&s, ACCT, "imap.gmail.com").await, (0, false));
+    }
+
+    /// The pass skips the account while the allowance is 0, without a single
+    /// server command, and carries on once the clock is past UTC midnight.
+    #[tokio::test]
+    async fn a_pass_skips_an_account_whose_limit_is_spent_and_resumes_after_midnight() {
+        let mock = MockImap::start(Scenario::new().mailbox(folder("INBOX", 1..=5)));
+        let (dir, s) = state();
+        hoarder_with_limit(&dir, true, Some(MIB));
+        spend_today(&dir, MIB);
+
+        let out = hoard_account(&s, &config(&mock), ACCT).await;
+        assert_eq!(out.stopped.as_deref(), Some("daily_limit_reached"), "{out:?}");
+        assert_eq!(out.fetched, 0);
+        assert_eq!(mock.commands().len(), 0, "a spent day sends the server nothing");
+        assert!(!sweep(&s).await, "and a sweep leaves the account alone");
+
+        s.clock.advance(24 * 60 * 60 * 1000);
+        let next = hoard_account(&s, &config(&mock), ACCT).await;
+        assert_eq!(next, Outcome { fetched: 3, failed: 0, stopped: None }, "the new UTC day starts with the whole limit");
+        assert_eq!(uids(&dir, "INBOX"), vec![1, 2, 3, 4, 5]);
+    }
+
+    /// The bytes Hoarder itself downloads count against the limit: a folder
+    /// bigger than what is left stops part way, for the limit's reason.
+    #[tokio::test]
+    async fn a_limit_that_runs_out_mid_folder_ends_the_pass_for_the_day() {
+        let email = format!("hoard-limit-{}@example.com", uuid::Uuid::new_v4().simple());
+        let mock = MockImap::start(Scenario::new().mailbox(folder("INBOX", 1..=60)));
+        let (dir, s) = state();
+        // Wire bytes are counted per email and filed under the account id the
+        // app's accounts.json gives that email; this email is this test's own.
+        std::fs::write(dir.join("accounts.json"), json!([{"id": ACCT, "email": email}]).to_string()).unwrap();
+        hoarder_with_limit(&dir, true, Some(12_000));
+        let config: ImapConfig = serde_json::from_value(json!({
+            "email": email, "password": "hunter2", "imapHost": mock.host(), "imapPort": mock.port(),
+        }))
+        .unwrap();
+
+        let out = hoard_account(&s, &config, ACCT).await;
+
+        assert_eq!(out.stopped.as_deref(), Some("daily_limit_reached"), "{out:?}");
+        assert!(out.fetched >= 1 && out.fetched < 58, "some of the folder came down before the limit: {out:?}");
+        assert_eq!(uids(&dir, "INBOX").len(), 2 + out.fetched, "what was fetched is kept (two copies were already there)");
     }
 }

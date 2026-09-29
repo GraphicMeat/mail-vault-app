@@ -496,6 +496,7 @@ async fn daemon_main() {
         auto_tag_worker,
         eviction_worker: eviction_worker::EvictionWorkerState::default(),
         hoarder_worker: hoarder_worker::HoarderWorkerState::default(),
+        clock: mailvault_core::transfer_limits::Clock::system(),
         raw_messages: raw_message::RawMessages::default(),
         import_rehome_running: Default::default(),
         mbox_uploads: Default::default(),

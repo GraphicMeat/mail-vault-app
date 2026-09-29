@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock all dependencies
 const mail = vi.hoisted(() => ({ state: {
@@ -456,5 +456,123 @@ describe('AccountPipeline Graph header load', () => {
 
     expect(graph.adopt).toHaveBeenCalledWith(graphAccount, listing);
     expect(graph.order).toEqual(['listFolders', 'adopt', 'listMessages']);
+  });
+});
+
+// The daily download limit governs the download-ahead pass. The daemon refuses
+// a `backfill` fetch once the day's allowance is spent (`LimitReachedError`);
+// the pipeline must not retry that (the message is fine), and must not hold the
+// other accounts' cascade hostage for a day either: it sleeps until the next
+// UTC day, keeps its queue, and picks it up again there.
+describe('AccountPipeline download-ahead at the daily limit', () => {
+  const account = { id: 'acc-4', email: 'han@mock.test', password: 'pw' };
+  const HOUR = 3600_000;
+
+  function limitError(resumeAfterMs) {
+    const err = new Error('Daily download limit reached');
+    err.limitReached = true;
+    err.limitBytes = 2000 * 1024 * 1024;
+    err.resumeAfterMs = resumeAfterMs;
+    return err;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mockPruneIfGone.mockResolvedValue(false);
+    settings.autoDownloadAttachments = false;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('stops at the first refusal, keeps the queue in order, and hands the cascade on', async () => {
+    api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + 2 * HOUR));
+    const onComplete = vi.fn();
+    const pipeline = new AccountPipeline(account, { concurrency: 1, onComplete });
+
+    pipeline.startContentCaching([1, 2, 3], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    expect(pipeline._queue).toEqual([1, 2, 3]);
+    expect(pipeline._retryQueue).toEqual([]);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(pipeline.state.isRunning).toBe(false);
+    // The retry ladder (3s, 6s ... capped 120s) never runs for a limit.
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    pipeline.destroy();
+  });
+
+  it('picks the queue up again after the reset and finishes it', async () => {
+    api.fetchEmailLight.mockRejectedValueOnce(limitError(Date.now() + 2 * HOUR));
+    const onComplete = vi.fn();
+    const pipeline = new AccountPipeline(account, { concurrency: 1, onComplete });
+    pipeline.startContentCaching([1, 2], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+
+    api.fetchEmailLight.mockResolvedValue({ uid: 1 });
+    await vi.advanceTimersByTimeAsync(2 * HOUR + 60_000);
+
+    expect(api.fetchEmailLight.mock.calls.map(c => c[1])).toEqual([1, 1, 2]);
+    expect(pipeline._queue).toEqual([]);
+    expect(pipeline._phase).toBe('done');
+    expect(onComplete).toHaveBeenCalledTimes(2); // the hand-off, then the real finish
+    pipeline.destroy();
+  });
+
+  it('several slots hitting the limit at once arm one timer and lose no uid', async () => {
+    api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 3 });
+    pipeline.startContentCaching([1, 2, 3, 4, 5], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect([...pipeline._queue].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
+    expect(pipeline._retryQueue).toEqual([]);
+    expect(pipeline._activeSlots).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
+    pipeline.destroy();
+  });
+
+  it('coming back online or switching accounts does not wake a pass that sleeps for the limit', async () => {
+    api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    pipeline.pause();
+    pipeline.resume('INBOX');
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    pipeline.destroy();
+  });
+
+  it('new uids that arrive while it sleeps join the queue and launch nothing', async () => {
+    api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    pipeline.startContentCaching([2, 9], 'INBOX');
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(pipeline._queue).toEqual([1, 2, 9]);
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    pipeline.destroy();
+  });
+
+  it('a destroyed pipeline never wakes up', async () => {
+    api.fetchEmailLight.mockRejectedValue(limitError(Date.now() + HOUR));
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1], 'INBOX');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    pipeline.destroy();
+    api.fetchEmailLight.mockResolvedValue({ uid: 1 });
+    await vi.advanceTimersByTimeAsync(2 * HOUR);
+
+    expect(api.fetchEmailLight).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -320,7 +320,7 @@ export const settingSearchGroups = [
     ['settings.dataUsage.account.dailyDownloadLimitMb', 'data usage daily download limit mb bandwidth cap'],
     ['settings.dataUsage.account.dailyUploadLimitMb', 'data usage daily upload limit mb bandwidth cap'],
     ['settings.dataUsage.account.warnWhenNearingDailyLimit', 'data usage warn near limit notification'],
-    ['settings.dataUsage.account.pauseSyncDailyLimit', 'data usage pause sync stop limit reached'],
+    ['settings.dataUsage.account.pauseBackgroundDownloads', 'data usage pause background downloads backup hoarder download ahead stop limit reached'],
   ] },
   { id: 'logs', settings: [
     ['settings.logs.verbosityTitle', 'log detail level standard verbose verbosity'],

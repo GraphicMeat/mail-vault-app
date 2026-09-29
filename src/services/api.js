@@ -241,6 +241,25 @@ export class MessageGoneError extends Error {
   }
 }
 
+/**
+ * The daemon refused a download-ahead fetch because the account's daily
+ * download limit is spent (`imap_get_email_light`, `{success: false,
+ * limitReached: true, limitBytes, resumeAfterMs}`). Not a failure of the
+ * message: retrying today only asks the same question, so the pipeline pauses
+ * until `resumeAfterMs` (the next UTC midnight, epoch ms) instead.
+ */
+export class LimitReachedError extends Error {
+  constructor({ limitBytes, resumeAfterMs, uid, mailbox } = {}) {
+    super('Daily download limit reached');
+    this.name = 'LimitReachedError';
+    this.limitReached = true;
+    this.limitBytes = limitBytes ?? null;
+    this.resumeAfterMs = resumeAfterMs ?? null;
+    this.uid = uid;
+    this.mailbox = mailbox;
+  }
+}
+
 /** OpenPGP secret keys (`src-daemon/src/handlers/pgp.rs`). Each answers `{ keys: [{ fingerprint, userIds, created }] }`. */
 export async function pgpListKeys() {
   return transportSend('pgp.list_keys', {});
@@ -277,6 +296,9 @@ export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId
     if (intent) params.intent = intent;
     const data = await tauriInvoke('imap_get_email_light', params);
     if (data?.gone) throw new MessageGoneError(data.uid ?? uid, data.mailbox ?? mailbox);
+    // Only a download-ahead fetch (`intent: 'backfill'`) is ever answered this
+    // way: the account's daily download limit is spent for the UTC day.
+    if (data?.limitReached) throw new LimitReachedError({ limitBytes: data.limitBytes, resumeAfterMs: data.resumeAfterMs, uid: data.uid ?? uid, mailbox: data.mailbox ?? mailbox });
     // The daemon auto-caches the body it just fetched; `cached` says the vault
     // holds the file now, so the caller can mark it saved with no vault read.
     if (data.email && data.cached === true) data.email.vaultCached = true;

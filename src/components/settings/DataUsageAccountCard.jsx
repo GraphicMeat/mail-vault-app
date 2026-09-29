@@ -2,7 +2,7 @@ import React, { forwardRef, useState } from 'react';
 import { useSettingsStore, getAccountColor, getAccountInitial } from '../../stores/settingsStore';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
-import { isGmailAccount, resolveDailyLimitBytes } from '../../utils/transferLimits';
+import { isGmailAccount, resolveDailyLimitBytes, GMAIL_DEFAULT_DOWN_BYTES, GMAIL_DEFAULT_UP_BYTES } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
@@ -17,6 +17,11 @@ const inputClass = 'w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-bor
 
 function bytesToMbInput(bytes) {
   return bytes == null ? '' : String(Math.round(bytes / (1024 * 1024)));
+}
+
+/** What an empty limit field means, shown as its placeholder: Gmail's default in MB, else "Unlimited". */
+function limitPlaceholder(gmail, defaultBytes) {
+  return gmail ? bytesToMbInput(defaultBytes) : t('settings.dataUsage.account.unlimited');
 }
 
 const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, unavailable, highlighted }, ref) {
@@ -151,9 +156,15 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
           <span className="text-xs text-mail-text">{t('settings.dataUsage.account.warnWhenNearingDailyLimit')}</span>
           <ToggleSwitch label={t('settings.dataUsage.account.warnWhenNearingDailyLimit')} active={warnEnabled} onClick={() => setTransferLimit(account.id, { warnEnabled: !warnEnabled })} />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-mail-text">{t('settings.dataUsage.account.pauseSyncDailyLimit')}</span>
-          <ToggleSwitch label={t('settings.dataUsage.account.pauseSyncDailyLimit')} active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-mail-text">{t('settings.dataUsage.account.pauseBackgroundDownloads')}</span>
+            <ToggleSwitch label={t('settings.dataUsage.account.pauseBackgroundDownloads')} active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
+          </div>
+          <p className="text-[11px] text-mail-text-muted mt-1" data-testid="pause-background-hint">
+            {t('settings.dataUsage.account.pauseBackgroundDownloadsHint')}
+            {gmail && ` ${t('settings.dataUsage.account.pauseBackgroundDownloadsGmailHint')}`}
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div>
@@ -163,7 +174,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
               onBlur={handleLimitBlur('dailyDownLimitBytes')}
-              placeholder={gmail ? t('settings.dataUsage.account.providerDefault') : t('settings.dataUsage.account.unlimited')}
+              placeholder={limitPlaceholder(gmail, GMAIL_DEFAULT_DOWN_BYTES)}
               className={inputClass}
             />
           </div>
@@ -174,7 +185,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}
               onBlur={handleLimitBlur('dailyUpLimitBytes')}
-              placeholder={gmail ? t('settings.dataUsage.account.providerDefault') : t('settings.dataUsage.account.unlimited')}
+              placeholder={limitPlaceholder(gmail, GMAIL_DEFAULT_UP_BYTES)}
               className={inputClass}
             />
           </div>

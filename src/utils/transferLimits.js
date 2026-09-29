@@ -1,17 +1,28 @@
 // Shared resolution logic for per-account daily transfer limits (data-usage
-// feature). Mirrors the daemon's semantics exactly — see backend contract for
-// `get_transfer_stats` and the `transferLimits` settings shape.
+// feature). Mirrors the daemon's semantics exactly: the daemon owns the
+// defaults (`src-core/src/transfer_limits.rs`, `default_limits`) and enforces
+// them; this file repeats the two numbers only to show them, and
+// tests/unit/transferLimits.test.js reads them out of the Rust source so the
+// copies cannot drift. See the `transferLimits` settings shape in settingsStore.
 
 // Provider defaults applied only when capEnabled is on and no explicit limit
 // was set. Only Gmail has a known default; other providers are unlimited.
-export const GMAIL_DEFAULT_DOWN_BYTES = 2500 * 1024 * 1024;
+// Gmail itself allows about 2,500 MB a day, across every client of the
+// account, so the download default stops 500 MB short of that and leaves room
+// for everyday mail.
+export const GMAIL_DEFAULT_DOWN_BYTES = 2000 * 1024 * 1024;
 export const GMAIL_DEFAULT_UP_BYTES = 500 * 1024 * 1024;
 
-const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
-
+/**
+ * Whether the daemon applies Gmail's defaults to this account. Decided by the
+ * IMAP host, exactly as `default_limits(host)` does (the host contains "gmail"
+ * or "googlemail", case-insensitive), never by the email domain: a Workspace
+ * address on imap.gmail.com is Gmail, and an @gmail.com address pointed at
+ * another server is not.
+ */
 export function isGmailAccount(account) {
-  const domain = (account?.email || '').split('@')[1]?.toLowerCase();
-  return GMAIL_DOMAINS.has(domain);
+  const host = String(account?.imapHost || '').toLowerCase();
+  return host.includes('gmail') || host.includes('googlemail');
 }
 
 /**

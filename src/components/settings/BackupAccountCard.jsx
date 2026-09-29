@@ -182,6 +182,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       if (result.status === 'success') {
         setManualStatus('success');
         setTimeout(() => setManualStatus('idle'), 2000);
+      } else if (result.status === 'limit_reached') {
+        // Not a failure: the account's daily download limit is spent and the
+        // backup carries on after midnight UTC. Shown as a notice, not an error.
+        setManualStatus('error');
+        setManualError(result.message);
       } else if (result.status === 'degraded') {
         setManualStatus('degraded');
         setManualError(result.message || 'Backed up locally, but external backup failed for some emails.');
@@ -333,6 +338,12 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
       {state.lastStatus === 'failed' && state.lastError && (
         <div className="text-mail-danger text-xs">{state.lastError}</div>
+      )}
+      {state.lastStatus === 'limit' && state.lastError && (
+        <div className="flex items-start gap-2 text-xs text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-2" data-testid="backup-limit-notice">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <span>{state.lastError}</span>
+        </div>
       )}
       {state.lastStatus === 'degraded' && (
         <div className="flex items-start gap-2 text-xs text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-2">

@@ -760,8 +760,11 @@ export const useSettingsStore = create(
       // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1, folders: string[]|null } }
       // folders: null = all folders, string[] = specific folder paths
 
-      // Per-account daily transfer limits — read by the daemon from disk to decide
-      // whether to warn or pause sync. Missing entry = cap off, warn on.
+      // Per-account daily transfer limits — read by the daemon from disk
+      // (src-core/src/transfer_limits.rs). capEnabled = "Pause background
+      // downloads at daily limit": backup, Hoarder and download-ahead stop for
+      // the UTC day; regular sync, IDLE arrivals and opening a message never
+      // do. warnEnabled drives the near-limit banner. Missing entry = cap off, warn on.
       transferLimits: {},
       // Shape: { [accountId]: { capEnabled: bool, warnEnabled: bool, dailyDownLimitBytes: number|null, dailyUpLimitBytes: number|null } }
 
@@ -770,7 +773,7 @@ export const useSettingsStore = create(
 
       // Backup runtime state (persisted for display across restarts)
       backupState: {},
-      // Shape: { [accountId]: { lastBackupTime: number|null, lastStatus: 'success'|'failed'|null, lastError: string|null, emailsBackedUp: number, nextRunTime: number|null } }
+      // Shape: { [accountId]: { lastBackupTime: number|null, lastStatus: 'success'|'failed'|'degraded'|'limit'|null ('limit' = stopped at the daily download limit, runs again after midnight UTC), lastError: string|null, emailsBackedUp: number, nextRunTime: number|null } }
 
       // Backup history (max 5 entries per account)
       backupHistory: {},

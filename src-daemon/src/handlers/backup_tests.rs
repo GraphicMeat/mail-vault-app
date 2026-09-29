@@ -198,3 +198,122 @@ async fn a_guards_drop_never_evicts_a_newer_runs_token_for_the_same_account() {
     assert!(runs.contains_key("acct1"), "the newer run's entry must survive the older guard's drop");
     assert!(Arc::ptr_eq(runs.get("acct1").unwrap(), &new_cancel));
 }
+
+// ── The daily download limit (a backup is background work) ────────────────
+
+mod daily_limit {
+    use super::*;
+    use mock_imap::state::synthetic_mailbox;
+    use mock_imap::{MockImap, Scenario};
+
+    const NOON: i64 = 1_773_144_000_000; // 2026-03-10T12:00:00Z
+    const MIB: u64 = 1024 * 1024;
+
+    /// The next `backup-progress` frame with `active: false` on the bus.
+    async fn terminal_frame(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Value {
+        loop {
+            let line = tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv())
+                .await
+                .expect("the run never sent a terminal backup-progress frame")
+                .unwrap();
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == "backup-progress" && payload["active"] == json!(false) {
+                    return payload;
+                }
+            }
+        }
+    }
+
+    fn account_json_for(server: &MockImap) -> String {
+        json!({
+            "email": "user@example.com", "password": "hunter2",
+            "imapHost": server.host(), "imapPort": server.port(), "imapSecure": true,
+        })
+        .to_string()
+    }
+
+    fn stored(s: &Arc<DaemonState>) -> usize {
+        let root = common::vault_root(s).unwrap();
+        let cur = mailvault_core::vault_files::cur_path(&root, "acct1", "INBOX");
+        std::fs::read_dir(cur).map(|d| d.flatten().count()).unwrap_or(0)
+    }
+
+    /// The whole wiring: the user's settings and the day's stats decide, the
+    /// daemon's clock says which day it is, the terminal frame says why the
+    /// run ended and when to come back, and after midnight the same call
+    /// finishes the job.
+    #[tokio::test]
+    async fn a_backup_at_the_users_daily_limit_stops_with_limit_reached_and_finishes_after_midnight() {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let (_v, s) = st();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 4)));
+        s.clock.set(NOON);
+        std::fs::write(
+            s.app_dir.join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": {"transferLimits": {"acct1": {
+                "capEnabled": true, "dailyDownLimitBytes": MIB,
+            }}}}})
+            .to_string(),
+        )
+        .unwrap();
+        // The whole limit is spent on the UTC day the clock is stopped at.
+        mailvault_core::app_db::with(&s.app_dir, |c| {
+            mailvault_core::app_db::stats::add(c, "acct1", "2026-03-10", "daemon", MIB, 0)
+        })
+        .unwrap();
+        let mut rx = s.events.subscribe();
+
+        backup_run_account(&s, json!({"accountId": "acct1", "accountJson": account_json_for(&server)})).await.unwrap();
+        let stopped = terminal_frame(&mut rx).await;
+
+        assert_eq!(stopped["stop_reason"], json!("limit_reached"), "{stopped}");
+        assert_eq!(stopped["limit_bytes"], json!(MIB));
+        assert_eq!(stopped["resume_after_ms"], json!(NOON + 12 * 60 * 60 * 1000), "the next UTC midnight");
+        assert_eq!(stopped["cancelled"], json!(true), "the app's checkpoint branch keys off it");
+        assert!(stopped.get("last_error").map_or(true, |e| e.is_null()), "no English prose on the frame: {stopped}");
+        assert_eq!(stored(&s), 0, "a spent day downloads nothing");
+
+        // The clock crosses midnight; the scheduler runs the account again.
+        s.clock.set(stopped["resume_after_ms"].as_i64().unwrap());
+        backup_run_account(&s, json!({
+            "accountId": "acct1", "accountJson": account_json_for(&server),
+            "skipFolders": stopped["completed_folders"],
+        }))
+        .await
+        .unwrap();
+        let done = terminal_frame(&mut rx).await;
+
+        assert!(done.get("stop_reason").is_none(), "{done}");
+        assert_eq!(done["cancelled"], json!(false));
+        assert_eq!(done["completed_emails"], json!(4));
+        assert_eq!(stored(&s), 4);
+    }
+
+    /// Cap off: the same spent day changes nothing.
+    #[tokio::test]
+    async fn a_backup_with_the_cap_off_never_stops_for_the_limit() {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let (_v, s) = st();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        s.clock.set(NOON);
+        std::fs::write(
+            s.app_dir.join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": {"transferLimits": {"acct1": {
+                "capEnabled": false, "dailyDownLimitBytes": MIB,
+            }}}}})
+            .to_string(),
+        )
+        .unwrap();
+        mailvault_core::app_db::with(&s.app_dir, |c| {
+            mailvault_core::app_db::stats::add(c, "acct1", "2026-03-10", "daemon", 10 * MIB, 0)
+        })
+        .unwrap();
+        let mut rx = s.events.subscribe();
+
+        backup_run_account(&s, json!({"accountId": "acct1", "accountJson": account_json_for(&server)})).await.unwrap();
+        let done = terminal_frame(&mut rx).await;
+
+        assert!(done.get("stop_reason").is_none(), "{done}");
+        assert_eq!(done["completed_emails"], json!(3));
+    }
+}
