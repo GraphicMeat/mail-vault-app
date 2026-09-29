@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
@@ -188,7 +188,7 @@ describe('demo mailbox backend', () => {
     expect(backend.snapshot().messages).toEqual(baseline.messages);
   });
 
-  it('answers the MBOX import options: a probe, label mode filing to the fallback folder, and the modes not built yet', async () => {
+  it('answers the MBOX import options: a probe, and label mode filing to the fallback folder', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];
     const sourcePath = 'browser-sample/mailvault-demo.mbox';
@@ -200,9 +200,101 @@ describe('demo mailbox backend', () => {
     } });
     expect(result).toMatchObject({ emailCount: 1, skippedCount: 0, accountId: account.id, mailbox: 'Archive', folders: [{ mailbox: 'Archive', imported: 1, skipped: 0 }] });
     expect(backend.snapshot().messages.some(row => row.accountId === account.id && row.mailbox === 'Archive' && row.subject === 'Imported sample MBOX message')).toBe(true);
+  });
 
-    await expect(backend.invoke('daemon_rpc', { method: 'import_mbox', params: { sourcePath, accountId: account.id, mode: 'server' } }))
-      .rejects.toThrow(/^E_MBOX_MODE_UNAVAILABLE: /);
+  // Mode 1 is a daemon job that answers at once and reports by events; the
+  // demo runs a short simulated one with the same routes, shapes and codes.
+  describe('an MBOX upload to the server', () => {
+    const sourcePath = 'browser-sample/mailvault-demo.mbox';
+    let backend;
+    let account;
+    let events;
+    const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    const last = () => events[events.length - 1];
+    const run = () => vi.advanceTimersByTime(10_000);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      backend = createDemoBackend();
+      account = backend.accounts[0];
+      events = [];
+      backend.on('mbox-import-progress', ({ payload }) => events.push(payload));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('starts at once, reports progress with the daemon\'s shape, and ends with a server copy in the target folder', async () => {
+      const started = await rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'Clients', useLabels: false });
+      expect(started).toEqual({ jobId: expect.stringMatching(/^[A-Za-z0-9-]{1,64}$/), started: true });
+      expect(last()).toMatchObject({ mode: 'server', jobId: started.jobId, accountId: account.id, fileName: 'mailvault-demo.mbox', active: true, state: 'running' });
+      const { jobs } = await rpc('mbox_upload_status', {});
+      expect(jobs).toEqual([expect.objectContaining({ jobId: started.jobId, live: true, active: true, state: 'running' })]);
+
+      run();
+      const done = last();
+      expect(done).toMatchObject({ mode: 'server', jobId: started.jobId, active: false, state: 'done', uploadedCount: 1, skippedCount: 0, failedCount: 0, foldersChanged: false, etaSeconds: null });
+      expect(done.bytesDone).toBe(done.bytesTotal);
+      // Every running event before it moved forward on bytes.
+      const bytes = events.map(e => e.bytesDone);
+      expect([...bytes].sort((a, b) => a - b)).toEqual(bytes);
+      const row = backend.snapshot().messages.find(m => m.accountId === account.id && m.mailbox === 'Clients' && m.subject === 'Uploaded sample MBOX message');
+      expect(row).toMatchObject({ custody: 'both' });
+      await expect(rpc('mbox_upload_status', {})).resolves.toEqual({ jobs: [] });
+    });
+
+    it('pauses, resumes, and holds one upload per account', async () => {
+      const { jobId } = await rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false });
+      await expect(rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false }))
+        .rejects.toThrow(new RegExp(`^E_MBOX_UPLOAD_RUNNING: ${jobId}$`));
+
+      await expect(rpc('mbox_upload_pause', { jobId })).resolves.toEqual({ jobId, paused: true });
+      expect(last()).toMatchObject({ jobId, active: true, state: 'paused', paused: true });
+      const held = events.length;
+      run();
+      expect(events).toHaveLength(held);
+      expect((await rpc('mbox_upload_status', {})).jobs[0]).toMatchObject({ state: 'paused', live: true });
+
+      await expect(rpc('mbox_upload_resume', { jobId })).resolves.toEqual({ jobId, resumed: true, restarted: false });
+      expect(last()).toMatchObject({ state: 'running', paused: false });
+      run();
+      expect(last()).toMatchObject({ active: false, state: 'done', uploadedCount: 1 });
+    });
+
+    it('a cancel keeps a journal to resume or discard, and a fresh start of that file is refused as resumable', async () => {
+      const { jobId } = await rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false });
+      await expect(rpc('mbox_upload_cancel', { jobId })).resolves.toEqual({ jobId, cancelled: true });
+      expect(last()).toMatchObject({ jobId, active: false, state: 'cancelled' });
+      expect((await rpc('mbox_upload_status', {})).jobs).toEqual([expect.objectContaining({ jobId, live: false, active: false, state: 'cancelled' })]);
+      await expect(rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false }))
+        .rejects.toThrow(new RegExp(`^E_MBOX_UPLOAD_RESUMABLE: ${jobId}$`));
+
+      await expect(rpc('mbox_upload_discard', { jobId })).resolves.toEqual({ jobId, discarded: true });
+      await expect(rpc('mbox_upload_status', {})).resolves.toEqual({ jobs: [] });
+      for (const method of ['mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_cancel', 'mbox_upload_discard']) {
+        await expect(rpc(method, { jobId })).rejects.toThrow(new RegExp(`^E_MBOX_UPLOAD_NOT_FOUND: ${jobId}$`));
+      }
+      // Nothing was uploaded by the cancelled run, and a new one starts.
+      expect(backend.snapshot().messages.some(m => m.subject === 'Uploaded sample MBOX message')).toBe(false);
+      await expect(rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false }))
+        .resolves.toMatchObject({ started: true });
+    });
+
+    it('a cancelled upload resumes from its journal', async () => {
+      const { jobId } = await rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false });
+      await rpc('mbox_upload_cancel', { jobId });
+      await expect(rpc('mbox_upload_resume', { jobId, sourcePath })).resolves.toEqual({ jobId, resumed: true, restarted: false });
+      expect(last()).toMatchObject({ jobId, active: true, state: 'running' });
+      run();
+      expect(last()).toMatchObject({ jobId, active: false, state: 'done', uploadedCount: 1 });
+    });
+
+    it('reset forgets every upload and its timers', async () => {
+      await rpc('import_mbox', { sourcePath, accountId: account.id, mode: 'server', mailbox: 'INBOX', useLabels: false });
+      backend.reset();
+      const before = events.length;
+      run();
+      expect(events).toHaveLength(before);
+      await expect(rpc('mbox_upload_status', {})).resolves.toEqual({ jobs: [] });
+    });
   });
 
   it('imports into a new folder kept on this computer, lists it and deletes it, as the daemon does', async () => {

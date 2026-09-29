@@ -176,6 +176,9 @@ export const DAEMON_OWNED = new Set([
   // labels?) and whether the account's folder list is known, before asking
   // how to import it.
   'mbox_probe',
+  // "Import and restore to the server" starts a daemon job (import_mbox,
+  // mode "server"); these hold, resume, end, forget and list it.
+  'mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_cancel', 'mbox_upload_discard', 'mbox_upload_status',
   // "Import as a separate folder" makes a vault-only folder: the sidebar lists
   // an account's (by display name) and deletes one into the deleted bin.
   'list_local_folders', 'delete_local_folder',

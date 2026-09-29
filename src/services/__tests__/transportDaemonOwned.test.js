@@ -86,6 +86,9 @@ describe('daemon-owned commands', () => {
       // The MBOX import options dialog reads the file's head before asking
       // how to import it (2026-09-29).
       'mbox_probe',
+      // "Import and restore to the server" is a daemon job: its five control
+      // routes (2026-09-29).
+      'mbox_upload_cancel', 'mbox_upload_discard', 'mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_status',
       'oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh',
       'op_journal_clear', 'op_journal_queue', 'op_journal_read',
       'pause_migration',

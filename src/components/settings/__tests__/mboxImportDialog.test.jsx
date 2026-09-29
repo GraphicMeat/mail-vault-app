@@ -80,13 +80,14 @@ beforeEach(() => {
   window.__MAILVAULT_DEMO__ = true; // skips window.location.reload() after the import
   window.__TAURI__ = { core: { invoke: vi.fn() } };
   vi.stubGlobal('alert', vi.fn());
-  useMailStore.setState({ accounts: [GMAIL, PLAIN, GRAPH], activeAccountId: null });
+  useMailStore.setState({ accounts: [GMAIL, PLAIN, GRAPH], activeAccountId: null, exportProgress: null });
 });
 
 afterEach(async () => {
   // A finished import alerts 1.5s later: let it land in its own test, not in
-  // the next one's alert stub.
-  if (importCalls().length) await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  // the next one's alert stub. An upload to the server alerts nothing: the
+  // corner chip follows it.
+  if (importCalls().some(([, a]) => a.mode !== 'server')) await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
   cleanup();
   delete window.__MAILVAULT_DEMO__;
   delete window.__TAURI__;
@@ -196,6 +197,7 @@ it('confirming with labels on sends the fallback folder path verbatim', async ()
 });
 
 it('confirming with labels off sends the picked folder alone, in the picked mode', async () => {
+  importAnswer = () => Promise.resolve({ jobId: 'job-1', started: true });
   const dialog = await openDialog();
   const picker = await folderPicker(dialog, FALLBACK);
   fireEvent.change(picker, { target: { value: 'Work' } });
@@ -246,16 +248,176 @@ it('cancel closes the dialog and imports nothing', async () => {
   expect(window.alert).not.toHaveBeenCalled();
 });
 
-it('a mode the daemon has not built yet shows the catalog message, not the daemon text', async () => {
-  importAnswer = () => Promise.reject(new Error('E_MBOX_MODE_UNAVAILABLE: import mode server is not available yet'));
+// ── "Import and restore to the server" (mode 1, Task 11) ─────────────────
+// The start answers at once with a job id; the daemon job then runs for hours
+// and the corner chip (MboxUploadProgress) follows it. The dialog adds a size
+// warning, and a choice when this file already has an upload that stopped.
+
+const LONG_UPLOAD = 'can take many hours';
+const longUploadNotice = (dialog) => within(dialog).queryByTestId('mbox-import-long-upload');
+const GIB = 1024 ** 3;
+const calls = (cmd) => sendMock.mock.calls.filter(([c]) => c === cmd).map(([, a]) => a);
+
+it('warns that uploading a file over 1 GiB can take many hours, only for the upload to the server, with no number', async () => {
+  probe = { ...LABELS, bytes: 2 * GIB };
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  // Filing into the vault is not an upload: nothing to warn about.
+  expect(longUploadNotice(dialog)).toBeNull();
+
+  fireEvent.click(modeButton(dialog, SERVER));
+  const notice = longUploadNotice(dialog);
+  expect(notice.textContent).toContain(LONG_UPLOAD);
+  // D5: no invented duration or size.
+  expect(notice.textContent).not.toMatch(/\d/);
+
+  fireEvent.click(modeButton(dialog, FOLDER));
+  expect(longUploadNotice(dialog)).toBeNull();
+});
+
+it('says nothing about hours for a file at the threshold, and warns one byte over it', async () => {
+  probe = { ...LABELS, bytes: GIB };
+  let dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  expect(longUploadNotice(dialog)).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  cleanup();
+
+  probe = { ...LABELS, bytes: GIB + 1 };
+  dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  expect(longUploadNotice(dialog).textContent).toContain(LONG_UPLOAD);
+});
+
+it('a Graph account keeps the upload disabled with its reason, and the size warning goes with it', async () => {
+  probe = { ...LABELS, bytes: 5 * GIB };
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  expect(longUploadNotice(dialog)).not.toBeNull();
+
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Account' }), { target: { value: GRAPH.id } });
+  await waitFor(() => expect(modeButton(dialog, SERVER).disabled).toBe(true));
+  expect(within(dialog).getByText(GRAPH_REASON)).toBeTruthy();
+  expect(modeButton(dialog, LOCAL).getAttribute('aria-pressed')).toBe('true');
+  expect(longUploadNotice(dialog)).toBeNull();
+});
+
+it('starting the upload hands it to the progress chip: the dialog closes, and nothing is alerted, reloaded or shown as an import', async () => {
+  importAnswer = () => Promise.resolve({ jobId: 'job-1', started: true });
+  const { listen } = await import('@tauri-apps/api/event');
+  listen.mockClear();
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  expect(await confirm(dialog)).toEqual({
+    sourcePath: SOURCE, accountId: GMAIL.id, mode: 'server',
+    mailbox: '[Gmail]/All Mail', fallbackMailbox: '[Gmail]/All Mail', useLabels: true,
+  });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  // The vault-import bar and its listener are for modes 2 and 3.
+  expect(useMailStore.getState().exportProgress).toBeNull();
+  expect(listen).not.toHaveBeenCalledWith('mbox-import-progress', expect.anything());
+  // Past the 1.5 s a finished vault import waits before its alert.
+  await new Promise((r) => setTimeout(r, 1700));
+  expect(window.alert).not.toHaveBeenCalled();
+});
+
+it('a second click on Import while the upload starts sends one start', async () => {
+  let answer;
+  importAnswer = () => new Promise((r) => { answer = r; });
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  await confirm(dialog);
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+  expect(importCalls()).toHaveLength(1);
+  answer({ jobId: 'job-1', started: true });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('a file whose upload stopped partway is offered to resume in the dialog, with the file just picked', async () => {
+  importAnswer = () => Promise.reject(new Error('E_MBOX_UPLOAD_RESUMABLE: job-7'));
   const dialog = await openDialog();
   await folderPicker(dialog, FALLBACK);
   fireEvent.click(modeButton(dialog, SERVER));
   await confirm(dialog);
 
-  await waitFor(() => expect(window.alert).toHaveBeenCalled());
-  const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
-  expect(msg).toBe('This import option is not available yet');
+  const notice = await within(dialog).findByTestId('mbox-import-resumable');
+  expect(notice.textContent).toContain('stopped partway');
+  expect(window.alert).not.toHaveBeenCalled();
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Resume upload' }));
+  // The fresh pick is what a sandboxed daemon may read now, so it goes along.
+  await waitFor(() => expect(calls('mbox_upload_resume')).toEqual([{ jobId: 'job-7', sourcePath: SOURCE }]));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(calls('mbox_upload_discard')).toEqual([]);
+  expect(importCalls()).toHaveLength(1);
+  expect(window.alert).not.toHaveBeenCalled();
+});
+
+it('... or discarded and started over with the same choices', async () => {
+  let n = 0;
+  importAnswer = () => ((n += 1) === 1
+    ? Promise.reject(new Error('E_MBOX_UPLOAD_RESUMABLE: job-7'))
+    : Promise.resolve({ jobId: 'job-8', started: true }));
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  await confirm(dialog);
+  await within(dialog).findByTestId('mbox-import-resumable');
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Start over' }));
+  await waitFor(() => expect(importCalls()).toHaveLength(2));
+  const order = sendMock.mock.calls.map(([c]) => c).filter((c) => c === 'import_mbox' || c === 'mbox_upload_discard');
+  expect(order).toEqual(['import_mbox', 'mbox_upload_discard', 'import_mbox']);
+  expect(calls('mbox_upload_discard')).toEqual([{ jobId: 'job-7' }]);
+  expect(importCalls()[1][1]).toEqual(importCalls()[0][1]);
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(calls('mbox_upload_resume')).toEqual([]);
+  expect(window.alert).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['E_MBOX_UPLOAD_RUNNING: 3f2a-11', 'errors.E_MBOX_UPLOAD_RUNNING'],
+  ['E_MBOX_UPLOAD_SIGN_IN: keychain: no password stored for acct-gmail', 'errors.E_MBOX_UPLOAD_SIGN_IN'],
+  ['E_MBOX_SERVER_GRAPH: an Outlook account takes no upload over IMAP', 'errors.E_MBOX_SERVER_GRAPH'],
+  ['Failed to read mbox file: No such file or directory (os error 2)', 'settings.backup.restore.mboxImportFailed'],
+])('a refused start (%s) shows the catalog words, never the daemon text', async (message, key) => {
+  const en = (await import('../../../i18n/locales/en.json')).default;
+  importAnswer = () => Promise.reject(new Error(message));
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  fireEvent.click(modeButton(dialog, SERVER));
+  await confirm(dialog);
+
+  await waitFor(() => expect(window.alert).toHaveBeenCalledTimes(1));
+  expect(window.alert.mock.calls[0][0]).toBe(en[key]);
+  expect(window.alert.mock.calls[0][0]).not.toContain(message.slice(message.indexOf(':') + 1).trim());
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('an import into the vault in progress ignores the progress of an upload to the server', async () => {
+  const { listen } = await import('@tauri-apps/api/event');
+  let handler = null;
+  listen.mockImplementationOnce(async (event, cb) => { if (event === 'mbox-import-progress') handler = cb; return () => {}; });
+  let answer;
+  importAnswer = () => new Promise((r) => { answer = r; });
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  await confirm(dialog);
+  await waitFor(() => expect(handler).toBeTypeOf('function'));
+
+  handler({ payload: { total: 0, completed: 7, active: true, bytesDone: 70, bytesTotal: 100 } });
+  expect(useMailStore.getState().exportProgress).toMatchObject({ completed: 7, bytesDone: 70, mode: 'import' });
+  // An upload running for another account at the same time.
+  handler({ payload: { mode: 'server', jobId: 'job-1', active: true, state: 'running', completed: 999, bytesDone: 1, bytesTotal: 5 } });
+  expect(useMailStore.getState().exportProgress).toMatchObject({ completed: 7, bytesDone: 70, mode: 'import' });
+
+  answer({ emailCount: 7, skippedCount: 0, accountId: GMAIL.id, mailbox: 'INBOX', folders: [], foldersKnown: true });
 });
 
 it('any other failure shows a catalog message, never the raw daemon text', async () => {

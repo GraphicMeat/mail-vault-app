@@ -334,6 +334,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   // account, as the daemon lists them. Their messages sit in `messages` under
   // the folder's name, vault copy only.
   const localFolders = new Map();
+  // MBOX uploads to the server (import mode 1), by job id: a short simulated
+  // run of the daemon job, for this session only (never saved or restored).
+  const uploads = new Map();
+  let uploadSeq = 0;
   let settings = clone(initialSettings);
   const listeners = new Map();
   const journal = [];
@@ -352,6 +356,43 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   let externalBackupPath = null;
 
   const emit = (event, payload) => { for (const callback of listeners.get(event) || []) callback({ payload }); };
+
+  // The daemon job's progress payload (src-daemon/src/mbox_upload_job.rs
+  // `progress`), over a three-step run of one sample message.
+  const UPLOAD_BYTES = 2048;
+  const UPLOAD_STEPS = 3;
+  const UPLOAD_STEP_MS = 700;
+  const uploadView = job => {
+    const live = job.state === 'running' || job.state === 'paused';
+    return {
+      mode: 'server', jobId: job.jobId, accountId: job.accountId, fileName: 'mailvault-demo.mbox',
+      active: live, state: job.state, total: live ? 0 : job.uploaded, completed: job.uploaded,
+      bytesDone: Math.round((job.step / UPLOAD_STEPS) * UPLOAD_BYTES), bytesTotal: UPLOAD_BYTES,
+      uploadedCount: job.uploaded, skippedCount: 0, failedCount: 0,
+      paused: job.state === 'paused', throttled: false, needsSignIn: false,
+      etaSeconds: job.state === 'running' && job.step ? Math.ceil(((UPLOAD_STEPS - job.step) * UPLOAD_STEP_MS) / 1000) : null,
+    };
+  };
+  const uploadTick = job => {
+    job.timer = setTimeout(() => {
+      job.timer = null;
+      job.step += 1;
+      if (job.step < UPLOAD_STEPS) { emit('mbox-import-progress', uploadView(job)); uploadTick(job); return; }
+      const uid = Math.max(0, ...messages.filter(row => row.accountId === job.accountId).map(row => row.uid)) + 1;
+      messages.push(makeMessage({ accountId: job.accountId, mailbox: job.mailbox, uid, from: plain({ name: 'MBOX sample', address: 'imported@mailvault.demo' }), subject: 'Uploaded sample MBOX message', text: 'This fictional message demonstrates an MBOX upload to the server in the browser.', vault: true, server: true }, sessionNow));
+      job.uploaded = 1;
+      job.state = 'done';
+      uploads.delete(job.jobId);
+      emit('mbox-import-progress', { ...uploadView(job), foldersChanged: false });
+      emit('demo:state', { type: 'import' });
+    }, UPLOAD_STEP_MS);
+  };
+  const uploadJob = jobId => {
+    const job = uploads.get(jobId);
+    if (!job) throw new Error(`E_MBOX_UPLOAD_NOT_FOUND: ${jobId}`);
+    return job;
+  };
+  const stopUpload = job => { clearTimeout(job.timer); job.timer = null; };
   const visible = (accountId, mailbox) => messages.filter(message => message.accountId === accountId && message.mailbox === mailbox && message.serverPresent);
   const local = (accountId, mailbox) => messages.filter(message => message.accountId === accountId && message.mailbox === mailbox && message.vaultPresent);
   const find = ({ accountId, mailbox, uid }) => messages.find(message => message.accountId === accountId && message.mailbox === mailbox && Number(message.uid) === Number(uid));
@@ -1094,9 +1135,21 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       // The sample file carries no Takeout labels, so the dialog offers one folder.
       case 'mbox_probe': return { bytes: 2048, hasLabels: false, foldersKnown: true, sampledMessages: 1, simulated: true };
       case 'import_mbox': {
-        // Same refusal the daemon gives until that mode is built.
-        if (args.mode === 'server') throw new Error(`E_MBOX_MODE_UNAVAILABLE: import mode ${args.mode} is not available yet`);
         const target = args.accountId || ACCOUNT_IDS[0];
+        if (args.mode === 'server') {
+          // The daemon's refusals: one upload per account, and a file with a
+          // journal is resumed or discarded, never started twice.
+          const mine = [...uploads.values()].filter(job => job.accountId === target);
+          const running = mine.find(job => job.state !== 'cancelled');
+          if (running) throw new Error(`E_MBOX_UPLOAD_RUNNING: ${running.jobId}`);
+          const kept = mine.find(job => job.sourcePath === args.sourcePath);
+          if (kept) throw new Error(`E_MBOX_UPLOAD_RESUMABLE: ${kept.jobId}`);
+          const job = { jobId: `demo-upload-${uploadSeq += 1}`, accountId: target, sourcePath: args.sourcePath, mailbox: (args.useLabels && args.fallbackMailbox) || args.mailbox || 'INBOX', state: 'running', step: 0, uploaded: 0, timer: null };
+          uploads.set(job.jobId, job);
+          emit('mbox-import-progress', uploadView(job));
+          uploadTick(job);
+          return { jobId: job.jobId, started: true };
+        }
         if (args.mode === 'folder') {
           // A new folder of the day, " 2", " 3"... on a clash, as the daemon names it.
           const day = new Date(sessionNow).toISOString().slice(0, 10);
@@ -1115,6 +1168,37 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         messages.push(makeMessage({ accountId: target, mailbox: targetMailbox, uid, from: plain({ name: 'MBOX sample', address: 'imported@mailvault.demo' }), subject: 'Imported sample MBOX message', text: 'This fictional message demonstrates an MBOX import in the browser.', vault: true, server: false }, sessionNow));
         emit('mbox-import-progress', { total: 1, completed: 1, active: false }); emit('demo:state', { type: 'import' });
         return { success: true, emailCount: 1, skippedCount: 0, accountId: target, mailbox: targetMailbox, folders: [{ mailbox: targetMailbox, imported: 1, skipped: 0 }], foldersKnown: !!args.useLabels, simulated: true };
+      }
+      case 'mbox_upload_status': {
+        const all = [...uploads.values()];
+        return { jobs: [...all.filter(job => job.state !== 'cancelled').map(job => ({ ...uploadView(job), live: true })), ...all.filter(job => job.state === 'cancelled').map(job => ({ ...uploadView(job), live: false, updatedAt: sessionNow }))] };
+      }
+      case 'mbox_upload_pause': {
+        const job = uploadJob(args.jobId);
+        if (job.state === 'running') { stopUpload(job); job.state = 'paused'; emit('mbox-import-progress', uploadView(job)); }
+        return { jobId: job.jobId, paused: true };
+      }
+      case 'mbox_upload_resume': {
+        const job = uploadJob(args.jobId);
+        if (job.state === 'running') return { jobId: job.jobId, resumed: true, restarted: false };
+        const running = [...uploads.values()].find(other => other !== job && other.accountId === job.accountId && other.state !== 'cancelled');
+        if (running) throw new Error(`E_MBOX_UPLOAD_RUNNING: ${running.jobId}`);
+        job.state = 'running';
+        emit('mbox-import-progress', uploadView(job));
+        uploadTick(job);
+        return { jobId: job.jobId, resumed: true, restarted: false };
+      }
+      case 'mbox_upload_cancel': {
+        const job = uploadJob(args.jobId);
+        if (job.state !== 'cancelled') { stopUpload(job); job.state = 'cancelled'; emit('mbox-import-progress', uploadView(job)); }
+        return { jobId: job.jobId, cancelled: true };
+      }
+      case 'mbox_upload_discard': {
+        const job = uploadJob(args.jobId);
+        stopUpload(job);
+        uploads.delete(job.jobId);
+        if (job.state !== 'cancelled') { job.state = 'discarded'; emit('mbox-import-progress', uploadView(job)); }
+        return { jobId: job.jobId, discarded: true };
       }
       case 'list_local_folders': return clone(localFolders.get(args.accountId) || []);
       case 'delete_local_folder': {
@@ -1151,7 +1235,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

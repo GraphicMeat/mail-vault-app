@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { send } from '../../services/transport';
+import * as mboxUpload from '../../services/mboxUpload';
 import MboxImportDialog from './MboxImportDialog';
 
 export default function BackupRestore() {
@@ -230,17 +231,7 @@ export default function BackupRestore() {
       return;
     }
     try {
-      // WebDriver cannot drive the native open panel, so under VITE_E2E a
-      // spec injects the file (exportSaver's `__MV_EXPORT_DEST__` seam). The
-      // flag is compiled out of a shipped build.
-      const injected = import.meta.env.VITE_E2E === '1' ? window.__MV_MBOX_SOURCE__ : null;
-      const sourcePath = injected || await (async () => {
-        const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
-        return openDialog({
-          filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
-          multiple: false,
-        });
-      })();
+      const sourcePath = await mboxUpload.pickMboxFile();
       if (!sourcePath) return;
 
       // The account on screen, not whichever sorts first: that is where the
@@ -254,9 +245,46 @@ export default function BackupRestore() {
     }
   };
 
+  // "Import and restore to the server" is a daemon job: the start answers at
+  // once and the corner chip (MboxUploadProgress) follows it from its events.
+  // A file that already has an upload that stopped partway keeps the dialog
+  // open with a choice: resume it, or discard it and start over.
+  const startServerUpload = async (options, discardJobId) => {
+    const { sourcePath } = mboxPick;
+    try {
+      // Already gone is as good as discarded.
+      if (discardJobId) await mboxUpload.discard(discardJobId).catch((e) => { if (!mboxUpload.isNotFound(e)) throw e; });
+      await mboxUpload.start({ sourcePath, ...options });
+      setMboxPick(null);
+    } catch (error) {
+      const jobId = mboxUpload.resumableJobId(error);
+      if (jobId && !discardJobId) {
+        setMboxPick((pick) => pick && { ...pick, resumable: { jobId, options } });
+        return;
+      }
+      console.error('MBOX upload error:', error);
+      setMboxPick(null);
+      alert(t(mboxUpload.errorKey(error)));
+    }
+  };
+
+  // The file was just picked, so its path goes along: after a restart a
+  // sandboxed daemon may not read the one its journal holds.
+  const resumeServerUpload = async () => {
+    const { sourcePath, resumable } = mboxPick;
+    setMboxPick(null);
+    try {
+      await mboxUpload.resume(resumable.jobId, sourcePath);
+    } catch (error) {
+      console.error('MBOX upload resume error:', error);
+      alert(t(mboxUpload.errorKey(error)));
+    }
+  };
+
   // `options` is what MboxImportDialog collected: accountId, mode, and for the
   // folder modes mailbox/useLabels/fallbackMailbox, sent to the daemon as is.
   const runMboxImport = async (options) => {
+    if (options.mode === 'server') return startServerUpload(options);
     const { sourcePath } = mboxPick;
     setMboxPick(null);
     const targetAccount = visibleAccounts.find(a => a.id === options.accountId);
@@ -267,6 +295,8 @@ export default function BackupRestore() {
       const { listen } = await import('@tauri-apps/api/event');
       const unlisten = await listen('mbox-import-progress', (event) => {
         const p = event.payload;
+        // An upload to the server running meanwhile shares the event name.
+        if (p?.mode === 'server') return;
         useMailStore.getState().setExportProgress({
           total: p.total, completed: p.completed, active: p.active, mode: 'import',
           bytesDone: p.bytesDone, bytesTotal: p.bytesTotal,
@@ -307,9 +337,8 @@ export default function BackupRestore() {
       console.error('MBOX import error:', error);
       useMailStore.getState().dismissExportProgress();
       // Daemon text is English and internal ("custody store unavailable:
-      // closed"); only a mode the daemon does not offer yet has its own code.
-      const modeUnavailable = String(error?.message ?? error).startsWith('E_MBOX_MODE_UNAVAILABLE:');
-      alert(modeUnavailable ? t('errors.E_MBOX_MODE_UNAVAILABLE') : t('settings.backup.restore.mboxImportFailed'));
+      // closed"): never shown.
+      alert(t('settings.backup.restore.mboxImportFailed'));
     }
   };
 
@@ -403,6 +432,9 @@ export default function BackupRestore() {
           defaultAccountId={mboxPick.accountId}
           onCancel={() => setMboxPick(null)}
           onConfirm={runMboxImport}
+          resumable={!!mboxPick.resumable}
+          onResume={resumeServerUpload}
+          onStartOver={() => startServerUpload(mboxPick.resumable.options, mboxPick.resumable.jobId)}
         />
       )}
     </div>

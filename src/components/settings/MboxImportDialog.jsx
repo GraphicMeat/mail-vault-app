@@ -23,17 +23,28 @@ const isAllMail = (m) => (m.flags || []).some((f) => f === 'All' || /^Extension\
 const inboxOf = (list) => list.find((m) => m.specialUse === '\\Inbox' || m.path.toUpperCase() === 'INBOX')?.path || 'INBOX';
 const fallbackOf = (list) => (list.find(isAllMail) || list.find((m) => m.specialUse === '\\Archive'))?.path || inboxOf(list);
 
+// Over this many bytes an upload to the server is said to take many hours (D5:
+// no number is promised; the chip shows the daemon's own ETA once measured).
+export const LONG_UPLOAD_BYTES = 1024 ** 3;
+
 /**
  * Asks how to import a picked MBOX file. Collects choices only: the daemon's
  * `import_mbox` routes, dedupes and files, and `onConfirm` receives exactly
  * the params it should be sent.
+ *
+ * `resumable`: the upload to the server was refused because this file already
+ * has one that stopped partway; the dialog then offers `onResume` or
+ * `onStartOver` instead of Import.
  */
-export default function MboxImportDialog({ sourcePath, accounts, defaultAccountId, onCancel, onConfirm }) {
+export default function MboxImportDialog({ sourcePath, accounts, defaultAccountId, onCancel, onConfirm, resumable, onResume, onStartOver }) {
   const t = useT();
   const id = useId();
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [mode, setMode] = useState('local');
   const [useLabels, setUseLabels] = useState(true);
+  // An upload start is awaited here (it answers at once); a second click
+  // meanwhile would start a second job.
+  const [busy, setBusy] = useState(false);
   // null until the probe and the folder list are in for this account.
   const [probe, setProbe] = useState(null);
   const [folders, setFolders] = useState([]);
@@ -58,7 +69,7 @@ export default function MboxImportDialog({ sourcePath, accounts, defaultAccountI
       const labels = !!(answer?.hasLabels && answer?.foldersKnown);
       setFolders(list.map((m) => m.path));
       setFolder(labels ? fallbackOf(list) : inboxOf(list));
-      setProbe({ labels });
+      setProbe({ labels, bytes: answer?.bytes || 0 });
     });
     return () => { live = false; };
   }, [sourcePath, accountId]);
@@ -71,9 +82,14 @@ export default function MboxImportDialog({ sourcePath, accounts, defaultAccountI
   const labelsOn = !!probe?.labels && useLabels;
   const options = folders.includes(folder) ? folders : [folder, ...folders];
 
-  const confirm = () => onConfirm(mode === 'folder'
+  const whileBusy = (run) => () => {
+    setBusy(true);
+    Promise.resolve(run()).finally(() => setBusy(false));
+  };
+  const confirm = whileBusy(() => onConfirm(mode === 'folder'
     ? { accountId, mode }
-    : { accountId, mode, mailbox: folder, useLabels: labelsOn, ...(labelsOn ? { fallbackMailbox: folder } : {}) });
+    : { accountId, mode, mailbox: folder, useLabels: labelsOn, ...(labelsOn ? { fallbackMailbox: folder } : {}) }));
+  const longUpload = mode === 'server' && probe?.bytes > LONG_UPLOAD_BYTES;
 
   return (
     <Dialog
@@ -85,9 +101,20 @@ export default function MboxImportDialog({ sourcePath, accounts, defaultAccountI
       footer={(
         <>
           <Button variant="ghost" onClick={onCancel}>{t('common.cancel')}</Button>
-          <Button variant="primary" disabled={!probe} onClick={confirm} data-testid="mbox-import-confirm">
-            {t('settings.backup.restore.mboxImportConfirm')}
-          </Button>
+          {resumable ? (
+            <>
+              <Button variant="secondary" disabled={busy} onClick={whileBusy(onStartOver)} data-testid="mbox-import-start-over">
+                {t('settings.backup.restore.mboxUploadStartOver')}
+              </Button>
+              <Button variant="primary" disabled={busy} onClick={whileBusy(onResume)} data-testid="mbox-import-resume">
+                {t('settings.backup.restore.mboxUploadResume')}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" disabled={!probe || busy} onClick={confirm} data-testid="mbox-import-confirm">
+              {t('settings.backup.restore.mboxImportConfirm')}
+            </Button>
+          )}
         </>
       )}
     >
@@ -117,6 +144,13 @@ export default function MboxImportDialog({ sourcePath, accounts, defaultAccountI
           );
         })}
       </div>
+
+      {longUpload && (
+        <p className="text-sm text-mail-text-muted" data-testid="mbox-import-long-upload">{t('settings.backup.restore.mboxServerLongUpload')}</p>
+      )}
+      {resumable && (
+        <p role="status" className="text-sm text-mail-text" data-testid="mbox-import-resumable">{t('settings.backup.restore.mboxUploadResumable')}</p>
+      )}
 
       {probe && mode !== 'folder' && (
         <>
