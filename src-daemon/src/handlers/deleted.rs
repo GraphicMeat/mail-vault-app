@@ -22,7 +22,8 @@ use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, deleted::{self as bin, Capture, Deleted}};
 use mailvault_core::custody::{cache, entries};
-use mailvault_core::{vault_eml, vault_files};
+use mailvault_core::search_index::text::vault_dir_name;
+use mailvault_core::{local_folder, vault_eml, vault_files};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
@@ -155,8 +156,46 @@ fn bare_message_id(d: &Deleted) -> Option<String> {
     d.message_id.as_deref().map(|m| m.trim().trim_start_matches('<').trim_end_matches('>').to_string()).filter(|m| !m.is_empty())
 }
 
+/// Whether the account's `mailbox` can only have been a vault-only (local)
+/// folder: the cached folder list is known and has no folder of that name or
+/// dir, and the header cache has never held a row or a count for it. Anything
+/// unknown reads as no, so a server folder is never taken for a local one.
+fn no_server_folder(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> bool {
+    let Ok(Some(listing)) = crate::handlers::cache::load_mailbox_listing(state, account_id) else { return false };
+    let dir = vault_dir_name(mailbox);
+    if mailvault_core::takeout::folder_refs_from_listing(&listing).iter().any(|f| f.path == mailbox || f.dir == dir) {
+        return false;
+    }
+    crate::custody::with_conn(state, |c| Ok(cache::sync_meta(c, account_id, mailbox)? == (None, None) && cache::count(c, account_id, mailbox)? == 0))
+        .unwrap_or(false)
+}
+
+/// A local folder's marker, written again when a recover brings mail back
+/// into the folder after it was deleted: without it the mail lands in a dir
+/// no view lists. A folder that still has its marker (or one that will not
+/// read) is left as it is.
+fn mark_local_folder_again(root: &std::path::Path, account_id: &str, mailbox: &str) {
+    let account_dir = vault_files::account_dir(&root.join("Maildir"), account_id);
+    let dir = vault_dir_name(mailbox);
+    if !matches!(local_folder::read_marker(&account_dir, &dir), Ok(None)) {
+        return;
+    }
+    let marker = local_folder::Marker {
+        kind: local_folder::KIND_IMPORT.to_string(),
+        name: mailbox.to_string(),
+        created: mailvault_core::vault_layout::now_millis(),
+        source: "recovered".to_string(),
+    };
+    match local_folder::write_marker(&account_dir.join(&dir), &marker) {
+        Ok(()) => info!("[deleted] a recover brought back the local folder {dir} of {account_id}"),
+        Err(e) => warn!("[deleted] the local folder {dir} of {account_id} was not marked again: {e}"),
+    }
+}
+
 /// Into the vault under the uid it had, kept and marked as deleted from the
-/// server by this app, which is what custody reads as "your only copy".
+/// server by this app, which is what custody reads as "your only copy". A
+/// message of a local folder the user has since deleted brings that folder
+/// back, marked, so it lists again.
 async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
     let fetched = if d.has_eml { None } else { Some(from_trash(state, &d).await?) };
     let state = Arc::clone(state);
@@ -165,8 +204,14 @@ async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, St
             Some(raw) => raw,
             None => bin::read_eml(&state.app_dir, &d.id)?,
         };
+        // Custody and the folder list are read before the mailbox lock.
+        let local_only = no_server_folder(&state, &d.account_id, &d.mailbox);
         with_mailbox_write(&state, &d.account_id, &d.mailbox, |root| {
-            vault_files::store(&state.vault_registry, root, &d.account_id, &d.mailbox, d.uid, &raw, &vault_flags(&d.flags), true)
+            vault_files::store(&state.vault_registry, root, &d.account_id, &d.mailbox, d.uid, &raw, &vault_flags(&d.flags), true)?;
+            if local_only {
+                mark_local_folder_again(root, &d.account_id, &d.mailbox);
+            }
+            Ok(())
         })?;
         let mut entry = if d.row.is_object() { d.row.clone() } else { json!({}) };
         let obj = entry.as_object_mut().expect("object");
