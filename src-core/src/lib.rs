@@ -15,6 +15,7 @@ pub mod fsx;
 pub mod log_redact;
 pub mod header_cache;
 pub mod import_rehome;
+pub mod local_folder;
 pub mod maildir;
 pub mod notes_to_self;
 pub mod search_index;

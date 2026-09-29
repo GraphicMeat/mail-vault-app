@@ -23,10 +23,17 @@
 //! A Google Takeout import with labels (`use_labels`) files each message in
 //! its home folder among the account's cached folders; each folder keeps its
 //! own uid range, dedupe and server view (`Dest`).
+//!
+//! Mode 3 ("Import as a separate folder") imports into a new vault-only
+//! folder (`mailvault_core::local_folder`: a directory no server lists, known
+//! by its marker), which `list_local_folders` and `delete_local_folder` read
+//! and remove.
 
-use crate::handlers::common;
+use crate::handlers::common::{self, blocking};
+use crate::handlers::deleted::{capture, Source};
 use crate::server::DaemonState;
 use mailvault_core::import_rehome;
+use mailvault_core::local_folder;
 use mailvault_core::maildir::{has_info, info_flags, is_info_sep, IMPORT_UID_BASE};
 use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::takeout;
@@ -68,6 +75,16 @@ pub struct MboxImportResult {
     /// with it when the list is unknown: then everything went to `mailbox`.
     #[serde(rename = "foldersKnown")]
     pub folders_known: bool,
+    /// Mode "folder": the vault-only folder this import made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<LocalFolderRef>,
+}
+
+/// A vault-only folder: its display name and its vault dir.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LocalFolderRef {
+    pub name: String,
+    pub dir: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,6 +105,13 @@ pub struct MboxProbe {
     #[serde(rename = "sampledMessages")]
     pub sampled_messages: u32,
 }
+
+/// A delete asked of a directory with no import marker (a server folder's,
+/// an unmarked one, a symlink); the app shows `errors.E_NOT_LOCAL_FOLDER`.
+const E_NOT_LOCAL_FOLDER: &str = "E_NOT_LOCAL_FOLDER";
+/// A local folder whose delete left mail in it (one message whose bin copy
+/// could not be made or matched); it stays listed and can be deleted again.
+const E_LOCAL_FOLDER_NOT_EMPTY: &str = "E_LOCAL_FOLDER_NOT_EMPTY";
 
 const PROBE_MESSAGES: u32 = 200;
 const PROBE_BYTES: u64 = 8 << 20;
@@ -584,7 +608,165 @@ fn import_from(
     }
 
     let per_folder = dests.into_iter().map(|d| FolderCount { mailbox: d.mailbox, imported: d.imported, skipped: d.skipped }).collect();
-    Ok(MboxImportResult { email_count, account_id, mailbox, skipped_count, folders: per_folder, folders_known: !folders.is_empty() })
+    Ok(MboxImportResult { email_count, account_id, mailbox, skipped_count, folders: per_folder, folders_known: !folders.is_empty(), folder: None })
+}
+
+/// Import an mbox as a folder of its own, kept only in the vault (mode 3): a
+/// new `MBOX import <today>` folder with its marker, every message into it,
+/// labels not read. Its uids come from the import range (no server shares
+/// the folder) and its dedupe covers this folder alone, so importing a file
+/// again makes and fills another folder.
+pub fn import_mbox_as_folder(state: &Arc<DaemonState>, source_path: PathBuf, account_id: String, emit: impl Fn(&str, Value)) -> Result<MboxImportResult, String> {
+    info!("import_mbox as a folder: source={}, account={}", source_path.display(), account_id);
+    // Opened before the folder is made: a missing file leaves none behind.
+    let file = std::fs::File::open(&source_path).map_err(|e| format!("Failed to read mbox file: {}", e))?;
+    let bytes_total = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let source = source_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let (marker, dir) = create_local_folder(state, &account_id, &today, &source)?;
+    let reader = std::io::BufReader::with_capacity(1 << 20, file);
+    match import_from(state, reader, bytes_total, account_id.clone(), marker.name.clone(), false, emit) {
+        Ok(mut result) => {
+            result.folder = Some(LocalFolderRef { name: marker.name, dir });
+            Ok(result)
+        }
+        Err(e) => {
+            // Nothing landed (the import's own rule for an error), so the new
+            // folder is empty and goes with the error.
+            let safe_account_id = common::sanitize_mailbox_name(&account_id);
+            let removed = common::with_mailbox_write(state, &safe_account_id, &dir, |root| {
+                local_folder::remove_if_no_mail(&local_account_dir(root, &safe_account_id).join(&dir))
+            });
+            if !matches!(removed, Ok(true)) {
+                warn!("import_mbox: the empty folder {dir} of a failed import stays: {removed:?}");
+            }
+            Err(e)
+        }
+    }
+}
+
+/// The account dir an import writes, keyed by the sanitized id as `import_from` does.
+fn local_account_dir(root: &Path, safe_account_id: &str) -> PathBuf {
+    mailvault_core::vault_files::account_dir(&root.join("Maildir"), safe_account_id)
+}
+
+/// Makes the next free `MBOX import <date>` folder of the account, under the
+/// vault gate: one directory and one small file.
+fn create_local_folder(state: &Arc<DaemonState>, account_id: &str, date: &str, source: &str) -> Result<(local_folder::Marker, String), String> {
+    let safe_account_id = common::sanitize_mailbox_name(account_id);
+    common::with_vault_write(state, |root| {
+        let created = mailvault_core::vault_layout::now_millis();
+        local_folder::create_import_folder(&local_account_dir(root, &safe_account_id), date, source, created)
+            .map_err(|e| format!("Failed to create the import folder: {e}"))
+    })
+}
+
+/// The account's vault-only folders, oldest first: `[{name, dir, kind,
+/// created, source}]`. One directory listing plus one small read per folder
+/// that has a marker, and no lock: nothing a foreground read waits on.
+pub fn list_local_folders(state: &Arc<DaemonState>, account_id: &str) -> Result<Value, String> {
+    let root = common::vault_root(state)?;
+    let account_dir = local_account_dir(&root, &common::sanitize_mailbox_name(account_id));
+    let folders = local_folder::list(&account_dir).map_err(|e| format!("Failed to list local folders: {e}"))?;
+    Ok(Value::Array(
+        folders.into_iter().map(|(dir, m)| json!({"name": m.name, "dir": dir, "kind": m.kind, "created": m.created, "source": m.source})).collect(),
+    ))
+}
+
+/// Delete a vault-only folder: every message into the deleted-mail bin the
+/// way a local-only message's delete puts it there (`maildir_delete` with
+/// `bin`: capture, then `vault_files::delete`, which updates the registry and
+/// through it the search index), then the folder with its marker. Only a
+/// folder whose marker says an import made it: never a server folder's
+/// directory, an unmarked one, or a symlink. `name` is the display name or
+/// the dir (`vault_dir_name` maps both to the dir). A folder already gone is
+/// a success.
+pub async fn delete_local_folder(state: &Arc<DaemonState>, account_id: &str, name: &str) -> Result<Value, String> {
+    let safe_account_id = common::sanitize_mailbox_name(account_id);
+    let dir = vault_dir_name(name);
+    let (st, acct, d) = (Arc::clone(state), safe_account_id.clone(), dir.clone());
+    let found = blocking(move || -> Result<Option<(String, Vec<u32>)>, String> {
+        let root = common::vault_root(&st)?;
+        let account_dir = local_account_dir(&root, &acct);
+        match std::fs::symlink_metadata(account_dir.join(&d)) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("Failed to read the folder {d}: {e}")),
+            Ok(meta) if !meta.is_dir() => return Err(format!("{E_NOT_LOCAL_FOLDER}: {d} is not a folder")),
+            Ok(_) => {}
+        }
+        let marker = match local_folder::read_marker(&account_dir, &d) {
+            Ok(Some(m)) if m.kind == local_folder::KIND_IMPORT => m,
+            Ok(_) => return Err(format!("{E_NOT_LOCAL_FOLDER}: {d} carries no import marker")),
+            Err(e) => return Err(format!("{E_NOT_LOCAL_FOLDER}: {d}: {e}")),
+        };
+        // One registry listing, outside the mailbox lock (it takes it).
+        let files = st.vault_registry.files(&root, &acct, &d).ok_or_else(|| format!("Failed to list the folder {d}"))?;
+        Ok(Some((marker.name, files.into_iter().map(|f| f.0).collect())))
+    })
+    .await
+    .and_then(|r| r)?;
+    let Some((folder_name, uids)) = found else {
+        return Ok(json!({"dir": dir, "deleted": 0}));
+    };
+
+    // One message per unit: its capture, then its removal under the
+    // mailbox lock, so a foreground read never waits on more than one.
+    let mut deleted = 0u32;
+    for uid in uids {
+        let kept = match capture(state, &safe_account_id, &folder_name, uid, Source::Local).await {
+            Ok(Some((_, true))) => true,
+            // The bin already held a copy under this key: a delete cut off
+            // after its capture, or a deleted folder of the same name whose
+            // uid came back. Only these very bytes count as kept.
+            Ok(Some((bin_id, false))) => kept_as_is(state, &safe_account_id, &folder_name, uid, bin_id).await,
+            // `Source::Local` reads nothing into this too: leave the message,
+            // the folder then stays and the delete says so.
+            Ok(None) => false,
+            Err(e) => return Err(format!("E_BIN_CAPTURE: {e}")),
+        };
+        if !kept {
+            continue;
+        }
+        let (st, acct, n) = (Arc::clone(state), safe_account_id.clone(), folder_name.clone());
+        blocking(move || common::with_mailbox_write(&st, &acct, &n, |root| mailvault_core::vault_files::delete(&st.vault_registry, root, &acct, &n, uid)))
+            .await
+            .and_then(|r| r)?;
+        deleted += 1;
+    }
+
+    // The folder goes last, under its lock, and only with no mail left in it.
+    let (st, acct, d) = (Arc::clone(state), safe_account_id.clone(), dir.clone());
+    let removed = blocking(move || {
+        common::with_mailbox_write(&st, &acct, &d, |root| {
+            let folder = local_account_dir(root, &acct).join(&d);
+            if folder.symlink_metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
+                return Ok(true);
+            }
+            let removed = local_folder::remove_if_no_mail(&folder);
+            st.vault_registry.invalidate(&acct, &d);
+            removed
+        })
+    })
+    .await
+    .and_then(|r| r)?;
+    if !removed {
+        return Err(format!("{E_LOCAL_FOLDER_NOT_EMPTY}: {deleted} moved to the deleted bin, some mail is left in {dir}"));
+    }
+    info!("local folder {dir} of {safe_account_id} deleted, {deleted} message(s) into the deleted bin");
+    Ok(json!({"dir": dir, "deleted": deleted}))
+}
+
+/// Whether the bin copy `bin_id` holds exactly the vault's bytes for `uid`.
+async fn kept_as_is(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, bin_id: String) -> bool {
+    let (st, acct, mb) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
+    blocking(move || -> Result<bool, String> {
+        let root = common::vault_root(&st)?;
+        let raw = mailvault_core::vault_files::read_message(&st.vault_registry, &root, &acct, &mb, uid, false)?;
+        Ok(raw.is_some() && raw == Some(mailvault_core::app_db::deleted::read_eml(&st.app_dir, &bin_id)?))
+    })
+    .await
+    .and_then(|r| r)
+    .unwrap_or(false)
 }
 
 /// Message-ID -> every vault file in `cur_dir` carrying it, one bounded
