@@ -26,7 +26,7 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav, expecting } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { imap } from './rawImap.js';
 
@@ -47,8 +47,15 @@ function invoke(cmd, args) {
   }, cmd, args);
 }
 
-const wait = (predicate, timeout, message) =>
-  browser.waitUntil(predicate, { timeout, interval: 300, timeoutMsg: message });
+/** `message` is a string, or an async function called only when the wait fails (so it can read the state then). */
+async function wait(predicate, timeout, message) {
+  try {
+    await browser.waitUntil(predicate, { timeout, interval: 300 });
+  } catch (err) {
+    const why = typeof message === 'function' ? await message() : message;
+    throw new Error(`${why} (${err.message})`);
+  }
+}
 
 /** Click a sub-tab: the last visible button with the label (the sidebar may carry the same words). */
 async function clickBackupSubTab(label) {
@@ -157,7 +164,7 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
     // The dry run for exactly this selection: not stale, and it names the fixture's size.
     await wait(async () => (await visible('abd-summary')) && (await attr('abd-summary', 'data-stale')) === null
       && (await textOf('abd-summary-total')).startsWith(`${count} email`),
-    30_000, `The summary never showed ${count} emails for ${folder}: ${await textOf('abd-summary-total')}`);
+    30_000, async () => `The summary never showed ${count} emails for ${folder}: ${await textOf('abd-summary-total')}`);
   }
 
   /**
@@ -179,7 +186,7 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
   async function waitForFinished() {
     if (await visible('abd-pill-restore')) expect(await clickTestId('abd-pill-restore')).toBe(true);
     await wait(async () => (await attr('abd-status', 'data-state')) === 'completed', 240_000,
-      `The job never finished: ${await attr('abd-status', 'data-state')} / ${await textOf('abd-status')}`);
+      async () => `The job never finished: ${await attr('abd-status', 'data-state')} / ${await textOf('abd-status')}`);
   }
 
   /** Close the finished panel (this dismisses the job, removing its files). */
@@ -202,9 +209,12 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
     // this spec could minimize it.)
     expect(await serverUids(port, BACKUP_FOLDER)).toEqual(BACKUP_UIDS);
     expect(await serverUids(port, ARCHIVE_FOLDER)).toEqual(ARCHIVE_UIDS);
-    for (const uid of BACKUP_UIDS) expect(vaultNames(BACKUP_FOLDER, uid), `vault already holds ${uid}`).toEqual([]);
-    for (const uid of ARCHIVE_UIDS) expect(vaultNames(ARCHIVE_FOLDER, uid), `vault already holds ${uid}`).toEqual([]);
-    for (const uid of BACKUP_UIDS) expect(await trashUidsOf(port, uid), `Trash already holds ${uid}`).toEqual([]);
+    for (const uid of BACKUP_UIDS) expecting(`vault already holds ${uid}`, () => expect(vaultNames(BACKUP_FOLDER, uid)).toEqual([]));
+    for (const uid of ARCHIVE_UIDS) expecting(`vault already holds ${uid}`, () => expect(vaultNames(ARCHIVE_FOLDER, uid)).toEqual([]));
+    for (const uid of BACKUP_UIDS) {
+      const held = await trashUidsOf(port, uid);
+      expecting(`Trash already holds ${uid}`, () => expect(held).toEqual([]));
+    }
     expect(existsSync(join(backupRoot, LUKE))).toBe(false);
   });
 
@@ -260,7 +270,8 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
     expect(await clickTestId('abd-minimize')).toBe(true);
     await wait(() => visible('abd-pill'), 10_000, 'The pill never appeared');
     expect(await visible('abd-panel')).toBe(false);
-    expect(await attr('abd-pill', 'data-state'), 'the job must still be running when minimized').not.toBe('completed');
+    const pillState = await attr('abd-pill', 'data-state');
+    expecting('the job must still be running when minimized', () => expect(pillState).not.toBe('completed'));
 
     // The job runs on with the panel folded away; the pill brings it back.
     expect(await clickTestId('abd-pill-restore')).toBe(true);
@@ -275,16 +286,17 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
 
   it('backup mode: the server lists none of them and Trash holds each', async function () {
     await wait(async () => (await serverUids(port, BACKUP_FOLDER)).length === 0, 30_000,
-      `The server still lists ${JSON.stringify(await serverUids(port, BACKUP_FOLDER))} in ${BACKUP_FOLDER}`);
+      async () => `The server still lists ${JSON.stringify(await serverUids(port, BACKUP_FOLDER))} in ${BACKUP_FOLDER}`);
     for (const uid of BACKUP_UIDS) {
-      expect((await trashUidsOf(port, uid)).length, `Trash copies of ${messageId(uid)}`).toBe(1);
+      const inTrash = (await trashUidsOf(port, uid)).length;
+      expecting(`Trash copies of ${messageId(uid)}`, () => expect(inTrash).toBe(1));
     }
   });
 
   it('backup mode: the vault holds an archived copy of each', function () {
     for (const uid of BACKUP_UIDS) {
       const names = vaultNames(BACKUP_FOLDER, uid);
-      expect(names, `vault files for uid ${uid}`).toHaveLength(1);
+      expecting(`vault files for uid ${uid}`, () => expect(names).toHaveLength(1));
       expect((names[0].split(/[:;]2,/)[1] || '')).toContain('A');
     }
   });
@@ -293,7 +305,7 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
     for (const uid of BACKUP_UIDS) {
       const [vaultName] = vaultNames(BACKUP_FOLDER, uid);
       const mirrored = mirrorNames(BACKUP_FOLDER, uid);
-      expect(mirrored, `drive files for uid ${uid}`).toHaveLength(1);
+      expecting(`drive files for uid ${uid}`, () => expect(mirrored).toHaveLength(1));
       expect(readFileSync(join(mirrorCur(BACKUP_FOLDER), mirrored[0])))
         .toEqual(readFileSync(join(vaultCur(BACKUP_FOLDER), vaultName)));
     }
@@ -317,13 +329,14 @@ describe('Archive & delete jobs (Settings > Backup & Restore)', function () {
     await closePanel();
 
     await wait(async () => (await serverUids(port, ARCHIVE_FOLDER)).length === 0, 30_000,
-      `The server still lists ${JSON.stringify(await serverUids(port, ARCHIVE_FOLDER))} in ${ARCHIVE_FOLDER}`);
+      async () => `The server still lists ${JSON.stringify(await serverUids(port, ARCHIVE_FOLDER))} in ${ARCHIVE_FOLDER}`);
     for (const uid of ARCHIVE_UIDS) {
-      expect((await trashUidsOf(port, uid)).length, `Trash copies of ${messageId(uid)}`).toBe(1);
+      const inTrash = (await trashUidsOf(port, uid)).length;
+      expecting(`Trash copies of ${messageId(uid)}`, () => expect(inTrash).toBe(1));
       const names = vaultNames(ARCHIVE_FOLDER, uid);
-      expect(names, `vault files for uid ${uid}`).toHaveLength(1);
+      expecting(`vault files for uid ${uid}`, () => expect(names).toHaveLength(1));
       expect((names[0].split(/[:;]2,/)[1] || '')).toContain('A');
     }
-    expect(existsSync(join(backupRoot, LUKE, ARCHIVE_FOLDER)), 'archive-only must not write to the drive').toBe(false);
+    expecting('archive-only must not write to the drive', () => expect(existsSync(join(backupRoot, LUKE, ARCHIVE_FOLDER))).toBe(false));
   });
 });

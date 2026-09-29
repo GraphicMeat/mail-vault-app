@@ -830,8 +830,11 @@ fn seed_graph_job(dir: &Path) -> JobFile {
 
 #[tokio::test]
 async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_token_goes_nowhere() {
-    // A closed local port: whatever the job does with the token, it goes nowhere.
-    std::env::set_var("MAILVAULT_GRAPH_BASE", "http://127.0.0.1:1");
+    // The process-wide Graph base is the Graph handler tests' loopback mock
+    // (an empty queue: every request it gets is a 500), so whatever the job does
+    // with the token, it goes nowhere. Never set `MAILVAULT_GRAPH_BASE` here: it
+    // is read once per process and would break those tests.
+    let _graph = crate::handlers::graph::test_graph_mock();
     let logs = captured_logs();
     let mock = MockImap::start(Scenario::new());
     let rig = Rig::build(

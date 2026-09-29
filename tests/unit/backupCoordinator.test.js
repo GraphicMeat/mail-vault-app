@@ -1723,7 +1723,8 @@ describe('BackupCoordinator — stopped at the daily download limit', () => {
     await vi.advanceTimersByTimeAsync(60_000 + LIMIT_RESUME_MARGIN_MS);
 
     expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
-    expect(api.backupRunAccount).toHaveBeenLastCalledWith('acc-1', expect.any(String), null, 2);
+    // Resumes at folder 2. The scheduled account is Premium, so the run also carries its mailbox concurrency.
+    expect(api.backupRunAccount).toHaveBeenLastCalledWith('acc-1', expect.any(String), null, 2, expect.any(Number));
     expect(backupScheduler._checkpoints.has('acc-1')).toBe(false);
     expect(backupScheduler._limitHolds.size).toBe(0);
   });

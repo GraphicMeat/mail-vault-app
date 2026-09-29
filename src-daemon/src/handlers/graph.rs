@@ -335,6 +335,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// Test seam for other modules' tests that reach Graph: points the process-wide
+/// Graph base at this module's one loopback mock and holds its lock (queue empty,
+/// so a stray request gets a 500) until the guard drops. `MAILVAULT_GRAPH_BASE`
+/// is read once per process, so nobody else may ever set it to another address.
+#[cfg(test)]
+pub(crate) fn test_graph_mock() -> std::sync::MutexGuard<'static, ()> {
+    tests::mock_graph(Vec::new())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,7 +402,7 @@ mod tests {
     /// order, and return a guard that serializes this test against every
     /// other test in the module. Callers must hold the guard for the whole
     /// test (`let _g = mock_graph(...)`).
-    fn mock_graph(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
+    pub(super) fn mock_graph(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
         let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         mock_server_port();
         let mut q = QUEUE.lock().unwrap();

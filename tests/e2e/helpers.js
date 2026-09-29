@@ -13,6 +13,25 @@ import { join } from 'node:path';
 const EXE = process.platform === 'win32' ? '.exe' : '';
 
 // ---------------------------------------------------------------------------
+// Assertion helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * WebdriverIO's `expect` takes ONE argument (jest's `expect(actual, message)`
+ * throws "Expect takes at most one argument"). Run `assertion` and, if it
+ * fails, prefix the failure with `message`:
+ *   expecting(`vault files for uid ${uid}`, () => expect(names).toHaveLength(1));
+ */
+export function expecting(message, assertion) {
+  try {
+    assertion();
+  } catch (err) {
+    if (err && typeof err.message === 'string') err.message = `${message}: ${err.message}`;
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Wait helpers
 // ---------------------------------------------------------------------------
 

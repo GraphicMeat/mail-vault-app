@@ -5,7 +5,7 @@
  * drive, checks both copies, and only then removes them from the server. This
  * spec runs it on three rows and proves each of the three places from the
  * outside:
- *   - the server no longer lists them (the rows fall to "local only");
+ *   - the server no longer lists them (a second IMAP client asks);
  *   - the vault holds an archived copy of each;
  *   - the backup drive holds the same bytes under the vault's Maildir name.
  *
@@ -22,8 +22,9 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, expecting } from './helpers.js';
 import { appDataDir } from './mockImap.js';
+import { imap } from './rawImap.js';
 
 const LUKE = 'luke@mock.test';
 const FOLDER = 'BackupDelete';
@@ -144,26 +145,30 @@ describe('Archive, Back up & Delete', function () {
   it('is Premium: a free plan gets the upsell instead of a run', async function () {
     await setStore({ billingProfile: null });
     await openBulkAtStepTwo();
-
-    expect((await testIdState('bulk-action-archive_backup_delete'))?.text).toContain('Premium');
-    expect((await testIdState('bulk-action-archive_and_delete'))?.text).toContain('Premium');
-    expect(await clickTestId('bulk-action-archive_backup_delete')).toBe(true);
-    await waitForBodyText('part of Premium', 'The Premium upsell never appeared');
-    expect((await testIdState('bulk-step2-confirm'))?.disabled).toBe(true);
-
-    await abandonBulk();
+    try {
+      // The badge is CSS-uppercased and `innerText` returns the rendered case, so compare lower-cased.
+      expect((await testIdState('bulk-action-archive_backup_delete'))?.text.toLowerCase()).toContain('premium');
+      expect((await testIdState('bulk-action-archive_and_delete'))?.text.toLowerCase()).toContain('premium');
+      expect(await clickTestId('bulk-action-archive_backup_delete')).toBe(true);
+      await waitForBodyText('part of Premium', 'The Premium upsell never appeared');
+      expect((await testIdState('bulk-step2-confirm'))?.disabled).toBe(true);
+    } finally {
+      // A failed assertion must not leave the modal open for the next case.
+      await abandonBulk();
+    }
   });
 
   it('is disabled until a backup folder is chosen', async function () {
     await setStore({ billingProfile: PREMIUM, externalBackupLocation: null });
     await openBulkAtStepTwo();
-
-    const option = await testIdState('bulk-action-archive_backup_delete');
-    expect(option?.disabled).toBe(true);
-    expect(option?.text).toContain('Choose a backup folder first');
-    expect((await testIdState('bulk-action-archive_and_delete'))?.disabled).toBe(false);
-
-    await abandonBulk();
+    try {
+      const option = await testIdState('bulk-action-archive_backup_delete');
+      expect(option?.disabled).toBe(true);
+      expect(option?.text).toContain('Choose a backup folder first');
+      expect((await testIdState('bulk-action-archive_and_delete'))?.disabled).toBe(false);
+    } finally {
+      await abandonBulk();
+    }
   });
 
   it('archives, backs up and deletes three rows from the server, leaving the vault and the drive holding them', async function () {
@@ -177,7 +182,7 @@ describe('Archive, Back up & Delete', function () {
     await openBulkAtStepTwo();
     const option = await testIdState('bulk-action-archive_backup_delete');
     expect(option?.disabled).toBe(false);
-    expect(option?.text).not.toContain('Premium');
+    expect(option?.text.toLowerCase()).not.toContain('premium');
     expect(option?.text).not.toContain('Choose a backup folder first');
 
     expect(await clickTestId('bulk-action-archive_backup_delete')).toBe(true);
@@ -188,23 +193,20 @@ describe('Archive, Back up & Delete', function () {
     await waitForBodyText('Operation Complete', 'The run never reported completion', 120_000);
   });
 
-  it('removed all three from the server: each row is now local only', async function () {
-    await browser.waitUntil(async () => {
-      const list = await rows();
-      return list.length === UIDS.length && list.every((r) => r.localOnly);
-    }, {
-      timeout: 60_000, interval: 500,
-      timeoutMsg: `The rows never fell to local-only: ${JSON.stringify(await rows())}`,
-    });
-    // The store agrees the server no longer lists them.
-    const serverUids = await browser.execute(() => [...(window.__MAIL_STORE__?.getState?.().serverUids?.uids || [])]);
-    for (const uid of UIDS) expect(serverUids).not.toContain(uid);
+  it('removed all three from the server', async function () {
+    // Proof from outside the app: a second IMAP client asks the server what the folder holds.
+    // (The list on screen is not the proof: a bulk delete does not prune the app's header cache
+    // or stamp the vault entries, so what the rows show afterwards is not what the server holds.)
+    const lines = await imap(account.imapPort, FOLDER, 'UID SEARCH ALL');
+    const line = lines.find((l) => l.startsWith('* SEARCH'));
+    const left = line ? line.replace('* SEARCH', '').split(/\s+/).filter(Boolean).map(Number) : [];
+    expecting('uids still on the server', () => expect(left.filter((u) => UIDS.includes(u))).toEqual([]));
   });
 
   it('left an archived copy of each in the vault', function () {
     for (const uid of UIDS) {
       const names = vaultNames(uid);
-      expect(names, `vault files for uid ${uid}`).toHaveLength(1);
+      expecting(`vault files for uid ${uid}`, () => expect(names).toHaveLength(1));
       expect((names[0].split(/[:;]2,/)[1] || '')).toContain('A');
     }
   });
@@ -213,7 +215,7 @@ describe('Archive, Back up & Delete', function () {
     for (const uid of UIDS) {
       const [vaultName] = vaultNames(uid);
       const mirrored = mirrorNames(uid);
-      expect(mirrored, `drive files for uid ${uid}`).toHaveLength(1);
+      expecting(`drive files for uid ${uid}`, () => expect(mirrored).toHaveLength(1));
       expect(readFileSync(join(mirrorCur, mirrored[0]))).toEqual(readFileSync(join(vaultCur, vaultName)));
     }
   });

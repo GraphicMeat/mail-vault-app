@@ -72,6 +72,7 @@ const ALLOWLIST = new Set([
   'settings.searchIndex.indexing', // progress status text, not a setting
   // choices for one MBOX import in its options dialog, not settings
   'settings.backup.restore.mboxAccount', 'settings.backup.restore.mboxUseLabels',
+  'settings.storage.hoarderOrBackup', // info-popover trigger explaining the download modes, not a setting
   // page chrome, not settings
   'settingsPage.close', 'settingsPage.restore',
   // already indexed via a top-level tab's own labelKey (also reused as an in-page heading)
