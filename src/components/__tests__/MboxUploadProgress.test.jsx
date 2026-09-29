@@ -81,6 +81,11 @@ const flush = async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve
 const tick = () => act(async () => { vi.advanceTimersByTime(RENDER_EVERY_MS); });
 // A resume first looks the account up (loaded on demand): wait for its call.
 const settled = (cmd, expected) => act(() => vi.waitFor(() => expect(calls(cmd)).toEqual(expected), { timeout: 10_000 }));
+// Wait for what the chip RENDERS. React holds every update made inside an
+// act() scope until that scope ends, so a DOM check polled inside one act
+// never sees it: each attempt runs its own short act (flushing what landed)
+// and checks the DOM after it.
+const rendered = (check) => vi.waitFor(async () => { await act(flush); check(); }, { timeout: 10_000 });
 
 const chip = () => screen.queryByTestId('mbox-upload-chip');
 const job = (id = JOB) => document.querySelector(`[data-testid="mbox-upload-job"][data-job-id="${id}"]`);
@@ -314,7 +319,7 @@ describe('MboxUploadProgress', () => {
     openMock.mockResolvedValue('/Users/me/Downloads/Takeout-002.mbox');
     await mount();
     fireEvent.click(button('resume'));
-    await act(() => vi.waitFor(() => expect(job().textContent).toContain(en['mboxUpload.otherFile']), { timeout: 10_000 }));
+    await rendered(() => expect(job().textContent).toContain(en['mboxUpload.otherFile']));
     expect(openMock).toHaveBeenCalledTimes(1);
     expect(calls('mbox_upload_resume')).toEqual([{ jobId: JOB }]);
     expect(face()).toBe('stopped');
@@ -411,11 +416,12 @@ describe('MboxUploadProgress', () => {
       statusReply = { jobs: [journal({ state: 'cancelled', uploadedCount: 2 })] };
       fireEvent.click(button(name));
       await act(() => vi.waitFor(() => expect(calls('mbox_upload_status')).toHaveLength(2), { timeout: 10_000 }));
-      await act(flush);
-      expect(calls(`mbox_upload_${name}`)).toEqual([{ jobId: JOB }]);
       // Still there, as the daemon now lists it, with no refusal words.
-      expect(face()).toBe('stopped');
-      expect(job().textContent).toContain('2 uploaded');
+      await rendered(() => {
+        expect(face()).toBe('stopped');
+        expect(job().textContent).toContain('2 uploaded');
+      });
+      expect(calls(`mbox_upload_${name}`)).toEqual([{ jobId: JOB }]);
       expect(job().textContent).not.toContain(en['mboxUpload.actionFailed']);
       expect(alert).not.toHaveBeenCalled();
     } finally {
