@@ -15,9 +15,11 @@
  * The last block goes through the import options dialog itself ("Import into
  * my existing folders"). Only the file pick is injected: under VITE_E2E,
  * BackupRestore takes `window.__MV_MBOX_SOURCE__` instead of opening the
- * panel. A Takeout file whose two labels name two existing folders lands in
- * both and lists there, a repeat import skips both, and a file without labels
- * goes to the folder picked in the dialog.
+ * panel. In a Takeout file, the two messages whose labels name existing
+ * folders land in those folders and the one whose label names none lands in
+ * the fallback folder picked in the dialog, each listing there; a repeat
+ * import skips all three; a file without labels goes to the folder picked in
+ * the dialog.
  */
 
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -144,13 +146,19 @@ async function importThroughDialog(sourcePath, { pick } = {}) {
     window.__e2eBeforeReload = true;
     document.querySelector('[data-testid="mbox-import-confirm"]').click();
   });
-  await browser.waitUntil(async () => {
-    try {
-      return await browser.execute(() => window.__e2eBeforeReload !== true);
-    } catch {
-      return false; // mid-navigation
-    }
-  }, { timeout: 90_000, interval: 300, timeoutMsg: 'the app never reloaded after the dialog import' });
+  try {
+    await browser.waitUntil(async () => {
+      try {
+        return await browser.execute(() => window.__e2eBeforeReload !== true);
+      } catch {
+        return false; // mid-navigation
+      }
+    }, { timeout: 90_000, interval: 300 });
+  } catch (e) {
+    // A failed import alerts and does not reload: its alert is the reason.
+    const said = await browser.execute((key) => sessionStorage.getItem(key), ALERTS_KEY).catch(() => null);
+    throw new Error(`the app never reloaded after the dialog import; alerts: ${said || 'none'} (${e.message})`);
+  }
   await waitForApp();
 
   const alerts = await browser.execute((key) => JSON.parse(sessionStorage.getItem(key) || '[]'), ALERTS_KEY);
@@ -265,17 +273,41 @@ describe('MBOX import shows the imported mail', function () {
     expect(existsSync(join(mailboxDir, '.import-rehome.json'))).toBe(true);
   });
 
-  // The labels name INBOX (system label "Inbox") and Flaky (a custom label
-  // matching an existing folder). Both are folders this spec may add to: the
-  // cases above already import into luke's INBOX, and the specs that open
-  // Flaky find their rows by subject. Kunden and Archive are off limits, other
-  // specs count their messages (connected-folder-subtree, storage-matrix).
+  // Three destinations, each told apart from the other two:
+  //   - INBOX, by the system label "Inbox". The cases above already import
+  //     into luke's INBOX.
+  //   - Flaky, by a custom label naming an existing folder. The specs that
+  //     open Flaky (email-viewer, pgp) find their rows by subject.
+  //   - Trash, the fallback picked in the dialog, for the message whose only
+  //     label ("Category Promotions") names no folder. luke's Trash holds no
+  //     server mail; backup-orphan-restore finds its files there by uid and
+  //     custody-claims its row by subject, and every other Trash spec
+  //     (delete-undo, cleanup-rules, idle-repaint, instant-arrival,
+  //     delete-reader-race, storage-matrix) works on yoda or vader.
+  // Off limits: Kunden and Archive (connected-folder-subtree and storage-matrix
+  // count them) and Drafts (connected-restore-daemon counts luke's local
+  // Drafts with count_local_folder).
   describe('through the import options dialog, into my existing folders', function () {
+    const FALLBACK = 'Trash';
     const INBOX_MSG = { subject: 'Dialog import for the inbox', messageId: 'dialog-inbox@gmail.test' };
     const FLAKY_MSG = { subject: 'Dialog import for Flaky', messageId: 'dialog-flaky@gmail.test' };
+    const FALLBACK_MSG = { subject: 'Dialog import with no folder label', messageId: 'dialog-fallback@gmail.test' };
     const PLAIN_MSG = { subject: 'Dialog import without labels', messageId: 'dialog-plain@gmail.test' };
     let lukeId = null;
     let takeoutPath = null;
+
+    // Where each Takeout message has import-range copies: every message in
+    // every folder it could reach, Archive included (the unpicked default).
+    const FOLDERS = ['INBOX', 'Flaky', FALLBACK, 'Archive'];
+    const placement = () => Object.fromEntries([INBOX_MSG, FLAKY_MSG, FALLBACK_MSG].map((m) => [
+      m.subject, Object.fromEntries(FOLDERS.map((f) => [f, importedCopies(lukeId, f, m.messageId).length])),
+    ]));
+    const NOWHERE = { INBOX: 0, Flaky: 0, [FALLBACK]: 0, Archive: 0 };
+    const ROUTED = {
+      [INBOX_MSG.subject]: { ...NOWHERE, INBOX: 1 },
+      [FLAKY_MSG.subject]: { ...NOWHERE, Flaky: 1 },
+      [FALLBACK_MSG.subject]: { ...NOWHERE, [FALLBACK]: 1 },
+    };
 
     before(function () {
       lukeId = (browser.mockAccounts || []).find((a) => a.email === LUKE)?.id;
@@ -285,31 +317,34 @@ describe('MBOX import shows the imported mail', function () {
         takeoutMessage({ ...INBOX_MSG, labels: 'Inbox,Opened' }),
         // Important is ignored; the custom label that exists as a folder wins.
         takeoutMessage({ ...FLAKY_MSG, labels: 'Important,Flaky,Opened' }),
+        // Category labels never name a folder: this one has no home but the fallback.
+        takeoutMessage({ ...FALLBACK_MSG, labels: 'Category Promotions,Opened' }),
       ].join(''));
     });
 
-    it('files each labelled message into the folder its label names, and each lists there', async function () {
-      expect(importedCopies(lukeId, 'INBOX', INBOX_MSG.messageId)).toEqual([]);
-      expect(importedCopies(lukeId, 'Flaky', FLAKY_MSG.messageId)).toEqual([]);
+    it('files each labelled message into the folder its label names, the rest into the picked fallback, and each lists there', async function () {
+      expect(placement()).toEqual({
+        [INBOX_MSG.subject]: NOWHERE, [FLAKY_MSG.subject]: NOWHERE, [FALLBACK_MSG.subject]: NOWHERE,
+      });
 
       // luke has an \Archive folder and no All Mail: the fallback defaults to
-      // Archive. Pointed at INBOX instead, so a routing bug cannot drop mail
-      // into the Archive other specs count.
-      const run = await importThroughDialog(takeoutPath, { pick: 'INBOX' });
+      // Archive. Pointed at Trash, a folder neither label names, so a router
+      // that sent everything to the fallback, or ignored the picked one, fails.
+      const run = await importThroughDialog(takeoutPath, { pick: FALLBACK });
       expect(run.account).toBe(lukeId);
       expect(run.labels).toBe('true');
       expect(run.folder).toBe('Archive');
 
-      // The disk is the proof: one import-range copy in each labelled folder,
-      // and none in the other one.
-      expect(importedCopies(lukeId, 'INBOX', INBOX_MSG.messageId)).toHaveLength(1);
-      expect(importedCopies(lukeId, 'Flaky', FLAKY_MSG.messageId)).toHaveLength(1);
-      expect(importedCopies(lukeId, 'INBOX', FLAKY_MSG.messageId)).toEqual([]);
-      expect(importedCopies(lukeId, 'Flaky', INBOX_MSG.messageId)).toEqual([]);
-      expect(importedCopies(lukeId, 'Archive', INBOX_MSG.messageId)).toEqual([]);
+      // The disk is the proof: exactly one import-range copy of each message,
+      // in its own folder and nowhere else.
+      expect(placement()).toEqual(ROUTED);
 
-      for (const [folder, subject] of [['INBOX', INBOX_MSG.subject], ['Flaky', FLAKY_MSG.subject]]) {
-        await switchToFolder(LUKE, folder);
+      for (const { subject, folder } of [
+        { subject: INBOX_MSG.subject, folder: 'INBOX' },
+        { subject: FLAKY_MSG.subject, folder: 'Flaky' },
+        { subject: FALLBACK_MSG.subject, folder: FALLBACK },
+      ]) {
+        await switchToFolder(LUKE, folder, { requireRows: false });
         let rows = [];
         await browser.waitUntil(async () => {
           rows = await visibleRowSubjects();
@@ -319,17 +354,26 @@ describe('MBOX import shows the imported mail', function () {
           timeoutMsg: `"${subject}" never listed in ${LUKE} ${folder}; rows: ${JSON.stringify(rows).slice(0, 600)}`,
         });
       }
-      expect(run.alerts.join('\n')).toContain('2 email(s) are now in your vault');
+      expect(run.alerts.join('\n')).toContain('3 email(s) are now in your vault');
     });
 
     it('a repeat import of the same file skips what each folder already holds', async function () {
-      const run = await importThroughDialog(takeoutPath, { pick: 'INBOX' });
+      // Standalone: when the case above did not run, import once the way the
+      // dialog does (same params) so there is something to skip.
+      if (JSON.stringify(placement()) !== JSON.stringify(ROUTED)) {
+        const first = await daemonRpc('import_mbox', {
+          sourcePath: takeoutPath, accountId: lukeId, mode: 'local', mailbox: FALLBACK, fallbackMailbox: FALLBACK, useLabels: true,
+        });
+        expect(first.ok).toBe(true);
+      }
+      expect(placement()).toEqual(ROUTED);
 
-      expect(importedCopies(lukeId, 'INBOX', INBOX_MSG.messageId)).toHaveLength(1);
-      expect(importedCopies(lukeId, 'Flaky', FLAKY_MSG.messageId)).toHaveLength(1);
+      const run = await importThroughDialog(takeoutPath, { pick: FALLBACK });
+
+      expect(placement()).toEqual(ROUTED);
       const said = run.alerts.join('\n');
       expect(said).toContain('0 email(s) are now in your vault');
-      expect(said).toContain('2 email(s) were already in this folder and were skipped.');
+      expect(said).toContain('3 email(s) were already in this folder and were skipped.');
     });
 
     it('a file without labels goes to the folder picked in the dialog', async function () {
