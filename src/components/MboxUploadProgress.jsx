@@ -90,6 +90,13 @@ export function MboxUploadProgress({ onOpenAccounts }) {
     // summaries of runs it has forgotten. Either way an event that landed
     // while the list was on its way is newer than the list.
     const load = (restarted) => {
+      // Counts held back for the interval came from the daemon that went: the
+      // restarted one's list must not be overwritten by them.
+      if (restarted) {
+        clearTimeout(timer);
+        timer = null;
+        pending.clear();
+      }
       const before = events;
       upload.status().then((list) => {
         if (!alive) return;
@@ -122,7 +129,9 @@ export function MboxUploadProgress({ onOpenAccounts }) {
   );
   const controls = {
     pause: ({ jobId }) => act(jobId, () => upload.pause(jobId)),
-    resume: ({ jobId, accountId }) => act(jobId, () => upload.resume({ jobId, accountId })),
+    // The job's file name: a resume that must ask for the file names it, and
+    // refuses one by another name.
+    resume: ({ jobId, accountId, fileName }) => act(jobId, () => upload.resume({ jobId, accountId, fileName })),
     cancel: ({ jobId }) => act(jobId, () => upload.cancel(jobId)),
     // A journal with no worker sends no event: the row goes on the answer.
     discard: ({ jobId }) => act(jobId, () => upload.discard(jobId).then(() => drop(jobId))),
@@ -195,6 +204,8 @@ function UploadRow({ job, failed, controls }) {
       {f === 'throttled' && <p className="mt-1 text-xs text-mail-warning">{t('mboxUpload.throttled')}</p>}
       {job.needsSignIn && <p className="mt-1 text-xs text-mail-warning">{t('mboxUpload.needsSignIn')}</p>}
       {job.error && <p className="mt-1 text-xs text-mail-danger">{t(upload.errorKey(job.error))}</p>}
+      {/* Cancel keeps the journal: say so, and how to be rid of it. */}
+      {f === 'stopped' && <p className="mt-1 text-xs text-mail-text-muted">{t('mboxUpload.stoppedHint')}</p>}
       {failed && <p className="mt-1 text-xs text-mail-danger">{t(failed)}</p>}
       {f !== 'done' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">

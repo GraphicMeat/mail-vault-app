@@ -64,6 +64,13 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn(),
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
+// An upload start or resume resolves the account first (keychain, token
+// refresh), as the backup does; the store's accounts here carry no credentials.
+const resolveServerAccount = vi.fn(async (id, account) => ({ ok: true, account }));
+vi.mock('../../../services/authUtils', async (importOriginal) => ({
+  ...(await importOriginal()),
+  resolveServerAccount: (...a) => resolveServerAccount(...a),
+}));
 
 const { default: BackupRestore } = await import('../BackupRestore');
 const { useMailStore } = await import('../../../stores/mailStore');
@@ -117,7 +124,8 @@ async function confirm(dialog) {
   const button = within(dialog).getByRole('button', { name: 'Import' });
   await waitFor(() => expect(button.disabled).toBe(false));
   fireEvent.click(button);
-  await waitFor(() => expect(importCalls()).toHaveLength(1));
+  // An upload start resolves the account first (loaded on demand).
+  await waitFor(() => expect(importCalls()).toHaveLength(1), { timeout: 5000 });
   return importCalls()[0][1];
 }
 
@@ -352,7 +360,8 @@ it('a file whose upload stopped partway is offered to resume in the dialog, with
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Resume upload' }));
   // The fresh pick is what a sandboxed daemon may read now, so it goes along.
-  await waitFor(() => expect(calls('mbox_upload_resume')).toEqual([{ jobId: 'job-7', sourcePath: SOURCE }]));
+  await waitFor(() => expect(calls('mbox_upload_resume')).toEqual([{ jobId: 'job-7', sourcePath: SOURCE }]), { timeout: 5000 });
+  expect(resolveServerAccount).toHaveBeenCalledWith(GMAIL.id, GMAIL);
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(calls('mbox_upload_discard')).toEqual([]);
   expect(importCalls()).toHaveLength(1);
@@ -371,7 +380,7 @@ it('... or discarded and started over with the same choices', async () => {
   await within(dialog).findByTestId('mbox-import-resumable');
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Start over' }));
-  await waitFor(() => expect(importCalls()).toHaveLength(2));
+  await waitFor(() => expect(importCalls()).toHaveLength(2), { timeout: 5000 });
   const order = sendMock.mock.calls.map(([c]) => c).filter((c) => c === 'import_mbox' || c === 'mbox_upload_discard');
   expect(order).toEqual(['import_mbox', 'mbox_upload_discard', 'import_mbox']);
   expect(calls('mbox_upload_discard')).toEqual([{ jobId: 'job-7' }]);

@@ -14,17 +14,24 @@ import { forceMailboxRefetch } from './workflows/helpers/mailboxRefetch';
 /**
  * The daemon never refreshes an OAuth token itself (a job held for a refused
  * sign-in re-reads the stored credentials and nothing more), so before a start
- * or a resume the app refreshes the account's token where the daemon reads it:
- * ensureFreshToken writes it to the keychain, and leaves a password account
- * and a token still fresh alone. A refresh that fails is the daemon's to
- * report, as a refused sign-in.
+ * or a resume the app resolves the account the way the backup and the
+ * vault-gap save do: resolveServerAccount rehydrates it from the keychain when
+ * the store's copy has no credentials, then refreshes the token and writes it
+ * where the daemon reads it (a password account and a fresh token are left
+ * alone). One that cannot be resolved is the daemon's to report, as a refused
+ * sign-in: the daemon reads the keychain itself.
  */
 async function freshToken(accountId) {
-  const { useMailStore } = await import('../stores/mailStore');
-  const account = (useMailStore.getState().accounts || []).find((a) => a.id === accountId);
-  if (!account) return;
-  const { ensureFreshToken } = await import('./authUtils');
-  await ensureFreshToken(account).catch((e) => console.warn('[mboxUpload] token refresh failed:', e?.message || e));
+  if (!accountId) return;
+  try {
+    const { useMailStore } = await import('../stores/mailStore');
+    const account = (useMailStore.getState().accounts || []).find((a) => a.id === accountId);
+    const { resolveServerAccount } = await import('./authUtils');
+    const resolved = await resolveServerAccount(accountId, account);
+    if (!resolved?.ok) console.warn('[mboxUpload] account not resolved:', resolved?.reason);
+  } catch (e) {
+    console.warn('[mboxUpload] account resolve failed:', e?.message || e);
+  }
 }
 
 export async function start(params) {
@@ -38,6 +45,7 @@ export const cancel = (jobId) => send('mbox_upload_cancel', { jobId });
 export const discard = (jobId) => send('mbox_upload_discard', { jobId });
 
 const text = (e) => String(e?.message ?? e ?? '');
+const OTHER_FILE = 'E_MBOX_UPLOAD_OTHER_FILE:';
 
 // The daemon's codes, as catalog words. Its text after the code names paths
 // and internals, and never reaches the user.
@@ -48,6 +56,8 @@ const ERRORS = [
   ['E_MBOX_UPLOAD_SIGN_IN:', 'errors.E_MBOX_UPLOAD_SIGN_IN'],
   ['E_MBOX_UPLOAD_READ:', 'errors.E_MBOX_UPLOAD_READ'],
   ['E_MBOX_SERVER_GRAPH:', 'errors.E_MBOX_SERVER_GRAPH'],
+  // The app's own: a file picked again to resume that is not the job's.
+  [OTHER_FILE, 'mboxUpload.otherFile'],
 ];
 export const errorKey = (e, fallback = 'settings.backup.restore.mboxImportFailed') =>
   ERRORS.find(([prefix]) => text(e).startsWith(prefix))?.[1] || fallback;
@@ -57,16 +67,22 @@ const RESUMABLE = 'E_MBOX_UPLOAD_RESUMABLE:';
 export const resumableJobId = (e) => (text(e).startsWith(RESUMABLE) ? text(e).slice(RESUMABLE.length).trim() : null);
 export const isNotFound = (e) => text(e).startsWith('E_MBOX_UPLOAD_NOT_FOUND:');
 
-/** The native open panel for an .mbox file; null when cancelled. */
-export async function pickMboxFile() {
+/** The native open panel for an .mbox file, with an optional title; null when cancelled. */
+export async function pickMboxFile(title) {
   // WebDriver cannot drive the native open panel, so under VITE_E2E a spec
   // injects the file (exportSaver's `__MV_EXPORT_DEST__` seam). The flag is
   // compiled out of a shipped build.
   const injected = import.meta.env.VITE_E2E === '1' ? window.__MV_MBOX_SOURCE__ : null;
   if (injected) return injected;
   const { open } = await import('@tauri-apps/plugin-dialog');
-  return open({ filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }], multiple: false });
+  return open({
+    ...(title ? { title } : {}),
+    filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
+    multiple: false,
+  });
 }
+
+const baseName = (path) => String(path).split(/[\\/]/).pop();
 
 // The resume route opens the file before anything starts (`identity()`), and
 // answers with this when it cannot.
@@ -76,23 +92,33 @@ const UNREADABLE = 'Failed to read mbox file';
  * Resume a job where it stopped. The daemon reopens the file by the path its
  * journal holds; after a restart a sandboxed build may not let it (the daemon
  * sidecar holds no file entitlements of its own), so the user picks the file
- * again and the daemon gets that path. Resolves null when the pick is
- * cancelled. A caller that just picked the file passes it along instead.
+ * again, in a panel that names it (`fileName`, the job's), and the daemon gets
+ * that path. A file by another name is refused here: the daemon would take it
+ * as the job's file changed, start over from byte 0 and upload it to the
+ * server, which cannot be undone. Resolves null when the pick is cancelled. A
+ * caller that just picked the file passes it along instead.
  */
-export async function resume({ jobId, accountId, sourcePath }) {
+export async function resume({ jobId, accountId, sourcePath, fileName }) {
   await freshToken(accountId);
   try {
     return await send('mbox_upload_resume', sourcePath ? { jobId, sourcePath } : { jobId });
   } catch (e) {
     if (sourcePath || !text(e).startsWith(UNREADABLE)) throw e;
-    const picked = await pickMboxFile();
-    return picked ? send('mbox_upload_resume', { jobId, sourcePath: picked }) : null;
+    const picked = await pickMboxFile(fileName ? t('mboxUpload.pickAgainTitle', { file: fileName }) : undefined);
+    if (!picked) return null;
+    if (fileName && baseName(picked) !== fileName) throw new Error(OTHER_FILE);
+    return send('mbox_upload_resume', { jobId, sourcePath: picked });
   }
 }
 
+// One load of the event API, shared by every listener: the chip asks for two
+// in the same tick, and under vitest two overlapping dynamic imports of one
+// mocked module can resolve the second to the real module (whose `listen`
+// then throws without Tauri, and the listener is silently lost).
+let eventApi = null;
 async function listenTo(event, cb) {
   try {
-    const { listen } = await import('@tauri-apps/api/event');
+    const { listen } = await (eventApi ||= import('@tauri-apps/api/event'));
     return await listen(event, (e) => cb(e.payload));
   } catch {
     return () => {};
@@ -105,14 +131,15 @@ export const onProgress = (cb) => listenTo('mbox-import-progress', (p) => { if (
 export const onDaemonReconnected = (cb) => listenTo('daemon-reconnected', cb);
 
 /**
- * Once a run is done the daemon has synced every folder it uploaded into and
- * marked the cached folder list out of date when it made folders. The app
- * lists and counts the folders again the way Refresh does, so the uploaded
- * mail shows as server rows where it went: at once for the view on screen,
- * at the next open for another account.
+ * A run's last event (`active: false`: done, cancelled, a read error, a
+ * discard) that uploaded something or made a folder: the daemon has synced
+ * the folders it uploaded into and marked the cached folder list out of date
+ * when it made folders. The app lists and counts the folders again the way
+ * Refresh does, so the uploaded mail shows as server rows where it went: at
+ * once for the view on screen, at the next open for another account.
  */
 export async function refreshAfter(p) {
-  if (p?.state !== 'done' || !(p.uploadedCount > 0 || p.foldersChanged)) return;
+  if (p?.active !== false || !(p.uploadedCount > 0 || p.foldersChanged)) return;
   forceMailboxRefetch(p.accountId);
   const { invalidateFolderStatus } = await import('./workflows/folderStatus');
   invalidateFolderStatus(p.accountId);

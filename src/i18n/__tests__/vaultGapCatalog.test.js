@@ -20,7 +20,8 @@ const CATALOGS = { en, de, es, fr, it: itIT, ja, ko, 'pt-BR': ptBR, 'zh-Hans': z
 
 // As src-daemon/src/vault_gap.rs answers them (E_VAULT_UNAVAILABLE was already a key).
 const DAEMON_CODES = ['E_ACCOUNT_NOT_FOUND', 'E_HEADER_CACHE_UNAVAILABLE', 'E_VAULT_GAP_GRAPH', 'E_VAULT_UNAVAILABLE'];
-const PLURALS = ['count', 'atLeast', 'failed'];
+// noneRecent / hintRecent: under Keep Recent the lines name the window in months.
+const PLURALS = ['count', 'atLeast', 'failed', 'noneRecent', 'hintRecent'];
 const ROW_KEYS = [
   'title', 'hint', 'partial', 'none', 'byDesign', 'countFailed', 'save', 'saveFailed', 'progress', 'joined',
   ...PLURALS.flatMap((k) => [`${k}_one`, `${k}_other`]),
@@ -67,6 +68,14 @@ describe('the not-in-vault catalog', () => {
       expect(en[`settings.backup.vaultGap.${k}_other`]).toMatch(/\bcopies\b/);
     }
     expect(en['settings.backup.vaultGap.none']).toMatch(/\bcopy\b/);
+  });
+
+  it('under Keep Recent never claims every copy, and says older mail stays on the server', () => {
+    for (const f of ['one', 'other']) {
+      expect(en[`settings.backup.vaultGap.noneRecent_${f}`]).toMatch(/last \{\{count\}\} months?/);
+      expect(en[`settings.backup.vaultGap.noneRecent_${f}`]).toMatch(/Older mail stays on the server/);
+      expect(en[`settings.backup.vaultGap.hintRecent_${f}`]).toMatch(/Older mail stays on the server/);
+    }
   });
 
   it('never tells an Outlook user to use a button a free user cannot reach', () => {

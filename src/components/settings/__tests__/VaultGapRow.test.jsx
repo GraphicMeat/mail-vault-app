@@ -41,6 +41,12 @@ const VADER = { id: 'acc-vader', email: 'vader@mock.test', password: 'pw' };
 const OUTLOOK = { id: 'acc-outlook', email: 'o@outlook.test', authType: 'oauth2', oauth2Transport: 'graph', oauth2AccessToken: 'a.b.c' };
 
 const NONE = en['settings.backup.vaultGap.none'];
+// Keep Recent (the default mode, a 3-month window in these specs) leaves older
+// mail on the server by design: its all-saved line names the window.
+const NONE_RECENT = en['settings.backup.vaultGap.noneRecent_other'].replace('{{count}}', '3');
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Either all-saved line: the ones a row must never show when it cannot know.
+const ALL_SAVED = new RegExp(`${escape(NONE)}|${escape(NONE_RECENT)}`);
 const PARTIAL = en['settings.backup.vaultGap.partial'];
 const UNAVAILABLE = en['errors.E_VAULT_UNAVAILABLE'];
 
@@ -135,24 +141,55 @@ describe('VaultGapRow - the count', () => {
     expect(sendMock).toHaveBeenCalledWith('vault_gap_count', { accountId: VADER.id });
     expect(calls('vault_gap_count')).toHaveLength(2);
     expect(saveButton(LUKE.id).disabled).toBe(false);
-    expect(row(LUKE.id).textContent).not.toContain(NONE);
+    expect(row(LUKE.id).textContent).not.toMatch(ALL_SAVED);
   });
 
   it('while the daemon counts, it says so and offers nothing to save', async () => {
     counts = { [LUKE.id]: new Promise(() => {}) };
     await renderRow(LUKE, 'loading');
     expect(row().textContent).toContain(en['settings.daemon.checking']);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
+    // No count yet is not a count that failed.
+    expect(row().querySelector('[data-testid="vault-gap-reason"]')).toBe(null);
+    expect(row().textContent).not.toContain(en['settings.backup.vaultGap.countFailed']);
     expect(saveButton().disabled).toBe(true);
   });
 
-  it('nothing missing, complete, reachable, in a mode that keeps copies: everything is in the vault', async () => {
+  it('nothing missing, complete, reachable, in Hoarder: every copy is in the vault', async () => {
+    useSettingsStore.setState({ fetchModes: { [LUKE.id]: 'hoarder' } });
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'none');
     expect(row().textContent).toContain('Every copy this app has shown or cached is in your vault.');
+    expect(row().textContent).toContain(en['settings.backup.vaultGap.hint']);
     expect(row().dataset.count).toBe('0');
     expect(row().querySelector('[data-testid="vault-gap-count"]')).toBe(null);
     expect(saveButton().disabled).toBe(true);
+  });
+
+  // The daemon leaves out mail dated before the Keep Recent window on purpose
+  // (the mode leaves it on the server), so "every copy" would claim too much.
+  it('under Keep Recent the all-saved line and the hint name the window, and say older mail stays on the server', async () => {
+    counts = { [LUKE.id]: reply({ count: 0 }) };
+    await renderRow(LUKE, 'none');
+    expect(row().textContent).toContain('Every copy from the last 3 months is in your vault. Older mail stays on the server under your download mode.');
+    expect(row().textContent).toContain(en['settings.backup.vaultGap.hintRecent_other'].replace('{{count}}', '3'));
+    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toContain(en['settings.backup.vaultGap.hint']);
+  });
+
+  it('a one-month window reads in the singular', async () => {
+    useSettingsStore.setState({ localCacheDurationMonths: 1 });
+    counts = { [LUKE.id]: reply({ count: 0 }) };
+    await renderRow(LUKE, 'none');
+    expect(row().textContent).toContain(en['settings.backup.vaultGap.noneRecent_one'].replace('{{count}}', '1'));
+  });
+
+  it('a Keep Recent window of 0 keeps everything: the plain line', async () => {
+    useSettingsStore.setState({ localCacheDurationMonths: 0, fetchMode: 'keepRecent' });
+    counts = { [LUKE.id]: reply({ count: 0 }) };
+    await renderRow(LUKE, 'none');
+    expect(row().textContent).toContain(NONE);
+    expect(row().textContent).toContain(en['settings.backup.vaultGap.hint']);
   });
 });
 
@@ -169,7 +206,7 @@ describe('VaultGapRow - an unreachable vault', () => {
     counts = { [LUKE.id]: reply({ count: 0, vaultReachable: false, reason: 'E_VAULT_UNAVAILABLE' }) };
     await renderRow(LUKE, 'unreachable');
     expect(row().textContent).toContain(UNAVAILABLE);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
     expect(saveButton().disabled).toBe(true);
   });
 
@@ -178,7 +215,7 @@ describe('VaultGapRow - an unreachable vault', () => {
     await renderRow(LUKE, 'unknown');
     expect(row().querySelector('[data-testid="vault-gap-reason"]').textContent).toBe(UNAVAILABLE);
     expect(row().querySelector('[data-testid="vault-gap-count"]')).toBe(null);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
     // `partial` is always true with a null count: the reason is the whole story.
     expect(row().textContent).not.toContain(PARTIAL);
     expect(row().dataset.count).toBe('');
@@ -203,7 +240,7 @@ describe('VaultGapRow - an unreachable vault', () => {
     counts = { [LUKE.id]: {} };
     await renderRow(LUKE, 'unknown');
     expect(row().textContent).toContain(en['settings.backup.vaultGap.countFailed']);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
   });
 });
 
@@ -220,7 +257,7 @@ describe('VaultGapRow - a count that is only a floor', () => {
     counts = { [LUKE.id]: reply({ count: 0, partial: true, byMailbox: [{ mailbox: 'INBOX', count: 0, partial: true }] }) };
     await renderRow(LUKE, 'partial');
     expect(row().textContent).toContain(PARTIAL);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
     expect(row().querySelector('[data-testid="vault-gap-count"]')).toBe(null);
     expect(saveButton().disabled).toBe(true);
   });
@@ -236,7 +273,10 @@ describe('VaultGapRow - download modes that keep no copies', () => {
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'byDesign');
     expect(row().textContent).toContain(en['settings.backup.vaultGap.byDesign']);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
+    // Nothing is counted by design: no "could not be counted" beside it.
+    expect(row().querySelector('[data-testid="vault-gap-reason"]')).toBe(null);
+    expect(row().textContent).not.toContain(en['settings.backup.vaultGap.countFailed']);
     expect(saveButton().disabled).toBe(true);
     expect(countCalls()).toBe(0);
   });
@@ -405,7 +445,7 @@ describe('VaultGapRow - progress', () => {
     frame(lastFrame({ completed_emails: 3 }));
     await waitFor(() => expect(row().dataset.state).toBe('none'));
     expect(countCalls()).toBe(2);
-    expect(row().textContent).toContain(NONE);
+    expect(row().textContent).toContain(NONE_RECENT);
     expect(progress()).toBe(null);
     expect(saveButton().disabled).toBe(true);
   });
@@ -509,7 +549,7 @@ describe('VaultGapRow - daemon codes as catalog words', () => {
     await renderRow(LUKE, 'error');
     expect(row().textContent).toContain(en[key]);
     expect(row().textContent).not.toContain(detail);
-    expect(row().textContent).not.toContain(NONE);
+    expect(row().textContent).not.toMatch(ALL_SAVED);
     expect(saveButton().disabled).toBe(true);
   });
 

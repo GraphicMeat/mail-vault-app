@@ -33,6 +33,9 @@ const CHIP_KEYS = [
   'mboxUpload.etaUnderMinute', 'mboxUpload.needsSignIn', 'mboxUpload.pause', 'mboxUpload.signIn',
   'mboxUpload.throttled', 'mboxUpload.title', 'mboxUpload.titleDone', 'mboxUpload.titlePaused',
   'mboxUpload.titleStopped',
+  // The file picked again to resume: the panel's title, and the refusal of
+  // a file by another name. The stopped row's note that Cancel kept it.
+  'mboxUpload.pickAgainTitle', 'mboxUpload.otherFile', 'mboxUpload.stoppedHint',
 ];
 const NEW_KEYS = [...DAEMON_CODES.map((c) => `errors.${c}`), ...DIALOG_KEYS, ...CHIP_KEYS];
 
@@ -75,10 +78,19 @@ describe('the MBOX upload catalog', () => {
       'mboxUpload.titleDone': '{{file}}',
       'mboxUpload.titlePaused': '{{file}}',
       'mboxUpload.titleStopped': '{{file}}',
+      'mboxUpload.pickAgainTitle': '{{file}}',
+      'mboxUpload.otherFile': '',
+      'mboxUpload.stoppedHint': '',
     };
     for (const [locale, catalog] of Object.entries(CATALOGS)) {
       for (const [k, v] of Object.entries(expected)) expect(vars(catalog[k]), `${locale} ${k}`).toBe(v);
     }
+  });
+
+  // Gmail's sign-in is OAuth: there is no password to check.
+  it('a refused sign-in asks to sign in again, not to check a password', () => {
+    expect(en['errors.E_MBOX_UPLOAD_SIGN_IN']).toMatch(/sign in to this account again/i);
+    expect(en['errors.E_MBOX_UPLOAD_SIGN_IN']).not.toMatch(/password/i);
   });
 
   it('the size warning names no number: the daemon measures, the dialog does not guess', () => {

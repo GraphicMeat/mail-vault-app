@@ -46,10 +46,10 @@ vi.mock('../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
 const openMock = vi.fn();
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openMock(...a), save: vi.fn() }));
 
-const refreshMock = vi.fn();
+const resolveMock = vi.fn();
 vi.mock('../../services/authUtils', async (importOriginal) => ({
   ...(await importOriginal()),
-  ensureFreshToken: (...a) => refreshMock(...a),
+  resolveServerAccount: (...a) => resolveMock(...a),
 }));
 
 const { MboxUploadProgress, RENDER_EVERY_MS } = await import('../MboxUploadProgress');
@@ -87,14 +87,16 @@ const buttons = (id = JOB) => [...(job(id)?.querySelectorAll('[data-testid^="mbo
   .sort();
 const calls = (cmd) => sendMock.mock.calls.filter(([c]) => c === cmd).map(([, a]) => a);
 
-// The service loads the event API on demand: wait until both listeners are on
-// and the status reply has landed, not for a fixed number of ticks.
+// The service loads the event API on demand: wait until both of the chip's
+// listeners are on and it has asked for the jobs, polling the conditions (no
+// fixed sleep). Its listener for a restarted daemon is the one registered
+// with the chip's progress listener: other stores may listen for that event too.
 const ready = () => act(async () => {
   await vi.waitFor(() => {
     expect(listeners['mbox-import-progress']?.size).toBe(1);
-    // Other stores may listen for a restarted daemon too.
-    expect(listeners['daemon-reconnected']?.size).toBeGreaterThanOrEqual(1);
-  }, { timeout: 10_000 });
+    expect(listeners['daemon-reconnected']?.size ?? 0).toBeGreaterThanOrEqual(1);
+    expect(calls('mbox_upload_status').length).toBeGreaterThanOrEqual(1);
+  }, { timeout: 15_000, interval: 20 });
   await flush();
 });
 
@@ -110,7 +112,7 @@ beforeEach(() => {
   controlReply = (cmd) => Promise.resolve({ jobId: JOB, [cmd.replace('mbox_upload_', '')]: true });
   sendMock.mockClear();
   openMock.mockReset();
-  refreshMock.mockReset().mockImplementation(async (a) => a);
+  resolveMock.mockReset().mockImplementation(async (id, a) => ({ ok: true, account: a }));
   useMailStore.setState({ activeAccountId: 'another-account', unifiedInbox: false });
   takeForcedMailboxRefetch(ACCT);
 });
@@ -205,21 +207,21 @@ describe('MboxUploadProgress', () => {
   });
 
   // The daemon never refreshes an OAuth token; a resume on the expired one
-  // would only hold the job again.
-  it('resuming an upload held for a refused sign-in refreshes the account\'s token first', async () => {
+  // would only hold the job again. Resolved as the backup resolves it.
+  it('resuming an upload held for a refused sign-in resolves the account (token refresh) first', async () => {
     const original = useMailStore.getState().accounts;
     const account = { id: ACCT, email: 'me@gmail.test', authType: 'oauth2', oauth2RefreshToken: 'r', oauth2ExpiresAt: 1 };
     useMailStore.setState({ accounts: [account] });
     const order = [];
-    refreshMock.mockImplementation(async (a) => { order.push(`refresh ${a.id}`); return a; });
+    resolveMock.mockImplementation(async (id, a) => { order.push(`resolve ${id}`); return { ok: true, account: a }; });
     controlReply = (cmd) => { order.push(cmd); return Promise.resolve({ jobId: JOB, resumed: true, restarted: false }); };
     try {
       await mount({ onOpenAccounts: vi.fn() });
       fire(ev({ state: 'needsSignIn', paused: true, needsSignIn: true }));
       fireEvent.click(button('resume'));
       await settled('mbox_upload_resume', [{ jobId: JOB }]);
-      expect(refreshMock).toHaveBeenCalledWith(account);
-      expect(order).toEqual([`refresh ${ACCT}`, 'mbox_upload_resume']);
+      expect(resolveMock).toHaveBeenCalledWith(ACCT, account);
+      expect(order).toEqual([`resolve ${ACCT}`, 'mbox_upload_resume']);
     } finally {
       useMailStore.setState({ accounts: original });
     }
@@ -240,6 +242,8 @@ describe('MboxUploadProgress', () => {
     expect(job().textContent).toContain('40 uploaded, 1 skipped, 0 failed');
     expect(job().querySelector('[role="progressbar"]').getAttribute('aria-valuenow')).toBe('40');
     expect(buttons()).toEqual(['discard', 'resume']);
+    // Cancel keeps it: the row says so, and how to be rid of it.
+    expect(job().textContent).toContain(en['mboxUpload.stoppedHint']);
 
     fireEvent.click(button('discard'));
     await act(flush);
@@ -248,7 +252,7 @@ describe('MboxUploadProgress', () => {
     expect(chip()).toBeNull();
   });
 
-  it('a stopped upload whose file the daemon may no longer read is resumed with the file picked again', async () => {
+  it('a stopped upload whose file the daemon may no longer read is resumed with the same file picked again', async () => {
     statusReply = { jobs: [journal()] };
     let n = 0;
     controlReply = (cmd) => (cmd === 'mbox_upload_resume' && (n += 1) === 1
@@ -260,10 +264,28 @@ describe('MboxUploadProgress', () => {
     // The picker is loaded on demand: wait for the second call, not a tick count.
     await act(() => vi.waitFor(() => expect(calls('mbox_upload_resume')).toHaveLength(2), { timeout: 10_000 }));
     expect(openMock).toHaveBeenCalledTimes(1);
+    // The panel names the file it wants.
+    expect(openMock.mock.calls[0][0].title).toBe(en['mboxUpload.pickAgainTitle'].replace('{{file}}', 'Takeout.mbox'));
     expect(calls('mbox_upload_resume')).toEqual([{ jobId: JOB }, { jobId: JOB, sourcePath: '/Users/me/Downloads/Takeout.mbox' }]);
     // Nothing went wrong that the user has to read.
     expect(job().textContent).not.toContain(en['mboxUpload.actionFailed']);
     expect(job().textContent).not.toMatch(/os error/);
+  });
+
+  // The daemon would read another file as the job's file changed: start over
+  // from byte 0 and upload it to the server, which cannot be undone.
+  it('a file picked again under another name is refused, and nothing is sent that would upload it', async () => {
+    statusReply = { jobs: [journal()] };
+    controlReply = (cmd) => (cmd === 'mbox_upload_resume'
+      ? Promise.reject(new Error('Failed to read mbox file: Operation not permitted (os error 1)'))
+      : Promise.resolve({ jobId: JOB }));
+    openMock.mockResolvedValue('/Users/me/Downloads/Takeout-002.mbox');
+    await mount();
+    fireEvent.click(button('resume'));
+    await act(() => vi.waitFor(() => expect(job().textContent).toContain(en['mboxUpload.otherFile']), { timeout: 10_000 }));
+    expect(openMock).toHaveBeenCalledTimes(1);
+    expect(calls('mbox_upload_resume')).toEqual([{ jobId: JOB }]);
+    expect(face()).toBe('stopped');
   });
 
   it('a cancelled upload keeps its journal: Resume and Discard, not Pause', async () => {
@@ -278,6 +300,16 @@ describe('MboxUploadProgress', () => {
     await mount();
     fire(ev());
     fire(ev({ active: false, state: 'discarded' }));
+    expect(chip()).toBeNull();
+  });
+
+  // A journal discarded with no worker (Start over in the import dialog, or
+  // another window) is told by an event that names the job alone.
+  it('a journal discarded elsewhere leaves the chip on the daemon\'s bare event', async () => {
+    statusReply = { jobs: [journal({ uploadedCount: 3 })] };
+    await mount();
+    expect(face()).toBe('stopped');
+    fire({ mode: 'server', jobId: JOB, state: 'discarded', active: false });
     expect(chip()).toBeNull();
   });
 
@@ -404,6 +436,21 @@ describe('MboxUploadProgress', () => {
     expect(face('job-2')).toBe('paused');
     fireEvent.click(button('resume', 'job-2'));
     await settled('mbox_upload_resume', [{ jobId: 'job-2' }]);
+  });
+
+  // A count held back for the interval must not land on top of what the
+  // restarted daemon says.
+  it('a count still held back when the daemon restarts never overwrites what it now says', async () => {
+    await mount();
+    fire(ev({ uploadedCount: 9 }));
+    fire(ev({ uploadedCount: 10, bytesDone: 100 }));
+    statusReply = { jobs: [journal({ uploadedCount: 9 })] };
+    await reconnect();
+    expect(face()).toBe('stopped');
+    await tick();
+    await tick();
+    expect(face()).toBe('stopped');
+    expect(job().textContent).toContain('9 uploaded');
   });
 
   it('asks again when the daemon restarts: a job cut off by it now reads as stopped', async () => {

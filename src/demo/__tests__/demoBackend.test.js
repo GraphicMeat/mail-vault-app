@@ -268,6 +268,8 @@ describe('demo mailbox backend', () => {
         .rejects.toThrow(new RegExp(`^E_MBOX_UPLOAD_RESUMABLE: ${jobId}$`));
 
       await expect(rpc('mbox_upload_discard', { jobId })).resolves.toEqual({ jobId, discarded: true });
+      // A journal with no worker: the daemon's bare event, so the chip drops the row.
+      expect(last()).toEqual({ mode: 'server', jobId, state: 'discarded', active: false });
       await expect(rpc('mbox_upload_status', {})).resolves.toEqual({ jobs: [] });
       for (const method of ['mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_cancel', 'mbox_upload_discard']) {
         await expect(rpc(method, { jobId })).rejects.toThrow(new RegExp(`^E_MBOX_UPLOAD_NOT_FOUND: ${jobId}$`));

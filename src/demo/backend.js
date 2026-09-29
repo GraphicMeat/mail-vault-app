@@ -1219,7 +1219,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         const job = uploadJob(args.jobId);
         stopUpload(job);
         uploads.delete(job.jobId);
-        if (job.state !== 'cancelled') { job.state = 'discarded'; emit('mbox-import-progress', uploadView(job)); }
+        // As the daemon: a live run's last event, else (a journal alone) a bare one naming the job.
+        const kept = job.state === 'cancelled';
+        job.state = 'discarded';
+        emit('mbox-import-progress', kept ? { mode: 'server', jobId: job.jobId, state: 'discarded', active: false } : uploadView(job));
         return { jobId: job.jobId, discarded: true };
       }
       case 'list_local_folders': return clone(localFolders.get(args.accountId) || []);

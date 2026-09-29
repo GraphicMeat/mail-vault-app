@@ -33,9 +33,19 @@ const keepsNoCopies = (state, accountId) => {
   return !policy || policy.mode === 'onDemand' || policy.mode === 'indexOnly';
 };
 
+// Keep Recent promises only mail dated inside its window (the daemon leaves
+// older copies out of the count on purpose: the mode leaves them on the
+// server), so the row names the window. 0 = no window (a window of 0 keeps
+// everything, as Hoarder does).
+const recentWindow = (state, accountId) => {
+  const policy = fetchPolicy(state, accountId);
+  return policy?.mode === 'keepRecent' ? policy.windowMonths : 0;
+};
+
 export default function VaultGapRow({ account }) {
   const t = useT();
   const byDesign = useSettingsStore((s) => keepsNoCopies(s, account.id));
+  const months = useSettingsStore((s) => recentWindow(s, account.id));
   // A backup running or queued for this account would displace a save.
   const backupBusy = useBackupStore((s) => (!!s.activeBackup?.active && !s.activeBackup.done
     && s.activeBackup.accountId === account.id) || s.queue.includes(account.id));
@@ -111,8 +121,10 @@ export default function VaultGapRow({ account }) {
     : unreachable ? 'unreachable'
     : gap.partial ? 'partial'
     : count > 0 ? 'missing' : 'none';
-  const reasonKey = (count === null || unreachable) && !gap?.error
-    ? errorKey(gap?.reason, unreachable ? 'errors.E_VAULT_UNAVAILABLE' : 'settings.backup.vaultGap.countFailed')
+  // Only for a reply that came back without a usable count: never while it is
+  // on its way, and never for a mode that keeps no copies (nothing is counted).
+  const reasonKey = gap && !gap.error && !byDesign && (count === null || unreachable)
+    ? errorKey(gap.reason, unreachable ? 'errors.E_VAULT_UNAVAILABLE' : 'settings.backup.vaultGap.countFailed')
     : null;
   const showCount = count !== null && !byDesign && (count > 0 || unreachable);
   const frame = run?.frame;
@@ -123,7 +135,9 @@ export default function VaultGapRow({ account }) {
       data-count={count ?? ''} data-running={run ? 'true' : 'false'}
       className="mb-3 rounded-lg bg-mail-bg p-3 space-y-1.5">
       <div className="text-sm font-medium text-mail-text">{t('settings.backup.vaultGap.title')}</div>
-      <p className="text-xs text-mail-text-muted">{t('settings.backup.vaultGap.hint')}</p>
+      <p className="text-xs text-mail-text-muted">
+        {months ? t('settings.backup.vaultGap.hintRecent', { count: months }) : t('settings.backup.vaultGap.hint')}
+      </p>
 
       {state === 'loading' && <p className="text-xs text-mail-text-muted">{t('settings.daemon.checking')}</p>}
       {state === 'byDesign' && <p className="text-xs text-mail-text-muted">{t('settings.backup.vaultGap.byDesign')}</p>}
@@ -133,7 +147,11 @@ export default function VaultGapRow({ account }) {
           {t(gap.partial && count > 0 ? 'settings.backup.vaultGap.atLeast' : 'settings.backup.vaultGap.count', { count })}
         </p>
       )}
-      {state === 'none' && <p className="text-xs text-mail-success">{t('settings.backup.vaultGap.none')}</p>}
+      {state === 'none' && (
+        <p className="text-xs text-mail-success">
+          {months ? t('settings.backup.vaultGap.noneRecent', { count: months }) : t('settings.backup.vaultGap.none')}
+        </p>
+      )}
       {gap?.partial && count !== null && <p className="text-xs text-mail-text-muted">{t('settings.backup.vaultGap.partial')}</p>}
       {reasonKey && <p data-testid="vault-gap-reason" className="text-xs text-mail-warning">{t(reasonKey)}</p>}
       {isGraph && count > 0 && <p className="text-xs text-mail-text-muted">{t('errors.E_VAULT_GAP_GRAPH')}</p>}
