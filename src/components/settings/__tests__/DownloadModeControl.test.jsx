@@ -3,13 +3,14 @@
 // share, and its per-account form in Settings > Accounts.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn(async () => ({ ok: true })) }));
 
 import { DownloadModeControl } from '../DownloadModeControl';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import en from '../../../i18n/locales/en.json';
 
 const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
 const radio = (name) => screen.getByRole('radio', { name });
@@ -135,5 +136,56 @@ describe('DownloadModeControl for one account', () => {
 
     fireEvent.click(useDefault);
     expect(useSettingsStore.getState().fetchModes).toEqual({});
+  });
+});
+
+describe('Hoarder explained (Part C)', () => {
+  const trigger = () => screen.getByRole('button', { name: t('settings.storage.hoarderOrBackup') });
+
+  it('uses the Hoarder hint key for Hoarder and says what it does and does not do', () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM, fetchMode: 'hoarder' });
+    render(<DownloadModeControl />);
+    expect(screen.getByText(t('settings.storage.modeHintHoarder'))).toBeTruthy();
+    const hint = en['settings.storage.modeHintHoarder'];
+    expect(hint).toMatch(/1,000 MB a day per account/);
+    expect(hint).toMatch(/daily download limit/);
+    expect(hint).toMatch(/Nothing is removed automatically/);
+    expect(hint).toMatch(/stay after mail is deleted from the server/);
+    expect(hint).toMatch(/Clear Cache removes/);
+    expect(hint).toMatch(/Archive or a backup/);
+    expect(hint).not.toMatch(/\u2014/);
+  });
+
+  it('opens a "Hoarder or backup?" comparison next to the mode picker and closes it again', async () => {
+    render(<DownloadModeControl />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    trigger().focus();
+    fireEvent.click(trigger());
+
+    const dialog = screen.getByRole('dialog', { name: t('settings.storage.hoarderOrBackup') });
+    const rows = within(dialog).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain(t('settings.storage.modeHoarder'));
+    expect(rows[0].textContent).toContain(t('settings.storage.hoarderOrBackupHoarder'));
+    expect(rows[1].textContent).toContain(t('settings.storage.hoarderOrBackupArchiveTitle'));
+    expect(rows[1].textContent).toContain(t('settings.storage.hoarderOrBackupArchive'));
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it('offers the comparison in a per-account picker too', () => {
+    render(<DownloadModeControl accountId="acct1" />);
+    expect(trigger()).toBeTruthy();
+  });
+});
+
+describe('Clear Cache copy (Part C)', () => {
+  it('says Clear Cache also removes mail Hoarder downloaded, and archived mail is kept', () => {
+    const text = en['settings.storage.removesAllCachedEmlFiles'];
+    expect(text).toMatch(/Hoarder/);
+    expect(text).toMatch(/Archived emails are preserved/);
+    expect(text).not.toMatch(/\u2014/);
   });
 });

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { Button } from '../ui/Button';
+import { InfoPopover } from '../ui/InfoPopover';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { FETCH_MODES } from '../../utils/fetchPolicy';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
@@ -64,6 +65,21 @@ export function DownloadModeControl({ accountId = null, onUpgrade }) {
 
   return (
     <div className="space-y-3" data-testid="download-mode">
+      {/* The heading above is the parent's; the comparison sits right under it. */}
+      <div className="flex justify-end">
+        <InfoPopover label={t('settings.storage.hoarderOrBackup')} data-testid="download-mode-hoarder-vs-backup">
+          <ul className="space-y-3 list-none p-0 m-0">
+            <li>
+              <div className="font-medium">{t('settings.storage.modeHoarder')}</div>
+              <p className="text-xs text-mail-text-muted mt-0.5">{t('settings.storage.hoarderOrBackupHoarder')}</p>
+            </li>
+            <li>
+              <div className="font-medium">{t('settings.storage.hoarderOrBackupArchiveTitle')}</div>
+              <p className="text-xs text-mail-text-muted mt-0.5">{t('settings.storage.hoarderOrBackupArchive')}</p>
+            </li>
+          </ul>
+        </InfoPopover>
+      </div>
       <SegmentedChoice label={t('settings.storage.downloadMode')} options={options} value={value} onChange={choose} />
       <p className="text-sm text-mail-text-muted">{t(MODE_HINT[mode])}</p>
 

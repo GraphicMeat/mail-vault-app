@@ -19,6 +19,7 @@ export { Spin } from './SpinField';
 export { SegmentedChoice } from './SegmentedChoice';
 export { SampleConversation } from './SampleConversation';
 export { Popover, MenuItem } from './Popover';
+export { InfoPopover } from './InfoPopover';
 
 // Organisms — a full section or dialog assembled from molecules/atoms.
 export { Dialog } from './Dialog';
