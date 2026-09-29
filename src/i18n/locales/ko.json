@@ -1460,6 +1460,7 @@
   "settings.accounts.aliases.removeFor": "{{address}} 삭제",
   "settings.accounts.aliases.empty": "아직 별칭이 없습니다. 제공업체가 이 계정에서 다른 주소로 보내도록 허용한다면 아래에서 추가하세요.",
   "settings.accounts.aliases.addAddress": "별칭 추가",
+  "settings.accounts.aliases.addPlaceholder": "alias@example.com",
   "settings.accounts.aliases.addName": "이름(선택)",
   "settings.accounts.aliases.add": "추가",
   "settings.accounts.aliases.error.invalid": "name@example.com 같은 전체 이메일 주소를 입력하세요.",

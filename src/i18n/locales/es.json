@@ -1460,6 +1460,7 @@
   "settings.accounts.aliases.removeFor": "Quitar {{address}}",
   "settings.accounts.aliases.empty": "Aún no hay alias. Si tu proveedor permite enviar desde otra dirección con esta cuenta, añádela abajo.",
   "settings.accounts.aliases.addAddress": "Añadir un alias",
+  "settings.accounts.aliases.addPlaceholder": "alias@ejemplo.com",
   "settings.accounts.aliases.addName": "Nombre (opcional)",
   "settings.accounts.aliases.add": "Añadir",
   "settings.accounts.aliases.error.invalid": "Escribe una dirección de correo completa, como nombre@ejemplo.com.",

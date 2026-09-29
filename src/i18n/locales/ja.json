@@ -1460,6 +1460,7 @@
   "settings.accounts.aliases.removeFor": "{{address}} を削除",
   "settings.accounts.aliases.empty": "エイリアスはまだありません。プロバイダーがこのアカウントで別のアドレスからの送信を許可している場合は、下で追加してください。",
   "settings.accounts.aliases.addAddress": "エイリアスを追加",
+  "settings.accounts.aliases.addPlaceholder": "alias@example.com",
   "settings.accounts.aliases.addName": "名前（任意）",
   "settings.accounts.aliases.add": "追加",
   "settings.accounts.aliases.error.invalid": "name@example.com のような完全なメールアドレスを入力してください。",

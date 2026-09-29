@@ -1460,6 +1460,7 @@
   "settings.accounts.aliases.removeFor": "移除 {{address}}",
   "settings.accounts.aliases.empty": "还没有别名。如果你的服务商允许此账户用其他地址发信，请在下方添加。",
   "settings.accounts.aliases.addAddress": "添加别名",
+  "settings.accounts.aliases.addPlaceholder": "alias@example.com",
   "settings.accounts.aliases.addName": "名称（可选）",
   "settings.accounts.aliases.add": "添加",
   "settings.accounts.aliases.error.invalid": "请输入完整的邮箱地址，例如 name@example.com。",

@@ -16,7 +16,7 @@ const ANSWER = {
   detected: [{ address: 'shop@example.test', name: '', count: 3, source: 'delivered_to' }],
 };
 
-beforeEach(() => mockSend.mockReset());
+beforeEach(() => { mockSend.mockReset(); });
 
 describe('discoverAliases', () => {
   it('asks the daemon with the account and its id, and returns its answer unchanged', async () => {

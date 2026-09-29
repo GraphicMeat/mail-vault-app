@@ -1460,6 +1460,7 @@
   "settings.accounts.aliases.removeFor": "Remover {{address}}",
   "settings.accounts.aliases.empty": "Nenhum apelido ainda. Se seu provedor permite que esta conta envie de outro endereço, adicione-o abaixo.",
   "settings.accounts.aliases.addAddress": "Adicionar um apelido",
+  "settings.accounts.aliases.addPlaceholder": "apelido@exemplo.com",
   "settings.accounts.aliases.addName": "Nome (opcional)",
   "settings.accounts.aliases.add": "Adicionar",
   "settings.accounts.aliases.error.invalid": "Digite um endereço de e-mail completo, como nome@exemplo.com.",

@@ -22,7 +22,7 @@ const FAILED = {
   port: 993,
 };
 
-beforeEach(() => mockSend.mockReset());
+beforeEach(() => { mockSend.mockReset(); });
 
 describe('connection tests that failed', () => {
   it('reject with the daemon\'s code, host and port, and keep its text', async () => {
