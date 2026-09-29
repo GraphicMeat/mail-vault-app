@@ -1313,8 +1313,13 @@ mod tests {
         let server = MockImap::start(gmail().without_cap("UIDPLUS").fault(Trigger::nth("SEARCH", 2), wait));
         let (v, s) = state();
         let mut up = upload(&s, &server);
+        // Gives up after about 10 s, so an upload that never stores the message
+        // fails the test instead of stalling the run.
         let arrives = async {
-            while server.state().find("INBOX").unwrap().messages.len() < 5 {
+            for _ in 0..2000 {
+                if server.state().find("INBOX").unwrap().messages.len() >= 5 {
+                    break;
+                }
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
             }
             server.mutate(|st| {
