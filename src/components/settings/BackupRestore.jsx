@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { send } from '../../services/transport';
+import MboxImportDialog from './MboxImportDialog';
 
 export default function BackupRestore() {
   const t = useT();
@@ -23,6 +24,8 @@ export default function BackupRestore() {
   const isDemo = !!window.__MAILVAULT_DEMO__;
 
   const [showExportChoice, setShowExportChoice] = useState(false);
+  // The picked MBOX file and default account while the options dialog is open.
+  const [mboxPick, setMboxPick] = useState(null);
   const invoke = window.__TAURI__?.core?.invoke;
 
   const refreshDemoMailbox = async (accountId) => {
@@ -227,19 +230,37 @@ export default function BackupRestore() {
       return;
     }
     try {
-      const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
-      const sourcePath = await openDialog({
-        filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
-        multiple: false,
-      });
+      // WebDriver cannot drive the native open panel, so under VITE_E2E a
+      // spec injects the file (exportSaver's `__MV_EXPORT_DEST__` seam). The
+      // flag is compiled out of a shipped build.
+      const injected = import.meta.env.VITE_E2E === '1' ? window.__MV_MBOX_SOURCE__ : null;
+      const sourcePath = injected || await (async () => {
+        const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
+        return openDialog({
+          filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
+          multiple: false,
+        });
+      })();
       if (!sourcePath) return;
 
       // The account on screen, not whichever sorts first: that is where the
-      // user goes looking for what they imported.
+      // user goes looking for what they imported. The dialog lets them change it.
       const { activeAccountId } = useMailStore.getState();
-      const targetAccount = visibleAccounts.find(a => a.id === activeAccountId) || visibleAccounts[0];
-      const targetMailbox = 'INBOX';
+      const accountId = (visibleAccounts.find(a => a.id === activeAccountId) || visibleAccounts[0]).id;
+      setMboxPick({ sourcePath, accountId });
+    } catch (error) {
+      console.error('MBOX import error:', error);
+      alert(t('settings.backup.restore.mboxImportFailed'));
+    }
+  };
 
+  // `options` is what MboxImportDialog collected: accountId, mode, and for the
+  // folder modes mailbox/useLabels/fallbackMailbox, sent to the daemon as is.
+  const runMboxImport = async (options) => {
+    const { sourcePath } = mboxPick;
+    setMboxPick(null);
+    const targetAccount = visibleAccounts.find(a => a.id === options.accountId);
+    try {
       const store = useMailStore.getState();
       store.setExportProgress({ total: 0, completed: 0, active: true, mode: 'import' });
 
@@ -254,20 +275,20 @@ export default function BackupRestore() {
 
       let result;
       try {
-        result = await send('import_mbox', {
-          sourcePath,
-          accountId: targetAccount.id,
-          mailbox: targetMailbox,
-        });
+        result = await send('import_mbox', { sourcePath, ...options });
       } finally {
         unlisten();
       }
 
-      await refreshDemoMailbox(targetAccount.id);
+      await refreshDemoMailbox(options.accountId);
 
+      // The folders the daemon filed mail into (labels can spread it over
+      // several), else the one it was pointed at.
+      const filed = (result.folders || []).filter(f => f.imported > 0).map(f => f.mailbox);
+      const targetMailbox = filed.length ? filed.join(', ') : (result.mailbox || options.mailbox || 'INBOX');
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        let message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox });
+        let message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount?.email || 'your account', targetMailbox });
         if (result.skippedCount > 0) message += `\n\n${t('settings.backup.restore.mboxSkippedAlreadyInFolder', { skipped: result.skippedCount })}`;
         if (isDemo) alert(`${message}\n\nThis browser demo keeps the sample in this session; no native file was read.`);
         else { alert(message); window.location.reload(); }
@@ -275,7 +296,10 @@ export default function BackupRestore() {
     } catch (error) {
       console.error('MBOX import error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert(t('settings.backup.restore.couldReadMboxFileCheck') + (error.message || error));
+      // Daemon text is English and internal ("custody store unavailable:
+      // closed"); only a mode the daemon does not offer yet has its own code.
+      const modeUnavailable = String(error?.message ?? error).startsWith('E_MBOX_MODE_UNAVAILABLE:');
+      alert(modeUnavailable ? t('errors.E_MBOX_MODE_UNAVAILABLE') : t('settings.backup.restore.mboxImportFailed'));
     }
   };
 
@@ -360,6 +384,17 @@ export default function BackupRestore() {
           </Button>
         </div>
       </Dialog>
+
+      {/* Mounted per pick, so every file starts from fresh choices. */}
+      {mboxPick && (
+        <MboxImportDialog
+          sourcePath={mboxPick.sourcePath}
+          accounts={visibleAccounts}
+          defaultAccountId={mboxPick.accountId}
+          onCancel={() => setMboxPick(null)}
+          onConfirm={runMboxImport}
+        />
+      )}
     </div>
   );
 }

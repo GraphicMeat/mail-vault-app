@@ -18,7 +18,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 // In-memory accounts.json, exactly the surface `src/services/db/accounts.js`
 // reads/writes through (`@tauri-apps/plugin-fs`, absolute paths under the dir
@@ -147,6 +147,10 @@ it('says how many MBOX messages the folder already had', async () => {
 
   render(<BackupRestore />);
   fireEvent.click(screen.getByRole('button', { name: /Import MBOX/i }));
+  // The import options dialog comes between the file pick and the import.
+  const importButton = within(await screen.findByRole('dialog')).getByRole('button', { name: 'Import' });
+  await waitFor(() => expect(importButton.disabled).toBe(false));
+  fireEvent.click(importButton);
 
   await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
   const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');

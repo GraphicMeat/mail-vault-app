@@ -69,6 +69,8 @@ const ALLOWLIST = new Set([
   'autoTag.newTagPlaceholder', 'autoTag.resultHeading',
   'fields.moveUp', 'fields.moveDown', 'fields.newOption', 'fields.optionColor',
   'settings.searchIndex.indexing', // progress status text, not a setting
+  // choices for one MBOX import in its options dialog, not settings
+  'settings.backup.restore.mboxAccount', 'settings.backup.restore.mboxUseLabels',
   // page chrome, not settings
   'settingsPage.close', 'settingsPage.restore',
   // already indexed via a top-level tab's own labelKey (also reused as an in-page heading)

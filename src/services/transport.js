@@ -172,6 +172,10 @@ export const DAEMON_OWNED = new Set([
   // flag on write (decision 3) so an imported message survives Clear cached
   // emails. The dead single-mailbox export variant was deleted, not moved.
   'export_mbox_all', 'import_mbox',
+  // The import options dialog reads the head of the picked file (Takeout
+  // labels?) and whether the account's folder list is known, before asking
+  // how to import it.
+  'mbox_probe',
   // Task 4.8: the eight migration commands, get_folder_mappings, and the
   // three restore commands, all now daemon-owned (decision 7's run_tokens
   // registry replaces the old per-command Tauri-managed cancel/pause

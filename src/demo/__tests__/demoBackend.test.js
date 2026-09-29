@@ -188,6 +188,25 @@ describe('demo mailbox backend', () => {
     expect(backend.snapshot().messages).toEqual(baseline.messages);
   });
 
+  it('answers the MBOX import options: a probe, label mode filing to the fallback folder, and the modes not built yet', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const sourcePath = 'browser-sample/mailvault-demo.mbox';
+    const probe = await backend.invoke('daemon_rpc', { method: 'mbox_probe', params: { sourcePath, accountId: account.id } });
+    expect(probe).toMatchObject({ bytes: expect.any(Number), hasLabels: false, foldersKnown: true, sampledMessages: expect.any(Number) });
+
+    const result = await backend.invoke('daemon_rpc', { method: 'import_mbox', params: {
+      sourcePath, accountId: account.id, mode: 'local', mailbox: 'Archive', fallbackMailbox: 'Archive', useLabels: true,
+    } });
+    expect(result).toMatchObject({ emailCount: 1, skippedCount: 0, accountId: account.id, mailbox: 'Archive', folders: [{ mailbox: 'Archive', imported: 1, skipped: 0 }] });
+    expect(backend.snapshot().messages.some(row => row.accountId === account.id && row.mailbox === 'Archive' && row.subject === 'Imported sample MBOX message')).toBe(true);
+
+    for (const mode of ['server', 'folder']) {
+      await expect(backend.invoke('daemon_rpc', { method: 'import_mbox', params: { sourcePath, accountId: account.id, mode } }))
+        .rejects.toThrow(/^E_MBOX_MODE_UNAVAILABLE: /);
+    }
+  });
+
   it('serves daemon-owned search index commands through daemon_rpc', async () => {
     const backend = createDemoBackend();
     const status = await backend.invoke('daemon_rpc', { method: 'search_index_status', params: {} });

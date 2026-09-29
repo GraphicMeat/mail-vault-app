@@ -1082,13 +1082,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         emit('mbox-export-progress', { total: rows.length, completed: rows.length, active: false }); emit('demo:state', { type: 'export' });
         return { success: true, emailCount: rows.length, accountCount: new Set(rows.map(row => row.accountId)).size, simulated: true };
       }
+      // The sample file carries no Takeout labels, so the dialog offers one folder.
+      case 'mbox_probe': return { bytes: 2048, hasLabels: false, foldersKnown: true, sampledMessages: 1, simulated: true };
       case 'import_mbox': {
+        // Same refusal the daemon gives until those modes are built.
+        if (args.mode === 'server' || args.mode === 'folder') throw new Error(`E_MBOX_MODE_UNAVAILABLE: import mode ${args.mode} is not available yet`);
         const target = args.accountId || ACCOUNT_IDS[0];
-        const targetMailbox = args.mailbox || 'INBOX';
+        const targetMailbox = (args.useLabels && args.fallbackMailbox) || args.mailbox || 'INBOX';
         const uid = Math.max(0, ...messages.filter(row => row.accountId === target).map(row => row.uid)) + 1;
         messages.push(makeMessage({ accountId: target, mailbox: targetMailbox, uid, from: plain({ name: 'MBOX sample', address: 'imported@mailvault.demo' }), subject: 'Imported sample MBOX message', text: 'This fictional message demonstrates an MBOX import in the browser.', vault: true, server: false }, sessionNow));
         emit('mbox-import-progress', { total: 1, completed: 1, active: false }); emit('demo:state', { type: 'import' });
-        return { success: true, emailCount: 1, simulated: true };
+        return { success: true, emailCount: 1, skippedCount: 0, accountId: target, mailbox: targetMailbox, folders: [{ mailbox: targetMailbox, imported: 1, skipped: 0 }], foldersKnown: !!args.useLabels, simulated: true };
       }
       case 'install_pending_update': return unsupported(command);
       case 'fetch_remote_asset': return unsupported(command);

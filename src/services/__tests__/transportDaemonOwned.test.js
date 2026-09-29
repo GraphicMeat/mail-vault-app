@@ -79,6 +79,9 @@ describe('daemon-owned commands', () => {
       'maildir_repair_generation',
       'maildir_set_flags', 'maildir_storage_stats',
       'maildir_store',
+      // The MBOX import options dialog reads the file's head before asking
+      // how to import it (2026-09-29).
+      'mbox_probe',
       'oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh',
       'op_journal_clear', 'op_journal_queue', 'op_journal_read',
       'pause_migration',
