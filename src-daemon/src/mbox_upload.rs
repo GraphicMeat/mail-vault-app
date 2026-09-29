@@ -105,6 +105,14 @@ struct Folder {
     floor: u32,
 }
 
+impl Folder {
+    /// A folder this run made: nothing cached belongs to it, and the server's
+    /// search decides what it holds.
+    fn made_again() -> Self {
+        Folder { view: ServerView::default(), whole: false, floor: 1 }
+    }
+}
+
 /// Why an attempt stopped. `appended`: its APPEND went out, so the message may
 /// be on the server whatever the error says.
 struct Fail {
@@ -277,7 +285,9 @@ impl MboxUpload {
 
     /// A folder's first message this run: its UIDVALIDITY and UIDNEXT from a
     /// SELECT (a folder gone from the server is made again), then what the
-    /// header cache holds of it and whether that is all of it.
+    /// header cache holds of it and whether that is all of it. Rows cached
+    /// under another UIDVALIDITY, or for a folder this run made, describe an
+    /// earlier folder of that name, not this one: they count for nothing.
     async fn open(&mut self, path: &str) -> Result<(), Fail> {
         if self.boxes.contains_key(path) {
             return Ok(());
@@ -290,9 +300,17 @@ impl MboxUpload {
             other => other?,
         };
         let (validity, next) = (mailbox.uid_validity, mailbox.uid_next);
+        if self.created.contains(path) {
+            self.boxes.insert(path.to_string(), Folder { floor: next.unwrap_or(1), ..Folder::made_again() });
+            return Ok(());
+        }
         let (st, account, p) = (Arc::clone(&self.state), self.account_id.clone(), path.to_string());
         let read = blocking(move || {
             crate::custody::with_conn(&st, |c| {
+                let (cached_validity, _) = cache::sync_meta(c, &account, &p)?;
+                if cached_validity.is_some() && cached_validity != validity {
+                    return Ok((ServerView::default(), false));
+                }
                 let view = ServerView::from_headers(&cache::all_headers(c, &account, &p)?);
                 let whole = match (validity, next) {
                     (Some(v), Some(n)) => cache::lists_whole_mailbox(c, &account, &p, v, n)?,
@@ -359,9 +377,14 @@ impl MboxUpload {
         let flags = flags.join(" ");
         let date = imap::internaldate_of(msg);
         let mut sent = self.append_once(path, msg, &flags, date.as_deref()).await;
-        // A tagged NO: nothing was stored, so the one resend is safe.
+        // A tagged NO: nothing was stored, so the one resend is safe. The
+        // folder is a new one now: what the run knew of the old one goes.
         if matches!(&sent, Err(e) if needs_create(e)) && !self.created.contains(path) {
             self.create(path).await?;
+            self.boxes.insert(path.to_string(), Folder::made_again());
+            if let Some(conn) = self.conn.as_mut() {
+                conn.selected = None;
+            }
             sent = self.append_once(path, msg, &flags, date.as_deref()).await;
         }
         match sent {
@@ -768,6 +791,20 @@ mod tests {
         assert!(server.count_commands("SEARCH") > 0);
     }
 
+    /// Rows cached for an earlier folder of that name (another UIDVALIDITY: it
+    /// was deleted and made again) describe mail that folder no longer holds.
+    #[tokio::test]
+    async fn rows_cached_for_another_generation_of_the_folder_skip_nothing() {
+        let server = MockImap::start(gmail().mailbox(Mailbox::new("Work").with_uid_validity(77)));
+        let (_v, s) = state();
+        let row = json!({"uid": 1, "messageId": "<a@x>", "subject": "one", "messageDate": DATE});
+        cache_headers(&s, "Work", json!({"uidValidity": 1, "emails": [row]}));
+        let mut up = upload(&s, &server);
+
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Work")).await, uploaded("Work", 1));
+        assert_eq!(subjects(&server, "Work"), ["one"]);
+    }
+
     /// A chat or draft has no Message-ID: only the cached rows can match it, by
     /// Subject and Date, and no search is sent for it.
     #[tokio::test]
@@ -926,6 +963,48 @@ mod tests {
         assert_eq!(subjects(&server, "Work"), ["two"]);
         assert_eq!(server.count_commands("CREATE"), 1);
         assert_eq!(up.created().iter().collect::<Vec<_>>(), ["Work"]);
+    }
+
+    /// The folder was whole when the run opened it, then went: once the run
+    /// makes it again, nothing the old folder held counts as there, and the
+    /// server's search decides.
+    #[tokio::test]
+    async fn a_folder_made_again_mid_run_forgets_what_the_old_one_held() {
+        // The old folder's uids (5, 6) are ones the new folder never reaches
+        // here, so no new row can overwrite an old one in the view.
+        let mut work = Mailbox::new("Work").with_uid_validity(77);
+        work.add(Message::new(5, stored("a@x", "one", "Work")));
+        let server = MockImap::start(gmail().mailbox(work));
+        let (_v, s) = state();
+        let row = json!({"uid": 5, "messageId": "<a@x>", "subject": "one", "messageDate": DATE});
+        cache_headers(&s, "Work", json!({"uidValidity": 77, "syncTotalEmails": 1, "syncUidNext": 6, "emails": [row]}));
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("z@x", "new", "Work")).await, uploaded("Work", 6));
+        server.mutate(|st| st.mailboxes.retain(|m| m.name != "Work"));
+
+        assert_eq!(up.upload_message(&tmsg("y@x", "made again", "Work")).await, uploaded("Work", 1));
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Work")).await, uploaded("Work", 2));
+        assert_eq!(up.upload_message(&tmsg("z@x", "new", "Work")).await, uploaded("Work", 3));
+        assert_eq!(subjects(&server, "Work"), ["made again", "one", "new"]);
+    }
+
+    /// Two non-ASCII labels whose names differ only in the case of their
+    /// base64 (日 is `&ZeU-`, 摅 is `&ZEU-`) are two folders. The mock looks
+    /// names up case-blind, so what is asserted is what the pipeline sends.
+    #[tokio::test]
+    async fn labels_that_differ_only_in_the_case_of_their_utf7_are_two_folders() {
+        let server = MockImap::start(gmail().mailbox(Mailbox::new("&ZeU-")));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let mailbox_of = |outcome: Outcome| match outcome {
+            Outcome::Uploaded { mailbox, .. } => mailbox,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(mailbox_of(up.upload_message(&tmsg("a@x", "one", "摅")).await), "&ZEU-");
+        assert_eq!(mailbox_of(up.upload_message(&tmsg("b@x", "two", "日")).await), "&ZeU-");
+        let creates: Vec<String> = server.commands().into_iter().filter(|c| c.contains(" CREATE ")).collect();
+        assert_eq!(creates.len(), 1, "{creates:?}");
+        assert!(creates[0].ends_with("CREATE \"&ZEU-\""), "{creates:?}");
     }
 
     // ---- classification ----

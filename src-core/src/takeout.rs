@@ -128,15 +128,36 @@ pub fn home_folder(labels: &[String], folders: &[FolderRef], create_missing: boo
             && !low.starts_with("category_")
     });
     for label in customs {
-        let want = label.to_lowercase();
+        let want = fold(label);
         // A label is `/`-separated whatever the server's delimiter is.
-        match folders.iter().find(|f| f.path.replace(f.delim, "/").to_lowercase() == want) {
+        match folders.iter().find(|f| fold(&f.path.replace(f.delim, "/")) == want) {
             Some(f) => return Home::Folder(f.clone()),
             None if create_missing => return Home::Create(label.clone()),
             None => {}
         }
     }
     Home::Fallback
+}
+
+/// `name` lowercased outside its modified UTF-7 runs (`&...-`, RFC 3501
+/// 5.1.3): their base64 is case-sensitive, so 日 (`&ZeU-`) and 摅 (`&ZEU-`)
+/// stay two names. Plain text without `&` is simply lowercased.
+fn fold(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut in_run = false;
+    for c in name.chars() {
+        match c {
+            '&' if !in_run => in_run = true,
+            '-' if in_run => in_run = false,
+            _ if in_run => {}
+            _ => {
+                out.extend(c.to_lowercase());
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The role an IMAP special-use attribute (`\Sent`, ...) stands for.
@@ -377,6 +398,22 @@ mod tests {
                 "{label}"
             );
         }
+    }
+
+    /// A label mode 1 encoded in modified UTF-7 matches a folder case-blind
+    /// only outside its `&...-` runs: their base64 is case-sensitive, and 日
+    /// (`&ZeU-`) and 摅 (`&ZEU-`) are two folders that lowercase alike.
+    #[test]
+    fn an_encoded_label_matches_its_folder_by_its_exact_base64() {
+        let f = vec![fr("&ZeU-", Role::Other, '/'), fr("Work/&ANw-bung", Role::Other, '/')];
+        assert_eq!(home_folder(&labs(&["&ZeU-"]), &f, true), Home::Folder(folder(&f, "&ZeU-").clone()));
+        assert_eq!(home_folder(&labs(&["&ZEU-"]), &f, true), Home::Create("&ZEU-".into()));
+        assert_eq!(home_folder(&labs(&["&ZEU-"]), &f, false), Home::Fallback);
+        assert_eq!(
+            home_folder(&labs(&["WORK/&ANw-bung"]), &f, true),
+            Home::Folder(folder(&f, "Work/&ANw-bung").clone()),
+            "the ASCII around a run still matches in any case"
+        );
     }
 
     #[test]
