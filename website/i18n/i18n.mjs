@@ -53,6 +53,7 @@ const EXCLUDE = new Set([
   'changelog.html',
   'privacy.html',
   'terms.html',
+  'download-stats.html',
   'oauth/yahoo/callback.html',
 ]);
 
