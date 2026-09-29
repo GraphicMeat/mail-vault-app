@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
-import { resolveEmailLocation, selectionKey } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './PgpStatus';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
@@ -47,7 +47,7 @@ import { registerActiveReply, openCompose } from '../../utils/composeOpener';
 import { QuickReplyChips } from './QuickReplyChips';
 import { AiComposeActions } from '../ai/AiComposeActions';
 import { boundedThreadText } from '../../utils/quickReplies';
-import { describePurge } from '../../utils/custodyCopy';
+import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
 import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
@@ -648,11 +648,11 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
         : useMailStore.getState().deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: localOnly
-          ? t('viewer.emailOnlyExistsLocalArchive')
-          : (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
-          ? t('viewer.emailArchivedLocallyDeletingServer')
-          : t('viewer.emailPermanentlyDeletedServer'),
+        description: describeReaderDelete({
+          localOnly,
+          localFolder: inLocalFolder(email, state),
+          archived: typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid),
+        }),
         confirmLabel: localOnly ? t('rowMenu.unarchive') : t('common.delete'),
       },
     });

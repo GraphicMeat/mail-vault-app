@@ -430,3 +430,56 @@ describe('SelectionActionBar over search results', () => {
     await waitFor(() => expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1));
   });
 });
+
+// A selection in a vault-only folder (MBOX import mode 3). No server holds
+// that folder: move and snooze need one, delete everywhere and unarchive would
+// remove the only copies with no bin copy kept. Delete stays, as a plain
+// delete into the deleted bin, and says so.
+describe('SelectionActionBar in a folder kept on this computer', () => {
+  const LOCAL = 'MBOX import 2026-09-29';
+  const rows = [1, 2].map(uid => ({
+    uid, _accountId: 'acct-1', _mailbox: LOCAL, source: 'local', flags: ['\\Seen'], isArchived: true,
+    messageId: `<imported-${uid}@example.test>`,
+  }));
+
+  beforeEach(() => {
+    useMailStoreMock.setState({
+      activeAccountId: 'acct-1', activeMailbox: LOCAL, accounts: [{ id: 'acct-1' }], mailboxes: [],
+      localFolders: { 'acct-1': [{ name: LOCAL, dir: 'MBOX_import_2026-09-29', kind: 'import' }] },
+      emails: [], sortedEmails: rows, localEmails: rows, sentEmails: [],
+      selectedEmailIds: new Set([1, 2]),
+      archivedEmailIds: new Set([1, 2]),
+      clearSelection: vi.fn(),
+      saveSelectedLocally: vi.fn(),
+      markSelectedAsRead: vi.fn(),
+      markSelectedAsUnread: vi.fn(),
+      deleteSelectedFromServer: vi.fn().mockResolvedValue(),
+      purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 2, failed: 0, queuedBackup: 0, needsResync: 0 }),
+      removeLocalEmail: vi.fn(),
+      getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('disables move, snooze, unarchive and delete everywhere', () => {
+    render(<SelectionActionBar />);
+    for (const title of ['Move to folder', 'Snooze', 'Unarchive selected', 'Delete everywhere']) {
+      expect(quickAction(title).disabled).toBe(true);
+    }
+  });
+
+  it('deletes into the deleted bin, and says so rather than "from the server"', async () => {
+    render(<SelectionActionBar />);
+    expect(screen.queryByTitle('Delete from server')).toBeNull();
+    const del = quickAction('Delete');
+    expect(del.disabled).toBe(false);
+    fireEvent.click(del);
+
+    expect(screen.getByText(/Deleted emails/)).toBeTruthy();
+    expect(screen.queryByText(/from the server/)).toBeNull();
+    const confirmButtons = screen.getAllByRole('button', { name: 'Delete' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1));
+    expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
+  });
+});

@@ -15,7 +15,7 @@ import {
   isFromUser
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
-import { resolveEmailLocation, selectionKey, emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey, emailScopeKey, inLocalFolder } from '../stores/slices/unifiedHelpers';
 import {
   ChevronLeft,
   Paperclip,
@@ -49,7 +49,7 @@ import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useExportStore } from '../stores/exportStore';
-import { describePurge } from '../utils/custodyCopy';
+import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhere } from '../services/workflows/messageMutations';
@@ -348,7 +348,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: localOnly ? t('viewer.emailOnlyExistsLocalArchive') : target.isArchived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        description: describeReaderDelete({
+          localOnly, localFolder: inLocalFolder(target, useMailStore.getState()), archived: target.isArchived,
+        }),
         confirmLabel: t('common.delete'),
       },
     });

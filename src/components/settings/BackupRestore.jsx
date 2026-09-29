@@ -280,18 +280,28 @@ export default function BackupRestore() {
         unlisten();
       }
 
-      await refreshDemoMailbox(options.accountId);
+      // "Import as a separate folder" made a new folder kept on this computer,
+      // named by its display name. Opening it lists the account's folders
+      // again and selects it; a reload would land on the first account's INBOX.
+      const newFolder = result.folder?.name;
+      if (newFolder) {
+        useMailStore.getState().activateAccount(options.accountId, newFolder)
+          .catch(e => console.warn('Opening the imported folder failed:', e));
+      } else await refreshDemoMailbox(options.accountId);
 
       // The folders the daemon filed mail into (labels can spread it over
       // several), else the one it was pointed at.
       const filed = (result.folders || []).filter(f => f.imported > 0).map(f => f.mailbox);
       const targetMailbox = filed.length ? filed.join(', ') : (result.mailbox || options.mailbox || 'INBOX');
+      const account = targetAccount?.email || 'your account';
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        let message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount?.email || 'your account', targetMailbox });
+        let message = newFolder
+          ? t('settings.backup.restore.mboxImportedToLocalFolder', { result: result.emailCount, folder: newFolder, targetAccount: account })
+          : t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: account, targetMailbox });
         if (result.skippedCount > 0) message += `\n\n${t('settings.backup.restore.mboxSkippedAlreadyInFolder', { skipped: result.skippedCount })}`;
         if (isDemo) alert(`${message}\n\nThis browser demo keeps the sample in this session; no native file was read.`);
-        else { alert(message); window.location.reload(); }
+        else { alert(message); if (!newFolder) window.location.reload(); }
       }, 1500);
     } catch (error) {
       console.error('MBOX import error:', error);

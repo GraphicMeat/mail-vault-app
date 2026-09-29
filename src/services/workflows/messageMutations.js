@@ -11,7 +11,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
-import { retryOnce } from './mailboxTree';
+import { retryOnce, isLocalMailbox } from './mailboxTree';
 import { cancelPendingMarkRead } from './selectEmail';
 import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
@@ -527,6 +527,13 @@ function _removalContext(state, uidOrKey, location) {
   }
 
   if (!context) console.warn('[removeLocalEmail] refused an unresolved or ambiguous location:', uidOrKey);
+  // Unarchive drops the vault copy and keeps the server's. A vault-only
+  // folder's message has no server copy, so that would be its only copy gone,
+  // with no deleted-bin copy kept.
+  if (context && isLocalMailbox(state.localFolders, context.accountId, context.mailbox)) {
+    console.warn('[removeLocalEmail] refused: the only copy, in a local folder:', uidOrKey);
+    return null;
+  }
   return context;
 }
 
@@ -899,7 +906,10 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     const location = resolveEmailLocation(e, state);
     return location?.accountId === accountId && location?.mailbox === mailbox;
   });
-  const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true;
+  // A message in a vault-only folder (an MBOX import kept on this computer)
+  // was never on a server either: same path, into the deleted bin.
+  const localFolder = isLocalMailbox(state.localFolders, accountId, mailbox);
+  const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true || localFolder;
 
   const invoke = window.__TAURI__?.core?.invoke;
   // Where the message ended up, for a caller that wants to offer an undo.
@@ -1052,7 +1062,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     counted: hidden.counted,
     // Never over a message this delete just opened.
     clearSelection: hidden.closes && !threadUpdate && !hidden.openNext,
-    deletedByUs: true,
+    // No server copy was ever there to delete: nothing to stamp gold.
+    deletedByUs: !localFolder,
   });
 
   // `skipRefresh` means a caller is deleting a set one message at a time (the
@@ -1636,11 +1647,15 @@ export async function applyServerRemoval(uid, {
   // loadUnifiedInbox (it reads each account's cache, never a live listing),
   // and every click on it failed again until the daemon's own reconcile came
   // round, up to six hours later.
-  await db.saveEmailHeaders(
-    accountId, mailbox, [],
-    exactTargetFolder ? newTotal : null,
-    { removedUids: [uid] },
-  );
+  // Not for a vault-only folder: no server lists it, so it has no header
+  // cache, and a write here would create one.
+  if (!isLocalMailbox(live.localFolders, accountId, mailbox)) {
+    await db.saveEmailHeaders(
+      accountId, mailbox, [],
+      exactTargetFolder ? newTotal : null,
+      { removedUids: [uid] },
+    );
+  }
 
   // Saving the sidecar is another await. The user may switch views while it
   // runs, so validate the destination again before a reload can repaint the
@@ -2043,7 +2058,10 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     // finished, and the replay carries it until it has failed once. The vault
     // write above has already landed, which for this row is the whole change.
     // Same guard deleteEmailFromServer applies before it journals a delete.
-    if (t.emailObj?.source === 'local-only' || t.emailObj?._localStaged) continue;
+    // A message in a vault-only folder is the same case: no server holds the
+    // folder, so a journalled flag on it would be replayed and refused forever.
+    if (t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
+      || isLocalMailbox(state.localFolders, t.accountId, t.mailbox)) continue;
     if (isGraphAccount(t.account)) {
       try {
         await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action);
@@ -2294,6 +2312,7 @@ export async function deleteSelectedFromServer() {
     const { uid, accountId, mailbox, account, emailObj } = contextOf(key);
     if (!account || isGraphAccount(account)) continue;
     if (emailObj?.source === 'local-only' || emailObj?._localStaged === true) continue;
+    if (isLocalMailbox(state.localFolders, accountId, mailbox)) continue;
     const groupKey = `${accountId}|${mailbox}`;
     if (!journalGroups.has(groupKey)) journalGroups.set(groupKey, { accountId, mailbox, uids: [] });
     journalGroups.get(groupKey).uids.push(uid);
@@ -2344,7 +2363,9 @@ export async function deleteSelectedFromServer() {
       // IMAP APPEND) live only in Maildir + local-index. Route them through the
       // local-delete path — otherwise the IMAP/Graph delete either errors or
       // no-ops on the pseudo-UID and the entry re-hydrates on next loadEmails.
-      const isLocalOnly = emailObj?.source === 'local-only' || emailObj?._localStaged === true;
+      // A vault-only folder's message too: into the deleted bin, no server.
+      const isLocalOnly = emailObj?.source === 'local-only' || emailObj?._localStaged === true
+        || isLocalMailbox(state.localFolders, accountId, mailbox);
       if (isLocalOnly) {
         if (invoke) {
           try {
@@ -2596,7 +2617,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     // `row` rides along for Graph: it carries `_graphId`, the only id stamped
     // from the same listing that assigned this uid its position.
     return { uid, accountId, mailbox, account, localOnly, tombstone, row: emailObj };
-  }).filter(t => t.account || t.localOnly);
+  // A vault-only folder's message is refused: its vault copy is the only one,
+  // and a purge removes it with no deleted-bin copy kept. Delete is its way out.
+  }).filter(t => (t.account || t.localOnly) && !isLocalMailbox(state.localFolders, t.accountId, t.mailbox));
 
   // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
   // below take seconds (now including a STATUS round trip) and the list must
@@ -2844,6 +2867,13 @@ export async function moveEmails(keys, targetMailbox) {
       continue;
     }
     if (!ctx.account || typeof ctx.uid !== 'number') continue;
+    // A vault-only folder is on no server, so nothing moves out of it or into
+    // it: a server MOVE would name a mailbox the server does not have.
+    if (isLocalMailbox(state.localFolders, ctx.accountId, ctx.mailbox)
+      || isLocalMailbox(state.localFolders, ctx.accountId, targetMailbox)) {
+      console.warn('[moveEmails] refused a move out of or into a local folder:', key);
+      continue;
+    }
     const gk = `${ctx.accountId}|${ctx.mailbox}`;
     if (!groups.has(gk)) groups.set(gk, { account: ctx.account, accountId: ctx.accountId, mailbox: ctx.mailbox, uids: [], rows: [], keys: [] });
     groups.get(gk).uids.push(ctx.uid);

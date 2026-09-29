@@ -3,7 +3,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
-import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionKey } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -29,7 +29,7 @@ import { TagChips } from '../TagChips';
 import { FieldStrip } from '../FieldStrip';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { describePurge } from '../../utils/custodyCopy';
+import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
@@ -185,7 +185,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         : useMailStore.getState().deleteEmailFromServer(target.uid, { accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: localOnly ? t('viewer.emailOnlyExistsLocalArchive') : target.isArchived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        description: describeReaderDelete({ localOnly, localFolder: inLocalFolder(target, state), archived: target.isArchived }),
         confirmLabel: t('common.delete'),
       },
     });

@@ -176,6 +176,9 @@ export const DAEMON_OWNED = new Set([
   // labels?) and whether the account's folder list is known, before asking
   // how to import it.
   'mbox_probe',
+  // "Import as a separate folder" makes a vault-only folder: the sidebar lists
+  // an account's (by display name) and deletes one into the deleted bin.
+  'list_local_folders', 'delete_local_folder',
   // Task 4.8: the eight migration commands, get_folder_mappings, and the
   // three restore commands, all now daemon-owned (decision 7's run_tokens
   // registry replaces the old per-command Tauri-managed cancel/pause

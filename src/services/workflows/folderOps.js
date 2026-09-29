@@ -82,6 +82,65 @@ function guardLocked(mailboxes, path) {
   if (node && specialOrInbox(node)) throw new Error(tr('errors.folderLocked'));
 }
 
+// ── Vault-only folders (MBOX import mode 3, "On this computer") ──
+//
+// The daemon owns them (marker, listing, delete); the app keeps the listing
+// per account in the store and addresses a folder by its display name.
+
+/**
+ * Read `accountId`'s local folders into the store. A listing that fails keeps
+ * what the store had: unknown is not "none", and dropping a known folder would
+ * switch its open list to INBOX.
+ */
+export async function loadLocalFolders(accountId) {
+  let folders;
+  try {
+    folders = await api.listLocalFolders(accountId);
+  } catch (e) {
+    console.warn('[localFolders] listing failed, keeping the last one:', e?.message || e);
+    return;
+  }
+  if (!Array.isArray(folders)) return;
+  const { useMailStore } = await import('../../stores/mailStore');
+  useMailStore.setState(s => ({ localFolders: { ...s.localFolders, [accountId]: folders } }));
+}
+
+// The daemon's refusals, as catalog words. Its own text names directories and
+// internals, and never reaches the user.
+const LOCAL_FOLDER_ERRORS = [
+  ['E_NOT_LOCAL_FOLDER:', 'errors.E_NOT_LOCAL_FOLDER'],
+  ['E_LOCAL_FOLDER_NOT_EMPTY:', 'errors.E_LOCAL_FOLDER_NOT_EMPTY'],
+  ['E_BIN_CAPTURE:', 'errors.E_BIN_CAPTURE'],
+  ['E_VAULT_UNAVAILABLE:', 'errors.E_VAULT_UNAVAILABLE'],
+];
+
+/**
+ * Delete a local folder: the daemon moves its mail into the deleted bin, then
+ * removes the folder. Listed again whatever the answer (a refused delete may
+ * already have binned part of it); the open list leaves a folder that went,
+ * and re-reads one that did not.
+ */
+export async function deleteLocalFolder(accountId, name) {
+  let failure = null;
+  try {
+    await api.deleteLocalFolder(accountId, name);
+  } catch (e) {
+    failure = e;
+  }
+  await loadLocalFolders(accountId);
+  const { useMailStore } = await import('../../stores/mailStore');
+  const s = useMailStore.getState();
+  if (s.activeAccountId === accountId && s.activeMailbox === name) {
+    await (failure ? s.loadEmails() : s.activateAccount(accountId, 'INBOX'));
+  }
+  if (failure) {
+    const message = String(failure?.message ?? failure);
+    console.warn('[deleteLocalFolder] refused:', message);
+    const known = LOCAL_FOLDER_ERRORS.find(([prefix]) => message.startsWith(prefix));
+    throw new Error(tr(known ? known[1] : 'errors.localFolderDeleteFailed'));
+  }
+}
+
 export async function createFolder(accountId, parentPath, displayName) {
   const { s, account, mailboxes, d } = await _ctx(accountId);
   const leaf = validName(displayName, d);

@@ -8,7 +8,7 @@ import { X } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { SnoozePicker } from "./SnoozePicker";
 import { canSnooze } from "../services/workflows/snooze";
-import { vaultClause } from "../utils/custodyCopy";
+import { vaultClause, describeReaderDelete } from "../utils/custodyCopy";
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
 import { useExportStore } from "../stores/exportStore";
@@ -16,6 +16,7 @@ import { QuickActions } from "./QuickActions";
 import { useQuickActionConfiguration } from "../hooks/useQuickActionConfiguration";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
+  inLocalFolder,
   resolveEmailLocation,
   selectionKey,
 } from "../stores/slices/unifiedHelpers";
@@ -74,7 +75,14 @@ function selectionFacts(selectedEmailIds, selectedRows, allSelectionRows, archiv
     locations.every(Boolean);
   const singleAccount = !!selectionTarget;
   const oneMailbox = !!selectionTarget?.mailbox;
-  const allServerBacked = selectionIsFullyResolved && selectedRows.length > 0 &&
+  // A selection in a vault-only folder (an MBOX import kept on this computer):
+  // no server holds it, so nothing that needs one is offered, and neither is
+  // a purge or unarchive (each would drop the only copies with no bin copy
+  // kept). Delete stays, as the delete workflow's local path into the bin.
+  const localFolder = selectedRows.some((email) =>
+    inLocalFolder(email, useMailStore.getState())
+  );
+  const allServerBacked = !localFolder && selectionIsFullyResolved && selectedRows.length > 0 &&
     selectedRows.every((email) =>
       email.source !== "local-only" && !email._insightsReadOnly &&
       !email._insightsNoServerActions
@@ -107,6 +115,7 @@ function selectionFacts(selectedEmailIds, selectedRows, allSelectionRows, archiv
     resolved,
     singleAccount,
     oneMailbox,
+    localFolder,
     allServerBacked,
     selectionJunkPath,
   };
@@ -340,6 +349,7 @@ export function SelectionActionBar() {
     locations,
     singleAccount,
     oneMailbox,
+    localFolder,
     allServerBacked,
     selectionJunkPath,
   } = facts;
@@ -457,13 +467,16 @@ export function SelectionActionBar() {
           // same button destroys the only copy there is, which is the line
           // this preference does not cross — `allServerBacked` is the same
           // test the bar already uses to decide the action is offered at all.
-          confirmOptional: deleteMode === "server" && allServerBacked,
+          // A local folder's delete keeps a deleted-bin copy, so it may skip.
+          confirmOptional: deleteMode === "server" && (allServerBacked || localFolder),
           executor: confirmDelete,
           copy: {
             title: deleteMode === "unarchive"
               ? t("viewer.unarchiveEmail")
               : deleteMode === "everywhere"
               ? t("rowMenu.deleteEverywhere")
+              : localFolder
+              ? t("common.delete")
               : t("rowMenu.deleteServer"),
             description: deleteMode === "unarchive"
               ? selectedRows.some((email) =>
@@ -475,6 +488,8 @@ export function SelectionActionBar() {
                 : t("viewer.cachedCopyRemovedEmailStill")
               : deleteMode === "everywhere"
               ? t("selection.deleteServerVaultBackupDrive", { deleteScope })
+              : localFolder
+              ? describeReaderDelete({ localFolder })
               : t("selection.deleteServer2", {
                 deleteScope,
                 vaultClause: vaultClause(totalCount, archivedCount),
@@ -483,6 +498,8 @@ export function SelectionActionBar() {
               ? t("rowMenu.unarchive")
               : deleteMode === "everywhere"
               ? t("rowMenu.deleteEverywhere")
+              : localFolder
+              ? t("common.delete")
               : t("rowMenu.deleteServer"),
           },
         }}
@@ -531,6 +548,7 @@ export function SelectionActionBarView({
     locations,
     resolved,
     singleAccount,
+    localFolder,
     allServerBacked,
     selectionJunkPath,
   } = facts || selectionFacts(
@@ -550,7 +568,7 @@ export function SelectionActionBarView({
       : entry.action === "toggleRead"
       ? (hasUnread ? t("selection.markRead") : t("selection.markUnread"))
       : entry.action === "deleteServer"
-      ? t("rowMenu.deleteServer")
+      ? (localFolder ? t("common.delete") : t("rowMenu.deleteServer"))
       : entry.action === "delete"
       ? t("common.delete")
       : entry.action === "deleteEverywhere"
@@ -587,9 +605,10 @@ export function SelectionActionBarView({
       entry.action === "archive" && !hasUnarchived ||
       entry.action === "unarchive" &&
         (!hasArchived || !selectionIsFullyResolved ||
-          !locations.every(Boolean)) ||
-      ["delete", "deleteServer"].includes(entry.action) && !allServerBacked ||
-      entry.action === "deleteEverywhere" && !resolved ||
+          !locations.every(Boolean) || localFolder) ||
+      ["delete", "deleteServer"].includes(entry.action) &&
+        !allServerBacked && !(localFolder && selectionIsFullyResolved) ||
+      entry.action === "deleteEverywhere" && (!resolved || localFolder) ||
       entry.action === "markRead" &&
         (!selectionIsFullyResolved || !hasUnread) ||
       entry.action === "toggleRead" &&

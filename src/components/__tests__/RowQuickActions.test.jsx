@@ -538,3 +538,48 @@ describe('RowQuickActions unsubscribe', () => {
     });
   });
 });
+
+// A row of a vault-only folder (MBOX import mode 3). No server holds that
+// folder: move, spam and snooze need one, delete everywhere and unarchive
+// would remove the only copy with no bin copy kept. Delete is the plain delete
+// into the deleted bin (the delete workflow routes it there), said as such.
+describe('RowQuickActions — a row in a folder kept on this computer', () => {
+  const LOCAL = 'MBOX import 2026-09-29';
+  const localRow = () => email({ uid: 9, _mailbox: LOCAL, isArchived: true, source: 'local', messageId: '<imported@example.test>', flags: ['\\Seen'] });
+  const button = id => screen.queryByTestId(`quick-action-${id}`);
+  beforeEach(() => {
+    useMailStoreMock.setState({
+      localFolders: { [ACCOUNT_A.id]: [{ name: LOCAL, dir: 'MBOX_import_2026-09-29', kind: 'import' }] },
+      mailboxes: [{ name: 'Junk', path: 'Junk', specialUse: '\\Junk' }],
+    });
+  });
+
+  it('offers no server action and nothing that skips the bin, and keeps read, star and export', () => {
+    setActions(...['move', 'spam', 'snooze', 'deleteEverywhere', 'unarchive', 'toggleRead', 'star', 'export'].map(name => action(name)));
+    renderActions({ emails: [localRow()] });
+    for (const id of ['move', 'spam', 'snooze']) expect(button(id) === null || button(id).disabled).toBe(true);
+    for (const id of ['deleteEverywhere', 'unarchive']) expect(button(id)).toBeNull();
+    for (const id of ['toggleRead', 'star', 'export']) expect(button(id).disabled).toBe(false);
+  });
+
+  it('control: the same row in a server folder is offered them', () => {
+    setActions(...['move', 'spam', 'snooze', 'deleteEverywhere', 'unarchive'].map(name => action(name)));
+    renderActions({ emails: [{ ...localRow(), _mailbox: 'INBOX' }] });
+    for (const id of ['move', 'spam', 'snooze', 'deleteEverywhere', 'unarchive']) expect(button(id).disabled).toBe(false);
+  });
+
+  it.each(['delete', 'deleteServer'])('%s is a plain delete into the deleted bin, confirmed first', async name => {
+    setActions(action(name));
+    const { actions, onRequestDelete } = renderActions({ emails: [localRow()] });
+    const btn = button(name);
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('common.delete');
+
+    fireEvent.click(btn);
+    const [confirm, copy] = onRequestDelete.mock.calls[0];
+    expect(copy).toMatchObject({ title: 'viewer.deleteEmail', description: 'viewer.localFolderDeleteToBin', confirmLabel: 'common.delete' });
+    await confirm();
+    expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(9, { accountId: ACCOUNT_A.id, mailboxOverride: LOCAL });
+    expect(actions.removeLocalEmails).not.toHaveBeenCalled();
+  });
+});

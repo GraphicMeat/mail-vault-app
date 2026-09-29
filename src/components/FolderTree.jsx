@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   ChevronDown, ChevronRight, Inbox, Send, File, Trash2, Star, AlertCircle,
-  Archive, Folder,
+  Archive, Folder, HardDrive,
 } from 'lucide-react';
 import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { mailboxLabel } from '../utils/imapUtf7';
@@ -26,7 +26,35 @@ const MAILBOX_ICONS = {
  * turned all 59 of a nested reader's folders into inboxes the moment it wasn't.
  */
 export function getMailboxIcon(mailbox) {
+  if (mailbox.local) return HardDrive;
   return MAILBOX_ICONS[mailbox.specialUse] || MAILBOX_ICONS[mailbox.path] || Folder;
+}
+
+// The vault-only folders (MBOX imports kept on this computer, merged in as
+// `local` rows by withLocalFolders) as tree nodes: no parent, no children.
+// buildMailboxTree leaves them out; they are drawn in a group of their own.
+const localNodes = (mailboxes) => (mailboxes || []).filter(m => m.local)
+  .map(m => ({ ...m, depth: 0, children: [] }));
+
+/**
+ * "On this computer": the local folders after the server's tree. The group
+ * carries its name for assistive tech; the compact rail shows a rule instead
+ * of the heading text.
+ */
+function LocalGroup({ nodes, compact, children }) {
+  const t = useT();
+  if (!nodes.length) return null;
+  const label = t('sidebar.onThisComputer');
+  return (
+    <div role="group" aria-label={label} data-testid="local-folders">
+      {compact
+        ? <hr className="my-1.5 border-mail-border" aria-hidden="true" />
+        : <div className="sidebar-section-heading mt-3" aria-hidden="true">
+            <h3 className="text-xs font-semibold text-mail-text-muted">{label}</h3>
+          </div>}
+      {children}
+    </div>
+  );
 }
 
 const INDENT = 12;
@@ -188,11 +216,12 @@ export function FolderTree({
   mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu, searchQuery = '',
 }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+  const local = useMemo(() => localNodes(mailboxes), [mailboxes]);
 
-  if (searchQuery.trim()) return <FolderSearchResults tree={tree} query={searchQuery}
+  if (searchQuery.trim()) return <FolderSearchResults tree={[...tree, ...local]} query={searchQuery}
     activeMailbox={activeMailbox} onSelect={onSelect} counts={counts} onContextMenu={onContextMenu} />;
 
-  return tree.map(node => (
+  const row = node => (
     <FolderRow
       key={node.path}
       node={node}
@@ -204,7 +233,11 @@ export function FolderTree({
       counts={counts}
       onContextMenu={onContextMenu}
     />
-  ));
+  );
+  return <>
+    {tree.map(row)}
+    <LocalGroup nodes={local} compact={compact}>{local.map(row)}</LocalGroup>
+  </>;
 }
 
 function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu }) {
@@ -283,22 +316,20 @@ function BubbleLevel({ nodes, trail, ...rest }) {
  */
 export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu, searchQuery = '' }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+  const local = useMemo(() => localNodes(mailboxes), [mailboxes]);
 
-  if (searchQuery.trim()) return <FolderSearchResults tree={tree} query={searchQuery}
+  if (searchQuery.trim()) return <FolderSearchResults tree={[...tree, ...local]} query={searchQuery}
     activeMailbox={activeMailbox} onSelect={onSelect} counts={counts} onContextMenu={onContextMenu} />;
 
+  const rest = { activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu };
   return (
     <div className="sidebar-folder-bubbles flex flex-col gap-1.5">
-      <BubbleLevel
-        nodes={tree}
-        trail={[]}
-        activeMailbox={activeMailbox}
-        expanded={expanded}
-        onToggle={onToggle}
-        onSelect={onSelect}
-        counts={counts}
-        onContextMenu={onContextMenu}
-      />
+      <BubbleLevel nodes={tree} trail={[]} {...rest} />
+      <LocalGroup nodes={local}>
+        <div className="sidebar-folder-bubbles flex flex-wrap gap-1.5">
+          {local.map(n => <FolderChip key={n.path} node={n} trail={[]} {...rest} />)}
+        </div>
+      </LocalGroup>
     </div>
   );
 }

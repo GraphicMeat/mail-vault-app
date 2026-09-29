@@ -330,6 +330,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   let messages = seedMessages(sessionNow);
   let mailboxList = clone(MAILBOXES);
   const accountMailboxAdds = new Map();
+  // Vault-only folders an MBOX import made ("Import as a separate folder"), per
+  // account, as the daemon lists them. Their messages sit in `messages` under
+  // the folder's name, vault copy only.
+  const localFolders = new Map();
   let settings = clone(initialSettings);
   const listeners = new Map();
   const journal = [];
@@ -443,6 +447,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     messages: messages.map(serializeMessage),
     mailboxList: clone(mailboxList),
     accountMailboxAdds: [...accountMailboxAdds.entries()].map(([id, rows]) => [id, clone(rows)]),
+    localFolders: [...localFolders.entries()].map(([id, rows]) => [id, clone(rows)]),
     settings: clone(settings),
     journal: clone(journal),
     migrationState: clone(migrationState),
@@ -471,6 +476,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     accountMailboxAdds.clear();
     for (const [id, rows] of stored.accountMailboxAdds || []) {
       if (ACCOUNT_IDS.includes(id) && Array.isArray(rows)) accountMailboxAdds.set(id, clone(rows));
+    }
+    localFolders.clear();
+    for (const [id, rows] of stored.localFolders || []) {
+      if (ACCOUNT_IDS.includes(id) && Array.isArray(rows)) localFolders.set(id, clone(rows));
     }
     settings = stored.settings && typeof stored.settings === 'object' ? clone(stored.settings) : clone(initialSettings);
     journal.length = 0;
@@ -1085,14 +1094,38 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       // The sample file carries no Takeout labels, so the dialog offers one folder.
       case 'mbox_probe': return { bytes: 2048, hasLabels: false, foldersKnown: true, sampledMessages: 1, simulated: true };
       case 'import_mbox': {
-        // Same refusal the daemon gives until those modes are built.
-        if (args.mode === 'server' || args.mode === 'folder') throw new Error(`E_MBOX_MODE_UNAVAILABLE: import mode ${args.mode} is not available yet`);
+        // Same refusal the daemon gives until that mode is built.
+        if (args.mode === 'server') throw new Error(`E_MBOX_MODE_UNAVAILABLE: import mode ${args.mode} is not available yet`);
         const target = args.accountId || ACCOUNT_IDS[0];
+        if (args.mode === 'folder') {
+          // A new folder of the day, " 2", " 3"... on a clash, as the daemon names it.
+          const day = new Date(sessionNow).toISOString().slice(0, 10);
+          const taken = new Set((localFolders.get(target) || []).map(folder => folder.name));
+          let n = 1;
+          while (taken.has(n === 1 ? `MBOX import ${day}` : `MBOX import ${day} ${n}`)) n += 1;
+          const name = n === 1 ? `MBOX import ${day}` : `MBOX import ${day} ${n}`;
+          const folder = { name, dir: name.replace(/ /g, '_'), kind: 'import', created: sessionNow + n, source: 'mailvault-demo.mbox' };
+          localFolders.set(target, [...(localFolders.get(target) || []), folder]);
+          messages.push(makeMessage({ accountId: target, mailbox: name, uid: 1, from: plain({ name: 'MBOX sample', address: 'imported@mailvault.demo' }), subject: 'Imported sample MBOX message', text: 'This fictional message demonstrates an MBOX import into its own folder in the browser.', vault: true, server: false, messageId: `<demo-import-${target}-${folder.dir}@mailvault.demo>` }, sessionNow));
+          emit('mbox-import-progress', { total: 1, completed: 1, active: false }); emit('demo:state', { type: 'import' });
+          return { success: true, emailCount: 1, skippedCount: 0, accountId: target, mailbox: name, folders: [{ mailbox: name, imported: 1, skipped: 0 }], foldersKnown: false, folder: { name, dir: folder.dir }, simulated: true };
+        }
         const targetMailbox = (args.useLabels && args.fallbackMailbox) || args.mailbox || 'INBOX';
         const uid = Math.max(0, ...messages.filter(row => row.accountId === target).map(row => row.uid)) + 1;
         messages.push(makeMessage({ accountId: target, mailbox: targetMailbox, uid, from: plain({ name: 'MBOX sample', address: 'imported@mailvault.demo' }), subject: 'Imported sample MBOX message', text: 'This fictional message demonstrates an MBOX import in the browser.', vault: true, server: false }, sessionNow));
         emit('mbox-import-progress', { total: 1, completed: 1, active: false }); emit('demo:state', { type: 'import' });
         return { success: true, emailCount: 1, skippedCount: 0, accountId: target, mailbox: targetMailbox, folders: [{ mailbox: targetMailbox, imported: 1, skipped: 0 }], foldersKnown: !!args.useLabels, simulated: true };
+      }
+      case 'list_local_folders': return clone(localFolders.get(args.accountId) || []);
+      case 'delete_local_folder': {
+        const folders = localFolders.get(args.accountId) || [];
+        const folder = folders.find(item => item.name === args.name || item.dir === args.name);
+        if (!folder) throw new Error(`E_NOT_LOCAL_FOLDER: ${args.name} is not a local folder`);
+        const rows = local(args.accountId, folder.name);
+        rows.forEach(row => { row.vaultPresent = false; });
+        localFolders.set(args.accountId, folders.filter(item => item !== folder));
+        emit('demo:state', { type: 'vault-delete-many' });
+        return { dir: folder.dir, deleted: rows.length };
       }
       case 'install_pending_update': return unsupported(command);
       case 'fetch_remote_asset': return unsupported(command);
@@ -1118,7 +1151,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

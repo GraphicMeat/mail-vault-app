@@ -4,8 +4,8 @@ import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useQuickActionConfiguration } from '../hooks/useQuickActionConfiguration';
-import { selectionKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
-import { describePurge, describeServerDelete } from '../utils/custodyCopy';
+import { selectionKey, resolveEmailLocation, spansMailboxes, inLocalFolder } from '../stores/slices/unifiedHelpers';
+import { describePurge, describeServerDelete, describeReaderDelete } from '../utils/custodyCopy';
 import { replyTarget } from '../utils/replyTarget';
 import { getSenderName } from '../utils/emailParser';
 import { openCompose } from '../utils/composeOpener';
@@ -85,11 +85,16 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   // for star/unstar and archive/unarchive.
   const visibility = actionVisibility(emails);
   const { markRead: hasUnread, markUnread: hasRead, star: hasUnflagged, unstar: hasFlagged, archive: hasUnarchived, unarchive: hasArchived } = visibility;
+  // Rows of a vault-only folder (an MBOX import kept on this computer): no
+  // server holds them, so no server action is offered, and neither is a
+  // purge or unarchive (each would drop the only copy with no bin copy kept).
+  // Delete stays: the delete workflow sends them into the deleted bin.
+  const localFolder = emails.some(email => inLocalFolder(email, state));
   const serverTargets = emails.map((email, index) => ({ email, location: locs[index] }))
     .filter(target => target.email.source !== 'local-only');
   const serverEmails = serverTargets.map(target => target.email);
   const hasServerBacked = serverEmails.length > 0;
-  const purge = describePurge({
+  const purge = !localFolder && describePurge({
     server: hasServerBacked,
     vault: hasArchived,
     backup: emails.some(email => isBackedUp(email, backupScan) === true),
@@ -97,7 +102,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const locationsResolved = locs.length > 0 && locs.every(Boolean);
   const oneAccount = sameResolvedAccount(locs);
   const oneMailbox = locs.length > 0 && locs.every(location => location?.mailbox === locs[0]?.mailbox);
-  const canServerAction = locationsResolved && emails.every(email => email.source !== 'local-only'
+  const canServerAction = !localFolder && locationsResolved && emails.every(email => email.source !== 'local-only'
     && !email._insightsReadOnly && !email._insightsNoServerActions);
   const accountIds = locationsResolved ? [...new Set(locs.map(location => location.accountId))] : [];
   const junkTargets = accountIds.map(accountId => {
@@ -131,7 +136,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     await reloadListInView();
     setDeleteUndo(outcomes.filter(Boolean));
   };
-  const requestServerDelete = () => onRequestDelete?.(deleteFromServer, {
+  const requestServerDelete = () => onRequestDelete?.(deleteFromServer, localFolder ? {
+    title: t('viewer.deleteEmail'),
+    description: describeReaderDelete({ localFolder }),
+    confirmLabel: t('common.delete'),
+  } : {
     title: t('rowMenu.deleteServer2'),
     description: describeServerDelete(serverEmails.length, serverEmails.filter(email => email.isArchived).length),
     confirmLabel: t('rowMenu.deleteServer'),
@@ -181,7 +190,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     if (entry.action === 'toggleRead') return hasUnread ? t('rowMenu.markRead') : t('rowMenu.markUnread');
     if (entry.action === 'archive') return t('common.archive');
     if (entry.action === 'delete') return t('common.delete');
-    if (entry.action === 'deleteServer') return t('rowMenu.deleteServer');
+    if (entry.action === 'deleteServer') return localFolder ? t('common.delete') : t('rowMenu.deleteServer');
     if (entry.action === 'deleteEverywhere') return purge?.label || t('rowMenu.deleteEverywhere');
     if (entry.action === 'unarchive') return t('rowMenu.unarchive');
     if (entry.action === 'markRead') return t('rowMenu.markRead');
@@ -210,8 +219,8 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     const targetMatches = entry.params?.accountId ? locs.every(location => location?.accountId === entry.params.accountId) : oneAccount;
     const disabledAction = entry.action === 'archive' && disabled
       || entry.action === 'unarchive' && (!locationsResolved || !onRequestDelete)
-      || entry.action === 'delete' && (!onRequestDelete || hasServerBacked && !canServerAction || !hasServerBacked && !emails.every(isLocalOnly))
-      || entry.action === 'deleteServer' && (!hasServerBacked || !canServerAction || !onRequestDelete)
+      || entry.action === 'delete' && (!onRequestDelete || hasServerBacked && !canServerAction && !localFolder || !hasServerBacked && !emails.every(isLocalOnly))
+      || entry.action === 'deleteServer' && (!hasServerBacked || !canServerAction && !localFolder || !onRequestDelete)
       || entry.action === 'deleteEverywhere' && (!purge || !locationsResolved || !onRequestDelete)
       || entry.action === 'toggleRead' && !locationsResolved
       || entry.action === 'tag' && (!label || !locationsResolved)
@@ -229,6 +238,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       // markRead/markUnread, star/unstar and archive/unarchive hide the side
       // that does not apply to the target instead of showing it disabled.
       hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge
+        || entry.action === 'unarchive' && localFolder
         || entry.action === 'unsubscribe' && !unsubscribe
         || ['markRead', 'markUnread', 'star', 'unstar', 'archive', 'unarchive'].includes(entry.action) && !visibility[entry.action] && !entry.thread,
       tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,

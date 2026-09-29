@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vaultClause, describeServerDelete, describePurge } from '../custodyCopy';
+import { vaultClause, describeServerDelete, describePurge, describeReaderDelete } from '../custodyCopy';
 
 // The bug this replaced: every "Delete from server" confirmation said "This
 // cannot be undone", whether or not a vault copy existed. These assertions
@@ -96,5 +96,25 @@ describe('describePurge', () => {
   it('asks one question for every scope, since the button already names the places', () => {
     expect(describePurge(scope(false, true, false), 1).title).toBe('Delete permanently?');
     expect(describePurge(scope(true, true, true), 9).title).toBe('Delete permanently?');
+  });
+});
+
+// The reading pane, thread, chat bubbles and full view ask one question
+// before a delete. A message in a folder kept only on this computer (MBOX
+// import mode 3) has no server copy to delete and no vault copy that stays:
+// it goes to Deleted emails, and the confirmation must not promise otherwise.
+describe('describeReaderDelete', () => {
+  it('sends a message of a folder kept on this computer to Deleted emails', () => {
+    for (const archived of [true, false]) {
+      const copy = describeReaderDelete({ localFolder: true, archived });
+      expect(copy).toMatch(/Deleted emails/);
+      expect(copy).not.toMatch(/server/);
+    }
+  });
+
+  it('keeps the other three answers', () => {
+    expect(describeReaderDelete({ archived: true })).toMatch(/keep the archived copy/);
+    expect(describeReaderDelete({})).toMatch(/permanently deleted from the server/);
+    expect(describeReaderDelete({ localOnly: true, archived: true })).toMatch(/only exists in your local archive/);
   });
 });

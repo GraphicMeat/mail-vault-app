@@ -20,6 +20,7 @@ import {
   createFolder as _createFolder,
   renameFolder as _renameFolder,
   deleteFolder as _deleteFolder,
+  deleteLocalFolder as _deleteLocalFolder,
 } from '../../services/workflows/folderOps';
 import {
   setUnifiedInbox as _setUnifiedInbox,
@@ -106,6 +107,11 @@ export const createAccountSlice = (set, get) => ({
   // Mailboxes
   mailboxes: [],
   mailboxesFetchedAt: null,
+  // Vault-only folders (MBOX import mode 3), per account, as `list_local_folders`
+  // answers: { [accountId]: [{ name, dir, kind, created, source }] }. Kept apart
+  // from `mailboxes`, the server's list, and merged only where the sidebar
+  // draws (withLocalFolders), so no server-list write or reader ever sees one.
+  localFolders: {},
   // Per-account STATUS counts for folders that are not open:
   // { [accountId]: { [path]: { path, messages, unseen, uidNext, uidValidity } } }
   folderStatus: {},
@@ -179,6 +185,7 @@ export const createAccountSlice = (set, get) => ({
   createFolder: (parentPath, name) => _createFolder(get().activeAccountId, parentPath, name),
   renameFolder: (path, name) => _renameFolder(get().activeAccountId, path, name),
   deleteFolder: (path) => _deleteFolder(get().activeAccountId, path),
+  deleteLocalFolder: (name) => _deleteLocalFolder(get().activeAccountId, name),
 
   refreshCurrentView: () => _throttledRefreshCurrentView(set),
   refreshAllAccounts: (options) => _refreshAllAccounts(options),

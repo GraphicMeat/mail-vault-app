@@ -4,7 +4,7 @@ import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribe
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useMailStore } from '../../stores/mailStore';
-import { selectionKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { selectionKey, resolveEmailLocation, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
@@ -41,6 +41,11 @@ export const EmailActionBar = memo(function EmailActionBar({
   const config = configOverride || storedConfig;
   const state = useMailStore.getState();
   const location = resolveEmailLocation(email, state);
+  // A message in a vault-only folder (an MBOX import kept on this computer):
+  // no server holds it. Star, read state, delete (into the deleted bin) and
+  // export are local and stay; what needs a server goes, and so does
+  // unarchive, which would drop the only copy with no bin copy kept.
+  const localFolder = inLocalFolder(email, state);
   const read = isRead ?? !!email?.flags?.includes('\\Seen');
   const flagged = !!email?.flags?.includes('\\Flagged');
   // Single email, so this is just its own read/flagged/archived state — the
@@ -100,12 +105,12 @@ export const EmailActionBar = memo(function EmailActionBar({
       || ['reply', 'replyAll'].includes(entry.action) && (isSentEmail || !callbacks[entry.action])
       || entry.action === 'forward' && !onForward
       || entry.action === 'replyAll' && singleRecipient
-      || ['archive', 'unarchive'].includes(entry.action) && (!onArchive || !location || (hasExplicitArchiveModes && !visibility[entry.action]) || (isLocalOnly && !isArchived))
+      || ['archive', 'unarchive'].includes(entry.action) && (!onArchive || !location || localFolder || (hasExplicitArchiveModes && !visibility[entry.action]) || (isLocalOnly && !isArchived))
       || entry.action === 'deleteServer' && isLocalOnly
       || ['delete', 'deleteServer'].includes(entry.action) && (!onDelete || !location)
-      || entry.action === 'deleteEverywhere' && (!onDeleteEverywhere || !location)
-      || entry.action === 'move' && (!onMove || isLocalOnly || !location)
-      || entry.action === 'spam' && (!onSpam && (!junk || !location) || isLocalOnly)
+      || entry.action === 'deleteEverywhere' && (!onDeleteEverywhere || !location || localFolder)
+      || entry.action === 'move' && (!onMove || isLocalOnly || !location || localFolder)
+      || entry.action === 'spam' && (!onSpam && (!junk || !location) || isLocalOnly || localFolder)
       || entry.action === 'toggleRead' && (!onToggleRead || isLocalOnly)
       || ['markRead', 'markUnread'].includes(entry.action) && (!onToggleRead || isLocalOnly || !visibility[entry.action])
       || ['star', 'unstar'].includes(entry.action) && (!onToggleFlag || isLocalOnly || (hasExplicitStarModes && !visibility[entry.action]))

@@ -28,7 +28,7 @@ import { ScheduledFolderModal } from './scheduled/ScheduledFolderModal';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
-import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
+import { buildMailboxTree, mailboxAncestors, withLocalFolders } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
 import { useKeychainGateStore } from '../stores/keychainGateStore';
 import { usePortableStore } from '../stores/portableStore';
@@ -529,6 +529,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // all — so what a view takes away is the highlight, not the account.
   const activeViewId = useViewStore(s => s.activeViewId);
   const mailboxes = useAccountStore(s => s.mailboxes);
+  // The active account's vault-only folders, drawn under "On this computer"
+  // after its server folders. Merged here only: `mailboxes` stays the server's.
+  const localFolders = useAccountStore(s => s.localFolders?.[s.activeAccountId]);
+  const shownMailboxes = useMemo(() => withLocalFolders(mailboxes, localFolders), [mailboxes, localFolders]);
+  // An import in progress may be filling one of them (see FolderContextMenu).
+  const importRunning = useAccountStore(s => !!s.exportProgress?.active && s.exportProgress.mode === 'import');
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   // STATUS counts for the folders that are not open. Keyed by account, and
   // `mailboxes` is the ACTIVE account's list, so that is the key to read.
@@ -816,6 +822,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onNewSubfolder={(node) => setNameDialog({ mode: 'create', node })}
         onRename={(node) => setNameDialog({ mode: 'rename', node })}
         onDelete={deleteFolder}
+        importRunning={importRunning}
       />
       <FolderNameDialog
         open={!!nameDialog}
@@ -830,9 +837,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onClose={() => setConfirmDelete(null)}
         role="alertdialog"
         size="sm"
-        title={t('sidebar.deleteFolderForever')}
+        title={t(confirmDelete?.local ? 'sidebar.deleteLocalFolderTitle' : 'sidebar.deleteFolderForever')}
         description={confirmDelete
-          ? t('sidebar.deleteFolderConfirm', { name: mailboxLabel(confirmDelete.name) })
+          ? t(confirmDelete.local ? 'sidebar.deleteLocalFolderConfirm' : 'sidebar.deleteFolderConfirm', { name: mailboxLabel(confirmDelete.name) })
           : null}
         footer={
           <>
@@ -846,7 +853,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               onClick={() => {
                 const node = confirmDelete;
                 setConfirmDelete(null);
-                runFolderOp(() => useMailStore.getState().deleteFolder(node.path));
+                runFolderOp(() => (node.local
+                  ? useMailStore.getState().deleteLocalFolder(node.path)
+                  : useMailStore.getState().deleteFolder(node.path)));
               }}
             >
               {t('common.delete')}
@@ -1023,7 +1032,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {!unifiedInbox && <div className="sidebar-collapsed-folders flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
-            mailboxes={mailboxes}
+            mailboxes={shownMailboxes}
             activeMailbox={activeViewId || mailHidden ? null : activeMailbox}
             expanded={expandedFolders}
             onToggle={toggleFolder}
@@ -1290,7 +1299,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </label>}
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
             {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
-              <Folders mailboxes={mailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
+              <Folders mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
             )}

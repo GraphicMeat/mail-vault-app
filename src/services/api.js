@@ -777,6 +777,19 @@ export async function countLocalFolder(accountId, mailbox) {
   return await tauriInvoke('count_local_folder', { accountId, mailbox });
 }
 
+// The vault-only folders an MBOX import made ("Import as a separate folder"),
+// oldest first: `[{name, dir, kind, created, source}]`. Addressed by `name`.
+export async function listLocalFolders(accountId) {
+  return await tauriInvoke('list_local_folders', { accountId });
+}
+
+// Moves the folder's mail into the deleted bin, then removes the folder.
+// Refusals carry a code prefix: E_NOT_LOCAL_FOLDER, E_LOCAL_FOLDER_NOT_EMPTY,
+// E_BIN_CAPTURE, E_VAULT_UNAVAILABLE.
+export async function deleteLocalFolder(accountId, name) {
+  return await tauriInvoke('delete_local_folder', { accountId, name });
+}
+
 export async function pauseMigration() {
   return await tauriInvoke('pause_migration');
 }

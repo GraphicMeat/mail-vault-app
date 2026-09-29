@@ -23,7 +23,7 @@ import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { moveEmails, reloadListInView } from './messageMutations';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
-import { resolveEmailLocation, selectionKey } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useSnoozeStore } from '../../stores/snoozeStore';
 import { t as tr } from '../../i18n/index.js';
@@ -35,6 +35,8 @@ const FOLDER_REFUSED = 'E_SNOOZE_FOLDER_REFUSED:';
 /** Whether `email` can be snoozed at all (see the header). */
 export function canSnooze(email, state) {
   if (!email?.messageId || email.source === 'local-only' || email._insightsReadOnly || email._insightsNoServerActions) return false;
+  // A snooze is a server move, and a vault-only folder is on no server.
+  if (inLocalFolder(email, state)) return false;
   const location = resolveEmailLocation(email, state);
   const account = location && state.accounts?.find(a => a.id === location.accountId);
   return !!account && !isGraphAccount(account);

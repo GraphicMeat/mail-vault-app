@@ -114,7 +114,9 @@ function sortLevel(nodes) {
  * on-disk vault directory name — only where a row is *drawn* changes here.
  */
 export function buildMailboxTree(mailboxes) {
-  const flat = mailboxes || [];
+  // Local folders are drawn in a group of their own (FolderTree). One of them
+  // in here would also stop an INBOX-prefixed namespace being lifted below.
+  const flat = (mailboxes || []).filter(m => !m.local);
   if (!flat.length) return [];
 
   // Dovecot-style servers put every mailbox under INBOX. Drawing the reader's
@@ -200,6 +202,28 @@ export function buildMailboxTree(mailboxes) {
   const shown = prune(roots);
   sortLevel(shown);
   return shown;
+}
+
+/**
+ * The account's vault-only folders (MBOX import mode 3, `list_local_folders`)
+ * after its server list, as `local` rows addressed by their display name: the
+ * daemon derives the folder's directory from that name, the way it does a
+ * server folder's. Merged where the sidebar draws, never into the stored list.
+ */
+export function withLocalFolders(mailboxes, folders) {
+  if (!folders?.length) return mailboxes;
+  return [...(mailboxes || []), ...folders.map(f => ({
+    name: f.name, path: f.name, delimiter: null, specialUse: null, local: true,
+  }))];
+}
+
+/**
+ * Is `path` one of `accountId`'s vault-only folders? No server holds one, so
+ * every workflow that would ask a server about it asks this first.
+ * `localFolders` is the store's `{ [accountId]: [{ name, ... }] }`.
+ */
+export function isLocalMailbox(localFolders, accountId, path) {
+  return !!path && !!localFolders?.[accountId]?.some(f => f.name === path);
 }
 
 /** A folder filter naming a branch — `sub:Kunden` — rather than one folder. */

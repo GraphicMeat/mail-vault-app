@@ -1,5 +1,6 @@
 import { t } from '../../i18n/index.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
+import { isLocalMailbox } from '../../services/workflows/mailboxTree.js';
 // ── Shared helpers used across multiple mail store slices ──
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -125,6 +126,13 @@ export function resolveEmailLocation(email, state) {
   if (!mailbox || mailbox === 'UNIFIED') return null;
 
   return { accountId, mailbox };
+}
+
+// Whether the message lives in a vault-only folder (an MBOX import kept on
+// this computer): no server holds it, so no server action may be offered.
+export function inLocalFolder(email, state) {
+  const location = resolveEmailLocation(email, state);
+  return !!location && isLocalMailbox(state.localFolders, location.accountId, location.mailbox);
 }
 
 /**

@@ -12,6 +12,7 @@ import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cach
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval, keyAfterUndo } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
+import { isLocalMailbox } from './mailboxTree';
 import { readIndexSnippets } from '../indexSnippet';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
@@ -117,7 +118,9 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
   const doMark = async () => {
     if (!stillCurrent()) return;
     try {
-      await markOnServer();
+      // A vault-only folder (an MBOX import kept on this computer) has no
+      // server copy to mark: the vault write applySeenLocally makes is all.
+      if (!isLocalMailbox(useMailStore.getState().localFolders, accountId, mailbox)) await markOnServer();
       applySeenLocally(useMailStore, { accountId, mailbox, uid, read: true, isUnified });
     } catch (e) {
       console.warn('[selectEmail] Mark as read failed:', e);

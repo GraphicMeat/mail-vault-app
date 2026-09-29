@@ -39,6 +39,9 @@ describe('daemon-owned commands', () => {
       'clear_email_cache', 'clear_migration_state_cmd', 'clear_pending_operation',
       'count_local_folder', 'count_migration_folders',
       'custody_status',
+      // MBOX import mode 3: the vault-only folders it creates, listed and
+      // deleted by display name (2026-09-29).
+      'delete_local_folder',
       'delete_mailbox_cache',
       'dns_mail_health',
       // The folder export of one message's attachments (2026-09-21): a
@@ -66,6 +69,7 @@ describe('daemon-owned commands', () => {
       'import_mbox',
       'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
       'list_cached_uids',
+      'list_local_folders',
       'load_email_cache', 'load_email_cache_by_uids', 'load_email_cache_meta', 'load_email_cache_partial',
       'load_graph_id_map', 'load_mailbox_cache',
       'local_index_append', 'local_index_read', 'local_index_remove',

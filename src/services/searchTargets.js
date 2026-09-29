@@ -1,6 +1,6 @@
 import { ensureFreshToken, hasValidCredentials } from './authUtils.js';
 import { getAccountCacheMailboxes } from './cacheManager.js';
-import { mailboxDescendants, SUBTREE_PREFIX } from './workflows/mailboxTree.js';
+import { mailboxDescendants, SUBTREE_PREFIX, isLocalMailbox } from './workflows/mailboxTree.js';
 import { _resolveMailboxPath, flattenMailboxes } from '../stores/slices/unifiedHelpers.js';
 
 // Selectable folders for a server-side all-folders search. Container-only
@@ -85,7 +85,10 @@ export async function buildSearchTargets(mail, settings, searchFilters) {
       account: canSearchServer ? await ensureFreshToken(account) : null,
       localMailboxes: resolveLocalScope(tree, mail, folder),
       knownMailboxes: serverSearchTargets(tree),
-      serverMailboxes: canSearchServer ? serverMailboxes : [],
+      // A vault-only folder is on no server: the local lane is its whole search.
+      serverMailboxes: canSearchServer
+        ? serverMailboxes.filter(path => !isLocalMailbox(mail.localFolders, account.id, path))
+        : [],
     };
   }));
 }

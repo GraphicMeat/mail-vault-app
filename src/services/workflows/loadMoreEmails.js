@@ -7,6 +7,7 @@ import { getSyncStatus } from '../syncService';
 import { saveRestoreDescriptor as _saveRestore } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
+import { isLocalMailbox } from './mailboxTree';
 import {
   getLoadMoreTimer, setLoadMoreTimer,
 } from '../../stores/slices/messageListSlice';
@@ -122,6 +123,8 @@ export async function loadMoreEmails() {
   let account = accounts.find(a => a.id === activeAccountId);
 
   if (!account || loadingMore || !hasMoreEmails) return;
+  // A vault-only folder has no server to page: its one vault read is the list.
+  if (isLocalMailbox(get().localFolders, activeAccountId, activeMailbox)) return;
 
   const resolved = await resolveServerAccount(account.id, account);
   if (!resolved.ok) return;

@@ -43,6 +43,19 @@ export function describeServerDelete(total, inVault) {
 }
 
 
+/**
+ * The reader's "Delete email?" body for one message: the reading pane, the
+ * thread, the chat bubbles and the full view all ask it. A message in a folder
+ * kept only on this computer (an MBOX import) has no server copy to delete and
+ * no vault copy that stays: it goes to the deleted bin, and the body says so.
+ */
+export function describeReaderDelete({ localOnly = false, localFolder = false, archived = false } = {}) {
+  if (localFolder) return t('viewer.localFolderDeleteToBin');
+  if (localOnly) return t('viewer.emailOnlyExistsLocalArchive');
+  return archived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer');
+}
+
+
 // Which label each scope earns. Also the gate: a scope with no copy of our own
 // has no entry, and a caller with no entry has no item to render.
 const PURGE_LABEL_KEY = {

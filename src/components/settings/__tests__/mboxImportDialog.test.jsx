@@ -288,3 +288,34 @@ it('the success message names the folders the mail went into', async () => {
   expect(msg).toContain('3 email(s) are now in your vault under me@gmail.test / Work, [Gmail]/All Mail.');
   expect(msg).toContain('1 email(s) were already in this folder and were skipped.');
 });
+
+// Mode 3 files the mail into a new folder kept on this computer. The message
+// names that folder by its display name (not a key), and the app opens it at
+// once: a reload would land on the first account's INBOX instead.
+it('a separate-folder import names the new folder and opens it', async () => {
+  const NAME = 'MBOX import 2026-09-29';
+  const original = useMailStore.getState().activateAccount;
+  const activateAccount = vi.fn(async () => {});
+  useMailStore.setState({ activateAccount });
+  try {
+    importAnswer = () => Promise.resolve({
+      emailCount: 2, skippedCount: 0, accountId: GMAIL.id, mailbox: NAME, foldersKnown: false,
+      folders: [{ mailbox: NAME, imported: 2, skipped: 0 }],
+      folder: { name: NAME, dir: 'MBOX_import_2026-09-29' },
+    });
+    const dialog = await openDialog();
+    await folderPicker(dialog, FALLBACK);
+    fireEvent.click(modeButton(dialog, FOLDER));
+    await confirm(dialog);
+
+    await waitFor(() => expect(activateAccount).toHaveBeenCalledWith(GMAIL.id, NAME));
+    await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+    const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
+    expect(msg).toContain(`2 email(s) are now in ${NAME}`);
+    expect(msg).toContain('On this computer');
+    expect(msg).not.toContain('MBOX_import');
+    expect(msg).not.toContain('reloads');
+  } finally {
+    useMailStore.setState({ activateAccount: original });
+  }
+});

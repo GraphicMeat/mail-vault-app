@@ -11,11 +11,26 @@ import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workfl
  * renamed or deleted: the app addresses them by role, and a server that lost
  * its Sent folder has nowhere to file a sent message. A folder already under
  * Trash offers the permanent delete instead of another move into it.
+ *
+ * A local folder (an MBOX import kept on this computer) is on no server: it
+ * takes no subfolder and no rename, and its delete is the confirmed one into
+ * the deleted bin. Not while an import runs (`importRunning`): the progress
+ * does not name its folder, and deleting the one being filled would leave the
+ * rest of the import in a folder nothing lists.
  */
-export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onDelete }) {
+export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onDelete, importRunning = false }) {
   const t = useT();
   if (!menu) return null;
   const { node, x, y } = menu;
+
+  if (node.local) return (
+    <Popover open onClose={onClose} style={{ top: y, left: x }} role="menu" data-testid="folder-context-menu">
+      <MenuItem tone="danger" disabled={importRunning} onClick={() => { onClose(); onDelete(node, { permanent: true }); }}>
+        <Trash2 size={14} />{t('sidebar.deleteLocalFolder')}
+      </MenuItem>
+    </Popover>
+  );
+
   const locked = specialOrInbox(node);
   const trash = trashPathOf(mailboxes);
   const d = folderDelimiter(mailboxes);

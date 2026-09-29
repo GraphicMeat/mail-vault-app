@@ -12,7 +12,7 @@ import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
-import { proveServerUidsIfUnproven } from './loadEmails';
+import { proveServerUidsIfUnproven, loadLocalFolder } from './loadEmails';
 import {
   recall as memoRecall, remember as memoRemember, peek as memoPeek, trim as memoTrim,
   adopt as memoAdopt, clearOnScreen as memoClearOnScreen, recallOnScreen as memoRecallOnScreen,
@@ -22,7 +22,8 @@ import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
-import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
+import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce, isLocalMailbox } from './mailboxTree';
+import { loadLocalFolders } from './folderOps';
 import { openFolder } from './loadSubtree';
 import { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
@@ -75,8 +76,15 @@ async function fetchAccountMailboxes(account) {
  * loadMailboxes — two-stream folder loading for activateAccount.
  */
 async function loadMailboxes(accountId, account, requestedMailbox, signal, useMailStoreRef, { isBackgroundRefresh = false } = {}) {
-  const cachedEntry = await db.getCachedMailboxEntry(accountId).catch(() => null);
+  // The account's vault-only folders are read beside its cached server list:
+  // both decide whether the requested folder exists before anything below
+  // falls back to INBOX. They stay out of `mailboxes` (see localFolders).
+  const [cachedEntry] = await Promise.all([
+    db.getCachedMailboxEntry(accountId).catch(() => null),
+    loadLocalFolders(accountId),
+  ]);
   if (signal.aborted) return null;
+  const isLocal = (path) => isLocalMailbox(useMailStoreRef.getState().localFolders, accountId, path);
 
   let localMailboxes = cachedEntry?.mailboxes;
   if (!localMailboxes || localMailboxes.length === 0) {
@@ -105,7 +113,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
   };
   collectPaths(localMailboxes);
 
-  if (effectiveMailbox !== 'INBOX' && !allPaths.has(effectiveMailbox)) {
+  if (effectiveMailbox !== 'INBOX' && !allPaths.has(effectiveMailbox) && !isLocal(effectiveMailbox)) {
     console.warn(`[loadMailboxes] Mailbox "${effectiveMailbox}" not found in cache, falling back to INBOX`);
     effectiveMailbox = 'INBOX';
     if (!isBackgroundRefresh) {
@@ -162,7 +170,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
             };
 
             const currentActive = useMailStoreRef.getState().activeMailbox;
-            if (currentActive !== 'INBOX' && currentActive !== 'UNIFIED' && !freshPaths.has(currentActive)) {
+            if (currentActive !== 'INBOX' && currentActive !== 'UNIFIED' && !freshPaths.has(currentActive) && !isLocal(currentActive)) {
               console.warn(`[loadMailboxes] Active mailbox "${currentActive}" not found on server, switching to INBOX`);
               updates.activeMailbox = 'INBOX';
               useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
@@ -441,7 +449,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   // Keyed on the requested folder for an account switch too. Keying on the
   // outgoing account's folder could paint the incoming account on a folder
   // other than the one just recorded above.
-  const restored = !isBackgroundRefresh ? _getRestore(accountId, mailbox, viewMode) : null;
+  // A local folder is read from the vault alone, which is quick: its paint
+  // must not come from a snapshot that carries its rows as server rows.
+  const restored = !isBackgroundRefresh && !isLocalMailbox(get().localFolders, accountId, mailbox)
+    ? _getRestore(accountId, mailbox, viewMode) : null;
   if (restored) {
     const isAccountSwitch = !isMailboxSwitch;
     const label = isAccountSwitch ? t('settings.storage.account') : t('svc.activateAccount.mailbox');
@@ -607,6 +618,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   const mbResult = await loadMailboxes(accountId, account, mailbox, signal, useMailStoreRef, { isBackgroundRefresh });
   if (!mbResult || signal.aborted) return;
   const { effectiveMailbox: resolvedMailbox, serverMailboxesPromise } = mbResult;
+  // A vault-only folder (MBOX import mode 3): no server holds it, so there is
+  // nothing to sync, probe or fetch. Its list is a vault read, below.
+  const localFolder = isLocalMailbox(get().localFolders, accountId, resolvedMailbox);
   // The proof in place before either half runs. A different, complete one at
   // paint time was written during this activation — see loadLocalEmails.
   const serverUidsAtStart = get().serverUids;
@@ -1328,7 +1342,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   }, 20000);
 
   try {
-    await Promise.all([loadLocalEmails(), loadServerEmails()]);
+    await (localFolder
+      ? loadLocalFolder(accountId, resolvedMailbox, { isCurrent: () => !signal.aborted })
+      : Promise.all([loadLocalEmails(), loadServerEmails()]));
 
     if (!signal.aborted && get().activeAccountId === accountId) {
       get().loadSentHeaders(accountId);

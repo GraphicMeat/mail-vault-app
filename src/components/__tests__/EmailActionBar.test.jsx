@@ -462,3 +462,39 @@ describe('reader unsubscribe', () => {
     });
   });
 });
+
+// A message in a vault-only folder (MBOX import mode 3): no server holds that
+// folder, so every action that goes to one is hidden. Its star, read state,
+// delete (into the deleted bin) and export are local and stay. Unarchive is
+// hidden too: that would remove the only copy with no bin copy kept.
+describe('EmailActionBar — a message in a folder kept on this computer', () => {
+  const LOCAL = 'MBOX import 2026-09-29';
+  const EVERY = ['delete', 'deleteServer', 'deleteEverywhere', 'archive', 'unarchive', 'move', 'spam', 'snooze', 'star', 'toggleRead', 'export'];
+  const config = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: EVERY.map(action => ({ id: action, action })) };
+  const renderIn = (mailbox) => {
+    mailState.activeMailbox = mailbox;
+    mailState.localFolders = { 'acct-1': [{ name: LOCAL, dir: 'MBOX_import_2026-09-29', kind: 'import' }] };
+    mailState.mailboxes = [{ path: 'Junk', name: 'Junk', specialUse: '\\Junk' }];
+    render(<EmailActionBar email={{ ...EMAIL, messageId: '<imported@example.test>', flags: ['\\Seen'] }}
+      variant="single" isArchived isRead isLocalOnly={false} configOverride={config}
+      {...allHandlers({ onSpam: vi.fn(), onDeleteEverywhere: vi.fn(), onToggleFlag: vi.fn(), onExport: vi.fn() })} />);
+  };
+  afterEach(() => {
+    mailState.activeMailbox = 'INBOX';
+    mailState.mailboxes = [];
+    delete mailState.localFolders;
+  });
+
+  it('hides move, spam, snooze, unarchive and delete everywhere, and keeps star, read, delete and export', () => {
+    renderIn(LOCAL);
+    const shown = labels();
+    for (const gone of ['Move', 'Move to Junk', 'Snooze', 'Unarchive', 'Archive', 'Delete everywhere']) expect(shown).not.toContain(gone);
+    for (const kept of ['Star', 'Mark unread', 'Delete', 'Export']) expect(shown).toContain(kept);
+  });
+
+  it('control: the same message in a server folder is offered all of them', () => {
+    renderIn('INBOX');
+    const shown = labels();
+    for (const offered of ['Move', 'Move to Junk', 'Snooze', 'Unarchive', 'Delete everywhere', 'Star', 'Delete']) expect(shown).toContain(offered);
+  });
+});

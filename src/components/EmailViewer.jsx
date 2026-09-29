@@ -41,7 +41,7 @@ import { getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder } from '../stores/slices/unifiedHelpers';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -58,7 +58,7 @@ import { ReadDelayProgress } from './ReadDelayProgress';
 import { TagChips } from './TagChips';
 import { FieldStrip } from './FieldStrip';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
-import { describePurge } from '../utils/custodyCopy';
+import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
@@ -333,7 +333,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       executor: () => confirmDeleteEmail(target, location),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: target.isArchived || archivedEmailIds.has(target.uid) ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        description: describeReaderDelete({
+          localFolder: inLocalFolder(target, useMailStore.getState()),
+          archived: target.isArchived || archivedEmailIds.has(target.uid),
+        }),
         confirmLabel: t('common.delete'),
       },
     });

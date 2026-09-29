@@ -13,6 +13,7 @@ import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIF
 import { createPerfTrace } from '../../utils/perfTrace';
 import { waitForSentMailboxPath, sentMailboxPathFor, mergesSentIntoThreads } from '../../utils/sentFolder';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
+import { isLocalMailbox } from './mailboxTree';
 import { _drainCache } from './loadMoreEmails';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
@@ -77,6 +78,42 @@ function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds)
 }
 
 
+// ── a vault-only folder's list ──
+
+/**
+ * List a vault-only folder (MBOX import mode 3) from the vault: its mail is
+ * archived vault rows and nothing else, which the list derivation shows from
+ * `localEmails` the way it shows any vault row. No server holds the folder,
+ * so this is the whole load, and a reload is this again (a vault rescan).
+ *
+ * Unknown is not empty: a vault that cannot be read keeps the rows on screen.
+ * `isCurrent` lets the caller's own abort stop a paint as well.
+ */
+export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => true } = {}) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+  const here = () => isCurrent() && get().activeAccountId === accountId && get().activeMailbox === mailbox;
+  const settle = { loading: false, loadingMore: false, restoring: false, hasMoreEmails: false };
+
+  const vault = await db.getVaultUidSets(accountId, mailbox);
+  if (!here()) return;
+  if (!vault) {
+    console.warn('[loadLocalFolder] vault unreadable for %s/%s, keeping the rows shown', accountId, mailbox);
+    useMailStore.setState(settle);
+    return;
+  }
+  setArchivedGroup(accountId, mailbox, vault.archived);
+  useMailStore.setState({ savedEmailIds: vault.saved, archivedEmailIds: vault.archived });
+  // Painted per batch: a large import is read in pages.
+  const paint = (rows) => {
+    if (!here()) return;
+    useMailStore.setState({ localEmails: rows, totalEmails: vault.archived.size, ...settle });
+    get().updateSortedEmails();
+  };
+  paint(await db.getArchivedEmails(accountId, mailbox, vault.archived, paint) || []);
+}
+
+
 // ── loadEmails workflow ──
 
 // `rereadFlags`: the daemon synced a flag change (read or starred on another
@@ -89,6 +126,14 @@ export async function loadEmails({ rereadFlags = false } = {}) {
   const { activeAccountId, accounts, activeMailbox, mailboxScope } = get();
   let account = accounts.find(a => a.id === activeAccountId);
   if (!account) return;
+
+  // A vault-only folder is not on any server: before the credential check and
+  // the Graph branch (which relists a server's folders when it cannot find
+  // this one), a reload of it is a vault rescan.
+  if (isLocalMailbox(get().localFolders, activeAccountId, activeMailbox)) {
+    await loadLocalFolder(activeAccountId, activeMailbox);
+    return;
+  }
 
   // A branch listing is not a folder this workflow can reload: it is
   // single-mailbox by construction (SELECT, CONDSTORE, uid pagination) and has

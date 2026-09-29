@@ -201,10 +201,43 @@ describe('demo mailbox backend', () => {
     expect(result).toMatchObject({ emailCount: 1, skippedCount: 0, accountId: account.id, mailbox: 'Archive', folders: [{ mailbox: 'Archive', imported: 1, skipped: 0 }] });
     expect(backend.snapshot().messages.some(row => row.accountId === account.id && row.mailbox === 'Archive' && row.subject === 'Imported sample MBOX message')).toBe(true);
 
-    for (const mode of ['server', 'folder']) {
-      await expect(backend.invoke('daemon_rpc', { method: 'import_mbox', params: { sourcePath, accountId: account.id, mode } }))
-        .rejects.toThrow(/^E_MBOX_MODE_UNAVAILABLE: /);
-    }
+    await expect(backend.invoke('daemon_rpc', { method: 'import_mbox', params: { sourcePath, accountId: account.id, mode: 'server' } }))
+      .rejects.toThrow(/^E_MBOX_MODE_UNAVAILABLE: /);
+  });
+
+  it('imports into a new folder kept on this computer, lists it and deletes it, as the daemon does', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    await expect(rpc('list_local_folders', { accountId: account.id })).resolves.toEqual([]);
+
+    const result = await rpc('import_mbox', { sourcePath: 'browser-sample/mailvault-demo.mbox', accountId: account.id, mode: 'folder' });
+    const name = result.folder?.name;
+    expect(name).toMatch(/^MBOX import \d{4}-\d{2}-\d{2}$/);
+    expect(result).toMatchObject({ emailCount: 1, skippedCount: 0, accountId: account.id, mailbox: name, folder: { name, dir: name.replace(/ /g, '_') } });
+    // A second import the same day gets the next name, as the daemon's does.
+    const again = await rpc('import_mbox', { sourcePath: 'browser-sample/mailvault-demo.mbox', accountId: account.id, mode: 'folder' });
+    expect(again.folder.name).toBe(`${name} 2`);
+
+    const listed = await rpc('list_local_folders', { accountId: account.id });
+    expect(listed.map(f => f.name)).toEqual([name, `${name} 2`]);
+    expect(listed[0]).toMatchObject({ dir: name.replace(/ /g, '_'), kind: 'import' });
+    // Its mail is in the vault only, and the server folder list never names it.
+    const vault = await rpc('vault_uid_sets', { accountId: account.id, mailbox: name });
+    expect(vault.archived).toHaveLength(1);
+    const { mailboxes } = await backend.invoke('imap_get_mailboxes', { accountId: account.id });
+    expect(mailboxes.some(m => m.path === name)).toBe(false);
+    // Another account has none.
+    await expect(rpc('list_local_folders', { accountId: backend.accounts[1].id })).resolves.toEqual([]);
+
+    await expect(rpc('delete_local_folder', { accountId: account.id, name: 'INBOX' })).rejects.toThrow(/^E_NOT_LOCAL_FOLDER: /);
+    await expect(rpc('delete_local_folder', { accountId: account.id, name })).resolves.toMatchObject({ deleted: 1 });
+    expect((await rpc('list_local_folders', { accountId: account.id })).map(f => f.name)).toEqual([`${name} 2`]);
+    expect((await rpc('vault_uid_sets', { accountId: account.id, mailbox: name })).saved).toEqual([]);
+    // Survives a saved and restored demo session.
+    const restored = createDemoBackend();
+    restored.restoreState(backend.exportState());
+    expect((await restored.invoke('daemon_rpc', { method: 'list_local_folders', params: { accountId: account.id } })).map(f => f.name)).toEqual([`${name} 2`]);
   });
 
   it('serves daemon-owned search index commands through daemon_rpc', async () => {
