@@ -82,3 +82,47 @@ describe('addAccount — first-account activation is fire-and-forget', () => {
     await expect(addAccount({ email: 'user2@gmail.com', imapHost: 'imap.gmail.com' })).resolves.toBeTruthy();
   });
 });
+
+// The add-account form shows what the connection test reached. The summary
+// rides on the value addAccount returns, never on the account that is saved
+// and put in the store.
+describe('addAccount: the connection test summary', () => {
+  beforeEach(() => {
+    mockSaveAccount.mockClear();
+    mockTestConnection.mockReset();
+    __mockState.accounts = [];
+  });
+
+  it('returns what the test reached', async () => {
+    mockTestConnection.mockResolvedValue({
+      success: true,
+      host: 'imap.example.test',
+      port: 993,
+      messageCount: 1204,
+      fromAddress: 'me@example.test',
+    });
+
+    const added = await addAccount({ email: 'me@example.test', imapHost: 'imap.example.test' });
+
+    expect(added.connectionCheck).toEqual({
+      host: 'imap.example.test',
+      messageCount: 1204,
+      fromAddress: 'me@example.test',
+    });
+    expect(mockSaveAccount.mock.calls[0][0]).not.toHaveProperty('connectionCheck');
+    expect(__mockState.accounts[0]).not.toHaveProperty('connectionCheck');
+    expect(added.id).toBe(__mockState.accounts[0].id);
+  });
+
+  it('keeps a null count as null', async () => {
+    mockTestConnection.mockResolvedValue({ success: true, host: 'imap.example.test', port: 993, messageCount: null, fromAddress: 'me@example.test' });
+    const added = await addAccount({ email: 'me2@example.test', imapHost: 'imap.example.test' });
+    expect(added.connectionCheck.messageCount).toBeNull();
+  });
+
+  it('has no summary when the test named no server (an older daemon)', async () => {
+    mockTestConnection.mockResolvedValue({ success: true, message: 'Connection successful' });
+    const added = await addAccount({ email: 'me3@example.test', imapHost: 'imap.example.test' });
+    expect(added.connectionCheck).toBeNull();
+  });
+});

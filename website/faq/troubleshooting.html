@@ -78,6 +78,14 @@
           "@type": "Answer",
           "text": "MailVault keeps a copy of your folder list on disk, so folders appear instantly when you open an account, and it refreshes that list from the server at most once every ten minutes. If you create, rename or delete a folder in webmail or another client, MailVault picks the change up the next time it opens that account or you click a folder in the sidebar, once the ten minutes have passed — so a new folder normally shows up within ten minutes. Restarting the app does not make it faster, because the cached list is stored on disk and survives a restart. The Refresh button reloads the messages in the folder you are reading; the folder list follows its own ten-minute check. Subfolders need no setup: MailVault draws the hierarchy from the paths the server reports, so a new subfolder appears nested under its parent, and folders for accounts you are not looking at are refreshed in the background on the same schedule."
         }
+      },
+      {
+        "@type": "Question",
+        "name": "MailVault says \"No internet connection\", but my internet works. Why?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "When a connection to a mail server fails in a way that points at the network, MailVault checks the internet itself and shows No internet connection only when nothing answers. Your mail stays readable from this computer, background syncing pauses, and the banner clears on its own once the check succeeds. The check used to ask three public DNS servers on the DNS port only, which many company networks, VPNs and internet providers block. It now also tries those servers on port 443 and your own mail servers, and any one answering means you are online; mail servers on this computer or your local network, such as Proton Mail Bridge, are left out. If the internet works but a firewall or VPN blocks the port one mail server uses, MailVault does not say the internet is gone: it names the server and port that did not answer, for example imap.example.com, port 993, so your IT team can allow it. Whatever the banner says, opening or deleting a message still goes ahead."
+        }
       }
     ]
   }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Subfolders need no setup.</strong> MailVault builds the tree from the paths the server reports, so a new subfolder turns up nested under its parent with the right name and position. Accounts you are not currently reading are refreshed in the background on the same schedule, a couple at a time, so switching to one rarely shows you a stale list.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault says "No internet connection", but my internet works. Why?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>What raises the banner.</strong> When a connection to a mail server fails in a way that points at the network, MailVault checks the internet itself, and only when nothing answers does it show <strong>No internet connection</strong>. While the banner is up, your mail is still there: MailVault shows what is already saved on this computer, pauses background syncing and clears the banner on its own once the check succeeds. <strong>Check again</strong> runs the check at once.
+              </p>
+              <p>
+                <strong>It now also checks your own mail servers.</strong> The check used to ask three public DNS servers on the DNS port only. Many company networks, VPNs and internet providers block that port, so on those networks the banner appeared while everything else worked. It now also tries those servers on port 443, the port secure websites use, and your own mail servers as well: any one of them answering means you are online. Mail servers on this computer or your local network, such as Proton Mail Bridge, are left out, since they answer even when the internet is down. Every connection the check makes is listed in Settings &rarr; Privacy &amp; security &rarr; Network Activity.
+              </p>
+              <p>
+                <strong>A blocked port looks different.</strong> If the internet works but a firewall or VPN blocks the port one mail server uses, MailVault does not say the internet is gone. It names the server and the port that did not answer, for example "No answer from imap.example.com, port 993", and says a firewall or VPN may be blocking it. Adding an account that cannot connect says the same. Give that server name and port to your IT team so they can allow it, or try another network.
+              </p>
+              <p>
+                <strong>Nothing you ask for is held back.</strong> Whatever the banner says, opening a message or deleting one still goes ahead, because a wrong verdict must never lock you out of your own mail.
               </p>
             </div>
         </article>

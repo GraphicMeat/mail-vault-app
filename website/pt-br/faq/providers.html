@@ -84,7 +84,15 @@
       "name": "Posso enviar de um endereço diferente daquele com que faço login?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim. Em Configurações → Contas, preencha o campo Enviar e-mail como para essa conta, ou deixe em branco para enviar do endereço de login. Só muda o endereço From das mensagens enviadas — seu usuário e sua senha continuam os mesmos, o MailVault continua entrando no IMAP e no SMTP com a conta que você configurou, e nenhum cabeçalho Reply-To é adicionado. O MailVault sugere endereços que já viu nas suas próprias mensagens, e um botão Verificar envia uma única mensagem de teste a partir do endereço para você confirmar que o provedor aceita. O endereço precisa ser um alias que o seu provedor autorize esse login a usar: o Fastmail aceita qualquer alias da conta, o Gmail exige que ele seja adicionado em \"Enviar e-mail como\" nas configurações do Gmail, e o Microsoft 365 exige a permissão Send As."
+        "text": "Sim. Adicione o endereço como alias da conta em Configurações → Contas → Apelidos e escolha-o na linha De ao escrever, ou torne-o o padrão. Seu usuário e sua senha continuam os mesmos, o MailVault continua entrando no IMAP e no SMTP com a conta que você configurou e nenhum cabeçalho Reply-To é adicionado. O endereço precisa ser um que o seu provedor permite que aquele login use para enviar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como envio de um alias?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Abra Configurações → Contas, escolha a conta e vá até a seção Apelidos, que lista todos os endereços dos quais a conta envia: primeiro o endereço de login, depois cada alias. Em uma conta Google conectada com o login do Google, o MailVault busca os endereços dos quais o Gmail deixa você enviar. Em qualquer outro provedor, o MailVault sugere endereços que viu nos seus próprios e-mails, os que você usou para enviar e os que recebem seus e-mails, e você pode adicionar qualquer endereço à mão. Dê a cada alias o nome que os destinatários devem ver e escolha com qual endereço as novas mensagens começam. Verificar envia uma mensagem de teste de um alias para você ver se o seu provedor o aceita. O seu provedor precisa permitir o endereço: no Fastmail, adicione-o antes como alias ou identidade; no Gmail, adicione-o em Configurações → Contas e importação → Enviar e-mail como; no Microsoft 365 e no Outlook.com, os aliases são adicionados na conta Microsoft. Só mudam o endereço e o nome do remetente, e nenhum cabeçalho Reply-To é adicionado, então as respostas voltam para o alias."
       }
     }
   ]
@@ -247,19 +255,34 @@
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso enviar de um endereço diferente daquele com que faço login?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Sim. Abra <strong>Configurações &rarr; Contas</strong>, escolha a conta e preencha <strong>Enviar e-mail como</strong>. Deixe em branco para enviar do endereço com que você entrou. Isso é comum no Fastmail e em qualquer provedor em que o endereço de login não é o endereço que você divulga.</p>
-              <p class="mb-4">Só muda o endereço no campo <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">De</code> das mensagens que saem. O seu nome de usuário e a sua senha continuam exatamente iguais, o MailVault continua entrando no IMAP e no SMTP como a conta que você configurou, e <strong>nenhum cabeçalho Reply-To é acrescentado</strong> &mdash; as respostas vão para o endereço a partir do qual você envia.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Encontrar e conferir o endereço:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Sugestões</strong> &mdash; O MailVault oferece endereços que ele já viu nas suas próprias mensagens: aqueles a partir dos quais você já enviou e aqueles em que chegam mensagens endereçadas a você.</li>
-                <li><strong>Verificar</strong> &mdash; envia uma única mensagem de teste a partir do endereço, para a sua própria caixa postal por padrão, para você confirmar que o seu provedor a aceita antes de contar com ela.</li>
-                <li><strong>Se for recusado</strong> &mdash; o endereço precisa ser um alias ou uma identidade que o seu provedor permite que aquele login use para enviar. O Fastmail aceita qualquer alias da conta; o Gmail exige que o endereço seja adicionado em "Enviar e-mail como" nas configurações do Gmail, e o Microsoft 365 exige a permissão Enviar como, dada por um administrador.</li>
-              </ul>
-              <p>Os aliases são configurados no seu provedor de e-mail, não no MailVault &mdash; o MailVault envia com um endereço que o seu provedor já autorizou.</p>
+              <p class="mb-4">Sim. Adicione o endereço como alias da conta, como explicado em <a href="#send-from-an-alias" class="text-primary-500 hover:underline">Como envio de um alias?</a>, e escolha-o na linha De ao escrever, ou torne-o o padrão. Isso é comum no Fastmail e em qualquer provedor em que o endereço de login não é o endereço que você divulga.</p>
+              <p>Só muda o endereço no campo <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">De</code> das mensagens que saem. O seu nome de usuário e a sua senha continuam exatamente iguais, o MailVault continua entrando no IMAP e no SMTP como a conta que você configurou, e <strong>nenhum cabeçalho Reply-To é acrescentado</strong> &mdash; as respostas vão para o endereço a partir do qual você envia.</p>
             </div>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/compose-email-720.webp 720w, /screenshots/pt-br/compose-email-1440.webp 1440w, /screenshots/pt-br/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/compose-email-light-1440.webp" srcset="/screenshots/pt-br/compose-email-light-720.webp 720w, /screenshots/pt-br/compose-email-light-1440.webp 1440w, /screenshots/pt-br/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Janela de composição e resposta do MailVault com edição de texto formatado" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
+        </article>
+
+        <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Como envio de um alias?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Abra <strong>Configurações &rarr; Contas</strong>, escolha a conta e vá até a seção <strong>Apelidos</strong>. Ela lista todos os endereços dos quais a conta envia: primeiro o endereço de login, depois cada alias. O link <strong>Adicionar endereço</strong> na linha De de uma nova mensagem abre a mesma seção.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Como adicionar e configurar um alias:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Contas Google</strong>: se você entrou com o Google, o MailVault busca os endereços dos quais o Gmail deixa você enviar e os lista para você.</li>
+                <li><strong>Outros provedores</strong>: o MailVault sugere endereços que viu nos seus próprios e-mails, os que você usou para enviar e os que recebem seus e-mails. Você também pode adicionar qualquer endereço à mão.</li>
+                <li><strong>Nome</strong>: dê a cada alias o nome que os destinatários devem ver. O e-mail enviado do alias sai com esse nome.</li>
+                <li><strong>Padrão</strong>: escolha com qual endereço as novas mensagens começam.</li>
+                <li><strong>Verificar</strong>: envia uma mensagem de teste do alias, para você ver se o seu provedor o aceita antes de depender dele.</li>
+              </ul>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">O seu provedor precisa permitir o endereço:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Fastmail</strong>: adicione antes o endereço como alias ou identidade no Fastmail.</li>
+                <li><strong>Gmail</strong>: adicione-o no Gmail em <strong>Configurações &rarr; Contas e importação &rarr; Enviar e-mail como</strong>.</li>
+                <li><strong>Microsoft 365 e Outlook.com</strong>: os aliases são adicionados na conta Microsoft, por você ou, em uma conta corporativa ou de estudante, pelo seu administrador.</li>
+              </ul>
+              <p>Só mudam o endereço e o nome do remetente. O MailVault continua entrando com a conta que você configurou e <strong>nenhum cabeçalho Reply-To é adicionado</strong>, então as respostas voltam para o alias.</p>
+            </div>
         </article>
 
       </div>

@@ -31,6 +31,9 @@ export async function addAccount(accountData) {
   console.log('[mailStore] Created account object with id:', account.id);
 
   console.log('[mailStore] Testing connection...');
+  // What the IMAP test reached (server, INBOX count, send-as address), for the
+  // add-account form to show. Returned beside the account, never saved on it.
+  let connectionCheck = null;
   try {
     if (isGraphAccount(account)) {
       const freshAccount = await ensureFreshToken(account);
@@ -38,7 +41,14 @@ export async function addAccount(accountData) {
       // no directories, so no folder-key adoption pass belongs here.
       await api.graphListFolders(freshAccount.oauth2AccessToken);
     } else {
-      await api.testConnection(account);
+      const result = await api.testConnection(account);
+      if (result?.host) {
+        connectionCheck = {
+          host: result.host,
+          messageCount: typeof result.messageCount === 'number' ? result.messageCount : null,
+          fromAddress: result.fromAddress || null,
+        };
+      }
     }
     console.log('[mailStore] Connection test successful');
   } catch (error) {
@@ -73,5 +83,5 @@ export async function addAccount(accountData) {
     });
   }
 
-  return account;
+  return { ...account, connectionCheck };
 }

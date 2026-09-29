@@ -76,6 +76,50 @@ async fn test_connection_succeeds_and_logs_out() {
     );
 }
 
+/// The add-account summary: the test reports how many messages INBOX holds,
+/// from an EXAMINE on the same session. EXAMINE, never SELECT: a connection
+/// test must not open anyone's inbox read-write.
+#[async_std::test]
+async fn test_connection_reports_the_inbox_count_read_only() {
+    let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+    let count = test_connection(&config_for(&server), &pool()).await.expect("connection test");
+    assert_eq!(count, Some(3));
+    let sent = server.commands().join("\n").to_uppercase();
+    assert!(sent.contains("EXAMINE"), "expected an EXAMINE, sent:\n{sent}");
+    assert!(!sent.contains("SELECT"), "the test must not SELECT the inbox, sent:\n{sent}");
+}
+
+/// The count is best effort: a server with no INBOX to examine still passes
+/// the test, with no count.
+#[async_std::test]
+async fn test_connection_passes_without_a_count_when_inbox_cannot_be_examined() {
+    let server = MockImap::start(Scenario::new().mailboxes(vec![Mailbox::new("Archive")]));
+    let count = test_connection(&config_for(&server), &pool())
+        .await
+        .expect("a missing count must never fail the test");
+    assert_eq!(count, None);
+}
+
+/// A slow EXAMINE must not hold up adding the account: it is cut off and the
+/// test passes with no count.
+#[async_std::test]
+async fn test_connection_does_not_wait_out_a_slow_examine() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::on("EXAMINE"), Action::Delay(Duration::from_secs(30))),
+    );
+
+    let started = std::time::Instant::now();
+    let count = test_connection(&config_for(&server), &pool()).await.expect("connection test");
+    assert_eq!(count, None);
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "a stalled EXAMINE must not be waited out, took {:?}",
+        started.elapsed()
+    );
+}
+
 /// LOGOUT is fire-and-forget: AUTH already succeeded, so a server that goes
 /// silent on LOGOUT must not make the test report failure, or wait for it.
 #[async_std::test]
@@ -109,6 +153,24 @@ async fn test_connection_retries_a_login_that_stalls_past_cmd_stall() {
     );
     test_connection(&config_for(&server), &pool()).await.expect("the retry must succeed on a fresh connection");
     assert_eq!(server.connection_count(), 2, "one stalled attempt, one retry");
+}
+
+/// A server slow enough to need the retry does not get the EXAMINE too: the
+/// count is best effort and must never stretch the test past its two
+/// attempts.
+#[async_std::test]
+async fn test_connection_skips_the_inbox_count_after_a_retry() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::nth("LOGIN", 1), Action::Delay(Duration::from_secs(16))),
+    );
+    let count = test_connection(&config_for(&server), &pool()).await.expect("the retry must succeed");
+    assert_eq!(count, None);
+    assert!(
+        !server.commands().iter().any(|c| c.to_uppercase().contains("EXAMINE")),
+        "no EXAMINE after a retried attempt"
+    );
 }
 
 /// The same retry path must never fire for a wrong password: `sign_in_error`

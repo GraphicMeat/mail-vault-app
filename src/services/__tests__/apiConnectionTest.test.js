@@ -48,6 +48,21 @@ describe('connection tests that failed', () => {
     await expect(testConnection(ACCOUNT)).resolves.toEqual({ success: true, message: 'Connection successful' });
   });
 
+  // The add-account summary reads these off the pass: nothing in between may
+  // drop them.
+  it('pass a success\'s host, port, message count and send-as address through', async () => {
+    const PASSED = {
+      success: true,
+      message: 'Connection successful',
+      host: 'imap.example.test',
+      port: 993,
+      messageCount: 1204,
+      fromAddress: 'me@example.test',
+    };
+    mockSend.mockResolvedValue(PASSED);
+    await expect(testConnection(ACCOUNT)).resolves.toEqual(PASSED);
+  });
+
   it('still reject when the daemon rejected (an older daemon, a bad argument)', async () => {
     mockSend.mockRejectedValue(new Error('Invalid params'));
     const err = await testConnection(ACCOUNT).catch(e => e);

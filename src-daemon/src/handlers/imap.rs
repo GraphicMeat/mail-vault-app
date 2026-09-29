@@ -602,9 +602,21 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // timeout wrapper here: one would cut off the retry it just
             // earned, and the RPC layer's own ceiling is already ≥45s
             // (imap_get_email_light's BODY_FETCH_TIMEOUT), well above the
-            // ~40s worst case of two attempts.
+            // ~40s worst case of two attempts. The INBOX count adds at most 5s
+            // to a first attempt that passed, and is skipped after a retry, so
+            // that worst case stands.
+            // A pass says what it reached, for the add-account summary: the
+            // server, INBOX's message count (null when it could not be read)
+            // and the address mail will be sent as.
             match imap::test_connection(&account, &state.imap_pool).await {
-                Ok(()) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
+                Ok(message_count) => RpcResponse::success(id, json!({
+                    "success": true,
+                    "message": "Connection successful",
+                    "host": account.host,
+                    "port": account.effective_port(),
+                    "messageCount": message_count,
+                    "fromAddress": account.from_address(),
+                })),
                 Err(e) => RpcResponse::success(id, super::failed_connection_test(&e, &account.host, account.effective_port())),
             }
         }
@@ -1220,6 +1232,42 @@ mod tests {
         let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
+    }
+
+    /// The add-account form says what the test reached: the server and port,
+    /// how many messages INBOX holds, and the address mail will leave as (the
+    /// send-as address when the account has one, not the login).
+    #[tokio::test]
+    async fn test_connection_success_says_what_it_reached() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let s = st(true);
+        let mut account = account_json(&server);
+        account["fromEmail"] = json!("alias@example.com");
+
+        let resp = call(&s, "imap_test_connection", json!({"account": account})).await;
+
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["host"], json!(server.host()));
+        assert_eq!(result["port"], json!(server.port()));
+        assert_eq!(result["messageCount"], json!(3));
+        assert_eq!(result["fromAddress"], json!("alias@example.com"));
+    }
+
+    /// No INBOX to count: the test still passes, with a null count.
+    #[tokio::test]
+    async fn test_connection_success_without_an_inbox_count_is_still_success() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailboxes(vec![Mailbox::new("Archive")]));
+        let s = st(true);
+
+        let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
+
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["messageCount"], json!(null));
+        assert_eq!(result["fromAddress"], json!("user@example.com"));
     }
 
     /// The account form says what failed: a closed port is "refused", with the

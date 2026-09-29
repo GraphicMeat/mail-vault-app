@@ -78,6 +78,14 @@
         "@type": "Answer",
         "text": "MailVault guarda una copia de tu lista de carpetas en el disco, por lo que las carpetas aparecen al instante cuando abres una cuenta, y actualiza esa lista desde el servidor como máximo una vez cada diez minutos. Si creas, cambias el nombre o eliminas una carpeta en el webmail o en otro cliente, MailVault detecta el cambio la próxima vez que abras esa cuenta o hagas clic en una carpeta de la barra lateral, cuando hayan pasado los diez minutos; por eso una carpeta nueva suele aparecer en menos de diez minutos. Reiniciar la app no lo acelera, porque la lista en caché se guarda en el disco y sobrevive a un reinicio. El botón Actualizar recarga los mensajes de la carpeta que estás leyendo; la lista de carpetas sigue su propia comprobación de diez minutos. Las subcarpetas no necesitan configuración: MailVault dibuja la jerarquía a partir de las rutas que informa el servidor, por lo que una subcarpeta nueva aparece bajo su carpeta principal, y las carpetas de las cuentas que no estás mirando se actualizan en segundo plano con el mismo calendario."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault dice “Sin conexión a internet”, pero mi internet funciona. ¿Por qué?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Cuando falla una conexión con un servidor de correo de una forma que apunta a la red, MailVault comprueba internet por sí mismo y solo muestra Sin conexión a internet si nada responde. Tu correo sigue legible desde este ordenador, la sincronización en segundo plano se pausa y el aviso desaparece solo en cuanto la comprobación funciona. Antes, la comprobación solo preguntaba a tres servidores DNS públicos en el puerto DNS, que muchas redes de empresa, VPN y proveedores de internet bloquean. Ahora también prueba esos servidores en el puerto 443 y tus propios servidores de correo, y con que uno responda estás en línea; los servidores de correo de este ordenador o de tu red local, como Proton Mail Bridge, quedan fuera. Si internet funciona pero un cortafuegos o una VPN bloquea el puerto que usa un servidor de correo, MailVault no dice que no hay internet: nombra el servidor y el puerto que no respondieron, por ejemplo imap.example.com, puerto 993, para que tu equipo de TI pueda permitirlo. Diga lo que diga el aviso, abrir o eliminar un mensaje sigue funcionando."
+      }
     }
   ]
 }
@@ -274,6 +282,24 @@
               </p>
               <p>
                 <strong>Las subcarpetas no necesitan configuración.</strong> MailVault crea el árbol con las rutas que informa el servidor, así que una subcarpeta nueva aparece anidada bajo su carpeta principal con el nombre y la posición correctos. Las cuentas que no estás leyendo se actualizan en segundo plano con el mismo calendario, unas pocas cada vez, por lo que al cambiar a una rara vez verás una lista desactualizada.
+              </p>
+            </div>
+        </article>
+
+        <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault dice “Sin conexión a internet”, pero mi internet funciona. ¿Por qué?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Qué hace aparecer el aviso.</strong> Cuando falla una conexión con un servidor de correo de una forma que apunta a la red, MailVault comprueba internet por sí mismo y solo muestra <strong>Sin conexión a internet</strong> si nada responde. Mientras el aviso está visible, tu correo sigue ahí: MailVault muestra lo que ya está guardado en este ordenador, pausa la sincronización en segundo plano y quita el aviso solo en cuanto la comprobación funciona. <strong>Volver a comprobar</strong> lanza la comprobación al momento.
+              </p>
+              <p>
+                <strong>Ahora también comprueba tus propios servidores de correo.</strong> Antes, la comprobación solo preguntaba a tres servidores DNS públicos en el puerto DNS. Muchas redes de empresa, VPN y proveedores de internet bloquean ese puerto, así que en esas redes el aviso aparecía aunque todo lo demás funcionaba. Ahora también prueba esos servidores en el puerto 443, el que usan las webs seguras, y además tus propios servidores de correo: con que uno responda, estás en línea. Los servidores de correo de este ordenador o de tu red local, como Proton Mail Bridge, quedan fuera, porque responden aunque no haya internet. Cada conexión que hace la comprobación aparece en Ajustes &rarr; Privacidad y seguridad &rarr; Actividad de red.
+              </p>
+              <p>
+                <strong>Un puerto bloqueado se ve distinto.</strong> Si internet funciona pero un cortafuegos o una VPN bloquea el puerto que usa un servidor de correo, MailVault no dice que no hay internet. Nombra el servidor y el puerto que no respondieron, por ejemplo “Sin respuesta de imap.example.com, puerto 993”, y dice que puede que un cortafuegos o una VPN lo bloquee. Al añadir una cuenta que no logra conectarse verás lo mismo. Pasa ese nombre de servidor y ese puerto a tu equipo de TI para que lo permita, o prueba con otra red.
+              </p>
+              <p>
+                <strong>Nada de lo que pides queda retenido.</strong> Diga lo que diga el aviso, abrir o eliminar un mensaje sigue funcionando, porque un diagnóstico equivocado nunca debe dejarte fuera de tu propio correo.
               </p>
             </div>
         </article>

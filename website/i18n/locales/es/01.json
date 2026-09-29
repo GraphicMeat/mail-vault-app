@@ -175,8 +175,6 @@
   "12866a4f8630": "Usuario: tu dirección de correo de Proton",
   "93ac7f32681b": "Contraseña: la contraseña generada por Bridge en el paso 3",
   "082783169c8d": "¿Puedo enviar desde una dirección distinta de aquella con la que inicio sesión?",
-  "7840e76f6d10": "Encontrar y comprobar la dirección:",
-  "076e0b1b8fe5": "Los alias se configuran con tu proveedor de correo, no en MailVault &mdash; MailVault envía desde una dirección que tu proveedor ya ha autorizado.",
   "5596c13ff9c1": "¿Cuáles son los requisitos del sistema?",
   "cb15e1d10b22": "MailVault necesita macOS 11 (Big Sur) o posterior, y se ejecuta de forma nativa tanto en Intel como en Apple Silicon. En Linux se distribuye como .deb, AppImage, Snap y Flatpak para Ubuntu 22.04+ / Debian 12+. Se queda en la barra de menús y sigue sincronizando con la ventana cerrada.",
   "da01f86c0297": "¿Cómo se gestionan los adjuntos?",

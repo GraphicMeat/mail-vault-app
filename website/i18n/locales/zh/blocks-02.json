@@ -108,11 +108,7 @@
   "41da1639ed80": "IMAP 端口：<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">1143</code>，安全方式：<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">STARTTLS</code>",
   "230a4bf715b7": "MailVault 同步的时候，Proton Mail Bridge 必须在后台运行 —— Bridge 关了，MailVault 就够不到邮箱。不过就算 Bridge 关着，你已经归档的邮件在 MailVault 里照样能完整地阅读和搜索，因为 MailVault 是本地优先的，它读的是自己的 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">.eml</code> 存储，而不是实时向 Bridge 要。",
   "8c84d1aff414": "Bridge 用一张自签名 TLS 证书来保护它本地的 IMAP/SMTP 服务。对本地（<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code>）连接，MailVault 会自动处理这一点，不需要你手动安装证书。",
-  "e6e83569b4fd": "可以。打开<strong>设置 &rarr; 账户</strong>，选中账户，填写<strong>发件身份</strong>。留空就用你的登录地址发信。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。",
   "7c555b0cdcac": "变的只有外发邮件的 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">From</code> 地址。你的用户名和密码原封不动，MailVault 仍然以你设置的那个账户登录 IMAP 和 SMTP，而且<strong>不会添加 Reply-To 头</strong> &mdash; 回信会寄到你用来发信的那个地址。",
-  "78134e40c863": "<strong>建议</strong> &mdash; MailVault 会给出它在你自己的邮件里见过的地址：你以前用来发过信的，以及别人寄给你的邮件所落到的那些地址。",
-  "027aba76c5ed": "<strong>验证</strong> &mdash; 用这个地址发一封测试邮件，默认寄到你自己的邮箱，这样你在真正依赖它之前就能确认服务商接受它。",
-  "8f07a6f9fde2": "<strong>如果被拒绝</strong> &mdash; 这个地址必须是你的服务商允许该登录身份用来发信的别名或身份。Fastmail 接受账户上的任何别名；Gmail 需要先在 Gmail 设置的“以此地址发送邮件”里添加该地址；Microsoft 365 则需要管理员授予 Send As 权限。",
   "a0e567732861": "附件以 MIME 部件的形式嵌在每个 .eml 文件里 —— 它们不是单独存放的文件。你打开一封邮件时，MailVault 的 Rust 后端会解析 MIME 结构并即时取出附件。你可以直接在邮件查看器里对任何附件执行<strong>打开</strong>、<strong>另存为</strong>或<strong>在文件夹中显示</strong>。取出来的附件会临时缓存，方便再次快速访问。",
   "8bd63a4353f7": "归档会从你的服务器下载完整邮件（如果尚未缓存），并把它存成磁盘上的一个 .eml 文件，文件名里带 <strong>A</strong>（已归档）标记。如果这封邮件本地已经缓存过，MailVault 只是给文件改个名，加上归档标记。归档过的邮件会出现在<strong>保险库</strong>视图中，并被纳入备份。在你自己动手删除之前，服务器上那份不会被碰。",
   "be2c6c4fce1b": "<strong>归档并删除</strong>按顺序做三件事：把邮件作为 .eml 文件复制进你的保险库，核对这份副本确实在那里，然后才从服务器上删除。任何没通过核对的都会留在服务器上 &mdash; 复制失败绝不会让你搭上原件。做完之后，这一行会显示<strong>你的唯一副本</strong>：保险库是这封邮件仅存的地方，这也提醒你该把备份盘接上。"

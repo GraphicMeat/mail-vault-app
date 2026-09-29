@@ -2689,6 +2689,11 @@ pub async fn find_message_id(
 /// stays well above that for a live server and still bounds a dead one.
 const TEST_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// The INBOX count the add-account summary shows is best effort, read after
+/// the test has already passed: every account added waits on it, so it gets a
+/// few seconds and is dropped past that rather than slow the add.
+const TEST_EXAMINE_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// LOGOUT is fire-and-forget once AUTH has already succeeded: a slow or
 /// silent LOGOUT must not turn a working account into a reported failure.
 const TEST_LOGOUT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -2717,26 +2722,59 @@ async fn test_connection_attempt(config: &ImapConfig, pool: &ImapPool) -> Result
     }
 }
 
-/// Test an IMAP connection: connect, authenticate, log out. Retries once if
-/// the attempt itself stalled (a throttled server, a dropped SYN, a silent
-/// greeting) — never on an auth rejection, which a retry cannot fix.
-pub async fn test_connection(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
+/// Test an IMAP connection: connect, authenticate, EXAMINE INBOX, log out.
+/// Retries once if the attempt itself stalled (a throttled server, a dropped
+/// SYN, a silent greeting), never on an auth rejection, which a retry cannot
+/// fix. `Ok` carries INBOX's message count, `None` when the EXAMINE failed or
+/// was too slow: the count never decides whether the test passed.
+pub async fn test_connection(config: &ImapConfig, pool: &ImapPool) -> Result<Option<u32>, String> {
     crate::net_activity::with_purpose("account setup", test_connection_inner(config, pool)).await
 }
 
-async fn test_connection_inner(config: &ImapConfig, pool: &ImapPool) -> Result<(), String> {
+/// An EXAMINE reply's message count, by the same dead-socket rule as SELECT:
+/// a reply that carried nothing is no count, not an empty inbox.
+fn inbox_count(mbox: Mailbox) -> Option<u32> {
+    selected("INBOX", mbox).ok().map(|m| m.exists)
+}
+
+async fn test_connection_inner(config: &ImapConfig, pool: &ImapPool) -> Result<Option<u32>, String> {
+    let mut retried = false;
     let mut session = match test_connection_attempt(config, pool).await {
         Ok(session) => session,
         Err(e) if is_timeout_error(&e) => match test_connection_attempt(config, pool).await {
-            Ok(session) => session,
+            Ok(session) => {
+                retried = true;
+                session
+            }
             Err(e2) if is_timeout_error(&e2) => return Err(format!("Connection test timed out for {}", config.email)),
             Err(e2) => return Err(format!("Connection test failed: {}", e2)),
         },
         Err(e) => return Err(format!("Connection test failed: {}", e)),
     };
 
+    // Read-only on purpose: EXAMINE never touches \Recent or any flag. Skipped
+    // after a retry: a server that slow would only spend the add's time on a
+    // count, and the worst case stays the two attempts it was.
+    let examined = if retried {
+        None
+    } else {
+        Some(async_std::future::timeout(TEST_EXAMINE_TIMEOUT, session.examine("INBOX")).await)
+    };
+    let count = match examined {
+        None => None,
+        Some(Ok(Ok(mbox))) => inbox_count(mbox),
+        Some(Ok(Err(e))) => {
+            warn!("[test-connection] EXAMINE INBOX failed, no message count: {}", e);
+            None
+        }
+        Some(Err(_)) => {
+            warn!("[test-connection] EXAMINE INBOX timed out, no message count");
+            None
+        }
+    };
+
     let _ = async_std::future::timeout(TEST_LOGOUT_TIMEOUT, session.logout()).await;
-    Ok(())
+    Ok(count)
 }
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -3815,6 +3853,30 @@ mod unescape_quoted_tests {
     fn an_escaped_backslash_does_not_escape_what_follows() {
         assert_eq!(unescape_quoted(r#"a\\\"b"#), r#"a\"b"#);
         assert_eq!(unescape_quoted(r"a\\\\b"), r"a\\b");
+    }
+}
+
+/// The add-account summary's message count, read off the EXAMINE reply.
+#[cfg(test)]
+mod inbox_count_tests {
+    use super::*;
+
+    #[test]
+    fn a_real_examine_reply_gives_its_exists_count() {
+        let mbox = Mailbox { exists: 1204, uid_validity: Some(1), ..Mailbox::default() };
+        assert_eq!(inbox_count(mbox), Some(1204));
+    }
+
+    #[test]
+    fn an_empty_inbox_is_a_count_of_zero() {
+        let mbox = Mailbox { exists: 0, uid_validity: Some(1), ..Mailbox::default() };
+        assert_eq!(inbox_count(mbox), Some(0));
+    }
+
+    /// The dead-socket reply `selected()` refuses: no count, not "0 messages".
+    #[test]
+    fn a_reply_that_carried_nothing_gives_no_count() {
+        assert_eq!(inbox_count(Mailbox::default()), None);
     }
 }
 

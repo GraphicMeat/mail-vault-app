@@ -23,8 +23,19 @@ describe('FAQ hub and topic pages', () => {
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus every answer added since.
-    expect(all.length).toBe(29);
-    expect(new Set(all).size).toBe(29);
+    expect(all.length).toBe(31);
+    expect(new Set(all).size).toBe(31);
+  });
+
+  // Every answer on a topic page has its row in the hub's index, which the
+  // search and the old /faq.html#id deep links both read.
+  it('lists the alias and "No internet connection" answers in the hub', () => {
+    expect(hub()).toContain('href="faq/providers.html#send-from-an-alias"');
+    expect(hub()).toContain('href="faq/troubleshooting.html#no-internet-connection"');
+    expect(topic('providers')).toContain('id="send-from-an-alias"');
+    expect(topic('troubleshooting')).toContain('id="no-internet-connection"');
+    expect(questionsIn(topic('providers'))).toContain('How do I send from an alias?');
+    expect(questionsIn(topic('troubleshooting'))).toContain('MailVault says "No internet connection", but my internet works. Why?');
   });
 
   it('links the hub to every topic and every topic back to the hub', () => {

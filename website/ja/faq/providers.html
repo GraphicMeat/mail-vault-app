@@ -84,7 +84,15 @@
       "name": "ログインに使うアドレスとは別のアドレスから送信できますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。設定 → アカウントで、そのアカウントのSend Mail Asの欄に入力します。空欄のままにすると、ログインに使うアドレスから送信されます。変わるのは送信するメールのFromアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし、Reply-Toヘッダーも追加されません。MailVaultはあなた自身のメールの中で見かけたアドレスを候補として提示し、検証ボタンを押すとそのアドレスからテストメールを1通送るので、プロバイダーが受け付けるかどうかを確認できます。そのアドレスは、そのログインからの送信をプロバイダーが許可しているエイリアスである必要があります。Fastmailはアカウント上のどのエイリアスでも受け付けます。GmailではGmailの設定の「Send mail as」への追加が必要で、Microsoft 365ではSend As権限が必要です。"
+        "text": "はい。設定 → アカウント → エイリアスでそのアドレスをアカウントのエイリアスとして追加し、メールを書くときに送信者の行で選ぶか、既定にします。ユーザー名とパスワードはそのままで、MailVault は設定したアカウントで IMAP と SMTP にサインインし続け、Reply-To ヘッダーは追加されません。そのアドレスは、そのログインでの送信を提供元が認めているものである必要があります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "エイリアスから送信するには？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "設定 → アカウントを開き、アカウントを選んでエイリアスのセクションに進みます。アカウントが送信に使うすべてのアドレスが、ログインアドレス、続いて各エイリアスの順に並びます。Google でサインインした Google アカウントでは、Gmail で送信が許可されているアドレスを MailVault が取得します。それ以外の提供元では、送信に使ったアドレスやメールが届くアドレスなど、あなた自身のメールで見つかったアドレスを MailVault が提案し、どのアドレスも手動で追加できます。各エイリアスには受信者に表示する名前を付け、新しいメッセージをどのアドレスで始めるかを選びます。確認を押すとエイリアスからテストメッセージを 1 通送り、提供元が受け付けるかどうかを確かめられます。そのアドレスは提供元で許可されている必要があります。Fastmail では先にエイリアスまたは ID として追加し、Gmail では 設定 → アカウントとインポート → Send mail as で追加します。Microsoft 365 と Outlook.com では、エイリアスは Microsoft アカウントで追加します。変わるのは差出人のアドレスと名前だけで、Reply-To ヘッダーは追加されないため、返信はエイリアスに届きます。"
       }
     }
   ]
@@ -247,19 +255,34 @@
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">ログインに使うアドレスとは別のアドレスから送信できますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">はい。<strong>設定 &rarr; アカウント</strong>を開き、アカウントを選んで、<strong>Send Mail As</strong>を入力します。空のままにすると、ログインに使うアドレスから送信します。Fastmailや、サインインに使うアドレスと人に伝えるアドレスが違う提供元では、よくあることです。</p>
-              <p class="mb-4">変わるのは、送信するメールの<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>のアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし続けます。また、<strong>Reply-Toのヘッダーは追加されません</strong> &mdash; 返信は、送信に使ったアドレスへ届きます。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">アドレスの見つけ方と確認方法:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>候補の表示</strong> &mdash; MailVaultは、自分のメールの中ですでに見かけたアドレスを提示します。以前そのアドレスで送ったもの、そして自分宛てのメールが届いているアドレスです。</li>
-                <li><strong>検証</strong> &mdash; そのアドレスからテストのメッセージを1通、既定では自分のメールボックス宛てに送るので、頼りにする前に提供元が受け付けるかを確かめられます。</li>
-                <li><strong>拒否された場合</strong> &mdash; そのアドレスは、そのログインでの送信を提供元が認めているエイリアスか差出人である必要があります。Fastmailはアカウント上のどのエイリアスでも受け付けます。GmailではGmailの設定の「Send mail as」にアドレスを追加する必要があり、Microsoft 365では管理者からSend Asの権限をもらう必要があります。</li>
-              </ul>
-              <p>エイリアスはMailVaultではなく、メールプロバイダー側で設定します &mdash; MailVaultは、プロバイダーがすでに許可しているアドレスとして送信するだけです。</p>
+              <p class="mb-4">はい。<a href="#send-from-an-alias" class="text-primary-500 hover:underline">エイリアスから送信するには？</a>の説明どおりにアドレスをアカウントのエイリアスとして追加し、メールを書くときに送信者の行で選ぶか、既定にします。Fastmailや、サインインに使うアドレスと人に伝えるアドレスが違う提供元では、よくあることです。</p>
+              <p>変わるのは、送信するメールの<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>のアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし続けます。また、<strong>Reply-Toのヘッダーは追加されません</strong> &mdash; 返信は、送信に使ったアドレスへ届きます。</p>
             </div>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/compose-email-720.webp 720w, /screenshots/ja/compose-email-1440.webp 1440w, /screenshots/ja/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/compose-email-light-1440.webp" srcset="/screenshots/ja/compose-email-light-720.webp 720w, /screenshots/ja/compose-email-light-1440.webp 1440w, /screenshots/ja/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
+        </article>
+
+        <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">エイリアスから送信するには？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><strong>設定 &rarr; アカウント</strong>を開き、アカウントを選んで<strong>エイリアス</strong>のセクションに進みます。アカウントが送信に使うすべてのアドレスが、ログインアドレス、続いて各エイリアスの順に並びます。新しいメッセージの送信者の行にある<strong>アドレスを追加</strong>リンクからも同じセクションが開きます。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">エイリアスの追加と設定:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Google アカウント</strong>: Google でサインインした場合、Gmail で送信が許可されているアドレスを MailVault が取得して一覧にします。</li>
+                <li><strong>その他の提供元</strong>: 送信に使ったアドレスやメールが届くアドレスなど、あなた自身のメールで見つかったアドレスを MailVault が提案します。どのアドレスも手動で追加できます。</li>
+                <li><strong>名前</strong>: 各エイリアスに受信者に表示する名前を付けます。エイリアスから送るメールはその名前で送信されます。</li>
+                <li><strong>既定</strong>: 新しいメッセージをどのアドレスで始めるかを選びます。</li>
+                <li><strong>確認</strong>: エイリアスからテストメッセージを 1 通送り、使い始める前に提供元が受け付けるかどうかを確かめられます。</li>
+              </ul>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">そのアドレスは提供元で許可されている必要があります:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Fastmail</strong>: 先に Fastmail でアドレスをエイリアスまたは ID として追加します。</li>
+                <li><strong>Gmail</strong>: Gmail の <strong>設定 &rarr; アカウントとインポート &rarr; Send mail as</strong> で追加します。</li>
+                <li><strong>Microsoft 365 と Outlook.com</strong>: エイリアスは Microsoft アカウントで追加します。追加するのはあなた自身か、職場または学校のアカウントでは管理者です。</li>
+              </ul>
+              <p>変わるのは差出人のアドレスと名前だけです。MailVault は設定したアカウントでサインインし続け、<strong>Reply-To ヘッダーは追加されない</strong>ため、返信はエイリアスに届きます。</p>
+            </div>
         </article>
 
       </div>
