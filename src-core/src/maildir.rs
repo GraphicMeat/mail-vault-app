@@ -410,7 +410,7 @@ pub fn carries_archived(name: &str) -> bool {
 
 /// `uid_file_map` restricted to archived copies: a uid with a cache copy and
 /// an `A` copy side by side maps to the `A` one.
-fn archived_file_map(cur_dir: &Path) -> HashMap<u32, PathBuf> {
+pub fn archived_file_map(cur_dir: &Path) -> HashMap<u32, PathBuf> {
     let mut map = HashMap::new();
     let Ok(entries) = fs::read_dir(cur_dir) else { return map };
     for entry in entries.flatten() {
@@ -426,7 +426,7 @@ fn archived_file_map(cur_dir: &Path) -> HashMap<u32, PathBuf> {
 /// `verify_copies` against a listing taken earlier. A uid the listing lacks
 /// is missing: a copy written since is only unproven, and the caller keeps
 /// the server's.
-fn verify_listed(
+pub fn verify_listed(
     cur_dir: &Path,
     listing: &HashMap<u32, PathBuf>,
     uids: &[u32],

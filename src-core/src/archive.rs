@@ -664,6 +664,123 @@ async fn fetch_and_store(
     Ok(index_entry)
 }
 
+// ── One fetched body into the vault, as archived ─────────────────────────────
+
+/// The custody entry `fetch_and_store` builds for a message, from its raw
+/// bytes: the same key set, so a job that never saw the server's envelope
+/// (Graph MIME, a sibling copy read back from the vault) files the same row.
+/// A message `mailparse` cannot read still gets a row from its uid and flags.
+pub fn custody_entry_from_raw(uid: u32, raw: &[u8], flags: &[String]) -> serde_json::Value {
+    let (in_reply_to, references) = parse_threading_headers(raw);
+    match crate::vault_eml::parse_eml_bytes(raw, uid, Vec::new()) {
+        Ok(p) => serde_json::json!({
+            "uid": uid,
+            "from": { "address": p.from.address, "name": p.from.name },
+            "to": p.to.iter().map(|a| serde_json::json!({ "address": a.address, "name": a.name })).collect::<Vec<_>>(),
+            "subject": p.subject,
+            "date": p.date,
+            "flags": flags,
+            "has_attachments": p.has_attachments,
+            "message_id": p.message_id,
+            "in_reply_to": in_reply_to,
+            "references": references,
+            "snippet": crate::vault_eml::preview_snippet(p.text.as_deref()),
+            "source": "local",
+            "_external_copy_failed": false,
+        }),
+        Err(_) => serde_json::json!({
+            "uid": uid,
+            "from": { "address": "", "name": null },
+            "to": [],
+            "subject": "(No Subject)",
+            "date": null,
+            "flags": flags,
+            "has_attachments": false,
+            "message_id": crate::maildir::message_id_in(raw),
+            "in_reply_to": in_reply_to,
+            "references": references,
+            "snippet": "",
+            "source": "local",
+            "_external_copy_failed": false,
+        }),
+    }
+}
+
+/// Store one fetched body into the vault as an ARCHIVED copy (`A` in the name,
+/// plus whatever the server's flags add) and return where it landed, with the
+/// custody entry for it. The caller (the Archive & delete job) adds the path
+/// to its folder listing, and appends the entry to custody itself.
+///
+/// Never overwrites an archived copy: if one is already there (found under the
+/// mailbox lock, whatever the caller's listing said) its path comes back and
+/// nothing is written. A working-cache copy of the uid (no `A`) is replaced,
+/// and its file removed, so the folder never holds two files for one uid.
+///
+/// Built on `vault_files::store` under the mailbox lock and the write gate,
+/// on the blocking pool (the lock order `fetch_and_store` uses). The mailbox
+/// is verified in the registry first, outside the lock, so `store` finds the
+/// uid's stale file from the registry and does not list the directory once per
+/// message: a 300k folder pass stays linear.
+pub async fn store_archived(
+    ctx: &ArchiveCtx,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    raw: Vec<u8>,
+    imap_flags: &[String],
+    _listed_archived: bool,
+) -> Result<(std::path::PathBuf, serde_json::Value), String> {
+    let root = ctx.root.clone();
+    let gate = Arc::clone(&ctx.gate);
+    let registry = Arc::clone(&ctx.registry);
+    let (account_key, mailbox_owned) = (account_id.to_string(), mailbox.to_string());
+    let flags = crate::vault_flags::store_flags(imap_flags);
+    let server_flags: Vec<String> = imap_flags.to_vec();
+
+    tokio::task::spawn_blocking(move || -> Result<(std::path::PathBuf, serde_json::Value), String> {
+        let cur_dir = vault_files::cur_path(&root, &account_key, &mailbox_owned);
+        let entry = custody_entry_from_raw(uid, &raw, &server_flags);
+
+        // Verify the mailbox in the registry before the lock: the verification
+        // takes the same lock, and the lock is not reentrant. The answer is
+        // not used; a `None` (cannot be verified) only means `store` scans.
+        let _ = registry.resolve(&root, &account_key, &mailbox_owned, uid);
+
+        let mut written: Option<std::path::PathBuf> = None;
+        registry.serialized(&account_key, &mailbox_owned, || {
+            gate(&mut || {
+                // An archived copy already there is the one to keep.
+                let existing = match registry.known(&account_key, &mailbox_owned, uid) {
+                    Some(Some(name)) => Some(name).filter(|n| crate::maildir::carries_archived(n)),
+                    Some(None) => None,
+                    None => archived_name_by_scan(&cur_dir, uid),
+                };
+                if let Some(name) = existing {
+                    written = Some(cur_dir.join(name));
+                    return Ok(());
+                }
+                vault_files::store(&registry, &root, &account_key, &mailbox_owned, uid, &raw, &flags, true)?;
+                written = Some(cur_dir.join(vault_files::build_maildir_filename(uid, &flags)));
+                Ok(())
+            })
+        })?;
+        let path = written.ok_or_else(|| format!("store UID {uid}: the write gate ran nothing"))?;
+        Ok((path, entry))
+    })
+    .await
+    .map_err(|e| format!("store UID {uid} panicked: {e}"))?
+}
+
+/// The name of an archived file for `uid` in `cur_dir`, by one directory scan.
+/// Only for a mailbox the registry could not verify.
+fn archived_name_by_scan(cur_dir: &std::path::Path, uid: u32) -> Option<String> {
+    std::fs::read_dir(cur_dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .find(|n| crate::maildir::vault_filename_uid(n) == Some(uid) && crate::maildir::carries_archived(n))
+}
+
 /// Extract In-Reply-To and References headers from raw email bytes for threading
 fn parse_threading_headers(raw: &[u8]) -> (Option<String>, Option<Vec<String>>) {
     let raw_str = String::from_utf8_lossy(raw);
