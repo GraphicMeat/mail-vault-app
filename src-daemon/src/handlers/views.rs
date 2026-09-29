@@ -321,6 +321,58 @@ fn messages_of(
     Ok(out)
 }
 
+/// The flags of a row that holds no vault file come from the server, not from
+/// the index. Such a row's file name is the only place the index keeps its
+/// flags, and with no file there is nothing for a read-state change to rename,
+/// so the row shows the flags it was indexed with for good. The header cache is
+/// what every read-state writer (a sync, a mark read) patches, and it names the
+/// same flags a file name would spell. A row with a vault copy keeps its file
+/// name, which the reconcile renames; a row the cache has no entry for keeps
+/// what the index says.
+fn overlay_server_flags(state: &DaemonState, account_id: &str, rows: &mut [Value]) {
+    let mut wanted: HashMap<String, Vec<u32>> = HashMap::new();
+    for row in rows.iter() {
+        let held = row.get("isArchived").and_then(Value::as_bool) == Some(true)
+            || row.get("_localOnlyFolder").and_then(Value::as_bool) == Some(true);
+        let (Some(mailbox), Some(uid)) = (
+            row.get("_mailbox").and_then(Value::as_str),
+            row.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()),
+        ) else {
+            continue;
+        };
+        if !held {
+            wanted.entry(mailbox.to_owned()).or_default().push(uid);
+        }
+    }
+    let mut server: HashMap<(String, u32), Vec<String>> = HashMap::new();
+    for (mailbox, uids) in wanted {
+        let Ok(headers) = crate::custody::with_conn(state, |conn| {
+            mailvault_core::custody::cache::load_by_uids(conn, account_id, &mailbox, &uids)
+        }) else {
+            continue;
+        };
+        for header in headers {
+            let Some(uid) = header.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()) else { continue };
+            let imap: Vec<String> = header
+                .get("flags")
+                .and_then(Value::as_array)
+                .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .unwrap_or_default();
+            let name = mailvault_core::vault_files::build_maildir_filename(uid, &mailvault_core::vault_flags::merge_flags(&[], &imap));
+            server.insert((mailbox.clone(), uid), mailvault_core::vault_eml::parse_flags_from_filename(&name));
+        }
+    }
+    for row in rows.iter_mut() {
+        let key = (
+            row.get("_mailbox").and_then(Value::as_str).unwrap_or("").to_owned(),
+            row.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()).unwrap_or(0),
+        );
+        if let (Some(flags), Some(object)) = (server.get(&key), row.as_object_mut()) {
+            object.insert("flags".into(), serde_json::json!(flags));
+        }
+    }
+}
+
 fn evaluate(
     state: &DaemonState,
     def: &ViewDef,
@@ -368,6 +420,7 @@ fn evaluate(
                         &custody,
                     );
                 }
+                overlay_server_flags(state, &account.account_id, &mut page);
                 rows.append(&mut page);
             }
         }
@@ -432,6 +485,34 @@ mod tests {
 
     fn accounts() -> Value {
         json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX"] }])
+    }
+
+    /// A message that holds no vault file has no file name to rename when its
+    /// read state changes, so the index row keeps the flags it was indexed
+    /// with. The server's flags (the header cache, patched by every read-state
+    /// writer) are what such a row must show.
+    #[tokio::test]
+    async fn a_row_with_no_vault_copy_shows_the_server_flags_not_the_indexed_ones() {
+        let s = st();
+        index(&s);
+        crate::custody::with_conn(&s, |conn| {
+            let header = |uid: u32, flags: Value| json!({ "uid": uid, "flags": flags, "date": "Mon, 07 Sep 2026 10:00:00 +0000" });
+            mailvault_core::custody::cache::save_headers(
+                conn, "a", "INBOX",
+                &json!({ "emails": [header(3, json!(["\\Seen"])), header(1, json!(["\\Seen"]))] }).to_string(),
+            )
+        })
+        .unwrap();
+        let out = call(&s, "views.evaluate", json!({ "def": {}, "accounts": accounts() })).await;
+        let flags_of = |uid: u64| -> Vec<String> {
+            let row = out["rows"].as_array().unwrap().iter().find(|r| r["uid"] == uid).unwrap();
+            row["flags"].as_array().unwrap().iter().map(|f| f.as_str().unwrap().to_owned()).collect()
+        };
+        assert!(flags_of(3).contains(&"\\Seen".to_owned()), "read on the server, indexed unread: {:?}", flags_of(3));
+        // Nothing cached for uid 2: its own file name stays the answer.
+        assert!(flags_of(2).contains(&"\\Seen".to_owned()), "{:?}", flags_of(2));
+        // The other way round: indexed starred, the server has since dropped the star.
+        assert!(!flags_of(1).contains(&"\\Flagged".to_owned()), "{:?}", flags_of(1));
     }
 
     /// "Download attachments" on a view: only the messages it finds that carry
