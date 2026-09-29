@@ -24,13 +24,25 @@
 //!   without a Message-ID: the resumed reader meets that message again and
 //!   the tail answers for it. A checkpoint rewrites the tail with only the
 //!   entries still ahead of the new offset (a resumed run's unreached ones),
-//!   so a second crash keeps them too. A changed file (path, size or mtime) starts
-//!   over from byte 0; the pipeline's server-side dedupe skips what landed.
-//!   Journals are listed by `mbox_upload_status` and never resumed unasked.
-//! - **Failures.** A transient one (throttling, a lost connection) is tried
-//!   again after an exponential wait with jitter, `attempts` times; then the
-//!   message counts as failed and the job goes on. A permanent one counts and
-//!   the job goes on. The job itself never fails because of one message.
+//!   so a second crash keeps them too; the rewrite is one atomic write. A
+//!   file moved or mounted again (a new path, the same size and mtime) goes
+//!   on at the checkpoint; a changed file (another size or mtime) starts over
+//!   from byte 0 with its tail kept (content fingerprints stay valid); the
+//!   pipeline's server-side dedupe skips what landed. Journals are listed by
+//!   `mbox_upload_status` (one this build cannot read as `damaged`, for a
+//!   discard) and never resumed unasked. An app quit holds every live job at
+//!   its next message boundary first (`pause_all_and_wait`, from the
+//!   daemon's shutdown).
+//! - **Failures.** A failure of one message (a lost connection, a stall) is
+//!   tried again after an exponential wait with jitter, `attempts` times;
+//!   then the message counts as failed and the job goes on. A permanent one
+//!   counts and the job goes on. A failure of the account spends no try and
+//!   moves nothing on: a throttled or over-limit account (`Busy`), an offline
+//!   daemon (the connectivity gate), and the same account-level refusal
+//!   (`OVERQUOTA`, `NOPERM` ...) met by `refusal_streak` messages in a row
+//!   are waited out on the message in hand (`holdReason`), until it goes up
+//!   or the user pauses or cancels. A panic in the pipeline costs one
+//!   message. The job itself never fails because of one message.
 //! - **Progress** is the `mbox-import-progress` event, at most one per
 //!   `progress_every` plus every change of state, with a throughput ETA the
 //!   daemon measures (D5) and `labelWarnings`, the uploads whose other Gmail
@@ -38,11 +50,13 @@
 //!   through `handlers::common::RunGuard`: `cancel_kind` and `pause_kind` act
 //!   on every run of a kind, and this job pauses, resumes and cancels one
 //!   account's upload by its id.
-//! - **At the end** every folder mail went into is synced the way the snooze
-//!   worker's wake syncs one (`sync_account`, then a change record the app's
-//!   change feed repaints from, with 0 new so restored mail raises no banner),
-//!   the cached folder list is marked out of date when the upload made
-//!   folders, and the search index gets a full pass.
+//! - **At the end** (done, and a cancel, discard or read error that changed
+//!   something on the server) every folder mail went into is synced the way
+//!   the snooze worker's wake syncs one (`sync_account`, then a change record
+//!   the app's change feed repaints from, with 0 new so restored mail raises
+//!   no banner) and its old mbox imports rehomed at once, the cached folder
+//!   list is marked out of date when the upload made folders, and the search
+//!   index gets a full pass.
 //!
 //! Logs carry counts, byte offsets and account ids: never message text,
 //! folder names or credentials.
@@ -87,6 +101,19 @@ const NEEDS_SIGN_IN: &str = "needsSignIn";
 const CANCELLED: &str = "cancelled";
 const DISCARDED: &str = "discarded";
 const DONE: &str = "done";
+/// A `*.json` in the journal dir this build cannot read: listed so it can be
+/// discarded, never resumed.
+const DAMAGED: &str = "damaged";
+
+/// Why a running job waits on the message in hand without spending a try
+/// (`holdReason` in its events): the account is throttled or over a limit,
+/// the daemon is offline, or message after message met the same
+/// account-level refusal.
+const HOLD_THROTTLED: &str = "throttled";
+const HOLD_OFFLINE: &str = "offline";
+const HOLD_REFUSED: &str = "refused";
+/// How often a hold looks at the connectivity gate.
+const HOLD_POLL: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone)]
 pub(crate) struct Tuning {
@@ -94,8 +121,15 @@ pub(crate) struct Tuning {
     /// row, never past `backoff_max`.
     pub backoff_base: Duration,
     pub backoff_max: Duration,
-    /// Tries per message before it counts as failed.
+    /// Tries per message before it counts as failed (a failure of that one
+    /// message: a hold for the account spends none).
     pub attempts: u32,
+    /// Different messages in a row refused with the same account-level code
+    /// before the job holds on the next one instead of counting it.
+    pub refusal_streak: u32,
+    /// At most one ETA sample per this long: at skip speed a sample per
+    /// message would fill the window with hundreds of thousands.
+    pub eta_sample_every: Duration,
     /// The offset checkpoint: after this many messages or this long,
     /// whichever comes first.
     pub checkpoint_every: u32,
@@ -111,6 +145,17 @@ pub(crate) struct Tuning {
     /// no checkpoint, no event.
     #[cfg(test)]
     pub crash_after: Option<u64>,
+    /// The connectivity gate as the job reads it, shut while this is set
+    /// (the test state's own gate always says online).
+    #[cfg(test)]
+    pub offline: Option<Arc<std::sync::atomic::AtomicBool>>,
+    /// Panic inside the pipeline's call for a message holding this text.
+    #[cfg(test)]
+    pub panic_in_upload: Option<&'static str>,
+    /// Panic in the worker itself, outside the pipeline's call, for a
+    /// message holding this text.
+    #[cfg(test)]
+    pub panic_in_worker: Option<&'static str>,
 }
 
 impl Default for Tuning {
@@ -119,6 +164,8 @@ impl Default for Tuning {
             backoff_base: Duration::from_secs(5),
             backoff_max: Duration::from_secs(300),
             attempts: 8,
+            refusal_streak: 5,
+            eta_sample_every: Duration::from_millis(250),
             checkpoint_every: 50,
             checkpoint_after: Duration::from_secs(10),
             progress_every: Duration::from_millis(500),
@@ -127,6 +174,12 @@ impl Default for Tuning {
             eta_min_span: Duration::from_secs(20),
             #[cfg(test)]
             crash_after: None,
+            #[cfg(test)]
+            offline: None,
+            #[cfg(test)]
+            panic_in_upload: None,
+            #[cfg(test)]
+            panic_in_worker: None,
         }
     }
 }
@@ -138,6 +191,9 @@ enum Ctl {
     Pause,
     Cancel,
     Discard,
+    /// The worker is ending (its last checkpoint and refresh): nothing asked
+    /// from here on changes what it does, so every control answers false.
+    Ending,
 }
 
 /// Why the worker stopped reading before the end of the file.
@@ -165,6 +221,13 @@ pub(crate) struct Job {
     account_id: String,
     ctl: Mutex<Ctl>,
     wake: Condvar,
+    /// Held with its journal checkpointed, or ended: what an app quit waits
+    /// for (`pause_all_and_wait`).
+    settled: Mutex<bool>,
+    settled_wake: Condvar,
+    /// `finish` ran (or the test crash stopped it dead): the worker's own
+    /// last event is out, or deliberately none.
+    ended: std::sync::atomic::AtomicBool,
     /// Its latest progress: what `mbox_upload_status` answers for it.
     view: Mutex<Value>,
     /// Messages the reader handed over in this run.
@@ -173,6 +236,9 @@ pub(crate) struct Job {
     /// The byte this run started reading at.
     #[cfg(test)]
     read_from: std::sync::atomic::AtomicU64,
+    /// Folders the refresh at the end handed to the import rehome pass.
+    #[cfg(test)]
+    rehomed: Mutex<Vec<String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -186,11 +252,16 @@ impl Job {
             account_id: account_id.to_string(),
             ctl: Mutex::new(Ctl::Run),
             wake: Condvar::new(),
+            settled: Mutex::new(false),
+            settled_wake: Condvar::new(),
+            ended: Default::default(),
             view: Mutex::new(Value::Null),
             #[cfg(test)]
             parsed: Default::default(),
             #[cfg(test)]
             read_from: Default::default(),
+            #[cfg(test)]
+            rehomed: Default::default(),
         }
     }
 
@@ -199,10 +270,11 @@ impl Job {
     }
 
     /// Pause only a running job and resume only a held one; a cancel stops
-    /// either, and a discard wins over everything.
+    /// either, and a discard wins over everything but an ending.
     fn request(&self, want: Ctl) -> Ctl {
         let mut ctl = lock(&self.ctl);
         *ctl = match (*ctl, want) {
+            (Ctl::Ending, _) => Ctl::Ending,
             (Ctl::Run, Ctl::Pause) => Ctl::Pause,
             (Ctl::Pause, Ctl::Run) => Ctl::Run,
             (Ctl::Run | Ctl::Pause, Ctl::Cancel) => Ctl::Cancel,
@@ -211,6 +283,18 @@ impl Job {
         };
         self.wake.notify_all();
         *ctl
+    }
+
+    /// The worker starts ending: every later control answers false. Returns
+    /// what was asked last; a pause is left standing when `hold_ok` (the
+    /// worker then holds first and asks again).
+    fn end(&self, hold_ok: bool) -> Ctl {
+        let mut ctl = lock(&self.ctl);
+        let was = *ctl;
+        if !(hold_ok && was == Ctl::Pause) {
+            *ctl = Ctl::Ending;
+        }
+        was
     }
 
     /// Wait while running until `until`: `Run` when the time is up, else
@@ -234,6 +318,24 @@ impl Job {
             ctl = self.wake.wait(ctl).unwrap_or_else(|p| p.into_inner());
         }
         *ctl
+    }
+
+    fn set_settled(&self, settled: bool) {
+        *lock(&self.settled) = settled;
+        self.settled_wake.notify_all();
+    }
+
+    /// Whether the job held (its journal checkpointed) or ended by `until`.
+    fn wait_settled(&self, until: Instant) -> bool {
+        let mut settled = lock(&self.settled);
+        while !*settled {
+            let now = Instant::now();
+            if now >= until {
+                return false;
+            }
+            settled = self.settled_wake.wait_timeout(settled, until - now).unwrap_or_else(|p| p.into_inner()).0;
+        }
+        true
     }
 
     fn view(&self) -> Value {
@@ -270,12 +372,50 @@ impl Uploads {
     }
 }
 
-/// Unregisters its job when the worker thread ends, however it ends.
+/// Every live upload asked to pause, then waited for until `limit` (all at
+/// once: one deadline): the daemon is quitting, and a worker that reached its
+/// hold has its journal checkpointed with nothing half recorded, so a message
+/// without a Message-ID in flight is not sent again on resume. One still
+/// inside an APPEND at the deadline is left to the exit; its tail covers every
+/// message it finished. Returns how many settled.
+pub(crate) fn pause_all_and_wait(state: &DaemonState, limit: Duration) -> usize {
+    let until = Instant::now() + limit;
+    let live: Vec<Arc<Job>> = state.mbox_uploads.lock().values().cloned().collect();
+    for job in &live {
+        job.request(Ctl::Pause);
+    }
+    let settled = live.iter().filter(|job| job.wait_settled(until)).count();
+    if !live.is_empty() {
+        info!("[mbox_upload] quitting: {settled} of {} upload(s) held at a checkpoint", live.len());
+    }
+    settled
+}
+
+/// Unregisters its job when the worker thread ends, however it ends. A
+/// worker that never reached `finish` (a panic) still leaves a last event,
+/// paused and inactive, so the app's row does not stay "running"; the
+/// journal is at its last checkpoint and resumable.
 struct Registered(Arc<DaemonState>, Arc<Job>);
 
 impl Drop for Registered {
     fn drop(&mut self) {
-        unregister(&self.0, &self.1);
+        let (state, job) = (&self.0, &self.1);
+        unregister(state, job);
+        if !job.ended.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            warn!("[mbox_upload] {}: job {} stopped unexpectedly; its journal stays resumable", job.account_id, job.id);
+            let mut last = job.view();
+            if last.is_object() {
+                last["active"] = json!(false);
+                last["state"] = json!(PAUSED);
+                last["paused"] = json!(true);
+                last["throttled"] = json!(false);
+                last["holdReason"] = Value::Null;
+                last["etaSeconds"] = Value::Null;
+                *lock(&job.view) = last.clone();
+                state.events.emit(EVENT, last);
+            }
+        }
+        job.set_settled(true);
     }
 }
 
@@ -313,6 +453,9 @@ pub(crate) struct Journal {
     /// `running` (a live worker, or one a quit or crash cut off), `paused`,
     /// `needsSignIn` or `cancelled`.
     pub state: String,
+    /// Why the last run stopped, when it stopped on the file (`E_MBOX_UPLOAD_READ: ...`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
     /// Folders an APPEND went out to, and folders the upload made: what the
     /// refresh at the end covers, across restarts.
     #[serde(default)]
@@ -362,19 +505,26 @@ fn read_journal(app_dir: &Path, id: &str) -> Option<Journal> {
     serde_json::from_slice::<Journal>(&raw).ok().filter(|j| j.version == JOURNAL_VERSION && j.job_id == id)
 }
 
-/// Every readable journal. An atomic write's temp file starts with a dot and
-/// never ends in `.json`, so it is never read as one.
-fn list_journals(app_dir: &Path) -> Vec<Journal> {
+/// The job id of every `*.json` in the journal dir. An atomic write's temp
+/// file starts with a dot and never ends in `.json`, so it is never one.
+fn journal_ids(app_dir: &Path) -> Vec<String> {
     std::fs::read_dir(journal_dir(app_dir))
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            let id = name.strip_suffix(".json").filter(|id| is_job_id(id))?;
-            read_journal(app_dir, id)
-        })
+        .filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".json").filter(|id| is_job_id(id)).map(str::to_string))
         .collect()
+}
+
+/// Every readable journal.
+fn list_journals(app_dir: &Path) -> Vec<Journal> {
+    journal_ids(app_dir).iter().filter_map(|id| read_journal(app_dir, id)).collect()
+}
+
+/// The ids of journals this build cannot read: empty, torn, not JSON, or
+/// another version. Listed as damaged so a discard can take them away.
+fn damaged_journals(app_dir: &Path) -> Vec<String> {
+    journal_ids(app_dir).into_iter().filter(|id| read_journal(app_dir, id).is_none()).collect()
 }
 
 fn remove_journal(app_dir: &Path, id: &str) {
@@ -414,16 +564,46 @@ impl Done {
     }
 }
 
-/// The messages finished since the last checkpoint, by fingerprint. A line a
-/// crash cut short does not parse and is left out.
-fn read_tail(app_dir: &Path, id: &str) -> HashMap<u64, Done> {
-    let Ok(text) = std::fs::read_to_string(tail_path(app_dir, id)) else { return HashMap::new() };
-    text.lines()
-        .filter_map(|line| {
-            let (done, fp) = line.split_once(' ')?;
-            Some((u64::from_str_radix(fp, 16).ok()?, Done::from_letter(done)?))
-        })
-        .collect()
+/// What a tail says was finished: per fingerprint, one outcome per message
+/// in file order. Two identical messages (a chat saved twice) are two
+/// entries, each met once.
+type Finished = HashMap<u64, VecDeque<Done>>;
+
+/// The messages finished since the last checkpoint. A line a crash cut short
+/// does not parse and is left out.
+fn read_tail(app_dir: &Path, id: &str) -> Finished {
+    let mut finished = Finished::new();
+    let Ok(text) = std::fs::read_to_string(tail_path(app_dir, id)) else { return finished };
+    for line in text.lines() {
+        let parsed = line.split_once(' ').and_then(|(done, fp)| Some((u64::from_str_radix(fp, 16).ok()?, Done::from_letter(done)?)));
+        if let Some((fp, done)) = parsed {
+            finished.entry(fp).or_default().push_back(done);
+        }
+    }
+    finished
+}
+
+/// One entry for this message, if the tail has one left.
+fn take_finished(finished: &mut Finished, fp: u64) -> Option<Done> {
+    let queue = finished.get_mut(&fp)?;
+    let done = queue.pop_front();
+    if queue.is_empty() {
+        finished.remove(&fp);
+    }
+    done
+}
+
+/// The tail's lines for `finished`.
+fn tail_lines(finished: &Finished) -> String {
+    finished.iter().flat_map(|(fp, dones)| dones.iter().map(move |done| format!("{} {fp:016x}\n", done.letter()))).collect()
+}
+
+/// The tail replaced by `lines` in one atomic write (a kill at any point
+/// leaves the old tail or the new one, never an empty or half one), then
+/// opened for the lines that follow.
+fn rewrite_tail(path: &Path, lines: &str) -> std::io::Result<std::fs::File> {
+    mailvault_core::fsx::write_atomic(path, lines.as_bytes())?;
+    std::fs::OpenOptions::new().append(true).open(path)
 }
 
 /// A message's content, as 8 bytes of its SHA-256: stable across builds, so a
@@ -452,7 +632,9 @@ fn file_name(path: &str) -> String {
 // ── progress ────────────────────────────────────────────────────────────────
 
 /// What the app renders, for a live job's events and status alike.
-fn progress(j: &Journal, active: bool, state: &str, throttled: bool, eta: Option<u64>) -> Value {
+/// `hold` is why a running job waits on the message in hand without
+/// spending a try (`throttled` is then true and `paused` false).
+fn progress(j: &Journal, active: bool, state: &str, throttled: bool, hold: Option<&str>, eta: Option<u64>) -> Value {
     json!({
         "mode": "server",
         "jobId": j.job_id,
@@ -473,6 +655,7 @@ fn progress(j: &Journal, active: bool, state: &str, throttled: bool, eta: Option
         "paused": state == PAUSED || state == NEEDS_SIGN_IN,
         "throttled": throttled,
         "needsSignIn": state == NEEDS_SIGN_IN,
+        "holdReason": hold,
         "etaSeconds": eta,
     })
 }
@@ -484,9 +667,13 @@ struct Eta {
 }
 
 impl Eta {
+    /// At most one sample per `every` (a later one within it is dropped).
     /// Samples older than `window` go, but never below `keep` of them: a
     /// slow upload still gets an estimate.
-    fn sample(&mut self, at: Instant, bytes: u64, window: Duration, keep: usize) {
+    fn sample(&mut self, at: Instant, bytes: u64, every: Duration, window: Duration, keep: usize) {
+        if self.samples.back().is_some_and(|(last, _)| at.duration_since(*last) < every) {
+            return;
+        }
         self.samples.push_back((at, bytes));
         while self.samples.len() > keep.max(2) && self.samples.front().is_some_and(|(t, _)| at.duration_since(*t) > window) {
             self.samples.pop_front();
@@ -565,12 +752,18 @@ pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Valu
         if let Some(running) = jobs.get(&req.account_id) {
             return Err(format!("{E_MBOX_UPLOAD_RUNNING}: {}", running.id));
         }
-        for old in list_journals(&st.app_dir).into_iter().filter(|j| j.account_id == req.account_id && j.source_path == source_path) {
-            if (old.size, old.mtime_ms) == (size, mtime_ms) {
-                return Err(format!("{E_MBOX_UPLOAD_RESUMABLE}: {}", old.job_id));
+        let old: Vec<Journal> = list_journals(&st.app_dir).into_iter().filter(|j| j.account_id == req.account_id && j.source_path == source_path).collect();
+        if let Some(same) = old.iter().find(|j| (j.size, j.mtime_ms) == (size, mtime_ms)) {
+            return Err(format!("{E_MBOX_UPLOAD_RESUMABLE}: {}", same.job_id));
+        }
+        // The file changed since: its offsets name other messages now, but a
+        // tail's fingerprints are of content and still recognise what landed
+        // after the old checkpoint. They carry over to the new job.
+        let mut carried = Finished::new();
+        for j in &old {
+            for (fp, dones) in read_tail(&st.app_dir, &j.job_id) {
+                carried.entry(fp).or_default().extend(dones);
             }
-            // The file changed since: its offsets name other messages now.
-            remove_journal(&st.app_dir, &old.job_id);
         }
         let journal = Journal {
             version: JOURNAL_VERSION,
@@ -587,13 +780,22 @@ pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Valu
             failed: 0,
             label_warnings: 0,
             state: RUNNING.to_string(),
+            error: None,
             touched: BTreeSet::new(),
             created: BTreeSet::new(),
             updated_at: now_ms(),
         };
         write_journal(&st.app_dir, &journal)?;
         let id = journal.job_id.clone();
-        if let Err(e) = spawn(&st, &mut jobs, journal, pipeline, config, HashMap::new()) {
+        if !carried.is_empty() {
+            if let Err(e) = rewrite_tail(&tail_path(&st.app_dir, &id), &tail_lines(&carried)) {
+                warn!("[mbox_upload] {}: job {id} did not take over the old tail: {e}", journal.account_id);
+            }
+        }
+        for j in &old {
+            remove_journal(&st.app_dir, &j.job_id);
+        }
+        if let Err(e) = spawn(&st, &mut jobs, journal, pipeline, config, carried) {
             remove_journal(&st.app_dir, &id);
             return Err(e);
         }
@@ -606,8 +808,13 @@ pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Valu
 /// A job held in this daemon goes on where it stands. Otherwise its journal
 /// starts a new worker at the checkpoint, reading `source_path` when the app
 /// gives one (a sandboxed app may have to pick the file again after a
-/// restart) and the journal's path when not. A file whose path, size or
-/// mtime differ from the journal's starts over from byte 0 (`restarted`).
+/// restart) and the journal's path when not. The file is the journal's when
+/// its size and mtime are: a new path alone (a drive mounted again as
+/// `/Volumes/Backup 1`, the file moved) is stored and the job goes on at the
+/// checkpoint. Another size or mtime, or a checkpoint past the file's end,
+/// starts over from byte 0 (`restarted`), keeping the tail: its fingerprints
+/// are of content, and they are all that recognises a message without a
+/// Message-ID that landed after the last checkpoint.
 pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path: Option<PathBuf>) -> Result<Value, String> {
     let (st, id) = (Arc::clone(state), job_id.clone());
     // `Err(resumed)` for a live job: false when it is ending (a cancel came first).
@@ -636,15 +843,15 @@ pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path
         let path = source_path.unwrap_or_else(|| PathBuf::from(&journal.source_path));
         let (size, mtime_ms) = identity(&path)?;
         let path = path.to_string_lossy().into_owned();
-        let restarted = (path.as_str(), size, mtime_ms) != (journal.source_path.as_str(), journal.size, journal.mtime_ms);
-        let done_before = if restarted {
+        let restarted = (size, mtime_ms) != (journal.size, journal.mtime_ms) || journal.offset > size;
+        if restarted {
             journal.restart(path, size, mtime_ms);
-            let _ = std::fs::remove_file(tail_path(&st.app_dir, &job_id));
-            HashMap::new()
         } else {
-            read_tail(&st.app_dir, &job_id)
-        };
+            journal.source_path = path;
+        }
+        let done_before = read_tail(&st.app_dir, &job_id);
         journal.state = RUNNING.to_string();
+        journal.error = None;
         journal.updated_at = now_ms();
         write_journal(&st.app_dir, &journal)?;
         spawn(&st, &mut jobs, journal, pipeline, config, done_before)?;
@@ -655,7 +862,9 @@ pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path
 }
 
 /// Holds a running job between messages. A job with no worker here is not
-/// running anywhere: nothing to do.
+/// running anywhere: nothing to do. A live job answers truthfully: `false`
+/// once it is ending (its last checkpoint and refresh), when a pause no
+/// longer changes anything.
 pub(crate) fn pause(state: &DaemonState, id: &str) -> Result<Value, String> {
     if let Some(job) = state.mbox_uploads.live(id) {
         return Ok(json!({"jobId": id, "paused": job.request(Ctl::Pause) == Ctl::Pause}));
@@ -663,12 +872,12 @@ pub(crate) fn pause(state: &DaemonState, id: &str) -> Result<Value, String> {
     read_journal(&state.app_dir, id).map(|_| json!({"jobId": id, "paused": true})).ok_or_else(|| not_found(id))
 }
 
-/// Ends a job, keeping its journal for a resume or a discard.
+/// Ends a job, keeping its journal for a resume or a discard. `false` for a
+/// live job already ending.
 pub(crate) fn cancel(state: &DaemonState, id: &str) -> Result<Value, String> {
     let jobs = state.mbox_uploads.lock();
     if let Some(job) = jobs.values().find(|j| j.id == id) {
-        job.request(Ctl::Cancel);
-        return Ok(json!({"jobId": id, "cancelled": true}));
+        return Ok(json!({"jobId": id, "cancelled": job.request(Ctl::Cancel) == Ctl::Cancel}));
     }
     let mut journal = read_journal(&state.app_dir, id).ok_or_else(|| not_found(id))?;
     journal.state = CANCELLED.to_string();
@@ -677,22 +886,36 @@ pub(crate) fn cancel(state: &DaemonState, id: &str) -> Result<Value, String> {
     Ok(json!({"jobId": id, "cancelled": true}))
 }
 
-/// Ends a job and deletes its journal (a live worker deletes it as it ends).
+/// Ends a job and deletes its journal: a live worker deletes it as it ends
+/// (`false` when it is already ending: discard again once its last event is
+/// out). A journal with no worker, a damaged one included, goes now, and the
+/// app is told as a worker would tell it (`state: "discarded"`, inactive), so
+/// its row goes too.
 pub(crate) fn discard(state: &DaemonState, id: &str) -> Result<Value, String> {
     let jobs = state.mbox_uploads.lock();
     if let Some(job) = jobs.values().find(|j| j.id == id) {
-        job.request(Ctl::Discard);
-        return Ok(json!({"jobId": id, "discarded": true}));
+        return Ok(json!({"jobId": id, "discarded": job.request(Ctl::Discard) == Ctl::Discard}));
     }
-    read_journal(&state.app_dir, id).ok_or_else(|| not_found(id))?;
+    let last = match read_journal(&state.app_dir, id) {
+        Some(journal) => progress(&journal, false, DISCARDED, false, None, None),
+        None if journal_path(&state.app_dir, id).exists() => damaged(id, false, DISCARDED),
+        None => return Err(not_found(id)),
+    };
     remove_journal(&state.app_dir, id);
+    state.events.emit(EVENT, last);
     Ok(json!({"jobId": id, "discarded": true}))
 }
 
+/// A journal this build cannot read: no account, file or counts to tell.
+fn damaged(id: &str, live: bool, state: &str) -> Value {
+    json!({"mode": "server", "jobId": id, "accountId": null, "fileName": null, "live": live, "active": false, "state": state})
+}
+
 /// `{jobs: [...]}`: every live job (`live: true`), then every journal with
-/// no worker here, newest first. Each entry is a progress payload; a journal
-/// still marked running is one a quit or a crash cut off, and reads as
-/// paused.
+/// no worker here, newest first, then every journal this build cannot read
+/// (`state: "damaged"`, no counts: discard it). Each entry is a progress
+/// payload; a journal still marked running is one a quit or a crash cut off,
+/// and reads as paused; `error` says why a run stopped on its file.
 pub(crate) fn status(state: &DaemonState) -> Value {
     let live: Vec<Arc<Job>> = state.mbox_uploads.lock().values().cloned().collect();
     let mut jobs: Vec<Value> = live
@@ -707,11 +930,15 @@ pub(crate) fn status(state: &DaemonState) -> Value {
     rest.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     jobs.extend(rest.iter().map(|j| {
         let held = if j.state == RUNNING { PAUSED } else { j.state.as_str() };
-        let mut v = progress(j, false, held, false, None);
+        let mut v = progress(j, false, held, false, None, None);
         v["live"] = json!(false);
         v["updatedAt"] = json!(j.updated_at);
+        if let Some(error) = &j.error {
+            v["error"] = json!(error);
+        }
         v
     }));
+    jobs.extend(damaged_journals(&state.app_dir).iter().map(|id| damaged(id, false, DAMAGED)));
     json!({ "jobs": jobs })
 }
 
@@ -723,7 +950,7 @@ fn spawn(
     journal: Journal,
     pipeline: MboxUpload,
     config: ImapConfig,
-    done_before: HashMap<u64, Done>,
+    done_before: Finished,
 ) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -732,7 +959,7 @@ fn spawn(
         .map_err(|e| format!("the upload could not start: {e}"))?;
     let job = Arc::new(Job::new(&journal.job_id, &journal.account_id));
     let tuning = state.mbox_uploads.tuning();
-    *lock(&job.view) = progress(&journal, true, RUNNING, false, None);
+    *lock(&job.view) = progress(&journal, true, RUNNING, false, None, None);
     let runner = Runner {
         state: Arc::clone(state),
         job: Arc::clone(&job),
@@ -752,6 +979,8 @@ fn spawn(
         throttled: false,
         changed: false,
         backoff_level: 0,
+        hold_reason: None,
+        refusals: None,
         stop: None,
     };
     std::thread::Builder::new()
@@ -782,7 +1011,7 @@ struct Runner {
     run_from: u64,
     tail: Option<std::fs::File>,
     /// What an earlier run's tail says it finished after the checkpoint.
-    done_before: HashMap<u64, Done>,
+    done_before: Finished,
     handled: u64,
     since_checkpoint: u32,
     checkpointed: Instant,
@@ -791,8 +1020,13 @@ struct Runner {
     throttled: bool,
     /// The next event goes out whatever the rate: something changed.
     changed: bool,
-    /// Transient failures in a row, across messages.
+    /// Transient failures and account waits in a row, across messages.
     backoff_level: u32,
+    /// Why the job waits on the message in hand without spending a try.
+    hold_reason: Option<&'static str>,
+    /// The account-level refusal code the last messages met, the start of
+    /// the last of them, and how many different messages in a row.
+    refusals: Option<(&'static str, u64, u32)>,
     stop: Option<Stop>,
 }
 
@@ -826,8 +1060,12 @@ impl Runner {
             return false;
         }
         crate::search_index::yield_to_foreground(&self.state.search_index);
+        #[cfg(test)]
+        if self.tuning.panic_in_worker.is_some_and(|needle| raw.windows(needle.len()).any(|w| w == needle.as_bytes())) {
+            panic!("a test's panic in the upload worker");
+        }
         let fp = fingerprint(raw);
-        let done = match self.done_before.remove(&fp) {
+        let done = match take_finished(&mut self.done_before, fp) {
             Some(done) => done,
             None => match self.upload(raw, span.start) {
                 Some(done) => done,
@@ -855,37 +1093,69 @@ impl Runner {
         }
     }
 
-    /// One message, tried until it settles: a transient failure waits
-    /// (`backoff`) and tries again, `attempts` times in all; a refused
-    /// sign-in reads the credentials again once, then holds the job for the
-    /// user. `None` when a cancel or a discard came first.
+    /// The pipeline's call for one message. A panic in it costs that message
+    /// (a new pipeline takes over: the old one's state is not to be trusted),
+    /// never the job.
+    fn try_once(&mut self, raw: &[u8], at: u64) -> Outcome {
+        let (rt, pipeline) = (&self.rt, &mut self.pipeline);
+        // Read around the call on this very pipeline: a rebuild between
+        // tries starts a new count, never loses or repeats one.
+        let before = pipeline.label_warnings();
+        #[cfg(test)]
+        let panic_on = self.tuning.panic_in_upload;
+        let tried = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            #[cfg(test)]
+            if panic_on.is_some_and(|needle| raw.windows(needle.len()).any(|w| w == needle.as_bytes())) {
+                panic!("a test's panic in the upload pipeline");
+            }
+            rt.block_on(pipeline.upload_message(raw))
+        }));
+        match tried {
+            Ok(outcome) => {
+                self.journal.label_warnings += pipeline.label_warnings() - before;
+                outcome
+            }
+            Err(_) => {
+                warn!("[mbox_upload] {}: the upload of the message at byte {at} panicked; it counts as failed", self.journal.account_id);
+                self.rebuild(false);
+                Outcome::Failed(FailKind::Permanent, "the upload panicked".to_string())
+            }
+        }
+    }
+
+    /// One message, tried until it settles. A failure of this message (a
+    /// drop, a stall) waits (`backoff`) and tries again, `attempts` times in
+    /// all, then counts as failed. A failure of the account spends no try and
+    /// moves nothing on: the throttled or over-limit account and the offline
+    /// daemon are waited out on this very message (`wait_out`), as is the
+    /// same account-level refusal once `refusal_streak` messages in a row met
+    /// it. A refused sign-in reads the credentials again once, then holds the
+    /// job for the user. `None` when a cancel or a discard came first.
     fn upload(&mut self, raw: &[u8], at: u64) -> Option<Done> {
         let mut tries = 0;
         let mut reread = false;
         loop {
-            let outcome = {
-                let (rt, pipeline) = (&self.rt, &mut self.pipeline);
-                // Read around the call on this very pipeline: a rebuild
-                // between tries starts a new count, never loses or repeats one.
-                let before = pipeline.label_warnings();
-                let outcome = rt.block_on(pipeline.upload_message(raw));
-                self.journal.label_warnings += pipeline.label_warnings() - before;
-                outcome
-            };
-            let kind = match outcome {
+            let (kind, text) = match self.try_once(raw, at) {
                 Outcome::Uploaded { .. } => return Some(self.cleared(Done::Uploaded)),
                 Outcome::Skipped { .. } => return Some(self.cleared(Done::Skipped)),
-                Outcome::Failed(kind, _) => kind,
+                Outcome::Failed(kind, text) => (kind, text),
             };
             match kind {
-                FailKind::Permanent => {
-                    self.log_failed(at, kind, tries + 1);
-                    return Some(Done::Failed);
+                FailKind::Transient | FailKind::Busy if self.offline(&text) => {
+                    if !self.wait_out(HOLD_OFFLINE) {
+                        return None;
+                    }
+                }
+                FailKind::Busy => {
+                    if !self.wait_out(HOLD_THROTTLED) {
+                        return None;
+                    }
                 }
                 FailKind::Transient => {
                     tries += 1;
                     if tries >= self.tuning.attempts {
                         self.log_failed(at, kind, tries);
+                        self.refusals = None;
                         return Some(Done::Failed);
                     }
                     self.backoff_level += 1;
@@ -897,24 +1167,49 @@ impl Runner {
                         return None;
                     }
                 }
+                FailKind::Refused(code) => {
+                    let streak = match self.refusals {
+                        Some((last, last_at, n)) if last == code && last_at == at => n,
+                        Some((last, _, n)) if last == code => n + 1,
+                        _ => 1,
+                    };
+                    self.refusals = Some((code, at, streak));
+                    if streak < self.tuning.refusal_streak {
+                        self.log_failed(at, kind, tries + 1);
+                        return Some(Done::Failed);
+                    }
+                    if !self.wait_out(HOLD_REFUSED) {
+                        return None;
+                    }
+                }
+                FailKind::Permanent => {
+                    self.log_failed(at, kind, tries + 1);
+                    self.refusals = None;
+                    return Some(Done::Failed);
+                }
                 FailKind::SignIn if !reread => {
                     reread = true;
-                    self.rebuild();
+                    self.rebuild(true);
                 }
                 FailKind::SignIn => {
                     if !self.hold(NEEDS_SIGN_IN) {
                         return None;
                     }
-                    self.rebuild();
+                    self.rebuild(true);
                 }
             }
         }
     }
 
+    /// A message settled on the server: every wait and streak is over, and
+    /// the round trip is proof the network is up.
     fn cleared(&mut self, done: Done) -> Done {
         self.backoff_level = 0;
-        if self.throttled {
+        self.refusals = None;
+        self.state.net.note_success();
+        if self.throttled || self.hold_reason.is_some() {
             self.throttled = false;
+            self.hold_reason = None;
             self.changed = true;
         }
         done
@@ -922,6 +1217,21 @@ impl Runner {
 
     fn log_failed(&self, at: u64, kind: FailKind, tries: u32) {
         warn!("[mbox_upload] {}: the message at byte {at} counts as failed ({kind:?}, {tries} attempt(s))", self.journal.account_id);
+    }
+
+    /// Whether the daemon is offline, the failure's text fed to the
+    /// connectivity gate first (the gate probes on connect-shaped text only).
+    fn offline(&self, text: &str) -> bool {
+        !self.rt.block_on(self.state.net.note_failure(text)) || self.offline_now()
+    }
+
+    /// The gate's verdict as it stands (no probe).
+    fn offline_now(&self) -> bool {
+        #[cfg(test)]
+        if self.tuning.offline.as_ref().is_some_and(|f| f.load(std::sync::atomic::Ordering::SeqCst)) {
+            return true;
+        }
+        !self.state.net.is_online()
     }
 
     /// A retry's wait. A pause during it holds the job (the message still
@@ -938,17 +1248,61 @@ impl Runner {
         }
     }
 
+    /// Waits out an account-level condition on the message in hand: no try
+    /// spent, the offset where it is, the job still running (`paused` false)
+    /// with `throttled` and `holdReason` set, the connection let go. The wait
+    /// grows like a retry's (`backoff`) up to `backoff_max`; offline, it ends
+    /// as soon as the gate opens again and no try is made while it is shut. A
+    /// pause, a cancel or a discard is answered at once. True: try again.
+    fn wait_out(&mut self, reason: &'static str) -> bool {
+        if self.hold_reason != Some(reason) || !self.throttled {
+            self.throttled = true;
+            self.hold_reason = Some(reason);
+            self.emit(true, RUNNING);
+            info!("[mbox_upload] {}: job {} waits ({reason}) at byte {}", self.journal.account_id, self.job.id, self.journal.offset);
+        }
+        self.pipeline.disconnect();
+        self.backoff_level += 1;
+        let until = Instant::now() + backoff(self.backoff_level, &self.tuning);
+        loop {
+            let slice = (Instant::now() + HOLD_POLL).min(until);
+            match self.job.wait_run(slice) {
+                Ctl::Run if reason == HOLD_OFFLINE && self.offline_now() => {}
+                Ctl::Run if reason != HOLD_OFFLINE && Instant::now() < until => {}
+                Ctl::Run => return true,
+                Ctl::Pause => return self.hold(PAUSED),
+                stop => {
+                    self.stop = Some(Stop::of(stop));
+                    return false;
+                }
+            }
+        }
+    }
+
     /// Holds the job until a resume: the connection goes (no slot of the
     /// account's budget is kept), the journal is checkpointed as `why` (the
     /// offset stays at the start of the message in hand) and the app is
-    /// told. True once resumed; false for a cancel or a discard.
+    /// told. True once resumed; false for a cancel or a discard, which a hold
+    /// asked for after them never announces.
     fn hold(&mut self, why: &'static str) -> bool {
-        self.job.request(Ctl::Pause);
+        match self.job.request(Ctl::Pause) {
+            Ctl::Pause => {}
+            stop => {
+                self.stop = Some(Stop::of(stop));
+                return false;
+            }
+        }
         self.pipeline.disconnect();
+        // Held is not throttled: a wait the hold cut short starts again, if
+        // it must, after the resume.
+        (self.throttled, self.hold_reason) = (false, None);
         self.checkpoint(why);
         self.emit(true, why);
+        self.job.set_settled(true);
         info!("[mbox_upload] {}: job {} held ({why}) at byte {}", self.journal.account_id, self.job.id, self.journal.offset);
-        match self.job.wait_held() {
+        let woke = self.job.wait_held();
+        self.job.set_settled(false);
+        match woke {
             Ctl::Run => {
                 // A held stretch is no throughput.
                 self.eta = Eta::default();
@@ -963,19 +1317,21 @@ impl Runner {
         }
     }
 
-    /// A new pipeline on the account's credentials as they are now (the app
-    /// may have signed in again since). What the old one touched is kept for
-    /// the refresh at the end.
-    fn rebuild(&mut self) {
+    /// A new pipeline (network-free), what the old one touched kept for the
+    /// refresh at the end. With `reread`, on the account's credentials as
+    /// they are now (the app may have signed in again since); else on the
+    /// ones in hand.
+    fn rebuild(&mut self, reread: bool) {
         self.keep_folders();
         let account = self.journal.account_id.clone();
-        let rebuilt = self.rt.block_on(quiet_config(&self.state, &account)).and_then(|config| {
+        let config = if reread { self.rt.block_on(quiet_config(&self.state, &account)) } else { Ok(self.config.clone()) };
+        let rebuilt = config.and_then(|config| {
             let pipeline = MboxUpload::new(Arc::clone(&self.state), config.clone(), account.clone(), self.journal.fallback.clone(), self.journal.use_labels)?;
             Ok((pipeline, config))
         });
         match rebuilt {
             Ok((pipeline, config)) => (self.pipeline, self.config) = (pipeline, config),
-            Err(_) => warn!("[mbox_upload] {account}: the account's credentials could not be read again"),
+            Err(_) => warn!("[mbox_upload] {account}: the upload pipeline was not made again"),
         }
     }
 
@@ -997,7 +1353,7 @@ impl Runner {
         if self.since_checkpoint >= self.tuning.checkpoint_every || self.checkpointed.elapsed() >= self.tuning.checkpoint_after {
             self.checkpoint(RUNNING);
         }
-        self.eta.sample(Instant::now(), end.saturating_sub(self.run_from), self.tuning.eta_window, self.tuning.eta_min_samples);
+        self.eta.sample(Instant::now(), end.saturating_sub(self.run_from), self.tuning.eta_sample_every, self.tuning.eta_window, self.tuning.eta_min_samples);
         let force = std::mem::take(&mut self.changed);
         self.emit(force, RUNNING);
     }
@@ -1028,15 +1384,13 @@ impl Runner {
 
     /// The tail after a checkpoint: what this run finished is behind the
     /// offset now and goes, but what an earlier run's tail still answers for
-    /// lies ahead of it and stays, or a second crash would lose it. Written
-    /// as a new file rather than cut: an append-only handle cannot be
-    /// truncated on Windows. Later lines follow on this handle.
+    /// lies ahead of it and stays, or a second crash would lose it. Replaced
+    /// in one atomic write (`rewrite_tail`), the old handle closed first
+    /// (Windows replaces no open file); later lines follow on the new one.
     fn restart_tail(&mut self) {
         self.tail = None;
-        let ahead: String = self.done_before.iter().map(|(fp, done)| format!("{} {fp:016x}\n", done.letter())).collect();
         let path = tail_path(&self.state.app_dir, &self.job.id);
-        let opened = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(path);
-        match opened.and_then(|mut file| file.write_all(ahead.as_bytes()).map(|()| file)) {
+        match rewrite_tail(&path, &tail_lines(&self.done_before)) {
             Ok(file) => self.tail = Some(file),
             Err(e) => warn!("[mbox_upload] {}: job {} stops keeping its tail, a crash may upload a message twice: {e}", self.journal.account_id, self.job.id),
         }
@@ -1045,12 +1399,12 @@ impl Runner {
     /// The job's progress as the app sees it; an event at most every
     /// `progress_every`, unless `force`.
     fn emit(&mut self, force: bool, state: &str) {
-        let eta = if state == RUNNING {
+        let eta = if state == RUNNING && self.hold_reason.is_none() {
             self.eta.seconds(self.journal.size.saturating_sub(self.journal.offset), self.tuning.eta_min_samples, self.tuning.eta_min_span)
         } else {
             None
         };
-        let payload = progress(&self.journal, true, state, self.throttled, eta);
+        let payload = progress(&self.journal, true, state, self.throttled, self.hold_reason, eta);
         *lock(&self.job.view) = payload.clone();
         if force || self.emitted.is_none_or(|at| at.elapsed() >= self.tuning.progress_every) {
             self.state.events.emit(EVENT, payload);
@@ -1058,15 +1412,49 @@ impl Runner {
         }
     }
 
-    /// The end, however it came: the journal made durable (or deleted), the
-    /// job unregistered, and only then the last event, so an app reacting to
-    /// `active: false` can resume or start again at once.
+    /// The end, however it came: the journal made durable (or deleted), what
+    /// the upload changed on the server refreshed, the job unregistered, and
+    /// only then the last event, so an app reacting to `active: false` can
+    /// resume or start again at once.
+    ///
+    /// Controls first: a pause that came in after the last message still
+    /// holds here, and a cancel or discard that came in still decides the
+    /// ending. From then on the job is `Ending` and every control answers
+    /// false (the refresh can take a while; the app acts on the journal once
+    /// the last event is out).
     fn finish(mut self, read: Result<(), String>) {
+        #[cfg(test)]
+        if self.stop == Some(Stop::Crash) {
+            // Dead, as a kill leaves it: no checkpoint, no event.
+            self.job.ended.store(true, std::sync::atomic::Ordering::SeqCst);
+            return;
+        }
+        loop {
+            let hold_ok = self.stop.is_none() && read.is_ok();
+            match self.job.end(hold_ok) {
+                Ctl::Pause if hold_ok => {
+                    self.hold(PAUSED);
+                }
+                Ctl::Discard => {
+                    self.stop = Some(Stop::Discard);
+                    break;
+                }
+                Ctl::Cancel => {
+                    self.stop = self.stop.or(Some(Stop::Cancel));
+                    break;
+                }
+                _ => break,
+            }
+        }
         let account = self.journal.account_id.clone();
+        let changed = self.journal.uploaded > 0 || !self.journal.created.is_empty() || !self.pipeline.created().is_empty();
         let (state, error) = match (self.stop, read) {
-            #[cfg(test)]
-            (Some(Stop::Crash), _) => return,
             (Some(Stop::Discard), _) => {
+                // What it touched is captured before the journal goes.
+                self.keep_folders();
+                if changed {
+                    self.refresh();
+                }
                 // Closed first: Windows removes no open file.
                 self.tail = None;
                 remove_journal(&self.state.app_dir, &self.job.id);
@@ -1074,11 +1462,18 @@ impl Runner {
             }
             (Some(Stop::Cancel), _) => {
                 self.checkpoint(CANCELLED);
+                if changed {
+                    self.refresh();
+                }
                 (CANCELLED, None)
             }
             (None, Err(e)) => {
                 warn!("[mbox_upload] {account}: job {} stopped reading its file at byte {}: {e}", self.job.id, self.journal.offset);
+                self.journal.error = Some(e.clone());
                 self.checkpoint(PAUSED);
+                if changed {
+                    self.refresh();
+                }
                 (PAUSED, Some(e))
             }
             (None, Ok(())) => {
@@ -1091,6 +1486,8 @@ impl Runner {
                 remove_journal(&self.state.app_dir, &self.job.id);
                 (DONE, None)
             }
+            #[cfg(test)]
+            (Some(Stop::Crash), _) => unreachable!("handled above"),
         };
         let j = &self.journal;
         info!(
@@ -1098,33 +1495,48 @@ impl Runner {
             self.job.id, j.uploaded, j.skipped, j.failed, j.label_warnings
         );
         unregister(&self.state, &self.job);
-        let mut last = progress(&self.journal, false, state, false, None);
+        let mut last = progress(&self.journal, false, state, false, None, None);
         last["foldersChanged"] = json!(!self.journal.created.is_empty());
         if let Some(e) = error {
             last["error"] = json!(e);
         }
         *lock(&self.job.view) = last.clone();
+        self.job.ended.store(true, std::sync::atomic::Ordering::SeqCst);
         self.state.events.emit(EVENT, last);
     }
 
     /// What the app shows for the folders mail went into, brought up to date
-    /// through the existing sync path; the folder list marked out of date when
-    /// the upload made folders; one full index pass when mail landed.
+    /// through the existing sync path (on the account's credentials read
+    /// again: a token can expire over hours of upload); each synced folder's
+    /// old mbox imports moved out of the server's uid range at once, so a
+    /// file imported locally and then restored lists each message once; the
+    /// folder list marked out of date when the upload made folders; one full
+    /// index pass when mail landed. Nothing here fails the job.
     fn refresh(&mut self) {
         self.keep_folders();
+        if let Ok(config) = self.rt.block_on(quiet_config(&self.state, &self.journal.account_id)) {
+            self.config = config;
+        }
         let account = SyncAccount { id: self.journal.account_id.clone(), email: self.config.email.clone(), imap_config: self.config.clone() };
         let folders: Vec<String> = self.journal.touched.iter().cloned().collect();
-        let mut unsynced = 0;
+        let (mut unsynced, mut unrehomed) = (0, 0);
         for folder in &folders {
             let result = self.rt.block_on(self.state.sync_engine.sync_account(&account, folder));
-            if result.success {
-                self.state.sync_engine.note_change(&account.id, folder, 0, result.updated_flags);
-            } else {
+            if !result.success {
                 unsynced += 1;
+                continue;
+            }
+            self.state.sync_engine.note_change(&account.id, folder, 0, result.updated_flags);
+            if !self.rehome(&account.id, folder) {
+                unrehomed += 1;
             }
         }
-        if unsynced > 0 {
-            warn!("[mbox_upload] {}: {unsynced} of {} folder(s) not synced after the upload", account.id, folders.len());
+        if unsynced + unrehomed > 0 {
+            warn!(
+                "[mbox_upload] {}: of {} folder(s), {unsynced} not synced and {unrehomed} not cleared of old imports after the upload",
+                account.id,
+                folders.len()
+            );
         }
         if !self.journal.created.is_empty() {
             if let Err(e) = folder_list_stale(&self.state, &account.id) {
@@ -1134,6 +1546,26 @@ impl Runner {
         if self.journal.uploaded > 0 {
             crate::search_index::sweep_soon(&self.state.search_index);
         }
+    }
+
+    /// The folder's import rehome pass again, now that the server holds the
+    /// uploads: its done stamp removed, the pass run here (this thread is at
+    /// background QoS and holds no lock). A pass that could not run (`None`:
+    /// the cache is not whole yet) leaves the stamp away, so the next open of
+    /// the folder tries again. False on an error.
+    fn rehome(&mut self, account_id: &str, folder: &str) -> bool {
+        #[cfg(test)]
+        lock(&self.job.rehomed).push(folder.to_string());
+        if let Ok(root) = crate::handlers::common::vault_root(&self.state) {
+            if let Some(dir) = mailvault_core::vault_files::cur_path(&root, account_id, folder).parent() {
+                if let Err(e) = std::fs::remove_file(dir.join(mailvault_core::import_rehome::DONE_FILE)) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        return false;
+                    }
+                }
+            }
+        }
+        crate::handlers::custody::rehome_imports_for(&self.state, account_id, folder).is_ok()
     }
 }
 
@@ -1169,6 +1601,8 @@ mod tests {
             backoff_base: Duration::from_millis(40),
             backoff_max: Duration::from_millis(200),
             attempts: 3,
+            refusal_streak: 5,
+            eta_sample_every: Duration::ZERO,
             checkpoint_every: 2,
             checkpoint_after: Duration::from_secs(60),
             progress_every: Duration::ZERO,
@@ -1176,6 +1610,9 @@ mod tests {
             eta_min_samples: 3,
             eta_min_span: Duration::ZERO,
             crash_after: None,
+            offline: None,
+            panic_in_upload: None,
+            panic_in_worker: None,
         }
     }
 
@@ -1202,28 +1639,37 @@ mod tests {
     fn the_eta_waits_for_enough_throughput_and_then_measures_it() {
         let mut eta = Eta::default();
         let t0 = Instant::now();
-        let (window, keep) = (Duration::from_secs(60), 3);
-        eta.sample(t0, 100, window, keep);
+        let (every, window, keep) = (Duration::ZERO, Duration::from_secs(60), 3);
+        eta.sample(t0, 100, every, window, keep);
         assert_eq!(eta.seconds(1000, 3, Duration::ZERO), None, "one sample says nothing");
-        eta.sample(t0 + Duration::from_secs(1), 200, window, keep);
+        eta.sample(t0 + Duration::from_secs(1), 200, every, window, keep);
         assert_eq!(eta.seconds(1000, 3, Duration::ZERO), None, "two are fewer than asked for");
-        eta.sample(t0 + Duration::from_secs(2), 300, window, keep);
+        eta.sample(t0 + Duration::from_secs(2), 300, every, window, keep);
         assert_eq!(eta.seconds(1000, 3, Duration::ZERO), Some(10), "100 bytes a second, 1000 left");
         assert_eq!(eta.seconds(1000, 3, Duration::from_secs(5)), None, "a span shorter than asked for");
 
         let mut stuck = Eta::default();
         for s in 0..4 {
-            stuck.sample(t0 + Duration::from_secs(s), 50, window, keep);
+            stuck.sample(t0 + Duration::from_secs(s), 50, every, window, keep);
         }
         assert_eq!(stuck.seconds(1000, 3, Duration::ZERO), None, "nothing moved");
 
         // Old samples leave the window, but `keep` of them always stay.
         let mut slow = Eta::default();
         for s in 0..10 {
-            slow.sample(t0 + Duration::from_secs(s * 100), s * 10, window, keep);
+            slow.sample(t0 + Duration::from_secs(s * 100), s * 10, every, window, keep);
         }
         assert_eq!(slow.samples.len(), 3);
         assert_eq!(slow.seconds(10, 3, Duration::ZERO), Some(100), "10 bytes per 100 s");
+
+        // FixA M7: at skip speed (a message a millisecond for a minute) the
+        // window holds a sample per 250 ms, not one per message.
+        let mut fast_run = Eta::default();
+        for ms in 0..60_000u64 {
+            fast_run.sample(t0 + Duration::from_millis(ms), ms * 10, Duration::from_millis(250), Duration::from_secs(120), 5);
+        }
+        assert_eq!(fast_run.samples.len(), 240);
+        assert_eq!(fast_run.seconds(10_000, 5, Duration::from_secs(20)), Some(1), "10 bytes a millisecond");
     }
 
     #[test]
@@ -1244,6 +1690,7 @@ mod tests {
             failed: 0,
             label_warnings: 1,
             state: PAUSED.into(),
+            error: Some("E_MBOX_UPLOAD_READ: gone".into()),
             touched: ["INBOX".to_string()].into(),
             created: BTreeSet::new(),
             updated_at: 5,
@@ -1258,9 +1705,9 @@ mod tests {
 
         std::fs::write(tail_path(app.path(), &journal.job_id), "u 00000000000000ff\ns 0000000000000001\nf 00000000000000\nu 12").unwrap();
         let tail = read_tail(app.path(), &journal.job_id);
-        assert_eq!(tail.get(&0xff), Some(&Done::Uploaded));
-        assert_eq!(tail.get(&1), Some(&Done::Skipped));
-        assert_eq!(tail.get(&0x12), Some(&Done::Uploaded), "a short hex still names a fingerprint");
+        assert_eq!(tail.get(&0xff), Some(&VecDeque::from([Done::Uploaded])));
+        assert_eq!(tail.get(&1), Some(&VecDeque::from([Done::Skipped])));
+        assert_eq!(tail.get(&0x12), Some(&VecDeque::from([Done::Uploaded])), "a short hex still names a fingerprint");
         assert_eq!(tail.len(), 4, "every line that parses");
         std::fs::write(tail_path(app.path(), &journal.job_id), "u 00000000000000ff\nf not-hex\nx 01\n").unwrap();
         assert_eq!(read_tail(app.path(), &journal.job_id).len(), 1, "a torn or foreign line is left out");
@@ -1421,6 +1868,23 @@ mod tests {
             seen.push(e);
             if last {
                 return seen;
+            }
+        }
+    }
+
+    /// Every progress event already on the bus, without waiting.
+    fn drain(rx: &mut broadcast::Receiver<Arc<str>>) -> Vec<Value> {
+        let mut seen = Vec::new();
+        loop {
+            match rx.try_recv() {
+                Ok(line) => {
+                    let v: Value = serde_json::from_str(&line).unwrap();
+                    if v["params"]["name"] == EVENT {
+                        seen.push(v["params"]["payload"].clone());
+                    }
+                }
+                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+                Err(_) => return seen,
             }
         }
     }
@@ -1651,25 +2115,45 @@ mod tests {
         assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "two", "three", "four", "five"]);
     }
 
-    /// Throttled once (the mock still runs a refused APPEND, so the message
-    /// is there): the job says so, waits at least the base backoff, tries
-    /// again, finds it on the server and goes on. One copy, nothing failed.
+    /// FixA T1, kept deliberately in its new meaning: a `[THROTTLED]` reply
+    /// is the account's (`Busy`), so the job waits it out on that message
+    /// with `throttled` and `holdReason: "throttled"`, not paused, spending
+    /// no try. The mock still runs a refused APPEND (its `Respond` trap), so
+    /// the second try finds the message there: a skip, one copy, nothing
+    /// failed. The backoff-then-success of one message is the
+    /// `DropConnection` variant below.
     #[tokio::test]
-    async fn a_throttled_message_backs_off_and_is_tried_again() {
+    async fn a_throttled_account_is_waited_out_on_the_message_in_hand() {
         let throttled = Action::Respond("NO".into(), "[THROTTLED] Too many commands, slow down".into());
-        let mut rig = setup(gmail().fault(Trigger::nth_with("APPEND", "throttle-me", 1), throttled), Tuning { backoff_base: Duration::from_millis(80), ..fast() });
+        let mut rig = setup(gmail().fault(Trigger::nth_with("APPEND", "throttle-me", 1), throttled), fast());
         let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "throttle-me"), msg("c@x", "three")]);
-        let started = Instant::now();
         start(&rig, &file, false).await;
         let events = until_done(&mut rig.rx).await;
-        assert!(started.elapsed() >= Duration::from_millis(80), "waited out the backoff: {:?}", started.elapsed());
 
         let at = events.iter().position(|e| e["throttled"] == json!(true)).expect("a throttled event");
-        assert_eq!(events[at]["paused"], json!(false));
-        assert!(events[at + 1..].iter().any(|e| e["throttled"] == json!(false)), "and one when it cleared");
+        assert_eq!((events[at]["paused"].clone(), events[at]["holdReason"].clone(), events[at]["state"].clone()), (json!(false), json!(HOLD_THROTTLED), json!(RUNNING)));
+        assert_eq!(events[at]["uploadedCount"], json!(1), "held on the second message, nothing moved on");
+        assert!(events[at + 1..].iter().any(|e| e["throttled"] == json!(false) && e["holdReason"].is_null()), "and one when it cleared");
         let last = events.last().unwrap();
         assert_eq!((last["failedCount"].clone(), last["uploadedCount"].clone(), last["skippedCount"].clone()), (json!(0), json!(2), json!(1)));
         assert_eq!(subjects(&rig.server, "INBOX").iter().filter(|s| *s == "throttle-me").count(), 1, "one copy");
+    }
+
+    /// FixA T1: a message whose APPEND loses its connection (the mock drops
+    /// it before running it: nothing stored) backs off and is tried again,
+    /// and this time goes up: 3 uploaded, 0 skipped, 4 APPEND lines.
+    #[tokio::test]
+    async fn a_message_whose_append_was_cut_off_backs_off_and_goes_up_on_the_next_try() {
+        let mut rig = setup(gmail().fault(Trigger::nth_with("APPEND", "drop-me", 1), Action::DropConnection), Tuning { backoff_base: Duration::from_millis(80), ..fast() });
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "drop-me"), msg("c@x", "three")]);
+        start(&rig, &file, false).await;
+        let events = until_done(&mut rig.rx).await;
+        let at = events.iter().position(|e| e["throttled"] == json!(true)).expect("a backing-off event");
+        assert!(events[at]["holdReason"].is_null(), "one message's failure, not the account's: {}", events[at]);
+        let last = events.last().unwrap();
+        assert_eq!((last["uploadedCount"].clone(), last["skippedCount"].clone(), last["failedCount"].clone()), (json!(3), json!(0), json!(0)));
+        assert_eq!(rig.server.count_commands("APPEND"), 4);
+        assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "drop-me", "three"]);
     }
 
     /// A message the server refuses counts as failed; the job goes on and
@@ -1810,6 +2294,16 @@ mod tests {
         assert_eq!(control(&rig, "mbox_upload_discard", &job).await, json!({"jobId": job, "discarded": true}));
         assert!(read_journal(&rig.s.app_dir, &job).is_none() && !tail_path(&rig.s.app_dir, &job).exists());
         assert_eq!(status_of(&rig, &job).await, Value::Null);
+        // FixA addendum: the app is told, once, as a worker's discard tells it.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let told: Vec<Value> = drain(&mut rig.rx).into_iter().filter(|e| e["jobId"] == json!(job)).collect();
+        assert_eq!(told.len(), 1, "{told:?}");
+        let name = file.file_name().unwrap().to_string_lossy().into_owned();
+        let told = &told[0];
+        assert_eq!(
+            (told["mode"].clone(), told["state"].clone(), told["active"].clone(), told["accountId"].clone(), told["fileName"].clone()),
+            (json!("server"), json!(DISCARDED), json!(false), json!("acct1"), json!(name))
+        );
         for method in ["mbox_upload_resume", "mbox_upload_pause", "mbox_upload_cancel", "mbox_upload_discard"] {
             let msg = refused(call(&rig.s, method, json!({"jobId": job})).await);
             assert_eq!(msg, format!("{E_MBOX_UPLOAD_NOT_FOUND}: {job}"), "{method}");
@@ -1833,6 +2327,9 @@ mod tests {
         assert_eq!(last["state"], json!(DISCARDED));
         assert!(read_journal(&rig.s.app_dir, &job).is_none());
         assert_eq!(status_of(&rig, &job).await, Value::Null);
+        // FixA M2: what went up before the discard is still refreshed.
+        let (_, changes) = rig.s.sync_engine.wait_changes(0, 0).await;
+        assert!(changes.iter().any(|c| c.mailbox == "INBOX" && c.new_emails == 0), "{changes:?}");
     }
 
     /// On Gmail every label STORE is refused here: each message still counts
@@ -1861,6 +2358,518 @@ mod tests {
         assert_eq!(counts, (json!(DONE), json!(3), json!(0), json!(2)));
         assert_eq!(rig.server.count_commands("X-GM-LABELS"), 2);
         assert_eq!(rig.server.count_commands("APPEND"), 3);
+    }
+
+    // ---- FixA ----
+
+    /// A journal for `path` as it is now, stopped at `offset`.
+    fn journal_for(path: &Path, offset: u64, state: &str) -> Journal {
+        let (size, mtime_ms) = identity(path).unwrap();
+        Journal {
+            version: JOURNAL_VERSION,
+            job_id: uuid::Uuid::new_v4().to_string(),
+            account_id: "acct1".into(),
+            source_path: path.to_string_lossy().into_owned(),
+            size,
+            mtime_ms,
+            use_labels: false,
+            fallback: "INBOX".into(),
+            offset,
+            uploaded: 7,
+            skipped: 0,
+            failed: 0,
+            label_warnings: 0,
+            state: state.into(),
+            error: None,
+            touched: BTreeSet::new(),
+            created: BTreeSet::new(),
+            updated_at: now_ms(),
+        }
+    }
+
+    async fn wait_for(what: &str, mut ready: impl FnMut() -> bool) {
+        for _ in 0..2000 {
+            if ready() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("never: {what}");
+    }
+
+    fn counts_of(e: &Value) -> (Value, Value, Value) {
+        (e["uploadedCount"].clone(), e["skippedCount"].clone(), e["failedCount"].clone())
+    }
+
+    /// M6: two identical messages (a chat saved twice) are two tail entries,
+    /// met once each and in order.
+    #[test]
+    fn two_identical_messages_are_two_tail_entries_each_met_once() {
+        let app = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(journal_dir(app.path())).unwrap();
+        std::fs::write(tail_path(app.path(), "j1"), "u 00000000000000aa\ns 00000000000000aa\nu 00000000000000bb\n").unwrap();
+        let mut finished = read_tail(app.path(), "j1");
+        assert_eq!(finished.get(&0xaa), Some(&VecDeque::from([Done::Uploaded, Done::Skipped])));
+        assert_eq!(take_finished(&mut finished, 0xaa), Some(Done::Uploaded));
+        assert_eq!(tail_lines(&finished).lines().filter(|l| l.ends_with("aa")).count(), 1, "the second is still owed");
+        assert_eq!(take_finished(&mut finished, 0xaa), Some(Done::Skipped));
+        assert_eq!(take_finished(&mut finished, 0xaa), None);
+        assert_eq!(finished.len(), 1);
+    }
+
+    /// M4: a checkpoint's tail rewrite replaces the file whole, through the
+    /// atomic writer (a kill leaves the old tail or the new one, never an
+    /// empty one: `fsx::write_atomic`'s contract), and later lines follow it.
+    #[test]
+    fn a_tail_rewrite_replaces_it_whole_and_later_lines_follow_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("j1.tail");
+        std::fs::write(&path, "u 0000000000000001\nu 0000000000000002\n").unwrap();
+        let mut ahead = Finished::new();
+        ahead.entry(3).or_default().push_back(Done::Skipped);
+        let mut file = rewrite_tail(&path, &tail_lines(&ahead)).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "s 0000000000000003\n");
+        file.write_all(b"f 0000000000000004\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "s 0000000000000003\nf 0000000000000004\n");
+        let names: Vec<String> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["j1.tail"], "no temp file left behind");
+    }
+
+    /// M8: a pause asked after a cancel never becomes a hold; once the job
+    /// began ending, no control changes anything (the routes answer false);
+    /// a pause standing when it ends is left to hold first.
+    #[test]
+    fn a_control_after_the_job_began_ending_changes_nothing() {
+        let job = Job::new("j1", "acct1");
+        assert_eq!(job.request(Ctl::Pause), Ctl::Pause);
+        assert_eq!(job.request(Ctl::Cancel), Ctl::Cancel);
+        assert_eq!(job.request(Ctl::Pause), Ctl::Cancel, "no hold after a cancel");
+        assert_eq!(job.request(Ctl::Run), Ctl::Cancel);
+        assert_eq!(job.end(true), Ctl::Cancel);
+        for ask in [Ctl::Pause, Ctl::Run, Ctl::Cancel, Ctl::Discard] {
+            assert_eq!(job.request(ask), Ctl::Ending, "{ask:?}");
+        }
+        let held = Job::new("j2", "acct1");
+        held.request(Ctl::Pause);
+        assert_eq!(held.end(true), Ctl::Pause);
+        assert_eq!(held.ctl(), Ctl::Pause, "left to hold first");
+        assert_eq!(held.end(false), Ctl::Pause);
+        assert_eq!(held.ctl(), Ctl::Ending);
+    }
+
+    /// I1: Gmail's bandwidth cap (here at sign-in, after a drop) is the
+    /// account's: the job waits it out on the message in hand, running and
+    /// not paused, with `holdReason: "throttled"`, spending no try (four
+    /// refused sign-ins against 3 tries) and moving nothing on, then goes on.
+    #[tokio::test]
+    async fn an_account_over_its_bandwidth_is_waited_out_without_spending_tries_or_moving_on() {
+        let over = Action::Respond("NO".into(), "[ALERT] Account exceeded command or bandwidth limits. (Failure)".into());
+        let mut scenario = gmail().fault(Trigger::nth_with("APPEND", "drop-me", 1), Action::DropConnection);
+        for n in 2..=5 {
+            scenario = scenario.fault(Trigger::nth("LOGIN", n), over.clone());
+        }
+        let mut rig = setup(scenario, fast());
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "drop-me"), msg("c@x", "three")]);
+        let first_end = mbox_bytes(&[msg("a@x", "one")]).len() as u64;
+        start(&rig, &file, false).await;
+        let events = until_done(&mut rig.rx).await;
+
+        let waiting: Vec<&Value> = events.iter().filter(|e| e["holdReason"] == json!(HOLD_THROTTLED)).collect();
+        assert!(!waiting.is_empty(), "the job said it waits");
+        for e in &waiting {
+            assert_eq!((e["paused"].clone(), e["throttled"].clone(), e["state"].clone()), (json!(false), json!(true), json!(RUNNING)));
+            assert_eq!((e["bytesDone"].clone(), e["uploadedCount"].clone(), e["failedCount"].clone()), (json!(first_end), json!(1), json!(0)));
+        }
+        let last = events.last().unwrap();
+        assert_eq!(counts_of(last), (json!(3), json!(0), json!(0)), "{last}");
+        assert!(rig.server.count_commands("LOGIN") >= 6, "four refused sign-ins, then one that worked");
+        assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "drop-me", "three"]);
+    }
+
+    /// I1: offline (the connectivity gate shut), a failed message is not
+    /// tried again at all until the gate opens: no try spent, nothing moved
+    /// on, `holdReason: "offline"`. A pause during the wait is taken at once
+    /// (not at the gate's next look); resumed and back online, the message
+    /// goes up.
+    #[tokio::test]
+    async fn offline_the_job_waits_on_the_message_in_hand_and_a_pause_wakes_it_at_once() {
+        let gate = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let tuning = Tuning { offline: Some(Arc::clone(&gate)), ..fast() };
+        let mut rig = setup(gmail().fault(Trigger::nth_with("APPEND", "drop-me", 1), Action::DropConnection), tuning);
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "drop-me"), msg("c@x", "three")]);
+        let job = start(&rig, &file, false).await;
+        let waiting = next(&mut rig.rx, |e| e["holdReason"] == json!(HOLD_OFFLINE)).await;
+        assert_eq!((waiting["paused"].clone(), waiting["throttled"].clone()), (json!(false), json!(true)));
+        assert_eq!(counts_of(&waiting), (json!(1), json!(0), json!(0)));
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert_eq!(rig.server.count_commands("APPEND"), 2, "no try while offline");
+        let listed = status_of(&rig, &job).await;
+        assert_eq!((listed["holdReason"].clone(), listed["failedCount"].clone(), listed["bytesDone"].clone()), (json!(HOLD_OFFLINE), json!(0), waiting["bytesDone"].clone()));
+
+        let asked = Instant::now();
+        assert_eq!(control(&rig, "mbox_upload_pause", &job).await["paused"], json!(true));
+        let paused = next(&mut rig.rx, |e| e["state"] == json!(PAUSED)).await;
+        assert!(asked.elapsed() < Duration::from_millis(900), "woke at once: {:?}", asked.elapsed());
+        assert_eq!((paused["throttled"].clone(), paused["holdReason"].clone()), (json!(false), Value::Null), "held, not throttled");
+
+        gate.store(false, std::sync::atomic::Ordering::SeqCst);
+        control(&rig, "mbox_upload_resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(counts_of(&last), (json!(3), json!(0), json!(0)));
+        assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "drop-me", "three"]);
+    }
+
+    /// I1: the same account-level refusal (`OVERQUOTA`) on 5 different
+    /// messages in a row: the first 4 count as failed, the fifth holds
+    /// (`holdReason: "refused"`, not paused) and is tried again and again
+    /// without counting or moving on, until the user cancels. (Messages
+    /// without a Message-ID: no search, so each try is a fresh APPEND.)
+    #[tokio::test]
+    async fn the_same_account_refusal_on_five_messages_in_a_row_holds_the_job() {
+        let full = Action::Respond("NO".into(), "[OVERQUOTA] Mailbox is full".into());
+        let mut rig = setup(gmail().fault(Trigger::on("APPEND"), full), fast());
+        let messages: Vec<Vec<u8>> = (1..=6).map(|i| idless(&format!("chat {i}"))).collect();
+        let file = mbox(&rig, &messages);
+        let fifth = mbox_bytes(&messages[..4]).len() as u64;
+        let job = start(&rig, &file, false).await;
+        let held = next(&mut rig.rx, |e| e["holdReason"] == json!(HOLD_REFUSED)).await;
+        assert_eq!((held["paused"].clone(), held["throttled"].clone(), held["state"].clone()), (json!(false), json!(true), json!(RUNNING)));
+        assert_eq!((held["failedCount"].clone(), held["bytesDone"].clone()), (json!(4), json!(fifth)));
+
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert!(rig.server.count_commands("APPEND") > 5, "the fifth is tried again while held");
+        let listed = status_of(&rig, &job).await;
+        assert_eq!((listed["failedCount"].clone(), listed["bytesDone"].clone()), (json!(4), json!(fifth)), "nothing counted, nothing moved on");
+
+        control(&rig, "mbox_upload_cancel", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!((last["state"].clone(), last["failedCount"].clone(), last["bytesDone"].clone()), (json!(CANCELLED), json!(4), json!(fifth)));
+    }
+
+    /// I1: a refusal of each message itself (`[CANNOT]`), however many in a
+    /// row, is counted and the job goes on: no hold.
+    #[tokio::test]
+    async fn refusals_of_single_messages_never_hold_however_many_in_a_row() {
+        let too_big = Action::Respond("NO".into(), "[CANNOT] Message too large".into());
+        let mut rig = setup(gmail().fault(Trigger::on("APPEND"), too_big), fast());
+        let messages: Vec<Vec<u8>> = (1..=6).map(|i| msg(&format!("big{i}@x"), &format!("big {i}"))).collect();
+        let file = mbox(&rig, &messages);
+        start(&rig, &file, false).await;
+        let events = until_done(&mut rig.rx).await;
+        assert!(events.iter().all(|e| e["holdReason"].is_null()), "no hold");
+        let last = events.last().unwrap();
+        assert_eq!((last["state"].clone(), last["failedCount"].clone()), (json!(DONE), json!(6)));
+        assert_eq!(rig.server.count_commands("APPEND"), 6, "each tried once");
+    }
+
+    /// I2: the daemon quitting holds every live upload at its next message
+    /// boundary, checkpointed with nothing half recorded, within the limit;
+    /// the job resumes from there.
+    #[tokio::test]
+    async fn a_quitting_daemon_holds_every_upload_at_a_checkpoint_within_its_limit() {
+        let mut rig = setup(slow_appends(150), fast());
+        let messages: Vec<Vec<u8>> = (1..=5).map(|i| msg(&format!("z{i}@x"), &format!("z{i}"))).collect();
+        let file = mbox(&rig, &messages);
+        let job = start(&rig, &file, false).await;
+        wait_until_uploaded(&rig, &job, 1).await;
+        let (s, asked) = (Arc::clone(&rig.s), Instant::now());
+        let settled = tokio::task::spawn_blocking(move || pause_all_and_wait(&s, Duration::from_millis(1200))).await.unwrap();
+        assert_eq!(settled, 1);
+        assert!(asked.elapsed() < Duration::from_millis(1200), "{:?}", asked.elapsed());
+
+        let (journal, listed) = (journal_of(&rig, &job), status_of(&rig, &job).await);
+        assert_eq!((journal.state.as_str(), listed["state"].clone(), listed["live"].clone()), (PAUSED, json!(PAUSED), json!(true)));
+        assert_eq!((json!(journal.offset), json!(journal.uploaded)), (listed["bytesDone"].clone(), listed["uploadedCount"].clone()));
+        assert!(read_tail(&rig.s.app_dir, &job).is_empty(), "every finished message is behind the checkpoint");
+        assert_eq!(rig.server.count_commands("APPEND") as u64, journal.uploaded, "nothing in flight");
+
+        control(&rig, "mbox_upload_resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(counts_of(&last), (json!(5), json!(0), json!(0)));
+    }
+
+    /// I2: a quit never waits past its limit for an APPEND the server sits
+    /// on; the pause is taken at the next boundary once it answers.
+    #[tokio::test]
+    async fn a_quit_never_waits_past_its_limit_for_an_append_that_hangs() {
+        let stall = Action::Delay(Duration::from_secs(3));
+        let mut rig = setup(gmail().fault(Trigger::nth_with("APPEND", "stalls", 1), stall), fast());
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "stalls"), msg("c@x", "three")]);
+        let job = start(&rig, &file, false).await;
+        let server = &rig.server;
+        wait_for("the stalling APPEND went out", || server.count_commands("APPEND") >= 2).await;
+        let (s, asked) = (Arc::clone(&rig.s), Instant::now());
+        let settled = tokio::task::spawn_blocking(move || pause_all_and_wait(&s, Duration::from_millis(300))).await.unwrap();
+        assert_eq!(settled, 0);
+        assert!(asked.elapsed() < Duration::from_millis(1500), "{:?}", asked.elapsed());
+
+        let paused = next(&mut rig.rx, |e| e["state"] == json!(PAUSED)).await;
+        assert_eq!(paused["uploadedCount"], json!(2), "the stalled one finished, then the hold");
+        control(&rig, "mbox_upload_cancel", &job).await;
+        until_done(&mut rig.rx).await;
+    }
+
+    /// I3: the file moved (or its drive mounted again under another name):
+    /// the same size and mtime at a new path. The old path no longer reads;
+    /// given the new one, the job goes on at its checkpoint, not from 0.
+    #[tokio::test]
+    async fn a_moved_file_goes_on_at_its_checkpoint() {
+        let mut rig = setup(slow_appends(120), fast());
+        let messages: Vec<Vec<u8>> = (1..=4).map(|i| msg(&format!("mv{i}@x"), &format!("mv{i}"))).collect();
+        let file = mbox(&rig, &messages);
+        let job = start(&rig, &file, false).await;
+        wait_until_uploaded(&rig, &job, 1).await;
+        control(&rig, "mbox_upload_cancel", &job).await;
+        let cancelled = next(&mut rig.rx, |e| e["active"] == json!(false)).await;
+        let before = cancelled["uploadedCount"].as_u64().unwrap();
+        let journal = journal_of(&rig, &job);
+
+        let moved = rig.files.path().join("Backup 1").join("Takeout.mbox");
+        std::fs::create_dir_all(moved.parent().unwrap()).unwrap();
+        std::fs::rename(&file, &moved).unwrap();
+        let err = refused(call(&rig.s, "mbox_upload_resume", json!({"jobId": job})).await);
+        assert!(err.starts_with("Failed to read mbox file"), "{err}");
+
+        let resumed = ok(call(&rig.s, "mbox_upload_resume", json!({"jobId": job, "sourcePath": moved.to_string_lossy()})).await);
+        assert_eq!(resumed, json!({"jobId": job, "resumed": true, "restarted": false}));
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(the_run(&rig, &job).read_from.load(std::sync::atomic::Ordering::SeqCst), journal.offset, "at the checkpoint");
+        assert_eq!(the_run(&rig, &job).parsed.load(std::sync::atomic::Ordering::SeqCst), 4 - before);
+        assert_eq!((counts_of(&last), last["fileName"].clone()), ((json!(4), json!(0), json!(0)), json!("Takeout.mbox")));
+        assert_eq!(rig.server.count_commands("APPEND"), 4);
+    }
+
+    /// I3: a changed file (another size) starts over from 0 but keeps its
+    /// tail: a message without a Message-ID that landed after the last
+    /// checkpoint is still answered for, not uploaded twice.
+    #[tokio::test]
+    async fn a_changed_file_keeps_its_tail_so_a_message_without_an_id_goes_up_once() {
+        let crashing = Tuning { checkpoint_every: 1000, checkpoint_after: Duration::from_secs(3600), crash_after: Some(2), ..fast() };
+        let mut rig = setup(gmail(), crashing);
+        let file = mbox(&rig, &[msg("a@x", "one"), idless("chat two"), msg("c@x", "three")]);
+        let job = start(&rig, &file, false).await;
+        wait_until_not_live(&rig, &job).await;
+        assert_eq!(read_tail(&rig.s.app_dir, &job).len(), 2);
+        assert_eq!(rig.server.count_commands("APPEND"), 2);
+
+        let mut more = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
+        more.write_all(&mbox_bytes(&[msg("e@x", "five")])).unwrap();
+        drop(more);
+        *lock(&rig.s.mbox_uploads.tuning) = Some(fast());
+        assert_eq!(control(&rig, "mbox_upload_resume", &job).await, json!({"jobId": job, "resumed": true, "restarted": true}));
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(the_run(&rig, &job).read_from.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(counts_of(&last), (json!(4), json!(0), json!(0)), "the tail answered for the first two");
+        assert_eq!(rig.server.count_commands("APPEND"), 4, "chat two went up once");
+        assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "chat two", "three", "five"]);
+    }
+
+    /// I3's class on a fresh start: the same path, the file changed since a
+    /// crash. The old journal goes, but its tail carries over, so the chat
+    /// without a Message-ID that landed before the crash is not sent again.
+    #[tokio::test]
+    async fn a_fresh_start_over_a_changed_file_keeps_what_the_old_tail_knew() {
+        let crashing = Tuning { checkpoint_every: 1000, checkpoint_after: Duration::from_secs(3600), crash_after: Some(2), ..fast() };
+        let mut rig = setup(gmail(), crashing);
+        let file = mbox(&rig, &[msg("a@x", "one"), idless("chat two"), msg("c@x", "three")]);
+        let old = start(&rig, &file, false).await;
+        wait_until_not_live(&rig, &old).await;
+        assert_eq!(rig.server.count_commands("APPEND"), 2);
+
+        let mut more = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
+        more.write_all(&mbox_bytes(&[msg("e@x", "five")])).unwrap();
+        drop(more);
+        *lock(&rig.s.mbox_uploads.tuning) = Some(fast());
+        let fresh = start(&rig, &file, false).await;
+        assert_ne!(fresh, old);
+        assert!(read_journal(&rig.s.app_dir, &old).is_none() && !tail_path(&rig.s.app_dir, &old).exists(), "the old journal went");
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(counts_of(&last), (json!(4), json!(0), json!(0)), "the carried tail answered for the first two");
+        assert_eq!(rig.server.count_commands("APPEND"), 4, "chat two went up once");
+    }
+
+    /// M6: killed after two identical chats (the second skipped in-run):
+    /// the tail's two entries answer for both on resume.
+    #[tokio::test]
+    async fn a_crash_after_two_identical_chats_uploads_neither_again() {
+        let crashing = Tuning { checkpoint_every: 1000, checkpoint_after: Duration::from_secs(3600), crash_after: Some(2), ..fast() };
+        let mut rig = setup(gmail(), crashing);
+        let file = mbox(&rig, &[idless("twin"), idless("twin"), msg("c@x", "three")]);
+        let job = start(&rig, &file, false).await;
+        wait_until_not_live(&rig, &job).await;
+        let tail = read_tail(&rig.s.app_dir, &job);
+        assert_eq!(tail.values().map(VecDeque::len).sum::<usize>(), 2, "{tail:?}");
+        assert_eq!(rig.server.count_commands("APPEND"), 1, "the second twin was skipped in-run");
+
+        *lock(&rig.s.mbox_uploads.tuning) = Some(fast());
+        control(&rig, "mbox_upload_resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(counts_of(&last), (json!(2), json!(1), json!(0)));
+        assert_eq!(rig.server.count_commands("APPEND"), 2, "neither twin went up again");
+    }
+
+    /// M5: a checkpoint past the end of the file (a journal that no longer
+    /// fits it) starts over from 0.
+    #[tokio::test]
+    async fn a_checkpoint_past_the_end_of_the_file_starts_over() {
+        let mut rig = setup(gmail(), fast());
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "two")]);
+        let size = std::fs::metadata(&file).unwrap().len();
+        let journal = journal_for(&file, size + 100, PAUSED);
+        write_journal(&rig.s.app_dir, &journal).unwrap();
+        let resumed = control(&rig, "mbox_upload_resume", &journal.job_id).await;
+        assert_eq!(resumed["restarted"], json!(true));
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(the_run(&rig, &journal.job_id).read_from.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(counts_of(&last), (json!(2), json!(0), json!(0)), "counted from nothing");
+    }
+
+    /// M5: a journal this build cannot read (empty, torn) is listed as
+    /// damaged with no counts, is never resumed, and a discard removes it
+    /// and tells the app once.
+    #[tokio::test]
+    async fn a_damaged_journal_is_listed_and_a_discard_removes_it() {
+        let mut rig = setup(gmail(), fast());
+        let dir = journal_dir(&rig.s.app_dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (empty, torn) = (uuid::Uuid::new_v4().to_string(), uuid::Uuid::new_v4().to_string());
+        std::fs::write(dir.join(format!("{empty}.json")), b"").unwrap();
+        std::fs::write(dir.join(format!("{torn}.json")), br#"{"version":1,"jobId":"#).unwrap();
+
+        for id in [&empty, &torn] {
+            let listed = status_of(&rig, id).await;
+            assert_eq!((listed["state"].clone(), listed["live"].clone(), listed["active"].clone()), (json!(DAMAGED), json!(false), json!(false)), "{id}");
+            assert!(listed.get("uploadedCount").is_none(), "no counts to tell: {listed}");
+            assert_eq!(refused(call(&rig.s, "mbox_upload_resume", json!({"jobId": id})).await), format!("{E_MBOX_UPLOAD_NOT_FOUND}: {id}"));
+        }
+        assert!(list_journals(&rig.s.app_dir).is_empty(), "never among the resumable");
+
+        drain(&mut rig.rx);
+        assert_eq!(control(&rig, "mbox_upload_discard", &empty).await, json!({"jobId": empty, "discarded": true}));
+        assert!(!dir.join(format!("{empty}.json")).exists());
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let told: Vec<Value> = drain(&mut rig.rx).into_iter().filter(|e| e["jobId"] == json!(empty)).collect();
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert_eq!((told[0]["state"].clone(), told[0]["active"].clone(), told[0]["mode"].clone()), (json!(DISCARDED), json!(false), json!("server")));
+        assert_eq!(status_of(&rig, &empty).await, Value::Null);
+        assert_eq!(status_of(&rig, &torn).await["state"], json!(DAMAGED));
+    }
+
+    /// Addendum: a run that stopped on its file keeps why in its journal, and
+    /// the status says it (`error`) after a restart; a resume clears it.
+    #[tokio::test]
+    async fn a_run_that_stopped_on_its_file_says_why_in_the_status() {
+        let mut rig = setup(slow_appends(300), fast());
+        let file = mbox(&rig, &[msg("a@x", "one")]);
+        let mut journal = journal_for(&file, 0, PAUSED);
+        journal.error = Some(format!("{E_MBOX_UPLOAD_READ}: Input/output error (os error 5)"));
+        write_journal(&rig.s.app_dir, &journal).unwrap();
+        let listed = status_of(&rig, &journal.job_id).await;
+        assert_eq!((listed["state"].clone(), listed["error"].clone()), (json!(PAUSED), json!(journal.error.clone().unwrap())));
+
+        let mut ended = journal_for(&file, 0, CANCELLED);
+        ended.job_id = uuid::Uuid::new_v4().to_string();
+        ended.account_id = "acct2".into();
+        write_journal(&rig.s.app_dir, &ended).unwrap();
+        assert!(status_of(&rig, &ended.job_id).await.get("error").is_none(), "only when known");
+
+        control(&rig, "mbox_upload_resume", &journal.job_id).await;
+        let running = next(&mut rig.rx, |e| e["jobId"] == json!(journal.job_id)).await;
+        assert!(running.get("error").is_none());
+        assert_eq!(read_journal(&rig.s.app_dir, &journal.job_id).map(|j| j.error), Some(None), "cleared on resume");
+        until_done(&mut rig.rx).await;
+    }
+
+    /// M2: a cancel after mail went up still refreshes what changed: the
+    /// folder is synced (a change record, 0 new) and the index gets a pass.
+    #[tokio::test]
+    async fn a_cancel_after_uploads_still_refreshes_what_changed() {
+        let mut rig = setup(slow_appends(120), fast());
+        let (tx, index) = std::sync::mpsc::channel();
+        *rig.s.search_index.signals.lock().unwrap() = Some(tx);
+        let messages: Vec<Vec<u8>> = (1..=4).map(|i| msg(&format!("r{i}@x"), &format!("r{i}"))).collect();
+        let file = mbox(&rig, &messages);
+        let job = start(&rig, &file, false).await;
+        wait_until_uploaded(&rig, &job, 1).await;
+        control(&rig, "mbox_upload_cancel", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(last["state"], json!(CANCELLED));
+        assert!(last["uploadedCount"].as_u64().unwrap() > 0);
+        let (_, changes) = rig.s.sync_engine.wait_changes(0, 0).await;
+        assert!(changes.iter().any(|c| c.mailbox == "INBOX" && c.new_emails == 0), "{changes:?}");
+        assert!(index.try_iter().any(|s| s == mailvault_core::search_index::plan::Signal::Sweep));
+        assert_eq!(journal_of(&rig, &job).state, CANCELLED, "and the journal stays resumable");
+    }
+
+    /// M8: while the job ends (its refresh signing in, held up here), every
+    /// control answers false, and the job ends done as it said.
+    #[tokio::test]
+    async fn a_control_during_the_final_refresh_answers_false() {
+        let slow_sign_in = Action::Delay(Duration::from_millis(800));
+        let mut rig = setup(gmail().fault(Trigger::nth("LOGIN", 2), slow_sign_in), fast());
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "two")]);
+        let job = start(&rig, &file, false).await;
+        let server = &rig.server;
+        wait_for("the refresh signing in", || server.count_commands("LOGIN") >= 2).await;
+        assert_eq!(control(&rig, "mbox_upload_pause", &job).await["paused"], json!(false));
+        assert_eq!(control(&rig, "mbox_upload_cancel", &job).await["cancelled"], json!(false));
+        assert_eq!(control(&rig, "mbox_upload_resume", &job).await["resumed"], json!(false));
+        assert_eq!(control(&rig, "mbox_upload_discard", &job).await["discarded"], json!(false));
+        let last = next(&mut rig.rx, |e| e["active"] == json!(false)).await;
+        assert_eq!((last["state"].clone(), last["uploadedCount"].clone()), (json!(DONE), json!(2)));
+        assert!(read_journal(&rig.s.app_dir, &job).is_none());
+    }
+
+    /// M1: a panic in the pipeline's call costs that message (failed), and
+    /// the job goes on with a new pipeline.
+    #[tokio::test]
+    async fn a_panic_in_the_pipeline_costs_one_message() {
+        let mut rig = setup(gmail(), Tuning { panic_in_upload: Some("boom-me"), ..fast() });
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "boom-me"), msg("c@x", "three")]);
+        start(&rig, &file, false).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!((last["state"].clone(), counts_of(&last)), (json!(DONE), (json!(2), json!(0), json!(1))));
+        assert_eq!(subjects(&rig.server, "INBOX")[4..], ["one", "three"]);
+    }
+
+    /// M1: a worker that dies outside the pipeline's call (a panic) still
+    /// tells the app: a last event, paused and inactive, not a row stuck on
+    /// "running". The journal stays resumable, and a resume finishes.
+    #[tokio::test]
+    async fn a_worker_that_dies_leaves_a_last_paused_event() {
+        let mut rig = setup(gmail(), Tuning { panic_in_worker: Some("die-here"), ..fast() });
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "die-here"), msg("c@x", "three")]);
+        let job = start(&rig, &file, false).await;
+        let last = next(&mut rig.rx, |e| e["active"] == json!(false)).await;
+        assert_eq!((last["state"].clone(), last["paused"].clone(), last["uploadedCount"].clone()), (json!(PAUSED), json!(true), json!(1)));
+        let listed = status_of(&rig, &job).await;
+        assert_eq!((listed["live"].clone(), listed["state"].clone()), (json!(false), json!(PAUSED)));
+
+        *lock(&rig.s.mbox_uploads.tuning) = Some(fast());
+        control(&rig, "mbox_upload_resume", &job).await;
+        let done = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(counts_of(&done), (json!(3), json!(0), json!(0)));
+        assert_eq!(rig.server.count_commands("APPEND"), 3);
+    }
+
+    /// F1b: the refresh at the end takes each synced folder's import rehome
+    /// stamp away and runs the pass there and then, so a file imported
+    /// locally and restored lists each message once (FixB's rule decides
+    /// what the pass moves; here: that it ran, and the old stamp is gone).
+    #[tokio::test]
+    async fn the_refresh_runs_the_import_rehome_pass_again_for_each_synced_folder() {
+        let mut rig = setup(gmail(), fast());
+        let dir = mailvault_core::vault_files::cur_path(rig._vault.path(), "acct1", "INBOX").parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(&dir).unwrap();
+        let stamp = dir.join(mailvault_core::import_rehome::DONE_FILE);
+        std::fs::write(&stamp, b"from an earlier pass").unwrap();
+        let file = mbox(&rig, &[msg("a@x", "one"), msg("b@x", "two")]);
+        let job = start(&rig, &file, false).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(last["state"], json!(DONE));
+        assert_eq!(*lock(&the_run(&rig, &job).rehomed), ["INBOX"]);
+        assert_ne!(std::fs::read(&stamp).ok().as_deref(), Some(&b"from an earlier pass"[..]), "the old stamp went (a pass that ran writes a new, empty one)");
     }
 }
 

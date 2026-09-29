@@ -640,6 +640,7 @@ async fn daemon_main() {
     let pool_cleanup = Arc::clone(&state.imap_pool);
     let idle_cleanup = Arc::clone(&state.idle);
     let shutdown_cleanup = Arc::clone(&state.shutdown);
+    let uploads_cleanup = Arc::clone(&state);
     tokio::spawn(async move {
         let ctrl_c = tokio::signal::ctrl_c();
 
@@ -671,10 +672,16 @@ async fn daemon_main() {
         // holding them open until their idle timeout. Bounded — a hung server
         // must not stop us from exiting, and the app that spawned us only waits
         // DAEMON_STOP_GRACE (3s) before escalating to SIGKILL, so stay under it.
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            pool_cleanup.shutdown(),
-        ).await;
+        // Alongside it, every mbox upload holds at its next message boundary
+        // and checkpoints (1.2s at most, all jobs at once): killed mid-message,
+        // one without a Message-ID would go up again on resume.
+        let uploads = tokio::task::spawn_blocking(move || {
+            mbox_upload_job::pause_all_and_wait(&uploads_cleanup, std::time::Duration::from_millis(1200))
+        });
+        let _ = tokio::join!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), pool_cleanup.shutdown()),
+            uploads,
+        );
 
         mailvault_core::transfer_stats::global().flush(&data_dir_cleanup, "daemon");
         cleanup_pid_file(&data_dir_cleanup);

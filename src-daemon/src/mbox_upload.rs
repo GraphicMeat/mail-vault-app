@@ -32,9 +32,12 @@
 //! an APPEND is never sent twice.
 //!
 //! The pipeline never waits or retries beyond that: a failure is `Transient`
-//! (throttling, a lost or silent connection: the job backs off and tries the
-//! message again), `Permanent` (the server refused this message) or `SignIn`
-//! (the server refused the account: the job stops for it). Only the
+//! (a lost or silent connection: the job backs off and tries the message
+//! again, a bounded number of times), `Busy` (the account is throttled or
+//! over a limit: the job waits it out on the same message), `Permanent` (the
+//! server refused this message), `Refused` (a refusal whose code is about
+//! the account's writes: the job holds once several messages in a row meet
+//! it) or `SignIn` (the server refused the account: the job stops for it). Only the
 //! server's or the socket's own words are classified, never the folder name
 //! an error carries: that name is a label, and the file chose it.
 
@@ -72,11 +75,19 @@ const CACHE_CHUNK: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailKind {
-    /// Throttling, a busy server, a lost or silent connection: worth another
-    /// try once the caller has waited.
+    /// This try of this message went wrong on the way (a lost or silent
+    /// connection): worth another try once the caller has waited.
     Transient,
+    /// The server or the account is throttled or over a limit (Gmail's
+    /// bandwidth cap, `[THROTTLED]`, `[UNAVAILABLE]`, "Too many simultaneous
+    /// connections"): waiting helps, and it is no message's fault.
+    Busy,
     /// The server refused this message.
     Permanent,
+    /// The server refused it with a code that is about the account's writes,
+    /// not the message (RFC 5530 `OVERQUOTA`, `NOPERM`, RFC 3501 `READ-ONLY`
+    /// ...): the code, as the job compares it across messages.
+    Refused(&'static str),
     /// The server refused the sign-in: the account, not this message. Every
     /// later message fails the same way until the credentials change, so the
     /// job stops for them rather than counting each one.
@@ -677,11 +688,8 @@ fn needs_create(cause: &str) -> bool {
 /// is this message, or this account (a rejected sign-in), refused. Read on a
 /// `Fail::cause`; a reply the server did send is never a lost connection.
 fn classify(cause: &str) -> FailKind {
-    const BUSY: [&str; 10] =
-        ["[throttled]", "[unavailable]", "[inuse]", "[limit]", "too many", "rate limit", "bandwidth", "try again", "temporar", "timed out"];
-    let low = cause.to_ascii_lowercase();
     let answered = is_tagged_no(cause) || cause.starts_with("bad response:");
-    let busy = imap::is_bandwidth_limited(cause) || BUSY.iter().any(|n| low.contains(n));
+    let busy = throttled(cause) || cause.to_ascii_lowercase().contains("timed out");
     if busy || (!answered && pool::is_retryable_connect_error(cause)) {
         FailKind::Transient
     } else {
@@ -689,12 +697,45 @@ fn classify(cause: &str) -> FailKind {
     }
 }
 
-/// `classify`, with a refused sign-in told apart from a refused message (the
-/// hoarder's words for one). A sign-in turned away because the server is busy
-/// ("Too many simultaneous connections") stays `Transient`.
+/// The server or the account is throttled or over a limit, whatever the
+/// message: Gmail's bandwidth cap and `[THROTTLED]`, a busy or unavailable
+/// server, too many connections. A timeout is not in it: that can be this
+/// one message's size on a slow link.
+fn throttled(cause: &str) -> bool {
+    const THROTTLE: [&str; 9] = ["[throttled]", "[unavailable]", "[inuse]", "[limit]", "too many", "rate limit", "bandwidth", "try again", "temporar"];
+    let low = cause.to_ascii_lowercase();
+    imap::is_bandwidth_limited(cause) || THROTTLE.iter().any(|n| low.contains(n))
+}
+
+/// Refusal codes about the account's writes, not the message (RFC 5530, and
+/// RFC 3501's `READ-ONLY`, which the parser reads into its `ReadOnly` code):
+/// every later APPEND meets the same answer until someone acts on the account.
+const ACCOUNT_CODES: [(&str, &str); 7] = [
+    ("[overquota]", "OVERQUOTA"),
+    ("[noperm]", "NOPERM"),
+    ("[read-only]", "READ-ONLY"),
+    ("readonly", "READ-ONLY"),
+    ("[contactadmin]", "CONTACTADMIN"),
+    ("[expired]", "EXPIRED"),
+    ("[authorizationfailed]", "AUTHORIZATIONFAILED"),
+];
+
+fn account_code(cause: &str) -> Option<&'static str> {
+    let low = cause.to_ascii_lowercase();
+    ACCOUNT_CODES.iter().find(|(needle, _)| low.contains(needle)).map(|(_, code)| *code)
+}
+
+/// `classify`, split finer for the job: a refused sign-in (the hoarder's
+/// words for one) and a refusal with an account-level code apart from a
+/// refused message, and a throttled account (`Busy`) apart from a try that
+/// went wrong on the way. A sign-in turned away because the server is busy
+/// ("Too many simultaneous connections") is `Busy`. Read on a `Fail::cause`,
+/// so a folder named like any of these sways nothing.
 fn kind_of(cause: &str) -> FailKind {
     match classify(cause) {
         FailKind::Permanent if crate::hoarder_worker::is_sign_in_failure(cause) => FailKind::SignIn,
+        FailKind::Permanent => account_code(cause).map_or(FailKind::Permanent, FailKind::Refused),
+        FailKind::Transient if throttled(cause) => FailKind::Busy,
         kind => kind,
     }
 }
@@ -1085,14 +1126,14 @@ mod tests {
     /// fault only rewrites the reply, the mock's APPEND still ran; what the
     /// pipeline knows is the refusal, so it files no copy.
     #[tokio::test]
-    async fn a_throttled_append_is_transient_and_keeps_the_connection() {
+    async fn a_throttled_append_is_busy_and_keeps_the_connection() {
         let throttled = Action::Respond("NO".into(), "[THROTTLED] Too many commands, slow down".into());
         let server = MockImap::start(gmail().fault(Trigger::with("APPEND", "throttle-me"), throttled));
         let (v, s) = state();
         let mut up = upload(&s, &server);
 
         let got = up.upload_message(&tmsg("a@x", "throttle-me", "Inbox")).await;
-        assert!(matches!(&got, Outcome::Failed(FailKind::Transient, e) if e.contains("THROTTLED")), "{got:?}");
+        assert!(matches!(&got, Outcome::Failed(FailKind::Busy, e) if e.contains("THROTTLED")), "{got:?}");
         assert_eq!(subjects(&server, "INBOX").last().unwrap(), "throttle-me", "the mock's APPEND ran");
         assert!(names_in(v.path(), "INBOX").is_empty());
         assert_eq!(up.upload_message(&tmsg("b@x", "next", "Inbox")).await, uploaded("INBOX", 6));
@@ -1529,8 +1570,8 @@ mod tests {
     // ---- Task 10: what the job needs from the pipeline ----
 
     /// A refused sign-in is the account's, not the message's: its own kind.
-    /// Turned away because the server is busy, it stays worth a retry; a
-    /// refused message stays `Permanent`.
+    /// Turned away because the server is busy, it is `Busy`; a refused
+    /// message stays `Permanent`.
     #[test]
     fn a_refused_sign_in_is_its_own_kind_and_a_busy_one_is_not() {
         for cause in [
@@ -1542,9 +1583,41 @@ mod tests {
             assert_eq!(kind_of(cause), FailKind::SignIn, "{cause}");
         }
         let busy = r#"Login failed for u@gmail.com: no response: code: None, info: Some("[ALERT] Too many simultaneous connections. (Failure)")"#;
-        assert_eq!(kind_of(busy), FailKind::Transient);
+        assert_eq!(kind_of(busy), FailKind::Busy);
         assert_eq!(kind_of(&no("[CANNOT] Message too large")), FailKind::Permanent);
         assert_eq!(kind_of("connection lost"), FailKind::Transient);
+    }
+
+    /// FixA I1: the account being throttled or over a limit is `Busy` (the
+    /// job waits it out, spending no try); a lost connection or a stall on
+    /// this one message stays `Transient` (bounded tries); a refusal whose
+    /// code is about the account is `Refused(code)`; any other refusal stays
+    /// `Permanent`. A folder named like any of them sways nothing.
+    #[test]
+    fn the_account_being_throttled_or_refused_is_told_apart_from_one_message() {
+        for cause in [
+            no("[THROTTLED] Too many commands"),
+            no("[UNAVAILABLE] Temporary System Problem. Try again later"),
+            no("[ALERT] Account exceeded command or bandwidth limits. (Failure)"),
+            r#"Login failed for u@gmail.com: no response: code: None, info: Some("[ALERT] Account exceeded command or bandwidth limits. (Failure)")"#.to_string(),
+            no("Rate limit exceeded"),
+        ] {
+            assert_eq!(kind_of(&cause), FailKind::Busy, "{cause}");
+        }
+        for cause in ["connection lost", "io: connection lost: no reply from the server for 180s", "APPEND timed out after 120s"] {
+            assert_eq!(kind_of(cause), FailKind::Transient, "{cause}");
+        }
+        assert_eq!(kind_of(&no("[OVERQUOTA] Quota exceeded")), FailKind::Refused("OVERQUOTA"));
+        assert_eq!(kind_of(&no("[NOPERM] Access denied")), FailKind::Refused("NOPERM"));
+        assert_eq!(kind_of(r#"no response: code: Some(ReadOnly), info: Some("Mailbox is read-only")"#), FailKind::Refused("READ-ONLY"));
+        assert_eq!(kind_of(&no("[READ-ONLY] Mailbox is read-only")), FailKind::Refused("READ-ONLY"));
+        assert_eq!(kind_of(&no("[CANNOT] Message too large")), FailKind::Permanent);
+        for folder in ["[OVERQUOTA]", "[NOPERM]", "Bandwidth", "Too many"] {
+            let refused = append_fail(folder, &no("[CANNOT] Message too large"));
+            assert_eq!(kind_of(&refused.cause), FailKind::Permanent, "{}", refused.error);
+            let lost = append_fail(folder, "connection lost");
+            assert_eq!(kind_of(&lost.cause), FailKind::Transient, "{}", lost.error);
+        }
     }
 
     /// The server turns the sign-in away: the outcome says so, and no APPEND
