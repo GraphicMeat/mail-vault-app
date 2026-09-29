@@ -32,6 +32,7 @@ mod ipc;
 mod learning;
 mod mbox;
 mod mbox_upload;
+mod mbox_upload_job;
 mod migration;
 mod netgate;
 mod raw_message;
@@ -496,6 +497,7 @@ async fn daemon_main() {
         hoarder_worker: hoarder_worker::HoarderWorkerState::default(),
         raw_messages: raw_message::RawMessages::default(),
         import_rehome_running: Default::default(),
+        mbox_uploads: Default::default(),
         net_log,
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.

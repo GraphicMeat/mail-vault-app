@@ -201,6 +201,9 @@ pub struct DaemonState {
     /// Folders whose old-import pass (`handlers::custody::rehome_imports_soon`)
     /// is running, so a folder opened twice runs it once.
     pub(crate) import_rehome_running: std::sync::Mutex<std::collections::HashSet<(String, String)>>,
+    /// The mbox-to-server upload job of each account (`mbox_upload_job`):
+    /// running, or held in place until a resume.
+    pub(crate) mbox_uploads: crate::mbox_upload_job::Uploads,
     /// Network Activity's kept events in `app.db`: the listener in main.rs
     /// feeds its writer, `handlers::net_activity` reads it.
     pub net_log: Arc<mailvault_core::net_log::NetLog>,
@@ -817,6 +820,7 @@ impl DaemonState {
             hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),
             raw_messages: Default::default(),
             import_rehome_running: Default::default(),
+            mbox_uploads: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
         });
         state.idle.set_daemon(&state);

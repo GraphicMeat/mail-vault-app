@@ -31,12 +31,10 @@
 //!
 //! The pipeline never waits or retries beyond that: a failure is `Transient`
 //! (throttling, a lost or silent connection: the job backs off and tries the
-//! message again) or `Permanent` (the server refused this message). Only the
+//! message again), `Permanent` (the server refused this message) or `SignIn`
+//! (the server refused the account: the job stops for it). Only the
 //! server's or the socket's own words are classified, never the folder name
 //! an error carries: that name is a label, and the file chose it.
-
-// The upload job (Task 10) is its caller.
-#![cfg_attr(not(test), allow(dead_code))]
 
 use crate::handlers::common::{self, blocking};
 use crate::imap::{self, pool, ImapConfig, ImapSession};
@@ -75,8 +73,12 @@ pub enum FailKind {
     /// Throttling, a busy server, a lost or silent connection: worth another
     /// try once the caller has waited.
     Transient,
-    /// The server refused this message, or the account (a rejected sign-in).
+    /// The server refused this message.
     Permanent,
+    /// The server refused the sign-in: the account, not this message. Every
+    /// later message fails the same way until the credentials change, so the
+    /// job stops for them rather than counting each one.
+    SignIn,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,10 +206,17 @@ impl MboxUpload {
         })
     }
 
-    /// Every folder a message went into this run (one made for it included):
-    /// what the header cache no longer matches.
+    /// Every folder an APPEND went out to this run (one made for it
+    /// included), whether or not it was answered: what the header cache may
+    /// no longer match.
     pub fn touched(&self) -> &BTreeSet<String> {
         &self.touched
+    }
+
+    /// Close the connection, so a paused job holds no slot of the account's
+    /// budget; the next message makes a new one.
+    pub fn disconnect(&mut self) {
+        self.conn = None;
     }
 
     /// Folders this run made on the server (or found already there when it
@@ -235,7 +244,7 @@ impl MboxUpload {
                 if !is_tagged_no(&f.cause) {
                     self.conn = None;
                 }
-                let kind = classify(&f.cause);
+                let kind = kind_of(&f.cause);
                 warn!("[mbox_upload] {}: not uploaded ({kind:?}): {}", self.config.email, f.error);
                 Outcome::Failed(kind, f.error)
             }
@@ -261,8 +270,9 @@ impl MboxUpload {
         if self.on_server(&path, &head).await? {
             return Ok(Outcome::Skipped { mailbox: path });
         }
-        let uid = self.append(&path, msg, &labels, &head).await?;
+        // Before the APPEND: one whose answer never came may still have landed.
         self.touched.insert(path.clone());
+        let uid = self.append(&path, msg, &labels, &head).await?;
         if let (Some(f), Some(fp)) = (self.boxes.get_mut(&path), fingerprint(&head)) {
             f.uploaded.insert(fp);
         }
@@ -609,6 +619,16 @@ fn classify(cause: &str) -> FailKind {
         FailKind::Transient
     } else {
         FailKind::Permanent
+    }
+}
+
+/// `classify`, with a refused sign-in told apart from a refused message (the
+/// hoarder's words for one). A sign-in turned away because the server is busy
+/// ("Too many simultaneous connections") stays `Transient`.
+fn kind_of(cause: &str) -> FailKind {
+    match classify(cause) {
+        FailKind::Permanent if crate::hoarder_worker::is_sign_in_failure(cause) => FailKind::SignIn,
+        kind => kind,
     }
 }
 
@@ -1437,5 +1457,63 @@ mod tests {
         assert!(!needs_create(&append_fail("Work", "connection lost").cause));
         assert!(!needs_create(&append_fail("Work", "io: Mailbox does not exist").cause), "only a tagged NO says so");
         assert!(!needs_create(&append_fail("Work", &no("[CANNOT] Message too large")).cause));
+    }
+
+    // ---- Task 10: what the job needs from the pipeline ----
+
+    /// A refused sign-in is the account's, not the message's: its own kind.
+    /// Turned away because the server is busy, it stays worth a retry; a
+    /// refused message stays `Permanent`.
+    #[test]
+    fn a_refused_sign_in_is_its_own_kind_and_a_busy_one_is_not() {
+        for cause in [
+            r#"Login failed for u@example.com: no response: code: None, info: Some("[AUTHENTICATIONFAILED] Invalid credentials")"#,
+            r#"XOAUTH2 auth failed for u@gmail.com: no response: code: None, info: Some("Invalid credentials (Failure)")"#,
+            "OAuth2 access token missing",
+            "Password missing",
+        ] {
+            assert_eq!(kind_of(cause), FailKind::SignIn, "{cause}");
+        }
+        let busy = r#"Login failed for u@gmail.com: no response: code: None, info: Some("[ALERT] Too many simultaneous connections. (Failure)")"#;
+        assert_eq!(kind_of(busy), FailKind::Transient);
+        assert_eq!(kind_of(&no("[CANNOT] Message too large")), FailKind::Permanent);
+        assert_eq!(kind_of("connection lost"), FailKind::Transient);
+    }
+
+    /// The server turns the sign-in away: the outcome says so, and no APPEND
+    /// is sent.
+    #[tokio::test]
+    async fn a_refused_sign_in_is_reported_as_one() {
+        let mut scenario = gmail();
+        scenario.state.expect_login = Some(("user@example.com".into(), "another password".into()));
+        let server = MockImap::start(scenario);
+        let (_v, s) = state();
+        let got = upload(&s, &server).upload_message(&tmsg("a@x", "one", "Inbox")).await;
+        assert!(matches!(&got, Outcome::Failed(FailKind::SignIn, e) if e.contains("Login failed")), "{got:?}");
+        assert_eq!(server.count_commands("APPEND"), 0);
+    }
+
+    /// An APPEND whose answer never came may have landed: its folder is
+    /// touched, so the job's refresh at the end covers it (carry-in 2).
+    #[tokio::test]
+    async fn a_folder_an_append_went_out_to_is_touched_even_when_its_answer_never_came() {
+        let server = MockImap::start(gmail().fault(Trigger::with("APPEND", "drop-me"), Action::DropConnection));
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        let got = up.upload_message(&tmsg("a@x", "drop-me", "Work")).await;
+        assert!(matches!(got, Outcome::Failed(FailKind::Transient, _)), "{got:?}");
+        assert_eq!(up.touched().iter().collect::<Vec<_>>(), ["Work"]);
+    }
+
+    /// A paused job lets its connection go; the next message makes a new one.
+    #[tokio::test]
+    async fn a_disconnected_pipeline_reconnects_for_the_next_message() {
+        let server = MockImap::start(gmail());
+        let (_v, s) = state();
+        let mut up = upload(&s, &server);
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox")).await, uploaded("INBOX", 5));
+        up.disconnect();
+        assert_eq!(up.upload_message(&tmsg("b@x", "two", "Inbox")).await, uploaded("INBOX", 6));
+        assert_eq!(server.connection_count(), 2);
     }
 }

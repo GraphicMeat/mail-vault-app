@@ -11,18 +11,30 @@
 //! options dialog; `import_mbox` takes its `mode`, `useLabels` and
 //! `fallbackMailbox`. `list_local_folders` and `delete_local_folder` read and
 //! remove the vault-only folders `mode: "folder"` makes.
+//!
+//! `mode: "server"` starts the upload job (`mbox_upload_job`) and answers at
+//! once with `{jobId, started: true}`; the job reports through
+//! `mbox-import-progress`. `mbox_upload_status`, `_pause`, `_resume`,
+//! `_cancel` and `_discard` follow and steer it.
 
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::mbox;
+use crate::mbox_upload_job;
 use crate::server::DaemonState;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// The answer to an import mode whose backend has not landed yet; the app
-/// shows `errors.E_MBOX_MODE_UNAVAILABLE` for it.
-const E_MBOX_MODE_UNAVAILABLE: &str = "E_MBOX_MODE_UNAVAILABLE";
+/// A job id names journal files: only a plain one gets through.
+fn job_id_arg(id: &Value, params: &Value) -> Result<String, RpcResponse> {
+    let job_id = str_arg(id, params, "jobId")?;
+    if mbox_upload_job::is_job_id(&job_id) {
+        Ok(job_id)
+    } else {
+        Err(RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Invalid jobId"))
+    }
+}
 
 macro_rules! req {
     ($result:expr) => {
@@ -65,21 +77,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             // `mode`: "local" (the default) files into the account's vault
             // folders; "folder" into a new vault-only folder, and nothing
-            // below it applies; "server" lands in a later task (R1).
-            let as_folder = match params.get("mode").filter(|m| !m.is_null()).map_or(Some("local"), Value::as_str) {
-                Some("local") => false,
-                Some("folder") => true,
-                Some(m @ "server") => {
-                    let msg = format!("{E_MBOX_MODE_UNAVAILABLE}: import mode {m} is not available yet");
-                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, msg));
-                }
+            // below it applies; "server" uploads to the account's server as
+            // a job of its own and answers at once.
+            let mode = match params.get("mode").filter(|m| !m.is_null()).map_or(Some("local"), Value::as_str) {
+                Some(m @ ("local" | "folder" | "server")) => m,
                 _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Unknown mode {}", params["mode"]))),
             };
+            let as_folder = mode == "folder";
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let use_labels = params.get("useLabels").and_then(Value::as_bool).unwrap_or(false);
             // With labels, what has no folder of its own goes to
             // `fallbackMailbox`, else to `mailbox`.
             let mailbox = if use_labels { opt_str_arg(params, "fallbackMailbox").unwrap_or(mailbox) } else { mailbox };
+
+            if mode == "server" {
+                if !mailvault_core::vault_files::is_plain_account_id(&account_id) {
+                    return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Invalid accountId: {account_id:?}")));
+                }
+                let request = mbox_upload_job::Request { source_path: PathBuf::from(&source_path), account_id, fallback: mailbox, use_labels };
+                return Some(done(id, mbox_upload_job::start(state, request).await));
+            }
 
             let state = Arc::clone(state);
             let result: Result<Value, String> = blocking(move || -> Result<Value, String> {
@@ -123,6 +140,27 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             let name = req!(str_arg(&id, params, "name"));
             done(id, mbox::delete_local_folder(state, &account_id, &name).await)
+        }
+        "mbox_upload_status" => {
+            let state = Arc::clone(state);
+            done(id, blocking(move || Ok(mbox_upload_job::status(&state))).await.and_then(|r| r))
+        }
+        "mbox_upload_pause" | "mbox_upload_cancel" | "mbox_upload_discard" => {
+            let job_id = req!(job_id_arg(&id, params));
+            let steer: fn(&DaemonState, &str) -> Result<Value, String> = match method {
+                "mbox_upload_pause" => mbox_upload_job::pause,
+                "mbox_upload_cancel" => mbox_upload_job::cancel,
+                _ => mbox_upload_job::discard,
+            };
+            let state = Arc::clone(state);
+            done(id, blocking(move || steer(&*state, &job_id)).await.and_then(|r| r))
+        }
+        "mbox_upload_resume" => {
+            let job_id = req!(job_id_arg(&id, params));
+            // Optional: the file as the app picked it again. Without it the
+            // journal's own path is read.
+            let source_path = opt_str_arg(params, "sourcePath").map(PathBuf::from);
+            done(id, mbox_upload_job::resume(state, job_id, source_path).await)
         }
         _ => return None,
     })
@@ -309,22 +347,83 @@ mod tests {
         assert_eq!(count_in(v.path(), "INBOX"), 1);
     }
 
-    /// R1: modes whose backends land later answer with a code the app maps to
-    /// a catalog key, before touching the file or the vault. "folder" landed
-    /// with Task 5 and is tested below.
+    /// R1's placeholder is gone: every mode is built. "server" no longer
+    /// answers `E_MBOX_MODE_UNAVAILABLE`; with no credentials to read it
+    /// answers its own sign-in code before touching the file or the vault,
+    /// and "local" and "folder" import as before.
     #[tokio::test]
-    async fn modes_not_built_yet_answer_with_their_code_and_write_nothing() {
+    async fn every_mode_is_built_and_server_no_longer_answers_unavailable() {
         let (v, _a, s) = st(true);
         let dir = tempfile::tempdir().unwrap();
         let src = takeout(dir.path(), &["Work"]);
-        for mode in ["server"] {
-            let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": mode})).await;
-            let err = resp.error.unwrap_or_else(|| panic!("mode {mode} must be refused"));
-            assert!(err.message.starts_with("E_MBOX_MODE_UNAVAILABLE:"), "{}", err.message);
-        }
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": "server"})).await;
+        let err = resp.error.expect("no credentials in this state").message;
+        assert!(!err.starts_with("E_MBOX_MODE_UNAVAILABLE"), "{err}");
+        assert!(err.starts_with("E_MBOX_UPLOAD_SIGN_IN:"), "{err}");
         assert!(!mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1").exists(), "nothing was imported");
+        assert_eq!(call(&s, "mbox_upload_status", json!({})).await.result.expect("status"), json!({"jobs": []}), "no job either");
+
         let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": "local"})).await;
         assert_eq!(resp.result.expect("local is today's import")["emailCount"], json!(1));
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mode": "folder"})).await;
+        assert_eq!(resp.result.expect("folder imports into a folder of its own")["emailCount"], json!(1));
+    }
+
+    // -- mode "server": the upload job's routes -----------------------------
+
+    fn imap_account(s: &Arc<DaemonState>, extra: Value) {
+        let mut config = json!({"email": "user@example.com", "password": "hunter2", "imapHost": "127.0.0.1", "imapPort": 1});
+        config.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), serde_json::from_value(config).unwrap());
+    }
+
+    /// D4: an Outlook (Graph) account is refused with its code, and no job or
+    /// journal is left behind.
+    #[tokio::test]
+    async fn a_server_upload_for_an_outlook_account_is_refused_with_its_code() {
+        let (_v, a, s) = st(true);
+        imap_account(&s, json!({"imapHost": "outlook.office365.com", "oauth2Transport": "graph"}));
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work"]);
+        let err = err_of(call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mode": "server"})).await);
+        assert!(err.starts_with("E_MBOX_SERVER_GRAPH:"), "{err}");
+        assert_eq!(call(&s, "mbox_upload_status", json!({})).await.result.expect("status"), json!({"jobs": []}));
+        assert!(!a.path().join("mbox_uploads").exists(), "no journal");
+    }
+
+    /// A file that will not open, and an account id that is not one plain
+    /// name, are refused before any job starts.
+    #[tokio::test]
+    async fn a_server_upload_wants_a_readable_file_and_a_plain_account_id() {
+        let (_v, _a, s) = st(true);
+        imap_account(&s, json!({}));
+        let err = err_of(call(&s, "import_mbox", json!({"sourcePath": "/nonexistent-xyz.mbox", "accountId": "acct1", "mode": "server"})).await);
+        assert!(err.starts_with("Failed to read mbox file"), "{err}");
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work"]);
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "../acct1", "mode": "server"})).await;
+        assert_eq!(resp.error.expect("refused").code, ipc::INVALID_PARAMS);
+        assert_eq!(call(&s, "mbox_upload_status", json!({})).await.result.expect("status"), json!({"jobs": []}));
+    }
+
+    /// The control routes reach this router, want a `jobId` that is one plain
+    /// name (INVALID_PARAMS otherwise, never a path), and answer an id with
+    /// no job and no journal with its code. Status takes no params.
+    #[tokio::test]
+    async fn the_upload_control_routes_want_a_plain_job_id() {
+        let (_v, _a, s) = st(true);
+        for method in ["mbox_upload_pause", "mbox_upload_resume", "mbox_upload_cancel", "mbox_upload_discard"] {
+            let resp = handle_request_for_test(&s, method, json!({})).await;
+            assert_eq!(resp.error.expect("refused").code, ipc::INVALID_PARAMS, "{method} without a jobId");
+            for bad in ["../x", "a/b", "x.json", ""] {
+                let resp = call(&s, method, json!({"jobId": bad})).await;
+                assert_eq!(resp.error.expect("refused").code, ipc::INVALID_PARAMS, "{method} {bad:?}");
+            }
+            let msg = err_of(call(&s, method, json!({"jobId": "3f1e0c1a-0000-4000-8000-000000000000"})).await);
+            assert_eq!(msg, "E_MBOX_UPLOAD_NOT_FOUND: 3f1e0c1a-0000-4000-8000-000000000000", "{method}");
+        }
+        let resp = handle_request_for_test(&s, "mbox_upload_status", json!({})).await;
+        assert_eq!(resp.result.expect("status needs nothing"), json!({"jobs": []}));
     }
 
     #[tokio::test]

@@ -236,19 +236,36 @@ fn mbox_from_line(raw: &[u8]) -> String {
 /// never the file (a 55 GB Google Takeout mbox used to be read whole and
 /// run the machine out of memory). A message starts at a "From " line at
 /// file start or right after a blank line (`\n` or `\r\n`); its trailing
-/// CR/LF is trimmed. `f` gets each message and the bytes read so far, and
-/// returns `false` to stop early.
-fn for_each_mbox_message(mut r: impl BufRead, mut f: impl FnMut(&[u8], u64) -> bool) -> std::io::Result<()> {
+/// CR/LF is trimmed. `f` gets each message and the offset it ends at (where
+/// the next one starts), and returns `false` to stop early.
+fn for_each_mbox_message(r: impl BufRead, mut f: impl FnMut(&[u8], u64) -> bool) -> std::io::Result<()> {
+    for_each_mbox_span(r, 0, |msg, span| f(msg, span.end))
+}
+
+/// Where one message sits in the file: from its `From ` line (`start`) to
+/// the next message's `From ` line, or the end of the file (`end`). A job
+/// that stops after a message goes on reading at its `end`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Span {
+    pub start: u64,
+    pub end: u64,
+}
+
+/// `for_each_mbox_message` with each message's place in the file. `r`
+/// stands at byte `from` of it (a file seeked there), and the first line
+/// read counts as a message boundary: a checkpoint is always one.
+pub(crate) fn for_each_mbox_span(mut r: impl BufRead, from: u64, mut f: impl FnMut(&[u8], Span) -> bool) -> std::io::Result<()> {
     let mut line = Vec::new();
     let mut msg = Vec::new();
-    let mut in_msg = false;
+    // The current message's start, while in one.
+    let mut start: Option<u64> = None;
     let mut prev_blank = true;
-    let mut read: u64 = 0;
-    let mut flush = |msg: &mut Vec<u8>, read: u64| -> bool {
+    let mut pos = from;
+    let mut flush = |msg: &mut Vec<u8>, span: Span| -> bool {
         while matches!(msg.last(), Some(b'\n' | b'\r')) {
             msg.pop();
         }
-        let go_on = msg.is_empty() || f(msg, read);
+        let go_on = msg.is_empty() || f(msg, span);
         msg.clear();
         go_on
     };
@@ -258,22 +275,25 @@ fn for_each_mbox_message(mut r: impl BufRead, mut f: impl FnMut(&[u8], u64) -> b
         if n == 0 {
             break;
         }
-        read += n as u64;
+        let at = pos;
+        pos += n as u64;
         if prev_blank && line.starts_with(b"From ") {
-            if in_msg && !flush(&mut msg, read) {
-                return Ok(());
+            if let Some(begun) = start {
+                if !flush(&mut msg, Span { start: begun, end: at }) {
+                    return Ok(());
+                }
             }
-            in_msg = true;
+            start = Some(at);
             prev_blank = false;
             continue;
         }
         prev_blank = line == b"\n" || line == b"\r\n";
-        if in_msg {
+        if start.is_some() {
             msg.extend_from_slice(&line);
         }
     }
-    if in_msg {
-        flush(&mut msg, read);
+    if let Some(begun) = start {
+        flush(&mut msg, Span { start: begun, end: pos });
     }
     Ok(())
 }
@@ -919,6 +939,90 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         assert_eq!(seen.len(), 2, "must stop after the callback says so");
         assert_eq!(seen[0].0, b"m1");
         assert!(seen[0].1 > 0 && seen[1].1 > seen[0].1 && seen[1].1 <= data.len() as u64);
+    }
+
+    /// `(message, start, end)` for every message read from `from` on.
+    fn spans_from(r: impl BufRead, from: u64) -> Vec<(Vec<u8>, u64, u64)> {
+        let mut out = Vec::new();
+        for_each_mbox_span(r, from, |m, span| {
+            out.push((m.to_vec(), span.start, span.end));
+            true
+        })
+        .unwrap();
+        out
+    }
+
+    fn spans(data: &[u8]) -> Vec<(Vec<u8>, u64, u64)> {
+        spans_from(std::io::Cursor::new(data.to_vec()), 0)
+    }
+
+    fn span(msg: &[u8], start: u64, end: u64) -> (Vec<u8>, u64, u64) {
+        (msg.to_vec(), start, end)
+    }
+
+    /// A message starts at its `From ` line and ends where the next one's
+    /// starts (the end of the file for the last), whatever its line breaks,
+    /// escapes or trailing blank lines. The offsets are counted by hand.
+    #[test]
+    fn each_message_reports_the_exact_bytes_it_spans() {
+        // LF; a `>From ` escape stays in the message; the last one has no line break.
+        // "From a\n"=0..7 "m1\n"=7..10 "\n"=10..11 | "From b\n"=11..18 "x\n"=18..20
+        // ">From y\n"=20..28 "\n"=28..29 | "From c\n"=29..36 "last"=36..40
+        let lf = b"From a\nm1\n\nFrom b\nx\n>From y\n\nFrom c\nlast";
+        assert_eq!(lf.len(), 40);
+        assert_eq!(spans(lf), vec![span(b"m1", 0, 11), span(b"x\n>From y", 11, 29), span(b"last", 29, 40)]);
+
+        // CRLF, a blank line inside the body, a trailing line break.
+        // "From a\r\n"=0..8 "S: 1\r\n"=8..14 "\r\n"=14..16 "body\r\n"=16..22 "\r\n"=22..24
+        // | "From b\r\n"=24..32 "S: 2\r\n"=32..38 "\r\n"=38..40 "b2\r\n"=40..44
+        let crlf = b"From a\r\nS: 1\r\n\r\nbody\r\n\r\nFrom b\r\nS: 2\r\n\r\nb2\r\n";
+        assert_eq!(crlf.len(), 44);
+        assert_eq!(spans(crlf), vec![span(b"S: 1\r\n\r\nbody", 0, 24), span(b"S: 2\r\n\r\nb2", 24, 44)]);
+
+        // A `From ` line with no blank line before it is body, and junk before
+        // the first envelope belongs to no message.
+        // "junk\n"=0..5 "\n"=5..6 | "From a\n"=6..13 "x\n"=13..15
+        // "From not-a-boundary\n"=15..35 "\n"=35..36 | "From b\n"=36..43 "y"=43..44
+        let mid = b"junk\n\nFrom a\nx\nFrom not-a-boundary\n\nFrom b\ny";
+        assert_eq!(mid.len(), 44);
+        assert_eq!(spans(mid), vec![span(b"x\nFrom not-a-boundary", 6, 36), span(b"y", 36, 44)]);
+
+        // The same offsets however the bytes arrive.
+        for step in [1, 2, 3, 7] {
+            assert_eq!(spans_from(trickle(crlf, step, None), 0), spans(crlf), "step {step}");
+            assert_eq!(spans_from(trickle(lf, step, None), 0), spans(lf), "step {step}");
+        }
+    }
+
+    /// Read from a checkpoint (a message's `end`), in a file seeked there: the
+    /// same messages at the same absolute offsets, none before it.
+    #[test]
+    fn reading_from_a_checkpoint_starts_at_that_message_with_its_absolute_offsets() {
+        let lf = b"From a\nm1\n\nFrom b\nx\n>From y\n\nFrom c\nlast";
+        assert_eq!(spans_from(std::io::Cursor::new(lf[11..].to_vec()), 11), vec![span(b"x\n>From y", 11, 29), span(b"last", 29, 40)]);
+        assert_eq!(spans_from(std::io::Cursor::new(lf[29..].to_vec()), 29), vec![span(b"last", 29, 40)]);
+        assert_eq!(spans_from(std::io::Cursor::new(Vec::new()), 40), vec![], "a checkpoint at the end reads nothing");
+
+        use std::io::{Seek, SeekFrom};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("in.mbox");
+        std::fs::write(&path, b"From a\r\nS: 1\r\n\r\nbody\r\n\r\nFrom b\r\nS: 2\r\n\r\nb2\r\n").unwrap();
+        let mut file = std::fs::File::open(&path).unwrap();
+        file.seek(SeekFrom::Start(24)).unwrap();
+        assert_eq!(spans_from(std::io::BufReader::new(file), 24), vec![span(b"S: 2\r\n\r\nb2", 24, 44)]);
+    }
+
+    /// The old callback gets each message's `end`: where the next one starts.
+    #[test]
+    fn the_message_callback_gets_where_each_message_ends() {
+        let lf = b"From a\nm1\n\nFrom b\nx\n>From y\n\nFrom c\nlast";
+        let mut ends = Vec::new();
+        for_each_mbox_message(std::io::Cursor::new(&lf[..]), |_, end| {
+            ends.push(end);
+            true
+        })
+        .unwrap();
+        assert_eq!(ends, vec![11, 29, 40]);
     }
 
     #[test]

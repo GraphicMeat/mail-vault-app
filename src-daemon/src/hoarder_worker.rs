@@ -326,8 +326,9 @@ fn folders_to_hoard(boxes: Vec<MailboxInfo>) -> Vec<String> {
 
 /// The words `imap::sign_in_error` and the missing-secret checks before it
 /// use. The daemon never refreshes a token or asks for a password, so every
-/// later folder would fail the same way.
-fn is_sign_in_failure(e: &str) -> bool {
+/// later folder would fail the same way. The mbox upload job reads a refused
+/// sign-in the same way (`mbox_upload::kind_of`).
+pub(crate) fn is_sign_in_failure(e: &str) -> bool {
     ["Login failed for", "XOAUTH2 auth failed for", "OAuth2 access token missing", "Password missing"]
         .iter()
         .any(|needle| e.contains(needle))
