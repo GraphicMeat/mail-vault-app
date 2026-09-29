@@ -460,6 +460,33 @@ it('the success message names the folders the mail went into', async () => {
   expect(msg).toContain('1 email(s) were already in this folder and were skipped.');
 });
 
+// A message the daemon could not write (a label whose folder name the disk
+// refuses, a full disk) is counted in `failedCount`, never dropped silently.
+it('an import that could not write some messages says how many, in modes 2 and 3', async () => {
+  importAnswer = () => Promise.resolve({
+    emailCount: 3, skippedCount: 0, failedCount: 2, accountId: GMAIL.id, mailbox: 'INBOX', foldersKnown: true,
+    folders: [{ mailbox: 'INBOX', imported: 3, skipped: 0 }],
+  });
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  await confirm(dialog);
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
+  expect(msg).toContain('3 email(s) are now in your vault');
+  expect(msg).toContain('2 email(s) could not be imported.');
+});
+
+it('an import that wrote everything adds no such line', async () => {
+  importAnswer = () => Promise.resolve({
+    emailCount: 1, skippedCount: 0, failedCount: 0, accountId: GMAIL.id, mailbox: 'INBOX', foldersKnown: true, folders: [],
+  });
+  const dialog = await openDialog();
+  await folderPicker(dialog, FALLBACK);
+  await confirm(dialog);
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  expect(window.alert.mock.calls.map((c) => c[0]).join('\n')).not.toContain('could not be imported');
+});
+
 // Mode 3 files the mail into a new folder kept on this computer. The message
 // names that folder by its display name (not a key), and the app opens it at
 // once: a reload would land on the first account's INBOX instead.
@@ -470,7 +497,7 @@ it('a separate-folder import names the new folder and opens it', async () => {
   useMailStore.setState({ activateAccount });
   try {
     importAnswer = () => Promise.resolve({
-      emailCount: 2, skippedCount: 0, accountId: GMAIL.id, mailbox: NAME, foldersKnown: false,
+      emailCount: 2, skippedCount: 0, failedCount: 1, accountId: GMAIL.id, mailbox: NAME, foldersKnown: false,
       folders: [{ mailbox: NAME, imported: 2, skipped: 0 }],
       folder: { name: NAME, dir: 'MBOX_import_2026-09-29' },
     });
@@ -484,6 +511,8 @@ it('a separate-folder import names the new folder and opens it', async () => {
     const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
     expect(msg).toContain(`2 email(s) are now in ${NAME}`);
     expect(msg).toContain('On this computer');
+    // Mode 3 says what it could not write too.
+    expect(msg).toContain('1 email(s) could not be imported.');
     expect(msg).not.toContain('MBOX_import');
     expect(msg).not.toContain('reloads');
   } finally {

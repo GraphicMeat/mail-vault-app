@@ -139,7 +139,8 @@ export const onDaemonReconnected = (cb) => listenTo('daemon-reconnected', cb);
  * once for the view on screen, at the next open for another account.
  */
 export async function refreshAfter(p) {
-  if (p?.active !== false || !(p.uploadedCount > 0 || p.foldersChanged)) return;
+  // A damaged journal's discard names no account: nothing to reload.
+  if (p?.active !== false || !p.accountId || !(p.uploadedCount > 0 || p.foldersChanged)) return;
   forceMailboxRefetch(p.accountId);
   const { invalidateFolderStatus } = await import('./workflows/folderStatus');
   invalidateFolderStatus(p.accountId);

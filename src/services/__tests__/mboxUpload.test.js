@@ -287,6 +287,16 @@ describe('the reload once an upload ends', () => {
     expect(takeForcedMailboxRefetch('acct-a')).toBe(false);
   });
 
+  // A damaged journal's discard event names no account: nothing to reload,
+  // and never "the account on screen" when that is none either.
+  it('a last event that names no account reloads nothing', async () => {
+    const refreshCurrentView = vi.fn(async () => {});
+    store.state = { activeAccountId: null, unifiedInbox: false, refreshCurrentView };
+    await upload.refreshAfter({ mode: 'server', jobId: 'dmg-1', accountId: null, fileName: null, live: false, active: false, state: 'discarded', uploadedCount: 1 });
+    expect(refreshCurrentView).not.toHaveBeenCalled();
+    expect(invalidateFolderStatus).not.toHaveBeenCalled();
+  });
+
   it('a run that made a folder but uploaded nothing new still lists the folders again', async () => {
     const refreshCurrentView = vi.fn(async () => {});
     store.state = { activeAccountId: 'acct-a', unifiedInbox: false, refreshCurrentView };

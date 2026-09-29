@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { UploadCloud, X } from 'lucide-react';
 import { ToastShell } from './ui/ToastShell';
@@ -11,13 +11,15 @@ import * as upload from '../services/mboxUpload';
 export const RENDER_EVERY_MS = 1000;
 
 // What decides the chip's words and buttons: a change here renders at once.
-const shape = (p) => [p.state, p.active, p.paused, p.throttled, p.needsSignIn].join('|');
+const shape = (p) => [p.state, p.active, p.paused, p.throttled, p.needsSignIn, p.holdReason].join('|');
 
 // The face a job shows, read off the daemon's own state. A job that is not
 // active and not done (cancelled, cut off by a quit, unreadable) has a
 // journal: it can be resumed or discarded.
 function face(p) {
   if (p.state === 'done') return 'done';
+  // A journal the daemon cannot read: no account, file or counts; discard only.
+  if (p.state === 'damaged') return 'damaged';
   if (!p.active) return 'stopped';
   if (p.needsSignIn) return 'needsSignIn';
   if (p.paused) return 'paused';
@@ -31,6 +33,14 @@ const TITLE = {
   needsSignIn: 'mboxUpload.titlePaused',
   stopped: 'mboxUpload.titleStopped',
   done: 'mboxUpload.titleDone',
+  damaged: 'mboxUpload.damaged',
+};
+
+// Why an account-level wait waits (`holdReason`); a message-level backoff
+// (null) reads as the server limiting uploads.
+const WAITING = {
+  offline: 'mboxUpload.offline',
+  refused: 'mboxUpload.refused',
 };
 
 const byId = (list) => Object.fromEntries(list.map((p) => [p.jobId, p]));
@@ -47,6 +57,8 @@ const without = (obj, ids) => Object.fromEntries(Object.entries(obj).filter(([id
 export function MboxUploadProgress({ onOpenAccounts }) {
   const [jobs, setJobs] = useState({});
   const [failed, setFailed] = useState({}); // jobId -> catalog key of a refused button
+  // Asks the daemon for its jobs again (a control it answered false for).
+  const recheck = useRef(() => {});
 
   useEffect(() => {
     let alive = true;
@@ -108,6 +120,7 @@ export function MboxUploadProgress({ onOpenAccounts }) {
       }, (e) => console.warn('[mboxUpload] could not list the uploads:', e?.message || e));
     };
     keep(upload.onDaemonReconnected(() => load(true)));
+    recheck.current = () => load(true);
     load(false);
 
     return () => { alive = false; clearTimeout(timer); unlisteners.forEach((un) => un?.()); };
@@ -117,10 +130,16 @@ export function MboxUploadProgress({ onOpenAccounts }) {
     setJobs((cur) => without(cur, [jobId]));
     setFailed((cur) => without(cur, [jobId]));
   };
-  // The chip moves on the daemon's next event, not on the answer. A job the
-  // daemon no longer has is gone; any other refusal is said in its row.
-  const act = (jobId, run) => run().then(
-    () => setFailed((cur) => (cur[jobId] ? without(cur, [jobId]) : cur)),
+  // The chip moves on the daemon's next event, not on the answer. An answer
+  // of false (`{paused: false}` ...) means nothing was applied: the job is
+  // ending or gone, so the chip asks for the jobs again and says nothing. A
+  // job the daemon no longer has is gone; any other refusal is said in its row.
+  const act = (jobId, run, answer, applied) => run().then(
+    (reply) => {
+      if (reply && reply[answer] === false) { recheck.current(); return; }
+      setFailed((cur) => (cur[jobId] ? without(cur, [jobId]) : cur));
+      if (reply !== null) applied?.();
+    },
     (e) => {
       if (upload.isNotFound(e)) { drop(jobId); return; }
       console.warn('[mboxUpload] the daemon refused:', e?.message || e);
@@ -128,13 +147,13 @@ export function MboxUploadProgress({ onOpenAccounts }) {
     },
   );
   const controls = {
-    pause: ({ jobId }) => act(jobId, () => upload.pause(jobId)),
+    pause: ({ jobId }) => act(jobId, () => upload.pause(jobId), 'paused'),
     // The job's file name: a resume that must ask for the file names it, and
     // refuses one by another name.
-    resume: ({ jobId, accountId, fileName }) => act(jobId, () => upload.resume({ jobId, accountId, fileName })),
-    cancel: ({ jobId }) => act(jobId, () => upload.cancel(jobId)),
-    // A journal with no worker sends no event: the row goes on the answer.
-    discard: ({ jobId }) => act(jobId, () => upload.discard(jobId).then(() => drop(jobId))),
+    resume: ({ jobId, accountId, fileName }) => act(jobId, () => upload.resume({ jobId, accountId, fileName }), 'resumed'),
+    cancel: ({ jobId }) => act(jobId, () => upload.cancel(jobId), 'cancelled'),
+    // The row goes on the answer too, not only on the daemon's event.
+    discard: ({ jobId }) => act(jobId, () => upload.discard(jobId), 'discarded', () => drop(jobId)),
     dismiss: ({ jobId }) => drop(jobId),
     signIn: onOpenAccounts && (({ accountId }) => onOpenAccounts(accountId)),
   };
@@ -168,6 +187,7 @@ function UploadRow({ job, failed, controls }) {
   const title = t(TITLE[f], { file: job.fileName || '' });
   const percent = job.bytesTotal > 0 ? Math.min(100, Math.floor((job.bytesDone * 100) / job.bytesTotal)) : 0;
   const eta = typeof job.etaSeconds === 'number' ? etaWords(job.etaSeconds) : null;
+  const damaged = f === 'damaged';
   const live = f === 'running' || f === 'throttled';
   const held = f === 'paused' || f === 'needsSignIn';
   const btn = (name, label, onClick, variant = 'secondary') => (
@@ -187,21 +207,23 @@ function UploadRow({ job, failed, controls }) {
           </Button>
         )}
       </div>
-      <p className="mt-1 text-xs text-mail-text-muted">
-        {t('mboxUpload.counts', {
-          uploaded: formatCount(job.uploadedCount || 0),
-          skipped: formatCount(job.skippedCount || 0),
-          failed: formatCount(job.failedCount || 0),
-        })}
-      </p>
-      {f !== 'done' && (
+      {!damaged && (
+        <p className="mt-1 text-xs text-mail-text-muted">
+          {t('mboxUpload.counts', {
+            uploaded: formatCount(job.uploadedCount || 0),
+            skipped: formatCount(job.skippedCount || 0),
+            failed: formatCount(job.failedCount || 0),
+          })}
+        </p>
+      )}
+      {f !== 'done' && !damaged && (
         <div role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={title}
           className="mt-2 h-1.5 rounded-full bg-mail-border overflow-hidden">
           <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
         </div>
       )}
       {eta && <p className="mt-1 text-xs text-mail-text-muted">{t(eta.etaKey, eta)}</p>}
-      {f === 'throttled' && <p className="mt-1 text-xs text-mail-warning">{t('mboxUpload.throttled')}</p>}
+      {f === 'throttled' && <p className="mt-1 text-xs text-mail-warning">{t(WAITING[job.holdReason] || 'mboxUpload.throttled')}</p>}
       {job.needsSignIn && <p className="mt-1 text-xs text-mail-warning">{t('mboxUpload.needsSignIn')}</p>}
       {job.error && <p className="mt-1 text-xs text-mail-danger">{t(upload.errorKey(job.error))}</p>}
       {/* Cancel keeps the journal: say so, and how to be rid of it. */}
@@ -213,7 +235,7 @@ function UploadRow({ job, failed, controls }) {
           {live && btn('pause', t('mboxUpload.pause'), controls.pause)}
           {(held || f === 'stopped') && btn('resume', t('common.resume'), controls.resume, 'primary')}
           {(live || held) && btn('cancel', t('common.cancel'), controls.cancel, 'ghost')}
-          {f === 'stopped' && btn('discard', t('common.discard'), controls.discard, 'ghost')}
+          {(f === 'stopped' || damaged) && btn('discard', t('common.discard'), controls.discard, 'ghost')}
         </div>
       )}
     </div>

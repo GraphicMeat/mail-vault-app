@@ -369,7 +369,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       active: live, state: job.state, total: live ? 0 : job.uploaded, completed: job.uploaded,
       bytesDone: Math.round((job.step / UPLOAD_STEPS) * UPLOAD_BYTES), bytesTotal: UPLOAD_BYTES,
       uploadedCount: job.uploaded, skippedCount: 0, failedCount: 0,
-      paused: job.state === 'paused', throttled: false, needsSignIn: false,
+      paused: job.state === 'paused', throttled: false, holdReason: null, needsSignIn: false,
       etaSeconds: job.state === 'running' && job.step ? Math.ceil(((UPLOAD_STEPS - job.step) * UPLOAD_STEP_MS) / 1000) : null,
     };
   };

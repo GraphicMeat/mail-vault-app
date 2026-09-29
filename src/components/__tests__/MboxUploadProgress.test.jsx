@@ -68,6 +68,11 @@ const ev = (o = {}) => ({
   ...o,
 });
 const journal = (o = {}) => ev({ active: false, live: false, state: 'paused', paused: true, updatedAt: 1, ...o });
+// A journal this build cannot read, as the daemon lists it: no account, file or counts.
+const DAMAGED = { mode: 'server', jobId: 'dmg-1', accountId: null, fileName: null, live: false, active: false, state: 'damaged' };
+const ANSWER = {
+  mbox_upload_pause: 'paused', mbox_upload_resume: 'resumed', mbox_upload_cancel: 'cancelled', mbox_upload_discard: 'discarded',
+};
 
 const fire = (payload) => act(() => { for (const cb of listeners['mbox-import-progress'] || []) cb({ payload }); });
 const reconnect = () => act(async () => { for (const cb of listeners['daemon-reconnected'] || []) cb({ payload: null }); await flush(); });
@@ -109,7 +114,8 @@ async function mount(props = {}) {
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   statusReply = { jobs: [] };
-  controlReply = (cmd) => Promise.resolve({ jobId: JOB, [cmd.replace('mbox_upload_', '')]: true });
+  // The daemon's answers: `{jobId, paused|resumed|cancelled|discarded: bool}`.
+  controlReply = (cmd) => Promise.resolve({ jobId: JOB, [ANSWER[cmd]]: true });
   sendMock.mockClear();
   openMock.mockReset();
   resolveMock.mockReset().mockImplementation(async (id, a) => ({ ok: true, account: a }));
@@ -166,6 +172,32 @@ describe('MboxUploadProgress', () => {
     fire(ev({ throttled: false }));
     expect(face()).toBe('running');
     expect(job().textContent).not.toContain(en['mboxUpload.throttled']);
+  });
+
+  // An account-level wait keeps the job running with `throttled` and says
+  // why in `holdReason`; each reason has its own words.
+  it.each([
+    ['the server limiting it', 'throttled', 'mboxUpload.throttled'],
+    ['no network', 'offline', 'mboxUpload.offline'],
+    ['the account refusing uploads', 'refused', 'mboxUpload.refused'],
+    ['one message backing off', null, 'mboxUpload.throttled'],
+  ])('a wait for %s says so, and keeps Pause and Cancel', async (_, holdReason, key) => {
+    await mount();
+    fire(ev({ throttled: true, holdReason, etaSeconds: null }));
+    expect(face()).toBe('throttled');
+    expect(job().textContent).toContain(en[key]);
+    for (const other of ['mboxUpload.throttled', 'mboxUpload.offline', 'mboxUpload.refused'].filter((k) => k !== key)) {
+      expect(job().textContent).not.toContain(en[other]);
+    }
+    expect(buttons()).toEqual(['cancel', 'pause']);
+  });
+
+  it('a new reason to wait shows at once, not after the interval', async () => {
+    await mount();
+    fire(ev({ throttled: true, holdReason: 'offline' }));
+    fire(ev({ throttled: true, holdReason: 'refused' }));
+    expect(job().textContent).toContain(en['mboxUpload.refused']);
+    expect(job().textContent).not.toContain(en['mboxUpload.offline']);
   });
 
   it('Pause, Resume and Cancel call the daemon for this job', async () => {
@@ -313,12 +345,82 @@ describe('MboxUploadProgress', () => {
     expect(chip()).toBeNull();
   });
 
+  // The daemon lists a journal it cannot read with no account, file or counts;
+  // it can only be discarded.
+  it('an upload record the daemon cannot read is a row of its own with Discard alone', async () => {
+    statusReply = { jobs: [DAMAGED] };
+    controlReply = (cmd) => Promise.resolve({ jobId: 'dmg-1', [ANSWER[cmd]]: true });
+    await mount();
+    expect(face('dmg-1')).toBe('damaged');
+    expect(job('dmg-1').textContent).toContain(en['mboxUpload.damaged']);
+    expect(job('dmg-1').textContent).not.toMatch(/uploaded|null|undefined/);
+    expect(job('dmg-1').querySelector('[role="progressbar"]')).toBe(null);
+    expect(buttons('dmg-1')).toEqual(['discard']);
+
+    fireEvent.click(button('discard', 'dmg-1'));
+    await act(flush);
+    expect(calls('mbox_upload_discard')).toEqual([{ jobId: 'dmg-1' }]);
+    expect(chip()).toBeNull();
+  });
+
+  it('the daemon\'s event for a discarded damaged record drops its row, and reloads nothing', async () => {
+    const refreshCurrentView = vi.fn(async () => {});
+    useMailStore.setState({ activeAccountId: null, unifiedInbox: false, refreshCurrentView });
+    statusReply = { jobs: [DAMAGED, journal()] };
+    await mount();
+    expect(face('dmg-1')).toBe('damaged');
+    fire({ ...DAMAGED, state: 'discarded' });
+    expect(job('dmg-1')).toBe(null);
+    expect(face()).toBe('stopped');
+    await act(flush);
+    expect(refreshCurrentView).not.toHaveBeenCalled();
+  });
+
+  // A run that stopped on its file keeps the reason in its journal: after a
+  // restart the status says it, and the row shows it in catalog words.
+  it('after a restart a run that stopped on its file still says why', async () => {
+    statusReply = { jobs: [journal({ error: 'E_MBOX_UPLOAD_READ: No such file or directory (os error 2)' })] };
+    await mount();
+    expect(face()).toBe('stopped');
+    expect(job().textContent).toContain(en['errors.E_MBOX_UPLOAD_READ']);
+    expect(job().textContent).not.toMatch(/os error|No such file|E_MBOX/);
+  });
+
   it('a file that stopped being readable shows the catalog words, never the daemon\'s', async () => {
     await mount();
     fire(ev({ active: false, state: 'paused', paused: true, error: 'E_MBOX_UPLOAD_READ: No such file or directory (os error 2)' }));
     expect(face()).toBe('stopped');
     expect(job().textContent).toContain(en['errors.E_MBOX_UPLOAD_READ']);
     expect(job().textContent).not.toMatch(/os error|No such file/);
+  });
+
+  // A job that is ending (or already gone) answers false: nothing was
+  // applied. The chip asks the daemon again and shows no refusal.
+  it.each([
+    ['pause', ev()],
+    ['cancel', ev()],
+    ['discard', journal()],
+  ])('a %s the daemon answers false for asks again and shows no refusal', async (name, payload) => {
+    const alert = vi.fn();
+    vi.stubGlobal('alert', alert);
+    try {
+      if (payload.active) await mount();
+      else { statusReply = { jobs: [payload] }; await mount(); }
+      if (payload.active) fire(payload);
+      controlReply = (cmd) => Promise.resolve({ jobId: JOB, [ANSWER[cmd]]: false });
+      statusReply = { jobs: [journal({ state: 'cancelled', uploadedCount: 2 })] };
+      fireEvent.click(button(name));
+      await act(() => vi.waitFor(() => expect(calls('mbox_upload_status')).toHaveLength(2), { timeout: 10_000 }));
+      await act(flush);
+      expect(calls(`mbox_upload_${name}`)).toEqual([{ jobId: JOB }]);
+      // Still there, as the daemon now lists it, with no refusal words.
+      expect(face()).toBe('stopped');
+      expect(job().textContent).toContain('2 uploaded');
+      expect(job().textContent).not.toContain(en['mboxUpload.actionFailed']);
+      expect(alert).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a job the daemon no longer knows leaves the chip; another refusal shows catalog words in the chip, not an alert', async () => {

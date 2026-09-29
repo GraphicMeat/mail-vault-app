@@ -27,6 +27,8 @@ const DIALOG_KEYS = [
   'settings.backup.restore.mboxUploadResumable',
   'settings.backup.restore.mboxUploadResume',
   'settings.backup.restore.mboxUploadStartOver',
+  // Modes 2 and 3: the messages the daemon could not write (`failedCount`).
+  'settings.backup.restore.mboxFailedToImport',
 ];
 const CHIP_KEYS = [
   'mboxUpload.actionFailed', 'mboxUpload.counts', 'mboxUpload.etaHours', 'mboxUpload.etaMinutes',
@@ -36,6 +38,9 @@ const CHIP_KEYS = [
   // The file picked again to resume: the panel's title, and the refusal of
   // a file by another name. The stopped row's note that Cancel kept it.
   'mboxUpload.pickAgainTitle', 'mboxUpload.otherFile', 'mboxUpload.stoppedHint',
+  // Why an account-level wait waits (`holdReason`), and a journal the daemon
+  // cannot read (status state "damaged").
+  'mboxUpload.offline', 'mboxUpload.refused', 'mboxUpload.damaged',
 ];
 const NEW_KEYS = [...DAEMON_CODES.map((c) => `errors.${c}`), ...DIALOG_KEYS, ...CHIP_KEYS];
 
@@ -81,10 +86,21 @@ describe('the MBOX upload catalog', () => {
       'mboxUpload.pickAgainTitle': '{{file}}',
       'mboxUpload.otherFile': '',
       'mboxUpload.stoppedHint': '',
+      'mboxUpload.offline': '',
+      'mboxUpload.refused': '',
+      'mboxUpload.damaged': '',
+      'settings.backup.restore.mboxFailedToImport': '{{failed}}',
     };
     for (const [locale, catalog] of Object.entries(CATALOGS)) {
       for (const [k, v] of Object.entries(expected)) expect(vars(catalog[k]), `${locale} ${k}`).toBe(v);
     }
+  });
+
+  // A refusal holds the job and marks nothing failed: the words must not
+  // promise otherwise, and must send the user to the account.
+  it('a refused account says to check the account and that nothing is marked failed', () => {
+    expect(en['mboxUpload.refused']).toMatch(/check the account/i);
+    expect(en['mboxUpload.refused']).toMatch(/waits and marks nothing as failed/);
   });
 
   // Gmail's sign-in is OAuth: there is no password to check.

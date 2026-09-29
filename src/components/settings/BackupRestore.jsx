@@ -330,6 +330,8 @@ export default function BackupRestore() {
           ? t('settings.backup.restore.mboxImportedToLocalFolder', { result: result.emailCount, folder: newFolder, targetAccount: account })
           : t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: account, targetMailbox });
         if (result.skippedCount > 0) message += `\n\n${t('settings.backup.restore.mboxSkippedAlreadyInFolder', { skipped: result.skippedCount })}`;
+        // Messages the daemon could not write (a folder the disk refuses, a full disk).
+        if (result.failedCount > 0) message += `\n\n${t('settings.backup.restore.mboxFailedToImport', { failed: result.failedCount })}`;
         if (isDemo) alert(`${message}\n\nThis browser demo keeps the sample in this session; no native file was read.`);
         else { alert(message); if (!newFolder) window.location.reload(); }
       }, 1500);
