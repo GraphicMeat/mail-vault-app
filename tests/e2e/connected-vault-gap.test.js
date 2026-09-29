@@ -4,15 +4,22 @@
  * there (Phase 5, D7). The daemon counts (`vault_gap_count`) and saves
  * (`vault_gap_save`); the row shows what it says.
  *
- * Fixture. luke's INBOX (41 messages dated Jan to Feb 2026: `stamp(uid)` is
- * 2026-01-01 + uid days) lies outside the default Keep Recent window, so the
- * app lists its headers and never downloads a body: none of it is in the
- * vault, and under Keep Recent none of it counts (the mode leaves it on the
- * server). The spec puts luke alone in Hoarder, without Premium: Hoarder
- * promises every copy, so every cached header counts, and without Premium no
- * Hoarder worker fills the vault behind the spec's back. The app's own body
- * pipeline is paused (`__PIPELINE_CONTROL__`, as connected-insights does), so
- * nothing but the save writes a body while the spec watches.
+ * Fixture. luke's mail is dated Jan to Feb 2026 (`stamp(uid)` is 2026-01-01
+ * + uid days), outside the default Keep Recent window: under Keep Recent none
+ * of it counts (the mode leaves it on the server). The spec puts luke alone in
+ * Hoarder, without Premium: Hoarder promises every copy, so every cached
+ * header counts, and without Premium the daemon's Hoarder worker does not
+ * fill the vault behind the spec's back.
+ *
+ * The spec relies on luke's Sent, not INBOX. The app caches Sent's headers
+ * (for threading) and never fetches its bodies ahead, so Sent stays in the
+ * count until the save. INBOX does not: the app's own fetch-ahead pipeline
+ * fills INBOX's vault copies under Hoarder in under a second against the
+ * local mock, and pausing it (`__PIPELINE_CONTROL__.pauseAll()`, kept) is not
+ * a hold, since switching to the active account, an account switch and the
+ * `online` handler all resume it. A run once counted 56 (Sent 11, INBOX 45)
+ * and one second later 11. Whether INBOX is in the count when it settles is
+ * therefore not asserted; every settle read is logged in full.
  *
  * luke's Flaky folder holds 9301, whose body fetch always fails: were its
  * headers cached, the save could never reach 0. The spec checks Flaky is not
@@ -44,6 +51,8 @@ import { closeSettings, waitForApp, waitForEmails } from './helpers.js';
 import { openTab } from './mockBilling.js';
 
 const LUKE = 'luke@mock.test';
+// luke's Sent (mockImap.js `mailbox('Sent', ...)`): its vault dir is the same name.
+const SENT = 'Sent';
 const NONE = 'Every copy this app has shown or cached is in your vault.';
 const UNAVAILABLE = 'Your mail storage folder is unavailable';
 
@@ -103,9 +112,9 @@ const gapRow = (accountId) => browser.execute((id) => {
   };
 }, accountId);
 
-/** Vault files in the account's INBOX that carry the archived flag: `4:2,AS.eml` -> `AS`. */
-function archivedInboxFiles(accountId) {
-  const cur = join(vaultRoot(), accountId, 'INBOX', 'cur');
+/** Vault files in one of the account's folders that carry the archived flag: `4:2,AS.eml` -> `AS`. */
+function archivedFiles(accountId, folder) {
+  const cur = join(vaultRoot(), accountId, folder, 'cur');
   if (!existsSync(cur)) return [];
   return readdirSync(cur).filter((name) => (name.split(/[:;]2,/)[1] || '').replace(/\.eml$/, '').includes('A'));
 }
@@ -146,7 +155,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
     lukeId = (browser.mockAccounts || []).find((a) => a.email === LUKE)?.id;
     assert.ok(lukeId, 'luke is not among the mock accounts');
 
-    // Nothing but the save writes a body from here on.
+    // Pause the app's body pipelines. Not a hold (see the header): INBOX may
+    // still fill, so the spec relies on Sent, which nothing fetches ahead.
     await browser.execute(() => window.__PIPELINE_CONTROL__.pauseAll());
     await wait(() => browser.execute(() => (window.__PIPELINES__?.() || []).every((p) => p.activeSlots <= 0)),
       60_000, 'Background body fetches were still in flight after pausing the pipelines');
@@ -162,12 +172,17 @@ describe('Settings > Backup - copies not yet in the vault', function () {
     assert.notEqual(diskSettings()?.fetchModePremium, true,
       'With Premium the Hoarder worker would fill the vault behind the spec');
 
-    // The header cache may still be landing (INBOX pages, Sent for threading):
-    // take the count once two reads a second apart agree and neither is a floor.
+    // The header cache may still be landing (Sent for threading) and the app's
+    // pipeline may still be filling INBOX: take the count once two reads a
+    // second apart agree and neither is a floor. Every read is logged in full,
+    // so a run that fails here shows which folder moved.
     let last = null;
+    let reads = 0;
     try {
       await browser.waitUntil(async () => {
         const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
+        reads += 1;
+        console.log(`[vault-gap] settle read ${reads}:`, JSON.stringify(reply));
         const same = reply.ok && !!last?.ok && JSON.stringify(last.v) === JSON.stringify(reply.v);
         last = reply;
         return same && reply.v.partial === false;
@@ -181,7 +196,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
     assert.equal(counted.partial, false,
       `luke's folders are small and fully cached; a floor here would keep the zero case from ever showing: ${JSON.stringify(counted.byMailbox)}`);
     assert.ok(counted.count > 0, 'Nothing of luke\'s is missing from the vault: the fixture no longer makes a gap');
-    assert.ok((counted.byMailbox.find((f) => f.mailbox === 'INBOX')?.count || 0) > 0, 'luke\'s INBOX is not in the count');
+    assert.ok((counted.byMailbox.find((f) => f.mailbox === SENT)?.count || 0) > 0,
+      `luke's ${SENT} is not in the count: ${JSON.stringify(counted.byMailbox)}`);
     assert.equal(counted.byMailbox.some((f) => f.mailbox === 'Flaky'), false,
       'Flaky is counted: its 9301 never fetches, so Save them now could never reach 0');
     assert.equal(counted.byMailbox.reduce((n, f) => n + f.count, 0), counted.count);
@@ -226,8 +242,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   });
 
   it('Save them now puts every copy in the vault, and the count reaches 0', async function () {
-    const inboxMissing = counted.byMailbox.find((f) => f.mailbox === 'INBOX').count;
-    const before = archivedInboxFiles(lukeId).length;
+    const sentMissing = counted.byMailbox.find((f) => f.mailbox === SENT).count;
+    const before = archivedFiles(lukeId, SENT).length;
 
     assert.equal(await browser.execute((id) => {
       const save = document.querySelector(`[data-testid="vault-gap-row"][data-account-id="${id}"] [data-testid="vault-gap-save"]`);
@@ -252,8 +268,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
     // The daemon agrees, and the copies are on disk, as archived copies.
     assert.deepEqual(await daemonRpc('vault_gap_count', { accountId: lukeId }),
       { ok: true, v: { count: 0, vaultReachable: true, partial: false, byMailbox: [] } });
-    const gained = archivedInboxFiles(lukeId).length - before;
-    assert.ok(gained >= inboxMissing, `INBOX gained ${gained} archived copies; ${inboxMissing} were missing`);
+    const gained = archivedFiles(lukeId, SENT).length - before;
+    assert.ok(gained >= sentMissing, `${SENT} gained ${gained} archived copies; ${sentMissing} were missing`);
   });
 
   it('an unreachable vault shows the reason, never everything-in-your-vault, and cannot save', async function () {
