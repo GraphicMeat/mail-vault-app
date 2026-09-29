@@ -140,6 +140,7 @@ function prime() {
     unifiedInbox: false,
     connectionError: null,
     connectionErrorType: null,
+    connectionErrorCode: null,
     loadSentHeaders: vi.fn(),
   });
 }
@@ -209,5 +210,37 @@ describe('activateAccount daemon path — offline vs server error', () => {
     expect(state.connectionErrorType).toBe('serverError');
     expect(state.connectionError).toContain('AUTHENTICATIONFAILED');
     expect(useConnectivityStore.getState().online).toBe(true);
+  });
+});
+
+// "Connection problem" named no cause and no remedy. The daemon classifies
+// the failure (errorCode) and the sidebar notice words it; the store carries
+// the code next to the type.
+describe('activateAccount daemon path — what failed', () => {
+  it('keeps the daemon\'s errorCode for the notice, and its text for Details', async () => {
+    prime();
+    mockWaitForSync.mockResolvedValue({
+      success: false,
+      offline: false,
+      error: 'TCP connect to imap.example.test:993 failed: operation timed out',
+      errorCode: 'blocked_or_timeout',
+    });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    const state = useMailStore.getState();
+    expect(state.connectionErrorType).toBe('serverError');
+    expect(state.connectionErrorCode).toBe('blocked_or_timeout');
+    expect(state.connectionError).toContain('TCP connect');
+  });
+
+  it('never leaves an earlier code on a failure that has none', async () => {
+    prime();
+    useMailStore.setState({ connectionErrorCode: 'dns' });
+    mockWaitForSync.mockResolvedValue({ success: false, error: 'something the daemon did not classify' });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(useMailStore.getState().connectionErrorCode).toBeNull();
   });
 });

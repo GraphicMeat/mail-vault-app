@@ -605,7 +605,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // ~40s worst case of two attempts.
             match imap::test_connection(&account, &state.imap_pool).await {
                 Ok(()) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
-                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                Err(e) => RpcResponse::success(id, super::failed_connection_test(&e, &account.host, account.effective_port())),
             }
         }
 
@@ -1220,6 +1220,24 @@ mod tests {
         let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
+    }
+
+    /// The account form says what failed: a closed port is "refused", with the
+    /// host and port it was on, not the raw socket error as the whole message.
+    #[tokio::test]
+    async fn test_connection_to_a_closed_port_says_what_failed() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let s = st(true);
+        let account = json!({"email": "a@b.co", "password": "x", "imapHost": "127.0.0.1", "imapPort": port});
+
+        let resp = call(&s, "imap_test_connection", json!({"account": account})).await;
+
+        let result = resp.result.expect("a failed test is a result, not an RPC error");
+        assert_eq!(result["success"], json!(false));
+        assert_eq!(result["errorCode"], json!("refused"), "error was: {}", result["error"]);
+        assert_eq!(result["host"], json!("127.0.0.1"));
+        assert_eq!(result["port"], json!(port));
+        assert!(result["error"].as_str().is_some_and(|e| e.contains("127.0.0.1")), "the text stays");
     }
 
     /// The first connection stalls in the greeting past `GREETING_TIMEOUT`;

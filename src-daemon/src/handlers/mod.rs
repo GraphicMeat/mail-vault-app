@@ -56,6 +56,22 @@ pub(crate) mod views;
 pub(crate) mod vault_files;
 pub(crate) mod vault_flags;
 
+/// A connection test that failed, as `imap_test_connection` and
+/// `smtp_test_connection` answer it: the daemon's own text, the code the app
+/// words its message by (`net::classify_connection_error`), and the host and
+/// port a blocked-port message names. A result, not an RPC error, because the
+/// shell forwards only an error's message and the code must reach the app;
+/// `api.js` turns it back into a rejection for every caller.
+pub(crate) fn failed_connection_test(error: &str, host: &str, port: u16) -> Value {
+    serde_json::json!({
+        "success": false,
+        "error": error,
+        "errorCode": mailvault_core::net::classify_connection_error(error).code(),
+        "host": host,
+        "port": port,
+    })
+}
+
 pub(crate) fn handle_contacts_index_get(
     contacts: Arc<contacts_index::ContactsState>,
     params: Value,

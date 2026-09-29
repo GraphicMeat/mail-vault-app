@@ -155,10 +155,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // also 15s, this guards against a stall before/around the
             // handshake. Verbatim from commands.rs.
             let outcome = tokio::time::timeout(std::time::Duration::from_secs(15), smtp::test_connection(&account)).await;
+            let (host, port) = (account.smtp_host.as_deref().unwrap_or(""), account.smtp_port.unwrap_or(587));
             match outcome {
                 Ok(Ok(())) => RpcResponse::success(id, json!({"success": true, "message": "SMTP connection successful"})),
-                Ok(Err(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-                Err(_) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("SMTP connection test timed out for {}", account.email)),
+                Ok(Err(e)) => RpcResponse::success(id, super::failed_connection_test(&e, host, port)),
+                Err(_) => RpcResponse::success(
+                    id,
+                    super::failed_connection_test(&format!("SMTP connection test timed out for {}", account.email), host, port),
+                ),
             }
         }
 
@@ -666,8 +670,12 @@ mod tests {
         assert_eq!(result, json!({"success": true, "message": "SMTP connection successful"}));
     }
 
+    /// A failed test answers `success:false` with a code the app words its
+    /// message by, and the host and port a blocked-port message names. Not an
+    /// RPC error: the shell forwards only an error's text, and the code would
+    /// never reach the account form.
     #[tokio::test]
-    async fn test_connection_against_a_bogus_host_is_an_error_not_a_panic() {
+    async fn test_connection_against_a_bogus_host_says_what_failed() {
         let s = st(true);
         let account = json!({
             "email": "a@b.co", "password": "x",
@@ -675,7 +683,12 @@ mod tests {
             "smtpHost": "127.0.0.1", "smtpPort": 1, "smtpSecure": false,
         });
         let resp = call(&s, "smtp_test_connection", json!({"account": account})).await;
-        assert!(resp.result.is_none(), "a bogus SMTP host must not report success");
+        let result = resp.result.expect("a failed test is a result, not an RPC error");
+        assert_eq!(result["success"], json!(false), "a bogus SMTP host must not report success");
+        assert_eq!(result["errorCode"], json!("refused"), "error was: {}", result["error"]);
+        assert_eq!(result["host"], json!("127.0.0.1"));
+        assert_eq!(result["port"], json!(1));
+        assert!(result["error"].as_str().is_some_and(|e| !e.is_empty()), "the text stays");
     }
 
     #[tokio::test]

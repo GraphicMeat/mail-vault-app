@@ -8,6 +8,7 @@ use crate::contacts_index::ContactsState;
 use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
+use mailvault_core::net::{self, ConnectionFailure};
 use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -38,6 +39,11 @@ pub struct SyncResult {
     /// `success:false`, which the app renders as a *server* error — the wrong
     /// story, and the wrong remedy, when the Wi-Fi is simply off.
     pub offline: bool,
+    /// What a failed sync ran into, as `net::ConnectionFailure::code()`: the
+    /// app words the notice and its remedy by this, never by `error`'s text.
+    /// `"offline"` whenever `offline` is. None on success.
+    #[serde(rename = "errorCode")]
+    pub error_code: Option<&'static str>,
     /// The uids `arrivals` counts, for the IDLE watcher to fetch bodies of.
     #[serde(skip)]
     pub arrival_uids: Vec<u32>,
@@ -425,6 +431,11 @@ impl SyncEngine {
     async fn sync_account_with(&self, account: &SyncAccount, mailbox: &str, announce: bool) -> SyncResult {
         let account_id = &account.id;
 
+        // Every account that syncs teaches the gate its server, before the
+        // short-circuit below: the watchdog's probe dials it too, and must
+        // know it while the gate is shut and no sync gets further than here.
+        self.net.register_host(&account.imap_config.host, account.imap_config.effective_port());
+
         // No connectivity: return without touching the network. This is the
         // whole point of the gate — nine accounts times one sync tick is nine
         // 15s TCP timeouts and nine log lines, repeated every tick, for a
@@ -437,6 +448,7 @@ impl SyncEngine {
                 success: false,
                 error: Some("No internet connection".to_string()),
                 offline: true,
+                error_code: Some(ConnectionFailure::Offline.code()),
                 arrival_uids: Vec::new(), announced: false,
             };
         }
@@ -458,7 +470,7 @@ impl SyncEngine {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
                 new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(reason), offline: false,
+                success: false, error: Some(reason), offline: false, error_code: None,
                 arrival_uids: Vec::new(), announced: false,
             };
         }
@@ -506,6 +518,11 @@ impl SyncEngine {
             self.net.note_success();
         } else if let Some(err) = result.error.clone() {
             result.offline = !self.net.note_failure(&err).await;
+            result.error_code = Some(if result.offline {
+                ConnectionFailure::Offline.code()
+            } else {
+                net::classify_connection_error(&err).code()
+            });
         }
 
         // Update state
@@ -597,14 +614,17 @@ impl SyncEngine {
                 success: true,
                 error: None,
                 offline: false,
+                error_code: None,
                 arrival_uids: delta.arrival_uids,
                 announced: delta.announced,
             },
+            // `error_code` is filled in by `sync_account_with`, once the gate
+            // has said whether this was the network.
             Err(e) => SyncResult {
                 account_id,
                 mailbox: mailbox.to_string(),
                 new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(e), offline: false,
+                success: false, error: Some(e), offline: false, error_code: None,
                 arrival_uids: Vec::new(), announced: false,
             },
         }
@@ -1642,12 +1662,33 @@ mod tests {
             success: true,
             error: None,
             offline: false,
+            error_code: None,
             arrival_uids: vec![1],
             announced: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"new_emails\":5"));
         assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"errorCode\":null"));
+    }
+
+    /// The name the app reads (`syncResult.errorCode` in activateAccount.js).
+    #[test]
+    fn a_failed_sync_serializes_its_error_code_for_the_app() {
+        let result = SyncResult {
+            account_id: "acc1".into(),
+            mailbox: "INBOX".into(),
+            new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
+            success: false,
+            error: Some("TCP connect to imap.example.test:993 failed: operation timed out".into()),
+            offline: false,
+            error_code: Some("blocked_or_timeout"),
+            arrival_uids: Vec::new(),
+            announced: false,
+        };
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["errorCode"], "blocked_or_timeout");
+        assert_eq!(json["error"], "TCP connect to imap.example.test:993 failed: operation timed out", "the text stays");
     }
 
     fn scratch_dir(name: &str) -> PathBuf {
@@ -2123,7 +2164,65 @@ mod tests {
         assert!(!result.success);
         assert!(result.offline, "must be labelled offline, not a server error");
         assert_eq!(result.error.as_deref(), Some("No internet connection"));
+        assert_eq!(result.error_code, Some("offline"));
         assert_eq!(cached_count(&engine, "INBOX"), 0, "nothing was fetched");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The watchdog's probe dials the user's own servers as well as the
+    /// resolvers, so it has to learn them while the gate is shut, which is
+    /// exactly when no sync dials anything. Shut gate: no packet is sent.
+    #[tokio::test]
+    async fn a_sync_teaches_the_gate_its_mail_server_even_while_shut() {
+        let dir = scratch_dir("net_gate_learns_host");
+        let engine = engine_with_net(&dir, gate(false));
+        engine.net.note_failure("Network is unreachable").await;
+        let account: SyncAccount = serde_json::from_value(serde_json::json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": {
+                "email": "user@example.com",
+                "password": "test-password",
+                "imapHost": "imap.example.test",
+                "imapPort": 993,
+            }
+        }))
+        .expect("build SyncAccount");
+
+        let result = engine.sync_account(&account, "INBOX").await;
+
+        assert!(result.offline, "the gate stayed shut");
+        assert_eq!(engine.net.registered_hosts(), vec![("imap.example.test".to_string(), 993)]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A sync the network let through but the server's port refused says so,
+    /// by code, so the app can name the remedy instead of "Connection problem".
+    #[tokio::test]
+    async fn a_refused_sync_carries_its_error_code() {
+        let dir = scratch_dir("net_gate_error_code");
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let engine = engine_with_net(&dir, gate(true)); // the probe says online
+        let account: SyncAccount = serde_json::from_value(serde_json::json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": {
+                "email": "user@example.com",
+                "password": "test-password",
+                "imapHost": "127.0.0.1",
+                "imapPort": port,
+            }
+        }))
+        .expect("build SyncAccount");
+
+        let result = engine.sync_account(&account, "INBOX").await;
+
+        assert!(!result.success);
+        assert!(!result.offline, "the probe said online: a closed port is not the internet");
+        assert_eq!(result.error_code, Some("refused"), "error was: {:?}", result.error);
+        assert!(result.error.is_some(), "the text stays alongside the code");
 
         let _ = fs::remove_dir_all(&dir);
     }

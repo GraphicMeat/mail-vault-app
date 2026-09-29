@@ -78,10 +78,24 @@ async function httpRequest(endpoint, options = {}) {
 
 export { ApiError };
 
+// The daemon answers a failed connection test with `success:false` and an
+// `errorCode` (plus the host and port it tried) rather than an RPC error, so
+// the code can reach the app. Every caller expects a rejection, so it is
+// turned back into one here, carrying the code along for
+// describeConnectionError.
+function rejectFailedTest(result) {
+  if (result?.success !== false) return result;
+  throw Object.assign(new ApiError(result.error || t('errors.conn.couldReachMailServerCheck'), 0), {
+    errorCode: result.errorCode ?? null,
+    host: result.host ?? null,
+    port: result.port ?? null,
+  });
+}
+
 export async function testConnection(account) {
   console.log('[api.js] testConnection: %s @ %s:%d', account.email, account.imapHost, account.imapPort);
   if (IS_TAURI) {
-    return tauriInvoke('imap_test_connection', { account });
+    return rejectFailedTest(await tauriInvoke('imap_test_connection', { account }));
   }
   return httpRequest('/test-connection', {
     method: 'POST',
@@ -91,7 +105,7 @@ export async function testConnection(account) {
 }
 
 export async function smtpTestConnection(account) {
-  return tauriInvoke('smtp_test_connection', { account });
+  return rejectFailedTest(await tauriInvoke('smtp_test_connection', { account }));
 }
 
 export async function storePassword(accountId, password) {

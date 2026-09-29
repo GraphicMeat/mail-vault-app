@@ -1000,6 +1000,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                   ? t('svc.activateAccount.noInternetConnectionShowingWhat')
                   : (syncResult?.error || 'The server refused the sync. Nothing in your vault changed.'),
                 connectionErrorType: offline ? 'offline' : 'serverError',
+                // What the daemon found the failure to be (dns, refused,
+                // blocked_or_timeout, tls, auth, throttled): the sidebar
+                // notice words it and names the remedy. The text stays for Details.
+                connectionErrorCode: offline ? null : (syncResult?.errorCode ?? null),
                 loading: false,
                 loadingMore: false,
               });
@@ -1296,6 +1300,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           connectionStatus: 'error',
           connectionError: errorMessage,
           connectionErrorType: errorType,
+          connectionErrorCode: null,
         });
         get().updateSortedEmails();
 

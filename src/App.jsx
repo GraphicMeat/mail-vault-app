@@ -1023,7 +1023,8 @@ function App() {
         useMailStore.setState({
           connectionStatus: 'error',
           connectionError: event.payload,
-          connectionErrorType: 'serverError'
+          connectionErrorType: 'serverError',
+          connectionErrorCode: null,
         });
       }).then(fn => {
         if (!active) fn(); // unmounted before listener ready — detach immediately
