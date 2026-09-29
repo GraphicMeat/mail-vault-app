@@ -117,6 +117,20 @@ describe('Sidebar local folders', () => {
     await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('studio', 'INBOX'));
   });
 
+  it('opens INBOX when the delete went but listing the folders again failed', async () => {
+    const loadEmails = vi.fn(async () => {});
+    useMailStore.setState({ activeMailbox: NAME, loadEmails });
+    sent.answer.list_local_folders = () => Promise.reject(new Error('daemon unreachable'));
+    render(<Sidebar />);
+    openMenu();
+    fireEvent.click(deleteItem());
+    fireEvent.click(within(confirmDialog()).getByTestId('confirm-delete-folder'));
+
+    // The stale list still names the folder; the daemon's ok is what counts.
+    await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('studio', 'INBOX'));
+    expect(loadEmails).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['gone after all', [], 'INBOX'],
     ['still there', [FOLDER], 'rescan'],

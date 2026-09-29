@@ -84,7 +84,10 @@ export async function buildSearchTargets(mail, settings, searchFilters) {
       accountId: account.id,
       account: canSearchServer ? await ensureFreshToken(account) : null,
       localMailboxes: resolveLocalScope(tree, mail, folder),
-      knownMailboxes: serverSearchTargets(tree),
+      // The account's local folders by display name too: the daemon names a
+      // hit by the known mailbox its vault dir belongs to, and a local folder
+      // left out would come back under its dir, not the name its list uses.
+      knownMailboxes: [...serverSearchTargets(tree), ...(mail.localFolders?.[account.id] || []).map(f => f.name)],
       // A vault-only folder is on no server: the local lane is its whole search.
       serverMailboxes: canSearchServer
         ? serverMailboxes.filter(path => !isLocalMailbox(mail.localFolders, account.id, path))

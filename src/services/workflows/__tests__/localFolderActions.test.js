@@ -116,6 +116,7 @@ const { resolveMessageBody } = await import('../../export/bodyResolver');
 const { buildSearchTargets } = await import('../../searchTargets');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { selectionKey, inLocalFolder } = await import('../../../stores/slices/unifiedHelpers');
+const { accountPayload } = await import('../../../stores/viewStore');
 
 const ACCOUNT = { id: 'acct-a', email: 'a@mock.test', password: 'pw' };
 const ROW = {
@@ -357,5 +358,80 @@ describe('a search hit from a local folder, named by its directory', () => {
     expect(api.checkMailboxStatus).not.toHaveBeenCalled();
     expect(sends('maildir_delete_many')).toEqual([]);
     noServer();
+  });
+});
+
+// The open folder's list names it by display NAME; a hit the daemon returns
+// for it must name it the same way, or delete, star and the open-row
+// highlight address a second "folder" the list never shows. The daemon names
+// a hit by the one known mailbox whose vault dir holds it
+// (mail_search.rs `mailbox_for_vault_dir`), else by the dir itself. This
+// double does the same with the targets the app really builds.
+describe('a search inside the open local folder', () => {
+  const DIR = FOLDER.dir;
+  const dirOf = (mailbox) => [...mailbox].map(c => (/[\p{L}\p{N}._-]/u.test(c) ? c : '_')).join('');
+  const stampLikeDaemon = (target, row) => {
+    const named = target.knownMailboxes.filter(k => dirOf(k) === row.vaultDir);
+    return named.length === 1
+      ? { ...row, _mailbox: named[0] }
+      : { ...row, _mailbox: row.vaultDir, _localOnlyFolder: true };
+  };
+  const searchHit = async () => {
+    const [target] = await buildSearchTargets(useMailStore.getState(), { hiddenAccounts: {} }, { folder: 'current', location: 'all' });
+    const hit = stampLikeDaemon(target, {
+      ...ROW, _accountId: ACCOUNT.id, vaultDir: DIR, source: 'local', isLocal: true, isArchived: true,
+    });
+    useSearchStore.setState({ searchResults: [hit], searchActive: true });
+    return { target, hit };
+  };
+  const listRow = () => useMailStore.getState().sortedEmails.find(e => e.uid === 7);
+
+  it('names the folder among the known mailboxes, so the daemon stamps its hits with the display name', async () => {
+    prime();
+    const { target, hit } = await searchHit();
+
+    expect(target.localMailboxes).toEqual([NAME]);
+    expect(target.knownMailboxes).toContain(NAME);
+    expect(target.serverMailboxes).toEqual([]);
+    expect(hit._mailbox).toBe(NAME);
+  });
+
+  it('a deleted hit leaves the folder list too: no ghost row', async () => {
+    prime();
+    const { hit } = await searchHit();
+    expect(listRow()).toBeTruthy();
+
+    await useMailStore.getState().deleteEmailFromServer(hit.uid, { accountId: ACCOUNT.id, mailboxOverride: hit._mailbox });
+
+    expect(sends('maildir_delete')).toEqual([{ accountId: ACCOUNT.id, mailbox: NAME, uid: 7, bin: true }]);
+    expect(listRow()).toBeUndefined();
+  });
+
+  it('a star on a hit reaches the folder list\'s row', async () => {
+    prime();
+    const { hit } = await searchHit();
+
+    await useMailStore.getState().toggleFlagged(selectionKey(hit, useMailStore.getState()));
+
+    expect(listRow().flags).toContain('\\Flagged');
+    expect(m.queueOp).not.toHaveBeenCalled();
+  });
+
+  it('the opened hit is the highlighted row once the search clears', async () => {
+    prime();
+    const { hit } = await searchHit();
+
+    await useMailStore.getState().selectEmail(selectionKey(hit, useMailStore.getState()), 'local', hit._mailbox, null, hit);
+    useSearchStore.setState({ searchResults: [], searchActive: false });
+
+    const state = useMailStore.getState();
+    expect(state.selectedEmailId).toBe(selectionKey(listRow(), state));
+  });
+
+  it('a saved view names the account\'s local folders among its known mailboxes too', () => {
+    prime();
+    const payload = accountPayload(ACCOUNT, useMailStore.getState());
+
+    expect(payload.knownMailboxes).toEqual(['INBOX', 'Archive', 'Junk', NAME]);
   });
 });

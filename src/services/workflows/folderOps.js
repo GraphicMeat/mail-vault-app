@@ -132,9 +132,11 @@ export async function deleteLocalFolder(accountId, name) {
   const { useMailStore } = await import('../../stores/mailStore');
   const s = useMailStore.getState();
   if (s.activeAccountId === accountId && s.activeMailbox === name) {
-    // By the fresh listing, not by the answer: a refused delete can still have
-    // taken the folder, and a reload of a folder no longer local goes to a server.
-    await (isLocalMailbox(s.localFolders, accountId, name) ? s.loadEmails() : s.activateAccount(accountId, 'INBOX'));
+    // A delete that answered ok went, whatever a failed relist left behind.
+    // A refused one goes by the fresh listing: it can still have taken the
+    // folder, and a reload of a folder no longer local goes to a server.
+    const gone = !failure || !isLocalMailbox(s.localFolders, accountId, name);
+    await (gone ? s.activateAccount(accountId, 'INBOX') : s.loadEmails());
   }
   if (failure) {
     const message = String(failure?.message ?? failure);

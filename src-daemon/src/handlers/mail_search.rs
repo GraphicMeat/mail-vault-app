@@ -2533,6 +2533,31 @@ mod tests {
         }
     }
 
+    /// A folder kept only on this computer (MBOX import mode 3) that the app
+    /// names among the known mailboxes by its display name: its hits carry
+    /// that name, the one its own list uses, and are not marked as a folder
+    /// nothing knows.
+    #[tokio::test]
+    async fn a_local_folder_named_among_the_known_mailboxes_stamps_its_hits_with_that_name() {
+        let (tmp, state) = state();
+        let name = "MBOX import 2026-09-29";
+        write_mail(tmp.path(), "acct", name, 1, "imported", "body");
+        let mut req = request("named-local", 1);
+        req["targets"][0]["localMailboxes"] = json!([name]);
+        req["targets"][0]["knownMailboxes"] = json!(["INBOX", "Archive", name]);
+        let mut rx = state.events.subscribe();
+        call(&state, "mail_search_start", req).await;
+        let frames = collect_until_terminal(&mut rx, "named-local").await;
+        let row = frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .find(|row| row["subject"] == "imported")
+            .unwrap();
+        assert_eq!(row["_mailbox"], name);
+        assert_eq!(row["vaultDir"], "MBOX_import_2026-09-29");
+        assert!(row.get("_localOnlyFolder").is_none(), "{row}");
+    }
+
     #[test]
     fn local_filters_match_query_sender_attachments_and_inclusive_dates() {
         let row = LightEmail {

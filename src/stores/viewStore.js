@@ -91,7 +91,9 @@ export function accountPayload(account, mail) {
   return {
     accountId: account.id,
     address: account.email || '',
-    knownMailboxes: boxes.map(box => box.path).filter(Boolean),
+    // Local folders by display name too, so the daemon names their hits the
+    // way their lists do (see searchTargets).
+    knownMailboxes: [...boxes.map(box => box.path).filter(Boolean), ...(mail.localFolders?.[account.id] || []).map(f => f.name)],
     specialUse,
   };
 }
