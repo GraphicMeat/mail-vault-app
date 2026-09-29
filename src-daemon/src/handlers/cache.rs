@@ -89,6 +89,21 @@ fn removes_uids(data: &str) -> bool {
             .unwrap_or(false)
 }
 
+/// The account's cached folder list as `load_mailbox_cache` answers it, for
+/// that route and the mbox import: the custody row, else the pre-SQL
+/// `mailboxes.json` moved in once. `None` when neither exists. Blocking.
+pub(crate) fn load_mailbox_listing(state: &Arc<DaemonState>, account_id: &str) -> Result<Option<String>, String> {
+    let root = vault_root(state)?;
+    if let Some(data) = daemon_custody::with_conn(state, |c| sql_cache::load_mailboxes(c, account_id))? {
+        return Ok(Some(data));
+    }
+    let Some(data) = header_cache::take_legacy_mailbox_cache(&root, account_id) else {
+        return Ok(None);
+    };
+    daemon_custody::with_conn(state, |c| sql_cache::save_mailboxes(c, account_id, &data))?;
+    Ok(Some(data))
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
@@ -247,16 +262,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    if let Some(data) = daemon_custody::with_conn(&state, |c| sql_cache::load_mailboxes(c, &account_id))? {
-                        return Ok(Value::String(data));
-                    }
-                    // Nothing stored: move the pre-SQL `mailboxes.json` in, once.
-                    let Some(data) = header_cache::take_legacy_mailbox_cache(&root, &account_id) else {
-                        return Ok(Value::Null);
-                    };
-                    daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))?;
-                    Ok(Value::String(data))
+                    Ok(load_mailbox_listing(&state, &account_id)?.map_or(Value::Null, Value::String))
                 })
                 .await
                 .and_then(|r| r),

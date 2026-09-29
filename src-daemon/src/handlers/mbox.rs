@@ -5,17 +5,23 @@
 //! the Tauri commands (including the dead `export_mbox`) and switches the
 //! frontend to `daemon_rpc`.
 //!
-//! Both routes run on `spawn_blocking` (`common::blocking`): a full mbox
+//! Every route runs on `spawn_blocking` (`common::blocking`): a full mbox
 //! read-or-write pass is disk I/O end to end and must never run on a tokio
-//! worker.
+//! worker. `mbox_probe` reads a bounded head of the file for the import
+//! options dialog; `import_mbox` takes its `mode`, `useLabels` and
+//! `fallbackMailbox`.
 
-use crate::handlers::common::{blocking, str_arg};
+use crate::handlers::common::{blocking, done, opt_str_arg, str_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::mbox;
 use crate::server::DaemonState;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+/// The answer to an import mode whose backend has not landed yet; the app
+/// shows `errors.E_MBOX_MODE_UNAVAILABLE` for it.
+const E_MBOX_MODE_UNAVAILABLE: &str = "E_MBOX_MODE_UNAVAILABLE";
 
 macro_rules! req {
     ($result:expr) => {
@@ -56,12 +62,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "import_mbox" => {
             let source_path = req!(str_arg(&id, params, "sourcePath"));
             let account_id = req!(str_arg(&id, params, "accountId"));
-            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            // `mode`: "local" (the default) files into the account's vault
+            // folders; "server" and "folder" land in later tasks (R1).
+            match params.get("mode").filter(|m| !m.is_null()).map_or(Some("local"), Value::as_str) {
+                Some("local") => {}
+                Some(m @ ("server" | "folder")) => {
+                    let msg = format!("{E_MBOX_MODE_UNAVAILABLE}: import mode {m} is not available yet");
+                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, msg));
+                }
+                _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Unknown mode {}", params["mode"]))),
+            }
+            let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
+            let use_labels = params.get("useLabels").and_then(Value::as_bool).unwrap_or(false);
+            // With labels, what has no folder of its own goes to
+            // `fallbackMailbox`, else to `mailbox`.
+            let mailbox = if use_labels { opt_str_arg(params, "fallbackMailbox").unwrap_or(mailbox) } else { mailbox };
 
             let state = Arc::clone(state);
             let result: Result<Value, String> = blocking(move || -> Result<Value, String> {
                 let emit = bus_emit(&state);
-                let out = mbox::import_mbox(&state, PathBuf::from(&source_path), account_id, mailbox, emit)?;
+                let out = mbox::import_mbox(&state, PathBuf::from(&source_path), account_id, mailbox, use_labels, emit)?;
                 serde_json::to_value(out).map_err(|e| e.to_string())
             })
             .await
@@ -71,6 +91,20 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(v) => RpcResponse::success(id, v),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
+        }
+        "mbox_probe" => {
+            let source_path = req!(str_arg(&id, params, "sourcePath"));
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let out = mbox::probe_mbox(&state, std::path::Path::new(&source_path), &account_id)?;
+                    serde_json::to_value(out).map_err(|e| e.to_string())
+                })
+                .await
+                .and_then(|r| r),
+            )
         }
         _ => return None,
     })
@@ -173,6 +207,147 @@ mod tests {
     async fn import_mbox_missing_account_id_is_invalid_params() {
         let (_v, _a, s) = st(true);
         let resp = call(&s, "import_mbox", json!({"sourcePath": "/tmp/x.mbox", "mailbox": "INBOX"})).await;
+        assert_eq!(resp.error.unwrap().code, ipc::INVALID_PARAMS);
+    }
+
+    // -- mode, useLabels, fallbackMailbox; mbox_probe -----------------------
+
+    fn save_listing(s: &Arc<DaemonState>, paths: &[&str]) {
+        let list: Vec<Value> = paths.iter().map(|p| json!({"name": p, "path": p, "specialUse": null, "flags": [], "delimiter": "/"})).collect();
+        let listing = json!({"mailboxes": list}).to_string();
+        crate::custody::with_conn(s, |c| mailvault_core::custody::cache::save_mailboxes(c, "acct1", &listing)).unwrap();
+    }
+
+    /// An mbox of messages with these `X-Gmail-Labels` values (`""`: no header).
+    fn takeout(dir: &std::path::Path, labels: &[&str]) -> String {
+        let mut out = String::new();
+        for (i, l) in labels.iter().enumerate() {
+            let header = if l.is_empty() { String::new() } else { format!("X-Gmail-Labels: {l}\r\n") };
+            out.push_str(&format!("From x@y Mon Jan  1 00:00:00 2026\n{header}Message-ID: <{i}@x>\r\nSubject: m{i}\r\n\r\nbody {i}\n\n"));
+        }
+        let path = dir.join(format!("{}.mbox", uuid::Uuid::new_v4()));
+        std::fs::write(&path, out).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn count_in(root: &std::path::Path, mailbox: &str) -> usize {
+        std::fs::read_dir(mailvault_core::vault_files::cur_path(root, "acct1", mailbox)).map_or(0, |d| d.count())
+    }
+
+    #[tokio::test]
+    async fn use_labels_routes_by_label_and_sends_the_rest_to_the_fallback_mailbox() {
+        let (v, _a, s) = st(true);
+        save_listing(&s, &["INBOX", "Work", "Archive"]);
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work,Opened", "Ghost"]);
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "fallbackMailbox": "Archive", "useLabels": true})).await;
+        let result = resp.result.expect("import_mbox must succeed");
+        assert_eq!(result["emailCount"], json!(2));
+        assert_eq!(result["foldersKnown"], json!(true));
+        assert_eq!(
+            result["folders"],
+            json!([{"mailbox": "Work", "imported": 1, "skipped": 0}, {"mailbox": "Archive", "imported": 1, "skipped": 0}])
+        );
+        assert_eq!((count_in(v.path(), "Work"), count_in(v.path(), "Archive"), count_in(v.path(), "INBOX")), (1, 1, 0));
+    }
+
+    #[tokio::test]
+    async fn use_labels_without_a_fallback_mailbox_falls_back_to_mailbox() {
+        let (v, _a, s) = st(true);
+        save_listing(&s, &["INBOX", "Work"]);
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work", "Ghost"]);
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "Old Mail", "useLabels": true})).await;
+        assert_eq!(resp.result.expect("import_mbox must succeed")["mailbox"], json!("Old Mail"));
+        assert_eq!((count_in(v.path(), "Work"), count_in(v.path(), "Old Mail")), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn use_labels_without_a_cached_listing_sends_everything_to_the_fallback() {
+        let (v, _a, s) = st(true);
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work", "Sent"]);
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "fallbackMailbox": "Archive", "useLabels": true})).await;
+        let result = resp.result.expect("import_mbox must succeed");
+        assert_eq!(result["foldersKnown"], json!(false));
+        assert_eq!(result["folders"], json!([{"mailbox": "Archive", "imported": 2, "skipped": 0}]));
+        assert_eq!((count_in(v.path(), "Archive"), count_in(v.path(), "INBOX"), count_in(v.path(), "Work")), (2, 0, 0));
+    }
+
+    /// The old call shape files everything in `mailbox`, labels or not, and an
+    /// omitted `mailbox` is INBOX.
+    #[tokio::test]
+    async fn the_old_call_shape_ignores_labels_and_an_omitted_mailbox_is_inbox() {
+        let (v, _a, s) = st(true);
+        save_listing(&s, &["INBOX", "Work", "Receipts"]);
+        let dir = tempfile::tempdir().unwrap();
+        let resp = call(&s, "import_mbox", json!({"sourcePath": takeout(dir.path(), &["Work"]), "accountId": "acct1", "mailbox": "Receipts"})).await;
+        let result = resp.result.expect("import_mbox must succeed");
+        assert_eq!(result["folders"], json!([{"mailbox": "Receipts", "imported": 1, "skipped": 0}]));
+        assert_eq!((count_in(v.path(), "Receipts"), count_in(v.path(), "Work")), (1, 0));
+
+        let resp = call(&s, "import_mbox", json!({"sourcePath": takeout(dir.path(), &[""]), "accountId": "acct1"})).await;
+        assert_eq!(resp.result.expect("mailbox is optional")["mailbox"], json!("INBOX"));
+        assert_eq!(count_in(v.path(), "INBOX"), 1);
+    }
+
+    /// R1: modes whose backends land later answer with a code the app maps to
+    /// a catalog key, before touching the file or the vault.
+    #[tokio::test]
+    async fn modes_not_built_yet_answer_with_their_code_and_write_nothing() {
+        let (v, _a, s) = st(true);
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work"]);
+        for mode in ["server", "folder"] {
+            let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": mode})).await;
+            let err = resp.error.unwrap_or_else(|| panic!("mode {mode} must be refused"));
+            assert!(err.message.starts_with("E_MBOX_MODE_UNAVAILABLE:"), "{}", err.message);
+        }
+        assert!(!mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1").exists(), "nothing was imported");
+        let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": "local"})).await;
+        assert_eq!(resp.result.expect("local is today's import")["emailCount"], json!(1));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_mode_is_invalid_params_and_writes_nothing() {
+        let (v, _a, s) = st(true);
+        let dir = tempfile::tempdir().unwrap();
+        let src = takeout(dir.path(), &["Work"]);
+        for mode in [json!("restore"), json!(3)] {
+            let resp = call(&s, "import_mbox", json!({"sourcePath": src, "accountId": "acct1", "mailbox": "INBOX", "mode": mode})).await;
+            assert_eq!(resp.error.unwrap_or_else(|| panic!("mode {mode} must be refused")).code, ipc::INVALID_PARAMS);
+        }
+        assert!(!mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1").exists(), "nothing was imported");
+    }
+
+    #[tokio::test]
+    async fn mbox_probe_reaches_this_router_through_handle_request() {
+        let (_v, _a, s) = st(true);
+        let resp = handle_request_for_test(&s, "mbox_probe", json!({"sourcePath": "/nonexistent-xyz.mbox", "accountId": "a1"})).await;
+        let err = resp.error.expect("must be an error");
+        assert_ne!(err.code, ipc::METHOD_NOT_FOUND, "mbox_probe did not reach handlers::mbox::route");
+    }
+
+    #[tokio::test]
+    async fn mbox_probe_reports_size_labels_and_whether_the_folders_are_known() {
+        let (_v, _a, s) = st(true);
+        save_listing(&s, &["INBOX", "Work"]);
+        let dir = tempfile::tempdir().unwrap();
+        let labelled = takeout(dir.path(), &["", "Inbox,Opened"]);
+        let resp = call(&s, "mbox_probe", json!({"sourcePath": labelled, "accountId": "acct1"})).await;
+        let size = std::fs::metadata(&labelled).unwrap().len();
+        assert_eq!(resp.result.expect("probe"), json!({"bytes": size, "hasLabels": true, "foldersKnown": true, "sampledMessages": 2}));
+
+        let plain = takeout(dir.path(), &["", "", ""]);
+        let resp = call(&s, "mbox_probe", json!({"sourcePath": plain, "accountId": "no-listing"})).await;
+        let result = resp.result.expect("probe");
+        assert_eq!((result["hasLabels"].clone(), result["foldersKnown"].clone(), result["sampledMessages"].clone()), (json!(false), json!(false), json!(3)));
+    }
+
+    #[tokio::test]
+    async fn mbox_probe_missing_source_path_is_invalid_params() {
+        let (_v, _a, s) = st(true);
+        let resp = call(&s, "mbox_probe", json!({"accountId": "acct1"})).await;
         assert_eq!(resp.error.unwrap().code, ipc::INVALID_PARAMS);
     }
 }
