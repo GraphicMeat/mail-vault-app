@@ -20,10 +20,11 @@
  *
  * The unreachable-vault case renames the vault root away (the daemon's
  * reachability is `vault_root()` plus `is_dir()`, taken on every count),
- * reopens the panel so the row counts again, and puts the root back. It waits
- * for the search index to be idle first (the save's writes nudge it, and an
- * index pass creates its store under the root), and fails with its own
- * message if anything recreates the root while it is away. The
+ * reopens the panel so the row counts again, and puts the root back. The
+ * search index keeps its store under the root and recreates the root when a
+ * pass finds it gone, so the case waits for the index to settle, switches it
+ * off (the app's own setting) while the root is away and back on after, and
+ * fails with its own message if anything recreates the root meanwhile. The
  * header cache lives inside the vault, and the daemon keeps it open, so the
  * count may come back with the reason or as unknown with the reason; both
  * must show the reason and neither may say everything is in the vault. It
@@ -110,6 +111,16 @@ function archivedInboxFiles(accountId) {
 }
 
 let away = null;
+// Whether the unreachable case switched the search index off, and the
+// setting it found, so the index is switched back whatever happens.
+let indexSwitched = false;
+let indexWas = null;
+
+async function restoreIndex() {
+  if (!indexSwitched) return;
+  indexSwitched = false;
+  await browser.execute((v) => window.__SETTINGS_STORE__.setState({ searchIndexEnabled: v }), indexWas ?? true);
+}
 
 /** Put the vault root back where the daemon expects it. */
 function restoreVault() {
@@ -182,6 +193,7 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   after(async function () {
     // The vault first: a resumed pipeline writing into a missing root would recreate it.
     try { restoreVault(); } catch (e) { console.warn(`[vault-gap] could not put the vault back: ${e.message}`); }
+    await restoreIndex().catch((e) => console.warn(`[vault-gap] could not switch the search index back: ${e.message}`));
     await browser.execute((id) => {
       window.__SETTINGS_STORE__.setState((s) => {
         const { [id]: _, ...rest } = s.fetchModes || {};
@@ -247,23 +259,32 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   it('an unreachable vault shows the reason, never everything-in-your-vault, and cannot save', async function () {
     const root = vaultRoot();
     assert.ok(existsSync(root), `no vault at ${root}`);
-    // The save's vault writes nudge the search index, and an index pass writes
-    // (and creates) its store under the vault root. Rename only once the index
-    // has been idle for two reads a second apart, so nothing recreates the root
-    // while it is away.
+    // The search index keeps its store under the vault root, and a pass that
+    // finds the root gone recovers by reopening that store, which creates the
+    // root again (search_index/db.rs `open`: create_dir_all). The save's
+    // writes nudge it, and a burst of nudges waits up to 1.5 s (COALESCE)
+    // while the status still reads idle. So: wait until two reads 2 s apart
+    // are settled (phases are starting, recovering, indexing, idle, error,
+    // off), then switch the index off through the app's own setting (the app
+    // pushes it to the daemon) and move the vault only once the daemon says off.
+    const SETTLED = ['idle', 'off', 'error'];
     let index = null;
-    let idleReads = 0;
+    let settledReads = 0;
     try {
       await browser.waitUntil(async () => {
         const reply = await daemonRpc('search_index_status', {});
         index = reply.ok ? reply.v : { error: reply.__error };
-        const idle = reply.ok && !['indexing', 'starting'].includes(reply.v?.state);
-        idleReads = idle ? idleReads + 1 : 0;
-        return idleReads >= 2;
-      }, { timeout: 120_000, interval: 1_000 });
+        settledReads = reply.ok && SETTLED.includes(reply.v?.state) ? settledReads + 1 : 0;
+        return settledReads >= 2;
+      }, { timeout: 120_000, interval: 2_000 });
     } catch (e) {
       throw new Error(`the search index never settled before the vault was moved away: ${JSON.stringify(index)} (${e.message})`);
     }
+    indexWas = await browser.execute(() => window.__SETTINGS_STORE__.getState().searchIndexEnabled);
+    indexSwitched = true;
+    await browser.execute(() => window.__SETTINGS_STORE__.setState({ searchIndexEnabled: false }));
+    await wait(async () => (await daemonRpc('search_index_status', {})).v?.state === 'off', 30_000,
+      'the search index never switched off');
     away = `${root}.away-${Date.now()}`;
     renameSync(root, away);
     // Something writing into the vault while it is away brings the root back:
@@ -300,6 +321,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
       assert.equal(reply.v.reason, 'E_VAULT_UNAVAILABLE');
     } finally {
       restoreVault();
+      // Back on only with the root in place: it reopens its store there.
+      await restoreIndex();
     }
   });
 });
