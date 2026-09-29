@@ -10,7 +10,7 @@ import Image from '@tiptap/extension-image';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck,
-  ExternalLink, Pencil, Unlink, Trash2
+  ExternalLink, Pencil, Unlink, Trash2, ImagePlus
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSpellcheckStatus } from '../hooks/useSpellcheckStatus';
@@ -22,6 +22,12 @@ import { FIELD_TRIGGER } from './ui/field';
 import { Z } from './ui/layers';
 import { hasOpenDialog } from '../hooks/useDialogA11y';
 import { linkRangeAt, applyLink, removeLink, removeLinkWithText, openLink } from '../utils/editorLinks';
+import { imageList, resizedImage, scaleOffer } from '../utils/signatureImageScale';
+import { ImageScaleDialog } from './ImageScaleDialog';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { invoke } from '@tauri-apps/api/core';
+import { toClientPoint, toAttachment } from '../utils/nativeDrop';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -45,7 +51,7 @@ function ToolbarDivider() {
   return <div className="w-px h-5 bg-mail-border mx-0.5" />;
 }
 
-function Toolbar({ editor, onLink }) {
+function Toolbar({ editor, onLink, onImage }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
@@ -109,6 +115,11 @@ function Toolbar({ editor, onLink }) {
       <ToolbarButton onClick={() => onLink()} active={editor.isActive('link')} title={t('editor.insertLink')}>
         <LinkIcon size={S} />
       </ToolbarButton>
+      {onImage && (
+        <ToolbarButton onClick={onImage} title={t('editor.insertImage')}>
+          <ImagePlus size={S} />
+        </ToolbarButton>
+      )}
 
       <ToolbarDivider />
 
@@ -299,7 +310,7 @@ const MailHardBreak = HardBreak.extend({
 });
 
 /** The compose schema. Exported so the tests read and write HTML through the same one. */
-export const editorExtensions = (placeholder) => [
+export const editorExtensions = (placeholder, { resizeImages = false } = {}) => [
   StarterKit.configure({
     heading: false,
     // StarterKit ships its own link and underline; the two below replace
@@ -320,7 +331,20 @@ export const editorExtensions = (placeholder) => [
   Placeholder.configure({ placeholder }),
   // allowBase64: compose restores initialData.body HTML after minimize /
   // undo-send, and the inline picture must parse back out of that string.
-  Image.configure({ allowBase64: true }),
+  // `resizeImages`: a picture gets corner handles; the size lands in its
+  // width/height attributes, which the email carries.
+  Image.configure({
+    allowBase64: true,
+    ...(resizeImages && {
+      resize: {
+        enabled: true,
+        directions: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+        minWidth: 16,
+        minHeight: 16,
+        alwaysPreserveAspectRatio: true,
+      },
+    }),
+  }),
 ];
 
 /**
@@ -342,8 +366,18 @@ export function padEmptyLines(html) {
   return doc.body.innerHTML;
 }
 
-export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, placeCaret }) {
+/**
+ * `imageTools`: a signature's editor. Adds the insert-image button and corner
+ * handles on a picture, and after a resize offers the file at 3x its display
+ * size (see ImageScaleDialog).
+ */
+export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, placeCaret, imageTools = false }) {
   const t = useT();
+  const [scaleOfferState, setScaleOffer] = useState(null);
+  const pictures = useRef([]);
+  const fileInput = useRef(null);
+  const wrap = useRef(null);
+  const [fileDrag, setFileDrag] = useState(false);
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const [card, setCard] = useState(null);          // hovered link: { a, href, top, left }
   const [linkEdit, setLinkEdit] = useState(null);  // link panel: { from, to, text, href, edit, top, left }
@@ -356,14 +390,18 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     // Compose of a session committed an editor the timer had already destroyed.
     // `editor` is null for the first render instead.
     immediatelyRender: false,
-    extensions: editorExtensions(placeholder),
+    extensions: editorExtensions(placeholder, { resizeImages: imageTools }),
     content,
     // Fires once the instance above is actually built (never during render —
     // see the immediatelyRender note above). Reply/replyAll use `placeCaret`
     // to put the caret in the body instead of the To field (ComposeModal).
-    onCreate: placeCaret ? ({ editor }) => placeCaret(editor) : undefined,
+    onCreate: ({ editor }) => {
+      if (imageTools) pictures.current = imageList(editor.state.doc);
+      placeCaret?.(editor);
+    },
     onUpdate: ({ editor }) => {
       setCard(null);
+      if (imageTools) watchPictures(editor);
       onUpdate(padEmptyLines(editor.getHTML()));
     },
     editorProps: {
@@ -396,6 +434,63 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
       },
     },
   });
+
+  // A signature editor takes pictures dropped from Finder. In the app a file
+  // drag never reaches WebKit (see src/utils/nativeDrop.js): Tauri reports the
+  // drop as paths plus the pointer position, and the editor under that point
+  // claims it. Only pictures are taken.
+  useEffect(() => {
+    if (!imageTools || !editor || !window.__TAURI__ || document.body.dataset.mailvaultDemo === 'true') return undefined;
+    let disposed = false;
+    const stops = [];
+    const onDrop = async ({ paths = [], position } = {}) => {
+      setFileDrag(false);
+      const point = toClientPoint(position, {
+        dpr: window.devicePixelRatio, width: window.innerWidth, height: window.innerHeight,
+      });
+      const under = document.elementFromPoint(point.x, point.y);
+      if (!paths.length || !under || !wrap.current?.contains(under) || editor.isDestroyed) return;
+      try {
+        const images = (await invoke('read_dropped_files', { paths })).map(toAttachment)
+          .filter(record => record.contentType.startsWith('image/'))
+          .map(record => ({ src: `data:${record.contentType};base64,${record.content}`, name: record.filename }));
+        insertImages(editor, images, editor.view.posAtCoords({ left: point.x, top: point.y })?.pos ?? null);
+      } catch { /* a file that cannot be read is not inserted */ }
+    };
+    const target = { target: getCurrentWebviewWindow().label };
+    Promise.all([
+      listen('tauri://drag-enter', () => setFileDrag(true), target),
+      listen('tauri://drag-leave', () => setFileDrag(false), target),
+      listen('tauri://drag-drop', (ev) => onDrop(ev.payload), target),
+    ]).then((fns) => { if (disposed) fns.forEach(f => f()); else stops.push(...fns); }).catch(() => {});
+    return () => { disposed = true; stops.forEach(f => f()); };
+  }, [imageTools, editor]);
+
+  // A picture whose display size just changed: is the file worth scaling to 3x?
+  // The handles commit once, when the drag ends, so this is asked once per resize.
+  function watchPictures(editor) {
+    const next = imageList(editor.state.doc);
+    const resized = resizedImage(pictures.current, next);
+    pictures.current = next;
+    if (resized) scaleOffer(resized).then(offer => { if (offer && !editor.isDestroyed) setScaleOffer(offer); });
+  }
+
+  const applyScale = () => {
+    const offer = scaleOfferState;
+    setScaleOffer(null);
+    if (!offer || !editor) return;
+    editor.commands.command(({ tr, state }) => {
+      let done = false;
+      state.doc.descendants((node, pos) => {
+        if (!done && node.type.name === 'image' && node.attrs.src === offer.src) {
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: offer.target.src });
+          done = true;
+        }
+        return !done;
+      });
+      return done;
+    });
+  };
 
   // Expose editor instance to parent
   useEffect(() => {
@@ -444,6 +539,8 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   useEffect(() => {
     if (editor && !editor.isDestroyed && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
       editor.chain().setMeta('addToHistory', false).setContent(content).run();
+      // An external swap is not a resize: the next drag compares against this.
+      if (imageTools) pictures.current = imageList(editor.state.doc);
       const active = document.activeElement;
       if (placeCaret && !(active && !editor.view.dom.contains(active)
         && active.matches?.('input, textarea, select, [contenteditable="true"]'))) placeCaret(editor);
@@ -512,8 +609,20 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   return (
     // spellCheck is inherited by the contenteditable below — ProseMirror never
     // sets the attribute itself, so nothing here overrides it.
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg" spellCheck={spellcheckEnabled}>
-      <Toolbar editor={editor} onLink={openLinkEditor} />
+    <div ref={wrap} data-file-drag={fileDrag || undefined}
+      className={`flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg ${fileDrag ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
+      spellCheck={spellcheckEnabled}>
+      <Toolbar editor={editor} onLink={openLinkEditor} onImage={imageTools ? () => fileInput.current?.click() : undefined} />
+      {imageTools && (
+        <input ref={fileInput} type="file" accept="image/*" multiple className="hidden" tabIndex={-1}
+          data-testid="editor-image-input" aria-hidden="true"
+          onChange={(event) => {
+            const files = Array.from(event.target.files || []).filter(isImageFile);
+            event.target.value = '';
+            insertImageFiles(editor, files, null);
+          }} />
+      )}
+      <ImageScaleDialog offer={scaleOfferState} onScale={applyScale} onKeep={() => setScaleOffer(null)} />
       <div className="flex-1 overflow-y-auto" onMouseOver={onMouseOver} onMouseOut={onMouseOut}>
         <EditorContent editor={editor} className="h-full" />
       </div>

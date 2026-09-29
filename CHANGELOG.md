@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Resize a signature picture, and get a sharp file.** The signature editors in Settings > Accounts (the account's and an alias's own) now have an Insert image button, take a picture dragged in from Finder or pasted, and show corner handles on a picture to resize it. After you resize, MailVault offers to store the picture at three times the size it is shown at (a logo shown at 40 × 40 becomes a 120 × 120 file), which looks sharp on every screen and is usually much smaller. The offer shows the file size now and after, and the picture as it will look; Keep original leaves it alone, and nothing is offered when the file is already that small.
 - **Compact or comfortable message rows.** Settings > Appearance > Layout > Message list density switches the list between the current comfortable rows and tighter compact ones, like the sidebar density beside it.
 - **Move a compose window back into the main window.** A message you are writing in its own window has a button in its header that brings the draft back into the main window, content intact.
 - **Signature logo size guidance.** Settings > Accounts shows how large the logo in your signature is: under 100 KB is ideal, 100 to 200 KB gets a warning, and more than 200 KB is flagged as too large, with the recommended size next to the editor.
@@ -71,6 +72,8 @@
 - **Compose remembers its own window.** Open a message you are writing in a new window, and every compose after it, new messages, replies and forwards alike, opens in a window of its own too. Settings > Mail preferences > Behavior > Open Compose switches back to writing over your mail.
 
 ### Fixed
+- **A view's unsaved-changes prompt shows the words.** Leaving a view you edited without saving used to list "Contains" or "Sender" with no hint of what changed; it now shows what the phrase was and what it became, for the name, the words and the sender.
+- **A view's words also match attachment file names.** A view asking for "invoice" now finds a message whose attachment is named invoice-4471.pdf, as the word suggestions already implied, and it does the same for the search box and for excluded words. Attachment text was already searched when attachment indexing is on; file names are found wherever attachments are indexed.
 - **Archive & Delete no longer brings deleted messages back.** After Bulk Email Operations deleted messages from the server, the folder list went blank and reopening the folder showed them again as plain archived mail. The deleted messages now leave the list at once, and their saved copies are marked as deleted from the server by MailVault, the same as when you delete a single message.
 - **Resuming a paused account migration continues the same run.** Pressing Resume after Pause used to leave the paused run waiting and start a second one beside it; it now wakes the run that was paused. A pause that lands in the middle of a folder is saved right away, so it survives closing MailVault.
 - **Saved-view counts stay true.** The badge beside each view is counted again a moment after you read, star, move or delete mail, undo one of those, or a sync brings a change from another device. A count taken while the search index is still building keeps the last numbers instead of blanking them.

@@ -86,9 +86,24 @@ describe('unsaved changes', () => {
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Bills' } });
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'invoice' } });
     fireEvent.click(screen.getByTestId('view-starred-yes'));
-    expect(guard().changes).toEqual(['views.name', 'views.filter.query', 'views.filter.starred']);
+    expect(guard().changes).toEqual([
+      'views.name: “Receipts” → “Bills”', 'views.filter.query: — → “invoice”', 'views.filter.starred',
+    ]);
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
-    expect(guard().changes).toEqual(['views.filter.query', 'views.filter.starred']);
+    expect(guard().changes).toEqual(['views.filter.query: — → “invoice”', 'views.filter.starred']);
+  });
+
+  it('shows the phrase a text part was and became, and long ones clipped', () => {
+    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
+    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'x'.repeat(80) } });
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'statement' } });
+    const [name, query] = guard().changes;
+    expect(name).toBe(`views.name: “Receipts” → “${'x'.repeat(59)}…”`);
+    expect(query).toBe('views.filter.query: — → “statement”');
+    // an emptied part reads as removed, not as a bare label
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
+    expect(guard()).toBeNull();
   });
 
   it('the prompt saves what the form says, then tells the host', async () => {

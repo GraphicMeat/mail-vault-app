@@ -256,6 +256,12 @@ pub fn boolean_groups(query: &str) -> Option<Vec<Vec<String>>> {
     )
 }
 
+/// A name in the `attachments` table holding `?`. The attachment's TEXT is in
+/// `msg_fts.attach`; its file name is not, so a word written in a name
+/// (`invoice-4471.pdf`) needs this second look. Uncorrelated, like the FTS
+/// probes, so it runs once per query.
+const FILENAME_SQL: &str = "m.id IN (SELECT message_row FROM attachments WHERE filename LIKE ? ESCAPE '\\')";
+
 /// One `&&` word as a WHERE clause. A word of 3+ characters is a phrase the
 /// trigram index must hold, so `mindaugo 30` needs the `30` too. A two-letter
 /// Latin word is too short for a trigram on its own, so it is also looked for
@@ -266,11 +272,13 @@ pub fn boolean_groups(query: &str) -> Option<Vec<Vec<String>>> {
 fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
     if word.chars().count() >= 3 {
         args.push(Value::Text(fts_string(word)));
-        return "m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)".into();
+        args.push(Value::Text(like_pattern(word)));
+        return format!("(m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?) OR {FILENAME_SQL})");
     }
     if word.chars().any(is_cjk) {
         args.push(Value::Text(fts_string(&cjk_units(word))));
-        return "m.id IN (SELECT rowid FROM msg_cjk WHERE msg_cjk MATCH ?)".into();
+        args.push(Value::Text(like_pattern(word)));
+        return format!("(m.id IN (SELECT rowid FROM msg_cjk WHERE msg_cjk MATCH ?) OR {FILENAME_SQL})");
     }
     for _ in 0..3 {
         args.push(Value::Text(like_pattern(word)));
@@ -278,10 +286,12 @@ fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
     let headers = "m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\'";
     // One character plus its boundary is still under a trigram: headers only.
     if word.chars().count() < 2 {
-        return format!("({headers})");
+        args.push(Value::Text(like_pattern(word)));
+        return format!("({headers} OR {FILENAME_SQL})");
     }
     args.push(Value::Text(format!("{} OR {}", fts_string(&format!(" {word}")), fts_string(&format!("\n{word}")))));
-    format!("({headers} OR m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?))")
+    args.push(Value::Text(like_pattern(word)));
+    format!("({headers} OR m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?) OR {FILENAME_SQL})")
 }
 
 fn like_pattern(s: &str) -> String {
@@ -357,11 +367,10 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
             clauses.push(format!("({})", any.join(" OR ")));
         }
     } else if let Some(like) = &plan.like {
-        clauses.push(
-            "(m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')"
-                .into(),
-        );
-        for _ in 0..3 {
+        clauses.push(format!(
+            "(m.subject_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\' OR {FILENAME_SQL})"
+        ));
+        for _ in 0..4 {
             args.push(Value::Text(like_pattern(like)));
         }
     } else if plan.whole.is_some() || plan.all_long.is_some() || !plan.cjk.is_empty() {
@@ -381,6 +390,15 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         }
         if !all.is_empty() {
             branches.push(format!("({})", all.join(" AND ")));
+        }
+        // The same words in an attachment's file name: the whole query, or
+        // every word of it.
+        branches.push(FILENAME_SQL.into());
+        args.push(Value::Text(like_pattern(&plan.needles[0])));
+        let words: Vec<&String> = plan.needles.iter().skip(1).filter(|n| **n != plan.needles[0]).collect();
+        if !words.is_empty() {
+            branches.push(format!("({})", vec![FILENAME_SQL; words.len()].join(" AND ")));
+            args.extend(words.iter().map(|w| Value::Text(like_pattern(w))));
         }
         clauses.push(format!("({})", branches.join(" OR ")));
     }
@@ -1373,6 +1391,39 @@ mod tests {
     fn a_phrase_extends_to_the_end_of_the_word_the_prefix_ends_in() {
         let (_t, conn) = term_fixture(&[("a", 1, "Quarterly report 2025", &[])]);
         assert_eq!(terms(&suggest_terms(&conn, &[], "quarterly re", 0, 20).unwrap()), vec!["quarterly report"]);
+    }
+
+    fn found_uids(conn: &rusqlite::Connection, query: &str) -> Vec<u32> {
+        let req = SearchRequest { account_id: "a".into(), query: query.into(), ..Default::default() };
+        let mut uids: Vec<u32> = search(conn, &req).unwrap().hits.into_iter().map(|h| h.uid).collect();
+        uids.sort();
+        uids
+    }
+
+    /// The typeahead offers words from attachment names, so a query written
+    /// with one must find the message, whatever shape the query takes.
+    #[test]
+    fn a_query_finds_a_word_written_in_an_attachment_file_name() {
+        let (_t, conn) = term_fixture(&[
+            ("a", 1, "Hello", &["Invoice-4471.pdf"]),
+            ("a", 2, "Hello", &["photo.png"]),
+            ("a", 3, "Hello", &[]),
+        ]);
+        assert_eq!(found_uids(&conn, "invoice"), vec![1], "one long word");
+        assert_eq!(found_uids(&conn, "invoice 4471"), vec![1], "every word, in the name");
+        assert_eq!(found_uids(&conn, "invoice-4471.pdf"), vec![1], "the whole name");
+        assert_eq!(found_uids(&conn, "invoice && 4471"), vec![1], "an && group");
+        assert_eq!(found_uids(&conn, "photo || invoice"), vec![1, 2], "an || group");
+        assert_eq!(found_uids(&conn, "pd"), vec![1], "a short word");
+        assert!(found_uids(&conn, "receipt").is_empty());
+    }
+
+    #[test]
+    fn an_excluded_word_drops_a_message_whose_attachment_name_holds_it() {
+        let (_t, conn) = term_fixture(&[("a", 1, "Hello", &["invoice.pdf"]), ("a", 2, "Hello", &["photo.png"])]);
+        let req = SearchRequest { account_id: "a".into(), exclude_terms: vec!["invoice".into()], ..Default::default() };
+        let uids: Vec<u32> = search(&conn, &req).unwrap().hits.into_iter().map(|h| h.uid).collect();
+        assert_eq!(uids, vec![2]);
     }
 
     #[test]

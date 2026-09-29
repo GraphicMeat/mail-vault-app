@@ -552,6 +552,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   </label>
                   <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
                     <RichTextEditor
+                      imageTools
                       content={signatureHtml}
                       onUpdate={(html) => setSignatureHtml(html)}
                       placeholder={t('settings.accounts.bestRegardsJohnDoe')}

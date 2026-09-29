@@ -58,6 +58,11 @@ const CHANGE_LABELS = {
   fields: 'views.filter.fields', group: 'views.filter.group', sort: 'views.filter.sort',
   direction: 'views.filter.direction', showTimeline: 'views.showTimeline',
 };
+/// Parts that are a phrase: the prompt shows what it was and what it is now,
+/// not just that the part changed.
+const TEXT_CHANGES = ['name', 'query', 'sender'];
+const clip = text => (text.length > 60 ? `${text.slice(0, 59)}…` : text);
+const quoted = value => (value ? `“${clip(String(value))}”` : '—');
 const SORTS = ['date', 'sender', 'subject'];
 const DIRECTIONS = ['desc', 'asc'];
 
@@ -373,7 +378,9 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
   const current = snapshot();
   const changes = [...new Set(Object.keys(CHANGE_LABELS)
     .filter(key => JSON.stringify(current[key] ?? null) !== JSON.stringify(baseline[key] ?? null))
-    .map(key => t(CHANGE_LABELS[key])))];
+    .map(key => (TEXT_CHANGES.includes(key)
+      ? `${t(CHANGE_LABELS[key])}: ${quoted(baseline[key])} → ${quoted(current[key])}`
+      : t(CHANGE_LABELS[key]))))];
   const answers = useRef(null);
   answers.current = {
     save: async () => { const saved = await persist(); if (saved) onSaved?.(); return saved; },

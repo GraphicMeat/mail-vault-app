@@ -408,6 +408,7 @@ function AliasSignatureEditor({ accountId, alias }) {
     <div className="mt-2">
       <div className="flex h-40 rounded-lg border border-mail-border overflow-hidden" data-testid="alias-signature-editor">
         <RichTextEditor
+          imageTools
           content={html}
           onUpdate={next => {
             latest.current = next;
