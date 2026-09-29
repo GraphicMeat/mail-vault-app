@@ -56,7 +56,7 @@ const SYSTEM: [(&str, Role); 5] = [
 ];
 
 /// Labels that never name a folder besides the system ones (lowercase); `Category ...` is checked apart.
-const NOT_CUSTOM: [&str; 5] = ["starred", "important", "opened", "unread", "chat"];
+const NOT_CUSTOM: [&str; 6] = ["starred", "important", "opened", "unread", "chat", "archived"];
 
 /// The labels of one message, from its raw header block (CRLF or LF).
 pub fn labels_of(head: &[u8]) -> Vec<String> {
@@ -386,12 +386,12 @@ mod tests {
     #[test]
     fn ignored_labels_never_become_a_home_even_when_a_folder_bears_the_name() {
         let mut f = gmail();
-        for name in ["Starred", "Important", "Opened", "Unread", "Chat", "Category Promotions", "Category_Updates"] {
+        for name in ["Starred", "Important", "Opened", "Unread", "Chat", "Archived", "Category Promotions", "Category_Updates"] {
             f.push(fr(name, Role::Other, '/'));
         }
         let l = labs(&[
-            "Starred", "Important", "Opened", "Unread", "Chat", "Category Promotions", "Category_Updates",
-            "category social",
+            "Starred", "Important", "Opened", "Unread", "Chat", "Archived", "archived", "Category Promotions",
+            "Category_Updates", "category social",
         ]);
         assert_eq!(home_folder(&l, &f, false), Home::Fallback);
         assert_eq!(home_folder(&l, &f, true), Home::Fallback);
@@ -402,12 +402,55 @@ mod tests {
     }
 
     #[test]
+    fn every_system_label_without_a_folder_is_skipped_never_created() {
+        let f = gmail();
+        // (label, role that is missing, next system label, the folder it reaches)
+        for (label, role, next, next_path) in [
+            ("Inbox", Role::Inbox, "Sent", "[Gmail]/Sent Mail"),
+            ("Sent", Role::Sent, "Drafts", "[Gmail]/Drafts"),
+            ("Drafts", Role::Drafts, "Spam", "[Gmail]/Spam"),
+            ("Spam", Role::Spam, "Trash", "[Gmail]/Trash"),
+            ("Trash", Role::Trash, "Inbox", "INBOX"),
+        ] {
+            let without: Vec<FolderRef> = f.iter().filter(|x| x.role != role).cloned().collect();
+            for create in [false, true] {
+                // Alone: nothing to land in, and a system label is never a folder to create.
+                assert_eq!(home_folder(&labs(&[label]), &without, create), Home::Fallback, "{label} alone");
+                // The next priority step still runs, whatever the label order.
+                assert_eq!(
+                    home_folder(&labs(&[label, next]), &without, create),
+                    Home::Folder(folder(&without, next_path).clone()),
+                    "{label} then {next}"
+                );
+                // With a custom label after it, the custom folder is used.
+                assert_eq!(
+                    home_folder(&labs(&[label, "Work/Clients"]), &without, create),
+                    Home::Folder(folder(&without, "Work/Clients").clone()),
+                    "{label} then a custom label"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_takeout_message_with_only_important_and_a_category_falls_back() {
         let labels = labels_of(&head("X-Gmail-Labels: Important,Category Promotions"));
         assert_eq!(labels, labs(&["Important", "Category Promotions"]));
         assert_eq!(home_folder(&labels, &gmail(), false), Home::Fallback);
         assert_eq!(home_folder(&labels, &gmail(), true), Home::Fallback);
         assert_eq!(home_folder(&[], &gmail(), true), Home::Fallback);
+    }
+
+    #[test]
+    fn archived_is_ignored_and_never_creates_a_folder() {
+        // Takeout's pseudo-label for mail that only lives in All Mail.
+        let labels = labels_of(&head("X-Gmail-Labels: Archived,Opened"));
+        assert_eq!(labels, labs(&["Archived", "Opened"]));
+        assert_eq!(home_folder(&labels, &gmail(), true), Home::Fallback);
+        assert_eq!(home_folder(&labels, &gmail(), false), Home::Fallback);
+        // A real custom label after it is still the home, created in mode 1.
+        let with_custom = labs(&["Archived", "Ghost"]);
+        assert_eq!(home_folder(&with_custom, &gmail(), true), Home::Create("Ghost".into()));
     }
 
     #[test]
