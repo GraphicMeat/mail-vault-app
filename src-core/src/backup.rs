@@ -2084,6 +2084,35 @@ mod tests {
         assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([b]));
     }
 
+    /// An import copy (at the import uid B) of a message the server now holds
+    /// at 5 is set aside by the pass. The mirror still has B: the pre-sync
+    /// sets the mirror's copy aside too instead of restoring it into the vault.
+    #[test]
+    fn vault_uids_after_presync_keeps_a_set_aside_import_copy_out_of_the_vault() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let (vault_cur, mirror_cur) = (vault.path().join("INBOX").join("cur"), mirror.path().join("INBOX").join("cur"));
+        let b = crate::maildir::IMPORT_UID_BASE;
+        let raw = "Message-ID: <m@x>\r\nSubject: Hi\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nbody\r\n";
+        for cur in [&vault_cur, &mirror_cur] {
+            std::fs::create_dir_all(cur).unwrap();
+            for uid in [5, b] {
+                std::fs::write(cur.join(crate::vault_files::build_maildir_filename(uid, &["archived".to_string()])), raw).unwrap();
+            }
+        }
+        let row = serde_json::json!({"uid": 5, "messageId": "<m@x>", "subject": "Hi", "messageDate": "Mon, 1 Jan 2024 10:00:00 +0000"});
+        let server = crate::import_rehome::ServerView::from_headers(&[row]);
+        let plan = crate::import_rehome::plan(vault_cur.parent().unwrap(), &server, false, &HashSet::new());
+        assert_eq!(crate::import_rehome::apply(vault_cur.parent().unwrap(), &plan).unwrap().set_aside, vec![b]);
+
+        let (_app, reg) = test_registry(vault.path());
+        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &vault_cur, Some(&mirror_cur)).unwrap();
+
+        assert_eq!(uids, HashSet::from([5]), "the import copy stays out of the vault");
+        assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([5]));
+        assert!(mirror.path().join("INBOX").join(crate::maildir::ORPHAN_DIR).read_dir().unwrap().next().is_some(), "set aside in the mirror, not deleted");
+    }
+
     // ── purge queue ──────────────────────────────────────────────────────────
 
     #[test]

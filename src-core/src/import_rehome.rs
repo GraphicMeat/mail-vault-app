@@ -14,6 +14,11 @@
 //!   message as V (`same_message`), else moved into the import range. An
 //!   Outlook (Graph) folder leaves it where it is.
 //!
+//! The same pass also looks at the import range itself: an import copy of a
+//! message the server now lists (an mbox imported into the folder, then
+//! uploaded to the server, whose copy sits at its server uid) is set aside by
+//! the same rule, so the folder lists that message once. Graph leaves it too.
+//!
 //! Nothing is deleted. Every move and set-aside goes into the folder's ledger,
 //! which `replay` applies to the backup folder too: the backup's pre-sync copies
 //! by uid in both directions, and would otherwise put U straight back.
@@ -230,8 +235,9 @@ pub struct Plan {
 /// outside the mailbox lock; `apply` re-checks every name it acts on.
 ///
 /// Only archived files below the import range at a uid the server lists are
-/// read, one bounded header read each. `protected` holds uids of mail composed
-/// here, never the importer's.
+/// read, one bounded header read each; then the archived import copies
+/// (`import_twins`), one header read each. `protected` holds uids of mail
+/// composed here, never the importer's.
 ///
 /// The fence: a normalization bug on either side would read every file as
 /// "not the server's" and move a whole vault. That bug has one signature, no
@@ -279,12 +285,41 @@ pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: 
             }
         }
     }
+    plan.set_aside.extend(import_twins(server, is_graph, protected, &files));
     if plan.compared >= FENCE_MIN && confirmed == 0 {
         plan.to_import.clear();
         plan.set_aside.clear();
         plan.suspicious = true;
     }
     plan
+}
+
+/// The import copies (archived, at an import-range uid, with a Message-ID)
+/// of a message the server lists: the same message as one of the rows under
+/// its Message-ID, by `same_message`. They are what an upload of an imported
+/// mbox leaves behind beside the server's own copy. Never counted by the
+/// fence, which judges files at server uids only; a Graph folder keeps them.
+pub fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, files: &HashMap<u32, PathBuf>) -> Vec<Planned> {
+    if is_graph {
+        return Vec::new();
+    }
+    let mut uids: Vec<u32> = files.keys().copied().filter(|u| *u >= IMPORT_UID_BASE && !protected.contains(u)).collect();
+    uids.sort_unstable();
+    let mut out = Vec::new();
+    for uid in uids {
+        let path = &files[&uid];
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if !maildir::carries_archived(&name) {
+            continue;
+        }
+        let Some(head) = read_head(path) else { continue };
+        let Some(id) = head.id.clone() else { continue };
+        let twins = server.uids_of(&head);
+        if twins.iter().any(|v| same_message(path, &head, *v, server, files)) {
+            out.push(Planned { name, uid, message_id: id });
+        }
+    }
+    out
 }
 
 /// Whether the file at `path` is the message the server lists under `v`:
@@ -315,6 +350,25 @@ pub struct Report {
     pub errors: u32,
 }
 
+impl Report {
+    /// Adds what another part of the same pass (a chunk) did.
+    pub fn absorb(&mut self, other: Report) {
+        self.moved.extend(other.moved);
+        self.set_aside.extend(other.set_aside);
+        self.skipped += other.skipped;
+        self.errors += other.errors;
+    }
+}
+
+/// One step of a pass, as `record` wrote it into the ledger: the file `name`
+/// at `uid` moves to the import-range uid `to`, or with `to` empty is set aside.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    pub name: String,
+    pub uid: u32,
+    pub to: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct LedgerEntry {
     from: u32,
@@ -334,65 +388,100 @@ fn read_ledger(mailbox_dir: &Path) -> Result<Vec<LedgerEntry>, String> {
     }
 }
 
-/// Carry out `plan` on `<mailbox_dir>/cur`. The caller holds the mailbox lock.
-/// A planned name that is gone (renamed, deleted since the plan) is skipped.
-/// A move takes the next uid of the import range this folder has not used,
-/// in `cur/` or in the ledger, and keeps the file's flags.
-///
-/// The ledger is written before any rename: a pass cut short leaves entries
-/// whose files never moved, which `replay` then completes.
+/// Carry out `plan` on `<mailbox_dir>/cur` in one go: `record`, then
+/// `carry_out` of every step. The caller holds the mailbox lock. A caller
+/// with many steps runs the two halves itself, `carry_out` a chunk per hold.
 pub fn apply(mailbox_dir: &Path, plan: &Plan) -> Result<Report, String> {
-    let mut report = Report::default();
+    let (steps, skipped) = record(mailbox_dir, plan)?;
+    let mut report = carry_out(mailbox_dir, &steps);
+    report.skipped += skipped;
+    Ok(report)
+}
+
+/// The first half of a pass: the steps `plan` still has to take, written to
+/// the ledger at once, before any file moves, and the count of planned names
+/// already gone (renamed, deleted since the plan). A move takes the next uid
+/// of the import range this folder has not used, in `cur/` or in the ledger,
+/// and keeps the file's flags. The caller holds the mailbox lock.
+///
+/// A pass cut short after this leaves entries whose files never moved, which
+/// `replay` completes: the ledger is written once per pass, never per chunk.
+pub fn record(mailbox_dir: &Path, plan: &Plan) -> Result<(Vec<Step>, u32), String> {
     let cur = mailbox_dir.join("cur");
     let still_there = |p: &&Planned| cur.join(&p.name).is_file();
     let moves: Vec<&Planned> = plan.to_import.iter().filter(still_there).collect();
     let asides: Vec<&Planned> = plan.set_aside.iter().filter(still_there).collect();
-    report.skipped = (plan.to_import.len() + plan.set_aside.len() - moves.len() - asides.len()) as u32;
+    let skipped = (plan.to_import.len() + plan.set_aside.len() - moves.len() - asides.len()) as u32;
     if moves.is_empty() && asides.is_empty() {
-        return Ok(report);
+        return Ok((Vec::new(), skipped));
     }
     let mut ledger = read_ledger(mailbox_dir)?;
-    let mut next = next_import_uid(&cur, &ledger);
-    let mut targets = Vec::with_capacity(moves.len());
-    for p in &moves {
-        let to = next.ok_or("The import uid range is full")?;
-        next = to.checked_add(1);
-        targets.push(to);
-        ledger.push(LedgerEntry { from: p.uid, to: Some(to), message_id: p.message_id.clone() });
+    let mut steps = Vec::with_capacity(moves.len() + asides.len());
+    if !moves.is_empty() {
+        // A full listing of `cur/`: only a pass that moves anything needs it.
+        let mut next = next_import_uid(&cur, &ledger);
+        for p in &moves {
+            let to = next.ok_or("The import uid range is full")?;
+            next = to.checked_add(1);
+            ledger.push(LedgerEntry { from: p.uid, to: Some(to), message_id: p.message_id.clone() });
+            steps.push(Step { name: p.name.clone(), uid: p.uid, to: Some(to) });
+        }
     }
-    ledger.extend(asides.iter().map(|p| LedgerEntry { from: p.uid, to: None, message_id: p.message_id.clone() }));
+    for p in &asides {
+        ledger.push(LedgerEntry { from: p.uid, to: None, message_id: p.message_id.clone() });
+        steps.push(Step { name: p.name.clone(), uid: p.uid, to: None });
+    }
     let json = serde_json::to_vec(&ledger).map_err(|e| e.to_string())?;
     crate::fsx::write_atomic(&mailbox_dir.join(LEDGER_FILE), &json).map_err(|e| format!("Failed to write {LEDGER_FILE}: {e}"))?;
-
-    for (p, to) in moves.into_iter().zip(targets) {
-        match fs::rename(cur.join(&p.name), cur.join(maildir::with_uid(&p.name, to))) {
-            Ok(()) => {
-                move_decrypted(mailbox_dir, p.uid, Some(to));
-                report.moved.push((p.uid, to));
-            }
-            Err(e) => {
-                warn!("import_rehome: move {} failed: {}", p.name, e);
-                report.errors += 1;
-            }
-        }
-    }
-    for p in asides {
-        match set_aside(mailbox_dir, &cur.join(&p.name), &p.name) {
-            Ok(()) => {
-                move_decrypted(mailbox_dir, p.uid, None);
-                report.set_aside.push(p.uid);
-            }
-            Err(e) => {
-                warn!("import_rehome: set aside {} failed: {}", p.name, e);
-                report.errors += 1;
-            }
-        }
-    }
-    Ok(report)
+    Ok((steps, skipped))
 }
 
-/// One past every import-range uid in `cur/` and in the ledger, or the base.
-/// `None` once the range is full.
+/// The second half: the renames of `steps`, all of `record`'s or one chunk
+/// of them, under the mailbox lock the caller holds. It writes no ledger. A
+/// name gone since `record` is skipped. A move whose target uid another
+/// writer took between chunks is set aside instead, never written over or
+/// doubled: the ledger names it either way, and `replay` sets aside whatever
+/// still sits at a recorded uid.
+pub fn carry_out(mailbox_dir: &Path, steps: &[Step]) -> Report {
+    let mut report = Report::default();
+    let cur = mailbox_dir.join("cur");
+    // Read once per call, and only when it moves anything.
+    let mut taken: Option<HashSet<u32>> = None;
+    for step in steps {
+        let src = cur.join(&step.name);
+        if !src.is_file() {
+            report.skipped += 1;
+            continue;
+        }
+        let target = step.to.filter(|to| !taken.get_or_insert_with(|| maildir::uid_file_map(&cur).into_keys().collect()).contains(to));
+        let result = match target {
+            Some(to) => fs::rename(&src, cur.join(maildir::with_uid(&step.name, to))).map_err(|e| e.to_string()),
+            None => set_aside(mailbox_dir, &src, &step.name),
+        };
+        match result {
+            Ok(()) => {
+                move_decrypted(mailbox_dir, step.uid, target);
+                match target {
+                    Some(to) => {
+                        if let Some(taken) = taken.as_mut() {
+                            taken.insert(to);
+                        }
+                        report.moved.push((step.uid, to));
+                    }
+                    None => report.set_aside.push(step.uid),
+                }
+            }
+            Err(e) => {
+                warn!("import_rehome: {} of {} failed: {}", if target.is_some() { "move" } else { "set aside" }, step.name, e);
+                report.errors += 1;
+            }
+        }
+    }
+    report
+}
+
+/// One past every import-range uid in `cur/` and in the ledger (moved to, or
+/// set aside from), or the base. `None` once the range is full.
 fn next_import_uid(cur: &Path, ledger: &[LedgerEntry]) -> Option<u32> {
     let in_cur = fs::read_dir(cur)
         .into_iter()
@@ -400,10 +489,23 @@ fn next_import_uid(cur: &Path, ledger: &[LedgerEntry]) -> Option<u32> {
         .flatten()
         .filter_map(|e| maildir::vault_filename_uid(&e.file_name().to_string_lossy()));
     in_cur
-        .chain(ledger.iter().filter_map(|e| e.to))
+        .chain(ledger_import_uids(ledger))
         .filter(|u| *u >= IMPORT_UID_BASE)
         .max()
         .map_or(Some(IMPORT_UID_BASE), |m| m.checked_add(1))
+}
+
+/// Every import-range uid the ledger names, as a target or as a copy set
+/// aside from it: none of them may be handed out again, or `replay` would
+/// act on the new file at that uid.
+fn ledger_import_uids(ledger: &[LedgerEntry]) -> impl Iterator<Item = u32> + '_ {
+    ledger.iter().flat_map(|e| [Some(e.from), e.to]).flatten().filter(|u| *u >= IMPORT_UID_BASE)
+}
+
+/// The highest import-range uid the folder's ledger names, for an importer
+/// seeding its own allocator (`None`: no ledger, none named, or unreadable).
+pub fn highest_recorded_import_uid(mailbox_dir: &Path) -> Option<u32> {
+    ledger_import_uids(&read_ledger(mailbox_dir).ok()?).max()
 }
 
 fn set_aside(mailbox_dir: &Path, path: &Path, name: &str) -> Result<(), String> {
@@ -823,6 +925,202 @@ mod tests {
         let before = maildir::READ_MESSAGE_ID_CALLS.with(|c| c.get());
         assert!(!replay(vault.path(), mirror.path()));
         assert_eq!(maildir::READ_MESSAGE_ID_CALLS.with(|c| c.get()), before);
+    }
+
+    // ---- import copies of mail the server now lists (an mbox imported, then uploaded) ----
+
+    const B: u32 = IMPORT_UID_BASE;
+
+    /// The import copy at B and the upload's copy at the server's uid 9 are one
+    /// message (same Message-ID, Subject and body; the headers may differ):
+    /// the import copy is set aside, through the ledger, and the server's stays.
+    #[test]
+    fn an_import_copy_of_a_server_message_with_the_same_body_is_set_aside() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), B, "A", &eml("<m@x>", "Hi", DATE, "X-Gmail-Labels: Inbox\r\n", "the body"));
+        put(t.path(), 9, "AS", &eml("<m@x>", "Hi", DATE, "", "the body\r\n"));
+        let server = view(&[row(9, "<m@x>", "Hi", DATE)]);
+        let (p, r) = run(t.path(), &server, false);
+        assert_eq!(p.set_aside.iter().map(|s| s.uid).collect::<Vec<_>>(), vec![B]);
+        assert_eq!((p.compared, p.mismatched, p.suspicious), (1, 0, false), "only the server-range copy is compared");
+        assert_eq!(r.set_aside, vec![B]);
+        assert_eq!(cur_uids(t.path()), vec![9]);
+        assert!(t.path().join(ORPHAN_DIR).join(name(B, "A")).is_file(), "set aside, still on disk");
+        assert_eq!(read_ledger(t.path()).unwrap(), vec![LedgerEntry { from: B, to: None, message_id: "m@x".into() }]);
+    }
+
+    /// The same Message-ID, Subject and Date, but the vault's copy at the
+    /// server uid says another body: not the same message, so it stays.
+    #[test]
+    fn an_import_copy_whose_body_differs_from_the_servers_copy_stays() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), B, "A", &eml("<m@x>", "Hi", DATE, "", "one body"));
+        put(t.path(), 9, "A", &eml("<m@x>", "Hi", DATE, "", "another body"));
+        let (p, r) = run(t.path(), &view(&[row(9, "<m@x>", "Hi", DATE)]), false);
+        assert!(p.set_aside.is_empty() && p.to_import.is_empty(), "{p:?}");
+        assert!(r.set_aside.is_empty());
+        assert_eq!(cur_uids(t.path()), vec![9, B]);
+    }
+
+    /// No vault copy at the server's uid: its row's Subject and Date decide,
+    /// every row under the Message-ID tested.
+    #[test]
+    fn without_the_servers_copy_subject_and_date_decide_for_an_import_copy() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), B, "A", &eml("<m@x>", "Hi", DATE, "", "body"));
+        put(t.path(), B + 1, "A", &eml("<late@x>", "Hi", "Tue, 2 Jan 2024 10:00:00 +0000", "", "body"));
+        put(t.path(), B + 2, "A", &eml("<n@x>", "Second", DATE, "", "body"));
+        let server = view(&[row(7, "<m@x>", "Hi", DATE), row(8, "<late@x>", "Hi", DATE), row(10, "<n@x>", "First", DATE), row(11, "<n@x>", "Second", DATE)]);
+        let (_, r) = run(t.path(), &server, false);
+        assert_eq!(r.set_aside, vec![B, B + 2], "another Date is another message; the second row under <n@x> is this one");
+        assert_eq!(cur_uids(t.path()), vec![B + 1]);
+    }
+
+    /// Left: an import copy with no Message-ID (nothing keys it to a row), one
+    /// without the archived flag, a protected uid, one no row lists, and any
+    /// on a Graph folder.
+    #[test]
+    fn an_import_copy_is_left_without_an_id_an_archived_flag_a_row_or_on_graph() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), B, "A", &format!("Subject: Hi\r\nDate: {DATE}\r\n\r\nbody\r\n"));
+        put(t.path(), B + 1, "S", &eml("<cache@x>", "Hi", DATE, "", "body"));
+        put(t.path(), B + 2, "A", &eml("<kept@x>", "Hi", DATE, "", "body"));
+        put(t.path(), B + 3, "A", &eml("<local@x>", "Hi", DATE, "", "body"));
+        let server = view(&[
+            json!({"uid": 5, "subject": "Hi", "messageDate": DATE}),
+            row(6, "<cache@x>", "Hi", DATE),
+            row(7, "<kept@x>", "Hi", DATE),
+        ]);
+        let p = plan(t.path(), &server, false, &HashSet::from([B + 2]));
+        assert!(p.set_aside.is_empty(), "{p:?}");
+
+        let g = tempfile::tempdir().unwrap();
+        put(g.path(), B, "A", &eml("<m@x>", "Hi", DATE, "", "body"));
+        let (p, r) = run(g.path(), &view(&[row(9, "<m@x>", "Hi", DATE)]), true);
+        assert!(p.set_aside.is_empty() && r.set_aside.is_empty());
+        assert_eq!(cur_uids(g.path()), vec![B]);
+    }
+
+    /// The fence judges files at server uids only: an import copy of server
+    /// mail neither trips it nor lifts it. Ten mismatched old imports plus a
+    /// twin stay suspicious (nothing planned); a twin alone is set aside.
+    #[test]
+    fn import_copies_neither_trip_nor_lift_the_fence() {
+        let t = tempfile::tempdir().unwrap();
+        let mut rows = vec![row(99, "<twin@x>", "Hi", DATE)];
+        for uid in 1..=10 {
+            put(t.path(), uid, "A", &eml(&format!("<file{uid}@x>"), "Hi", DATE, "", "body"));
+            rows.push(row(uid, &format!("<server{uid}@x>"), "Hi", DATE));
+        }
+        put(t.path(), B, "A", &eml("<twin@x>", "Hi", DATE, "", "body"));
+        let p = plan(t.path(), &view(&rows), false, &HashSet::new());
+        assert!(p.suspicious);
+        assert_eq!((p.compared, p.mismatched), (10, 10));
+        assert!(p.set_aside.is_empty() && p.to_import.is_empty());
+
+        let alone = tempfile::tempdir().unwrap();
+        put(alone.path(), B, "A", &eml("<twin@x>", "Hi", DATE, "", "body"));
+        let p = plan(alone.path(), &view(&[row(99, "<twin@x>", "Hi", DATE)]), false, &HashSet::new());
+        assert!(!p.suspicious);
+        assert_eq!(p.compared, 0);
+        assert_eq!(p.set_aside.iter().map(|s| s.uid).collect::<Vec<_>>(), vec![B]);
+    }
+
+    /// The mirror's copy at the import uid goes aside too when the backup
+    /// replays the ledger.
+    #[test]
+    fn replay_sets_aside_the_mirrors_copy_of_a_set_aside_import() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let content = eml("<m@x>", "Hi", DATE, "", "body");
+        put(vault.path(), B, "A", &content);
+        put(vault.path(), 9, "A", &content);
+        put(mirror.path(), B, "A", &content);
+        run(vault.path(), &view(&[row(9, "<m@x>", "Hi", DATE)]), false);
+        assert!(!replay(vault.path(), mirror.path()), "the vault's side is done already");
+        assert!(cur_uids(mirror.path()).is_empty());
+        assert!(mirror.path().join(ORPHAN_DIR).join(name(B, "A")).is_file());
+    }
+
+    /// A pass carried out a chunk at a time ends where one carried out at once
+    /// does, and the ledger is written once, by `record`: removing it after
+    /// that shows no chunk writes it again.
+    #[test]
+    fn a_pass_carried_out_in_chunks_ends_as_one_carried_out_at_once() {
+        let fill = |dir: &Path| -> ServerView {
+            let mut rows = Vec::new();
+            for uid in 1..=3 {
+                put(dir, uid, "A", &eml(&format!("<old{uid}@x>"), "Old", DATE, "", "imported"));
+                rows.push(row(uid, &format!("<s{uid}@x>"), "S", DATE));
+            }
+            put(dir, 4, "AS", &eml("<real@x>", "Real", DATE, "", "real"));
+            rows.push(row(4, "<real@x>", "Real", DATE));
+            for i in 0..3 {
+                let id = format!("<twin{i}@x>");
+                put(dir, B + i, "A", &eml(&id, "Twin", DATE, "", "twin"));
+                rows.push(row(20 + i, &id, "Twin", DATE));
+            }
+            view(&rows)
+        };
+        let (once, chunked) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let server = fill(once.path());
+        let (_, all) = run(once.path(), &server, false);
+
+        let server = fill(chunked.path());
+        let p = plan(chunked.path(), &server, false, &HashSet::new());
+        let (steps, skipped) = record(chunked.path(), &p).unwrap();
+        assert_eq!((steps.len(), skipped), (6, 0));
+        let ledger = std::fs::read(chunked.path().join(LEDGER_FILE)).unwrap();
+        fs::remove_file(chunked.path().join(LEDGER_FILE)).unwrap();
+        let mut report = Report::default();
+        for chunk in steps.chunks(2) {
+            report.absorb(carry_out(chunked.path(), chunk));
+        }
+        assert!(!chunked.path().join(LEDGER_FILE).exists(), "no chunk writes the ledger");
+        fs::write(chunked.path().join(LEDGER_FILE), &ledger).unwrap();
+
+        assert_eq!((report.moved.clone(), report.set_aside.clone()), (all.moved.clone(), all.set_aside.clone()));
+        assert_eq!(cur_uids(chunked.path()), cur_uids(once.path()));
+        assert_eq!(read_ledger(chunked.path()).unwrap(), read_ledger(once.path()).unwrap());
+        let aside = |dir: &Path| -> Vec<String> {
+            let mut names: Vec<String> = fs::read_dir(dir.join(ORPHAN_DIR)).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+            names.sort();
+            names
+        };
+        assert_eq!(aside(chunked.path()), aside(once.path()));
+        assert_eq!(all.moved.len() + all.set_aside.len(), 6, "{all:?}");
+    }
+
+    /// Between two chunks another writer took the uid a move was given: the
+    /// file is set aside rather than written over or doubled under that uid.
+    #[test]
+    fn a_move_whose_target_was_taken_between_chunks_is_set_aside() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), 5, "A", &eml("<old@x>", "Old", DATE, "", "imported"));
+        let p = plan(t.path(), &view(&[row(5, "<s@x>", "S", DATE)]), false, &HashSet::new());
+        let (steps, _) = record(t.path(), &p).unwrap();
+        assert_eq!(steps, vec![Step { name: name(5, "A"), uid: 5, to: Some(B) }]);
+        put(t.path(), B, "AF", &eml("<new@x>", "New", DATE, "", "another writer's"));
+        let r = carry_out(t.path(), &steps);
+        assert_eq!((r.moved.len(), r.set_aside.clone()), (0, vec![5]));
+        assert_eq!(cur_uids(t.path()), vec![B]);
+        assert_eq!(fs::read_to_string(t.path().join("cur").join(name(B, "AF"))).unwrap(), eml("<new@x>", "New", DATE, "", "another writer's"));
+    }
+
+    /// An import uid set aside is never handed out again, to a later move or
+    /// to an importer seeding its allocator: the ledger's replay would act on
+    /// whatever sat there next.
+    #[test]
+    fn a_set_aside_import_uid_is_never_handed_out_again() {
+        let t = tempfile::tempdir().unwrap();
+        put(t.path(), B, "A", &eml("<m@x>", "Hi", DATE, "", "body"));
+        run(t.path(), &view(&[row(9, "<m@x>", "Hi", DATE)]), false);
+        assert_eq!(highest_recorded_import_uid(t.path()), Some(B));
+        put(t.path(), 5, "A", &eml("<old@x>", "Old", DATE, "", "imported"));
+        let (_, r) = run(t.path(), &view(&[row(5, "<s@x>", "S", DATE), row(9, "<m@x>", "Hi", DATE)]), false);
+        assert_eq!(r.moved, vec![(5, B + 1)]);
+        assert_eq!(highest_recorded_import_uid(t.path()), Some(B + 1));
+        assert_eq!(highest_recorded_import_uid(tempfile::tempdir().unwrap().path()), None);
     }
 
     #[test]
