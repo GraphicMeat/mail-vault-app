@@ -688,7 +688,7 @@ pub async fn bulk_delete(
     mailbox: String,
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
-) -> Result<ArchiveProgress, String> {
+) -> Result<(ArchiveProgress, Vec<u32>), String> {
     let total = uids.len();
     info!("bulk_delete: starting {} UIDs for account {}", total, account_id);
 
@@ -706,6 +706,8 @@ pub async fn bulk_delete(
     let sem = Arc::new(Semaphore::new(5));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
+    // The uids the server actually lost, for the caller to record.
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
     let mut set: JoinSet<()> = JoinSet::new();
 
     for uid in uids {
@@ -720,6 +722,7 @@ pub async fn bulk_delete(
         let mailbox = mailbox.clone();
         let completed = Arc::clone(&completed);
         let errors = Arc::clone(&errors);
+        let deleted = Arc::clone(&deleted);
         let cancel = Arc::clone(&cancel);
 
         set.spawn(async move {
@@ -732,6 +735,7 @@ pub async fn bulk_delete(
             let result = delete_single_email(&ctx.pool, &account, &mailbox, uid).await;
 
             if result.is_ok() {
+                deleted.lock().unwrap_or_else(|p| p.into_inner()).push(uid);
                 completed.fetch_add(1, Ordering::Relaxed);
             } else {
                 errors.fetch_add(1, Ordering::Relaxed);
@@ -758,7 +762,8 @@ pub async fn bulk_delete(
 
     info!("bulk_delete: done — {}/{} deleted, {} errors", final_completed, total, final_errors);
 
-    Ok(ArchiveProgress {
+    let deleted = std::mem::take(&mut *deleted.lock().unwrap_or_else(|p| p.into_inner()));
+    Ok((ArchiveProgress {
         total,
         completed: final_completed,
         errors: final_errors,
@@ -773,7 +778,7 @@ pub async fn bulk_delete(
         // label so a future reader can't mistake this reply for an archive
         // run's. Matches the cancel registry's "bulk_delete" key (Task 3.4).
         operation: "bulk_delete", account_id: account_id.clone(), mailbox: mailbox.clone(),
-    })
+    }, deleted))
 }
 
 async fn delete_single_email(

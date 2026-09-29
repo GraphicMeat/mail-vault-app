@@ -65,6 +65,7 @@
 - **Compose remembers its own window.** Open a message you are writing in a new window, and every compose after it, new messages, replies and forwards alike, opens in a window of its own too. Settings > Mail preferences > Behavior > Open Compose switches back to writing over your mail.
 
 ### Fixed
+- **Archive & Delete no longer brings deleted messages back.** After Bulk Email Operations deleted messages from the server, the folder list went blank and reopening the folder showed them again as plain archived mail. The deleted messages now leave the list at once, and their saved copies are marked as deleted from the server by MailVault, the same as when you delete a single message.
 - **Resuming a paused account migration continues the same run.** Pressing Resume after Pause used to leave the paused run waiting and start a second one beside it; it now wakes the run that was paused. A pause that lands in the middle of a folder is saved right away, so it survives closing MailVault.
 - **Saved-view counts stay true.** The badge beside each view is counted again a moment after you read, star, move or delete mail, undo one of those, or a sync brings a change from another device. A count taken while the search index is still building keeps the last numbers instead of blanking them.
 - **The Notes to Self board follows other devices.** A star or read change made on another device now repaints the board's cards when MailVault syncs it, without pressing Refresh.

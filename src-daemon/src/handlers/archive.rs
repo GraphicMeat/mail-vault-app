@@ -2,8 +2,8 @@
 //! `mailvault_core::archive` (Task 3.2) with the daemon's own sinks: the bus
 //! for `emit`, an in-process custody upsert for `custody_append`, and the
 //! vault registry (whose hook nudges the index). `bulk_delete_emails` is
-//! intentionally ungated (it touches only the IMAP server, no vault file,
-//! inventory-archive-bulk §3.2);
+//! intentionally ungated (it touches the IMAP server and `custody.db`, never a
+//! vault file, inventory-archive-bulk §3.2);
 //! `archive_emails` and `verify_archived_emails` go through
 //! `common::vault_root` / `common::with_vault_write` like every other Phase 2
 //! vault route.
@@ -130,6 +130,43 @@ async fn capture_all(
     (kept, refused)
 }
 
+/// What the app must stop showing once the server lost these uids: their
+/// header-cache rows go (through the app's own `removedUids` write, so
+/// `appRemovedSinceSync` keeps the list complete against the sync baseline),
+/// and custody learns this app deleted the server copy of any vault copy it
+/// holds, or a reopened folder lists them again as plain "archived" mail.
+async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>) {
+    if uids.is_empty() {
+        return;
+    }
+    let st = Arc::clone(state);
+    let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
+    let result = blocking(move || {
+        crate::custody::with_conn(&st, |c| {
+            mailvault_core::custody::cache::save_headers(c, &account_id, &mailbox, &serde_json::json!({ "removedUids": uids }).to_string())?;
+            let gone: std::collections::HashSet<u32> = uids.into_iter().collect();
+            let rows: Vec<Value> = entries::read(c, &account_id, &mailbox)?.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            let stamped: Vec<Value> = rows
+                .into_iter()
+                .filter(|e| entries::uid_of(e).is_some_and(|u| gone.contains(&u)))
+                .map(|mut e| {
+                    e["serverDeleted"] = Value::Bool(true);
+                    e
+                })
+                .collect();
+            if !stamped.is_empty() {
+                entries::upsert(c, &account_id, &mailbox, &stamped)?;
+            }
+            Ok(())
+        })
+    })
+    .await
+    .and_then(|r| r);
+    if let Err(e) = result {
+        warn!("bulk_delete: could not record the deleted uids in the header cache / custody: {e}");
+    }
+}
+
 fn progress_reply(id: Value, result: Result<mailvault_core::archive::ArchiveProgress, String>) -> RpcResponse {
     match result {
         Ok(progress) => match serde_json::to_value(&progress) {
@@ -166,8 +203,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             progress_reply(id, result)
         }
         // Ungated by design (inventory-archive-bulk §3.2): a bulk delete
-        // never touches the vault, custody or the search index, only the
-        // IMAP server. `root` stays an unused empty path rather than
+        // never touches a vault file, only the IMAP server, then records what
+        // it deleted in the header cache and custody
+        // (`record_server_deleted`). `root` stays an unused empty path rather than
         // resolving `vault_root` (which would gate a route that has nothing
         // to gate) or falling back to `state.app_dir`.
         "bulk_delete_emails" => {
@@ -189,12 +227,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             } else {
                 (uids, 0)
             };
-            let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await.map(|mut p| {
-                p.total += refused;
-                p.errors += refused;
-                p
-            });
+            let (acct, mb) = (account_id.clone(), mailbox.clone());
+            let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await;
             drop(guard);
+            let result = match result {
+                Ok((mut p, deleted)) => {
+                    record_server_deleted(&state, &acct, &mb, deleted).await;
+                    p.total += refused;
+                    p.errors += refused;
+                    Ok(p)
+                }
+                Err(e) => Err(e),
+            };
             progress_reply(id, result)
         }
         "verify_archived_emails" => {
@@ -524,6 +568,82 @@ mod tests {
             .unwrap()
             .count();
         assert_eq!(before, after, "bulk_delete_emails must not change a single vault file");
+    }
+
+    // ── bulk_delete_emails: what the app must stop showing ────────────────
+    //
+    // The delete touches no vault file, but the header cache still listed the
+    // deleted uids and custody never learned the server copy was deleted by
+    // this app, so a reopened folder showed them again as "archived".
+
+    fn inbox_with(uids: &[u32]) -> mock_imap::state::Mailbox {
+        let mut mb = mock_imap::state::Mailbox::new("INBOX");
+        for &uid in uids {
+            mb.add(mock_imap::Message::new(
+                uid,
+                format!("From: s@example.com\r\nTo: user@example.com\r\nSubject: m{uid}\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\nMessage-ID: <m{uid}@example.com>\r\n\r\nbody\r\n"),
+            ));
+        }
+        mb
+    }
+
+    fn cached_uids(s: &Arc<DaemonState>) -> Vec<u32> {
+        let mut v: Vec<u32> = crate::custody::with_conn(s, |c| mailvault_core::custody::cache::uid_set(c, "acc", "INBOX")).unwrap().into_iter().collect();
+        v.sort();
+        v
+    }
+
+    fn seed_headers(s: &Arc<DaemonState>, uids: &[u32]) {
+        let rows: Vec<Value> = uids.iter().map(|u| json!({"uid": u, "subject": format!("m{u}"), "flags": []})).collect();
+        crate::custody::with_conn(s, |c| mailvault_core::custody::cache::save_headers(c, "acc", "INBOX", &json!({"emails": rows, "syncTotalEmails": uids.len()}).to_string())).unwrap();
+    }
+
+    async fn bulk_delete(s: &Arc<DaemonState>, server: &mock_imap::MockImap, uids: &[u32]) -> Value {
+        let r = call(
+            s,
+            "bulk_delete_emails",
+            json!({"accountId": "acc", "accountJson": account_json_for(server), "mailbox": "INBOX", "uids": uids, "bin": false}),
+        )
+        .await;
+        r.result.expect("bulk_delete_emails must succeed")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_delete_emails_takes_the_deleted_uids_out_of_the_header_cache() {
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with(&[7, 8])));
+        seed_headers(&s, &[7, 8]);
+
+        let result = bulk_delete(&s, &server, &[7]).await;
+
+        assert_eq!(result["completed"], json!(1));
+        assert_eq!(cached_uids(&s), vec![8], "only the uid the server lost leaves the list");
+        // The app's own removal tally, so the list stays complete against the
+        // sync's baseline (`syncTotalEmails - appRemovedSinceSync`).
+        let meta = crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::load_meta(c, "acc", "INBOX")).unwrap().unwrap();
+        let meta: Value = serde_json::from_str(&meta).unwrap();
+        assert_eq!(meta["appRemovedSinceSync"], json!(1));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_delete_emails_marks_the_archived_copy_as_deleted_from_the_server() {
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with(&[7, 8])));
+        crate::custody::with_conn(&s, |c| {
+            entries::upsert(c, "acc", "INBOX", &[
+                json!({"uid": 7, "source": "local", "subject": "m7"}),
+                json!({"uid": 8, "source": "local", "subject": "m8"}),
+            ])
+        })
+        .unwrap();
+
+        bulk_delete(&s, &server, &[7]).await;
+
+        let rows: Vec<Value> = serde_json::from_str(&crate::custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap()).unwrap();
+        let of = |uid: u64| rows.iter().find(|e| e["uid"] == json!(uid)).unwrap().clone();
+        assert_eq!(of(7)["serverDeleted"], json!(true), "custody reads this as 'we deleted it'");
+        assert_eq!(of(7)["subject"], json!("m7"), "the rest of the entry is kept");
+        assert!(of(8).get("serverDeleted").is_none(), "a uid this run did not delete is not stamped");
     }
 
     // ── Archive against a live mock IMAP server ───────────────────────────
