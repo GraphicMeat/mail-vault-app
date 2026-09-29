@@ -376,8 +376,7 @@ fn rehome_pass(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Res
     });
     let view = import_rehome::ServerView::from_headers(&rows);
     let plan = if stamped {
-        let files = maildir::uid_file_map(&dir.join("cur"));
-        import_rehome::Plan { set_aside: import_rehome::import_twins(&view, is_graph, &protected, &files), ..Default::default() }
+        import_rehome::plan_import_twins(&dir, &view, is_graph, &protected)
     } else {
         import_rehome::plan(&dir, &view, is_graph, &protected)
     };

@@ -299,7 +299,7 @@ pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: 
 /// its Message-ID, by `same_message`. They are what an upload of an imported
 /// mbox leaves behind beside the server's own copy. Never counted by the
 /// fence, which judges files at server uids only; a Graph folder keeps them.
-pub fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, files: &HashMap<u32, PathBuf>) -> Vec<Planned> {
+fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, files: &HashMap<u32, PathBuf>) -> Vec<Planned> {
     if is_graph {
         return Vec::new();
     }
@@ -320,6 +320,13 @@ pub fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32
         }
     }
     out
+}
+
+/// A plan of the import copies alone (`import_twins`), for a folder whose
+/// server-range files were sorted for good by an earlier pass.
+pub fn plan_import_twins(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
+    let files = maildir::uid_file_map(&mailbox_dir.join("cur"));
+    Plan { set_aside: import_twins(server, is_graph, protected, &files), ..Default::default() }
 }
 
 /// Whether the file at `path` is the message the server lists under `v`:
