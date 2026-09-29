@@ -116,7 +116,7 @@
   <main id="main" class="pt-24 pb-20">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <h1 class="text-4xl font-bold mb-2">Privacy Policy</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Last updated: July 17, 2026</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Last updated: September 29, 2026</p>
 
       <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
 
@@ -133,12 +133,81 @@
             MailVault is a privacy-first desktop email client. The application:
           </p>
           <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
-            <li><strong>Stores all data locally</strong> on your computer. Your emails, attachments, and account data never leave your machine.</li>
-            <li><strong>Does not transmit data to our servers.</strong> The app connects directly to your email provider via IMAP/SMTP. We have no access to your emails.</li>
-            <li><strong>Stores credentials in your operating system's keychain</strong> (macOS Keychain, Windows Credential Manager, or the Linux Secret Service). We never see or store your passwords.</li>
-            <li><strong>Does not include analytics, tracking, or telemetry</strong> of any kind.</li>
+            <li><strong>Stores your mail locally</strong> on your computer: messages, attachments, folders, and account settings live in a folder on your own disk.</li>
+            <li><strong>Does not send your mail to our servers.</strong> The app connects directly to your email provider (over IMAP and SMTP, or Microsoft Graph for Outlook.com). We have no access to your emails.</li>
+            <li><strong>Stores credentials in your operating system's secure credential store</strong> (macOS Keychain, Windows Credential Manager, or the Linux Secret Service). We never see or store your passwords or sign-in tokens.</li>
+            <li><strong>Does not include analytics, tracking, or telemetry</strong> about how you use the app or about your mail.</li>
             <li><strong>Is open source.</strong> You can verify all of the above by inspecting the source code.</li>
           </ul>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
+            The app only connects to anything other than your email provider in these cases:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li><strong>Updates.</strong> The app checks GitHub for new versions and release notes. These requests carry no personal data.</li>
+            <li><strong>Premium.</strong> If you subscribe to Premium, the email address you choose for the subscription, a random identifier for this device, its name, platform, operating system version, and app version are sent to our billing server to manage your subscription and devices. Payments are processed by Stripe. No email content is ever sent.</li>
+            <li><strong>AI features you turn on.</strong> AI features run on your computer by default, using your operating system's built-in model or a model you download from Hugging Face. If you connect your own AI provider instead, the text you ask it to work on is sent to that provider under your own account and its terms.</li>
+            <li><strong>Images in messages.</strong> Showing images hosted elsewhere contacts the server that hosts them, as in any email client.</li>
+          </ul>
+        </section>
+
+        <section id="google-user-data">
+          <h2 class="text-2xl font-semibold mb-3">Google User Data</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            This section explains how MailVault handles data from your Google account when you add a Gmail or Google Workspace account with "Sign in with Google".
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Data We Access</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            With your permission, MailVault requests these Google OAuth scopes:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li><strong>https://mail.google.com/</strong>: access to your Gmail mailbox over IMAP and SMTP, including your messages, attachments, labels and folders, and message flags, and the ability to send mail as you. Gmail's IMAP and SMTP servers accept only this scope.</li>
+            <li><strong>openid</strong> and <strong>email</strong>: your Google account's email address, used once at sign-in to confirm it matches the address you entered.</li>
+          </ul>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">How We Use It</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            Google user data is used only to provide the email client and backup features you see and control in the app, and all of this happens on your computer:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>downloading your messages and attachments so you can read and search them, including offline;</li>
+            <li>keeping a local copy of each message as a standard .eml file, and backing up or exporting it to a location you choose;</li>
+            <li>sending mail and replies, including messages you schedule to send later;</li>
+            <li>organizing mail: marking messages read or unread, flagging, moving, snoozing, and sorting them with rules you set;</li>
+            <li>deleting messages, and removing messages from the server when you choose to keep only their verified local copy.</li>
+          </ul>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Sharing and Transfer</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MB Modernios Aplikacijos does not receive, store, or have access to your Google user data. It never reaches our servers, and we do not sell, share, or transfer it to anyone. Google user data leaves your computer only when you take one of these actions yourself:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>sending an email, which Gmail delivers to the recipients you choose;</li>
+            <li>backing up or exporting mail to a folder or drive you choose;</li>
+            <li>connecting your own AI provider and asking it to work on a message (off by default; see above);</li>
+            <li>subscribing to Premium with your Gmail address, in which case only that address is sent to our billing server and Stripe (see above).</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
+            Google user data is never used for advertising of any kind, never sold to data brokers or anyone else, never used to determine creditworthiness or for lending, and never used to develop, improve, or train artificial intelligence or machine learning models, whether ours or anyone else's.
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">How We Protect It</h3>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>All connections to Google use encrypted TLS connections.</li>
+            <li>Sign-in uses OAuth 2.0 with PKCE. MailVault never sees your Google password.</li>
+            <li>Your OAuth tokens are stored in your operating system's secure credential store, not in plain files.</li>
+            <li>Your mail is stored in your user account's data folder, protected by your operating system's file permissions. We recommend turning on full-disk encryption (FileVault on macOS, BitLocker on Windows).</li>
+          </ul>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Retention and Deletion</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            Your Google user data stays on your computer for as long as you keep it there. Removing the account in MailVault's Settings deletes its stored tokens and its mail from MailVault's data folder. Copies you backed up or exported to other locations stay until you delete them. You can revoke MailVault's access at any time at <a href="https://myaccount.google.com/permissions" class="text-primary-500 hover:underline" target="_blank" rel="noopener">myaccount.google.com/permissions</a>. Because we never receive Google user data, there is none on our servers to delete. If you used your Gmail address for Premium, contact us to have it removed from our billing records.
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Limited Use</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.
+          </p>
         </section>
 
         <section>
