@@ -229,6 +229,7 @@
   "bulk.ops.lastWeek": "Semaine dernière",
   "bulk.ops.lastYear": "Année dernière",
   "bulk.ops.minimizeSelectionKept": "Réduire — la sélection est conservée",
+  "bulk.ops.nothingFoundRange": "Rien trouvé pour cette plage",
   "bulk.ops.onServerCount": "{{count}} sur le serveur",
   "bulk.ops.presets": "Préréglages",
   "bulk.ops.readingAllEmails": "Lecture des {{count}} e-mails…",

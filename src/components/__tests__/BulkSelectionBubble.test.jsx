@@ -114,15 +114,25 @@ describe('BulkSelectionBubble', () => {
     expect(screen.getByTestId('bulk-selection-bubble').textContent).toContain('2 selected');
   });
 
+  it('ends the session when the last selected row is unchecked by hand, so no "0 selected" chip stays', () => {
+    const endBulkSession = vi.fn();
+    useMailStoreMock.setState({ bulkSession: boundSession(), bulkModalOpen: false, endBulkSession, selectedEmailIds: new Set([1]) });
+    render(<BulkSelectionBubble />);
+    expect(endBulkSession).not.toHaveBeenCalled();
+
+    act(() => { useMailStoreMock.setState({ selectedEmailIds: new Set() }); });
+    expect(endBulkSession).toHaveBeenCalledTimes(1);
+  });
+
   it('renders "All inboxes" for a unified-mailbox session instead of the raw sentinel', () => {
-    useMailStoreMock.setState({ bulkSession: boundSession({ mailbox: 'UNIFIED' }), bulkModalOpen: false });
+    useMailStoreMock.setState({ bulkSession: boundSession({ mailbox: 'UNIFIED' }), bulkModalOpen: false, selectedEmailIds: new Set([1]) });
     render(<BulkSelectionBubble />);
     expect(screen.getByTestId('bulk-selection-bubble').textContent).toContain('All inboxes');
   });
 
   it('clicking the bubble body calls openBulkModal', () => {
     const openBulkModal = vi.fn();
-    useMailStoreMock.setState({ bulkSession: boundSession(), bulkModalOpen: false, openBulkModal });
+    useMailStoreMock.setState({ bulkSession: boundSession(), bulkModalOpen: false, openBulkModal, selectedEmailIds: new Set([1]) });
     render(<BulkSelectionBubble />);
 
     fireEvent.click(screen.getByTitle('Back to bulk operations'));
@@ -131,7 +141,7 @@ describe('BulkSelectionBubble', () => {
 
   it('clicking the dismiss × calls endBulkSession', () => {
     const endBulkSession = vi.fn();
-    useMailStoreMock.setState({ bulkSession: boundSession(), bulkModalOpen: false, endBulkSession });
+    useMailStoreMock.setState({ bulkSession: boundSession(), bulkModalOpen: false, endBulkSession, selectedEmailIds: new Set([1]) });
     render(<BulkSelectionBubble />);
 
     fireEvent.click(screen.getByTitle('End bulk selection'));
@@ -147,6 +157,7 @@ describe('BulkSelectionBubble', () => {
       accounts: [...ACCOUNTS, { id: 'acct-2', email: 'other@example.com' }],
       bulkSession: boundSession({ accountId: 'acct-2', mailbox: 'Archive' }),
       bulkModalOpen: false,
+      selectedEmailIds: new Set([1]),
     });
     render(<BulkSelectionBubble />);
 

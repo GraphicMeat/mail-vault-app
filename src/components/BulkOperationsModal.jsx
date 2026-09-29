@@ -318,6 +318,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // Live count, not the range's own result — hand edits made while the modal
   // was minimized must be reflected here and must be what Start acts on.
   const selectedCount = selectedRange ? selectedEmailIds.size : 0;
+  // The range's own result, not the live selection: a hand-cleared selection
+  // is not "nothing found", and the store lands the range's uids a render late.
+  const rangeFoundNothing = !!selectedRange && !loadingPool && selectedEmails.length === 0;
   const liveUids = () => [...selectedEmailIds];
   const isPartialLoad = !loadingPool && emailPool.length < totalEmails;
 
@@ -375,7 +378,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // single owner of "minimize" the store's state, so this just delegates to
   // it rather than also calling minimizeBulkModal directly (that fired the
   // same store update twice per minimize).
+  //
+  // Nothing selected means nothing to keep: minimizing would leave a "0
+  // selected" bubble on screen, so closing ends the session instead.
   const handleMinimize = () => {
+    if (selectedEmailIds.size === 0) {
+      handleCancel();
+      return;
+    }
     setShowDeleteConfirm(false);
     onClose();
   };
@@ -449,6 +459,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               {loadingPool && (
                 <div className="flex items-start gap-2 p-3 bg-mail-surface border border-mail-border rounded-lg mb-4">
                   <p className="text-xs text-mail-text-muted">{t('bulk.ops.readingAllEmails', { count: formatCount(totalEmails) })}</p>
+                </div>
+              )}
+
+              {rangeFoundNothing && (
+                <div role="status" data-testid="bulk-nothing-found"
+                  className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning/20 rounded-lg mb-4">
+                  <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-mail-text">{t('bulk.ops.nothingFoundRange')}</p>
                 </div>
               )}
 
@@ -556,7 +574,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-mail-border">
                 <span className="text-sm text-mail-text-muted">
-                  {selectedCount > 0 ? t('bulk.ops.emailsSelected', { selectedCount: formatCount(selectedCount) }) : t('bulk.ops.selectDateRange')}
+                  {selectedCount > 0 ? t('bulk.ops.emailsSelected', { selectedCount: formatCount(selectedCount) }) : rangeFoundNothing ? '' : t('bulk.ops.selectDateRange')}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="ghost" className="hover:bg-mail-border"

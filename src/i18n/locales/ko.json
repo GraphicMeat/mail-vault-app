@@ -229,6 +229,7 @@
   "bulk.ops.lastWeek": "지난주",
   "bulk.ops.lastYear": "작년",
   "bulk.ops.minimizeSelectionKept": "최소화 — 선택은 유지됩니다",
+  "bulk.ops.nothingFoundRange": "이 기간에 해당하는 이메일이 없습니다",
   "bulk.ops.onServerCount": "서버에 {{count}}개",
   "bulk.ops.presets": "사전 설정",
   "bulk.ops.readingAllEmails": "메일 {{count}}개를 모두 읽는 중…",

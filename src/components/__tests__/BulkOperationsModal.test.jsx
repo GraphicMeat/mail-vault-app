@@ -193,6 +193,39 @@ describe('BulkOperationsModal', () => {
     expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(3);
   });
 
+  // Closing with nothing selected must not leave a "0 selected" bubble behind:
+  // a minimize only makes sense when there is a selection to keep.
+  it.each([
+    ['header X', () => fireEvent.click(document.querySelector('[data-icon="X"]').closest('button'))],
+    ['backdrop', () => fireEvent.click(document.querySelector('.bg-black\\/50'))],
+    ['Escape', () => fireEvent.keyDown(document, { key: 'Escape' })],
+  ])('%s with nothing selected ends the session instead of minimizing', async (_name, close) => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    close();
+
+    expect(useMessageListStoreMock.getState().bulkSession).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a range that matches nothing says so, and closing it ends the session', async () => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    fireEvent.click(screen.getByText('Custom Range'));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2000-01-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2000-01-31' } });
+
+    expect(await screen.findByText('Nothing found for this range')).toBeTruthy();
+    expect(screen.queryByText('Select a date range')).toBeNull();
+
+    fireEvent.click(document.querySelector('[data-icon="X"]').closest('button'));
+    expect(useMessageListStoreMock.getState().bulkSession).toBeNull();
+  });
+
   it('step-1 Cancel ends the session (endBulkSession), not just a minimize', async () => {
     const onClose = vi.fn();
     render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);

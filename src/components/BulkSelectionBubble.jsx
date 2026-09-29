@@ -1,5 +1,5 @@
 import { Button } from './ui/Button';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
@@ -38,6 +38,11 @@ export function BulkSelectionBubble() {
   const email = accounts.find(a => a.id === bulkSession?.accountId)?.email || '';
   const folder = bulkSession?.mailbox === 'UNIFIED' ? tr('selection.bubble.allInboxes') : bulkSession?.mailbox;
   const count = selectedEmailIds.size;
+
+  // A minimized session with nothing selected has nothing to keep: unchecking
+  // the last row by hand ends it, so a "0 selected" chip never sits on screen.
+  const emptied = visible && count === 0;
+  useEffect(() => { if (emptied) endBulkSession(); }, [emptied, endBulkSession]);
 
   return (
     <AnimatePresence>
