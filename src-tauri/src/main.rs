@@ -83,6 +83,7 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
+mod abd;
 mod autostart;
 mod backup;
 mod commands;
@@ -3406,6 +3407,7 @@ fn main() {
     // app-side IMAP callers.
     let builder = builder
         .manage(backup::HeldBackupPaths::default())
+        .manage(abd::HeldAbdPaths::default())
         .manage(export_folder::HeldExportPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
@@ -3492,6 +3494,9 @@ fn main() {
             backup::backup_purge_uids,
             backup::backup_copy_uids,
             backup::backup_scan_uids,
+            abd::abd_summarize,
+            abd::abd_start,
+            abd::abd_attach,
             commands::get_transfer_stats,
             github::github_device_start,
             github::github_device_poll,

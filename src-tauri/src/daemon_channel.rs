@@ -95,6 +95,9 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 // The app fails every export in flight on a reconnect; their
                 // folders' scoped access goes with them.
                 crate::export_folder::release_all(&app, "the daemon channel reconnected");
+                // Same for a backup-drive hold of an archive/delete job: the
+                // app re-attaches through `abd_attach` once it is connected.
+                crate::abd::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
                 // Runs on the first connect too (CONNECTED is already true above, addendum
                 // C3). Harmless on a fresh daemon (unconfigured until 1.8's re-push); catches
@@ -238,6 +241,10 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // (`export_folder.rs`): its final frame lets go, and a
                         // lag may have eaten one, so it lets every job go.
                         let export_frame = (name == crate::export_folder::EXPORT_PROGRESS).then(|| payload.clone());
+                        // An archive/delete job holds the backup drive the same way
+                        // (`abd.rs`): its terminal frame, or one saying it paused
+                        // for the drive, lets go.
+                        let abd_frame = (name == crate::abd::ABD_PROGRESS).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
                         if app.emit(&name, payload).is_err() {
                             debug!("daemon channel: failed to emit {name} to the frontend");
@@ -248,8 +255,12 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(frame) = export_frame {
                             crate::export_folder::release_after_final_frame(app, &frame);
                         }
+                        if let Some(frame) = abd_frame {
+                            crate::abd::release_after_frame(app, &frame);
+                        }
                         if lagged {
                             crate::export_folder::release_all(app, "the daemon event stream lagged");
+                            crate::abd::release_all(app, "the daemon event stream lagged");
                         }
                     }
                 }
