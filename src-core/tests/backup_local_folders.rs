@@ -98,6 +98,7 @@ impl Run {
                 frames.lock().unwrap().push(p);
             }),
             apply_flags: Arc::new(|_, _| Ok(Applied::default())),
+            limit: None,
         }
     }
 
