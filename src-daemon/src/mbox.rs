@@ -558,9 +558,12 @@ fn import_from(
             // Spent even if the write below fails: a uid is never reused.
             d.max_uid = uid;
             let dest = cur_dir.join(build_maildir_filename(uid, &flags));
-            if let Err(e) = std::fs::write(&dest, &unescaped) {
-                // A failed plain write can leave a partial file.
-                state.vault_registry.invalidate(&safe_account_id, &d.dir);
+            // Atomic: readers that take no lock (the backup's mirror copy)
+            // list this folder mid-import and copy once what they find, so the
+            // uid name appears only with the whole message behind it. A failed
+            // write leaves nothing under it: at most a dot-prefixed temp no
+            // uid scanner reads, so the registry has nothing to correct.
+            if let Err(e) = mailvault_core::fsx::write_atomic(&dest, &unescaped) {
                 return Err(format!("Failed to write .eml: {}", e));
             }
             state.vault_registry.upsert(&safe_account_id, &d.dir, uid, &dest);
@@ -1605,6 +1608,91 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
             let r = import_mbox(&s, path, "acct1".into(), "INBOX".into(), use_labels, |_, _| {});
             assert!(r.is_err(), "labels: {use_labels}: {r:?}");
         }
+    }
+
+    /// Readers that take no lock (the backup's local-folder pass, the
+    /// pre-sync) list `cur/` while an import writes, and copy what they find
+    /// once, for good. So a message's own name may only ever hold the whole
+    /// message. A watcher lists the folder through an import of large
+    /// messages and reads the size of every file a uid scanner would take
+    /// (`mirror_filename_uid`, the rule the mirror copy uses): none is ever
+    /// short, and no temp is left once the import is done.
+    #[test]
+    fn a_reader_listing_the_folder_mid_import_never_sees_half_a_message() {
+        use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+        const BODY: usize = 16 << 20;
+        const MESSAGES: usize = 6;
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let line = format!("{}\r\n", "x".repeat(75));
+        let body = line.repeat(BODY / line.len() + 1);
+        let messages: Vec<String> = (0..MESSAGES).map(|i| format!("Message-ID: <big-{i}@x>\r\nSubject: big {i}\r\n\r\n{body}")).collect();
+        let refs: Vec<&str> = messages.iter().map(String::as_str).collect();
+        let path = write_mbox(dir.path(), "big.mbox", &refs);
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "Big");
+
+        let done = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let (cur, done) = (cur.clone(), Arc::clone(&done));
+            std::thread::spawn(move || {
+                let (mut looked, mut short) = (0usize, Vec::new());
+                loop {
+                    let last = done.load(SeqCst);
+                    for entry in std::fs::read_dir(&cur).into_iter().flatten().flatten() {
+                        let name = entry.file_name().to_string_lossy().into_owned();
+                        if mailvault_core::maildir::mirror_filename_uid(&name).is_none() {
+                            continue;
+                        }
+                        looked += 1;
+                        let len = entry.metadata().map(|m| m.len() as usize).unwrap_or(0);
+                        if len < BODY {
+                            short.push((name, len));
+                        }
+                    }
+                    if last {
+                        return (looked, short);
+                    }
+                }
+            })
+        };
+        let r = import_mbox(&s, path, "acct1".into(), "Big".into(), false, |_, _| {});
+        done.store(true, SeqCst);
+        let (looked, short) = watcher.join().unwrap();
+
+        assert_eq!(r.unwrap().email_count, MESSAGES as u32);
+        assert!(looked >= MESSAGES, "the watcher saw the folder's files ({looked})");
+        assert!(short.is_empty(), "a uid name held part of a message {} times, e.g. {:?}", short.len(), &short[..short.len().min(3)]);
+        let names = names_in(v.path(), "Big");
+        assert_eq!(names.len(), MESSAGES, "one file per message, no temp left: {names:?}");
+        assert!(names.iter().all(|n| mailvault_core::maildir::vault_filename_uid(n).is_some()), "{names:?}");
+    }
+
+    /// A message write the disk refuses (here a `cur/` that takes no new
+    /// file) stops the import as an error and leaves nothing in the folder:
+    /// no file under the uid, no temp beside it, and the registry still
+    /// answers for the folder as it is.
+    #[cfg(unix)]
+    #[test]
+    fn a_refused_message_write_leaves_nothing_in_the_folder() {
+        use std::os::unix::fs::PermissionsExt;
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_mbox(dir.path(), "t.mbox", &[&tmsg("a@x", "one", None)]);
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "Big");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::set_permissions(&cur, std::fs::Permissions::from_mode(0o555)).unwrap();
+        if std::fs::write(cur.join("probe"), b"").is_ok() {
+            // Root ignores the mode: nothing to prove here.
+            return;
+        }
+
+        let r = import_mbox(&s, path, "acct1".into(), "Big".into(), false, |_, _| {});
+        std::fs::set_permissions(&cur, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert!(r.is_err(), "{r:?}");
+        assert_eq!(names_in(v.path(), "Big"), Vec::<String>::new());
+        let listed = s.vault_registry.files(v.path(), "acct1", "Big").expect("the registry answers");
+        assert!(listed.is_empty(), "{listed:?}");
     }
 
     // -- probe ---------------------------------------------------------------
