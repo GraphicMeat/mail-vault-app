@@ -568,6 +568,16 @@ describe('RowQuickActions — a row in a folder kept on this computer', () => {
     for (const id of ['move', 'spam', 'snooze', 'deleteEverywhere', 'unarchive']) expect(button(id).disabled).toBe(false);
   });
 
+  // A search or saved-view hit names the folder by its vault directory.
+  it('treats a hit that names the folder by its directory the same way', () => {
+    setActions(...['move', 'spam', 'snooze', 'deleteEverywhere', 'unarchive', 'deleteServer'].map(name => action(name)));
+    renderActions({ emails: [{ ...localRow(), _mailbox: 'MBOX_import_2026-09-29', _localOnlyFolder: true }] });
+    for (const id of ['move', 'spam', 'snooze']) expect(button(id) === null || button(id).disabled).toBe(true);
+    for (const id of ['deleteEverywhere', 'unarchive']) expect(button(id)).toBeNull();
+    expect(button('deleteServer').textContent).toBe('common.delete');
+    expect(button('deleteServer').disabled).toBe(false);
+  });
+
   it.each(['delete', 'deleteServer'])('%s is a plain delete into the deleted bin, confirmed first', async name => {
     setActions(action(name));
     const { actions, onRequestDelete } = renderActions({ emails: [localRow()] });

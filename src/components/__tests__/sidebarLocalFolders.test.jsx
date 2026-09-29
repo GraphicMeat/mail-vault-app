@@ -33,6 +33,7 @@ const NAME = 'MBOX import 2026-09-29';
 const FOLDER = { name: NAME, dir: 'MBOX_import_2026-09-29', kind: 'import', created: 1, source: 'takeout.mbox' };
 const accounts = [{ id: 'studio', name: 'Studio', email: 'studio@example.com', authType: 'password' }];
 const activateAccount = vi.fn(async () => {});
+const realLoadEmails = useMailStore.getState().loadEmails;
 
 beforeEach(() => {
   sent.calls = [];
@@ -51,7 +52,7 @@ beforeEach(() => {
     localFolders: { studio: [FOLDER] },
     emails: [], localEmails: [], connectionStatus: 'connected', connectionError: null, connectionErrorType: null,
     loading: false, loadingMore: false, totalEmails: 0, viewMode: 'all', folderStatus: {},
-    exportProgress: null, error: null, activateAccount,
+    exportProgress: null, error: null, activateAccount, loadEmails: realLoadEmails,
   });
 });
 
@@ -114,6 +115,30 @@ describe('Sidebar local folders', () => {
     fireEvent.click(deleteItem());
     fireEvent.click(within(confirmDialog()).getByTestId('confirm-delete-folder'));
     await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('studio', 'INBOX'));
+  });
+
+  it.each([
+    ['gone after all', [], 'INBOX'],
+    ['still there', [FOLDER], 'rescan'],
+  ])('after a refused delete of the open folder, goes by the fresh listing: %s', async (_label, listed, expected) => {
+    const loadEmails = vi.fn(async () => {});
+    useMailStore.setState({ activeMailbox: NAME, loadEmails });
+    sent.answer.delete_local_folder = () => Promise.reject(new Error('E_LOCAL_FOLDER_NOT_EMPTY: 1 moved to the deleted bin, some mail is left in MBOX_import_2026-09-29'));
+    sent.answer.list_local_folders = listed;
+    render(<Sidebar />);
+    openMenu();
+    fireEvent.click(deleteItem());
+    fireEvent.click(within(confirmDialog()).getByTestId('confirm-delete-folder'));
+    await waitFor(() => expect(useMailStore.getState().error).toBeTruthy());
+
+    if (expected === 'INBOX') {
+      // A reload of a folder no longer local would have gone to a server.
+      expect(activateAccount).toHaveBeenCalledWith('studio', 'INBOX');
+      expect(loadEmails).not.toHaveBeenCalled();
+    } else {
+      expect(loadEmails).toHaveBeenCalled();
+      expect(activateAccount).not.toHaveBeenCalled();
+    }
   });
 
   it.each([

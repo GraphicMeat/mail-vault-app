@@ -111,9 +111,11 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { canSnooze } = await import('../snooze');
-const { purgeEverywhere } = await import('../messageMutations');
+const { purgeEverywhere, applyFlagToKeys } = await import('../messageMutations');
 const { resolveMessageBody } = await import('../../export/bodyResolver');
 const { buildSearchTargets } = await import('../../searchTargets');
+const { useSearchStore } = await import('../../../stores/searchStore');
+const { selectionKey, inLocalFolder } = await import('../../../stores/slices/unifiedHelpers');
 
 const ACCOUNT = { id: 'acct-a', email: 'a@mock.test', password: 'pw' };
 const ROW = {
@@ -282,5 +284,78 @@ describe('a message in a local folder', () => {
 
     expect(target.localMailboxes).toEqual([NAME]);
     expect(target.serverMailboxes).toEqual([]);
+  });
+});
+
+// A search or saved-view hit from a local folder, as the daemon stamps it: it
+// only knows the server's folder names, so the hit names its folder by the
+// vault directory (`_mailbox: <dir>`, `_localOnlyFolder: true`). The view on
+// screen is a server folder. Every guard must know the dir as the same folder.
+describe('a search hit from a local folder, named by its directory', () => {
+  const DIR = FOLDER.dir;
+  const HIT = {
+    ...ROW, _accountId: ACCOUNT.id, _mailbox: DIR, vaultDir: DIR, _localOnlyFolder: true,
+    source: 'local', isLocal: true, isArchived: true,
+  };
+  let KEY;
+  const primeHit = (extra = {}) => {
+    prime({ activeMailbox: 'INBOX', localEmails: [], savedEmailIds: new Set(), archivedEmailIds: new Set(), ...extra });
+    useSearchStore.setState({ searchResults: [{ ...HIT }], searchActive: true });
+    KEY = selectionKey(HIT, useMailStore.getState());
+  };
+  const noServer = () => {
+    expect(api.updateEmailFlags).not.toHaveBeenCalled();
+    expect(api.deleteEmail).not.toHaveBeenCalled();
+    expect(api.moveEmails).not.toHaveBeenCalled();
+    expect(api.fetchEmailLight).not.toHaveBeenCalled();
+    expect(m.queueOp).not.toHaveBeenCalled();
+  };
+
+  it('is marked read in the vault only when opened', async () => {
+    primeHit();
+    await useMailStore.getState().selectEmail(KEY, 'local', DIR, null, { ...HIT });
+
+    await vi.waitFor(() => expect(api.vaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, DIR, ACCOUNT.email, [{ uid: 7, flags: ['\\Seen'], on: true }]));
+    noServer();
+  });
+
+  it('is starred and marked read in the vault only', async () => {
+    primeHit();
+    await useMailStore.getState().toggleFlagged(KEY);
+    await applyFlagToKeys([KEY], '\\Seen', true);
+
+    expect(api.vaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, DIR, ACCOUNT.email, [{ uid: 7, flags: ['\\Flagged'], on: true }]);
+    noServer();
+  });
+
+  it('goes to the deleted bin when deleted, one or from a selection, with nothing written for a server', async () => {
+    primeHit();
+    await useMailStore.getState().deleteEmailFromServer(7, { accountId: ACCOUNT.id, mailboxOverride: DIR });
+    primeHit({ selectedEmailIds: new Set() });
+    useMailStore.setState({ selectedEmailIds: new Set([KEY]) });
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(sends('maildir_delete')).toEqual([
+      { accountId: ACCOUNT.id, mailbox: DIR, uid: 7, bin: true },
+      { accountId: ACCOUNT.id, mailbox: DIR, uid: 7, bin: true },
+    ]);
+    expect(api.appendLocalIndex).not.toHaveBeenCalled();
+    expect(m.saveEmailHeaders.mock.calls.filter(([, mailbox]) => mailbox === DIR)).toEqual([]);
+    noServer();
+  });
+
+  it('is offered no server action: it counts as local, cannot be snoozed, moved or purged', async () => {
+    primeHit();
+    const state = useMailStore.getState();
+    expect(inLocalFolder(HIT, state)).toBe(true);
+    expect(canSnooze({ ...HIT }, state)).toBe(false);
+
+    await useMailStore.getState().moveEmails([KEY], 'Junk');
+    await purgeEverywhere([KEY]);
+
+    expect(api.checkMailboxStatus).not.toHaveBeenCalled();
+    expect(sends('maildir_delete_many')).toEqual([]);
+    noServer();
   });
 });

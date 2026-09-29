@@ -1404,6 +1404,10 @@ export async function init() {
     console.log('[init] Got', accounts.length, 'accounts');
     await adoptGraphFolderKeys(accounts);
     useMailStore.setState({ accounts });
+    // Every account's local folders, not only the ones opened this session: a
+    // search or saved-view hit can come from any account, and an account with
+    // no known list reads as "server folder" to every guard.
+    for (const a of accounts) loadLocalFolders(a.id);
 
     if (accounts.length > 0) {
       await db.ensureAccountsInFile(accounts);

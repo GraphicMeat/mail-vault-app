@@ -11,6 +11,7 @@ import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
+import { isLocalMailbox } from './mailboxTree';
 import { encodeImapUtf7 } from '../../utils/imapUtf7';
 import { t as tr } from '../../i18n/index.js';
 
@@ -131,7 +132,9 @@ export async function deleteLocalFolder(accountId, name) {
   const { useMailStore } = await import('../../stores/mailStore');
   const s = useMailStore.getState();
   if (s.activeAccountId === accountId && s.activeMailbox === name) {
-    await (failure ? s.loadEmails() : s.activateAccount(accountId, 'INBOX'));
+    // By the fresh listing, not by the answer: a refused delete can still have
+    // taken the folder, and a reload of a folder no longer local goes to a server.
+    await (isLocalMailbox(s.localFolders, accountId, name) ? s.loadEmails() : s.activateAccount(accountId, 'INBOX'));
   }
   if (failure) {
     const message = String(failure?.message ?? failure);

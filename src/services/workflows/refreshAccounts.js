@@ -11,6 +11,7 @@ import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMail
 import { invalidate as _invalidateProbe } from '../syncProbe';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
 import { invalidateFolderStatus } from './folderStatus';
+import { loadLocalFolders } from './folderOps';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
 
@@ -122,6 +123,8 @@ export async function refreshAllAccounts(options = {}) {
   for (const account of accounts) {
     _invalidateRestore(account.id);
     _invalidateProbe(account.id);
+    // Also picks up a folder an import made elsewhere, and an added account.
+    loadLocalFolders(account.id);
   }
 
   console.log('[mailStore] Refreshing all accounts...');

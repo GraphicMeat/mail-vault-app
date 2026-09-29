@@ -46,6 +46,9 @@ const db = vi.hoisted(() => ({
   listCachedUids: vi.fn(),
   getEmailHeadersByUids: vi.fn(),
   clearMailboxCache: vi.fn(),
+  initDB: vi.fn(),
+  getAccounts: vi.fn(),
+  ensureAccountsInFile: vi.fn(),
 }));
 vi.mock('../../db', () => db);
 
@@ -106,6 +109,7 @@ vi.mock('../../syncService', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { forget: forgetMemo } = await import('../../headerMemo');
+const { inLocalFolder } = await import('../../../stores/slices/unifiedHelpers');
 
 const ACCOUNT = { id: 'acct-a', email: 'a@mock.test', password: 'pw' };
 
@@ -305,5 +309,44 @@ describe('reloading a local folder', () => {
     await useMailStore.getState().loadMoreEmails();
 
     expectNoServerCallFor(NAME);
+  });
+});
+
+// A search or saved-view hit can come from an account nobody opened this
+// session (All Inboxes search, a cross-account view). Every account's local
+// folders are listed at start, so a hit from one is known as local, not
+// taken for a server folder.
+describe('every account\'s local folders, from the start', () => {
+  const B = { id: 'acct-b', email: 'b@mock.test', password: 'pw' };
+  const FOLDER_B = { name: 'MBOX import 2026-09-28', dir: 'MBOX_import_2026-09-28', kind: 'import', created: 2, source: 'b.mbox' };
+  const HIT_B = { uid: 3, _accountId: B.id, _mailbox: FOLDER_B.dir, _localOnlyFolder: true, source: 'local', isArchived: true };
+
+  beforeEach(() => {
+    db.initDB.mockResolvedValue(undefined);
+    db.getAccounts.mockResolvedValue([ACCOUNT, B]);
+    db.ensureAccountsInFile.mockResolvedValue(undefined);
+  });
+
+  it('knows a hit from an account never opened as local once the app has started', async () => {
+    api.listLocalFolders.mockImplementation(async (accountId) => (accountId === B.id ? [FOLDER_B] : []));
+    prime({ accounts: [ACCOUNT, B] });
+    await useMailStore.getState().init();
+
+    await vi.waitFor(() => expect(useMailStore.getState().localFolders[B.id]).toEqual([FOLDER_B]));
+    expect(inLocalFolder(HIT_B, useMailStore.getState())).toBe(true);
+  });
+
+  it('keeps the list it knew for an account whose listing fails', async () => {
+    api.listLocalFolders.mockImplementation(async (accountId) => {
+      if (accountId === B.id) throw new Error('daemon unreachable');
+      return [];
+    });
+    prime({ accounts: [ACCOUNT, B], localFolders: { [B.id]: [FOLDER_B] } });
+    await useMailStore.getState().init();
+
+    await vi.waitFor(() => expect(api.listLocalFolders).toHaveBeenCalledWith(B.id));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(useMailStore.getState().localFolders[B.id]).toEqual([FOLDER_B]);
+    expect(inLocalFolder(HIT_B, useMailStore.getState())).toBe(true);
   });
 });
