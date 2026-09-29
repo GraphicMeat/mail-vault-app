@@ -25,18 +25,20 @@
  * headers cached, the save could never reach 0. The spec checks Flaky is not
  * in the count before relying on that.
  *
- * The unreachable-vault case renames the vault root away (the daemon's
- * reachability is `vault_root()` plus `is_dir()`, taken on every count),
- * reopens the panel so the row counts again, and puts the root back. The
- * search index keeps its store under the root and recreates the root when a
- * pass finds it gone, so the case waits for the index to settle, switches it
- * off (the app's own setting) while the root is away and back on after, and
- * fails with its own message if anything recreates the root meanwhile. The
- * header cache lives inside the vault, and the daemon keeps it open, so the
- * count may come back with the reason or as unknown with the reason; both
- * must show the reason and neither may say everything is in the vault. It
+ * The unreachable-vault case puts the daemon in the state a vault move puts
+ * it in (`vault_close`: the vault gate refuses, and the header cache, which
+ * lives in the vault, closes), reopens the panel so the row counts again, and
+ * reopens the vault after (`vault_reopen`). The daemon's reachability is the
+ * vault gate plus the vault ROOT still being a directory: an unplugged
+ * external drive takes the whole vault path away, which the daemon's unit
+ * specs cover (`a_vault_lost_since_startup_is_unreachable_and_a_save_refuses_it`).
+ * Here the vault is the default location, the app data dir itself, which
+ * cannot be taken away under a running app; renaming only its `Maildir` is
+ * not an unreachable vault but an empty one (a fresh account has no
+ * `Maildir` yet either), so every cached copy counts as missing, correctly.
+ * With the header cache closed the count is unknown, with the reason. It
  * runs last, and every spec file starts from a fresh data dir
- * (`resetAppState`), so a failed restore cannot reach another spec.
+ * (`resetAppState`), so a failed reopen cannot reach another spec.
  *
  * Every wait is `browser.waitUntil(() => browser.execute(...))`: `$(sel)` and
  * `waitForDisplayed` die on tauri-wd, and a page callback cannot close over a
@@ -44,7 +46,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appDataDir } from './mockImap.js';
 import { closeSettings, waitForApp, waitForEmails } from './helpers.js';
@@ -119,26 +121,15 @@ function archivedFiles(accountId, folder) {
   return readdirSync(cur).filter((name) => (name.split(/[:;]2,/)[1] || '').replace(/\.eml$/, '').includes('A'));
 }
 
-let away = null;
-// Whether the unreachable case switched the search index off, and the
-// setting it found, so the index is switched back whatever happens.
-let indexSwitched = false;
-let indexWas = null;
+// Whether the unreachable case closed the vault, so it is reopened whatever happens.
+let vaultClosed = false;
 
-async function restoreIndex() {
-  if (!indexSwitched) return;
-  indexSwitched = false;
-  await browser.execute((v) => window.__SETTINGS_STORE__.setState({ searchIndexEnabled: v }), indexWas ?? true);
-}
-
-/** Put the vault root back where the daemon expects it. */
-function restoreVault() {
-  if (!away) return;
-  const root = vaultRoot();
-  // Something recreated the root while it was away: the renamed one is the vault.
-  if (existsSync(root)) rmSync(root, { recursive: true, force: true });
-  renameSync(away, root);
-  away = null;
+/** Reopen the vault the unreachable case closed. */
+async function reopenVault() {
+  if (!vaultClosed) return;
+  const reply = await daemonRpc('vault_reopen', {});
+  if (!reply.ok) throw new Error(`vault_reopen refused: ${reply.__error}`);
+  vaultClosed = false;
 }
 
 describe('Settings > Backup - copies not yet in the vault', function () {
@@ -207,9 +198,8 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   });
 
   after(async function () {
-    // The vault first: a resumed pipeline writing into a missing root would recreate it.
-    try { restoreVault(); } catch (e) { console.warn(`[vault-gap] could not put the vault back: ${e.message}`); }
-    await restoreIndex().catch((e) => console.warn(`[vault-gap] could not switch the search index back: ${e.message}`));
+    // The vault first: the pipeline resumed below writes into it.
+    await reopenVault().catch((e) => console.warn(`[vault-gap] could not reopen the vault: ${e.message}`));
     await browser.execute((id) => {
       window.__SETTINGS_STORE__.setState((s) => {
         const { [id]: _, ...rest } = s.fetchModes || {};
@@ -273,39 +263,9 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   });
 
   it('an unreachable vault shows the reason, never everything-in-your-vault, and cannot save', async function () {
-    const root = vaultRoot();
-    assert.ok(existsSync(root), `no vault at ${root}`);
-    // The search index keeps its store under the vault root, and a pass that
-    // finds the root gone recovers by reopening that store, which creates the
-    // root again (search_index/db.rs `open`: create_dir_all). The save's
-    // writes nudge it, and a burst of nudges waits up to 1.5 s (COALESCE)
-    // while the status still reads idle. So: wait until two reads 2 s apart
-    // are settled (phases are starting, recovering, indexing, idle, error,
-    // off), then switch the index off through the app's own setting (the app
-    // pushes it to the daemon) and move the vault only once the daemon says off.
-    const SETTLED = ['idle', 'off', 'error'];
-    let index = null;
-    let settledReads = 0;
-    try {
-      await browser.waitUntil(async () => {
-        const reply = await daemonRpc('search_index_status', {});
-        index = reply.ok ? reply.v : { error: reply.__error };
-        settledReads = reply.ok && SETTLED.includes(reply.v?.state) ? settledReads + 1 : 0;
-        return settledReads >= 2;
-      }, { timeout: 120_000, interval: 2_000 });
-    } catch (e) {
-      throw new Error(`the search index never settled before the vault was moved away: ${JSON.stringify(index)} (${e.message})`);
-    }
-    indexWas = await browser.execute(() => window.__SETTINGS_STORE__.getState().searchIndexEnabled);
-    indexSwitched = true;
-    await browser.execute(() => window.__SETTINGS_STORE__.setState({ searchIndexEnabled: false }));
-    await wait(async () => (await daemonRpc('search_index_status', {})).v?.state === 'off', 30_000,
-      'the search index never switched off');
-    away = `${root}.away-${Date.now()}`;
-    renameSync(root, away);
-    // Something writing into the vault while it is away brings the root back:
-    // that is a failure of this setup, said as one, not a reachable vault.
-    const recreated = () => (existsSync(root) ? readdirSync(root) : null);
+    const closed = await daemonRpc('vault_close', {});
+    assert.equal(closed.ok, true, `vault_close refused: ${closed.__error}`);
+    vaultClosed = true;
     try {
       // Reopen the panel: the row counts again when it mounts. Through the
       // first sub-tab, which sends nothing on mount.
@@ -314,31 +274,28 @@ describe('Settings > Backup - copies not yet in the vault', function () {
       await clickBackupSubTab('Backup Schedule');
 
       let seen = null;
-      let back = null;
       try {
         await wait(async () => {
-          back = recreated();
-          if (back) return true;
           seen = await gapRow(lukeId);
           return seen?.state === 'unreachable' || seen?.state === 'unknown';
         }, 30_000);
       } catch (e) {
         throw new Error(`the row never said the vault is unreachable: ${JSON.stringify(seen)} (${e.message})`);
       }
-      assert.equal(back, null, `something recreated the vault root while it was away, holding ${JSON.stringify(back)}`);
       assert.ok(seen.text.includes(UNAVAILABLE), seen.text);
       assert.ok(!seen.text.includes(NONE), seen.text);
       assert.equal(seen.saveDisabled, true, 'Save them now is offered into a vault that is not there');
 
+      // The header cache lives in the vault and closed with it: no count, the reason.
       const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
-      assert.equal(recreated(), null, 'something recreated the vault root while it was away');
       assert.equal(reply.ok, true, `vault_gap_count refused: ${reply.__error}`);
-      assert.equal(reply.v.vaultReachable, false);
-      assert.equal(reply.v.reason, 'E_VAULT_UNAVAILABLE');
+      assert.deepEqual(reply.v, { count: null, vaultReachable: false, reason: 'E_VAULT_UNAVAILABLE', partial: true, byMailbox: [] });
     } finally {
-      restoreVault();
-      // Back on only with the root in place: it reopens its store there.
-      await restoreIndex();
+      await reopenVault();
     }
+    // Reopened, the account counts again.
+    const back = await daemonRpc('vault_gap_count', { accountId: lukeId });
+    assert.equal(back.ok, true, `vault_gap_count refused after the reopen: ${back.__error}`);
+    assert.equal(back.v.vaultReachable, true);
   });
 });

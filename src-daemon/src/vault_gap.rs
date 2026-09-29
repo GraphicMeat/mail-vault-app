@@ -1047,6 +1047,37 @@ mod tests {
         assert_eq!(got["partial"], json!(false));
     }
 
+    /// What a vault move does to the daemon (`vault_close`: the gate refuses,
+    /// the header cache in the vault closes) reads as unreachable with no
+    /// count, and `vault_reopen` brings the count back. The e2e spec's
+    /// unreachable case drives exactly these two routes.
+    #[tokio::test]
+    async fn a_vault_closed_for_a_move_is_unreachable_until_it_reopens() {
+        let r = rig();
+        cached(&r.s, "INBOX", [1, 2]);
+        ok(handle_request_for_test(&r.s, "vault_close", json!({})).await);
+        assert_eq!(
+            count_of(&r.s).await,
+            json!({"count": null, "vaultReachable": false, "reason": E_VAULT_UNAVAILABLE, "partial": true, "byMailbox": []})
+        );
+        ok(handle_request_for_test(&r.s, "vault_reopen", json!({})).await);
+        let got = count_of(&r.s).await;
+        assert_eq!((got["count"].clone(), got["vaultReachable"].clone()), (json!(2), json!(true)), "{got}");
+        assert!(got.get("reason").is_none(), "{got}");
+    }
+
+    /// A vault root that is there but has no `Maildir` yet (a fresh account,
+    /// or a folder whose mail never landed) is an empty vault, not an
+    /// unreachable one: every cached copy counts, with no reason.
+    #[tokio::test]
+    async fn a_vault_with_no_maildir_yet_is_reachable_and_empty() {
+        let r = rig();
+        cached(&r.s, "INBOX", [1, 2]);
+        let _ = std::fs::remove_dir_all(r.s.data_dir.join("Maildir"));
+        let got = count_of(&r.s).await;
+        assert_eq!(got, json!({"count": 2, "vaultReachable": true, "partial": false, "byMailbox": [{"mailbox": "INBOX", "count": 2, "partial": false}]}));
+    }
+
     /// No header cache to count from: the vault unreachable since startup
     /// (its `custody.db` with it), or the store closed on a reachable vault.
     /// The count is `null` with a reason, never 0.
