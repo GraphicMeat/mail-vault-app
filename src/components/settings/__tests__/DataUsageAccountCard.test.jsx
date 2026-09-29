@@ -4,8 +4,8 @@
  * The daily limit governs BACKGROUND downloads (backups, Hoarder, download-
  * ahead) and never everyday mail, so the card says exactly that: the toggle is
  * "Pause background downloads at daily limit", its hint says new mail keeps
- * arriving, and on a Gmail account an empty field shows the real default (2,000
- * MB down, 500 up) as its placeholder.
+ * arriving, and on a Gmail account an empty field shows what applies (2,500 MB
+ * down, 500 up with the cap off; the 2,000 MB default with it on) as its placeholder.
  *
  * "Gmail" is decided by the account's IMAP host, the way the daemon decides it
  * (`default_limits(host)`), not by the email domain.
@@ -17,6 +17,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const { default: DataUsageAccountCard } = await import('../DataUsageAccountCard');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
+const { formatBytes } = await import('../../../utils/formatBytes');
 
 const PLAIN = { id: 'acc-plain', email: 'han@example.com', imapHost: 'imap.example.com' };
 const GMAIL = { id: 'acc-gmail', email: 'leia@gmail.com', imapHost: 'imap.gmail.com' };
@@ -71,21 +72,45 @@ describe('DataUsageAccountCard daily limit copy', () => {
 });
 
 describe('DataUsageAccountCard placeholders', () => {
-  it('shows Gmail\'s real defaults, 2000 down and 500 up', () => {
+  // With the cap OFF nothing of ours stops a download, so the figure shown is
+  // Gmail's own limit (2,500 MB down, 500 up). Only with the cap ON does an
+  // empty field mean the 2,000 MB default, the one the daemon enforces.
+  it('shows Gmail\'s real limits with the cap off, 2500 down and 500 up', () => {
+    renderCard(GMAIL);
+    expect(downInput().getAttribute('placeholder')).toBe('2500');
+    expect(upInput().getAttribute('placeholder')).toBe('500');
+  });
+
+  it('shows the 2000 MB default once the cap is on and the field is empty', () => {
+    useSettingsStore.setState({ transferLimits: { [GMAIL.id]: { capEnabled: true } } });
     renderCard(GMAIL);
     expect(downInput().getAttribute('placeholder')).toBe('2000');
     expect(upInput().getAttribute('placeholder')).toBe('500');
   });
 
-  it('says Unlimited everywhere else', () => {
+  it('follows the toggle: switching the cap on moves the placeholder from 2500 to 2000', () => {
+    renderCard(GMAIL);
+    expect(downInput().getAttribute('placeholder')).toBe('2500');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause background downloads at daily limit' }));
+
+    expect(downInput().getAttribute('placeholder')).toBe('2000');
+  });
+
+  it('says Unlimited everywhere else, with the cap on or off', () => {
     renderCard(PLAIN);
     expect(downInput().getAttribute('placeholder')).toBe('Unlimited');
     expect(upInput().getAttribute('placeholder')).toBe('Unlimited');
+    cleanup();
+
+    useSettingsStore.setState({ transferLimits: { [PLAIN.id]: { capEnabled: true } } });
+    renderCard(PLAIN);
+    expect(downInput().getAttribute('placeholder')).toBe('Unlimited');
   });
 
   it('decides by IMAP host: Google Workspace is Gmail, a forwarded @gmail.com is not', () => {
     renderCard(WORKSPACE);
-    expect(downInput().getAttribute('placeholder')).toBe('2000');
+    expect(downInput().getAttribute('placeholder')).toBe('2500');
     cleanup();
 
     renderCard(FORWARDED);
@@ -99,5 +124,23 @@ describe('DataUsageAccountCard placeholders', () => {
     });
     renderCard(GMAIL);
     expect(downInput().value).toBe('1500');
+  });
+});
+
+describe('DataUsageAccountCard usage bar on a Gmail account', () => {
+  const MB = 1024 * 1024;
+  const bar = (account) => render(<DataUsageAccountCard account={account} stats={{ today: { down: 100 * MB, up: 10 * MB } }} />);
+
+  it('measures today against Gmail\'s real 2,500 MB limit while the cap is off', () => {
+    bar(GMAIL);
+    const text = document.body.textContent;
+    expect(text).toContain(`/ ${formatBytes(2500 * MB)}`);
+    expect(text).not.toContain(`/ ${formatBytes(2000 * MB)}`);
+  });
+
+  it('measures against the 2,000 MB default once the cap is on', () => {
+    useSettingsStore.setState({ transferLimits: { [GMAIL.id]: { capEnabled: true } } });
+    bar(GMAIL);
+    expect(document.body.textContent).toContain(`/ ${formatBytes(2000 * MB)}`);
   });
 });

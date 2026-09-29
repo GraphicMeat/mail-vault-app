@@ -10,7 +10,7 @@
 //!
 //! Release discipline, two shapes:
 //!
-//! - `backup_status`/`backup_purge_uids`/`backup_scan_uids` are bounded calls
+//! - `backup_status`/`backup_purge_uids`/`backup_scan_uids`/`backup_copy_uids` are bounded calls
 //!   that finish before they reply, so `forward` releases on EVERY path —
 //!   success, daemon error, budget expiry — exactly like
 //!   `vault_flags.rs`'s own forwarder. A release skipped on an error path
@@ -265,6 +265,32 @@ pub async fn backup_purge_uids(
         let status = external_location_status();
         forward(&app_handle, "backup_purge_uids", None, |_root| {
             json!({"email": email, "mailbox": mailbox, "uids": uids, "externalStatus": status})
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Copy the vault files of `uids` into the external backup mirror and verify
+/// each copy (daemon `backup_copy_uids`, `mailvault_core::backup::copy_uids_to_mirror`).
+///
+/// A bounded call like `backup_purge_uids`: the slot is resolved, held for the
+/// call and released on every path by `forward`. There is deliberately no
+/// `externalStatus` and no queue: a drive that cannot be reached is an error
+/// the caller answers by keeping the mail on the server (the daemon answers
+/// `Backup folder unavailable` for the `mirrorRoot: null` an unresolved
+/// bookmark forwards). Every read, write and comparison happens in the daemon.
+#[tauri::command]
+pub async fn backup_copy_uids(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    email: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<Value, String> {
+    tokio::task::spawn_blocking(move || {
+        forward(&app_handle, "backup_copy_uids", None, |_root| {
+            json!({"accountId": account_id, "email": email, "mailbox": mailbox, "uids": uids})
         })
     })
     .await

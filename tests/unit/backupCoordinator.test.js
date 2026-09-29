@@ -1656,7 +1656,16 @@ describe('BackupCoordinator — stopped at the daily download limit', () => {
   afterEach(() => {
     backupScheduler.stopAll();
     vi.useRealTimers();
+    mockSettingsState.backupGlobalEnabled = false;
+    mockSettingsState.backupSchedules = {};
+    mockSettingsState.hiddenAccounts = {};
   });
+
+  /** acc-1 has an automatic schedule and the plan that allows it. */
+  const scheduleAcc1 = () => {
+    mockPremium = true;
+    mockSettingsState.backupSchedules = { 'acc-1': { enabled: true, interval: 'daily', timeOfDay: '03:00', dayOfWeek: 1 } };
+  };
 
   const limitFrame = (over = {}) => ({
     emails_backed_up: 12,
@@ -1696,6 +1705,7 @@ describe('BackupCoordinator — stopped at the daily download limit', () => {
   });
 
   it('does not run the account again before the reset, then runs it from its checkpoint right after', async () => {
+    scheduleAcc1();
     api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
     backupScheduler.queueBackup('acc-1');
     await vi.advanceTimersByTimeAsync(50);
@@ -1716,6 +1726,76 @@ describe('BackupCoordinator — stopped at the daily download limit', () => {
     expect(api.backupRunAccount).toHaveBeenLastCalledWith('acc-1', expect.any(String), null, 2);
     expect(backupScheduler._checkpoints.has('acc-1')).toBe(false);
     expect(backupScheduler._limitHolds.size).toBe(0);
+  });
+
+  // The midnight timer is a scheduled run like any other: it obeys the same
+  // Premium, enabled and hidden gates `checkAndQueueDue` applies.
+  describe('the midnight re-queue obeys the scheduling gates', () => {
+    const stopAtLimitThenPassMidnight = async ({ manual = false } = {}) => {
+      api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+      const pending = manual ? backupScheduler.triggerManualBackup('acc-1') : (backupScheduler.queueBackup('acc-1'), null);
+      await vi.advanceTimersByTimeAsync(50);
+      await pending;
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+      api.backupRunAccount.mockImplementation(finishWith({ emails_backed_up: 7, success: true, completed_folders: 9 }));
+      await vi.advanceTimersByTimeAsync(4 * HOUR + LIMIT_RESUME_MARGIN_MS);
+    };
+
+    it('runs a scheduled Premium account again after the reset (negative control)', async () => {
+      scheduleAcc1();
+      await stopAtLimitThenPassMidnight();
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    });
+
+    it('runs an account on the global schedule again after the reset', async () => {
+      mockPremium = true;
+      mockSettingsState.backupGlobalEnabled = true;
+      await stopAtLimitThenPassMidnight();
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not run a free user\'s manual backup again by itself, however the schedule is set', async () => {
+      mockPremium = false;
+      mockSettingsState.backupSchedules = { 'acc-1': { enabled: true, interval: 'daily', timeOfDay: '03:00', dayOfWeek: 1 } };
+      await stopAtLimitThenPassMidnight({ manual: true });
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+      expect(backupScheduler._queue).toEqual([]);
+      expect(backupScheduler._limitHolds.size).toBe(0);
+    });
+
+    it('does not run a Premium account that has no schedule (manual only) again by itself', async () => {
+      mockPremium = true;
+      mockSettingsState.backupSchedules = {};
+      await stopAtLimitThenPassMidnight({ manual: true });
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not run a schedule whose account has since been switched off', async () => {
+      scheduleAcc1();
+      api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+      backupScheduler.queueBackup('acc-1');
+      await vi.advanceTimersByTimeAsync(50);
+      mockSettingsState.backupSchedules = { 'acc-1': { enabled: false } };
+      await vi.advanceTimersByTimeAsync(4 * HOUR + LIMIT_RESUME_MARGIN_MS);
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-queue a hidden account', async () => {
+      scheduleAcc1();
+      mockSettingsState.hiddenAccounts = { 'acc-1': true };
+      await stopAtLimitThenPassMidnight();
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not run for a subscription that lapsed while the account was held', async () => {
+      scheduleAcc1();
+      api.backupRunAccount.mockImplementationOnce(finishWith(limitFrame()));
+      backupScheduler.queueBackup('acc-1');
+      await vi.advanceTimersByTimeAsync(50);
+      mockPremium = false;
+      await vi.advanceTimersByTimeAsync(4 * HOUR + LIMIT_RESUME_MARGIN_MS);
+      expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('resolves a manual run as limit_reached, with the words and the reset time', async () => {

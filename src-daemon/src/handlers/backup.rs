@@ -302,6 +302,42 @@ pub(crate) async fn backup_purge_uids(state: &Arc<DaemonState>, params: Value) -
     serde_json::to_value(outcome).map_err(|e| format!("serialize purge outcome: {}", e))
 }
 
+/// Copy vault files into the external backup mirror and verify each copy by
+/// Message-ID. Calls into `mailvault_core::backup::copy_uids_to_mirror`.
+///
+/// Params: `accountId` (the vault folder), `email` (the mirror folder),
+/// `mailbox`, `uids`, and the shell-resolved `mirrorRoot`. Unlike
+/// `backup_purge_uids` there is no queue for an unreachable drive: a copy that
+/// could not be made is an error the caller answers by keeping the mail on the
+/// server, so a missing `mirrorRoot` is `Backup folder unavailable`, not an
+/// empty success.
+///
+/// Reads the vault (checked through `common::vault_root`, the read-side gate
+/// `backup_status` uses, so a vault move in progress refuses) and writes only
+/// the mirror, one small file at a time, on the blocking pool: the drive may be
+/// slow, and a runtime worker must keep polling the IMAP sockets meanwhile.
+pub(crate) async fn backup_copy_uids(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+    let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
+    let email = params.get("email").and_then(Value::as_str).ok_or("Missing email")?.to_string();
+    let mailbox = params.get("mailbox").and_then(Value::as_str).ok_or("Missing mailbox")?.to_string();
+    let uids: Vec<u32> = params
+        .get("uids")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .ok_or("Missing or invalid uids")?;
+    let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
+
+    let vault = common::vault_root(state)?;
+    let mirror_root = mirror_root.ok_or("Backup folder unavailable")?;
+
+    let outcome = common::blocking(move || {
+        backup::copy_uids_to_mirror(&vault, Path::new(&mirror_root), &account_id, &email, &mailbox, &uids)
+    })
+    .await??;
+
+    serde_json::to_value(outcome).map_err(|e| format!("serialize copy outcome: {}", e))
+}
+
 /// Which uids of `<email>/<mailbox>` are present in the external mirror, or
 /// `null` if that can't be determined (no mirror resolved). Calls into
 /// `mailvault_core::backup::scan_uids` — see that function's doc comment for
@@ -333,6 +369,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
         },
         "backup_purge_uids" => match backup_purge_uids(state, params.clone()).await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        },
+        "backup_copy_uids" => match backup_copy_uids(state, params.clone()).await {
             Ok(v) => RpcResponse::success(id, v),
             Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
         },

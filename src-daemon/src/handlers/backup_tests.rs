@@ -317,3 +317,126 @@ mod daily_limit {
         assert_eq!(done["completed_emails"], json!(3));
     }
 }
+
+// ── backup_copy_uids (Archive, Back up & Delete) ──────────────────────────
+
+/// One archived vault message, the way `archive_emails` names it.
+fn seed_archived(vault: &std::path::Path, account: &str, mailbox: &str, uid: u32, id: &str) -> std::path::PathBuf {
+    let cur = mailvault_core::vault_files::cur_path(vault, account, mailbox);
+    std::fs::create_dir_all(&cur).unwrap();
+    let path = cur.join(mailvault_core::vault_files::build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]));
+    std::fs::write(&path, format!("Message-ID: <{id}>\r\nSubject: t\r\n\r\nbody {uid}")).unwrap();
+    path
+}
+
+#[tokio::test]
+async fn backup_copy_uids_copies_into_the_mirror_and_answers_the_outcome() {
+    let (v, s) = st();
+    let mirror = tempfile::tempdir().unwrap();
+    let src = seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+
+    let r = call(
+        &s,
+        "backup_copy_uids",
+        json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7, 8],
+               "mirrorRoot": mirror.path().to_string_lossy()}),
+    )
+    .await;
+
+    let out = r.result.expect("a reachable drive answers with an outcome");
+    assert_eq!(out["copied"], json!([7]));
+    assert_eq!(out["verified"], json!([7]));
+    assert_eq!(out["missing"], json!([8]));
+    assert_eq!(out["mismatched"], json!([]));
+    assert_eq!(out["failed"], json!([]));
+    let dst = mirror.path().join("me@x.test").join("INBOX").join("cur").join(src.file_name().unwrap());
+    assert_eq!(std::fs::read(dst).unwrap(), std::fs::read(src).unwrap());
+}
+
+#[tokio::test]
+async fn backup_copy_uids_without_a_resolved_mirror_is_an_error_not_an_empty_success() {
+    let (v, s) = st();
+    seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+    // The shell passes `mirrorRoot: null` when the bookmark did not resolve. Unlike
+    // purge there is no queue for a copy: the caller must keep the mail on the server.
+    let err = backup_copy_uids(
+        &s,
+        json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7], "mirrorRoot": null}),
+    )
+    .await
+    .unwrap_err();
+    assert!(err.contains("Backup folder unavailable"), "{err}");
+}
+
+#[tokio::test]
+async fn backup_copy_uids_names_the_missing_param() {
+    let (_v, s) = st();
+    let base = json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [1], "mirrorRoot": "/x"});
+    for key in ["accountId", "email", "mailbox", "uids"] {
+        let mut p = base.clone();
+        p.as_object_mut().unwrap().remove(key);
+        let err = backup_copy_uids(&s, p).await.unwrap_err();
+        assert!(err.contains(key), "{key}: {err}");
+    }
+}
+
+#[tokio::test]
+async fn backup_copy_uids_is_gated_while_the_vault_is_being_moved() {
+    let (v, s) = st();
+    let mirror = tempfile::tempdir().unwrap();
+    seed_archived(v.path(), "acct1", "INBOX", 7, "a@x");
+    s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = backup_copy_uids(
+        &s,
+        json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": [7],
+               "mirrorRoot": mirror.path().to_string_lossy()}),
+    )
+    .await
+    .unwrap_err();
+    assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+    assert!(!mirror.path().join("me@x.test").exists(), "a gated call writes nothing");
+}
+
+#[tokio::test]
+async fn backup_copy_uids_reaches_this_router_through_handle_request() {
+    let (_v, s) = st();
+    let resp = handle_request_for_test(&s, "backup_copy_uids", json!({})).await;
+    let err = resp.error.expect("missing params is an error");
+    assert_ne!(err.code, ipc::METHOD_NOT_FOUND, "backup_copy_uids did not reach handlers::backup::route");
+    assert!(err.message.contains("accountId"), "{}", err.message);
+}
+
+/// The copy is disk work on what may be a slow external drive: it must run on
+/// the blocking pool, so a runtime worker keeps polling sockets while it does.
+#[tokio::test(flavor = "current_thread")]
+async fn backup_copy_uids_leaves_the_runtime_thread_free() {
+    let (v, s) = st();
+    let mirror = tempfile::tempdir().unwrap();
+    for uid in 1..=40 {
+        seed_archived(v.path(), "acct1", "INBOX", uid, &format!("m{uid}@x"));
+    }
+    let ticks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let t = ticks.clone();
+    let ticker = tokio::spawn(async move {
+        loop {
+            t.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::task::yield_now().await;
+        }
+    });
+
+    let uids: Vec<u32> = (1..=40).collect();
+    let r = backup_copy_uids(
+        &s,
+        json!({"accountId": "acct1", "email": "me@x.test", "mailbox": "INBOX", "uids": uids,
+               "mirrorRoot": mirror.path().to_string_lossy()}),
+    )
+    .await
+    .unwrap();
+    ticker.abort();
+
+    assert_eq!(r["verified"].as_array().unwrap().len(), 40);
+    assert!(
+        ticks.load(std::sync::atomic::Ordering::SeqCst) > 1,
+        "the runtime thread polled other tasks while the copy ran"
+    );
+}

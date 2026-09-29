@@ -10,6 +10,7 @@ import { formatCount } from '../utils/formatCount';
 const PHASE_LABELS = () => ({
   archive: tr('bulk.progress.downloading'),
   verify: tr('bulk.progress.verifying'),
+  copy: tr('bulk.progress.backingUp'),
   delete: tr('bulk.progress.deleting'),
   vault: tr('bulk.progress.removingVault'),
   backup: tr('bulk.progress.clearingBackup'),
@@ -18,6 +19,7 @@ const PHASE_LABELS = () => ({
 const PHASE_ICONS = {
   archive: HardDrive,
   verify: Check,
+  copy: Shield,
   delete: Trash2,
   vault: HardDrive,
   backup: Shield,
@@ -42,7 +44,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const isComplete = status === 'complete';
   const isCancelled = status === 'cancelled';
   const isError = status === 'error';
-  const isActive = ['archiving', 'verifying', 'deleting'].includes(status);
+  const isActive = ['archiving', 'verifying', 'backingUp', 'deleting'].includes(status);
   const isDone = isComplete || isCancelled || isError;
 
   // Auto-dismiss after 4s on success
@@ -56,11 +58,15 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   if (!operation) return null;
 
   // Determine phase count for display
-  const totalPhases = type === 'archive_and_delete' ? 2 : 1;
+  // Archive, Back up & Delete shows every step: download, verify, back up, delete.
+  const backsUp = type === 'archive_backup_delete';
+  const totalPhases = backsUp ? 4 : type === 'archive_and_delete' ? 2 : 1;
   // Custody colours only when the operation really does move mail into the vault.
   // A delete (or delete_everywhere) is not "server becoming vault".
-  const movesToVault = type === 'archive' || type === 'archive_and_delete';
-  const currentPhaseNum = currentPhase === 'delete' && type === 'archive_and_delete' ? 2 : 1;
+  const movesToVault = type === 'archive' || type === 'archive_and_delete' || backsUp;
+  const currentPhaseNum = backsUp
+    ? ({ archive: 1, verify: 2, copy: 3, delete: 4 }[currentPhase] || 1)
+    : currentPhase === 'delete' && type === 'archive_and_delete' ? 2 : 1;
 
   const PhaseIcon = PHASE_ICONS[currentPhase] || HardDrive;
   const phaseLabel = PHASE_LABELS()[currentPhase] || 'Processing';

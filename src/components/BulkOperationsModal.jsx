@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef, useId } from 'react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
+import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar, ShieldCheck } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useMailStore } from '../stores/mailStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
+import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
 import { t as tr, t, useT   } from '../i18n/index.js';
@@ -26,6 +27,11 @@ const ACTION_STYLES = () => ({
     color: 'var(--mail-local)',
     iconColor: 'text-mail-local',
     confirmLabel: tr('bulk.ops.archiveDelete2'),
+  },
+  archive_backup_delete: {
+    color: 'var(--mail-local)',
+    iconColor: 'text-mail-local',
+    confirmLabel: tr('bulk.ops.archiveBackupDelete2'),
   },
   unarchive: {
     color: 'var(--mail-warning)',
@@ -61,6 +67,14 @@ const CONFIRM_COPY = () => ({
     detail: () => 'Each email is verified in your vault before it leaves the server. Anything that fails to copy stays on the server.',
     confirmLabel: tr('bulk.ops.archiveDelete2'),
   },
+  archive_backup_delete: {
+    title: tr('bulk.ops.archiveBackupDeleteTitle'),
+    lead: (n) => tr('bulk.ops.archiveBackupDeleteLead', { total: formatCount(n) }),
+    // True of the run: BulkOperationManager verifies the vault copy, copies to the
+    // drive, verifies that copy, and deletes only the uids that passed both.
+    detail: () => tr('bulk.ops.archiveBackupDeleteDetail'),
+    confirmLabel: tr('bulk.ops.archiveBackupDelete2'),
+  },
   delete_everywhere: {
     title: tr('rowMenu.deleteEverywhere2'),
     lead: (n) => `Remove ${formatCount(n)} emails from the server, your vault, and your backup drive.`,
@@ -69,11 +83,16 @@ const CONFIRM_COPY = () => ({
   },
 });
 
+// The two options that archive and then remove mail from the server are Premium.
+const PREMIUM_ACTIONS = new Set(['archive_and_delete', 'archive_backup_delete']);
+// The options that end with a server delete carry the custody gradient and a confirmation.
+const ARCHIVE_THEN_DELETE = new Set(['archive_and_delete', 'archive_backup_delete']);
+
 function actionBg(color, pct) {
   return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 }
 
-export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
+export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   const t = useT();
   const bulkSession = useMessageListStore(s => s.bulkSession);
   const setBulkSession = useMessageListStore(s => s.setBulkSession);
@@ -94,6 +113,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const setSelectedRange = (v) => { rangePickRef.current += 1; setBulkSession({ range: v }); };
   const setSelectedAction = (v) => setBulkSession({ action: v });
 
+  const premium = useSettingsStore(s => hasPremiumAccess(s.billingProfile));
+  // Set when a non-Premium person picks a Premium option. Explains, never selects.
+  const [showUpsell, setShowUpsell] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -355,8 +377,18 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
       ? t('bulk.ops.removeServerOnlyOnlyEmails')
       : t('bulk.ops.removeServerOnlyVaultKeeps');
 
+  const chooseAction = (id) => {
+    if (PREMIUM_ACTIONS.has(id) && !premium) { setShowUpsell(true); return; }
+    setShowUpsell(false);
+    setSelectedAction(id);
+  };
+
   const handleConfirm = () => {
-    if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {
+    // The action lives in the bulk session, which outlasts a minimize: a
+    // subscription that lapsed meanwhile must not start a Premium run.
+    if (PREMIUM_ACTIONS.has(selectedAction) && !premium) { setShowUpsell(true); return; }
+    if (selectedAction === 'archive_backup_delete' && !hasBackupConfigured) return;
+    if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'archive_backup_delete' || selectedAction === 'delete_everywhere') {
       setShowDeleteConfirm(true);
       return;
     }
@@ -366,6 +398,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   };
 
   const handleDeleteConfirm = () => {
+    if (PREMIUM_ACTIONS.has(selectedAction) && !premium) { setShowDeleteConfirm(false); setShowUpsell(true); return; }
     const uids = liveUids();
     onConfirm({ action: selectedAction, uids });
     handleMinimize();
@@ -644,6 +677,16 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     description: t('bulk.ops.copyIntoVaultVerifyEach'),
                   },
                   {
+                    id: 'archive_backup_delete',
+                    icon: ShieldCheck,
+                    label: t('bulk.ops.archiveBackupDelete'),
+                    description: t('bulk.ops.archiveBackupDeleteDesc'),
+                    // Never delete on a vault-only copy under this option: it needs a drive to check.
+                    // A person without Premium still gets the upsell from a click, so only a
+                    // Premium person is blocked outright.
+                    needsBackup: true,
+                  },
+                  {
                     id: 'delete_everywhere',
                     icon: Trash2,
                     label: t('bulk.ops.deleteEverywhere'),
@@ -653,13 +696,16 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   const isActive = selectedAction === action.id;
                   const Icon = action.icon;
                   const styles = ACTION_STYLES()[action.id];
-                  const isGradient = action.id === 'archive_and_delete';
+                  const isGradient = ARCHIVE_THEN_DELETE.has(action.id);
+                  const showPremium = PREMIUM_ACTIONS.has(action.id) && !premium;
+                  const noBackup = action.needsBackup && !hasBackupConfigured;
                   return (
                     <button
                       key={action.id}
                       data-testid={`bulk-action-${action.id}`}
-                      onClick={() => setSelectedAction(action.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                      disabled={noBackup && premium}
+                      onClick={() => chooseAction(action.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed ${
                         isActive ? '' : 'bg-mail-surface border-mail-border hover:bg-mail-surface-hover'
                       }`}
                       style={isActive ? {
@@ -684,13 +730,30 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                       <div>
                         <div className="text-sm font-medium text-mail-text">
                           {action.label}
+                          {showPremium && (
+                            <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">{t('common.premium')}</span>
+                          )}
                         </div>
                         <div className="text-xs text-mail-text-muted">{action.description}</div>
+                        {noBackup && (
+                          <div className="text-xs text-mail-warning mt-0.5" data-testid="bulk-action-needs-backup">{t('bulk.ops.chooseBackupFolderFirst')}</div>
+                        )}
                       </div>
                     </button>
                   );
                 })}
               </div>
+
+              {showUpsell && !premium && (
+                <div data-testid="bulk-upsell" className="border border-mail-accent/30 bg-mail-accent/5 rounded-xl p-4 mb-4">
+                  <p className="text-sm text-mail-text">{t('bulk.ops.premiumUpsell')}</p>
+                  {!IS_APPSTORE_BUILD && onUpgrade && (
+                    <Button variant="primary" size="sm" className="mt-3" data-testid="bulk-upsell-upgrade" onClick={onUpgrade}>
+                      {t('common.upgrade')}
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {/* Footer */}
               <div className="flex justify-between pt-3 border-t border-mail-border">
@@ -709,7 +772,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-all
                             disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                   style={{
-                    background: !selectedAction || selectedAction === 'archive_and_delete'
+                    background: !selectedAction || ARCHIVE_THEN_DELETE.has(selectedAction)
                       ? 'var(--mail-accent)'
                       : ACTION_STYLES()[selectedAction].color
                   }}

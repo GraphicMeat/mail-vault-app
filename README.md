@@ -37,7 +37,7 @@ MailVault is a full email client with a vault behind it. You read, search, threa
 
 - **Your mail outlives the server.** Every message you keep is a plain `.eml` on your own disk, and it stays there after the provider deletes it.
 - **You can see what is safe.** Each row shows whether a message is on the server, in the vault, in both, or only on your disk.
-- **Clear the server without losing anything.** Archive and delete in one step, or thousands at once by year, with crash-safe recovery.
+- **Clear the server without losing anything.** Archive and delete in one step *(Premium)*, or thousands at once by year, with crash-safe recovery. Archive, Back up & Delete *(Premium)* also copies each message to your backup drive and checks both copies before anything leaves the server.
 - **Find anything, offline.** SQLite FTS5 search over the whole vault: 50,000 messages searched in under 15 ms in our test.
 - **No lock-in.** Maildir and MBOX, readable by Thunderbird, Apple Mail or `grep`.
 - **Private by default.** No account to create, no sync service in the middle, no telemetry. Credentials stay in your OS keychain, and AI can run on your own machine.
@@ -88,7 +88,7 @@ Every build is on the [latest release](https://github.com/GraphicMeat/mail-vault
 
 - **Maildir + `.eml`** - one standard RFC 5322 file per message: headers, body, inline images, attachments. Readable by Thunderbird, Apple Mail, `grep`, or anything else you own.
 - **Per-message state, on the row** - whether a message is on the server, in the vault, in both, or local-only because the server no longer has it.
-- **Delete from the server with confidence** - archive first, then delete, in one operation. The local copy stays.
+- **Delete from the server with confidence** *(Premium)* - archive first, then delete, in one operation. The local copy stays. Archive, Back up & Delete adds a second, checked copy on your backup drive first, and keeps on the server anything either check does not confirm. Archiving on its own, and deleting from the server on its own, stay free.
 - **Portable by construction** - the mail is plain files: back the folder up, move it to another machine, mirror it to an external drive, or export the lot as MBOX for Thunderbird or Apple Mail. No lock-in.
 - **Choose how much mail stays on this computer** - Settings > Storage > Download mode, with a free choice per account too. On Demand fetches a message when you open it and keeps nothing; Keep Recent, the default, keeps the last 1, 3, 6 or 12 months; Index Only keeps a search index of that period and downloads a message in full only when you open it. Hoarder *(Premium)* downloads every folder and all history in the background and keeps it. Backups and archived mail are never removed by any mode, and a lapsed Premium subscription never deletes anything.
 
@@ -127,7 +127,7 @@ Conversations stack chronologically with quotes folded, or switch the whole clie
   <img src="website/screenshots/selection-dialog-light-1440.webp" alt="Bulk selection with date-range presets">
 </picture>
 
-Pick a year or a custom range, then archive, delete, or archive-and-delete thousands of messages in one pass, with a live progress bar, a cancel button, and crash-safe recovery if the machine gives up halfway.
+Pick a year or a custom range, then archive, delete, or archive-and-delete thousands of messages in one pass, with a live progress bar, a cancel button, and crash-safe recovery if the machine gives up halfway. Archive & Delete and Archive, Back up & Delete (which also copies to your backup drive and checks that copy) are Premium; archive and delete on their own are free.
 
 ### Security
 
@@ -181,7 +181,7 @@ A background helper keeps mail syncing with the window closed, and the app updat
 </picture>
 </p>
 
-The client is free forever: reading, composing, search, threading, Explorer, Insights, Auto Tags, Notes to Self, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, attachment search, and Time Capsule snapshots of a mailbox as it was on any past date. Hoarder, a download mode that fetches every folder and all history in the background and never evicts it, is Premium too; the free download modes, On Demand, Keep Recent and Index Only, cover everyone else. Focus sessions, a timer that covers the window and holds notifications for the minutes you choose, are Premium too. So is Scheduled Send: an email goes out at the exact date and time you pick, in any time zone, with the recipient's zone suggested from their last email; delaying a send by up to five minutes stays free. So is Portable MailVault: a copy on a USB stick or external drive that runs on any computer with your mail and accounts on the drive, locked with a password (Windows for now). Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
+The client is free forever: reading, composing, search, threading, Explorer, Insights, Auto Tags, Notes to Self, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: the one-step Archive & Delete and Archive, Back up & Delete for removing archived mail from the server, automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, attachment search, and Time Capsule snapshots of a mailbox as it was on any past date. Hoarder, a download mode that fetches every folder and all history in the background and never evicts it, is Premium too; the free download modes, On Demand, Keep Recent and Index Only, cover everyone else. Focus sessions, a timer that covers the window and holds notifications for the minutes you choose, are Premium too. So is Scheduled Send: an email goes out at the exact date and time you pick, in any time zone, with the recipient's zone suggested from their last email; delaying a send by up to five minutes stays free. So is Portable MailVault: a copy on a USB stick or external drive that runs on any computer with your mail and accounts on the drive, locked with a password (Windows for now). Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
 
 ## Building
 

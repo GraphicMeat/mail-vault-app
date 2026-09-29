@@ -1081,6 +1081,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         return accountMailboxes(sourceId).map(folder => ({ source_path: folder.path, dest_path: folder.path, email_count: messages.filter(row => row.accountId === sourceId && row.mailbox === folder.path && row.serverPresent).length }));
       }
       case 'backup_purge_uids': return { removed: 0, queued: 0, simulated: true };
+      case 'backup_copy_uids': return { copied: [...(args.uids || [])], verified: [...(args.uids || [])], missing: [], mismatched: [], failed: [], simulated: true };
       case 'start_migration': {
         const source = typeof args.sourceAccount === 'string' ? JSON.parse(args.sourceAccount) : (args.sourceAccount || {});
         const destination = typeof args.destAccount === 'string' ? JSON.parse(args.destAccount) : (args.destAccount || {});

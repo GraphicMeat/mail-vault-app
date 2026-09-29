@@ -693,6 +693,21 @@ export async function backupPurgeUids(email, mailbox, uids) {
 }
 
 /**
+ * Copy the vault files of `uids` into the external backup drive and check each
+ * copy by Message-ID (daemon `backup_copy_uids`, through the shell's bookmark
+ * forwarder). Answers `{ copied, verified, missing, mismatched, failed }`, each
+ * a list of uids; only `verified` is proof the drive holds the message. Rejects
+ * when the drive cannot be reached at all ("Backup folder unavailable").
+ */
+export async function backupCopyUids(accountId, email, mailbox, uids) {
+  if (IS_TAURI) {
+    return tauriInvoke('backup_copy_uids', { accountId, email, mailbox, uids });
+  }
+  // Without the desktop shell there is no drive: nothing is verified.
+  return { copied: [], verified: [], missing: [], mismatched: [], failed: uids };
+}
+
+/**
  * Uids of this mailbox present in the external backup mirror, or null when we
  * cannot tell (no location configured, or the drive is not connected). Null is
  * not an empty set — see backup_scan_uids.

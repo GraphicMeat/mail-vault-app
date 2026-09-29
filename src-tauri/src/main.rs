@@ -3490,6 +3490,7 @@ fn main() {
             commands::iap_restore,
             commands::backup_migrate_legacy_path,
             backup::backup_purge_uids,
+            backup::backup_copy_uids,
             backup::backup_scan_uids,
             commands::get_transfer_stats,
             github::github_device_start,

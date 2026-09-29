@@ -100,6 +100,15 @@ export const State = {
   PAUSED_OFFLINE: 'paused_offline',
 };
 
+/**
+ * The schedule an account runs on: the global one when it is on, else the
+ * account's own. `null`/`enabled: false` means no automatic run.
+ */
+function scheduleConfigFor(settings, accountId) {
+  if (settings.backupGlobalEnabled) return { ...settings.backupGlobalConfig, enabled: true };
+  return settings.backupSchedules?.[accountId] ?? null;
+}
+
 class BackupCoordinator {
   constructor() {
     this._state = State.IDLE;
@@ -294,7 +303,7 @@ class BackupCoordinator {
 
     const mailState = useMailStore.getState();
     const accounts = mailState.accounts || [];
-    const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = settings;
+    const { hiddenAccounts, backupState } = settings;
 
     if (accounts.length === 0) return;
 
@@ -310,12 +319,7 @@ class BackupCoordinator {
     for (const account of accounts) {
       if (hiddenAccounts?.[account.id]) continue;
 
-      let config;
-      if (backupGlobalEnabled) {
-        config = { ...backupGlobalConfig, enabled: true };
-      } else {
-        config = backupSchedules[account.id];
-      }
+      const config = scheduleConfigFor(settings, account.id);
       if (!config?.enabled) continue;
 
       const accountState = backupState[account.id];
@@ -736,9 +740,21 @@ class BackupCoordinator {
     const until = (resumeAfterMs ?? Math.floor(Date.now() / 86_400_000 + 1) * 86_400_000) + LIMIT_RESUME_MARGIN_MS;
     const timer = setTimeout(() => {
       this._limitHolds.delete(accountId);
-      this.queueBackup(accountId);
+      // The same gates as any scheduled run (`checkAndQueueDue`): a free user's
+      // "Back up now" that hit the limit, an account with no schedule, a hidden
+      // one and a lapsed subscription all stop here. The person's next manual
+      // click is the only thing that runs them.
+      if (this._isScheduledRun(accountId)) this.queueBackup(accountId);
     }, Math.max(0, until - Date.now()));
     this._limitHolds.set(accountId, { until, timer });
+  }
+
+  /** Whether an automatic run of this account is allowed right now: Premium, visible, scheduled. */
+  _isScheduledRun(accountId) {
+    const settings = useSettingsStore.getState();
+    if (!hasPremiumAccess(settings.billingProfile)) return false;
+    if (settings.hiddenAccounts?.[accountId]) return false;
+    return !!scheduleConfigFor(settings, accountId)?.enabled;
   }
 
   _isHeldForLimit(accountId) {

@@ -76,7 +76,7 @@
         "name": "What happens when I archive and delete from server?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Archive & Delete runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached."
+          "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted."
         }
       },
       {
@@ -84,7 +84,7 @@
         "name": "What happens if I delete emails from the server?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete, which copies each message into your vault and verifies it there before removing it from the server."
+          "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
         }
       },
       {
@@ -233,14 +233,16 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What happens when I archive and delete from server?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong> runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.
+              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What happens if I delete emails from the server?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong>, which copies each message into your vault and verifies it there before removing it from the server.
+              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/state-icons-720.webp 720w, /screenshots/state-icons-1440.webp 1440w, /screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/state-icons-light-1440.webp" srcset="/screenshots/state-icons-light-720.webp 720w, /screenshots/state-icons-light-1440.webp 1440w, /screenshots/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault inbox showing per-message state icons for server-only, archived locally, and local-only emails" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

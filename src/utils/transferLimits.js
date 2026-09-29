@@ -5,11 +5,16 @@
 // tests/unit/transferLimits.test.js reads them out of the Rust source so the
 // copies cannot drift. See the `transferLimits` settings shape in settingsStore.
 
-// Provider defaults applied only when capEnabled is on and no explicit limit
-// was set. Only Gmail has a known default; other providers are unlimited.
-// Gmail itself allows about 2,500 MB a day, across every client of the
-// account, so the download default stops 500 MB short of that and leaves room
-// for everyday mail.
+// Gmail allows about 2,500 MB a day down and 500 MB up, across every client of
+// the account. That is the figure the banner and the usage bar measure against
+// while "Pause background downloads at daily limit" is OFF: nothing of ours
+// stops a download then, and Gmail's own cut-off is the only limit there is.
+export const GMAIL_LIMIT_DOWN_BYTES = 2500 * 1024 * 1024;
+
+// The daemon's default, applied only when the cap is ON and the download field
+// is empty (`background_down_limit`): 500 MB short of Gmail's own limit, so
+// backups stop early and leave room for everyday mail. Only Gmail has a known
+// default; other providers are unlimited. Upload has one figure, 500 MB.
 export const GMAIL_DEFAULT_DOWN_BYTES = 2000 * 1024 * 1024;
 export const GMAIL_DEFAULT_UP_BYTES = 500 * 1024 * 1024;
 
@@ -26,21 +31,29 @@ export function isGmailAccount(account) {
 }
 
 /**
+ * The figure an EMPTY limit field stands for on a Gmail account: 2000 MB down
+ * when the cap is on (what the daemon enforces), Gmail's own 2500 MB when it is
+ * off; upload is 500 MB either way. `null` off Gmail (unlimited).
+ */
+export function providerDefaultBytes(isGmail, capEnabled, direction) {
+  if (!isGmail) return null;
+  if (direction === 'up') return GMAIL_DEFAULT_UP_BYTES;
+  return capEnabled ? GMAIL_DEFAULT_DOWN_BYTES : GMAIL_LIMIT_DOWN_BYTES;
+}
+
+/**
  * Resolve the daily limit (in bytes) that warn/cap checks compare usage
- * against for one direction. Missing entry or blank field = provider
- * default for Gmail, unlimited (null) otherwise.
+ * against for one direction. A number the user typed wins. A blank field is the
+ * provider default for Gmail (see `providerDefaultBytes`: it depends on the
+ * cap), unlimited (null) otherwise.
  */
 export function resolveDailyLimitBytes(limitConfig, isGmail, direction) {
   const explicit = direction === 'down'
     ? limitConfig?.dailyDownLimitBytes
     : limitConfig?.dailyUpLimitBytes;
   if (explicit != null) return { limitBytes: explicit, isProviderDefault: false };
-  if (isGmail) {
-    return {
-      limitBytes: direction === 'down' ? GMAIL_DEFAULT_DOWN_BYTES : GMAIL_DEFAULT_UP_BYTES,
-      isProviderDefault: true,
-    };
-  }
+  const fallback = providerDefaultBytes(isGmail, limitConfig?.capEnabled === true, direction);
+  if (fallback != null) return { limitBytes: fallback, isProviderDefault: true };
   return { limitBytes: null, isProviderDefault: false };
 }
 

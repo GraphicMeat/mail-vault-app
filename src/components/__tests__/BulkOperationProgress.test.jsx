@@ -84,3 +84,35 @@ describe('BulkOperationProgress — the completion beat', () => {
     expect(screen.getByText('40%')).toBeTruthy();
   });
 });
+
+// Archive, Back up & Delete has four visible steps; the panel names each one.
+describe('BulkOperationProgress — Archive, Back up & Delete steps', () => {
+  afterEach(cleanup);
+
+  const step = (status, currentPhase) => paint({ type: 'archive_backup_delete', status, currentPhase });
+
+  it.each([
+    ['archiving', 'archive', 'Phase 1/4: Downloading'],
+    ['verifying', 'verify', 'Phase 2/4: Verifying'],
+    ['backingUp', 'copy', 'Phase 3/4: Copying to backup drive'],
+    ['deleting', 'delete', 'Phase 4/4: Deleting'],
+  ])('shows %s as "%s"', (status, phase, label) => {
+    step(status, phase);
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it('counts the backup step as a running state, with cancel available', () => {
+    step('backingUp', 'copy');
+    expect(screen.getByText('Cancel')).toBeTruthy();
+  });
+
+  it('spends custody emerald on the finished run, as any run that moved mail into the vault does', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = paint({ type: 'archive_backup_delete', status: 'complete', completed: 100 });
+      expect(container.querySelector('.rounded-xl').className).toContain('border-mail-local');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

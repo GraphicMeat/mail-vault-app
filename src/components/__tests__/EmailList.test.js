@@ -735,6 +735,48 @@ describe('formatPurgeEverywhereOutcome', () => {
   });
 });
 
+describe('formatArchiveBackupDeleteOutcome', () => {
+  const run = async (result) => (await import('../EmailList.jsx')).formatArchiveBackupDeleteOutcome(result);
+
+  it('says nothing about a clean run, and nothing when there is no result', async () => {
+    expect(await run({ removed: 5, keptNotArchived: 0, keptBackupUnreachable: 0, keptCopyMismatch: 0 })).toBeNull();
+    expect(await run(undefined)).toBeNull();
+    expect(await run(null)).toBeNull();
+  });
+
+  it('names how many stayed on the server when the backup drive could not be reached', async () => {
+    const msg = await run({ removed: 0, keptNotArchived: 0, keptBackupUnreachable: 3, keptCopyMismatch: 0 });
+    expect(msg).toContain('0 removed from the server.');
+    expect(msg).toContain('3 emails were kept on the server because your backup drive could not be reached.');
+    expect(msg).not.toMatch(/did not match|vault/);
+  });
+
+  it('names a copy that did not match, in the singular for one', async () => {
+    const msg = await run({ removed: 2, keptNotArchived: 0, keptBackupUnreachable: 0, keptCopyMismatch: 1 });
+    expect(msg).toContain('2 removed from the server.');
+    expect(msg).toContain('1 email was kept on the server because its copy on your backup drive did not match.');
+  });
+
+  it('names emails the vault could not confirm', async () => {
+    const msg = await run({ removed: 1, keptNotArchived: 4, keptBackupUnreachable: 0, keptCopyMismatch: 0 });
+    expect(msg).toContain('4 emails were kept on the server because they could not be verified in your vault.');
+  });
+
+  it('names emails the server refused to delete, so "removed" is only what really went', async () => {
+    const msg = await run({ removed: 2, keptNotArchived: 0, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 3 });
+    expect(msg).toContain('2 removed from the server.');
+    expect(msg).toContain('3 emails could not be removed from the server and were left there.');
+  });
+
+  it('gives every reason its own clause when several apply', async () => {
+    const msg = await run({ removed: 10, keptNotArchived: 1, keptBackupUnreachable: 2, keptCopyMismatch: 3 });
+    expect(msg).toContain('10 removed from the server.');
+    expect(msg).toContain('2 emails were kept on the server because your backup drive could not be reached.');
+    expect(msg).toContain('3 emails were kept on the server because their copy on your backup drive did not match.');
+    expect(msg).toContain('1 email was kept on the server because it could not be verified in your vault.');
+  });
+});
+
 // ── Unread-only filter ────────────────────────────────────────────────────
 // The filter is a view concern: the store keeps handing out the full window
 // (bulk operations, the viewer's own lookups and the unread badges all read

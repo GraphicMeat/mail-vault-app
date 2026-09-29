@@ -104,9 +104,11 @@ vi.mock('../../services/db', () => ({
 // Backup-configured flag the legend reads. A plain mutable object, same
 // pattern as `archivedEmailIds`/`tombstones` above — mutate it per-test,
 // reset in beforeEach.
-const backupState = { externalBackupLocation: null };
+const backupState = { externalBackupLocation: null, billingProfile: null };
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: (selector) => selector(backupState),
+  // The real rule lives in the store; the modal only asks it.
+  hasPremiumAccess: (profile) => !!profile?.premiumAccess,
 }));
 
 import { BulkOperationsModal } from '../BulkOperationsModal';
@@ -123,6 +125,7 @@ describe('BulkOperationsModal', () => {
     });
     archivedEmailIds.clear();
     backupState.externalBackupLocation = null;
+    backupState.billingProfile = null;
   });
   afterEach(() => cleanup());
 
@@ -577,6 +580,141 @@ describe('BulkOperationsModal', () => {
       // even though the legend elsewhere on this screen does say "backup
       // configured". The description itself makes no claim either way.
       expect(screen.getByText('Remove from the server only. Your vault keeps its copy.')).toBeTruthy();
+    });
+  });
+
+  // The two options that remove mail from the server after archiving it are
+  // Premium. The new one also needs somewhere to back up to.
+  describe('Archive & Delete and Archive, Back up & Delete', () => {
+    const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active', clientAccessGranted: true };
+    const openToStep2 = async (props = {}) => {
+      const onConfirm = props.onConfirm || vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} onUpgrade={props.onUpgrade} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+      return onConfirm;
+    };
+    const backUpOption = () => screen.getByTestId('bulk-action-archive_backup_delete');
+    const archiveDeleteOption = () => screen.getByTestId('bulk-action-archive_and_delete');
+
+    it('lists the new option after Archive & Delete, with its subtitle', async () => {
+      backupState.billingProfile = PREMIUM;
+      backupState.externalBackupLocation = { status: 'ready' };
+      await openToStep2();
+      const ids = screen.getAllByTestId(/^bulk-action-/).map(el => el.getAttribute('data-testid'));
+      expect(ids.indexOf('bulk-action-archive_backup_delete')).toBe(ids.indexOf('bulk-action-archive_and_delete') + 1);
+      expect(backUpOption().textContent).toContain('Archive, Back up & Delete');
+      expect(backUpOption().textContent).toContain(
+        'Copy into your vault and your backup drive, check both copies, then remove from the server.',
+      );
+    });
+
+    it('marks both server-delete options Premium without Premium, and neither is marked with it', async () => {
+      backupState.externalBackupLocation = { status: 'ready' };
+      await openToStep2();
+      expect(archiveDeleteOption().textContent).toContain('Premium');
+      expect(backUpOption().textContent).toContain('Premium');
+      // The plain options never carry the badge.
+      expect(screen.getByTestId('bulk-action-archive').textContent).not.toContain('Premium');
+      expect(screen.getByTestId('bulk-action-delete').textContent).not.toContain('Premium');
+      cleanup();
+
+      // A fresh session: the store still holds step 2 from the first half.
+      useMessageListStoreMock.setState({ bulkSession: boundSession(), selectedEmailIds: new Set() });
+      backupState.billingProfile = PREMIUM;
+      await openToStep2();
+      expect(archiveDeleteOption().textContent).not.toContain('Premium');
+      expect(backUpOption().textContent).not.toContain('Premium');
+    });
+
+    it.each(['archive_and_delete', 'archive_backup_delete'])(
+      'opens the upsell instead of selecting %s without Premium, and Upgrade calls onUpgrade',
+      async (id) => {
+        backupState.externalBackupLocation = { status: 'ready' };
+        const onUpgrade = vi.fn();
+        await openToStep2({ onUpgrade });
+        expect(screen.queryByTestId('bulk-upsell')).toBeNull();
+
+        fireEvent.click(screen.getByTestId(`bulk-action-${id}`));
+
+        expect(screen.getByTestId('bulk-upsell')).toBeTruthy();
+        expect(screen.getByTestId('bulk-step2-confirm').disabled).toBe(true);
+        fireEvent.click(screen.getByTestId('bulk-upsell-upgrade'));
+        expect(onUpgrade).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('a non-Premium person can still choose Archive and Delete from Server, and the upsell closes', async () => {
+      backupState.externalBackupLocation = { status: 'ready' };
+      await openToStep2({ onUpgrade: vi.fn() });
+      fireEvent.click(backUpOption());
+      expect(screen.getByTestId('bulk-upsell')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('bulk-action-delete'));
+
+      expect(screen.queryByTestId('bulk-upsell')).toBeNull();
+      expect(screen.getByTestId('bulk-step2-confirm').disabled).toBe(false);
+    });
+
+    it('is disabled with "Choose a backup folder first" when no backup folder is set', async () => {
+      backupState.billingProfile = PREMIUM;
+      backupState.externalBackupLocation = null;
+      await openToStep2();
+      expect(backUpOption().disabled).toBe(true);
+      expect(backUpOption().textContent).toContain('Choose a backup folder first');
+
+      fireEvent.click(backUpOption());
+      expect(screen.getByTestId('bulk-step2-confirm').disabled).toBe(true);
+      // Archive & Delete does not need a drive.
+      expect(archiveDeleteOption().disabled).toBe(false);
+    });
+
+    it('is enabled with Premium and a backup folder, and confirms as archive_backup_delete', async () => {
+      backupState.billingProfile = PREMIUM;
+      backupState.externalBackupLocation = { status: 'ready' };
+      const onConfirm = await openToStep2();
+      expect(backUpOption().disabled).toBe(false);
+      expect(backUpOption().textContent).not.toContain('Choose a backup folder first');
+
+      fireEvent.click(backUpOption());
+      fireEvent.click(screen.getByTestId('bulk-step2-confirm'));
+
+      // Its own confirmation names both places and the check.
+      expect(screen.getByText('Archive, back up, then delete from server?', { selector: 'h2' })).toBeTruthy();
+      expect(screen.getByText(/Copy 3 emails into your vault and your backup drive, then remove them from the server\./)).toBeTruthy();
+      expect(screen.getByText(/checked in your vault and on your backup drive before it leaves the server/)).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('bulk-delete-confirm'));
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive_backup_delete', uids: [5, 4, 1] });
+    });
+
+    it('Premium Archive & Delete still confirms as archive_and_delete', async () => {
+      backupState.billingProfile = PREMIUM;
+      const onConfirm = await openToStep2();
+      fireEvent.click(archiveDeleteOption());
+      fireEvent.click(screen.getByTestId('bulk-step2-confirm'));
+      fireEvent.click(screen.getByTestId('bulk-delete-confirm'));
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive_and_delete', uids: [5, 4, 1] });
+    });
+
+    it('does not start a Premium action from a session that outlived the subscription', async () => {
+      backupState.billingProfile = PREMIUM;
+      backupState.externalBackupLocation = { status: 'ready' };
+      const onConfirm = await openToStep2({ onUpgrade: vi.fn() });
+      fireEvent.click(archiveDeleteOption());
+      // The subscription lapses while the modal is minimized (the action is kept in the session).
+      cleanup();
+      backupState.billingProfile = null;
+      const again = vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={again} onUpgrade={vi.fn()} />);
+      await waitFor(() => expect(screen.getByTestId('bulk-step2-confirm')).toBeTruthy());
+      fireEvent.click(screen.getByTestId('bulk-step2-confirm'));
+
+      expect(screen.getByTestId('bulk-upsell')).toBeTruthy();
+      expect(screen.queryByTestId('bulk-delete-confirm')).toBeNull();
+      expect(again).not.toHaveBeenCalled();
+      expect(onConfirm).not.toHaveBeenCalled();
     });
   });
 });

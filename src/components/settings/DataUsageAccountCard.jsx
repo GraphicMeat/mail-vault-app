@@ -2,7 +2,7 @@ import React, { forwardRef, useState } from 'react';
 import { useSettingsStore, getAccountColor, getAccountInitial } from '../../stores/settingsStore';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
-import { isGmailAccount, resolveDailyLimitBytes, GMAIL_DEFAULT_DOWN_BYTES, GMAIL_DEFAULT_UP_BYTES } from '../../utils/transferLimits';
+import { isGmailAccount, resolveDailyLimitBytes, providerDefaultBytes } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
@@ -19,9 +19,9 @@ function bytesToMbInput(bytes) {
   return bytes == null ? '' : String(Math.round(bytes / (1024 * 1024)));
 }
 
-/** What an empty limit field means, shown as its placeholder: Gmail's default in MB, else "Unlimited". */
-function limitPlaceholder(gmail, defaultBytes) {
-  return gmail ? bytesToMbInput(defaultBytes) : t('settings.dataUsage.account.unlimited');
+/** What an empty limit field means, shown as its placeholder: the Gmail figure in MB (it depends on the cap), else "Unlimited". */
+function limitPlaceholder(defaultBytes) {
+  return defaultBytes != null ? bytesToMbInput(defaultBytes) : t('settings.dataUsage.account.unlimited');
 }
 
 const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, unavailable, highlighted }, ref) {
@@ -174,7 +174,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
               onBlur={handleLimitBlur('dailyDownLimitBytes')}
-              placeholder={limitPlaceholder(gmail, GMAIL_DEFAULT_DOWN_BYTES)}
+              placeholder={limitPlaceholder(providerDefaultBytes(gmail, capEnabled, 'down'))}
               className={inputClass}
             />
           </div>
@@ -185,7 +185,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}
               onBlur={handleLimitBlur('dailyUpLimitBytes')}
-              placeholder={limitPlaceholder(gmail, GMAIL_DEFAULT_UP_BYTES)}
+              placeholder={limitPlaceholder(providerDefaultBytes(gmail, capEnabled, 'up'))}
               className={inputClass}
             />
           </div>

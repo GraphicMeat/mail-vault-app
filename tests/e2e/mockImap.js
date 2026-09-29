@@ -718,7 +718,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null } = {}) {
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null, backupDeleteMailbox = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message', sentByOwner: true });
 
@@ -919,6 +919,17 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     mailboxes.push(mailbox(name, 1, {
       owner, attrs: ['\\HasNoChildren'], subjectPrefix: `Nested ${name}`,
       uidStart: 9401 + (nestedMailboxes.indexOf(name) * 10),
+    }));
+  }
+
+  // Disposable fixture for "Archive, Back up & Delete": connected-archive-backup-delete
+  // permanently removes these messages from the server. After the nested folders for the
+  // same reason they sit after extraMailbox: only an account no skipFolders spec counts
+  // through (luke) may carry it. `uidStart` keeps its uids clear of every other folder.
+  if (backupDeleteMailbox) {
+    mailboxes.push(mailbox(backupDeleteMailbox.name, backupDeleteMailbox.count, {
+      owner, attrs: ['\\HasNoChildren'], subjectPrefix: backupDeleteMailbox.subjectPrefix,
+      uidStart: backupDeleteMailbox.uidStart,
     }));
   }
 

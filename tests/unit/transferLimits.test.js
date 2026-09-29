@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
+  GMAIL_LIMIT_DOWN_BYTES,
   GMAIL_DEFAULT_DOWN_BYTES,
   GMAIL_DEFAULT_UP_BYTES,
   isGmailAccount,
@@ -46,13 +47,38 @@ describe('isGmailAccount', () => {
 });
 
 describe('resolveDailyLimitBytes', () => {
-  it('uses the Gmail default for an empty field, 2000 MB down and 500 MB up', () => {
-    expect(resolveDailyLimitBytes({}, true, 'down')).toEqual({ limitBytes: 2000 * MB, isProviderDefault: true });
+  // The daemon enforces 2000 MB only when "Pause background downloads at daily
+  // limit" is ON and the field is empty (`background_down_limit`). With the cap
+  // off it enforces nothing, so the banner and the usage bar keep showing
+  // Gmail's own limit, 2500 MB down.
+  it('is Gmail\'s real limit, 2500 MB down and 500 MB up, while the cap is off', () => {
+    expect(resolveDailyLimitBytes({}, true, 'down')).toEqual({ limitBytes: 2500 * MB, isProviderDefault: true });
+    expect(resolveDailyLimitBytes(undefined, true, 'down')).toEqual({ limitBytes: 2500 * MB, isProviderDefault: true });
+    expect(resolveDailyLimitBytes({ capEnabled: false }, true, 'down')).toEqual({ limitBytes: 2500 * MB, isProviderDefault: true });
     expect(resolveDailyLimitBytes(undefined, true, 'up')).toEqual({ limitBytes: 500 * MB, isProviderDefault: true });
   });
 
-  it('prefers what the user typed, and is unlimited off Gmail', () => {
+  it('is the 2000 MB default only when the cap is on and the field is empty', () => {
+    expect(resolveDailyLimitBytes({ capEnabled: true }, true, 'down')).toEqual({ limitBytes: 2000 * MB, isProviderDefault: true });
+    expect(resolveDailyLimitBytes({ capEnabled: true, dailyDownLimitBytes: null }, true, 'down')).toEqual({ limitBytes: 2000 * MB, isProviderDefault: true });
+  });
+
+  it('leaves the upload default at 500 MB with the cap on or off', () => {
+    expect(resolveDailyLimitBytes({ capEnabled: true }, true, 'up')).toEqual({ limitBytes: 500 * MB, isProviderDefault: true });
+    expect(resolveDailyLimitBytes({ capEnabled: false }, true, 'up')).toEqual({ limitBytes: 500 * MB, isProviderDefault: true });
+  });
+
+  it('prefers what the user typed, cap on or off, and is unlimited off Gmail', () => {
     expect(resolveDailyLimitBytes({ dailyDownLimitBytes: 123 * MB }, true, 'down')).toEqual({ limitBytes: 123 * MB, isProviderDefault: false });
+    expect(resolveDailyLimitBytes({ capEnabled: true, dailyDownLimitBytes: 123 * MB }, true, 'down')).toEqual({ limitBytes: 123 * MB, isProviderDefault: false });
     expect(resolveDailyLimitBytes({}, false, 'down')).toEqual({ limitBytes: null, isProviderDefault: false });
+    expect(resolveDailyLimitBytes({ capEnabled: true }, false, 'down')).toEqual({ limitBytes: null, isProviderDefault: false });
+  });
+});
+
+describe('the two Gmail download figures', () => {
+  it('keeps Gmail\'s own limit above the cap default that leaves room for everyday mail', () => {
+    expect(GMAIL_LIMIT_DOWN_BYTES).toBe(2500 * MB);
+    expect(GMAIL_DEFAULT_DOWN_BYTES).toBeLessThan(GMAIL_LIMIT_DOWN_BYTES);
   });
 });

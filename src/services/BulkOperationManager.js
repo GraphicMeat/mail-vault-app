@@ -3,7 +3,12 @@ import { send } from './transport.js';
 import { ensureFreshToken } from './authUtils';
 import { t } from '../i18n/index.js';
 
-// Operation states: 'idle' | 'archiving' | 'verifying' | 'deleting' | 'complete' | 'cancelled' | 'error'
+// Operation states: 'idle' | 'archiving' | 'verifying' | 'backingUp' | 'deleting' | 'complete' | 'cancelled' | 'error'
+
+// How many uids one `backup_copy_uids` call carries. Each call is one round trip to the
+// daemon that reads and writes the backup drive file by file, so a batch is also the unit
+// after which progress moves and a cancel or a vanished drive is noticed.
+const BACKUP_COPY_BATCH = 100;
 
 class BulkOperationManager {
   constructor() {
@@ -18,13 +23,13 @@ class BulkOperationManager {
   }
 
   get isRunning() {
-    return this._operation && ['archiving', 'verifying', 'deleting'].includes(this._operation.status);
+    return this._operation && ['archiving', 'verifying', 'backingUp', 'deleting'].includes(this._operation.status);
   }
 
   /**
    * Start a bulk operation.
    * @param {Object} params
-   * @param {string} params.type - 'archive' | 'delete' | 'archive_and_delete' | 'delete_everywhere'
+   * @param {string} params.type - 'archive' | 'delete' | 'archive_and_delete' | 'archive_backup_delete' | 'delete_everywhere'
    * @param {string} params.accountId
    * @param {Object} params.account - Full account object (for IMAP auth)
    * @param {string} params.mailbox
@@ -64,7 +69,7 @@ class BulkOperationManager {
     try {
       const freshAccount = await ensureFreshToken(account);
 
-      if (type === 'archive' || type === 'archive_and_delete') {
+      if (type === 'archive' || type === 'archive_and_delete' || type === 'archive_backup_delete') {
         // Phase 1: Archive
         this._operation.currentPhase = 'archive';
         this._operation.status = 'archiving';
@@ -111,6 +116,9 @@ class BulkOperationManager {
           const freshAccount2 = await ensureFreshToken(account);
           // No deleted-mail bin copy: the vault copies were just verified.
           await api.bulkDeleteEmails(freshAccount2, accountId, mailbox, verifiedUids, { bin: false });
+        } else if (type === 'archive_backup_delete') {
+          await this._backUpThenDelete({ account, accountId, mailbox, uids });
+          if (this._cancelled) return;
         }
       } else if (type === 'delete') {
         // Delete only — no archive, no verify
@@ -154,6 +162,101 @@ class BulkOperationManager {
       this._emitProgress();
     } finally {
       this._cleanup();
+    }
+  }
+
+  /**
+   * Archive, Back up & Delete, after the archive step: verify the vault copies,
+   * copy the verified ones to the backup drive and check them there, then delete
+   * from the server ONLY the uids proven in both places. A uid that fails either
+   * proof stays on the server and is counted under the reason, in `result`.
+   * The delete is a permanent server delete (`bin: false`), as Archive & Delete's is.
+   */
+  async _backUpThenDelete({ account, accountId, mailbox, uids }) {
+    const op = this._operation;
+    const result = { removed: 0, keptNotArchived: 0, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 0 };
+    op.result = result;
+
+    // Step 2: the vault holds an archived copy of each uid.
+    op.currentPhase = 'verify';
+    op.status = 'verifying';
+    this._emitProgress();
+    const vault = await api.verifyArchivedEmails(accountId, mailbox, uids);
+    const vaultVerified = vault.verified || [];
+    result.keptNotArchived = uids.length - vaultVerified.length;
+    if (this._cancelled) return;
+
+    // Step 3: the drive holds a verified copy of each of those.
+    op.currentPhase = 'copy';
+    op.status = 'backingUp';
+    op.totalUids = vaultVerified;
+    op.total = vaultVerified.length;
+    op.completed = 0;
+    op.errors = 0;
+    await this._persist();
+    this._emitProgress();
+
+    const asked = new Set(vaultVerified);
+    const bothVerified = [];
+    let driveGone = false;
+    for (let i = 0; i < vaultVerified.length; i += BACKUP_COPY_BATCH) {
+      const batch = vaultVerified.slice(i, i + BACKUP_COPY_BATCH);
+      if (driveGone) {
+        // The drive stopped answering: do not hammer it, and delete none of the rest.
+        result.keptBackupUnreachable += batch.length;
+        op.completed += batch.length;
+        continue;
+      }
+      let copied;
+      try {
+        copied = await api.backupCopyUids(accountId, account.email, mailbox, batch);
+      } catch (e) {
+        console.warn('[BulkOp] Backup copy failed, keeping the rest on the server:', e);
+        driveGone = true;
+        result.keptBackupUnreachable += batch.length;
+        // Kept on purpose, not failed: the result reports them under their reason.
+        op.completed += batch.length;
+        this._emitProgress();
+        continue;
+      }
+      if (this._cancelled) return;
+      // Only what this batch asked about and the drive proved. The vault check
+      // already gated `asked`; the drive's word never widens it.
+      const proven = (copied?.verified || []).filter((u) => asked.has(u) && batch.includes(u));
+      const provenSet = new Set(proven);
+      const mismatched = new Set(copied?.mismatched || []);
+      const missing = new Set(copied?.missing || []);
+      for (const uid of batch) {
+        if (provenSet.has(uid)) continue;
+        if (mismatched.has(uid)) result.keptCopyMismatch += 1;
+        else if (missing.has(uid)) result.keptNotArchived += 1;
+        else result.keptBackupUnreachable += 1;
+      }
+      bothVerified.push(...proven);
+      op.completed += batch.length;
+      this._emitProgress();
+    }
+    if (this._cancelled) return;
+
+    // Step 4: delete what both places hold. Nothing proven, nothing sent.
+    if (bothVerified.length > 0) {
+      op.currentPhase = 'delete';
+      op.status = 'deleting';
+      op.totalUids = bothVerified;
+      op.total = bothVerified.length;
+      op.completed = 0;
+      op.errors = 0;
+      await this._persist();
+      this._emitProgress();
+
+      const freshAccount = await ensureFreshToken(account);
+      // No deleted-mail bin copy: both copies were just verified.
+      const reply = await api.bulkDeleteEmails(freshAccount, accountId, mailbox, bothVerified, { bin: false });
+      // The daemon counts what the server really removed; a reply without a count
+      // (an older daemon) is taken at its word. Anything it did not remove stayed.
+      const removed = Number.isInteger(reply?.completed) ? Math.min(reply.completed, bothVerified.length) : bothVerified.length;
+      result.removed = removed;
+      result.keptDeleteFailed = bothVerified.length - removed;
     }
   }
 

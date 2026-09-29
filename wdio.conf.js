@@ -158,6 +158,8 @@ let MOCK_ACCOUNTS = [
       'Kunden/Company XY/Project A/Invoices/erledigt',
       'Kunden/Company XY/Project B/Invoices/erledigt',
     ],
+    // connected-archive-backup-delete removes these three from the server for good.
+    backupDeleteMailbox: { name: 'BackupDelete', count: 3, subjectPrefix: 'ABD fixture', uidStart: 9601 },
     faults: [
       ...bodyFetchDropsAlways(9301),
       // connected-sent-single-copy: one reply's Sent APPEND is stored only
@@ -480,6 +482,7 @@ export const config = {
         searchMailbox: a.searchMailbox,
         extraMailbox: a.extraMailbox,
         nestedMailboxes: a.nestedMailboxes,
+        backupDeleteMailbox: a.backupDeleteMailbox,
       }))),
     );
     // A Graph entry ({ graph: true, account }) carries its whole seeded account:

@@ -127,6 +127,24 @@ export function formatPurgeEverywhereOutcome(result) {
   return clauses.join(' ');
 }
 
+// Archive, Back up & Delete keeps a message on the server unless both the vault and the
+// backup drive proved they hold it. A clean run (nothing kept) has nothing to say: the
+// list already shows the mail gone. Otherwise say how many were removed and, per reason,
+// how many stayed: the drive could not be reached, the drive's copy did not match, the
+// vault could not confirm its own copy, or the server refused the delete itself.
+export function formatArchiveBackupDeleteOutcome(result) {
+  if (!result) return null;
+  const { removed = 0, keptNotArchived = 0, keptBackupUnreachable = 0, keptCopyMismatch = 0, keptDeleteFailed = 0 } = result;
+  if (!keptNotArchived && !keptBackupUnreachable && !keptCopyMismatch && !keptDeleteFailed) return null;
+
+  const clauses = [t('bulk.result.removedFromServer', { total: formatCount(removed) })];
+  if (keptBackupUnreachable > 0) clauses.push(t('bulk.result.keptBackupUnreachable', { count: keptBackupUnreachable }));
+  if (keptCopyMismatch > 0) clauses.push(t('bulk.result.keptCopyMismatch', { count: keptCopyMismatch }));
+  if (keptNotArchived > 0) clauses.push(t('bulk.result.keptNotArchived', { count: keptNotArchived }));
+  if (keptDeleteFailed > 0) clauses.push(t('bulk.result.keptDeleteFailed', { count: keptDeleteFailed }));
+  return clauses.join(' ');
+}
+
 // The header's one line about how much of the mailbox is on screen.
 //
 // `shown` is what the list draws, `loaded` the window the store holds, `total`
@@ -1153,9 +1171,13 @@ function EmailListComponent({ stacked = false }) {
         await useMailStore.getState().loadEmails();
       }
 
-      // Only delete_everywhere populates `result` (BulkOperationManager.js) —
-      // null for every other action type, so this is a no-op for them.
-      const outcomeMessage = formatPurgeEverywhereOutcome(bulkOperationManager.operation?.result);
+      // Only delete_everywhere and archive_backup_delete populate `result`
+      // (BulkOperationManager.js) — null for every other action type, so this is a
+      // no-op for them. The two shapes differ, so each has its own formatter.
+      const opResult = bulkOperationManager.operation?.result;
+      const outcomeMessage = action === 'archive_backup_delete'
+        ? formatArchiveBackupDeleteOutcome(opResult)
+        : formatPurgeEverywhereOutcome(opResult);
       if (outcomeMessage) {
         // Reuses the store's `error` field, the one feedback channel already
         // wired to a Toast at the app root (App.jsx renders it off `error`/
@@ -1798,6 +1820,8 @@ function EmailListComponent({ stacked = false }) {
         isOpen={bulkModalOpen}
         onClose={minimizeBulkModal}
         onConfirm={handleBulkConfirm}
+        // The upsell's Upgrade: park the bulk session (selection kept) and open Settings > Billing.
+        onUpgrade={() => { minimizeBulkModal(); useMailStore.getState().requestSettingsTab('billing'); }}
       />
       <BulkOperationProgress
         operation={bulkOpProgress}
