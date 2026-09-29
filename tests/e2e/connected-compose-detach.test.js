@@ -255,8 +255,10 @@ describe('Connected Compose Detach', function () {
     const reply = await waitForNativeCompose(mainHandle, 'Reply did not open in a window of its own');
     expect(await inlineComposeShown()).toBe(false);
     await browser.switchToWindow(reply);
-    await browser.waitUntil(() => testidPresent('compose-context-panel'), {
-      timeout: 15_000, timeoutMsg: 'The reply window did not show the message it answers',
+    // A window opens narrow, and the original-message panel folds away below
+    // 564px, so the subject is what says this window is that reply.
+    await browser.waitUntil(() => testidPresent('compose-subject'), {
+      timeout: 15_000, timeoutMsg: 'The reply did not initialize in its own window',
     });
     expect(await fieldValue('compose-subject')).toBe('Re: Remembered window');
   });
