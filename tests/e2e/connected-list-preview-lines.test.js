@@ -58,6 +58,10 @@ describe('Preview lines under each message row', function () {
     }
   });
 
+  const indexStatus = () => browser.executeAsync((done) => {
+    window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'search_index_status', params: {} }).then(done, (e) => done({ error: String(e) }));
+  });
+
   /** The preview under the fixture's row, or null while it has none. */
   const fixturePreview = () => browser.execute((subject) => {
     const row = [...document.querySelectorAll('[data-testid="email-row"]')]
@@ -109,8 +113,19 @@ describe('Preview lines under each message row', function () {
       timeout: 30_000, interval: 500, timeoutMsg: 'the fixture never reached the list',
     });
 
+    // The index holds off while the user is acting (a folder switch is
+    // foreground work), so it is left alone until it has caught up: a
+    // status poll is not foreground work.
+    await browser.waitUntil(async () => {
+      const s = await indexStatus();
+      return s.available === true && s.state === 'idle' && s.complete === true;
+    }, {
+      timeout: 120_000, interval: 1_000,
+      timeoutMsg: 'the index never caught up with the fixture: its body was not stored or not indexed',
+    });
+
     // Opening the folder again reads its rows afresh, with whatever the index
-    // has read by then: the preview needs the body stored and indexed first.
+    // has read by then.
     let preview = null;
     await browser.waitUntil(async () => {
       await switchToFolder(YODA, 'Sent');
