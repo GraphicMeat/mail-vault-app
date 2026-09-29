@@ -326,7 +326,9 @@ mod tests {
     /// moved the message: its wake marks it unread where it is and moves
     /// nothing, since a MOVE into its own folder is not a no-op on a real
     /// server. The event says which rows the pass woke: the app announces a
-    /// local wake off it, and a message that was gone is no news.
+    /// local wake off it, and a message that was gone is no news. The header
+    /// cache says unread too before the event goes out: the app marks its row
+    /// unread off the event, and every repaint from the cache must agree.
     #[tokio::test]
     async fn a_pass_wakes_a_local_snooze_unread_where_it_is() {
         use mock_imap::state::{Mailbox, Message};
@@ -348,6 +350,20 @@ mod tests {
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
 
         let uid = server.state().find("INBOX").unwrap().messages[0].uid;
+        // The list was read before the snooze: the cache holds the message read.
+        let sync_account: SyncAccount = serde_json::from_value(json!({
+            "id": "acct", "email": "user@example.com",
+            "imapConfig": { "email": "user@example.com", "password": "hunter2", "imapHost": server.host(), "imapPort": server.port() },
+        }))
+        .unwrap();
+        assert!(state.sync_engine.sync_account(&sync_account, "INBOX").await.success);
+        let cached_seen = || {
+            let db = state.sync_engine.custody_db().expect("the header cache is open");
+            let guard = db.lock().unwrap_or_else(|p| p.into_inner());
+            let rows = mailvault_core::custody::cache::load_by_uids(guard.as_ref().expect("store is open"), "acct", "INBOX", &[uid]).unwrap();
+            rows[0]["flags"].as_array().unwrap().iter().any(|f| f == "\\Seen")
+        };
+        assert!(cached_seen(), "cached read before the wake");
         app_db::with(&dir, |c| {
             snooze::insert(c, "l", "acct", "INBOX", "", Some(uid), "<snz-local@example.com>", 1_000)?;
             snooze::insert(c, "gone", "acct", "INBOX", "", None, "<gone@example.com>", 2_000)
@@ -356,6 +372,7 @@ mod tests {
         let mut events = state.events.subscribe();
         let results = pass(&state).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(!cached_seen(), "the wake's sync patched the cached row unread");
 
         let outcomes: Vec<_> = results.iter().map(|(id, outcome, _)| (id.as_str(), outcome.clone())).collect();
         assert_eq!(outcomes, vec![("l", WakeOutcome::Woken), ("gone", WakeOutcome::NotFound)]);

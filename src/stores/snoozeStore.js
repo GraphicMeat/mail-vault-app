@@ -83,6 +83,28 @@ async function announceLocalWake(row) {
   notifyArrival(row.accountId, row.fromMailbox, 1, header);
 }
 
+// The daemon's sync wrote the cleared \Seen into the header cache, and the
+// mailbox's modseq with it, before the event went out: the list's reload
+// finds nothing changed and never reads a row. So the rows the snooze held
+// are marked unread here. A restore window saved before the snooze still
+// holds the message read, and All Inboxes repaints from those first.
+async function markWokenUnread(row, applySeenLocally) {
+  const [{ useMailStore }, { invalidateRestoreDescriptors }] = await Promise.all([
+    import('./mailStore'),
+    import('../services/cacheManager'),
+  ]);
+  invalidateRestoreDescriptors(row.accountId);
+  const s = useMailStore.getState();
+  // The key deriveDisplayRows held these rows out by.
+  const spans = s.unifiedInbox || s.activeMailbox === 'UNIFIED';
+  const key = localSnoozeKey(row.accountId, row.fromMailbox, row.messageId);
+  for (const e of s.emails) {
+    if (!e.messageId || !e.flags?.includes('\\Seen')) continue;
+    if (localSnoozeKey(e._accountId || s.activeAccountId, e._mailbox || (spans ? 'INBOX' : s.activeMailbox), e.messageId) !== key) continue;
+    applySeenLocally(useMailStore, { accountId: row.accountId, mailbox: row.fromMailbox, uid: e.uid, read: false, isUnified: spans });
+  }
+}
+
 async function listenTo(event, cb) {
   try {
     const { listen } = await import('@tauri-apps/api/event');
@@ -96,8 +118,8 @@ let _initialized = false;
 
 /// Called once at app launch (App.jsx, beside initScheduledSend). A wake also
 /// syncs the destination and reports it as new mail through the sync engine;
-/// this keeps the rows current, repaints a list that shows Snoozed, and
-/// announces a local snooze's wake, which the sync cannot.
+/// this keeps the rows current, repaints a list that shows Snoozed, and shows
+/// a local snooze's message unread and announces it, which the sync cannot.
 export function initSnooze() {
   if (_initialized) return;
   _initialized = true;
@@ -107,9 +129,11 @@ export function initSnooze() {
     const row = useSnoozeStore.getState().rows.find(r => r.id === payload?.id);
     useSnoozeStore.getState().applyEvent(payload);
     if (payload?.state !== 'woken') return;
-    const { reloadListInView } = await import('../services/workflows/messageMutations');
+    const { reloadListInView, applySeenLocally } = await import('../services/workflows/messageMutations');
+    // `woke` is false for an undo, which left \Seen alone: that is no news.
+    const localWake = payload.woke && row?.snoozedMailbox === '';
+    if (localWake) await markWokenUnread(row, applySeenLocally).catch(() => {});
     reloadListInView().catch(() => {});
-    // `woke` is false for an undo: that is no news.
-    if (payload.woke && row?.snoozedMailbox === '') await announceLocalWake(row).catch(() => {});
+    if (localWake) await announceLocalWake(row).catch(() => {});
   });
 }

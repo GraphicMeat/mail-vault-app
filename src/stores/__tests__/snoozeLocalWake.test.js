@@ -42,7 +42,8 @@ const mockNotify = vi.fn();
 vi.mock('../focusStore', () => ({ notify: (...a) => mockNotify(...a) }));
 
 const mockReload = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../services/workflows/messageMutations', () => ({ reloadListInView: (...a) => mockReload(...a) }));
+// The row coming back unread is snoozeWakeUnread.test.js's subject.
+vi.mock('../../services/workflows/messageMutations', () => ({ reloadListInView: (...a) => mockReload(...a), applySeenLocally: vi.fn() }));
 
 vi.mock('../../services/searchIndex', () => ({ onDaemonReconnected: () => Promise.resolve(() => {}) }));
 
