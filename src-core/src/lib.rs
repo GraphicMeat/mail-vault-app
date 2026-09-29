@@ -4,6 +4,7 @@
 //! the background daemon. Functions take explicit `data_dir` paths instead
 //! of depending on Tauri's AppHandle.
 
+pub mod abd;
 pub mod ai;
 pub mod aliases;
 pub mod app_db;
