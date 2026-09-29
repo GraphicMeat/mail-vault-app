@@ -85,15 +85,22 @@ const takeoutMessage = ({ subject, messageId, labels }) => [
 async function importThroughDialog(sourcePath, { pick } = {}) {
   await switchToFolder(LUKE, 'INBOX');
   await openTab('Backup & Restore');
-  await browser.execute((path, key) => {
+  // Read back what was installed, not `true`: a stub assignment on a locked
+  // webview property fails silently on tauri-wd (core.invoke does), and a
+  // real native alert would then sit over every later spec.
+  const installed = await browser.execute((path, key) => {
     window.__MV_MBOX_SOURCE__ = path;
     sessionStorage.removeItem(key);
-    window.alert = (m) => {
+    const capture = (m) => {
       const seen = JSON.parse(sessionStorage.getItem(key) || '[]');
       seen.push(String(m));
       sessionStorage.setItem(key, JSON.stringify(seen));
     };
+    capture.__mvCapture = true;
+    window.alert = capture;
+    return { source: window.__MV_MBOX_SOURCE__ === path, alert: window.alert?.__mvCapture === true };
   }, sourcePath, ALERTS_KEY);
+  expect(installed).toEqual({ source: true, alert: true });
 
   await browser.waitUntil(() => browser.execute(() => {
     const button = [...document.querySelectorAll('[data-testid="settings-page"] button')]
