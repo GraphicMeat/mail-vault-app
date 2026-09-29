@@ -20,10 +20,14 @@
  * exactly once, in its home folder and nowhere else. A second upload of the
  * same file uploads nothing and skips both.
  *
- * Folder choice. Flaky is only ever read by subject (email-viewer, pgp); the
- * created folder is this spec's own and is deleted from the server in
- * `after()` (as connected-migration-daemon does with its folders), so the
- * sidebar is as it was for the specs after this one. Off limits: luke's
+ * Folder choice. Flaky is only ever read by subject (email-viewer, pgp), and
+ * what the upload adds to it is taken off again in `after()` (`trackMailbox`);
+ * the created folder is this spec's own and is deleted from the server in
+ * `after()` (as connected-migration-daemon does with its folders), once every
+ * upload is cancelled and discarded, so the sidebar is as it was for the specs
+ * after this one. The mock servers serve the whole run, so placements are
+ * read against a baseline taken in `before`, never against zero (a CI
+ * spec-file retry meets what an earlier attempt left). Off limits: luke's
  * INBOX (the upload keeps a vault copy under the server uid, and
  * connected-mbox-import-visible takes "vault max uid + 1" there as a server
  * uid), Archive (storage-matrix counts it, and it is the dialog's default
@@ -37,7 +41,7 @@ import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
 import { closeSettings, switchToFolder, visibleRowSubjects, waitForApp, waitForEmails } from './helpers.js';
 import { openTab } from './mockBilling.js';
-import { MOCK_PASSWORD, SLOW_APPEND_MARKER } from './mockImap.js';
+import { MOCK_PASSWORD, SLOW_APPEND_MARKER, trackMailbox } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const LUKE_SERVER = 0; // MOCK_ACCOUNTS order: luke, vader, yoda
@@ -47,18 +51,22 @@ const CREATED = 'MboxRestored';
 const FALLBACK = 'Trash';
 const FILE_NAME = 'takeout-server.mbox';
 
-const FLAKY_MSG = { subject: 'Server upload for Flaky', messageId: 'server-upload-flaky@gmail.test', labels: 'Important,Flaky,Opened' };
-const NEW_MSG = { subject: 'Server upload into a new folder', messageId: 'server-upload-new@gmail.test', labels: `${CREATED},Starred` };
+const FLAKY_MSG = { subject: 'Server upload for Flaky', messageId: 'server-upload-flaky@gmail.test', labels: 'Important,Flaky,Opened', home: 'Flaky' };
+const NEW_MSG = { subject: 'Server upload into a new folder', messageId: 'server-upload-new@gmail.test', labels: `${CREATED},Starred`, home: CREATED };
 const MESSAGES = [FLAKY_MSG, NEW_MSG];
 
 // Every folder either message could reach: its home, the picked fallback, the
 // dialog's default fallback, and INBOX.
 const FOLDERS = ['Flaky', CREATED, FALLBACK, 'Archive', 'INBOX'];
-const NOWHERE = Object.fromEntries(FOLDERS.map((f) => [f, 0]));
-const ROUTED = {
-  [FLAKY_MSG.subject]: { ...NOWHERE, Flaky: 1 },
-  [NEW_MSG.subject]: { ...NOWHERE, [CREATED]: 1 },
-};
+// The mock servers serve the whole run, and a spec-file retry (CI) meets what
+// an earlier attempt left: every placement is read against a baseline taken in
+// `before`, never against zero. After an upload each message is in its home
+// once (an upload skips what its home already holds), elsewhere as it was.
+const routed = (base) => Object.fromEntries(MESSAGES.map((m) => [
+  m.subject, { ...base[m.subject], [m.home]: Math.max(1, base[m.subject][m.home]) },
+]));
+/** How many of the messages an upload would send: those their home lacks. */
+const freshIn = (base) => MESSAGES.filter((m) => base[m.subject][m.home] === 0).length;
 
 const takeoutMessage = ({ subject, messageId, labels }) => [
   'From 1790000000000000000@xxx Mon Jan 01 00:00:00 +0000 2026',
@@ -285,6 +293,8 @@ describe('MBOX import and restore to the server', function () {
   let workDir = null;
   let lukeId = null;
   let sourcePath = null;
+  let restoreFlaky = null;
+  let baseline = null; // the server's placement before this spec uploads anything
 
   before(async function () {
     await waitForApp();
@@ -295,13 +305,32 @@ describe('MBOX import and restore to the server', function () {
     workDir = mkdtempSync(join(tmpdir(), 'mv-mbox-to-server-e2e-'));
     sourcePath = join(workDir, FILE_NAME);
     writeFileSync(sourcePath, MESSAGES.map(takeoutMessage).join(''));
+    // Everything the upload APPENDs to luke's Flaky goes again in `after`.
+    restoreFlaky = await trackMailbox(browser.mockImap[LUKE_SERVER], 'Flaky');
+    baseline = await serverPlacement();
+    console.log('[mbox-to-server] server placement before:', JSON.stringify(baseline));
   });
 
   after(async function () {
-    // Leave luke's server folder list as the later specs expect it.
+    // Stop every upload first: a job still running after a failed case would
+    // create the folder again (its label routing creates a missing folder)
+    // and APPEND into it after the delete below.
+    try {
+      const listed = await daemonRpc('mbox_upload_status', {});
+      for (const job of listed.v?.jobs || []) {
+        await daemonRpc('mbox_upload_cancel', { jobId: job.jobId });
+        await daemonRpc('mbox_upload_discard', { jobId: job.jobId });
+      }
+      await browser.waitUntil(async () => (await daemonRpc('mbox_upload_status', {})).v?.jobs?.length === 0,
+        { timeout: 60_000, interval: 500 });
+    } catch (e) {
+      console.warn(`[mbox-to-server] uploads still listed before the cleanup: ${e.message}`);
+    }
+    // Leave luke's server folders as the later specs expect them.
     await withLuke(async (client) => {
       try { await client.mailboxDelete(CREATED); } catch { /* never made, or already gone */ }
     }).catch((e) => console.warn(`[mbox-to-server] could not delete ${CREATED}: ${e.message}`));
+    await restoreFlaky?.().catch((e) => console.warn(`[mbox-to-server] could not restore Flaky: ${e.message}`));
     try {
       await closeSettings();
       for (const id of await chipJobIds()) await dismissChip(id);
@@ -317,7 +346,8 @@ describe('MBOX import and restore to the server', function () {
   });
 
   it('uploads each message once, to the folder its label names, and the app lists them there as server rows', async function () {
-    expect(await serverPlacement()).toEqual({ [FLAKY_MSG.subject]: NOWHERE, [NEW_MSG.subject]: NOWHERE });
+    expect(await serverPlacement()).toEqual(baseline);
+    const fresh = freshIn(baseline);
 
     const run = await uploadThroughDialog(sourcePath);
     // luke is IMAP: the upload is offered, on the account on screen, with labels on.
@@ -327,11 +357,11 @@ describe('MBOX import and restore to the server', function () {
     expect(run.longUploadWarning).toBe(false);
     expect(run.alerts).toEqual([]);
     expect(run.text).toContain(`Upload of ${FILE_NAME} finished`);
-    expect(run.text).toContain('2 uploaded, 0 skipped, 0 failed');
+    expect(run.text).toContain(`${fresh} uploaded, ${MESSAGES.length - fresh} skipped, 0 failed`);
 
-    // The server is the proof: one copy of each, in its home, nowhere else,
-    // and the Starred label became the flag.
-    expect(await serverPlacement()).toEqual(ROUTED);
+    // The server is the proof: one copy of each, in its home, nowhere else
+    // beyond what was there before, and the Starred label became the flag.
+    expect(await serverPlacement()).toEqual(routed(baseline));
     expect(await serverFlags(CREATED, NEW_MSG.subject)).toContain('\\Flagged');
     // Done means done: no journal is left to resume.
     expect(await daemonRpc('mbox_upload_status', {})).toEqual({ ok: true, v: { jobs: [] } });
@@ -369,7 +399,7 @@ describe('MBOX import and restore to the server', function () {
   it('a second upload of the same file uploads nothing and skips both', async function () {
     // Standalone: when the case above did not run, upload once the way the
     // dialog does (same params) and wait for the job to end.
-    if (JSON.stringify(await serverPlacement()) !== JSON.stringify(ROUTED)) {
+    if (JSON.stringify(await serverPlacement()) !== JSON.stringify(routed(baseline))) {
       const first = await daemonRpc('import_mbox', {
         sourcePath, accountId: lukeId, mode: 'server', mailbox: FALLBACK, fallbackMailbox: FALLBACK, useLabels: true,
       });
@@ -378,13 +408,13 @@ describe('MBOX import and restore to the server', function () {
         timeout: 120_000, interval: 500, timeoutMsg: 'the first upload never ended',
       });
     }
-    expect(await serverPlacement()).toEqual(ROUTED);
+    expect(await serverPlacement()).toEqual(routed(baseline));
 
     const run = await uploadThroughDialog(sourcePath);
     expect(run.alerts).toEqual([]);
-    expect(run.text).toContain('0 uploaded, 2 skipped, 0 failed');
+    expect(run.text).toContain(`0 uploaded, ${MESSAGES.length} skipped, 0 failed`);
 
-    expect(await serverPlacement()).toEqual(ROUTED);
+    expect(await serverPlacement()).toEqual(routed(baseline));
     expect(await daemonRpc('mbox_upload_status', {})).toEqual({ ok: true, v: { jobs: [] } });
     await dismissChip(run.id);
   });

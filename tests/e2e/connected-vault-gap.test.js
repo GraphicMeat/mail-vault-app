@@ -20,7 +20,10 @@
  *
  * The unreachable-vault case renames the vault root away (the daemon's
  * reachability is `vault_root()` plus `is_dir()`, taken on every count),
- * reopens the panel so the row counts again, and puts the root back. The
+ * reopens the panel so the row counts again, and puts the root back. It waits
+ * for the search index to be idle first (the save's writes nudge it, and an
+ * index pass creates its store under the root), and fails with its own
+ * message if anything recreates the root while it is away. The
  * header cache lives inside the vault, and the daemon keeps it open, so the
  * count may come back with the reason or as unknown with the reason; both
  * must show the reason and neither may say everything is in the vault. It
@@ -244,8 +247,28 @@ describe('Settings > Backup - copies not yet in the vault', function () {
   it('an unreachable vault shows the reason, never everything-in-your-vault, and cannot save', async function () {
     const root = vaultRoot();
     assert.ok(existsSync(root), `no vault at ${root}`);
+    // The save's vault writes nudge the search index, and an index pass writes
+    // (and creates) its store under the vault root. Rename only once the index
+    // has been idle for two reads a second apart, so nothing recreates the root
+    // while it is away.
+    let index = null;
+    let idleReads = 0;
+    try {
+      await browser.waitUntil(async () => {
+        const reply = await daemonRpc('search_index_status', {});
+        index = reply.ok ? reply.v : { error: reply.__error };
+        const idle = reply.ok && !['indexing', 'starting'].includes(reply.v?.state);
+        idleReads = idle ? idleReads + 1 : 0;
+        return idleReads >= 2;
+      }, { timeout: 120_000, interval: 1_000 });
+    } catch (e) {
+      throw new Error(`the search index never settled before the vault was moved away: ${JSON.stringify(index)} (${e.message})`);
+    }
     away = `${root}.away-${Date.now()}`;
     renameSync(root, away);
+    // Something writing into the vault while it is away brings the root back:
+    // that is a failure of this setup, said as one, not a reachable vault.
+    const recreated = () => (existsSync(root) ? readdirSync(root) : null);
     try {
       // Reopen the panel: the row counts again when it mounts. Through the
       // first sub-tab, which sends nothing on mount.
@@ -254,19 +277,24 @@ describe('Settings > Backup - copies not yet in the vault', function () {
       await clickBackupSubTab('Backup Schedule');
 
       let seen = null;
+      let back = null;
       try {
         await wait(async () => {
+          back = recreated();
+          if (back) return true;
           seen = await gapRow(lukeId);
           return seen?.state === 'unreachable' || seen?.state === 'unknown';
         }, 30_000);
       } catch (e) {
         throw new Error(`the row never said the vault is unreachable: ${JSON.stringify(seen)} (${e.message})`);
       }
+      assert.equal(back, null, `something recreated the vault root while it was away, holding ${JSON.stringify(back)}`);
       assert.ok(seen.text.includes(UNAVAILABLE), seen.text);
       assert.ok(!seen.text.includes(NONE), seen.text);
       assert.equal(seen.saveDisabled, true, 'Save them now is offered into a vault that is not there');
 
       const reply = await daemonRpc('vault_gap_count', { accountId: lukeId });
+      assert.equal(recreated(), null, 'something recreated the vault root while it was away');
       assert.equal(reply.ok, true, `vault_gap_count refused: ${reply.__error}`);
       assert.equal(reply.v.vaultReachable, false);
       assert.equal(reply.v.reason, 'E_VAULT_UNAVAILABLE');
