@@ -1,22 +1,25 @@
 import React, { useRef } from "react";
 
+/** The option an arrow, Home or End key moves a radio group to, or null. */
+export function choiceFromKey(key, options, current) {
+  const available = options.filter((option) => !option.disabled);
+  const offset = available.indexOf(current);
+  if (key === "Home") return available[0];
+  if (key === "End") return available.at(-1);
+  if (key === "ArrowRight" || key === "ArrowDown") {
+    return available[(offset + 1 + available.length) % available.length];
+  }
+  if (key === "ArrowLeft" || key === "ArrowUp") {
+    return available[(offset - 1 + available.length) % available.length];
+  }
+  return null;
+}
+
 /** A compact radio group for choosing one immediately-applied setting value. */
 export function SegmentedChoice({ label, options, value, onChange, className = "" }) {
   const choices = useRef([]);
-  const available = options.filter((option) => !option.disabled);
   const changeFromKey = (event, index) => {
-    const current = options[index];
-    let next = null;
-    if (event.key === "Home") next = available[0];
-    if (event.key === "End") next = available.at(-1);
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      const offset = available.indexOf(current);
-      next = available[(offset + 1 + available.length) % available.length];
-    }
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-      const offset = available.indexOf(current);
-      next = available[(offset - 1 + available.length) % available.length];
-    }
+    const next = choiceFromKey(event.key, options, options[index]);
     if (!next) return;
     event.preventDefault();
     onChange(next.value);
