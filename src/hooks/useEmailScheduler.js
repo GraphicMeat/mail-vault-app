@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { inboxUnread, localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
+import { invalidateRestoreDescriptors } from '../services/cacheManager';
 import { watchAccount, waitForSyncChanges } from '../services/syncService';
 import { onDaemonReconnected } from '../services/searchIndex';
 import { hasValidCredentials } from '../services/authUtils';
@@ -182,7 +183,7 @@ export function useEmailScheduler() {
     for (const accountId of changed) recountInboxUnread(accountId, 0);
   }), []);
 
-  const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
+  const onSyncChange = async ({ accountId, mailbox, newEmails, updatedFlags }) => {
     const s = useMailStore.getState();
     // All Inboxes lists every account, so a change on ANY of them is on
     // screen there, whichever account happens to be "active" underneath.
@@ -203,6 +204,9 @@ export function useEmailScheduler() {
       } catch { /* no preview, still notify */ }
       notifyArrival(accountId, mailbox, newEmails, newest);
     }
+    // A restore window saved before the change holds the old flags, and All
+    // Inboxes paints those ahead of the cache.
+    if (updatedFlags > 0) invalidateRestoreDescriptors(accountId);
     if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
     return onScreen;
   };
@@ -252,12 +256,15 @@ export function useEmailScheduler() {
         for (const c of reply?.changes || []) {
           const key = `${c.accountId}\x01${c.mailbox}`;
           const seen = byFolder.get(key);
-          byFolder.set(key, seen ? { ...seen, newEmails: (seen.newEmails || 0) + (c.newEmails || 0) } : c);
+          byFolder.set(key, seen ? { ...seen, newEmails: (seen.newEmails || 0) + (c.newEmails || 0), updatedFlags: (seen.updatedFlags || 0) + (c.updatedFlags || 0) } : c);
         }
-        let repaint = false;
+        let repaint = false, flagsMoved = false;
         for (const c of byFolder.values()) {
           if (stopped) break;
-          if (await onSyncChange(c)) repaint = true;
+          if (await onSyncChange(c)) {
+            repaint = true;
+            if (c.updatedFlags > 0) flagsMoved = true;
+          }
         }
         if (stopped) return;
         // One reload per reply, whatever it named. `loadEmails()` takes no
@@ -276,7 +283,7 @@ export function useEmailScheduler() {
           if (mail.unifiedInbox || mail.activeMailbox === 'UNIFIED') {
             mail.loadUnifiedInbox?.(null, mail.unifiedFolder || 'INBOX');
           } else {
-            mail.loadEmails?.();
+            mail.loadEmails?.(flagsMoved ? { rereadFlags: true } : undefined);
           }
         }
       }

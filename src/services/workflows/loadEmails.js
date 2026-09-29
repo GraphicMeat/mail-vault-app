@@ -79,7 +79,10 @@ function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds)
 
 // ── loadEmails workflow ──
 
-export async function loadEmails() {
+// `rereadFlags`: the daemon synced a flag change (read or starred on another
+// device) into the cache and the mailbox's modseq with it, so no exit below
+// sees a difference. The store's rows take their flags from the cache.
+export async function loadEmails({ rereadFlags = false } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -248,6 +251,24 @@ export async function loadEmails() {
         activeAccountId, activeMailbox, new Set(existingStoreEmails.map(e => e.uid))
       );
       if (isStale()) return;
+      if (rereadFlags) {
+        const cached = await db.getEmailHeadersByUids(
+          activeAccountId, activeMailbox, existingStoreEmails.map(e => e.uid)
+        ).catch(() => []);
+        if (isStale()) return;
+        const cachedFlags = new Map(cached.map(r => [r.uid, r.flags || []]));
+        const differs = (e) => {
+          const f = cachedFlags.get(e.uid);
+          return !!f && (f.length !== (e.flags || []).length || f.some(x => !e.flags?.includes(x)));
+        };
+        const current = get().emails;
+        if (current.some(differs)) {
+          useMailStore.setState({ emails: current.map(e => (differs(e) ? { ...e, flags: cachedFlags.get(e.uid) } : e)) });
+          bumpFlagChangeCounter();
+          invalidateChatAndThreadCaches();
+          get().updateSortedEmails();
+        }
+      }
       if (drained) {
         // Dedupe against the LIVE store — activateAccount or a flag write may
         // have committed rows while the cache read was in flight.

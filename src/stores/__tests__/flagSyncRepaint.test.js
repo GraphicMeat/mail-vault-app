@@ -1,0 +1,175 @@
+// A flag change the daemon synced (a message read or starred on another
+// device) lands in the header cache together with the mailbox's new modseq,
+// before the change feed announces it. The reload the announcement triggers
+// compares that modseq with the server's, finds them equal (condstore-noop)
+// and never reads a cached row, and the drain only adds uids the store lacks:
+// the open list kept the old flags until the user switched folders.
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { serverUids } from '../slices/serverUids';
+
+if (!globalThis.window) {
+  globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
+} else {
+  globalThis.window.addEventListener = globalThis.window.addEventListener || (() => {});
+}
+vi.stubGlobal('navigator', { onLine: true });
+
+const listeners = {};
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (name, cb) => { listeners[name] = cb; return Promise.resolve(() => {}); },
+  emit: () => Promise.resolve(),
+}));
+
+vi.mock('../../services/daemonClient', async (importOriginal) => ({
+  ...(await importOriginal()),
+  daemonCall: vi.fn().mockResolvedValue([]),
+}));
+
+const mockGetEmailHeadersMeta = vi.fn();
+const mockGetEmailHeadersPartial = vi.fn().mockResolvedValue(null);
+const mockGetEmailHeadersByUids = vi.fn().mockResolvedValue([]);
+vi.mock('../../services/db', () => ({
+  getVaultUidSets: vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() }),
+  getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
+  getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
+  getEmailHeaders: vi.fn().mockResolvedValue(null),
+  listCachedUids: vi.fn().mockResolvedValue({ uids: [], changed: [] }),
+  getEmailHeadersByUids: (...a) => mockGetEmailHeadersByUids(...a),
+  getCachedMailboxes: vi.fn().mockResolvedValue([{ path: 'INBOX', name: 'INBOX' }]),
+  readLocalEmailIndex: vi.fn().mockResolvedValue([]),
+  getLocalEmails: vi.fn().mockResolvedValue([]),
+  getArchivedEmails: vi.fn().mockResolvedValue([]),
+  saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
+  clearMailboxCache: vi.fn().mockResolvedValue(undefined),
+}));
+
+const mockCheckMailboxStatus = vi.fn();
+const mockFetchChangedFlags = vi.fn().mockResolvedValue([]);
+vi.mock('../../services/api', () => ({
+  checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
+  fetchChangedFlags: (...a) => mockFetchChangedFlags(...a),
+  searchAllUids: vi.fn().mockResolvedValue([]),
+  fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
+  fetchEmails: vi.fn().mockResolvedValue({ emails: [], total: 0 }),
+  updateEmailFlags: vi.fn().mockResolvedValue(undefined),
+  vaultApplyFlags: vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 }),
+}));
+
+vi.mock('../../services/authUtils', () => ({
+  hasValidCredentials: () => true,
+  ensureFreshToken: (a) => Promise.resolve(a),
+  resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
+}));
+vi.mock('../../services/graphConfig', () => ({
+  isGraphAccount: () => false,
+  graphMessageToEmail: (m) => m,
+  graphFoldersToMailboxes: () => [],
+}));
+vi.mock('../../services/mailSearch.js', () => ({
+  startMailSearch: vi.fn(),
+  cancelMailSearch: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../services/attachmentUtils', () => ({
+  hasRealAttachments: () => false,
+  hydrateInlineImages: (email) => Promise.resolve(email),
+  getRealAttachments: () => [],
+  replaceCidUrls: (html) => html,
+}));
+vi.mock('../../services/workflows/probeServerCopy', () => ({
+  probeServerCopy: vi.fn().mockResolvedValue({ state: 'unknown' }),
+}));
+vi.mock('../../services/safeStorage', () => ({
+  safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+}));
+// The banner is snoozeLocalWake.test.js's subject.
+vi.mock('../../hooks/useEmailScheduler', () => ({ notifyArrival: vi.fn() }));
+
+// All Inboxes reloads through a refetch of every account: parked here, so
+// what the list shows is what the wake itself put there.
+const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../services/workflows/refreshAccounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  refreshCurrentView: (...a) => mockRefreshCurrentView(...a),
+}));
+
+const mockSetUnread = vi.fn();
+vi.mock('../settingsStore', () => ({
+  effectiveSearchMailboxConcurrency: () => 1,
+  useSettingsStore: {
+    getState: () => ({
+      cacheLimitMB: 128,
+      hiddenAccounts: {},
+      unreadPerAccount: {},
+      getLastMailbox: () => 'INBOX',
+      emailListStyle: 'default',
+      linkAlerts: {},
+      linkSafetyEnabled: false,
+      markAsReadMode: 'manual',
+      markAsReadDelay: 3,
+      setUnreadForAccount: (...a) => mockSetUnread(...a),
+      addSearchToHistory: () => {},
+    }),
+  },
+}));
+
+const { useMailStore } = await import('../mailStore');
+const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
+
+const A1 = { id: 'a1', email: 'me@one.co', imapHost: 'h', password: 'x' };
+const row = (uid, flags) => ({
+  uid, messageId: `<m${uid}@x>`, flags, subject: `Message ${uid}`, source: 'server',
+  from: { address: 'them@x.co' }, date: `2026-09-2${uid}T10:00:00Z`,
+});
+const flagsOf = (uid) => useMailStore.getState().emails.find(e => e.uid === uid)?.flags;
+const lastUnread = () => mockSetUnread.mock.calls.filter(([id]) => id === 'a1').at(-1)?.[1];
+const tick = async () => { for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+describe('a flag change the daemon synced reaches the open folder list', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useMailStore.setState({
+      accounts: [A1], activeAccountId: 'a1', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
+      unifiedFolder: 'INBOX', viewMode: 'all', localEmails: [], sentEmails: [],
+      savedEmailIds: new Set(), archivedEmailIds: new Set(), deleteTombstones: new Set(),
+      selectedEmail: null, selectedEmailId: null, selectedThread: null, emailCache: new Map(),
+      loading: false, loadingMore: false, _sortedEmailsFingerprint: '',
+      emails: [row(5, []), row(4, ['\\Seen'])],
+      serverUids: serverUids(new Set([5, 4]), { complete: true }),
+      totalEmails: 2,
+    });
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+    // What the daemon left behind: its sync wrote the server's modseq, and the
+    // flags another device changed (5 read, 4 starred and unread), into the cache.
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 6, highestModseq: 9, totalEmails: 2, totalCached: 2 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 6, highestModseq: 9, exists: 2 });
+    mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) =>
+      [row(5, ['\\Seen']), row(4, ['\\Flagged'])].filter(r => uids.includes(r.uid)));
+  });
+
+  it('a plain reload reads no cached row (the noop exit)', async () => {
+    await useMailStore.getState().loadEmails();
+    await tick();
+
+    expect(mockFetchChangedFlags).not.toHaveBeenCalled();
+    expect(flagsOf(5)).toEqual([]);
+  });
+
+  it('a reload told flags changed shows them, and recounts the badge', async () => {
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+
+    expect(flagsOf(5)).toEqual(['\\Seen']);
+    expect(flagsOf(4)).toEqual(['\\Flagged']);
+    expect(lastUnread()).toBe(1);
+  });
+
+  it('keeps the other rows as they were', async () => {
+    const before = useMailStore.getState().emails.find(e => e.uid === 5);
+    mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) => [row(5, []), row(4, ['\\Seen'])].filter(r => uids.includes(r.uid)));
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+
+    expect(useMailStore.getState().emails.find(e => e.uid === 5)).toBe(before);
+  });
+});

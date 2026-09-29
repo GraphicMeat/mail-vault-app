@@ -100,6 +100,7 @@ vi.mock('../../stores/settingsStore', () => ({
 
 const { useEmailScheduler } = await import('../useEmailScheduler');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
+const { saveRestoreDescriptor, getRestoreDescriptor } = await import('../../services/cacheManager');
 
 const IMAP_A = { id: 'a1', email: 'a@one.co', password: 'pw', imapHost: 'imap.one.co', imapPort: 993 };
 const IMAP_B = { id: 'a2', email: 'b@two.co', authType: 'oauth2', oauth2AccessToken: 'tok' };
@@ -278,6 +279,78 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockLoadEmails).not.toHaveBeenCalled();
     // and the change was actually consumed — otherwise this asserts nothing
     expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 1]);
+  });
+
+  // A read or a star on another device: the daemon's sync wrote the flags and
+  // the mailbox's modseq into the cache, so a plain reload finds nothing
+  // changed. The change says flags moved, and the reload has to reread them.
+  describe('flag changes', () => {
+    const flagChange = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1, ...fields }] });
+
+    it('has the open folder reread its cached flags', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [flagChange()];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+      expect(mockLoadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+    });
+
+    it('still rereads when the same reply also carries an arrival for that folder', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [reply({ gen: 2, changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+        { gen: 2, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 2, at: 2 },
+      ] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+      expect(mockLoadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+    });
+
+    it('leaves an arrival-only reload alone', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [flagChange({ newEmails: 1, updatedFlags: 0 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadEmails).toHaveBeenCalledWith(undefined);
+    });
+
+    // All Inboxes pushes a saved restore window's rows before the disk rows
+    // and keeps the first copy of each: one saved before the change holds the
+    // old flags, so it goes before the repaint reads anything.
+    it("drops the account's restore windows before repainting All Inboxes", async () => {
+      const window = { accountId: 'a1', mailbox: 'INBOX', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] };
+      saveRestoreDescriptor(window);
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
+      let held = null;
+      mockLoadUnifiedInbox.mockImplementation(() => { held = getRestoreDescriptor('a1', 'INBOX', 'all'); });
+      eventReplies = [flagChange()];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
+      expect(held).toBeNull();
+    });
+
+    it('drops them for a folder that is not on screen too', async () => {
+      saveRestoreDescriptor({ accountId: 'a1', mailbox: 'Archive', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [flagChange({ mailbox: 'Archive' })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadEmails).not.toHaveBeenCalled();
+      expect(getRestoreDescriptor('a1', 'Archive', 'all')).toBeNull();
+    });
   });
 
   it('pauses 30s when the daemon is offline, then polls again', async () => {

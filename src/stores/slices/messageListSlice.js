@@ -527,7 +527,7 @@ export const createMessageListSlice = (set, get) => ({
 
   // ── Passthrough wrappers to workflow functions ──
 
-  loadEmails: () => _loadEmails(),
+  loadEmails: (opts) => _loadEmails(opts),
   _loadEmailsViaGraph: (account, activeAccountId, activeMailbox, generation) => _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation),
   loadMoreEmails: () => _loadMoreEmails(),
   loadSentHeaders: (accountId, opts) => _loadSentHeaders(accountId, opts),
