@@ -179,7 +179,7 @@ fn mbox_escape_from(raw: &[u8]) -> Vec<u8> {
 }
 
 /// Unescape ">From " at start of lines back to "From " when importing mbox.
-fn mbox_unescape_from(raw: &[u8]) -> Vec<u8> {
+pub(crate) fn mbox_unescape_from(raw: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(raw.len());
     for line in raw.split(|&b| b == b'\n') {
         if line.starts_with(b">From ") {
@@ -428,7 +428,7 @@ impl Dest {
 
 /// Takeout labels as vault flags: archived like every import, flagged for
 /// `Starred`, seen unless `Unread` (R5: it beats `Opened`; neither is read).
-fn label_flags(labels: &[String]) -> Vec<String> {
+pub(crate) fn label_flags(labels: &[String]) -> Vec<String> {
     let attrs = takeout::attrs_of(labels);
     let mut flags = vec!["archived".to_string()];
     if attrs.flagged {

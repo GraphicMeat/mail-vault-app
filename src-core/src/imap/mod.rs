@@ -1641,6 +1641,40 @@ pub fn quote_mailbox(name: &str) -> Result<String, String> {
     Ok(format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
+/// A folder name in IMAP's modified UTF-7 (RFC 3501 §5.1.3), the form a server
+/// lists and expects unless UTF8=ACCEPT is enabled, which this client never
+/// does: printable ASCII as is, `&` as `&-`, every other run as `&`, its
+/// UTF-16 in base64 (`,` for `/`, no padding), `-`. A Takeout label is plain
+/// text; the folder a server lists for it is this. No control character is
+/// left raw, so none can end a command early.
+pub fn utf7_encode(name: &str) -> String {
+    use base64::Engine;
+    fn flush(run: &mut Vec<u16>, out: &mut String) {
+        if run.is_empty() {
+            return;
+        }
+        let bytes: Vec<u8> = run.drain(..).flat_map(u16::to_be_bytes).collect();
+        out.push('&');
+        out.push_str(&base64::engine::general_purpose::STANDARD_NO_PAD.encode(bytes).replace('/', ","));
+        out.push('-');
+    }
+    let (mut out, mut run) = (String::with_capacity(name.len()), Vec::new());
+    for c in name.chars() {
+        if (' '..='~').contains(&c) {
+            flush(&mut run, &mut out);
+            if c == '&' {
+                out.push_str("&-");
+            } else {
+                out.push(c);
+            }
+        } else {
+            run.extend_from_slice(c.encode_utf16(&mut [0; 2]));
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
 fn uids_of(set: &[imap_proto::UidSetMember]) -> Vec<u32> {
     let mut out = Vec::new();
     for m in set {
@@ -2183,6 +2217,11 @@ pub fn internaldate_of(head: &[u8]) -> Option<String> {
         return None;
     };
     let utc = chrono::Utc.timestamp_opt(secs, 0).single()?;
+    // `%Y` writes a year past 9999 (a spam Date) with a sign, which no server
+    // parses: a BAD would cost the APPEND over a date that is plainly wrong.
+    if !(0..=9999).contains(&chrono::Datelike::year(&utc)) {
+        return None;
+    }
     Some(imap_date_time(&utc.with_timezone(&chrono::FixedOffset::east_opt(0)?)))
 }
 
@@ -2214,6 +2253,26 @@ pub async fn append_email(
     flags: &str,
     internal_date: Option<&str>,
 ) -> Result<Option<(u32, u32)>, String> {
+    append_email_with(session, mailbox, raw_email, flags, internal_date, false).await
+}
+
+/// `append_email`, with the literal sent LITERAL+ style when `literal_plus`
+/// (`{n+}`, RFC 7888): the message follows the command at once, with no wait
+/// for the server's `+`. A host that never sends that `+` (Hostinger, see
+/// `append_email_verified`) still takes the message this way.
+///
+/// Only for a server that advertises `LITERAL+` (not `LITERAL-`, which caps
+/// such a literal at 4 KiB): one that does not reads the message as commands.
+/// For the same reason a BAD after a LITERAL+ APPEND leaves the session out of
+/// step, and the caller drops it.
+pub async fn append_email_with(
+    session: &mut ImapSession,
+    mailbox: &str,
+    raw_email: &[u8],
+    flags: &str,
+    internal_date: Option<&str>,
+    literal_plus: bool,
+) -> Result<Option<(u32, u32)>, String> {
     // RFC 3501 wants the flag list parenthesized and the date-time quoted; every
     // caller passes bare flags (`\Seen \Flagged`), which without the parens
     // leaves the date in a position no server parses, and is a malformed APPEND
@@ -2222,33 +2281,37 @@ pub async fn append_email(
     let flag_list = if flags.is_empty() { String::new() } else { format!(" ({})", flags) };
     let quoted_date = internal_date.map(|d| format!(" \"{}\"", d)).unwrap_or_default();
     let command = format!(
-        "APPEND {}{}{} {{{}}}",
+        "APPEND {}{}{} {{{}{}}}",
         quote_mailbox(mailbox).map_err(failed)?,
         flag_list,
         quoted_date,
-        raw_email.len()
+        raw_email.len(),
+        if literal_plus { "+" } else { "" }
     );
 
-    patient(append_with_literal(session, command, raw_email)).await.map_err(failed)
+    patient(append_with_literal(session, command, raw_email, literal_plus)).await.map_err(failed)
 }
 
 /// Send `command` (an APPEND ending in `{n}`), the literal once the server says
 /// `+`, and read the tagged reply. A server that refuses before the `+` (a
 /// mailbox that does not exist) gets no literal: it would read the message as
-/// commands.
+/// commands. `nonsync` (`{n+}`): the literal goes right behind the command.
 async fn append_with_literal(
     session: &mut ImapSession,
     command: String,
     raw_email: &[u8],
+    nonsync: bool,
 ) -> Result<Option<(u32, u32)>, String> {
     use async_imap::error::Error as ImapError;
-    use async_std::io::WriteExt;
     use imap_proto::Response;
     // Worded as async-imap words them ("io: ...", "connection lost"): the pool's
     // retry (`is_connection_lost`) reads these strings.
     let io = |e: std::io::Error| ImapError::from(e).to_string();
     let id = session.run_command(&command).await.map_err(|e| e.to_string())?;
-    let mut sent = false;
+    let mut sent = nonsync;
+    if nonsync {
+        write_literal(session, raw_email).await.map_err(io)?;
+    }
     loop {
         let rd = session
             .read_response()
@@ -2264,13 +2327,19 @@ async fn append_with_literal(
         }
         drop(rd);
         sent = true;
-        // The stream async-imap's own `append` writes the literal to: under the
-        // command encoder, over the transport (COMPRESS included).
-        let out = session.get_mut();
-        out.write_all(raw_email).await.map_err(io)?;
-        out.write_all(b"\r\n").await.map_err(io)?;
-        out.flush().await.map_err(io)?;
+        write_literal(session, raw_email).await.map_err(io)?;
     }
+}
+
+/// The literal and its closing CRLF, on the stream async-imap's own `append`
+/// writes it to: under the command encoder, over the transport (COMPRESS
+/// included).
+async fn write_literal(session: &mut ImapSession, raw_email: &[u8]) -> std::io::Result<()> {
+    use async_std::io::WriteExt;
+    let out = session.get_mut();
+    out.write_all(raw_email).await?;
+    out.write_all(b"\r\n").await?;
+    out.flush().await
 }
 
 /// What an APPEND's tagged reply says: the `(UIDVALIDITY, UID)` from its
@@ -2383,6 +2452,23 @@ pub async fn uid_of_message_id(session: &mut ImapSession, message_id: &str) -> R
     let criteria = format!("HEADER Message-ID \"{}\"", escaped);
     let set = patient(session.uid_search(&criteria)).await.map_err(|e| e.to_string())?;
     Ok(set.iter().copied().max())
+}
+
+/// Every uid in the SELECTED mailbox whose Message-ID header holds
+/// `message_id` (`<>` optional), read through the tagged OK so a socket that
+/// drops mid-reply is an error, never "none" (`uid_search_to_tag`): a caller
+/// that dedupes on the answer would upload the message again. An id with a
+/// control character in it (a stray CR ends the command early) is refused, and
+/// so is an empty one, which would match every message.
+pub async fn message_id_uids(session: &mut ImapSession, message_id: &str) -> Result<Vec<u32>, String> {
+    let term = message_id_search_term(message_id);
+    if term.is_empty() || term.chars().any(char::is_control) {
+        return Err(format!("Message-ID search: no usable Message-ID in {message_id:?}"));
+    }
+    let mut uids = patient(uid_search_to_tag(session, &format!("HEADER Message-ID \"{term}\""))).await?;
+    uids.sort_unstable();
+    uids.dedup();
+    Ok(uids)
 }
 
 /// APPEND with pre/post verification. Returns the mailbox EXISTS count before
@@ -4141,5 +4227,28 @@ mod append_outcome_tests {
         assert_eq!(bad, r#"bad response: code: None, info: Some("Invalid arguments")"#);
         let limited = outcome(b"a1 NO Account exceeded bandwidth limits. (Failure)\r\n").expect_err("NO");
         assert!(is_bandwidth_limited(&limited), "{limited}");
+    }
+}
+
+#[cfg(test)]
+mod utf7_tests {
+    use super::*;
+
+    /// RFC 3501 §5.1.3's own examples, plus the escapes a Takeout label can hold.
+    #[test]
+    fn a_label_becomes_the_name_a_server_lists() {
+        assert_eq!(utf7_encode("Work/Clients"), "Work/Clients", "plain ASCII is unchanged");
+        assert_eq!(utf7_encode("Kunden/Übung"), "Kunden/&ANw-bung");
+        assert_eq!(utf7_encode("~peter/mail/台北/日本語"), "~peter/mail/&U,BTFw-/&ZeVnLIqe-");
+        assert_eq!(utf7_encode("R&D"), "R&-D");
+        assert_eq!(utf7_encode("Café Bar"), "Caf&AOk- Bar");
+        assert_eq!(utf7_encode("😀"), "&2D3eAA-", "a character past the BMP is its surrogate pair");
+    }
+
+    #[test]
+    fn no_control_character_stays_raw() {
+        let encoded = utf7_encode("Evil\r\nA1 DELETE INBOX\0");
+        assert_eq!(encoded, "Evil&AA0ACg-A1 DELETE INBOX&AAA-");
+        assert!(!encoded.chars().any(char::is_control));
     }
 }

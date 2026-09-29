@@ -105,11 +105,16 @@ struct ServerRow {
 pub struct ServerView {
     by_uid: HashMap<u32, ServerRow>,
     by_id: HashMap<String, u32>,
+    /// Subject and Date of the dated rows with no Message-ID: all a message
+    /// without one (a Takeout chat or draft) can be matched by. Kept apart so
+    /// the rehome plan, which keys files by the server's id, never sees them.
+    no_id: HashSet<(String, i64)>,
 }
 
 impl ServerView {
     /// From the header cache's rows (`custody::cache::all_headers`). A row
-    /// without a uid or a Message-ID says nothing here and is skipped.
+    /// without a uid says nothing here and is skipped; one without a
+    /// Message-ID counts only for a message without one.
     pub fn from_headers(rows: &[Value]) -> Self {
         let mut view = Self::default();
         for row in rows {
@@ -118,22 +123,51 @@ impl ServerView {
             // Rows written by the frontend carry `messageId`; ones serialized
             // from `EmailHeader` carry `message_id`.
             let id = maildir::normalize_message_id(text("messageId").or_else(|| text("message_id")).unwrap_or(""));
-            if id.is_empty() {
-                continue;
-            }
             // `messageDate` is the Date header; a row without one has it in `date`.
             let date_secs = text("messageDate").or_else(|| text("date")).and_then(maildir::header_date_secs);
+            let subject = squash(text("subject").unwrap_or(""));
+            if id.is_empty() {
+                if let Some(date) = date_secs {
+                    view.no_id.insert((subject, date));
+                }
+                continue;
+            }
             view.by_id.insert(id.clone(), uid);
-            view.by_uid.insert(uid, ServerRow { message_id: id, subject: squash(text("subject").unwrap_or("")), date_secs });
+            view.by_uid.insert(uid, ServerRow { message_id: id, subject, date_secs });
         }
         view
     }
 
     /// Whether the server lists a message with `head`'s Message-ID, Subject
-    /// and Date: the same-message rule when only its header is known.
+    /// and Date: the same-message rule when only its header is known. A
+    /// message with no Message-ID matches a dated row with none, by Subject
+    /// and Date alone.
     pub fn lists_same(&self, head: &Head) -> bool {
-        let Some(id) = &head.id else { return false };
-        self.by_id.get(id).is_some_and(|v| self.row_matches(*v, head))
+        match &head.id {
+            Some(id) => self.by_id.get(id).is_some_and(|v| self.row_matches(*v, head)),
+            None => head.date_secs.is_some_and(|date| self.no_id.contains(&(head.subject.clone(), date))),
+        }
+    }
+
+    /// Count a message the caller just put on the server, under `uid` when the
+    /// server said which, so the same message later in one run reads as there.
+    /// False when it cannot be placed (a Message-ID with no uid): the caller
+    /// then asks the server instead.
+    pub fn add(&mut self, uid: Option<u32>, head: &Head) -> bool {
+        match (&head.id, uid) {
+            (Some(id), Some(uid)) => {
+                self.by_id.insert(id.clone(), uid);
+                self.by_uid.insert(uid, ServerRow { message_id: id.clone(), subject: head.subject.clone(), date_secs: head.date_secs });
+                true
+            }
+            (Some(_), None) => false,
+            (None, _) => {
+                if let Some(date) = head.date_secs {
+                    self.no_id.insert((head.subject.clone(), date));
+                }
+                true
+            }
+        }
     }
 
     fn row_matches(&self, uid: u32, head: &Head) -> bool {
@@ -475,6 +509,38 @@ mod tests {
         let plan = plan(mailbox, server, is_graph, &HashSet::new());
         let report = apply(mailbox, &plan).unwrap();
         (plan, report)
+    }
+
+    /// A message with no Message-ID (a Takeout chat or draft) has only its
+    /// Subject and Date to go by, and matches only a row with no id either: a
+    /// row carrying an id names some other message. No Date, no match.
+    #[test]
+    fn a_message_without_an_id_matches_an_idless_row_by_subject_and_date() {
+        let chat = head_of(b"Subject: Chat with  Ann\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nhi");
+        let idless = |date: &str| json!({"uid": 3, "subject": "Chat with Ann", "messageDate": date});
+        assert!(view(&[idless(DATE)]).lists_same(&chat));
+        assert!(!view(&[idless("Mon, 1 Jan 2024 10:00:01 +0000")]).lists_same(&chat), "another second, another chat");
+        assert!(!view(&[row(3, "<c@x>", "Chat with Ann", DATE)]).lists_same(&chat), "a row with an id is another message");
+        let undated = head_of(b"Subject: Chat with Ann\r\n\r\nhi");
+        assert!(!view(&[json!({"uid": 3, "subject": "Chat with Ann"})]).lists_same(&undated));
+        // The rehome plan never sees such a row: it keys files by the server's id.
+        assert!(view(&[idless(DATE)]).by_uid.is_empty());
+    }
+
+    #[test]
+    fn a_message_added_to_the_view_is_listed_by_it() {
+        let mut v = ServerView::default();
+        let with_id = head_of(eml("<n@x>", "New", DATE, "", "body").as_bytes());
+        let chat = head_of(b"Subject: Chat\r\nDate: Mon, 1 Jan 2024 10:00:00 +0000\r\n\r\nhi");
+        assert!(!v.lists_same(&with_id) && !v.lists_same(&chat));
+        assert!(v.add(Some(9), &with_id));
+        assert!(v.add(None, &chat), "an idless message needs no uid");
+        assert!(v.lists_same(&with_id) && v.lists_same(&chat));
+        let other = head_of(eml("<n@x>", "Another subject", DATE, "", "body").as_bytes());
+        assert!(!v.lists_same(&other), "the rule is unchanged: same id, another subject is another message");
+        let unplaced = head_of(eml("<u@x>", "Unplaced", DATE, "", "body").as_bytes());
+        assert!(!v.add(None, &unplaced), "an id with no uid cannot be placed");
+        assert!(!v.lists_same(&unplaced));
     }
 
     #[test]

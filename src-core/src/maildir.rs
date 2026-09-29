@@ -660,6 +660,18 @@ pub(crate) fn free_orphan_path(orphan_dir: &Path, name: &str) -> PathBuf {
     orphan_dir.join(format!("{}.dup", name))
 }
 
+/// Keep `raw` beside a mailbox, never in its `cur/`: written atomically into
+/// its `orphaned/` under `name`, or a free variant of it. For a copy that
+/// cannot take its uid because the vault already holds another message there;
+/// the generation repair reads `orphaned/` back when a later uid fits it.
+pub fn set_aside_copy(mailbox_dir: &Path, name: &str, raw: &[u8]) -> Result<PathBuf, String> {
+    let dir = mailbox_dir.join(ORPHAN_DIR);
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create {dir:?}: {e}"))?;
+    let path = free_orphan_path(&dir, name);
+    crate::fsx::write_atomic(&path, raw).map_err(|e| format!("Failed to write {path:?}: {e}"))?;
+    Ok(path)
+}
+
 /// Re-key a mailbox's vault files onto the current UID generation.
 ///
 /// `id_to_uid` maps normalized Message-ID → the uid the *current* generation
@@ -922,6 +934,25 @@ mod tests {
         assert_eq!(header_date_secs("sometime"), None);
         assert_eq!(header_date_secs("Sat, 12 Sep 2026 10:00:00 +0000"), Some(1_789_207_200));
         assert_eq!(header_date_secs("2026-09-12T10:00:00+00:00"), Some(1_789_207_200));
+    }
+
+    /// A copy set aside lands in `orphaned/` under a name of its own, never in
+    /// `cur/` and never over an earlier one.
+    #[test]
+    fn a_copy_set_aside_never_touches_cur_or_an_earlier_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mailbox = tmp.path().join("INBOX");
+        fs::create_dir_all(mailbox.join("cur")).unwrap();
+        fs::write(mailbox.join("cur").join("5:2,S.eml"), "the vault's own").unwrap();
+        let first = set_aside_copy(&mailbox, "5:2,AS.eml", b"first").unwrap();
+        let second = set_aside_copy(&mailbox, "5:2,AS.eml", b"second").unwrap();
+        assert_eq!(first, mailbox.join(ORPHAN_DIR).join("5:2,AS.eml"));
+        assert_ne!(first, second);
+        assert_eq!(fs::read(&first).unwrap(), b"first");
+        assert_eq!(fs::read(&second).unwrap(), b"second");
+        assert_eq!(fs::read_to_string(mailbox.join("cur").join("5:2,S.eml")).unwrap(), "the vault's own");
+        assert_eq!(fs::read_dir(mailbox.join("cur")).unwrap().count(), 1);
+        assert_eq!(orphan_stats(&mailbox).count, 2);
     }
 
     /// Keep Recent never judges a copy by a Date it cannot read.

@@ -366,6 +366,23 @@ pub fn listed_message_ids_shared(
     Ok(out)
 }
 
+/// Whether the cached rows of `mailbox` are all the server held when a SELECT
+/// just now answered `uid_validity` / `uid_next`: the daemon's sync recorded
+/// that very generation and UIDNEXT (nothing arrived since) and every row its
+/// count covers is here (`folder_listing`). Only then does a message the rows
+/// lack prove absent from the server. A cache the app wrote (no daemon count),
+/// one synced before the latest arrival, or one part way through a refill is
+/// never whole.
+pub fn lists_whole_mailbox(conn: &Connection, account: &str, mailbox: &str, uid_validity: u32, uid_next: u32) -> Result<bool, String> {
+    let Some(meta) = load_meta(conn, account, mailbox)? else { return Ok(false) };
+    let meta: Value = serde_json::from_str(&meta).map_err(|e| e.to_string())?;
+    let n = |key: &str| meta.get(key).and_then(Value::as_u64);
+    if n("uidValidity") != Some(u64::from(uid_validity)) || n("syncUidNext") != Some(u64::from(uid_next)) || n("syncTotalEmails").is_none() {
+        return Ok(false);
+    }
+    Ok(matches!(folder_listing(conn, account, &crate::search_index::text::vault_dir_name(mailbox))?, FolderListing::Complete(_)))
+}
+
 /// How a lookup for a folder the header cache holds no complete listing of
 /// starts its `Err`.
 pub const FOLDER_NOT_LISTED: &str = "the header cache holds no complete listing of this folder";
@@ -1022,6 +1039,31 @@ mod tests {
         save_headers(&c, "a", "Sent", &json!({"syncTotalEmails": 2, "emails": rows(&[1, 2])}).to_string()).unwrap();
         save_headers(&c, "a", "Sent", &json!({"removedUids": [2]}).to_string()).unwrap();
         assert_eq!(meta_u64(&c, "Sent", APP_REMOVED_SINCE_SYNC), Some(1));
+    }
+
+    /// A miss in the rows proves absence only when they are the whole mailbox
+    /// as the server has it right now: the sync's own count is in, every row
+    /// it covers is cached, and the generation and UIDNEXT it recorded are the
+    /// ones a SELECT just gave (a later APPEND, ours or anyone's, moves UIDNEXT).
+    #[test]
+    fn a_mailbox_is_whole_only_when_complete_and_nothing_arrived_since_its_sync() {
+        let (_t, c) = store();
+        let rows = |uids: &[u32]| json!(uids.iter().map(|u| json!({"uid": u, "messageId": format!("<{u}@x.test>")})).collect::<Vec<_>>());
+        let whole = |c: &Connection, mailbox: &str| lists_whole_mailbox(c, "a", mailbox, 7, 4).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"uidValidity": 7, "syncTotalEmails": 3, "syncUidNext": 4, "emails": rows(&[1, 2, 3])}).to_string()).unwrap();
+        assert!(whole(&c, "INBOX"), "complete, same generation, same UIDNEXT");
+        assert!(!lists_whole_mailbox(&c, "a", "INBOX", 7, 5).unwrap(), "a message arrived after the sync");
+        assert!(!lists_whole_mailbox(&c, "a", "INBOX", 8, 4).unwrap(), "another generation");
+
+        save_headers(&c, "a", "Partial", &json!({"uidValidity": 7, "syncTotalEmails": 3, "syncUidNext": 4, "emails": rows(&[3])}).to_string()).unwrap();
+        assert!(!whole(&c, "Partial"), "a refill part way");
+
+        save_headers(&c, "a", "AppOnly", &json!({"uidValidity": 7, "uidNext": 4, "emails": rows(&[1, 2, 3])}).to_string()).unwrap();
+        assert!(!whole(&c, "AppOnly"), "no daemon count: the rows may be any subset");
+
+        save_headers(&c, "a", "Empty", &json!({"uidValidity": 7, "syncTotalEmails": 0, "syncUidNext": 4}).to_string()).unwrap();
+        assert!(whole(&c, "Empty"), "counted empty and nothing arrived since");
+        assert!(!whole(&c, "Never"), "never synced");
     }
 
     /// The hole heal writes only what is missing: a row written since the

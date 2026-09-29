@@ -31,6 +31,7 @@ mod insights;
 mod ipc;
 mod learning;
 mod mbox;
+mod mbox_upload;
 mod migration;
 mod netgate;
 mod raw_message;

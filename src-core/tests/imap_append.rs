@@ -251,3 +251,92 @@ fn internaldate_of_an_unparseable_or_missing_date_is_none() {
     assert_eq!(internaldate_of(b"Subject: no date\r\n\r\n"), None);
     assert_eq!(internaldate_of(b""), None);
 }
+
+/// A spam Date far in the future renders a signed five-digit year no server
+/// parses; the APPEND goes without a date rather than draw a BAD.
+#[test]
+fn internaldate_of_a_year_past_9999_is_none() {
+    assert_eq!(internaldate_of(b"Date: Mon, 1 Jan 20250 00:00:00 +0000\r\n\r\n"), None);
+    assert_eq!(
+        internaldate_of(b"Date: Fri, 31 Dec 9999 12:00:00 +0000\r\n\r\n").as_deref(),
+        Some("31-Dec-9999 12:00:00 +0000")
+    );
+}
+
+// ── LITERAL+ ───────────────────────────────────────────────────────────────
+
+/// A LITERAL+ server takes the message right behind the command: the client
+/// never waits for a `+` (the mock sends none for `{n+}`, so a client that
+/// waited would stall here), and the reply still carries the uid.
+#[async_std::test]
+async fn a_literal_plus_append_sends_the_message_without_waiting_for_a_go_ahead() {
+    let mut inbox = Mailbox::new("INBOX").with_uid_validity(77);
+    inbox.add(Message::new(4, eml("Four", "a@example.com", "body")));
+    let server = MockImap::start(Scenario::new().mailbox(inbox).with_cap("LITERAL+"));
+    let mut sess = session(&server).await;
+    let raw = eml("Fresh", "a@example.com", "body");
+
+    let got = append_email_with(&mut sess, "INBOX", raw.as_bytes(), "\\Seen", None, true).await.expect("append");
+
+    assert_eq!(got, Some((77, 5)));
+    assert_eq!(newest_subject(&server), "Fresh");
+    let line = server.commands().into_iter().find(|c| c.contains("APPEND")).expect("an APPEND");
+    assert!(line.ends_with(&format!("{{{}+}}", raw.len())), "{line}");
+    // The session is in step afterwards: the next command reads its own reply.
+    assert_eq!(select_mailbox(&mut sess, "INBOX").await.expect("select").exists, 2);
+}
+
+#[async_std::test]
+async fn without_literal_plus_the_literal_is_synchronous() {
+    let server = server(true);
+    let mut sess = session(&server).await;
+    let raw = eml("Fresh", "a@example.com", "body");
+
+    append_email_with(&mut sess, "INBOX", raw.as_bytes(), "", None, false).await.expect("append");
+
+    let line = server.commands().into_iter().find(|c| c.contains("APPEND")).expect("an APPEND");
+    assert!(line.ends_with(&format!("{{{}}}", raw.len())), "{line}");
+}
+
+// ── message_id_uids ────────────────────────────────────────────────────────
+
+#[async_std::test]
+async fn message_id_uids_lists_every_copy_in_the_selected_mailbox() {
+    let server = server(true);
+    let mut sess = session(&server).await;
+    select_mailbox(&mut sess, "INBOX").await.expect("select");
+    append_email(&mut sess, "INBOX", eml("Twin", "a@example.com", "again").as_bytes(), "", None).await.expect("append");
+
+    assert_eq!(message_id_uids(&mut sess, "<twin@example.com>").await.expect("search"), vec![2, 5]);
+    assert_eq!(message_id_uids(&mut sess, "nobody@example.com").await.expect("search"), Vec::<u32>::new());
+}
+
+/// A CR inside an id would end the SEARCH command early and send the rest as
+/// a command of its own; an empty id would match every message.
+#[async_std::test]
+async fn message_id_uids_refuses_an_id_it_cannot_quote_and_sends_nothing() {
+    let server = server(true);
+    let mut sess = session(&server).await;
+    select_mailbox(&mut sess, "INBOX").await.expect("select");
+
+    for id in ["twin@example.com\r\nA1 DELETE INBOX", "a\u{0}b@example.com", "<>", "  "] {
+        assert!(message_id_uids(&mut sess, id).await.is_err(), "{id:?} must be refused");
+    }
+    assert_eq!(server.count_commands("SEARCH"), 0);
+    assert!(server.state().find("INBOX").is_some());
+}
+
+/// A socket that dies before the tagged reply is an error: "no copy" would
+/// have the caller upload the message again.
+#[async_std::test]
+async fn message_id_uids_on_a_dropped_connection_is_an_error_not_none() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .fault(Trigger::on("SEARCH"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+    select_mailbox(&mut sess, "INBOX").await.expect("select");
+
+    assert!(message_id_uids(&mut sess, "<a@example.com>").await.is_err());
+}
