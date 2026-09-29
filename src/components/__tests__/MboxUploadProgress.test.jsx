@@ -46,6 +46,12 @@ vi.mock('../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
 const openMock = vi.fn();
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openMock(...a), save: vi.fn() }));
 
+const refreshMock = vi.fn();
+vi.mock('../../services/authUtils', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ensureFreshToken: (...a) => refreshMock(...a),
+}));
+
 const { MboxUploadProgress, RENDER_EVERY_MS } = await import('../MboxUploadProgress');
 const { useMailStore } = await import('../../stores/mailStore');
 const { takeForcedMailboxRefetch } = await import('../../services/workflows/helpers/mailboxRefetch');
@@ -68,6 +74,8 @@ const reconnect = () => act(async () => { for (const cb of listeners['daemon-rec
 const flush = async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); };
 // Counts that change within one state are held for at most this long.
 const tick = () => act(async () => { vi.advanceTimersByTime(RENDER_EVERY_MS); });
+// A resume first looks the account up (loaded on demand): wait for its call.
+const settled = (cmd, expected) => act(() => vi.waitFor(() => expect(calls(cmd)).toEqual(expected), { timeout: 10_000 }));
 
 const chip = () => screen.queryByTestId('mbox-upload-chip');
 const job = (id = JOB) => document.querySelector(`[data-testid="mbox-upload-job"][data-job-id="${id}"]`);
@@ -102,6 +110,7 @@ beforeEach(() => {
   controlReply = (cmd) => Promise.resolve({ jobId: JOB, [cmd.replace('mbox_upload_', '')]: true });
   sendMock.mockClear();
   openMock.mockReset();
+  refreshMock.mockReset().mockImplementation(async (a) => a);
   useMailStore.setState({ activeAccountId: 'another-account', unifiedInbox: false });
   takeForcedMailboxRefetch(ACCT);
 });
@@ -172,8 +181,7 @@ describe('MboxUploadProgress', () => {
     expect(buttons()).toEqual(['cancel', 'resume']);
 
     fireEvent.click(button('resume'));
-    await act(flush);
-    expect(calls('mbox_upload_resume')).toEqual([{ jobId: JOB }]);
+    await settled('mbox_upload_resume', [{ jobId: JOB }]);
     expect(openMock).not.toHaveBeenCalled();
 
     fireEvent.click(button('cancel'));
@@ -193,8 +201,28 @@ describe('MboxUploadProgress', () => {
     fireEvent.click(button('sign-in'));
     expect(onOpenAccounts).toHaveBeenCalledWith(ACCT);
     fireEvent.click(button('resume'));
-    await act(flush);
-    expect(calls('mbox_upload_resume')).toEqual([{ jobId: JOB }]);
+    await settled('mbox_upload_resume', [{ jobId: JOB }]);
+  });
+
+  // The daemon never refreshes an OAuth token; a resume on the expired one
+  // would only hold the job again.
+  it('resuming an upload held for a refused sign-in refreshes the account\'s token first', async () => {
+    const original = useMailStore.getState().accounts;
+    const account = { id: ACCT, email: 'me@gmail.test', authType: 'oauth2', oauth2RefreshToken: 'r', oauth2ExpiresAt: 1 };
+    useMailStore.setState({ accounts: [account] });
+    const order = [];
+    refreshMock.mockImplementation(async (a) => { order.push(`refresh ${a.id}`); return a; });
+    controlReply = (cmd) => { order.push(cmd); return Promise.resolve({ jobId: JOB, resumed: true, restarted: false }); };
+    try {
+      await mount({ onOpenAccounts: vi.fn() });
+      fire(ev({ state: 'needsSignIn', paused: true, needsSignIn: true }));
+      fireEvent.click(button('resume'));
+      await settled('mbox_upload_resume', [{ jobId: JOB }]);
+      expect(refreshMock).toHaveBeenCalledWith(account);
+      expect(order).toEqual([`refresh ${ACCT}`, 'mbox_upload_resume']);
+    } finally {
+      useMailStore.setState({ accounts: original });
+    }
   });
 
   it('with no account settings to open, a refused sign-in is a plain message', async () => {
@@ -375,8 +403,7 @@ describe('MboxUploadProgress', () => {
     expect(face(JOB)).toBe('running');
     expect(face('job-2')).toBe('paused');
     fireEvent.click(button('resume', 'job-2'));
-    await act(flush);
-    expect(calls('mbox_upload_resume')).toEqual([{ jobId: 'job-2' }]);
+    await settled('mbox_upload_resume', [{ jobId: 'job-2' }]);
   });
 
   it('asks again when the daemon restarts: a job cut off by it now reads as stopped', async () => {

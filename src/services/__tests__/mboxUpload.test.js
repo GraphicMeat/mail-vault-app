@@ -5,17 +5,19 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { send, open, listen, invalidateFolderStatus, store } = vi.hoisted(() => ({
+const { send, open, listen, invalidateFolderStatus, ensureFreshToken, store } = vi.hoisted(() => ({
   send: vi.fn(),
   open: vi.fn(),
   listen: vi.fn(),
   invalidateFolderStatus: vi.fn(),
+  ensureFreshToken: vi.fn(),
   store: { state: {} },
 }));
 vi.mock('../transport.js', () => ({ send: (...a) => send(...a) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => open(...a) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listen(...a) }));
 vi.mock('../workflows/folderStatus', () => ({ invalidateFolderStatus: (...a) => invalidateFolderStatus(...a) }));
+vi.mock('../authUtils', () => ({ ensureFreshToken: (...a) => ensureFreshToken(...a) }));
 vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => store.state } }));
 
 const upload = await import('../mboxUpload.js');
@@ -29,6 +31,7 @@ beforeEach(() => {
   open.mockReset();
   listen.mockReset();
   invalidateFolderStatus.mockReset();
+  ensureFreshToken.mockReset();
   store.state = {};
   for (const id of ['acct-a', 'acct-b']) takeForcedMailboxRefetch(id);
 });
@@ -97,7 +100,7 @@ describe('the routes', () => {
 describe('resume', () => {
   it('asks the daemon once, with no path, when it can read the file', async () => {
     send.mockResolvedValue({ jobId: 'j1', resumed: true, restarted: false });
-    await expect(upload.resume('j1')).resolves.toMatchObject({ resumed: true });
+    await expect(upload.resume({ jobId: 'j1' })).resolves.toMatchObject({ resumed: true });
     expect(send.mock.calls).toEqual([['mbox_upload_resume', { jobId: 'j1' }]]);
     expect(open).not.toHaveBeenCalled();
   });
@@ -105,7 +108,7 @@ describe('resume', () => {
   it('asks for the file again when the daemon cannot read it, and resumes with that path', async () => {
     send.mockRejectedValueOnce(new Error(UNREADABLE)).mockResolvedValueOnce({ jobId: 'j1', resumed: true });
     open.mockResolvedValue('/Users/me/Downloads/Takeout.mbox');
-    await expect(upload.resume('j1')).resolves.toMatchObject({ resumed: true });
+    await expect(upload.resume({ jobId: 'j1' })).resolves.toMatchObject({ resumed: true });
     expect(open).toHaveBeenCalledTimes(1);
     expect(open.mock.calls[0][0]).toMatchObject({ multiple: false, filters: [{ extensions: ['mbox'] }] });
     expect(send.mock.calls).toEqual([
@@ -117,17 +120,55 @@ describe('resume', () => {
   it('does nothing more when that pick is cancelled', async () => {
     send.mockRejectedValueOnce(new Error(UNREADABLE));
     open.mockResolvedValue(null);
-    await expect(upload.resume('j1')).resolves.toBe(null);
+    await expect(upload.resume({ jobId: 'j1' })).resolves.toBe(null);
     expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('never asks for the file over any other refusal, or when it was given a path', async () => {
     send.mockRejectedValueOnce(new Error('E_MBOX_UPLOAD_SIGN_IN: keychain'));
-    await expect(upload.resume('j1')).rejects.toThrow(/^E_MBOX_UPLOAD_SIGN_IN:/);
+    await expect(upload.resume({ jobId: 'j1' })).rejects.toThrow(/^E_MBOX_UPLOAD_SIGN_IN:/);
     send.mockRejectedValueOnce(new Error(UNREADABLE));
-    await expect(upload.resume('j1', '/picked/a.mbox')).rejects.toThrow(/^Failed to read mbox file/);
+    await expect(upload.resume({ jobId: 'j1', sourcePath: '/picked/a.mbox' })).rejects.toThrow(/^Failed to read mbox file/);
     expect(send.mock.calls[1]).toEqual(['mbox_upload_resume', { jobId: 'j1', sourcePath: '/picked/a.mbox' }]);
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+// The daemon never refreshes an OAuth token: a job held for a refused sign-in
+// re-reads the stored credentials and holds again on the same expired token.
+// So the app refreshes the account's token, where the daemon reads it, first.
+describe('the account\'s sign-in, before a start or a resume', () => {
+  const GMAIL = { id: 'acct-a', email: 'me@gmail.test', authType: 'oauth2', oauth2RefreshToken: 'r', oauth2ExpiresAt: 1 };
+  const order = [];
+  beforeEach(() => {
+    order.length = 0;
+    store.state = { accounts: [GMAIL, { id: 'acct-b', email: 'me@plain.test' }] };
+    ensureFreshToken.mockImplementation(async (a) => { order.push(`refresh ${a.id}`); return a; });
+    send.mockImplementation(async (cmd) => { order.push(cmd); return {}; });
+  });
+
+  it('refreshes the token of the job\'s account before the resume goes to the daemon', async () => {
+    await upload.resume({ jobId: 'j1', accountId: 'acct-a' });
+    expect(ensureFreshToken).toHaveBeenCalledWith(GMAIL);
+    expect(order).toEqual(['refresh acct-a', 'mbox_upload_resume']);
+  });
+
+  it('refreshes it before a start too, with the store\'s account', async () => {
+    await upload.start({ sourcePath: '/x.mbox', accountId: 'acct-a', mode: 'server', mailbox: 'INBOX', useLabels: false });
+    expect(order).toEqual(['refresh acct-a', 'import_mbox']);
+    expect(send).toHaveBeenCalledWith('import_mbox', { sourcePath: '/x.mbox', accountId: 'acct-a', mode: 'server', mailbox: 'INBOX', useLabels: false });
+  });
+
+  it('a refresh that fails still sends the resume: the daemon says what is wrong', async () => {
+    ensureFreshToken.mockImplementation(async () => { order.push('refresh failed'); throw new Error('invalid_grant'); });
+    await upload.resume({ jobId: 'j1', accountId: 'acct-a' });
+    expect(order).toEqual(['refresh failed', 'mbox_upload_resume']);
+  });
+
+  it('an account the store does not know goes straight to the daemon', async () => {
+    await upload.resume({ jobId: 'j1', accountId: 'gone' });
+    expect(ensureFreshToken).not.toHaveBeenCalled();
+    expect(order).toEqual(['mbox_upload_resume']);
   });
 });
 

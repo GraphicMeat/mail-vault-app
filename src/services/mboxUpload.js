@@ -11,7 +11,26 @@ import { forceMailboxRefetch } from './workflows/helpers/mailboxRefetch';
  * shows what it says.
  */
 
-export const start = (params) => send('import_mbox', params);
+/**
+ * The daemon never refreshes an OAuth token itself (a job held for a refused
+ * sign-in re-reads the stored credentials and nothing more), so before a start
+ * or a resume the app refreshes the account's token where the daemon reads it:
+ * ensureFreshToken writes it to the keychain, and leaves a password account
+ * and a token still fresh alone. A refresh that fails is the daemon's to
+ * report, as a refused sign-in.
+ */
+async function freshToken(accountId) {
+  const { useMailStore } = await import('../stores/mailStore');
+  const account = (useMailStore.getState().accounts || []).find((a) => a.id === accountId);
+  if (!account) return;
+  const { ensureFreshToken } = await import('./authUtils');
+  await ensureFreshToken(account).catch((e) => console.warn('[mboxUpload] token refresh failed:', e?.message || e));
+}
+
+export async function start(params) {
+  await freshToken(params.accountId);
+  return send('import_mbox', params);
+}
 /** Every job the daemon holds or has a journal of. Rejects when it cannot say. */
 export const status = () => send('mbox_upload_status', {}).then((r) => r?.jobs || []);
 export const pause = (jobId) => send('mbox_upload_pause', { jobId });
@@ -60,7 +79,8 @@ const UNREADABLE = 'Failed to read mbox file';
  * again and the daemon gets that path. Resolves null when the pick is
  * cancelled. A caller that just picked the file passes it along instead.
  */
-export async function resume(jobId, sourcePath) {
+export async function resume({ jobId, accountId, sourcePath }) {
+  await freshToken(accountId);
   try {
     return await send('mbox_upload_resume', sourcePath ? { jobId, sourcePath } : { jobId });
   } catch (e) {

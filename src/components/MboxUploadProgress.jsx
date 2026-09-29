@@ -121,13 +121,13 @@ export function MboxUploadProgress({ onOpenAccounts }) {
     },
   );
   const controls = {
-    pause: (id) => act(id, () => upload.pause(id)),
-    resume: (id) => act(id, () => upload.resume(id)),
-    cancel: (id) => act(id, () => upload.cancel(id)),
+    pause: ({ jobId }) => act(jobId, () => upload.pause(jobId)),
+    resume: ({ jobId, accountId }) => act(jobId, () => upload.resume({ jobId, accountId })),
+    cancel: ({ jobId }) => act(jobId, () => upload.cancel(jobId)),
     // A journal with no worker sends no event: the row goes on the answer.
-    discard: (id) => act(id, () => upload.discard(id).then(() => drop(id))),
-    dismiss: drop,
-    signIn: onOpenAccounts,
+    discard: ({ jobId }) => act(jobId, () => upload.discard(jobId).then(() => drop(jobId))),
+    dismiss: ({ jobId }) => drop(jobId),
+    signIn: onOpenAccounts && (({ accountId }) => onOpenAccounts(accountId)),
   };
 
   const list = Object.values(jobs);
@@ -162,7 +162,7 @@ function UploadRow({ job, failed, controls }) {
   const live = f === 'running' || f === 'throttled';
   const held = f === 'paused' || f === 'needsSignIn';
   const btn = (name, label, onClick, variant = 'secondary') => (
-    <Button key={name} variant={variant} size="xs" data-testid={`mbox-upload-${name}`} onClick={() => onClick(id)}>{label}</Button>
+    <Button key={name} variant={variant} size="xs" data-testid={`mbox-upload-${name}`} onClick={() => onClick(job)}>{label}</Button>
   );
 
   return (
@@ -173,7 +173,7 @@ function UploadRow({ job, failed, controls }) {
         {/* Only this line is announced, and it changes only with the state. */}
         <p role="status" aria-live="polite" className="flex-1 min-w-0 font-medium text-mail-text break-words">{title}</p>
         {f === 'done' && (
-          <Button variant="ghost" icon size="xs" aria-label={t('common.close')} data-testid="mbox-upload-dismiss" onClick={() => controls.dismiss(id)}>
+          <Button variant="ghost" icon size="xs" aria-label={t('common.close')} data-testid="mbox-upload-dismiss" onClick={() => controls.dismiss(job)}>
             <X size={14} className="text-mail-text-muted" />
           </Button>
         )}
@@ -198,7 +198,7 @@ function UploadRow({ job, failed, controls }) {
       {failed && <p className="mt-1 text-xs text-mail-danger">{t(failed)}</p>}
       {f !== 'done' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {job.needsSignIn && controls.signIn && btn('sign-in', t('mboxUpload.signIn'), () => controls.signIn(job.accountId))}
+          {job.needsSignIn && controls.signIn && btn('sign-in', t('mboxUpload.signIn'), controls.signIn)}
           {live && btn('pause', t('mboxUpload.pause'), controls.pause)}
           {(held || f === 'stopped') && btn('resume', t('common.resume'), controls.resume, 'primary')}
           {(live || held) && btn('cancel', t('common.cancel'), controls.cancel, 'ghost')}

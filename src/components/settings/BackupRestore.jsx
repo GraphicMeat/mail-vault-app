@@ -274,7 +274,7 @@ export default function BackupRestore() {
     const { sourcePath, resumable } = mboxPick;
     setMboxPick(null);
     try {
-      await mboxUpload.resume(resumable.jobId, sourcePath);
+      await mboxUpload.resume({ jobId: resumable.jobId, accountId: resumable.options.accountId, sourcePath });
     } catch (error) {
       console.error('MBOX upload resume error:', error);
       alert(t(mboxUpload.errorKey(error)));
