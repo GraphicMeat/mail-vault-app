@@ -22,7 +22,9 @@
 //!   message (its outcome and a content fingerprint), so a crash between an
 //!   APPEND and the next checkpoint costs no duplicate on resume, with or
 //!   without a Message-ID: the resumed reader meets that message again and
-//!   the tail answers for it. A changed file (path, size or mtime) starts
+//!   the tail answers for it. A checkpoint rewrites the tail with only the
+//!   entries still ahead of the new offset (a resumed run's unreached ones),
+//!   so a second crash keeps them too. A changed file (path, size or mtime) starts
 //!   over from byte 0; the pipeline's server-side dedupe skips what landed.
 //!   Journals are listed by `mbox_upload_status` and never resumed unasked.
 //! - **Failures.** A transient one (throttling, a lost connection) is tried
@@ -998,25 +1000,34 @@ impl Runner {
         }
     }
 
-    /// The offset, counters and folders, durably; then the tail starts over
-    /// (every message in it is now behind the offset). A journal that will
-    /// not write keeps its tail.
+    /// The offset, counters and folders, durably; then the tail starts over.
+    /// A journal that will not write keeps its tail.
     fn checkpoint(&mut self, state: &str) {
         self.keep_folders();
         self.journal.state = state.to_string();
         self.journal.updated_at = now_ms();
         match write_journal(&self.state.app_dir, &self.journal) {
-            Ok(()) => {
-                if let Some(tail) = &self.tail {
-                    if let Err(e) = tail.set_len(0) {
-                        warn!("[mbox_upload] {}: job {}'s tail was not cleared: {e}", self.journal.account_id, self.job.id);
-                    }
-                }
-            }
+            Ok(()) => self.restart_tail(),
             Err(e) => warn!("[mbox_upload] {}: job {} not checkpointed: {e}", self.journal.account_id, self.job.id),
         }
         self.since_checkpoint = 0;
         self.checkpointed = Instant::now();
+    }
+
+    /// The tail after a checkpoint: what this run finished is behind the
+    /// offset now and goes, but what an earlier run's tail still answers for
+    /// lies ahead of it and stays, or a second crash would lose it. Written
+    /// as a new file rather than cut: an append-only handle cannot be
+    /// truncated on Windows. Later lines follow on this handle.
+    fn restart_tail(&mut self) {
+        self.tail = None;
+        let ahead: String = self.done_before.iter().map(|(fp, done)| format!("{} {fp:016x}\n", done.letter())).collect();
+        let path = tail_path(&self.state.app_dir, &self.job.id);
+        let opened = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(path);
+        match opened.and_then(|mut file| file.write_all(ahead.as_bytes()).map(|()| file)) {
+            Ok(file) => self.tail = Some(file),
+            Err(e) => warn!("[mbox_upload] {}: job {} stops keeping its tail, a crash may upload a message twice: {e}", self.journal.account_id, self.job.id),
+        }
     }
 
     /// The job's progress as the app sees it; an event at most every
@@ -1555,8 +1566,10 @@ mod tests {
 
     /// Killed between APPENDs and before any checkpoint (the journal still at
     /// byte 0): the tail answers for what landed, with and without a
-    /// Message-ID. Without it the idless one would go up twice, and the ones
-    /// with an id would count as skipped.
+    /// Message-ID. Killed again during the resume, right after its first
+    /// checkpoint: the tail still holds the entries that run had not reached.
+    /// Without the tail (or with one a checkpoint emptied) the idless "chat
+    /// two" would go up twice, and the ones with an id would count as skipped.
     #[tokio::test]
     async fn a_crash_before_the_checkpoint_duplicates_nothing_with_or_without_a_message_id() {
         let crashing = Tuning { checkpoint_every: 1000, checkpoint_after: Duration::from_secs(3600), crash_after: Some(3), ..fast() };
@@ -1571,6 +1584,17 @@ mod tests {
         assert_eq!(rig.server.count_commands("APPEND"), 3);
         let listed = status_of(&rig, &job).await;
         assert_eq!((listed["live"].clone(), listed["state"].clone()), (json!(false), json!(PAUSED)), "cut off while running reads as paused");
+
+        // The resume checkpoints after its first message (answered by the
+        // tail), then dies too.
+        *lock(&rig.s.mbox_uploads.tuning) = Some(Tuning { checkpoint_every: 1, crash_after: Some(1), ..fast() });
+        control(&rig, "mbox_upload_resume", &job).await;
+        wait_until_not_live(&rig, &job).await;
+        let journal = journal_of(&rig, &job);
+        assert_eq!(journal.uploaded, 1, "checkpointed past the first message");
+        assert!(journal.offset > 0);
+        assert_eq!(read_tail(&rig.s.app_dir, &job).len(), 2, "the two entries still ahead of the offset stay");
+        assert_eq!(rig.server.count_commands("APPEND"), 3, "the tail answered, nothing went up");
 
         *lock(&rig.s.mbox_uploads.tuning) = Some(Tuning { crash_after: None, ..fast() });
         control(&rig, "mbox_upload_resume", &job).await;
