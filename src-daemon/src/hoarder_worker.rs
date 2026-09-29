@@ -24,7 +24,7 @@
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
 use crate::handlers::imap::{auto_cache, email_date_ms, fetch_policy, now_ms, BODY_FETCH_TIMEOUT};
-use crate::imap::{self, ImapConfig, MailboxInfo};
+use crate::imap::{self, has_attr, ImapConfig, MailboxInfo};
 use crate::server::DaemonState;
 use futures::FutureExt;
 use mailvault_core::custody::cache;
@@ -308,18 +308,6 @@ pub(crate) struct Outcome {
     pub fetched: usize,
     pub failed: usize,
     pub stopped: Option<String>,
-}
-
-/// Whether a LIST attribute is `name` (no backslash), whole token.
-/// `MailboxInfo.flags` holds the `{:?}` of the parser's `NameAttribute`:
-/// `All`, `Flagged`, `Extension("\\Important")`.
-fn has_attr(flags: &[String], name: &str) -> bool {
-    flags.iter().any(|f| {
-        f == name
-            || f.strip_prefix("Extension(\"")
-                .and_then(|rest| rest.strip_suffix("\")"))
-                .is_some_and(|attr| attr.trim_start_matches('\\').eq_ignore_ascii_case(name))
-    })
 }
 
 /// The folders to hoard, in order: every selectable one, except that with
@@ -926,14 +914,5 @@ mod tests {
         assert_eq!(mock.count_commands("Important"), 0);
         let selects: Vec<String> = mock.commands().into_iter().filter(|c| c.to_uppercase().contains(" SELECT ")).collect();
         assert!(selects.last().is_some_and(|c| c.contains("All Mail")), "{selects:?}");
-    }
-
-    #[test]
-    fn list_attributes_match_as_whole_tokens() {
-        let flags = |f: &[&str]| f.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(has_attr(&flags(&["All"]), "All"));
-        assert!(has_attr(&flags(&["Extension(\"\\\\Important\")"]), "Important"));
-        assert!(!has_attr(&flags(&["Extension(\"\\\\AllMail\")"]), "All"));
-        assert!(!has_attr(&flags(&["Flagged"]), "All"));
     }
 }

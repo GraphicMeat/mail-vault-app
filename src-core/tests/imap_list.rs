@@ -105,6 +105,78 @@ async fn gmail_labels_named_like_a_role_do_not_compete_with_the_declared_one() {
     assert_eq!(resolve_mailbox_path("Deleted Items", &boxes).as_deref(), Some("[Gmail]/Bin"));
 }
 
+/// Gmail as it LISTs: All Mail is `\All` and nothing else. The import fallback
+/// finds it in the raw attributes the listing already carries (`flags`, saved
+/// into the cached mailbox list as is), so `special_use` stays what every
+/// consumer of it has always seen: nothing.
+#[async_std::test]
+async fn gmail_all_mail_resolves_through_the_flags_and_keeps_no_special_use() {
+    use mailvault_core::takeout::{folder_refs_from_listing, Role};
+
+    let nc = "\\HasNoChildren";
+    let server = MockImap::start(Scenario::new().mailboxes(vec![
+        Mailbox::new("INBOX"),
+        Mailbox::new("Work").with_attrs(&[nc]),
+        Mailbox::new("[Gmail]").with_attrs(&["\\HasChildren", "\\Noselect"]),
+        Mailbox::new("[Gmail]/All Mail").with_attrs(&[nc, "\\All"]),
+        Mailbox::new("[Gmail]/Drafts").with_attrs(&[nc, "\\Drafts"]),
+        Mailbox::new("[Gmail]/Important").with_attrs(&[nc, "\\Important"]),
+        Mailbox::new("[Gmail]/Sent Mail").with_attrs(&[nc, "\\Sent"]),
+        Mailbox::new("[Gmail]/Spam").with_attrs(&[nc, "\\Junk"]),
+        Mailbox::new("[Gmail]/Starred").with_attrs(&[nc, "\\Flagged"]),
+        Mailbox::new("[Gmail]/Trash").with_attrs(&[nc, "\\Trash"]),
+    ]));
+    let mut sess = session(&server).await;
+    let boxes = list_mailboxes(&mut sess).await.expect("list");
+
+    // The value every existing consumer sees is unchanged: no role, declared or guessed.
+    assert_eq!(role(&boxes, "[Gmail]/All Mail"), (None, false));
+    assert_eq!(role(&boxes, "[Gmail]/Starred"), (None, false));
+    assert_eq!(role(&boxes, "[Gmail]/Sent Mail"), (Some("\\Sent".into()), false));
+
+    // The cached mailbox list is the app's copy of this listing, saved as is.
+    let cache = serde_json::json!({ "mailboxes": boxes, "fetchedAt": 1 }).to_string();
+    let all_mail = serde_json::to_string(find(&boxes, "[Gmail]/All Mail")).unwrap();
+    eprintln!("cached All Mail entry: {all_mail}");
+    assert!(all_mail.contains(r#""specialUse":null"#) && all_mail.contains(r#""All""#), "{all_mail}");
+
+    let refs = folder_refs_from_listing(&cache);
+    let roles: Vec<(&str, Role)> = refs.iter().map(|f| (f.path.as_str(), f.role)).collect();
+    assert_eq!(
+        roles,
+        [
+            ("INBOX", Role::Inbox),
+            ("Work", Role::Other),
+            ("[Gmail]/All Mail", Role::AllMail),
+            ("[Gmail]/Drafts", Role::Drafts),
+            ("[Gmail]/Important", Role::Other),
+            ("[Gmail]/Sent Mail", Role::Sent),
+            ("[Gmail]/Spam", Role::Spam),
+            ("[Gmail]/Starred", Role::Other),
+            ("[Gmail]/Trash", Role::Trash),
+        ],
+        "the unselectable [Gmail] parent is left out"
+    );
+    assert!(refs.iter().all(|f| f.delim == '/'));
+}
+
+#[async_std::test]
+async fn a_server_without_all_mail_lists_its_archive_as_archive_and_no_all_mail() {
+    use mailvault_core::takeout::{folder_refs_from_listing, Role};
+
+    let server = MockImap::start(Scenario::new().mailboxes(vec![
+        Mailbox::new("INBOX"),
+        Mailbox::new("Archive").with_attrs(&["\\HasNoChildren", "\\Archive"]),
+        Mailbox::new("Sent").with_attrs(&["\\HasNoChildren", "\\Sent"]),
+    ]));
+    let mut sess = session(&server).await;
+    let boxes = list_mailboxes(&mut sess).await.expect("list");
+    let refs = folder_refs_from_listing(&serde_json::json!({ "mailboxes": boxes }).to_string());
+
+    let roles: Vec<(&str, Role)> = refs.iter().map(|f| (f.path.as_str(), f.role)).collect();
+    assert_eq!(roles, [("INBOX", Role::Inbox), ("Archive", Role::Archive), ("Sent", Role::Sent)]);
+}
+
 #[async_std::test]
 async fn without_special_use_the_name_guess_stays_and_says_it_is_a_guess() {
     let server = MockImap::start(Scenario::new().without_cap("SPECIAL-USE").mailboxes(vec![

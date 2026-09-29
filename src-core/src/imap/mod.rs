@@ -873,6 +873,18 @@ fn declared_special_use(attrs: &[String], path: &str) -> Option<String> {
     path.eq_ignore_ascii_case("INBOX").then(|| "\\Inbox".to_string())
 }
 
+/// Whether a LIST attribute is `name` (no backslash), whole token.
+/// `MailboxInfo.flags` holds the `{:?}` of the parser's `NameAttribute`:
+/// `All`, `Flagged`, `Extension("\\Important")`.
+pub fn has_attr(flags: &[String], name: &str) -> bool {
+    flags.iter().any(|f| {
+        f == name
+            || f.strip_prefix("Extension(\"")
+                .and_then(|rest| rest.strip_suffix("\")"))
+                .is_some_and(|attr| attr.trim_start_matches('\\').eq_ignore_ascii_case(name))
+    })
+}
+
 /// A role read off the name, for servers that declare none (no SPECIAL-USE).
 fn guessed_special_use(path: &str) -> Option<String> {
     let p = path.to_lowercase();
@@ -3759,6 +3771,35 @@ mod resolve_mailbox_path_tests {
         let mut container = mb("[Google Mail]/Sent Mail", Some("\\Sent"));
         container.noselect = true;
         assert_eq!(resolve_mailbox_path("Sent", &[mb("INBOX", Some("\\Inbox")), container]), None);
+    }
+}
+
+#[cfg(test)]
+mod list_attr_tests {
+    use super::*;
+
+    #[test]
+    fn list_attributes_match_as_whole_tokens() {
+        let flags = |f: &[&str]| f.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(has_attr(&flags(&["All"]), "All"));
+        assert!(has_attr(&flags(&["Extension(\"\\\\Important\")"]), "Important"));
+        assert!(!has_attr(&flags(&["Extension(\"\\\\AllMail\")"]), "All"));
+        assert!(!has_attr(&flags(&["Flagged"]), "All"));
+    }
+
+    /// Gmail's All Mail (`\All`) keeps no special use, declared or guessed:
+    /// every consumer of `special_use` (folder lock, icon, migration map,
+    /// contacts filter) sees what it saw before the import fallback learned
+    /// to find All Mail through `flags` instead.
+    #[test]
+    fn all_mail_gets_no_special_use_from_its_attribute_or_its_name() {
+        let attrs = vec!["Extension(\"\\\\HasNoChildren\")".to_string(), "All".to_string()];
+        assert_eq!(declared_special_use(&attrs, "[Gmail]/All Mail"), None);
+        assert_eq!(declared_special_use(&attrs, "[Google Mail]/Alle Nachrichten"), None);
+        assert_eq!(guessed_special_use("[Gmail]/All Mail"), None);
+        // The server's other roles are read as before.
+        let sent = vec!["Sent".to_string()];
+        assert_eq!(declared_special_use(&sent, "[Gmail]/Sent Mail").as_deref(), Some("\\Sent"));
     }
 }
 

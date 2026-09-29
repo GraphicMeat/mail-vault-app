@@ -1,8 +1,12 @@
 //! Google Takeout label handling for MBOX import: read a message's
 //! `X-Gmail-Labels`, turn it into flags, and pick the one folder it belongs
-//! in. Pure functions; the caller supplies the folder list and does all I/O.
+//! in. Pure functions; the caller does all I/O and gets the folder list from
+//! `folder_refs_from_listing`.
 
+use crate::imap::has_attr;
 use crate::mime::decode_rfc2047;
+use crate::search_index::text::vault_dir_name;
+use serde_json::Value;
 
 /// What a folder is for. `AllMail` is Gmail's `\All`, `Archive` the plain
 /// archive folder of every other provider; both serve as the fallback home.
@@ -149,9 +153,69 @@ pub fn role_of_special_use(su: &str) -> Role {
     }
 }
 
+/// The folders of an account as the import sees them, read from its cached
+/// mailbox list (`custody::cache::load_mailboxes`): `{"mailboxes": [...]}`,
+/// the app's copy of the daemon's listing, saved as is. Empty when there is
+/// no usable list, which the caller reads as "folders unknown".
+///
+/// Roles come from `specialUse` (declared, or guessed where the listing
+/// already guesses one). Gmail's All Mail (`\All`) has none there and must not
+/// get one: every consumer of `specialUse` would see it. It is found in the
+/// raw LIST attributes the listing carries in `flags`. INBOX is Inbox by name
+/// (RFC 3501) for a stub that lacks the role.
+///
+/// `path` is the mailbox key the vault and custody use: the server path on
+/// IMAP, the storage key on Graph (its cached `path` already is one; `name` is
+/// the display word). `dir` is `vault_dir_name(path)`, the directory sync
+/// writes for that key on both. Unselectable folders are left out, and so is
+/// an entry with no path. A list emptied by a failed refresh gives way to the
+/// last known good one, as in the insights snapshot.
+pub fn folder_refs_from_listing(cached: &str) -> Vec<FolderRef> {
+    let mut out = Vec::new();
+    if let Ok(v) = serde_json::from_str::<Value>(cached) {
+        let list = if v.is_array() {
+            Some(&v)
+        } else {
+            v.get("mailboxes")
+                .filter(|a| a.as_array().is_some_and(|a| !a.is_empty()))
+                .or_else(|| v.get("lastKnownGoodMailboxes"))
+        };
+        if let Some(list) = list {
+            collect_folder_refs(list, &mut out);
+        }
+    }
+    out
+}
+
+/// The list is flat; the pre-flattening cache nested folders under their
+/// parent, so children are followed too.
+fn collect_folder_refs(list: &Value, out: &mut Vec<FolderRef>) {
+    for m in list.as_array().into_iter().flatten() {
+        if let Some(path) = m["path"].as_str().filter(|p| !p.is_empty()) {
+            if m["noselect"].as_bool() != Some(true) {
+                let flags: Vec<String> =
+                    m["flags"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(str::to_owned)).collect();
+                let role = match m["specialUse"].as_str().map_or(Role::Other, role_of_special_use) {
+                    Role::Other if has_attr(&flags, "All") => Role::AllMail,
+                    Role::Other if path.eq_ignore_ascii_case("INBOX") => Role::Inbox,
+                    role => role,
+                };
+                out.push(FolderRef {
+                    path: path.to_string(),
+                    dir: vault_dir_name(path),
+                    role,
+                    delim: m["delimiter"].as_str().and_then(|d| d.chars().next()).unwrap_or('/'),
+                });
+            }
+        }
+        collect_folder_refs(&m["children"], out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::{json, Value};
 
     fn fr(path: &str, role: Role, delim: char) -> FolderRef {
         FolderRef { path: path.into(), dir: path.replace(' ', "_"), role, delim }
@@ -509,5 +573,207 @@ mod tests {
             assert_eq!(role_of_special_use(su), role, "{su:?}");
         }
         assert_eq!(role_of_special_use("\\SENT"), Role::Sent);
+    }
+
+    // ---- folder_refs_from_listing ----
+
+    /// One cached IMAP entry as the daemon's `list_mailboxes` serializes it
+    /// (`flags` are the `{:?}` of the parser's attributes).
+    fn entry(path: &str, special_use: Option<&str>, flags: &[&str], delim: &str, noselect: bool) -> Value {
+        json!({
+            "name": path.rsplit(delim).next().unwrap(), "path": path, "specialUse": special_use,
+            "specialUseGuessed": false, "flags": flags, "delimiter": delim, "noselect": noselect, "children": [],
+        })
+    }
+
+    fn cached(mailboxes: Vec<Value>) -> String {
+        json!({ "mailboxes": mailboxes, "fetchedAt": 1720000000000_i64 }).to_string()
+    }
+
+    fn gmail_cache() -> String {
+        const NC: &str = "Extension(\"\\\\HasNoChildren\")";
+        cached(vec![
+            entry("INBOX", Some("\\Inbox"), &[NC], "/", false),
+            entry("[Gmail]", None, &["Extension(\"\\\\HasChildren\")", "NoSelect"], "/", true),
+            entry("[Gmail]/All Mail", None, &[NC, "All"], "/", false),
+            entry("[Gmail]/Drafts", Some("\\Drafts"), &[NC, "Drafts"], "/", false),
+            entry("[Gmail]/Sent Mail", Some("\\Sent"), &[NC, "Sent"], "/", false),
+            entry("[Gmail]/Spam", Some("\\Junk"), &[NC, "Junk"], "/", false),
+            entry("[Gmail]/Starred", None, &[NC, "Flagged"], "/", false),
+            entry("[Gmail]/Trash", Some("\\Trash"), &[NC, "Trash"], "/", false),
+            entry("Work", None, &[NC], "/", false),
+        ])
+    }
+
+    fn role_of<'a>(refs: &'a [FolderRef], path: &str) -> &'a FolderRef {
+        refs.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("{path:?} not in {refs:?}"))
+    }
+
+    /// The directory the vault writes for `path`, the way sync does.
+    fn sync_dir(path: &str) -> String {
+        let cur = crate::vault_files::cur_path(std::path::Path::new("/vault"), "acct", path);
+        cur.parent().unwrap().file_name().unwrap().to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn a_gmail_listing_resolves_every_role_including_all_mail() {
+        let refs = folder_refs_from_listing(&gmail_cache());
+        let want = |path: &str, dir: &str, role| FolderRef { path: path.into(), dir: dir.into(), role, delim: '/' };
+        assert_eq!(
+            refs,
+            vec![
+                want("INBOX", "INBOX", Role::Inbox),
+                want("[Gmail]/All Mail", "_Gmail__All_Mail", Role::AllMail),
+                want("[Gmail]/Drafts", "_Gmail__Drafts", Role::Drafts),
+                want("[Gmail]/Sent Mail", "_Gmail__Sent_Mail", Role::Sent),
+                want("[Gmail]/Spam", "_Gmail__Spam", Role::Spam),
+                want("[Gmail]/Starred", "_Gmail__Starred", Role::Other),
+                want("[Gmail]/Trash", "_Gmail__Trash", Role::Trash),
+                want("Work", "Work", Role::Other),
+            ],
+            "the unselectable [Gmail] parent is not a place to file mail"
+        );
+    }
+
+    #[test]
+    fn the_built_list_drives_home_folder_by_role_and_by_name() {
+        let refs = folder_refs_from_listing(&gmail_cache());
+        let sent = home_folder(&labs(&["Sent", "Important"]), &refs, false);
+        assert_eq!(sent, Home::Folder(role_of(&refs, "[Gmail]/Sent Mail").clone()));
+        let work = home_folder(&labs(&["Category Updates", "work"]), &refs, false);
+        assert_eq!(work, Home::Folder(role_of(&refs, "Work").clone()));
+        assert_eq!(home_folder(&labs(&["Important"]), &refs, false), Home::Fallback);
+    }
+
+    #[test]
+    fn a_non_gmail_listing_has_no_all_mail_and_its_archive_is_archive() {
+        const NC: &str = "Extension(\"\\\\HasNoChildren\")";
+        let refs = folder_refs_from_listing(&cached(vec![
+            entry("INBOX", Some("\\Inbox"), &[NC], ".", false),
+            entry("INBOX.Archive", Some("\\Archive"), &[NC, "Archive"], ".", false),
+            entry("INBOX.Sent", Some("\\Sent"), &[NC, "Sent"], ".", false),
+            entry("INBOX.Work", None, &[NC], ".", false),
+        ]));
+        assert_eq!(refs.len(), 4);
+        assert!(refs.iter().all(|f| f.role != Role::AllMail), "{refs:?}");
+        assert_eq!(role_of(&refs, "INBOX.Archive").role, Role::Archive);
+        assert_eq!(role_of(&refs, "INBOX.Archive").delim, '.');
+    }
+
+    #[test]
+    fn only_the_whole_all_attribute_makes_all_mail() {
+        let refs = folder_refs_from_listing(&cached(vec![
+            entry("A", None, &["Extension(\"\\\\AllMail\")"], "/", false),
+            entry("B", None, &["Flagged"], "/", false),
+            entry("C", None, &["Extension(\"\\\\All\")"], "/", false),
+            // A role the server declared beats the flag.
+            entry("D", Some("\\Archive"), &["All"], "/", false),
+        ]));
+        assert_eq!(role_of(&refs, "A").role, Role::Other);
+        assert_eq!(role_of(&refs, "B").role, Role::Other);
+        assert_eq!(role_of(&refs, "C").role, Role::AllMail);
+        assert_eq!(role_of(&refs, "D").role, Role::Archive);
+    }
+
+    #[test]
+    fn an_old_cache_without_flags_or_the_guess_field_still_loads() {
+        // The stubs the daemon and older builds wrote, and the app's placeholder.
+        let refs = folder_refs_from_listing(
+            &json!({"mailboxes": [
+                {"path": "INBOX"},
+                {"name": "Sent", "path": "Sent", "specialUse": "\\Sent"},
+                {"name": "Work", "path": "Work", "specialUse": null, "delimiter": null, "children": []},
+            ]})
+            .to_string(),
+        );
+        assert_eq!(
+            refs,
+            vec![
+                FolderRef { path: "INBOX".into(), dir: "INBOX".into(), role: Role::Inbox, delim: '/' },
+                FolderRef { path: "Sent".into(), dir: "Sent".into(), role: Role::Sent, delim: '/' },
+                FolderRef { path: "Work".into(), dir: "Work".into(), role: Role::Other, delim: '/' },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_guessed_role_counts_because_the_listing_already_guesses_it() {
+        let mut e = entry("Sent Items", Some("\\Sent"), &[], "/", false);
+        e["specialUseGuessed"] = json!(true);
+        let refs = folder_refs_from_listing(&cached(vec![e]));
+        assert_eq!(refs[0].role, Role::Sent);
+    }
+
+    #[test]
+    fn a_graph_listing_files_under_the_storage_key_not_the_display_name() {
+        // `graphFoldersToMailboxes`: `path` is the storage key, `name` the UI word.
+        let graph = |name: &str, path: &str, su: Option<&str>| {
+            json!({"name": name, "path": path, "specialUse": su, "flags": [], "delimiter": "/",
+                   "noselect": false, "children": [], "_graphFolderId": "AAMk"})
+        };
+        let refs = folder_refs_from_listing(&cached(vec![
+            graph("INBOX", "INBOX", Some("\\Inbox")),
+            graph("Gesendet", "Sent", Some("\\Sent")),
+            graph("Archiv", "Archive", Some("\\Archive")),
+            graph("Project X", "Project X", None),
+        ]));
+        let sent = role_of(&refs, "Sent");
+        assert_eq!((sent.dir.as_str(), sent.role, sent.delim), ("Sent", Role::Sent, '/'));
+        assert!(refs.iter().all(|f| f.path != "Gesendet"), "the display name is not a key");
+        assert_eq!(role_of(&refs, "Archive").role, Role::Archive);
+        // A key with a space is a sanitized directory, exactly as sync writes it.
+        assert_eq!(role_of(&refs, "Project X").dir, "Project_X");
+    }
+
+    #[test]
+    fn dir_is_the_directory_sync_writes_for_the_folder() {
+        for f in folder_refs_from_listing(&gmail_cache()) {
+            assert_eq!(f.dir, sync_dir(&f.path), "{}", f.path);
+        }
+        let refs = folder_refs_from_listing(&cached(vec![entry("Kunden/Übung & Co", None, &[], "/", false)]));
+        assert_eq!(refs[0].dir, sync_dir("Kunden/Übung & Co"));
+    }
+
+    #[test]
+    fn each_folder_keeps_its_own_delimiter_and_a_missing_one_is_a_slash() {
+        let refs = folder_refs_from_listing(&json!({"mailboxes": [
+            {"path": "A", "delimiter": "."}, {"path": "B", "delimiter": null},
+            {"path": "C"}, {"path": "D", "delimiter": ""}, {"path": "E", "delimiter": "\\"},
+        ]}).to_string());
+        let delims: Vec<char> = refs.iter().map(|f| f.delim).collect();
+        assert_eq!(delims, ['.', '/', '/', '/', '\\']);
+    }
+
+    #[test]
+    fn the_last_known_good_list_stands_in_for_an_emptied_one() {
+        let good = vec![entry("INBOX", Some("\\Inbox"), &[], "/", false), entry("Work", None, &[], "/", false)];
+        let empty_now = json!({"mailboxes": [], "lastKnownGoodMailboxes": good}).to_string();
+        assert_eq!(folder_refs_from_listing(&empty_now).len(), 2);
+        // A current list wins over the snapshot.
+        let both = json!({"mailboxes": [good[0].clone()], "lastKnownGoodMailboxes": good}).to_string();
+        assert_eq!(folder_refs_from_listing(&both).len(), 1);
+    }
+
+    #[test]
+    fn a_bare_array_and_a_nested_tree_are_read_too() {
+        let bare = json!([entry("INBOX", Some("\\Inbox"), &[], "/", false)]).to_string();
+        assert_eq!(folder_refs_from_listing(&bare).len(), 1);
+        // The pre-flattening cache nested children under their parent.
+        let nested = json!({"mailboxes": [
+            {"path": "Work", "delimiter": "/", "children": [{"path": "Work/Clients", "delimiter": "/", "children": []}]},
+        ]})
+        .to_string();
+        let paths: Vec<String> = folder_refs_from_listing(&nested).into_iter().map(|f| f.path).collect();
+        assert_eq!(paths, ["Work", "Work/Clients"]);
+    }
+
+    #[test]
+    fn no_usable_listing_yields_no_folders() {
+        for raw in ["", "not json", "null", "{}", "[]", r#"{"mailboxes": []}"#, r#"{"mailboxes": "x"}"#, "42"] {
+            assert!(folder_refs_from_listing(raw).is_empty(), "{raw:?}");
+        }
+        // An entry with no path names no folder.
+        let refs = folder_refs_from_listing(&json!({"mailboxes": [{"name": "x"}, {"path": ""}, {"path": "Ok"}]}).to_string());
+        assert_eq!(refs.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["Ok"]);
     }
 }
