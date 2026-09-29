@@ -555,8 +555,10 @@ mod tests {
     }
 
     /// Mode 3: a new folder of its own with its marker, every message in it
-    /// at an import uid with `A` only (labels are not read in this mode), and
-    /// nothing in the account's other folders.
+    /// at an import uid, archived, and nothing in the account's other
+    /// folders: labels never pick a folder here. A message that has labels
+    /// keeps its Starred and read state (`Work,Starred,Opened`: `AFS`); one
+    /// with none stays `A` only.
     #[tokio::test]
     async fn a_folder_import_fills_a_new_marked_folder_from_the_import_base() {
         let (v, _a, s) = st(true);
@@ -572,10 +574,9 @@ mod tests {
 
         let files = files_in(v.path(), &fdir);
         assert_eq!(files.iter().map(|f| f.0).collect::<Vec<_>>(), vec![IMPORT_UID_BASE, IMPORT_UID_BASE + 1]);
-        for (_, file, _) in &files {
-            assert_eq!(mailvault_core::maildir::info_flags(file), Some("A.eml"), "{file}");
-        }
-        assert_eq!((count_in(v.path(), "Work"), count_in(v.path(), "INBOX")), (0, 0), "labels are not read in this mode");
+        let flags: Vec<Option<&str>> = files.iter().map(|(_, file, _)| mailvault_core::maildir::info_flags(file)).collect();
+        assert_eq!(flags, vec![Some("AFS.eml"), Some("A.eml")], "{files:?}");
+        assert_eq!((count_in(v.path(), "Work"), count_in(v.path(), "INBOX")), (0, 0), "labels never pick a folder in this mode");
 
         let marker = local_folder::read_marker(&account_dir(v.path()), &fdir).unwrap().expect("marked");
         let source = Path::new(&src).file_name().unwrap().to_string_lossy().into_owned();

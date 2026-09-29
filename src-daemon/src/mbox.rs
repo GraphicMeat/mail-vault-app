@@ -68,6 +68,10 @@ pub struct MboxImportResult {
     /// not written again.
     #[serde(rename = "skippedCount")]
     pub skipped_count: u32,
+    /// Messages not written: their folder could not be written (it is then
+    /// skipped for the rest of the file), or the disk filled up.
+    #[serde(rename = "failedCount")]
+    pub failed_count: u32,
     /// Per destination folder, in the order the import first routed to it.
     pub folders: Vec<FolderCount>,
     /// True when the messages were routed by the account's folder list
@@ -406,7 +410,64 @@ pub fn import_mbox(
 
     let file = std::fs::File::open(&source_path).map_err(|e| format!("Failed to read mbox file: {}", e))?;
     let bytes_total = file.metadata().map(|m| m.len()).unwrap_or(0);
-    import_from(state, std::io::BufReader::with_capacity(1 << 20, file), bytes_total, account_id, mailbox, use_labels, emit)
+    let labels = if use_labels { Labels::Route } else { Labels::Ignore };
+    import_from(state, std::io::BufReader::with_capacity(1 << 20, file), bytes_total, account_id, mailbox, labels, emit)
+}
+
+/// How an import reads each message's `X-Gmail-Labels`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Labels {
+    /// Not at all: every message into `mailbox`, archived only (mode 2
+    /// without labels).
+    Ignore,
+    /// Its home folder among the account's and its flags (mode 2 with labels).
+    Route,
+    /// Its flags only, for a message that has labels: every message still
+    /// goes into `mailbox` (mode 3, so a Takeout keeps its read and starred
+    /// state). A message with none stays archived only.
+    FlagsOnly,
+}
+
+/// A message write that failed inside the vault gate: its folder's problem
+/// (the import goes on without that folder), or the disk's (full, or over
+/// quota: nothing more can land anywhere, so the import stops).
+enum WriteFail {
+    Folder(String),
+    Disk(String),
+}
+
+impl WriteFail {
+    fn of(what: &str, e: std::io::Error) -> Self {
+        let text = format!("{what}: {e}");
+        match e.kind() {
+            std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded => WriteFail::Disk(text),
+            _ => WriteFail::Folder(text),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// A write failure a test plants for one folder dir (a full disk, which
+    /// no test can make for real), met right before the message write.
+    static WRITE_FAULT: std::cell::RefCell<Option<(String, std::io::ErrorKind)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Uids per custody unit when a folder's cached rows are read: the store's
+/// lock, which every foreground header read shares, is held for one chunk.
+const CACHE_CHUNK: usize = 500;
+
+/// Every cached header row of `mailbox`, handed to `f` one chunk of uids at a
+/// time, each chunk read in its own custody unit. The same reader as the
+/// upload pipeline's (`mbox_upload::cached_rows`, private there).
+fn cached_rows(state: &DaemonState, account: &str, mailbox: &str, chunk: usize, mut f: impl FnMut(Vec<Value>)) -> Result<(), String> {
+    use mailvault_core::custody::cache;
+    let mut uids: Vec<u32> = crate::custody::with_conn(state, |c| cache::uid_set(c, account, mailbox))?.into_iter().collect();
+    uids.sort_unstable();
+    for part in uids.chunks(chunk.max(1)) {
+        f(crate::custody::with_conn(state, |c| cache::load_by_uids(c, account, mailbox, part))?);
+    }
+    Ok(())
 }
 
 /// One folder an import writes into, set up on the first message routed to it.
@@ -423,26 +484,37 @@ struct Dest {
     /// The vault registry holds this folder, so it can say whether a uid is
     /// taken without a directory scan. Cleared when it stops answering.
     listed: bool,
+    /// A write here failed for a reason of the folder's own: the rest of its
+    /// messages count as failed without another try.
+    broken: bool,
     imported: u32,
     skipped: u32,
 }
 
 impl Dest {
     /// Imports take their own range, past any uid a server hands out, and
-    /// continue after the last import already in the folder. The server's
-    /// listing is read here, before any write, so custody is never taken
-    /// under the mailbox lock.
+    /// continue after the last import already in the folder, or named in its
+    /// rehome ledger (an import copy set aside there never gives its uid to
+    /// another message). The server's listing is read here, before any write
+    /// and a chunk per custody unit, so custody is never taken under the
+    /// mailbox lock and never held for a whole folder.
     fn open(state: &Arc<DaemonState>, account_dir: &Path, account_id: &str, mailbox: String, dir: String) -> Self {
+        let folder = account_dir.join(&dir);
         let mut max_uid: u32 = IMPORT_UID_BASE - 1;
-        for f in std::fs::read_dir(account_dir.join(&dir).join("cur")).into_iter().flatten().flatten() {
+        for f in std::fs::read_dir(folder.join("cur")).into_iter().flatten().flatten() {
             if let Some(uid) = name_uid(&f.file_name().to_string_lossy()) {
                 max_uid = max_uid.max(uid);
             }
         }
-        let server = crate::custody::with_conn(state, |c| mailvault_core::custody::cache::all_headers(c, account_id, &mailbox))
-            .map(|rows| import_rehome::ServerView::from_headers(&rows))
-            .unwrap_or_default();
-        Dest { mailbox, dir, max_uid, server, known: None, listed: false, imported: 0, skipped: 0 }
+        if let Some(recorded) = import_rehome::highest_recorded_import_uid(&folder) {
+            max_uid = max_uid.max(recorded);
+        }
+        let mut server = import_rehome::ServerView::default();
+        if let Err(e) = cached_rows(state, account_id, &mailbox, CACHE_CHUNK, |rows| server.extend(&rows)) {
+            warn!("import_mbox: the header cache of a folder is unreadable, its server rows are not checked: {e}");
+            server = import_rehome::ServerView::default();
+        }
+        Dest { mailbox, dir, max_uid, server, known: None, listed: false, broken: false, imported: 0, skipped: 0 }
     }
 }
 
@@ -466,7 +538,7 @@ fn import_from(
     bytes_total: u64,
     account_id: String,
     mailbox: String,
-    use_labels: bool,
+    labels_mode: Labels,
     emit: impl Fn(&str, Value),
 ) -> Result<MboxImportResult, String> {
     // Decision 10: a single up-front read-only check of the vault; the actual
@@ -481,7 +553,7 @@ fn import_from(
     // Folder dirs come from core's `vault_dir_name`, the function sync writes
     // with, which also keeps a `.` or `..` name inside the account dir. With
     // no folder list every message goes to `mailbox`.
-    let folders = if use_labels { account_folders(state, &account_id)? } else { Vec::new() };
+    let folders = if labels_mode == Labels::Route { account_folders(state, &account_id)? } else { Vec::new() };
     let fallback_dir = vault_dir_name(&mailbox);
     // One destination per vault dir, never per name: two names that share a
     // dir must share its uid allocator.
@@ -494,11 +566,13 @@ fn import_from(
 
     let mut email_count: u32 = 0;
     let mut skipped_count: u32 = 0;
+    let mut failed_count: u32 = 0;
+    // The first write that failed: the run's error when nothing landed.
     let mut write_error: Option<String> = None;
 
     let streamed = for_each_mbox_message(reader, |msg_raw, bytes_done| {
         let unescaped = mbox_unescape_from(msg_raw);
-        let labels = if use_labels { takeout::labels_of(&unescaped) } else { Vec::new() };
+        let labels = if labels_mode == Labels::Ignore { Vec::new() } else { takeout::labels_of(&unescaped) };
         let (name, dir) = match takeout::home_folder(&labels, &folders, false) {
             takeout::Home::Folder(f) => (f.path, f.dir),
             // Without `create_missing` there is no `Create`: mode 2 never makes a folder (D3).
@@ -509,6 +583,11 @@ fn import_from(
             dests.len() - 1
         });
         let d = &mut dests[i];
+        // A folder that already refused a write is not tried again.
+        if d.broken {
+            failed_count += 1;
+            return true;
+        }
 
         // A message the folder already holds is not written twice: not the
         // same file imported again, not a duplicate inside the file, not mail
@@ -536,7 +615,11 @@ fn import_from(
         // Decision 3: "archived" always, so vault_files::clear_cache does not
         // treat mbox-imported mail as disposable cache; the label flags only
         // when labels were asked for, so the old call shape writes what it did.
-        let flags = if use_labels { label_flags(&labels) } else { vec!["archived".to_string()] };
+        let flags = match labels_mode {
+            Labels::Route => label_flags(&labels),
+            Labels::FlagsOnly if !labels.is_empty() => label_flags(&labels),
+            _ => vec!["archived".to_string()],
+        };
 
         if !d.listed {
             // One listing, outside the mailbox lock (a registry listing takes
@@ -552,10 +635,13 @@ fn import_from(
         //
         // Under the vault registry's lock for the folder (keyed by the
         // sanitized names, the directory itself), and each file lands as a
-        // row right after its write.
-        let write_result = common::with_mailbox_write(state, &safe_account_id, &d.dir, |root| -> Result<PathBuf, String> {
+        // row right after its write. A write that fails inside the gate is
+        // `Ok(Err(..))`: the folder's own failure, or a full disk.
+        let write_result = common::with_mailbox_write(state, &safe_account_id, &d.dir, |root| -> Result<Result<PathBuf, WriteFail>, String> {
             let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&d.dir).join("cur");
-            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
+            if let Err(e) = std::fs::create_dir_all(&cur_dir) {
+                return Ok(Err(WriteFail::of("Failed to create maildir", e)));
+            }
 
             // The next uid no file holds, under any flags: another writer (the
             // rehome pass, a second import) may have taken some since `open`
@@ -563,7 +649,8 @@ fn import_from(
             // folder (`known` takes no mailbox lock); otherwise the disk does.
             let mut uid = d.max_uid;
             loop {
-                uid = uid.checked_add(1).ok_or("The import uid range is full")?;
+                let Some(next) = uid.checked_add(1) else { return Ok(Err(WriteFail::Folder("The import uid range is full".into()))) };
+                uid = next;
                 let taken = match state.vault_registry.known(&safe_account_id, &d.dir, uid) {
                     Some(row) => row.is_some(),
                     None => {
@@ -578,20 +665,24 @@ fn import_from(
             // Spent even if the write below fails: a uid is never reused.
             d.max_uid = uid;
             let dest = cur_dir.join(build_maildir_filename(uid, &flags));
+            #[cfg(test)]
+            if let Some(kind) = WRITE_FAULT.with(|f| f.borrow().as_ref().filter(|(dir, _)| *dir == d.dir).map(|(_, kind)| *kind)) {
+                return Ok(Err(WriteFail::of("Failed to write .eml", kind.into())));
+            }
             // Atomic: readers that take no lock (the backup's mirror copy)
             // list this folder mid-import and copy once what they find, so the
             // uid name appears only with the whole message behind it. A failed
             // write leaves nothing under it: at most a dot-prefixed temp no
             // uid scanner reads, so the registry has nothing to correct.
             if let Err(e) = mailvault_core::fsx::write_atomic(&dest, &unescaped) {
-                return Err(format!("Failed to write .eml: {}", e));
+                return Ok(Err(WriteFail::of("Failed to write .eml", e)));
             }
             state.vault_registry.upsert(&safe_account_id, &d.dir, uid, &dest);
-            Ok(dest)
+            Ok(Ok(dest))
         });
 
         match write_result {
-            Ok(dest) => {
+            Ok(Ok(dest)) => {
                 d.imported += 1;
                 email_count += 1;
                 if let (Some(id), Some(known)) = (head.id, d.known.as_mut()) {
@@ -602,9 +693,25 @@ fn import_from(
                 }
                 true
             }
+            // This folder cannot take a message (a name the file system
+            // refuses, a file where its dir belongs, a spent uid range): its
+            // messages count as failed, the other folders go on.
+            Ok(Err(WriteFail::Folder(e))) => {
+                warn!("import_mbox: a folder of {safe_account_id} cannot be written, its messages count as failed: {e}");
+                d.broken = true;
+                failed_count += 1;
+                write_error.get_or_insert(e);
+                true
+            }
+            Ok(Err(WriteFail::Disk(e))) => {
+                warn!("import_mbox: the disk is full, stopping the import early: {e}");
+                failed_count += 1;
+                write_error.get_or_insert(e);
+                false
+            }
             Err(e) => {
-                warn!("import_mbox: a write failed (vault gate or disk), stopping the import early: {}", e);
-                write_error = Some(e);
+                warn!("import_mbox: the vault gate refused a write, stopping the import early: {e}");
+                write_error.get_or_insert(e);
                 false
             }
         }
@@ -621,9 +728,19 @@ fn import_from(
         return Err(e);
     }
 
-    emit("mbox-import-progress", json!({"total": email_count, "completed": email_count, "active": false, "bytesDone": bytes_total, "bytesTotal": bytes_total, "skippedCount": skipped_count}));
+    emit(
+        "mbox-import-progress",
+        json!({"total": email_count, "completed": email_count, "active": false, "bytesDone": bytes_total, "bytesTotal": bytes_total, "skippedCount": skipped_count, "failedCount": failed_count}),
+    );
 
-    info!("MBOX imported: {} emails into {} folder(s) of {}, {} already there skipped", email_count, dests.len(), account_id, skipped_count);
+    info!(
+        "MBOX imported: {} emails into {} folder(s) of {}, {} already there skipped, {} failed",
+        email_count,
+        dests.len(),
+        account_id,
+        skipped_count,
+        failed_count
+    );
     if email_count > 0 {
         // Decision 9: a whole mailbox of new files, the in-process
         // equivalent of the app's own sweep_index_soon() full pass.
@@ -631,12 +748,13 @@ fn import_from(
     }
 
     let per_folder = dests.into_iter().map(|d| FolderCount { mailbox: d.mailbox, imported: d.imported, skipped: d.skipped }).collect();
-    Ok(MboxImportResult { email_count, account_id, mailbox, skipped_count, folders: per_folder, folders_known: !folders.is_empty(), folder: None })
+    Ok(MboxImportResult { email_count, account_id, mailbox, skipped_count, failed_count, folders: per_folder, folders_known: !folders.is_empty(), folder: None })
 }
 
 /// Import an mbox as a folder of its own, kept only in the vault (mode 3): a
-/// new `MBOX import <today>` folder with its marker, every message into it,
-/// labels not read. Its uids come from the import range (no server shares
+/// new `MBOX import <today>` folder with its marker, every message into it.
+/// Labels never pick a folder here; a message that has them keeps their
+/// Starred and read state as flags. Its uids come from the import range (no server shares
 /// the folder) and its dedupe covers this folder alone, so importing a file
 /// again makes and fills another folder.
 pub fn import_mbox_as_folder(state: &Arc<DaemonState>, source_path: PathBuf, account_id: String, emit: impl Fn(&str, Value)) -> Result<MboxImportResult, String> {
@@ -648,7 +766,7 @@ pub fn import_mbox_as_folder(state: &Arc<DaemonState>, source_path: PathBuf, acc
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let (marker, dir) = create_local_folder(state, &account_id, &today, &source)?;
     let reader = std::io::BufReader::with_capacity(1 << 20, file);
-    match import_from(state, reader, bytes_total, account_id.clone(), marker.name.clone(), false, emit) {
+    match import_from(state, reader, bytes_total, account_id.clone(), marker.name.clone(), Labels::FlagsOnly, emit) {
         Ok(mut result) => {
             result.folder = Some(LocalFolderRef { name: marker.name, dir });
             Ok(result)
@@ -1030,7 +1148,7 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         let (v, s) = state(true);
         let data = b"From a\nSubject: 1\n\nb1\n\nFrom a\nSubject: 2\n\nb2\n\nFrom a\nSubject: 3\n\nb3\n".to_vec();
         let fail_at = data.len() - 4;
-        let result = import_from(&s, trickle(&data, 4, Some(fail_at)), data.len() as u64, "acct1".into(), "INBOX".into(), false, |_, _| {}).unwrap();
+        let result = import_from(&s, trickle(&data, 4, Some(fail_at)), data.len() as u64, "acct1".into(), "INBOX".into(), Labels::Ignore, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 2, "the two whole messages before the failure are kept, not reported as an error");
         let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
         assert_eq!(std::fs::read_dir(&cur).unwrap().count(), 2);
@@ -1040,7 +1158,7 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
     fn import_that_writes_nothing_before_a_read_failure_is_an_error() {
         let (_v, s) = state(true);
         let data = b"From a\nSubject: 1\n\nb1\n".to_vec();
-        assert!(import_from(&s, trickle(&data, 4, Some(8)), data.len() as u64, "acct1".into(), "INBOX".into(), false, |_, _| {}).is_err());
+        assert!(import_from(&s, trickle(&data, 4, Some(8)), data.len() as u64, "acct1".into(), "INBOX".into(), Labels::Ignore, |_, _| {}).is_err());
     }
 
     #[test]
@@ -1797,6 +1915,140 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         assert_eq!(names_in(v.path(), "Big"), Vec::<String>::new());
         let listed = s.vault_registry.files(v.path(), "acct1", "Big").expect("the registry answers");
         assert!(listed.is_empty(), "{listed:?}");
+    }
+
+    // -- a folder that cannot be written; a full disk ------------------------
+
+    /// One folder that cannot take a message (a file stands where its dir
+    /// belongs) fails its own messages, each counted once, and is not tried
+    /// again; the messages bound for other folders still land.
+    #[test]
+    fn a_folder_that_cannot_be_written_fails_its_messages_and_the_rest_go_on() {
+        let (v, s) = state(true);
+        save_listing(&s, &gmail_listing());
+        let account = mailvault_core::vault_files::account_dir(&v.path().join("Maildir"), "acct1");
+        std::fs::create_dir_all(&account).unwrap();
+        std::fs::write(account.join("Receipts"), b"a file where the folder belongs").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_mbox(dir.path(), "t.mbox", &[
+            &tmsg("a@x", "one", Some("Work")),
+            &tmsg("b@x", "two", Some("Receipts")),
+            &tmsg("c@x", "three", Some("Work")),
+            &tmsg("d@x", "four", Some("Receipts")),
+            &tmsg("e@x", "five", None),
+        ]);
+        let events = std::sync::Mutex::new(Vec::new());
+        let r = import_mbox(&s, path, "acct1".into(), "INBOX".into(), true, |n, p| events.lock().unwrap().push((n.to_string(), p))).unwrap();
+
+        assert_eq!((r.email_count, r.skipped_count, r.failed_count), (3, 0, 2));
+        assert_eq!(counts(&r), vec![("Work", 2, 0), ("Receipts", 0, 0), ("INBOX", 1, 0)]);
+        assert_eq!((names_in(v.path(), "Work").len(), names_in(v.path(), "INBOX").len()), (2, 1));
+        assert_eq!(std::fs::read(account.join("Receipts")).unwrap(), b"a file where the folder belongs");
+        let last = events.into_inner().unwrap().pop().unwrap();
+        assert_eq!((last.1["active"].clone(), last.1["failedCount"].clone()), (json!(false), json!(2)));
+        assert_eq!(serde_json::to_value(&r).unwrap()["failedCount"], json!(2), "the result says so too");
+    }
+
+    /// A full disk is no folder's fault: nothing more can land anywhere, so
+    /// the import stops there, keeping what landed and counting the one that
+    /// failed; the message after it is never tried.
+    #[test]
+    fn a_full_disk_stops_the_import() {
+        let (v, s) = state(true);
+        save_listing(&s, &gmail_listing());
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_mbox(dir.path(), "t.mbox", &[&tmsg("a@x", "one", None), &tmsg("b@x", "two", Some("Work")), &tmsg("c@x", "three", None)]);
+        WRITE_FAULT.with(|f| *f.borrow_mut() = Some(("Work".into(), std::io::ErrorKind::StorageFull)));
+        let r = import_mbox(&s, path, "acct1".into(), "INBOX".into(), true, |_, _| {});
+        WRITE_FAULT.with(|f| *f.borrow_mut() = None);
+
+        let r = r.expect("what landed is kept");
+        assert_eq!((r.email_count, r.failed_count), (1, 1));
+        assert_eq!(counts(&r), vec![("INBOX", 1, 0), ("Work", 0, 0)], "the third message was never read");
+        assert_eq!((names_in(v.path(), "INBOX").len(), names_in(v.path(), "Work").len()), (1, 0));
+    }
+
+    // -- the header cache, a chunk at a time -----------------------------------
+
+    /// A folder's cached rows come a chunk of uids per custody unit, and all
+    /// of them: together they are what one whole read gives.
+    #[test]
+    fn a_folders_cached_rows_are_read_a_chunk_at_a_time_and_all_of_them() {
+        let (_v, s) = state(true);
+        let rows: Vec<Value> = (1..=5).map(|uid| json!({"uid": uid, "messageId": format!("<{uid}@x>"), "subject": format!("s{uid}"), "messageDate": DATE})).collect();
+        let headers = json!({"uidValidity": 1, "totalEmails": 5, "emails": rows});
+        crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acct1", "INBOX", &headers.to_string())).unwrap();
+
+        let mut chunks = Vec::new();
+        cached_rows(&s, "acct1", "INBOX", 2, |part| chunks.push(part)).unwrap();
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), vec![2, 2, 1]);
+        let by_uid = |mut rows: Vec<Value>| {
+            rows.sort_by_key(|r| r["uid"].as_u64());
+            rows
+        };
+        let whole = crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::all_headers(c, "acct1", "INBOX")).unwrap();
+        assert_eq!(by_uid(chunks.into_iter().flatten().collect()), by_uid(whole));
+
+        // The import reads the folder this way: a message a row lists is skipped.
+        let dir = tempfile::tempdir().unwrap();
+        let r = import(&s, dir.path(), "a.mbox", &[&msg("3@x", "s3", "body"), &msg("9@x", "new", "body")]);
+        assert_eq!((r.email_count, r.skipped_count), (1, 1));
+    }
+
+    /// An import uid a rehome pass set aside is never handed to another
+    /// message: the next import continues past what the ledger names.
+    #[test]
+    fn an_import_continues_past_the_uids_the_rehome_ledger_names() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        import(&s, dir.path(), "a.mbox", &[&msg("a@x", "one", "body")]);
+        let b = IMPORT_UID_BASE;
+        let folder = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX").parent().unwrap().to_path_buf();
+        let server = import_rehome::ServerView::from_headers(&[json!({"uid": 5, "messageId": "<a@x>", "subject": "one", "messageDate": DATE})]);
+        let plan = import_rehome::plan(&folder, &server, false, &std::collections::HashSet::new());
+        assert_eq!(import_rehome::apply(&folder, &plan).unwrap().set_aside, vec![b]);
+
+        import(&s, dir.path(), "b.mbox", &[&msg("n@x", "new", "another body")]);
+        assert_eq!(uids_in(v.path(), "INBOX"), vec![b + 1], "never the set-aside uid again");
+    }
+
+    // -- mode 3 keeps a Takeout's read and starred state -----------------------
+
+    /// As a separate folder, labels never pick a folder, but a message that
+    /// has them keeps their Starred and read state (R5: Unread beats Opened,
+    /// neither is read); one with no labels at all stays archived only, as a
+    /// plain mbox always did.
+    #[test]
+    fn a_separate_folder_keeps_a_takeouts_read_and_starred_state_and_nothing_else() {
+        let (v, s) = state(true);
+        save_listing(&s, &gmail_listing());
+        let dir = tempfile::tempdir().unwrap();
+        let cases = [
+            ("starred", Some("Work,Starred,Opened"), "AFS"),
+            ("unread", Some("Work,Unread"), "A"),
+            ("opened", Some("Opened,Inbox"), "AS"),
+            ("both", Some("Opened,Unread"), "A"),
+            ("starred unread", Some("Unread,Starred"), "AF"),
+            ("category only", Some("Category Promotions"), "AS"),
+            ("no labels", None, "A"),
+        ];
+        let msgs: Vec<String> = cases.iter().enumerate().map(|(i, (subject, labels, _))| tmsg(&format!("{i}@x"), subject, *labels)).collect();
+        let refs: Vec<&str> = msgs.iter().map(String::as_str).collect();
+        let r = import_mbox_as_folder(&s, write_mbox(dir.path(), "t.mbox", &refs), "acct1".into(), |_, _| {}).unwrap();
+        let name = r.folder.as_ref().expect("a folder of its own").name.clone();
+        assert_eq!(counts(&r), vec![(name.as_str(), cases.len() as u32, 0)]);
+
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", &name);
+        for (subject, _, letters) in cases {
+            let file = names_in(v.path(), &name)
+                .into_iter()
+                .find(|n| std::fs::read_to_string(cur.join(n)).unwrap().contains(&format!("Subject: {subject}\r\n")))
+                .unwrap_or_else(|| panic!("{subject} is in the folder"));
+            assert_eq!(info_flags(&file).map(|f| f.trim_end_matches(".eml")), Some(letters), "{subject}: {file}");
+        }
+        for folder in ["Work", "INBOX"] {
+            assert!(names_in(v.path(), folder).is_empty(), "labels never pick a folder here: {folder}");
+        }
     }
 
     // -- probe ---------------------------------------------------------------
