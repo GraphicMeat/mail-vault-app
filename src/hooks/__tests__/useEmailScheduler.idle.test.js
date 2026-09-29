@@ -570,6 +570,44 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
     });
 
+    // A local snooze, its wake or its undo takes a message out of an inbox or
+    // puts it back with no sync to say so. An inbox that is not the list on
+    // screen has its badge recounted from its cache.
+    it('recounts an inbox a local snooze takes a message out of, or puts back into', async () => {
+      const held = { id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' };
+      useSnoozeStore.setState({ rows: [] });
+      mailStore.setState(unifiedOpen);
+      settingsStore.setState({ unreadPerAccount: { a2: 2 } });
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 2, flags: [], messageId: '<held@x>' }, { uid: 1, flags: [], messageId: '<b@x>' }] });
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      useSnoozeStore.getState().upsert([held]);
+      await flush();
+
+      expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
+      expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
+      expect(mailStore.getState().totalUnreadCount).toBe(1);
+
+      useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
+      await flush();
+      expect(settingsStore.getState().unreadPerAccount.a2).toBe(2);
+    });
+
+    // That inbox's own list recounts it, from rows fresher than its cache.
+    it('leaves the inbox on screen to its list', async () => {
+      useSnoozeStore.setState({ rows: [] });
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false });
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      useSnoozeStore.getState().upsert([{ id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }]);
+      await flush();
+      useSnoozeStore.setState({ rows: [] });
+
+      expect(mockGetAllHeaders).not.toHaveBeenCalled();
+    });
+
     it('leaves other folders alone', async () => {
       mailStore.setState(unifiedOpen);
       eventReplies = [change({ mailbox: 'Archive' })];

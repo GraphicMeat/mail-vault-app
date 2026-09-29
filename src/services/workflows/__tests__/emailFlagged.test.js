@@ -119,6 +119,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { useSearchStore } = await import('../../../stores/searchStore');
+const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { toggleFlagged, markAnswered, markForwarded, applyFlagToTargets, applySeenLocally } = await import('../messageMutations');
 
@@ -465,5 +466,20 @@ describe('mark read, through the same core', () => {
         { uid: 7, flags: expect.arrayContaining(['\\Flagged', '\\Seen']) },
       ]);
     });
+  });
+
+  // All Inboxes counts its rows per account. A message a local snooze holds
+  // out of the inbox is on no badge, there as anywhere else.
+  it('a read change in All Inboxes leaves a locally snoozed message off the badge', () => {
+    const row = (uid, messageId) => ({ uid, _accountId: 'a1', _mailbox: 'INBOX', messageId, subject: `m${uid}`, flags: [], from: { address: 'them@x' }, date: `2026-08-0${uid - 6}T10:00:00Z` });
+    primeStore({ emails: [row(7, '<a@mock>'), row(8, '<held@mock>'), row(9, '<c@mock>')], activeMailbox: 'UNIFIED' });
+    useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'a1', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@mock>', state: 'snoozed' }] });
+    mockSetUnreadForAccount.mockClear();
+    try {
+      applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 7, read: true, isUnified: true });
+      expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('a1', 1);
+    } finally {
+      useSnoozeStore.setState({ rows: [] });
+    }
   });
 });

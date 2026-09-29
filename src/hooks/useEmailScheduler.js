@@ -3,7 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { inboxUnread } from '../stores/snoozeStore';
+import { inboxUnread, localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { watchAccount, waitForSyncChanges } from '../services/syncService';
@@ -164,6 +164,23 @@ export function useEmailScheduler() {
         .reduce((sum, [, count]) => sum + (count || 0), 0),
     });
   };
+
+  // A local snooze, its wake and its undo take a message out of an inbox or
+  // put it back with no sync to report it. The list on screen recounts its own
+  // inbox (updateSortedEmails, from rows fresher than the cache); every other
+  // inbox that changed is recounted here.
+  useEffect(() => useSnoozeStore.subscribe((state, prev) => {
+    if (state.rows === prev.rows) return;
+    const before = localSnoozeKeys(prev.rows), after = localSnoozeKeys(state.rows);
+    const s = useMailStore.getState();
+    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' ? s.activeAccountId : null;
+    const changed = new Set();
+    for (const key of [...before, ...after]) {
+      const [accountId, mailbox] = key.split('\x01');
+      if (before.has(key) !== after.has(key) && mailbox === 'INBOX' && accountId !== listed) changed.add(accountId);
+    }
+    for (const accountId of changed) recountInboxUnread(accountId, 0);
+  }), []);
 
   const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
     const s = useMailStore.getState();

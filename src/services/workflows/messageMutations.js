@@ -17,6 +17,7 @@ import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
+import { inboxUnread } from '../../stores/snoozeStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { mailboxLabel } from '../../utils/imapUtf7';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -1658,14 +1659,16 @@ function _refreshAfterFlagChange(useMailStore) {
 // Unified rows span accounts, so one \Seen change there has to be counted per
 // account. Every single-account list is recounted by updateSortedEmails, which
 // deliberately leaves this one alone — it cannot tell whose inbox it is looking
-// at. An account with no row in the list keeps the count it already had.
+// at. An account with no row in the list keeps the count it already had. A
+// message a local snooze holds out of the inbox is not counted (inboxUnread).
 function _syncUnifiedUnreadBadges(useMailStore) {
   const byAccount = new Map();
   for (const e of useMailStore.getState().emails) {
     if (!e._accountId) continue;
-    byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
+    if (!byAccount.has(e._accountId)) byAccount.set(e._accountId, []);
+    byAccount.get(e._accountId).push(e);
   }
-  for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
+  for (const [id, rows] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, inboxUnread(id, rows));
 }
 
 // The vault half of a flag change.

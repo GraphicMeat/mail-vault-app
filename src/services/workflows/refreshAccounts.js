@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { inboxUnread } from '../../stores/snoozeStore';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, storageKeyOf } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
@@ -192,10 +193,7 @@ export async function refreshAllAccounts(options = {}) {
               await db.saveEmailHeaders(account.id, normalizedMailbox, headers, targetFolder.totalItemCount);
               console.log(`[mailStore] Graph: cached ${headers.length} ${normalizedMailbox} headers for ${account.email}`);
             }
-            if (normalizedMailbox === 'INBOX') {
-              const graphUnread = headers.filter(e => !e.flags?.includes('\\Seen')).length;
-              countedUnread[account.id] = graphUnread;
-            }
+            if (normalizedMailbox === 'INBOX') countedUnread[account.id] = inboxUnread(account.id, headers);
 
             const newHeaders = headers.filter(e => !baseline.uids.has(e.uid));
             if (newHeaders.length > 0 && baseline.complete) {
@@ -243,10 +241,8 @@ export async function refreshAllAccounts(options = {}) {
             console.log(`[mailStore] Cached ${allEmails.length} ${resolvedMailbox} headers for ${account.email}`);
           }
 
-          if (resolvedMailbox === 'INBOX') {
-            const imapUnread = allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
-            countedUnread[account.id] = imapUnread;
-          }
+          // Less what a local snooze holds out of the inbox, as every badge count.
+          if (resolvedMailbox === 'INBOX') countedUnread[account.id] = inboxUnread(account.id, allEmails);
 
           const newHeaders = allEmails.filter(e => !baseline.uids.has(e.uid));
           if (newHeaders.length > 0 && baseline.complete) {

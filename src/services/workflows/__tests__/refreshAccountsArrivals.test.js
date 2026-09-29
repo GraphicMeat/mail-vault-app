@@ -70,19 +70,21 @@ vi.mock('../../authUtils', () => ({
   ensureFreshToken: async (a) => a,
 }));
 vi.mock('../../../stores/slices/unifiedHelpers', () => ({ _resolveMailboxPath: (_m, target) => target }));
+const mockSetUnreadPerAccount = vi.fn();
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
       isAccountHidden: () => false,
       unreadPerAccount: {},
       hiddenAccounts: {},
-      setUnreadPerAccount: vi.fn(),
+      setUnreadPerAccount: (...a) => mockSetUnreadPerAccount(...a),
     }),
   },
   hasPremiumAccess: () => false,
 }));
 
 const { refreshAllAccounts } = await import('../refreshAccounts');
+const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 
 const header = (uid, extra = {}) => ({ uid, subject: `msg ${uid}`, flags: ['\\Seen'], ...extra });
 const cacheEntry = (uids, totalEmails) => ({ uids, totalEmails });
@@ -210,6 +212,26 @@ describe('a background account (the disk cache)', () => {
       newestSubject: 'statement',
     });
     expect(mockGetEmailHeaders).not.toHaveBeenCalled();
+  });
+
+  // The badge counts what the inbox shows, and a local snooze holds its
+  // message out of it while the server still lists it there, unread.
+  it('leaves a message a local snooze holds out of the inbox off the badge', async () => {
+    backgroundAccount();
+    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2], 2);
+    mockFetchEmails.mockResolvedValue({
+      emails: [header(2, { flags: [], messageId: '<held@x>' }), header(1, { flags: [], messageId: '<other@x>' })],
+      total: 2,
+      hasMore: false,
+    });
+    useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'acct-2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }] });
+    mockSetUnreadPerAccount.mockClear();
+    try {
+      await refreshAllAccounts();
+    } finally {
+      useSnoozeStore.setState({ rows: [] });
+    }
+    expect(mockSetUnreadPerAccount).toHaveBeenLastCalledWith({ 'acct-2': 1 });
   });
 });
 
