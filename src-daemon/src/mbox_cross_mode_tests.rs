@@ -625,6 +625,21 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
     let r = ok(call(&s, "import_mbox", params).await);
     assert_eq!(r["emailCount"], json!(names.len() - 1), "every folder a file system holds took its message: {r}");
 
+    // A folder name resolves inside its account's dir: it must stay there,
+    // never reach `Maildir/` itself or a sibling account's dir.
+    let maildir = vault.join("Maildir");
+    let store = mailvault_core::custody::db::db_path(&vault).parent().unwrap().to_path_buf();
+    let own = vault_files::account_dir(&maildir, "acct1");
+    let mid = tree(scratch.path());
+    for path in mid.keys().filter(|p| !before.contains(*p)) {
+        assert!(path.starts_with(&own) || path.starts_with(&store) || path.starts_with(&app), "{path:?} was written outside the account's dir");
+    }
+    for escaped in [maildir.join("cur"), own.join("cur"), maildir.join("Escape"), maildir.join("b")] {
+        assert!(!escaped.exists(), "{escaped:?}");
+    }
+    let before: BTreeSet<PathBuf> = mid.into_keys().collect();
+
+    // An account id resolves inside `Maildir/`.
     let ids = ["..", ".", "../escape", "../../escape", "a/../../escape", "a\u{0}b", "CON", "NUL", "aux.txt", "COM1", long.as_str()];
     for id in ids {
         for mode in ["local", "folder"] {
@@ -636,8 +651,6 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
         }
     }
 
-    let maildir = vault.join("Maildir");
-    let store = mailvault_core::custody::db::db_path(&vault).parent().unwrap().to_path_buf();
     for path in tree(scratch.path()).into_keys().filter(|p| !before.contains(p)) {
         assert!(path.starts_with(&maildir) || path.starts_with(&store) || path.starts_with(&app), "{path:?} was written outside the Maildir tree");
     }
@@ -676,10 +689,14 @@ async fn an_upload_keeps_hostile_labels_and_account_ids_inside_the_maildir_tree(
     for c in &creates {
         assert!(c.is_ascii() && !c.chars().any(char::is_control), "sent raw: {c:?}");
     }
+    // A label names a folder inside the account's dir: every copy stays there.
     let maildir = vault.join("Maildir");
+    let own = vault_files::account_dir(&maildir, "acct1");
     let store = mailvault_core::custody::db::db_path(&vault).parent().unwrap().to_path_buf();
     for path in tree(&vault).into_keys().filter(|p| !before.contains(p)) {
-        assert!(path.starts_with(&maildir) || path.starts_with(&store), "{path:?} was written outside the Maildir tree");
+        assert!(path.starts_with(&own) || path.starts_with(&store), "{path:?} was written outside the account's dir");
     }
-    assert!(!vault.join(&escape).exists() && !vault.parent().unwrap().join(&escape).exists());
+    for escaped in [maildir.join("cur"), own.join("cur"), maildir.join(&escape), vault.join(&escape), vault.parent().unwrap().join(&escape)] {
+        assert!(!escaped.exists(), "{escaped:?}");
+    }
 }
