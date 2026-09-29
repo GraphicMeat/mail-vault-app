@@ -312,8 +312,9 @@ pub(crate) struct Outcome {
 
 /// The folders to hoard, in order: every selectable one, except that with
 /// an `\All` folder present the `\Flagged` / `\Important` ones (strict
-/// subsets of it) are left out, and `\All` itself goes last.
-fn folders_to_hoard(boxes: Vec<MailboxInfo>) -> Vec<String> {
+/// subsets of it) are left out, and `\All` itself goes last. The vault-gap
+/// count leaves out the same folders (`vault_gap::listed_folders`).
+pub(crate) fn folders_to_hoard(boxes: Vec<MailboxInfo>) -> Vec<String> {
     let has_all = boxes.iter().any(|m| !m.noselect && has_attr(&m.flags, "All"));
     let mut keep: Vec<MailboxInfo> = boxes
         .into_iter()
