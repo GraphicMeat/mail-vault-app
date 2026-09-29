@@ -61,6 +61,7 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     ("src-core/src/vault_files.rs", "migrate_json_to_eml", "whole-vault legacy migration; one invalidate_all after the walk"),
     ("src-daemon/src/backup_zip.rs", "export", "reads the vault's cur/ and creates the zip outside it"),
     ("src-daemon/src/mbox.rs", "export_mbox_all", "reads the vault's cur/ and creates the mbox outside it"),
+    ("src-daemon/src/mbox_upload_job.rs", "rehome", "removes only the folder's .import-rehome-done stamp beside cur/, never a message file; the pass it then runs, rehome_imports_for, invalidates when anything moved"),
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {

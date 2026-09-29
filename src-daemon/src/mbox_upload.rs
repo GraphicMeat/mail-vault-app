@@ -148,13 +148,16 @@ struct Folder {
     /// The vault registry holds this folder: a uid's file is looked up, not
     /// searched for in `cur/`. Cleared when the registry stops answering.
     listed: bool,
+    /// The UIDVALIDITY of the SELECT the run opened it with: the generation
+    /// of the uids its copies are filed under (`keep_copy`).
+    validity: Option<u32>,
 }
 
 impl Folder {
     /// A folder this run made: nothing cached belongs to it, and the server's
     /// search decides what it holds.
     fn made_again() -> Self {
-        Folder { view: ServerView::default(), whole: false, uploaded: HashSet::new(), listed: false }
+        Folder { view: ServerView::default(), whole: false, uploaded: HashSet::new(), listed: false, validity: None }
     }
 }
 
@@ -434,7 +437,7 @@ impl MboxUpload {
         }
         let mailbox = self.select_or_make(path).await?;
         if self.created.contains(path) {
-            self.boxes.insert(path.to_string(), Folder::made_again());
+            self.boxes.insert(path.to_string(), Folder { validity: mailbox.uid_validity, ..Folder::made_again() });
             return Ok(());
         }
         let (validity, next) = (mailbox.uid_validity, mailbox.uid_next);
@@ -461,7 +464,7 @@ impl MboxUpload {
             warn!("[mbox_upload] header cache of {path} unreadable, the server decides: {e}");
             (ServerView::default(), false)
         });
-        self.boxes.insert(path.to_string(), Folder { view, whole, uploaded: HashSet::new(), listed: false });
+        self.boxes.insert(path.to_string(), Folder { view, whole, uploaded: HashSet::new(), listed: false, validity });
         Ok(())
     }
 
@@ -610,6 +613,7 @@ impl MboxUpload {
     async fn keep_copy(&mut self, path: &str, uid: u32, msg: &[u8], labels: &[String], head: &Head) {
         let flags = if self.use_labels { crate::mbox::label_flags(labels) } else { vec!["archived".to_string()] };
         let listed = self.boxes.get(path).is_some_and(|f| f.listed);
+        let validity = self.boxes.get(path).and_then(|f| f.validity);
         let (st, account, p, raw, head) = (Arc::clone(&self.state), self.account_id.clone(), path.to_string(), msg.to_vec(), head.clone());
         let done = blocking(move || {
             if !listed {
@@ -618,10 +622,24 @@ impl MboxUpload {
                 }
             }
             let kept = common::with_mailbox_write(&st, &account, &p, |root| {
+                let cur = vault_files::cur_path(root, &account, &p);
+                // A folder the vault held no files for gets its generation
+                // with its first copy, as the generation repair stamps a
+                // folder it finds without `cur/`. Left unstamped, the first
+                // repair (a folder read, the job's rehome pass) adopts the
+                // folder and sets aside, as a stranger at the server's uid,
+                // every copy whose Message-ID its bounded header read cannot
+                // find (one past the first 128 KiB). A folder that already
+                // held files is left for that repair to judge.
+                let fresh = !cur.exists();
                 if vault_files::store(&st.vault_registry, root, &account, &p, uid, &raw, &flags, false)? {
+                    if let (true, Some(v), Some(dir)) = (fresh, validity, cur.parent()) {
+                        if let Err(e) = maildir::write_generation(dir, v) {
+                            warn!("[mbox_upload] a new vault folder of {account} was not stamped with its generation: {e}");
+                        }
+                    }
                     return Ok(None);
                 }
-                let cur = vault_files::cur_path(root, &account, &p);
                 let there = maildir::find_by_uid(&cur, uid);
                 if there.is_some_and(|copy| import_rehome::same_as_copy(&head, &import_rehome::body_of(&raw), &copy)) {
                     return Ok(None);
@@ -1656,6 +1674,44 @@ mod tests {
         let got = up.upload_message(&tmsg("a@x", "drop-me", "Work")).await;
         assert!(matches!(got, Outcome::Failed(FailKind::Transient, _)), "{got:?}");
         assert_eq!(up.touched().iter().collect::<Vec<_>>(), ["Work"]);
+    }
+
+    /// FixA round 2: a folder the vault held no files for gets its
+    /// generation with the upload's first copy, so the generation repair a
+    /// folder read (and the job's rehome pass) runs keeps every copy. Before,
+    /// the unstamped folder was adopted and the copy whose Message-ID sits
+    /// past the repair's 128 KiB header read was set aside as a stranger at
+    /// the server's uid (the cross-mode "huge header" message). A folder that
+    /// already held files is left unstamped, for the repair to judge.
+    #[tokio::test]
+    async fn copies_in_a_folder_the_upload_made_in_the_vault_survive_the_generation_repair() {
+        let server = MockImap::start(gmail());
+        let (v, s) = state();
+        seed_vault(v.path(), "INBOX", "1:2,S.eml", b"Message-ID: <old1@x>\r\nSubject: old 1\r\n\r\nold");
+        let mut up = upload(&s, &server);
+        let chat = format!("Subject: chat\r\nDate: {DATE}\r\n\r\nhi").into_bytes();
+        let huge = format!("X-Filler: {}\r\nMessage-ID: <huge@x>\r\nSubject: huge\r\nDate: {DATE}\r\n\r\nbody", "f".repeat(200 * 1024)).into_bytes();
+        assert_eq!(up.upload_message(&chat).await, uploaded("[Gmail]/All Mail", 1));
+        assert_eq!(up.upload_message(&huge).await, uploaded("[Gmail]/All Mail", 2));
+        assert_eq!(up.upload_message(&tmsg("a@x", "into inbox", "Inbox")).await, uploaded("INBOX", 5));
+
+        let all_mail = vault_files::cur_path(v.path(), "acct1", "[Gmail]/All Mail");
+        let validity = server.state().find("[Gmail]/All Mail").unwrap().uid_validity;
+        assert_eq!(maildir::read_generation(all_mail.parent().unwrap()), Some(validity), "stamped with its first copy");
+        let inbox = vault_files::cur_path(v.path(), "acct1", "INBOX");
+        assert_eq!(maildir::read_generation(inbox.parent().unwrap()), None, "a folder that held files is the repair's to judge");
+
+        // The folder cached whole, as the job's refresh leaves it; then the
+        // repair every read of it runs first.
+        let rows = json!({"uidValidity": validity, "totalEmails": 2, "emails": [
+            {"uid": 1, "subject": "chat", "messageDate": DATE},
+            {"uid": 2, "messageId": "<huge@x>", "subject": "huge", "messageDate": DATE},
+        ]});
+        cache_headers(&s, "[Gmail]/All Mail", rows);
+        let repair = crate::handlers::custody::repair_generation_for(&s, "acct1", "[Gmail]/All Mail").unwrap();
+        assert!(repair.orphaned.is_empty(), "{repair:?}");
+        assert_eq!(names_in(v.path(), "[Gmail]/All Mail"), ["1:2,AS.eml", "2:2,AS.eml"]);
+        assert_eq!(std::fs::read(all_mail.join("2:2,AS.eml")).unwrap(), crate::mbox::mbox_unescape_from(&huge), "whole");
     }
 
     /// A paused job lets its connection go; the next message makes a new one.
