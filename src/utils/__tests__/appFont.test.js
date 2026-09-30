@@ -3,14 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const setZoom = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ setZoom }) }));
+const loadFontFaces = vi.fn(() => Promise.resolve(true));
+vi.mock('../../services/fontService', () => ({ loadFontFaces: (...args) => loadFontFaces(...args) }));
 
-import { APP_FONTS, DEFAULT_APP_FONT, applyAppFont, applyTextScale, fontStack, watchTextAppearance } from '../appFont';
+import { APP_FONTS, DEFAULT_APP_FONT, applyAppFont, applyTextScale, fontStack, normalizeAppFont, watchTextAppearance } from '../appFont';
 
 const appliedFont = () => document.documentElement.style.getPropertyValue('--app-font');
 
 afterEach(() => {
   delete window.__TAURI__;
   setZoom.mockClear();
+  loadFontFaces.mockClear();
 });
 
 describe('app font', () => {
@@ -28,6 +31,30 @@ describe('app font', () => {
   it('falls back to a monospace face for a coding font', () => {
     expect(fontStack('fira-code')).toMatch(/^'Fira Code', .*monospace$/);
     expect(fontStack('inter')).toMatch(/^'Inter', .*sans-serif$/);
+  });
+});
+
+describe('a downloaded Google font as the app font', () => {
+  it('is kept only when the catalogue lists it', () => {
+    expect(normalizeAppFont('google:Roboto')).toBe('google:Roboto');
+    expect(normalizeAppFont('google:Comic Sans MS')).toBe(DEFAULT_APP_FONT);
+    expect(normalizeAppFont('google:')).toBe(DEFAULT_APP_FONT);
+    expect(normalizeAppFont('Roboto')).toBe(DEFAULT_APP_FONT);
+  });
+
+  it('stacks the family over its category fallback, so text draws before the face loads', () => {
+    expect(fontStack('google:Roboto')).toBe("'Roboto', system-ui, sans-serif");
+    expect(fontStack('google:Lora')).toBe("'Lora', Georgia, serif");
+    expect(fontStack('google:Evil'), 'unknown: the default').toBe(fontStack(DEFAULT_APP_FONT));
+  });
+
+  it('registers the face in this window when applied, and nothing for a bundled font', () => {
+    applyAppFont('google:Lora');
+    expect(appliedFont()).toBe("'Lora', Georgia, serif");
+    expect(loadFontFaces).toHaveBeenCalledWith('Lora');
+    loadFontFaces.mockClear();
+    applyAppFont('inter');
+    expect(loadFontFaces).not.toHaveBeenCalled();
   });
 });
 
