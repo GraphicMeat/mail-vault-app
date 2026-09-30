@@ -7,7 +7,7 @@ const folders = vi.hoisted(() => ({
 vi.mock('../../services/cacheManager', () => ({ getAccountCacheMailboxes: accountId => folders[accountId] }));
 vi.mock('../../services/workflows/snooze', () => ({ canSnooze: email => !!email.messageId }));
 
-const { rowFacts, selectionFacts, readerFacts, junkPathOf } = await import('../quickActionFacts');
+const { rowFacts, selectionFacts, archivedSelectionKeys, readerFacts, junkPathOf } = await import('../quickActionFacts');
 
 const STATE = {
   activeAccountId: 'acct-a', activeMailbox: 'INBOX', mailboxScope: null,
@@ -88,6 +88,23 @@ describe('selectionFacts', () => {
     const facts = selectionFacts(new Set([1, 9, 'acct-b:INBOX:9']), rows, rows, new Set([9]), STATE);
     expect(facts).toMatchObject({ archivedCount: 1, totalCount: 3 });
     expect(facts.has).toMatchObject({ archive: true, unarchive: true });
+  });
+});
+
+// The bulk modal's counts and its Unarchive run read the ticked keys by the
+// selection bar's rule, not by the open folder's uids alone.
+describe('archivedSelectionKeys', () => {
+  it('names the ticked keys the vault holds: a row by its own state, a bare key no row resolves by the open folder', () => {
+    const rows = [mail(1), mail(3, { isArchived: true }), mail(12, { _accountId: 'acct-b', isArchived: true })];
+    const keys = new Set([1, 3, 9, 7, 'acct-b:INBOX:12', 'acct-b:INBOX:9']);
+    expect(archivedSelectionKeys(keys, rows, new Set([1, 9]), STATE)).toEqual([3, 9, 'acct-b:INBOX:12']);
+  });
+
+  // The list's row comes first and carries the derived state; a vault row the
+  // server row shadows is never re-derived, so it must not win the key.
+  it('reads the first loaded row a key names, as the selection bar resolves it', () => {
+    const rows = [mail(4, { isArchived: true }), mail(4, { isArchived: undefined })];
+    expect(archivedSelectionKeys(new Set([4]), rows, new Set(), STATE)).toEqual([4]);
   });
 });
 

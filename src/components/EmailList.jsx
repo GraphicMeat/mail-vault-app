@@ -20,6 +20,7 @@ import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { formatCount } from '../utils/formatCount';
+import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
 import { Button } from './ui/Button';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
@@ -1148,10 +1149,14 @@ function EmailListComponent({ stacked = false }) {
 
     // Handle unarchive separately — not a bulk operation manager action
     if (action === 'unarchive') {
-      const { removeLocalEmails, archivedEmailIds } = useMailStore.getState();
-      // Only archived messages have anything to remove. One call for the
-      // run: one vault delete and one re-read per (account, mailbox).
-      const targets = uids.filter(u => archivedEmailIds.has(u));
+      const state = useMailStore.getState();
+      const { removeLocalEmails, archivedEmailIds } = state;
+      // Only archived messages have anything to remove, read by the selection
+      // bar's rule: a key's own row, else the open folder's uids for a bare
+      // key. One call for the run: one vault delete and one re-read per
+      // (account, mailbox).
+      const rows = loadedRows(state, useSearchStore.getState().searchResults);
+      const targets = archivedSelectionKeys(uids, rows, archivedEmailIds, state);
       try { if (targets.length) await removeLocalEmails(targets); } catch (e) { console.error('Failed to unarchive the selection:', e); }
       useMailStore.getState().updateSortedEmails();
       return;

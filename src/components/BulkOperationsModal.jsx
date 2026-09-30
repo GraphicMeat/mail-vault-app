@@ -4,12 +4,14 @@ import { Button } from './ui/Button';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar, ShieldCheck } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useMailStore } from '../stores/mailStore';
+import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
+import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
 import { T } from '../i18n/T.jsx';
 
 const ACTION_STYLES = () => ({
@@ -123,6 +125,12 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   const sortedEmails = useMessageListStore(s => s.sortedEmails);
   const totalEmails = useMessageListStore(s => s.totalEmails);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  // The other loaded rows a hand-ticked key can name (another account's,
+  // another folder's, a search hit): each says whether the vault holds it.
+  const serverEmails = useMessageListStore(s => s.emails);
+  const localEmails = useMessageListStore(s => s.localEmails);
+  const sentEmails = useMessageListStore(s => s.sentEmails);
+  const searchResults = useSearchStore(s => s.searchResults);
   const activeAccountId = useMessageListStore(s => s.activeAccountId);
   const activeMailbox = useMessageListStore(s => s.activeMailbox);
   const viewMode = useMessageListStore(s => s.viewMode);
@@ -351,12 +359,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   // option, the legend, and the Delete-from-Server description must all
   // follow the checkboxes, not the stale range. One traversal shared by all
   // four consumers — selections here can reach ~15k, so this must not be a
-  // count computed once per consumer.
-  const archivedSelectedCount = useMemo(() => {
-    let n = 0;
-    for (const uid of selectedEmailIds) if (archivedEmailIds.has(uid)) n++;
-    return n;
-  }, [selectedEmailIds, archivedEmailIds]);
+  // count computed once per consumer. Archived is the selection bar's rule:
+  // a key's own row, else the open folder's uids for a bare key.
+  const archivedSelectedCount = useMemo(() => archivedSelectionKeys(
+    selectedEmailIds,
+    loadedRows({ sortedEmails, emails: serverEmails, localEmails, sentEmails }, searchResults),
+    archivedEmailIds,
+    useMailStore.getState(),
+  ).length, [selectedEmailIds, archivedEmailIds, sortedEmails, serverEmails, localEmails, sentEmails, searchResults]);
   const hasArchivedSelected = archivedSelectedCount > 0;
 
   // "Delete from Server" must not claim a copy survives when none does.

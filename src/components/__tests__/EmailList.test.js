@@ -65,7 +65,9 @@ vi.mock('@tauri-apps/api/path', () => ({
 
 // Mock child components
 vi.mock('../SearchBar', () => ({ SearchBar: () => null }));
-vi.mock('../BulkOperationsModal', () => ({ BulkOperationsModal: () => null }));
+// Holds the props the list hands the bulk modal, so a spec can confirm a run.
+const bulkModal = vi.hoisted(() => ({ props: null }));
+vi.mock('../BulkOperationsModal', () => ({ BulkOperationsModal: (props) => { bulkModal.props = props; return null; } }));
 vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: () => null }));
 vi.mock('../BulkSelectionBubble', () => ({ BulkSelectionBubble: () => null }));
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
@@ -655,6 +657,29 @@ describe('EmailList virtualization', () => {
     expect(useMailStore.getState().endBulkSession).not.toHaveBeenCalled();
 
     useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set() });
+  });
+});
+
+// The open folder's archived uids name only its own messages. A ticked
+// message of another account or folder is keyed account:mailbox:uid, and its
+// row says whether the vault holds it, as the selection bar reads it.
+describe('bulk Unarchive', () => {
+  it('unarchives a ticked message outside the open folder by its row, and a bare key no row resolves by the open folder', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const removeLocalEmails = vi.fn(async () => {});
+    const hit = { ...mockEmails[0], uid: 900, _accountId: 'acc2', _mailbox: 'INBOX', isArchived: true };
+    useMailStore.setState({ removeLocalEmails, updateSortedEmails: vi.fn(), archivedEmailIds: new Set([777]) });
+    useSearchStore.getState().searchResults = [hit];
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+    await act(() => bulkModal.props.onConfirm({ action: 'unarchive', uids: [2, 777, 'acc2:INBOX:900'] }));
+
+    expect(removeLocalEmails).toHaveBeenCalledWith([777, 'acc2:INBOX:900']);
+
+    useSearchStore.getState().searchResults = [];
+    useMailStore.setState({ archivedEmailIds: new Set() });
   });
 });
 

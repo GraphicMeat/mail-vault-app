@@ -34,10 +34,12 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => children,
 }));
 
-// Store window holds 2 of 5 — the paginated render window.
+// Store window holds 2 of 5 — the paginated render window. A loaded row
+// carries its folder's archived state, as updateSortedEmails derives it.
+const windowRow = (uid, date) => ({ uid, date, get isArchived() { return archivedEmailIds.has(uid); } });
 const WINDOW = [
-  { uid: 5, date: '2026-03-01T10:00:00Z' },
-  { uid: 4, date: '2026-02-01T10:00:00Z' },
+  windowRow(5, '2026-03-01T10:00:00Z'),
+  windowRow(4, '2026-02-01T10:00:00Z'),
 ];
 // Sidecar cache holds the whole mailbox.
 // uid 2 was deleted locally (tombstoned), uid 3 is server-flagged \Deleted —
@@ -92,8 +94,14 @@ vi.mock('../../stores/messageListStore', () => ({
 
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: {
-    getState: () => ({ deleteTombstones: tombstones, archivedEmailIds }),
+    getState: () => ({ ...useMessageListStoreMock.getState(), deleteTombstones: tombstones, archivedEmailIds }),
   },
+}));
+
+// Search hits are rows a ticked key can name, as the selection bar reads them.
+const useSearchStoreMock = create(() => ({ searchResults: [] }));
+vi.mock('../../stores/searchStore', () => ({
+  useSearchStore: (selector) => useSearchStoreMock(selector),
 }));
 
 vi.mock('../../services/db', () => ({
@@ -123,6 +131,7 @@ describe('BulkOperationsModal', () => {
       activeMailbox: 'INBOX',
       viewMode: 'all',
     });
+    useSearchStoreMock.setState({ searchResults: [] });
     archivedEmailIds.clear();
     backupState.externalBackupLocation = null;
     backupState.billingProfile = null;
@@ -465,6 +474,24 @@ describe('BulkOperationsModal', () => {
       // Configured backup is called out, but never with a count attached.
       expect(screen.getByText('backup configured')).toBeTruthy();
       expect(screen.queryByText(/\d+\s*(in|on)?\s*backup/i)).toBeNull();
+    });
+
+    // The open folder's archived uids name only its own messages. A message
+    // ticked from another account's row is keyed account:mailbox:uid, and its
+    // row says whether the vault holds it, as the selection bar reads it.
+    it('counts a ticked message of another account as archived when its row says so', async () => {
+      useSearchStoreMock.setState({
+        searchResults: [{ uid: 9, date: '2026-03-02T10:00:00Z', _accountId: 'acct-2', _mailbox: 'INBOX', isArchived: true }],
+      });
+
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      act(() => useMessageListStoreMock.getState().toggleEmailSelection('acct-2:INBOX:9'));
+      expect(screen.getByText('4 emails selected')).toBeTruthy();
+      fireEvent.click(screen.getByText('Next'));
+
+      expect(screen.getByText('1 archived here')).toBeTruthy();
     });
 
     it('legend omits the backup note entirely when no backup is configured', async () => {

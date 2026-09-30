@@ -82,6 +82,38 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
   };
 }
 
+// A ticked message is archived when its row says the vault holds it, as the
+// row menu reads it. The uids in `archivedIds` name only the open folder's
+// messages, so they stand in only for a bare key no row resolves; reading a
+// full key's uid there counted an archived message of another account or
+// folder (every row of a spanning view, a search hit) as unarchived.
+const isArchivedKey = (rowByKey, archivedIds) => key => {
+  const row = rowByKey.get(key);
+  return row ? !!row.isArchived : !String(key).includes(':') && archivedIds.has(key);
+};
+
+/**
+ * The ticked `keys` whose message the vault holds, in selection order: `rows`
+ * the loaded rows (those no key names are ignored), `archivedIds` the open
+ * folder's archived uids. The bulk modal's counts and its Unarchive run read
+ * this, so they agree with the selection bar.
+ */
+export function archivedSelectionKeys(keys, rows, archivedIds, state) {
+  // The first row a key names, as the selection bar resolves it: a list's row
+  // carries the derived state, a vault row it shadows may not.
+  const rowByKey = new Map();
+  for (const email of rows) {
+    const key = selectionKey(email, state);
+    if (!rowByKey.has(key)) rowByKey.set(key, email);
+  }
+  return [...keys].filter(isArchivedKey(rowByKey, archivedIds));
+}
+
+/** Every loaded row a selection key can name: the lists on screen and the search hits. */
+export function loadedRows({ sortedEmails, emails, localEmails, sentEmails }, searchResults) {
+  return [...(sortedEmails || []), ...(emails || []), ...(localEmails || []), ...(sentEmails || []), ...(searchResults || [])];
+}
+
 /**
  * The selection bar's targets: `keys` the ticked selection (a Set), `rows` its
  * messages the loaded lists resolve, `pool` every loaded row and
@@ -91,20 +123,9 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
  * Archive/Unarchive gates.
  */
 export function selectionFacts(keys, rows, pool, archivedIds, state, { backedUp = false } = {}) {
-  // A row says whether the vault holds it, as the row menu reads it. The
-  // uids in `archivedIds` name only the open folder's messages, so they
-  // stand in only for a bare key no row resolves; reading a full key's uid
-  // there counted an archived message of another account or folder (every
-  // row of a spanning view) as unarchived.
   const rowByKey = new Map(rows.map(email => [selectionKey(email, state), email]));
-  let archived = 0;
-  let unarchived = 0;
-  for (const key of keys) {
-    const row = rowByKey.get(key);
-    const isArchived = row ? !!row.isArchived : !String(key).includes(':') && archivedIds.has(key);
-    if (isArchived) archived++;
-    else unarchived++;
-  }
+  const archived = [...keys].filter(isArchivedKey(rowByKey, archivedIds)).length;
+  const unarchived = keys.size - archived;
   const target = resolveQuickActionSelectionTarget([...keys], pool, state);
   const fullyResolved = rowByKey.size === keys.size && [...keys].every(key => rowByKey.has(key));
   const locations = rows.map(email => resolveEmailLocation(email, state));
