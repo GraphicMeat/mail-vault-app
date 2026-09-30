@@ -23,6 +23,9 @@
 - **Bulk Operations no longer includes messages the list does not show.** Choosing All in Bulk Operations also took in messages an Auto Tags "hide from Inbox" rule keeps out of the Inbox and messages held by a local snooze, so a bulk archive or delete could act on mail you could not see. It now uses the same rules as the list. A folder with subfolders also no longer hides a subfolder's message because the parent folder's message with the same number carries a hidden tag.
 - **A vault copy can no longer take another account's details or status.** When two accounts (or two folders) held a message with the same internal number, archiving one in bulk could record the other's subject and sender in the vault, the server-wide check behind "your only copy" could look for the wrong message and mark yours as deleted by someone else, the open message could show another account's copy status, and deleting an Inbox message could be treated as removing a staged Sent copy instead. Each now follows the message's own account and folder.
 
+### Added
+- **Edit a signature as HTML.** The signature editor, for an account and for an alias with its own signature, has a Rendered / Code switch. Code shows the signature's HTML, one block per line, to read or edit by hand; switching back shows the result. Whatever you type is read through the same filter as the rendered editor, so scripts, styles and markup the editor does not support are removed, pictures and links are kept, and HTML that is broken is repaired rather than lost.
+
 ### Changed
 - **The update window shows it is loading the release notes.** While MailVault reads what changed from GitHub, the notes box now shows a few shimmering lines (still, with Reduce motion on) instead of staying empty or jumping in late; notes the update feed already carries stay on screen above it.
 

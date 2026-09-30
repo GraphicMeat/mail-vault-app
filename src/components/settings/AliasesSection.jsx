@@ -5,7 +5,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { refreshAliases } from '../../services/aliasDiscovery';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { SignatureImageSize } from './SignatureImageSize';
-import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
+import { SignatureEditor } from './SignatureEditor';
+import { textToHtml, htmlToText } from '../RichTextEditor';
 import { signatureHasContent } from '../../utils/signatureImages';
 import { useT } from '../../i18n/index.js';
 
@@ -406,19 +407,18 @@ function AliasSignatureEditor({ accountId, alias }) {
 
   return (
     <div className="mt-2">
-      <div className="flex h-40 rounded-lg border border-mail-border overflow-hidden" data-testid="alias-signature-editor">
-        <RichTextEditor
-          imageTools
-          content={html}
-          onUpdate={next => {
-            latest.current = next;
-            setHtml(next);
-            clearTimeout(timer.current);
-            timer.current = setTimeout(save, NAME_SAVE_DELAY_MS);
-          }}
-          placeholder={t('settings.accounts.bestRegardsJohnDoe')}
-        />
-      </div>
+      <SignatureEditor
+        html={html}
+        heightClass="h-40"
+        boxTestId="alias-signature-editor"
+        onChange={next => {
+          latest.current = next;
+          setHtml(next);
+          clearTimeout(timer.current);
+          timer.current = setTimeout(save, NAME_SAVE_DELAY_MS);
+        }}
+        placeholder={t('settings.accounts.bestRegardsJohnDoe')}
+      />
       <p className="text-xs text-mail-text-muted mt-2">{t('settings.accounts.aliases.signatureOwnHint')}</p>
       <SignatureImageSize html={html} />
     </div>

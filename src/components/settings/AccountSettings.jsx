@@ -14,9 +14,10 @@ import { AccountReorderList } from './AccountReorderList';
 import { AccountTransfer } from './AccountTransfer';
 import { DownloadModeControl } from './DownloadModeControl';
 import '../../styles/account-settings-navigation.css';
-import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
+import { textToHtml, htmlToText } from '../RichTextEditor';
 import { signatureHasContent } from '../../utils/signatureImages';
 import { SignatureImageSize } from './SignatureImageSize';
+import { SignatureEditor } from './SignatureEditor';
 import { Toast } from '../Toast';
 import {
   User,
@@ -550,14 +551,11 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   <label className="block text-sm font-medium text-mail-text mb-2">
                     {t('settings.accounts.signatureContent')}
                   </label>
-                  <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
-                    <RichTextEditor
-                      imageTools
-                      content={signatureHtml}
-                      onUpdate={(html) => setSignatureHtml(html)}
-                      placeholder={t('settings.accounts.bestRegardsJohnDoe')}
-                    />
-                  </div>
+                  <SignatureEditor
+                    html={signatureHtml}
+                    onChange={setSignatureHtml}
+                    placeholder={t('settings.accounts.bestRegardsJohnDoe')}
+                  />
                   <p className="text-xs text-mail-text-muted mt-2">
                     {t('settings.accounts.boldItalicLinksListsSupported')}
                   </p>
