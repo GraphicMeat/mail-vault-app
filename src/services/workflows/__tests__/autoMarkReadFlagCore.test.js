@@ -197,7 +197,8 @@ describe('opening a message marks it read through the one flag core', () => {
 
     answer();
     await opened;
-    expect(journal).toEqual([]);
+    // The journal clears behind the open (the mark's server half is detached).
+    await vi.waitFor(() => expect(journal).toEqual([]));
   });
 
   it('a server that refuses the write leaves the row read and the op in the journal, and the replay finishes it', async () => {

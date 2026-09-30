@@ -1908,8 +1908,14 @@ export async function exportEmail(uid, subject) {
  * `undoable` fills the undo slot with the reverse change — only for the two
  * flags the user sets deliberately, and only over the rows this call actually
  * changes. The reverse itself passes false, or Cmd+Z would ping-pong.
+ * `detachTail` is for a mark nobody asked for (the auto mark-read on open): the
+ * call settles once the rows are painted, and the vault write, the journal, the
+ * token check, the server and the journal clear run as a detached task behind
+ * it, off the click path that is waiting to show a body. Nothing in that task
+ * raises into the caller or into the error banner: a failure is logged, and the
+ * journal entry it leaves behind is what finishes the change (replayOps).
  */
-export async function applyFlagToTargets(targets, flag, on, { undoable = true } = {}) {
+export async function applyFlagToTargets(targets, flag, on, { undoable = true, detachTail = false } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -1974,54 +1980,70 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     });
   }
 
-  // The vault copies are written whatever the server says — a vault-only
-  // message has no server copy to fail against, and the rows on screen have
-  // already changed — and written ONCE per folder, not once per message.
-  const byFolder = new Map();
-  for (const t of targets) {
-    const k = `${t.accountId}|${t.mailbox}`;
-    if (!byFolder.has(k)) byFolder.set(k, { ...t, uids: [], namedUids: [] });
-    byFolder.get(k).uids.push(t.uid);
-    if (t.named) byFolder.get(k).namedUids.push(t.uid);
-  }
-  for (const f of byFolder.values()) {
-    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, flag, on, f.namedUids);
-  }
+  const finish = async () => {
+    // The vault copies are written whatever the server says — a vault-only
+    // message has no server copy to fail against, and the rows on screen have
+    // already changed — and written ONCE per folder, not once per message.
+    const byFolder = new Map();
+    for (const t of targets) {
+      const k = `${t.accountId}|${t.mailbox}`;
+      if (!byFolder.has(k)) byFolder.set(k, { ...t, uids: [], namedUids: [] });
+      byFolder.get(k).uids.push(t.uid);
+      if (t.named) byFolder.get(k).namedUids.push(t.uid);
+    }
+    for (const f of byFolder.values()) {
+      _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, flag, on, f.namedUids);
+    }
 
-  const action = on ? 'add' : 'remove';
-  for (const t of targets) {
-    // A vault-only row has no server copy, and its uid is a pseudo-uid the
-    // server would refuse — journalling it files an op that can never be
-    // finished, and the replay carries it until it has failed once. The vault
-    // write above has already landed, which for this row is the whole change.
-    // Same guard deleteEmailFromServer applies before it journals a delete.
-    // A message in a vault-only folder is the same case: no server holds the
-    // folder, so a journalled flag on it would be replayed and refused forever.
-    // `serverless`: the caller knows no server holds this one (a row the server
-    // has lost, an Insights note).
-    if (t.serverless || t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
-      || isLocalMailbox(state.localFolders, t.accountId, t.mailbox)) continue;
-    if (isGraphAccount(t.account)) {
-      try {
-        await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
-      } catch (e) {
-        // The one branch with no journal behind it — replayOps cannot replay a
-        // Graph op — so a failure here is the end of the road and has to say so.
-        console.error('[applyFlag] Graph write failed:', e);
-        useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: e.message }) });
+    const action = on ? 'add' : 'remove';
+    for (const t of targets) {
+      // A vault-only row has no server copy, and its uid is a pseudo-uid the
+      // server would refuse — journalling it files an op that can never be
+      // finished, and the replay carries it until it has failed once. The vault
+      // write above has already landed, which for this row is the whole change.
+      // Same guard deleteEmailFromServer applies before it journals a delete.
+      // A message in a vault-only folder is the same case: no server holds the
+      // folder, so a journalled flag on it would be replayed and refused forever.
+      // `serverless`: the caller knows no server holds this one (a row the server
+      // has lost, an Insights note).
+      if (t.serverless || t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
+        || isLocalMailbox(state.localFolders, t.accountId, t.mailbox)) continue;
+      if (isGraphAccount(t.account)) {
+        // A mark nobody asked for has nothing to say to the user, and offline
+        // there is no point trying: the next open of the message tries again.
+        if (detachTail && !useConnectivityStore.getState().online) {
+          console.warn('[applyFlag] Offline: the Graph %s for %s/%s/%s is not sent', flag, t.accountId, t.mailbox, t.uid);
+          continue;
+        }
+        try {
+          // The id the caller already resolved rides on the row, so the write
+          // does not look it up (and relist the folder) a second time.
+          const row = t.graphId ? { ...t.emailObj, _graphId: t.graphId } : t.emailObj;
+          await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action, row);
+        } catch (e) {
+          // The one branch with no journal behind it — replayOps cannot replay a
+          // Graph op — so a failure here is the end of the road and has to say so.
+          console.error('[applyFlag] Graph write failed:', e);
+          if (!detachTail) useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: e.message }) });
+        }
+        continue;
       }
-      continue;
+      await db.queueOp({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
+      if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
+      try {
+        const account = await ensureFreshToken(t.account);
+        await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
+        await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
+      } catch (e) {
+        console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);
+      }
     }
-    await db.queueOp({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
-    if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
-    try {
-      const account = await ensureFreshToken(t.account);
-      await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
-      await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
-    } catch (e) {
-      console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);
-    }
-  }
+  };
+
+  if (!detachTail) return finish();
+  // Started, not awaited: its first await (the journal write) is where the
+  // caller gets control back, and whatever it throws goes to the log.
+  finish().catch(e => console.warn('[applyFlag] %s %s not finished, left to the journal:', flag, on ? 'add' : 'remove', e));
 }
 
 /**

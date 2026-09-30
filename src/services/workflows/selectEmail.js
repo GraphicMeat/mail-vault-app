@@ -96,8 +96,13 @@ async function _readVerifiedLocal(accountId, mailbox, uid, headerRow, matchesHea
 // instead of a bold row nobody will ever finish. `serverless` is a message no
 // server holds a copy of (a vault-only read, a row the server has lost): the
 // core writes its vault copy and journals nothing. `named` is a vault copy whose
-// folder the caller knows without a row (the Insights reader).
-async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, account, row = null, serverless = false, named = false, isCurrent = () => true }) {
+// folder the caller knows without a row (the Insights reader). `graphId` is the
+// Graph message id the open already resolved, so the write does not look it up
+// again.
+//
+// This settles once the rows have painted (`detachTail`): the journal, the token
+// check and the server run behind it, so the body is not held for them.
+async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, account, row = null, serverless = false, named = false, graphId = null, isCurrent = () => true }) {
   const { markAsReadMode, markAsReadDelay } = useSettingsStore.getState();
   if (markAsReadMode === 'manual' || email?.flags?.includes('\\Seen')) return email;
 
@@ -136,8 +141,8 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, acc
       // A vault-only folder (an MBOX import kept on this computer) has no
       // server copy to mark: the core sees that from the folder itself.
       await applyFlagToTargets(
-        [{ account, accountId, mailbox, uid, emailObj: row || shown || null, serverless, named }],
-        '\\Seen', true, { undoable: false },
+        [{ account, accountId, mailbox, uid, emailObj: row || shown || null, serverless, named, graphId }],
+        '\\Seen', true, { undoable: false, detachTail: true },
       );
     } catch (e) {
       console.warn('[selectEmail] Mark as read failed:', e);
@@ -635,7 +640,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
           .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
         email = await _autoMarkRead(useMailStore, {
-          email, accountId, mailbox, uid: realUid, account: freshAccount, row: headerRow, isCurrent,
+          email, accountId, mailbox, uid: realUid, account: freshAccount, row: headerRow, graphId, isCurrent,
         });
       } else {
         console.warn('[selectEmail] No Graph message ID found for UID', realUid);
