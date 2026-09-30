@@ -744,8 +744,8 @@ function _shiftUnread(entries, sign) {
 // so only a change made inside that view can leave it stale.
 function _dropUnifiedFolderCache(state) {
   if (state.activeMailbox !== 'UNIFIED') return;
-  import('./activateAccount')
-    .then(({ _unifiedFolderCache }) => _unifiedFolderCache.clear())
+  import('./unifiedFolderCache')
+    .then(({ clearUnifiedFolders }) => clearUnifiedFolders())
     .catch(error => console.warn('[messageMutations] Could not drop the unified folder cache:', error));
 }
 

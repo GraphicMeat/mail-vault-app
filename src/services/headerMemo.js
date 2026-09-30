@@ -17,6 +17,8 @@
  * to read.
  */
 
+import { registerRows } from '../stores/messageRows';
+
 const MAX_MAILBOXES = 2;
 
 /**
@@ -265,6 +267,22 @@ export function forget(accountId, mailbox) {
   }
   if (_onScreen?.key.startsWith(prefix)) _onScreen = null;
 }
+
+// The memo snapshots the store's rows when a mailbox is left, and a flag written
+// to one of its messages afterwards (from All Inboxes, a search hit, a Notes card)
+// moves neither the stamp nor the sidecar directory's listing, so `recall` would
+// serve the old flags as fresh. The entry of the folder the write names is
+// dropped, the next visit reads the (patched) disk; another folder's stays. The
+// on-screen stamp is left alone: rows in the open view are patched in the store.
+registerRows({
+  name: 'headerMemo',
+  invalidate: (ctx) => {
+    for (const k of [..._memo.keys()]) {
+      const [accountId, mailbox] = k.split('\x01');
+      if (ctx.touches(accountId, mailbox)) _memo.delete(k);
+    }
+  },
+});
 
 /** Test/diagnostic helper. */
 export function _size() {

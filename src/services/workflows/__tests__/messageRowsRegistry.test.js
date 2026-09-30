@@ -2,6 +2,7 @@
 // container a row lives in, the one way a writer changes it, and the one pool a
 // key is resolved against.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { serverUids } from '../../../stores/slices/serverUids';
 
 vi.mock('../../mailSearch.js', () => ({
@@ -99,7 +100,11 @@ vi.mock('../../graphConfig', () => ({
   graphMessageToEmail: (m) => m,
 }));
 
-vi.mock('../../cacheManager', () => ({
+// The real module is loaded for what it registers (the restore descriptors are
+// a container); the stubs below are what the workflows under test call.
+vi.mock('../../cacheManager', async () => {
+  await vi.importActual('../../cacheManager');
+  return {
   getRestoreDescriptor: vi.fn().mockReturnValue(null),
   saveRestoreDescriptor: vi.fn(),
   invalidateRestoreDescriptors: () => {},
@@ -108,7 +113,8 @@ vi.mock('../../cacheManager', () => ({
   getGraphMessageId: () => null,
   resolveGraphMessageId: async () => null,
   clearGraphIdMap: () => {},
-}));
+  };
+});
 
 vi.mock('../../../stores/connectivityStore', () => ({
   useConnectivityStore: { getState: () => ({ online: netOnline }) },
@@ -141,7 +147,9 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { useNotesStore } = await import('../../../stores/notesStore');
-const { registeredFields, registeredContainers, patchEverywhere, resolvePool } = await import('../../../stores/messageRows');
+await import('../../headerMemo');
+await import('../unifiedFolderCache');
+const { registeredFields, registeredContainers, registerRows, unregisterRows, patchEverywhere, resolvePool } = await import('../../../stores/messageRows');
 
 // What each store holds, as it was created: read before any test seeds it.
 const initial = new Map([
@@ -184,6 +192,11 @@ const count = (store) => {
   return { seen, off };
 };
 const stamp = (row) => ({ ...row, _mark: true });
+// A registered snapshot for the test's duration; a name nobody else uses.
+const registerProbe = (invalidate) => {
+  registerRows({ name: 'probe', invalidate });
+  return () => unregisterRows('probe');
+};
 
 beforeEach(seed);
 
@@ -240,9 +253,43 @@ describe('the guard: a store field that holds rows is registered or exempted', (
     }
   });
 
-  it('every container is one of the three stores', () => {
-    for (const container of registeredContainers()) expect(storeName.has(container.store)).toBe(true);
+  it('every container is one of the three stores, or a snapshot outside them that invalidates', () => {
+    for (const container of registeredContainers()) {
+      if (container.invalidate) expect([container.name, container.store]).toEqual([container.name, undefined]);
+      else expect([container.name, storeName.has(container.store)]).toEqual([container.name, true]);
+    }
   });
+});
+
+describe('the guard: a module-level snapshot of rows is registered or exempted', () => {
+  // A cache that keeps message rows outside the stores (and paints a list from
+  // them) is a place a write must reach, so it registers an `invalidate`, or
+  // says here why no write can leave it stale. The declaration is found in its
+  // file, so a rename or a removal fails this until the entry is updated.
+  const SNAPSHOTS = [
+    { file: '../../cacheManager.js', decl: 'const _descriptorCache = new Map()', container: 'restoreDescriptors' },
+    { file: '../unifiedFolderCache.js', decl: 'const _entries = new Map()', container: 'unifiedFolderCache' },
+    { file: '../../headerMemo.js', decl: 'const _memo = new Map()', container: 'headerMemo' },
+    { file: '../../../stores/slices/messageListSlice.js', decl: 'let _chatEmailsCache = []',
+      exempt: 'derived lists, re-keyed by a fingerprint that carries _flagChangeCounter, which the flag core bumps with every write' },
+    { file: '../../../stores/slices/messageListSlice.js', decl: 'let _threadsCache = new Map()',
+      exempt: 'same fingerprint as the chat list above' },
+    { file: '../loadEmails.js', decl: 'const _sentCacheReads = new Map()', exempt: 'reads in flight (promises), no rows' },
+    { file: '../loadEmails.js', decl: 'const _sentFullMerges = new Map()', exempt: 'merge counters, no rows' },
+  ];
+  const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');
+
+  for (const { file, decl, container, exempt } of SNAPSHOTS) {
+    it(`${decl}: ${container ? `registered as ${container}` : 'exempted'}`, () => {
+      expect(read(file)).toContain(decl);
+      if (exempt) {
+        expect(exempt.length).toBeGreaterThan(0);
+      } else {
+        const registered = registeredContainers().find(c => c.name === container);
+        expect(registered?.invalidate).toBeTypeOf('function');
+      }
+    });
+  }
 });
 
 describe('patchEverywhere', () => {
@@ -260,6 +307,21 @@ describe('patchEverywhere', () => {
     search.off();
     expect(useMailStore.getState().sentEmails[0]._mark).toBe(true);
     expect(useMailStore.getState().selectedThread.emails[0]._mark).toBe(true);
+  });
+
+  it('calls a snapshot\'s invalidate once per write, with the keys and the stores that landed, and not for an `only` paint', () => {
+    const seen = [];
+    const off = registerProbe(ctx => seen.push({ keys: [...ctx.keys], landed: [...ctx.landed].map(store => storeName.get(store)).sort() }));
+
+    patchEverywhere(['a1-INBOX-7'], stamp);
+    patchEverywhere(['a1-INBOX-99'], stamp);
+    patchEverywhere(['a1-INBOX-7'], stamp, { only: 'notesCards' });
+    off();
+
+    expect(seen).toEqual([
+      { keys: ['a1-INBOX-7'], landed: ['mailStore', 'searchStore'] },
+      { keys: ['a1-INBOX-99'], landed: [] },
+    ]);
   });
 
   it('touches nothing, and tells nobody, when no row is the message', () => {

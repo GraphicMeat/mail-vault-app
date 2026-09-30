@@ -10,7 +10,7 @@ import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAc
 import {
   getLoadAbortController, setLoadAbortController, setArchivedGroup, deriveArchivedUnion,
 } from '../../stores/slices/messageListSlice';
-import { _unifiedFolderCache } from './activateAccount';
+import { putUnifiedFolder, getUnifiedFolder, clearUnifiedFolders } from './unifiedFolderCache';
 
 
 const CHUNK_SIZE = 50;
@@ -93,7 +93,7 @@ export async function setUnifiedInbox(enabled) {
   } else {
     const _loadAbortController = getLoadAbortController();
     if (_loadAbortController) _loadAbortController.abort();
-    _unifiedFolderCache.clear();
+    clearUnifiedFolders();
     useMailStore.setState({ unifiedInbox: false, unifiedFolder: 'INBOX', loadingProgress: null });
   }
 }
@@ -108,7 +108,7 @@ export async function switchUnifiedFolder(mailbox) {
   const { unifiedInbox } = get();
   if (!unifiedInbox) return;
 
-  const cached = _unifiedFolderCache.get(mailbox);
+  const cached = getUnifiedFolder(mailbox);
   if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
     const allServerUids = new Set(cached.emails.map(e => e.uid));
     useMailStore.setState({
@@ -285,17 +285,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   allEmails.sort(byDateDesc);
 
-  // Cap unified folder cache at 3 entries (LRU eviction)
-  const UNIFIED_FOLDER_CACHE_MAX = 3;
-  while (_unifiedFolderCache.size >= UNIFIED_FOLDER_CACHE_MAX) {
-    let oldest = null, oldestTime = Infinity;
-    for (const [k, v] of _unifiedFolderCache) {
-      if (v.timestamp < oldestTime) { oldest = k; oldestTime = v.timestamp; }
-    }
-    if (oldest) _unifiedFolderCache.delete(oldest);
-    else break;
-  }
-  _unifiedFolderCache.set(targetFolder, { emails: allEmails, timestamp: Date.now() });
+  putUnifiedFolder(targetFolder, allEmails);
 
   // The first `n` rows of allEmails with any flag written since the last commit
   // merged in, and written back into allEmails so the next, longer prefix (and

@@ -1058,11 +1058,8 @@ describe('unified inbox — server uid completeness never carries a stale true',
   });
 
   it('switchUnifiedFolder\'s cache-hit path clears the flag too', async () => {
-    const { _unifiedFolderCache } = await import('../../services/workflows/activateAccount');
-    _unifiedFolderCache.set('Archive', {
-      emails: [{ uid: 1, subject: 'Cached', date: '2026-01-01T00:00:00Z' }],
-      timestamp: Date.now(),
-    });
+    const { putUnifiedFolder, clearUnifiedFolders } = await import('../../services/workflows/unifiedFolderCache');
+    putUnifiedFolder('Archive', [{ uid: 1, subject: 'Cached', date: '2026-01-01T00:00:00Z' }]);
 
     useMailStore.setState({
       accounts: [ACCOUNT],
@@ -1079,7 +1076,7 @@ describe('unified inbox — server uid completeness never carries a stale true',
 
     expect(useMailStore.getState().serverUids.complete).toBe(false);
 
-    _unifiedFolderCache.delete('Archive');
+    clearUnifiedFolders();
   });
 });
 

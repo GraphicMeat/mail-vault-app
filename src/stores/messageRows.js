@@ -18,7 +18,8 @@
 //   paintFlags(rows)          a loader's flags (header cache, a committed list)
 //                             laid over every container's copy of those rows
 //
-// A container is `{ name, store, fields, mapRows?, rows?, rank?, derived? }`:
+// A container is `{ name, store, fields, mapRows?, rows?, rank?, derived? }`,
+// or, for a snapshot of rows that lives outside any store, `{ name, invalidate }`:
 //   fields   the store fields it holds (the guard spec lists every collection
 //            a store has and asks that each is registered or exempted)
 //   mapRows  (state, ctx) -> a partial state, or null when nothing changed.
@@ -31,6 +32,14 @@
 //   rank     where its rows sit in the pool; the lowest wins a key both hold
 //   derived  a projection of another container (`sortedEmails`): a writer
 //            that re-derives the list afterwards passes `skipDerived`
+//   invalidate  (ctx) -> void, for a cache of rows a store does not hold (the
+//            restore descriptors, the unified folder cache, the header memo):
+//            they paint a list before any read, and a row left stale in one
+//            comes back on screen. Called once per write, after the stores
+//            landed, and it runs on the click path: it marks or patches the
+//            entries the write touches by key (`ctx.keys`, `ctx.touches`) and
+//            never scans a list or reads disk. `ctx.landed` is the set of
+//            stores this write changed. Not called for an `only` paint.
 //
 // This module imports no store, so every store can import it.
 
@@ -43,6 +52,10 @@ let mailStore = null;
 /// read against (an unstamped row is the view's), so it is registered as such.
 export function registerRows(container) {
   containers.set(container.name, container);
+}
+
+export function unregisterRows(name) {
+  containers.delete(name);
 }
 
 /// The store `emailScopeKey` reads its view from.
@@ -87,14 +100,22 @@ export function indexRows(rows, keyOf) {
   return byKey;
 }
 
+/// The location a snapshot's rows sit in, for `mapList(rows, ctx, at)`: a row
+/// that names no account or folder is the snapshot's own.
+export function locationState(accountId, mailbox) {
+  return { activeAccountId: accountId, activeMailbox: mailbox };
+}
+
 /// A list with `ctx.mapRow` applied to its rows of `keys`: the array itself
-/// when no row changed (updateSortedEmails memoises on it), else a copy.
-export function mapList(rows, ctx) {
+/// when no row changed (updateSortedEmails memoises on it), else a copy. `at`
+/// places rows that name no location (see `locationState`); without it they are
+/// the view's.
+export function mapList(rows, ctx, at = null) {
   if (!rows?.length) return rows;
   let out = null;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const key = ctx.hit(row);
+    const key = at ? ctx.hitAt(row, at) : ctx.hit(row);
     if (key === null) continue;
     const next = ctx.mapRow(row, key);
     if (next !== row) {
@@ -134,10 +155,25 @@ export function patchEverywhere(keys, mapRow, { skipDerived = false, only = null
   const ctx = {
     keys: wanted,
     mapRow,
+    landed: new Set(),
     hit: (row) => {
       if (!row || !uids.has(row.uid)) return null;
       const key = emailScopeKey(row, mail);
       return key !== null && wanted.has(key) ? key : null;
+    },
+    // A row of a snapshot placed by the snapshot's own location (see
+    // `locationState`) rather than the view on screen: a descriptor's rows carry
+    // no account or folder, the descriptor does.
+    hitAt: (row, at) => {
+      if (!row || !uids.has(row.uid)) return null;
+      const key = emailScopeKey(row, at);
+      return key !== null && wanted.has(key) ? key : null;
+    },
+    // Whether the write names any message of this folder.
+    touches: (accountId, mailbox) => {
+      const prefix = `${accountId}-${mailbox}-`;
+      for (const key of wanted) if (key.startsWith(prefix)) return true;
+      return false;
     },
   };
   const patches = new Map();
@@ -146,7 +182,14 @@ export function patchEverywhere(keys, mapRow, { skipDerived = false, only = null
     const patch = container.mapRows(container.store.getState(), ctx);
     if (patch) patches.set(container.store, { ...patches.get(container.store), ...patch });
   }
-  for (const [store, patch] of patches) store.setState(patch);
+  for (const [store, patch] of patches) {
+    store.setState(patch);
+    ctx.landed.add(store);
+  }
+  // A skipped derived list is the writer's to re-derive; a snapshot outside
+  // the store is nobody's but the registry's.
+  if (only) return;
+  for (const container of containers.values()) container.invalidate?.(ctx);
 }
 
 /// A loader read these rows' flags from somewhere that is right about them (the

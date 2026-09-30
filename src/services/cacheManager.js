@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { registerRows, mapList, locationState } from '../stores/messageRows';
 // ── Lightweight Restore Cache & Graph ID Map ──────────────────────────────
 // Stores compact RestoreDescriptors for instant first-window render on switch.
 // No heavyweight state blobs — store is the sole owner of list data.
@@ -36,6 +37,22 @@ export function getRestoreDescriptor(accountId, mailbox, viewMode) {
   if (cached) cached._lruTimestamp = Date.now(); // LRU touch — does not affect timestamp
   return cached || null;
 }
+
+// A descriptor's window is a snapshot of rows: the restore paint puts it in the
+// list before any read, and the unified list keeps its copy of a row over the
+// disk's. A flag written to a message is laid over the rows of it, in a copy (the
+// window a paint put in the store is not written into) and in every descriptor,
+// since a window can hold a merged Sent copy. At most eight windows of fifty
+// rows; the descriptor itself, its folder tree and its ages stay as they were.
+registerRows({
+  name: 'restoreDescriptors',
+  invalidate: (ctx) => {
+    for (const [key, descriptor] of _descriptorCache) {
+      const firstWindow = mapList(descriptor.firstWindow, ctx, locationState(descriptor.accountId, descriptor.mailbox));
+      if (firstWindow !== descriptor.firstWindow) _descriptorCache.set(key, { ...descriptor, firstWindow });
+    }
+  },
+});
 
 export function invalidateRestoreDescriptors(accountId) {
   for (const key of _descriptorCache.keys()) {

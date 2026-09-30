@@ -44,9 +44,6 @@ import { t } from '../../i18n/index.js';
 // ── AbortController for activateAccount — cancels previous activation on rapid switch ──
 let _activeController = null;
 
-// ── Unified folder cache — stores merged emails per folder for instant switching ──
-const _unifiedFolderCache = new Map(); // folderId -> { emails: [...], timestamp }
-
 const MAILBOX_CACHE_FRESH_MS = 10 * 60 * 1000;
 const MAILBOX_PREFETCH_LIMIT = 2;
 
@@ -1523,5 +1520,5 @@ export async function setActiveAccount(accountId) {
 }
 
 
-// ── Expose _unifiedFolderCache for loadUnifiedInbox workflow ──
-export { _unifiedFolderCache, fetchAccountMailboxes, shouldUseFreshMailboxCache, isSuspiciousEmptyMailboxResult, MAILBOX_PREFETCH_LIMIT };
+// ── Expose helpers for the loadUnifiedInbox workflow ──
+export { fetchAccountMailboxes, shouldUseFreshMailboxCache, isSuspiciousEmptyMailboxResult, MAILBOX_PREFETCH_LIMIT };
