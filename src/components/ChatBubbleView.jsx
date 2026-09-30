@@ -16,6 +16,7 @@ import {
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import { resolveEmailLocation, selectionKey, emailScopeKey, inLocalFolder } from '../stores/slices/unifiedHelpers';
+import { isRowArchived } from '../utils/quickActionFacts';
 import {
   ChevronLeft,
   Paperclip,
@@ -311,10 +312,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     ? { ...email, _accountId: emailLocation.accountId, _mailbox: emailLocation.mailbox }
     : email;
   const emailSelectionKey = emailLocation ? selectionKey(scopedEmail, mailState) : null;
-  const isArchived = !!email.isArchived || (!Object.hasOwn(email, 'isArchived')
-    && emailLocation?.accountId === mailState.activeAccountId
-    && emailLocation?.mailbox === mailState.activeMailbox
-    && archivedEmailIds.has(email.uid));
+  const isArchived = isRowArchived(email, mailState, archivedEmailIds);
   const isLocalOnly = email.source === 'local-only' || email._origin === 'local-only';
   const isSentEmail = isOutgoingMailboxName(emailLocation?.mailbox) || fromUser || email.flags?.includes('\\Sent');
   const isRead = !!email.flags?.includes('\\Seen');
@@ -349,7 +347,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       copy: {
         title: t('viewer.deleteEmail'),
         description: describeReaderDelete({
-          localOnly, localFolder: inLocalFolder(target, useMailStore.getState()), archived: target.isArchived,
+          localOnly, localFolder: inLocalFolder(target, useMailStore.getState()), archived: isRowArchived(target, useMailStore.getState(), archivedEmailIds),
         }),
         confirmLabel: t('common.delete'),
       },
@@ -360,7 +358,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const location = resolveEmailLocation(target, state);
     if (!location) return;
     const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
-    const targetArchived = !!target.isArchived || isArchived;
+    const targetArchived = isRowArchived(target, state, archivedEmailIds) || isArchived;
     if (targetArchived) {
       setPendingConfirmation({
         executor: () => useMailStore.getState().removeLocalEmail(target.uid, explicitLocation),
@@ -383,7 +381,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
     const copy = describePurge({
       server: !localOnly,
-      vault: !!target.isArchived || localOnly || isArchived,
+      vault: isRowArchived(target, state, archivedEmailIds) || localOnly || isArchived,
       backup: isEmailBackedUp(scopedTarget, {
         backedUpKeys: state.backedUpKeys, backedUpScopes: state.backedUpScopes,
         backupConfigured: state.backupConfigured, activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox,

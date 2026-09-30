@@ -333,6 +333,18 @@ describe('FullViewEmailModal actions', () => {
     expect(moveEmails).toHaveBeenCalledWith([`${ACCOUNT_B.id}:Sent:78`], 'Archive');
   });
 
+  // Server view writes isArchived false on every row it lists; the open
+  // folder's archived uids still say the vault holds the message.
+  it('offers Unarchive for an open-folder message its folder holds archived, whatever its flag says', () => {
+    configureReaderActions(readerAction('archive'));
+    const target = fullMessage({ uid: 81, isArchived: false });
+    renderModal(vi.fn(), vi.fn(), target, {
+      accounts: [ACCOUNT_A], activeAccountId: ACCOUNT_A.id, activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
+      archivedEmailIds: new Set([81]),
+    });
+    expect(screen.getByTestId('reader-action-archive').textContent).toBe('Unarchive');
+  });
+
   it('hides server mutation actions for insight read-only and local-only messages', () => {
     configureReaderActions(readerAction('deleteServer'), readerAction('deleteEverywhere'), readerAction('archive'), readerAction('markRead'), readerAction('move'));
     const readOnly = fullMessage({ uid: 79, _insightsReadOnly: true });

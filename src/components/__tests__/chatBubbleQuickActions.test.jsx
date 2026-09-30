@@ -174,6 +174,19 @@ describe('chat bubble configurable actions', () => {
     }));
   });
 
+  // Server view writes isArchived false on every row it lists; the open
+  // folder's archived uids still say the vault holds the message.
+  it('offers Unarchive for an open-folder message its folder holds archived, whatever its flag says', () => {
+    mocks.accountState = { activeAccountId: ACCOUNT_A.id, activeMailbox: 'INBOX' };
+    mailStore.setState({ activeMailbox: 'INBOX', unifiedInbox: false });
+    mocks.messageListState.archivedEmailIds = new Set([82]);
+    setActions(action('archive'));
+    renderChat(email({ uid: 82, isArchived: false, _accountId: ACCOUNT_A.id, _mailbox: 'INBOX' }));
+    fireEvent.mouseEnter(screen.getByRole('group').parentElement.parentElement);
+    expect(actionButton('archive').textContent).toBe('rowMenu.unarchive');
+    mocks.accountState = { activeAccountId: 'acct-a', activeMailbox: 'UNIFIED' };
+  });
+
   it('purges only when backup custody is proven and preserves unrelated selection', async () => {
     setActions(action('deleteEverywhere'));
     const key = `${ACCOUNT_B.id}:Sent:76`;

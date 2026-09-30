@@ -3,7 +3,7 @@
 // rows) and the reader (one open message and the handlers its host wired).
 // quickActionAvailability.js and quickActionCatalog.js read only this shape;
 // each builder below says what its surface's facts mean.
-import { resolveEmailLocation, inLocalFolder, selectionKey } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, inLocalFolder, selectionKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { canSnooze } from '../services/workflows/snooze';
 import { actionVisibility } from './actionVisibility';
@@ -38,15 +38,22 @@ const BASE = {
 };
 
 /**
- * Whether the vault holds a loaded message, by the same rule as a ticked key:
- * its row says so, or it is the open folder's own (its selection key is the
- * bare uid) and the folder's archived uids hold it. Server view writes
- * isArchived false on every row it lists, so the row alone undercounts there.
+ * Whether the vault holds a message, by the same rule as a ticked key: its
+ * own flag says so, or it lives in the open folder (outside a view spanning
+ * several) and the folder's archived uids hold it. Server view writes
+ * isArchived false on every row it lists, so the flag alone undercounts
+ * there; and those uids name only the open folder's messages, so another
+ * folder's message that shares a uid is never read against them.
+ * `archivedIds` defaults to the store's; a component passes the set it
+ * subscribes to.
  */
-export function isRowArchived(email, state) {
-  if (email?.isArchived) return true;
-  const key = selectionKey(email, state);
-  return !String(key).includes(':') && !!state.archivedEmailIds?.has(key);
+export function isRowArchived(email, state, archivedIds = state?.archivedEmailIds) {
+  if (!email) return false;
+  if (email.isArchived) return true;
+  if (spansMailboxes(state)) return false;
+  const location = resolveEmailLocation(email, state);
+  return !!location && location.accountId === state.activeAccountId && location.mailbox === state.activeMailbox
+    && !!archivedIds?.has(email.uid);
 }
 
 /**

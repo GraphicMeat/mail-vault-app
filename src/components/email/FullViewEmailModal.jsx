@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
 import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
+import { isRowArchived } from '../../utils/quickActionFacts';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -47,6 +48,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
   const backedUpScopes = useMailStore(s => s.backedUpScopes);
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const iframeRef = useRef(null);
@@ -162,7 +164,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const barEmail = liveFlags && liveFlags !== email.flags ? { ...email, flags: liveFlags } : email;
   const emailLocation = resolveEmailLocation(email, useMailStore.getState());
   const emailKey = selectionKey(email, useMailStore.getState());
-  const isArchived = !!email?.isArchived;
+  const isArchived = isRowArchived(email, useMailStore.getState(), archivedEmailIds);
   const isLocalOnly = email?.source === 'local-only' || email?._origin === 'local-only';
   const isSentEmail = isOutgoingMailboxName(emailLocation?.mailbox) || email?.flags?.includes('\\Sent');
   const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
@@ -185,7 +187,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         : useMailStore.getState().deleteEmailFromServer(target.uid, { accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: describeReaderDelete({ localOnly, localFolder: inLocalFolder(target, state), archived: target.isArchived }),
+        description: describeReaderDelete({ localOnly, localFolder: inLocalFolder(target, state), archived: isRowArchived(target, state, archivedEmailIds) }),
         confirmLabel: t('common.delete'),
       },
     });
@@ -318,7 +320,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
             onForward={async target => openCompose({ mode: 'forward', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
             onArchive={target => {
-              if (target.isArchived) {
+              if (isRowArchived(target, useMailStore.getState(), archivedEmailIds)) {
                 const location = resolveEmailLocation(target, useMailStore.getState());
                 if (!location) return;
                 setPendingDelete({ executor: () => useMailStore.getState().removeLocalEmail(target.uid, { accountId: location.accountId, mailbox: location.mailbox }),
@@ -335,7 +337,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             }}
             onToggleFlag={target => useMailStore.getState().toggleFlagged(selectionKey(target, useMailStore.getState()))}
             onDeleteEverywhere={purgeDescription && emailLocation ? target => {
-              const purge = describePurge({ server: !isLocalOnly, vault: !!target.isArchived || isLocalOnly, backup: isBackedUp }, 1);
+              const purge = describePurge({ server: !isLocalOnly, vault: isRowArchived(target, useMailStore.getState(), archivedEmailIds) || isLocalOnly, backup: isBackedUp }, 1);
               if (!purge) return;
               const key = selectionKey(target, useMailStore.getState());
               setPendingDelete({ executor: () => purgeEverywhere([key]), copy: { title: purge.title, description: purge.description, confirmLabel: purge.label } });

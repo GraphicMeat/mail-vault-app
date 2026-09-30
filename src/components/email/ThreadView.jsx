@@ -7,6 +7,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
 import { resolveEmailLocation, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
+import { isRowArchived } from '../../utils/quickActionFacts';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './PgpStatus';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
@@ -363,7 +364,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   // active view is not it — reading a UID from the wrong folder returns a
   // different message (raw source, attachments).
   const location = resolveEmailLocation(email, useMailStore.getState());
-  const isArchived = typeof email.isArchived === 'boolean' ? email.isArchived : !!archivedEmailIds?.has(email.uid);
+  const isArchived = isRowArchived(email, useMailStore.getState(), archivedEmailIds);
 
   // Register for body load notifications
   useEffect(() => {
@@ -651,7 +652,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
         description: describeReaderDelete({
           localOnly,
           localFolder: inLocalFolder(email, state),
-          archived: typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid),
+          archived: isRowArchived(email, state, archivedEmailIds),
         }),
         confirmLabel: localOnly ? t('rowMenu.unarchive') : t('common.delete'),
       },
@@ -672,7 +673,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   }, [t]);
 
   const handleQuickArchive = useCallback(async (email, entry) => {
-    if (entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))) {
+    if (entry?.action === 'unarchive' || isRowArchived(email, useMailStore.getState(), archivedEmailIds)) {
       requestUnarchive(email);
       return;
     }
@@ -849,14 +850,14 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   // screen — the same rule as the row's archive button (see threadRowMembers).
   // The Sent copies an INBOX list merges in are context, not members.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const allArchived = members.every(e => archivedEmailIds.has(e.uid));
+  const allArchived = members.every(e => isRowArchived(e, useMailStore.getState(), archivedEmailIds));
 
   const handleArchiveThread = async () => {
     setSaving(true);
     try {
       // Rows, not uids: each one names its own account and folder, which is
       // what a thread opened from All Inboxes needs to archive at all.
-      const rows = members.filter(em => !archivedEmailIds.has(em.uid));
+      const rows = members.filter(em => !isRowArchived(em, useMailStore.getState(), archivedEmailIds));
       if (rows.length > 0) await saveEmailsLocally(rows);
     } finally {
       setSaving(false);

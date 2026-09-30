@@ -11,16 +11,19 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   const { emailKey } = await import('../../stores/slices/unifiedHelpers');
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
 });
-vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
+// The props each message's bar was last handed, by folder.
+const bars = vi.hoisted(() => new Map());
+vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: (props) => { bars.set(props.email._mailbox, props); return null; } }));
 vi.mock('../../utils/replyTarget', () => ({ replyTarget: async (header) => header }));
 const { ThreadView } = await import('../email/ThreadView');
 const { useSettingsStore } = await import('../../stores/settingsStore');
+const { useMailStore } = await import('../../stores/mailStore');
 const emails = [
   { uid: 7, _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Older', address: 'old@example.com' }, to: [], subject: 'Earlier' },
   { uid: 7, _mailbox: 'Sent', date: '2026-09-02', from: { name: 'Newest', address: 'new@example.com' }, to: [], subject: 'Latest' },
 ];
 const thread = { threadId: 'one', subject: 'Conversation', emails, messageCount: 2 };
-afterEach(() => { cleanup(); bodies.clear(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); bodies.clear(); bars.clear(); vi.clearAllMocks(); });
 describe('thread reader layouts', () => {
   it('opens the newest full message identity and follows changes to sort order', () => {
     useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
@@ -95,5 +98,24 @@ describe('thread body loading', () => {
     const indicators = screen.getAllByRole('status', { name: /Loading message/ });
     expect(indicators.length).toBeGreaterThan(0);
     expect(indicators[0].querySelector('.animate-spin')).toBeTruthy();
+  });
+});
+
+// A message of the open folder is archived when its flag says so or the
+// folder's archived uids hold it (Server view writes the flag false); a
+// message of another folder never reads the open folder's uids.
+describe('thread message archived state', () => {
+  it('reads the open folder\'s archived uids for its own message only', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    useMailStore.setState({ activeAccountId: 'acct-1', activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false, archivedEmailIds: new Set([7]) });
+    const own = [
+      { ...emails[0], _accountId: 'acct-1', isArchived: false },
+      { ...emails[1], _accountId: 'acct-1' },
+    ];
+    render(<ThreadView thread={{ ...thread, emails: own }} />);
+    fireEvent.click(screen.getAllByTestId('header-toggle')[0]);
+    expect(bars.get('INBOX').isArchived).toBe(true);
+    expect(bars.get('Sent').isArchived).toBe(false);
+    useMailStore.setState({ activeAccountId: null, activeMailbox: null, archivedEmailIds: new Set() });
   });
 });

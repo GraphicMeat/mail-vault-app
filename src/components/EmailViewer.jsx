@@ -42,6 +42,7 @@ import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder } from '../stores/slices/unifiedHelpers';
+import { isRowArchived } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -179,7 +180,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const emailColors = getEmailColors(effectiveEmailTheme, palette);
 
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
-  const isArchived = selectedEmail && (typeof selectedEmail.isArchived === 'boolean' ? selectedEmail.isArchived : archivedEmailIds.has(selectedEmail.uid));
+  const isArchived = !!selectedEmail && isRowArchived(selectedEmail, useMailStore.getState(), archivedEmailIds);
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');
   // One custody statement per message — and it is the ROW's, not a second
@@ -335,7 +336,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         title: t('viewer.deleteEmail'),
         description: describeReaderDelete({
           localFolder: inLocalFolder(target, useMailStore.getState()),
-          archived: target.isArchived || archivedEmailIds.has(target.uid),
+          archived: isRowArchived(target, useMailStore.getState(), archivedEmailIds),
         }),
         confirmLabel: t('common.delete'),
       },
@@ -348,7 +349,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const location = resolveEmailLocation(target, state);
     if (!location) return;
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
-    const archived = !!target.isArchived || archivedEmailIds.has(target.uid) || localOnly;
+    const archived = isRowArchived(target, state, archivedEmailIds) || localOnly;
     const backup = !!backedUpKeys?.has(`${location.accountId}:${location.mailbox}:${target.uid}`);
     const copy = describePurge({ server: !localOnly, vault: archived, backup }, 1);
     if (!copy) return;
@@ -754,7 +755,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             onReply={(email) => composeFrom('reply', email)}
             onReplyAll={(email) => composeFrom('replyAll', email)}
             onForward={(email) => composeFrom('forward', email)}
-            onArchive={(email, entry) => entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
+            onArchive={(email, entry) => entry?.action === 'unarchive' || isRowArchived(email, useMailStore.getState(), archivedEmailIds)
               ? handleRemoveLocal(email) : handleSave(email)}
             onDelete={(email, entry) => email.source === 'local-only' || email._origin === 'local-only'
               ? handleRemoveLocal(email) : handleDelete(email)}
