@@ -26,6 +26,10 @@ function tagKeys(tags) {
   });
 }
 
+/// An input method (Japanese, Korean, Chinese) confirms a candidate with
+/// Enter while composing: that key belongs to it, not to the tags.
+const composing = event => event.nativeEvent?.isComposing || event.keyCode === 229;
+
 const CHIP = 'flex items-center gap-1 px-2 py-0.5 bg-mail-surface border border-mail-border rounded-lg text-sm text-mail-text';
 
 /**
@@ -52,6 +56,7 @@ export function SearchTagInput({
   const t = useT();
   const listId = useId();
   const rootRef = useRef(null);
+  const rowRef = useRef(null);
   const chipRefs = useRef([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -88,6 +93,12 @@ export function SearchTagInput({
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, []);
+  // Past the rows the box shows, a new tag would push the input out of
+  // sight: the row scrolls to its end (where the input is) as tags come and
+  // go. Only the row scrolls, never the list around the bar.
+  useEffect(() => {
+    if (!editing && rowRef.current) rowRef.current.scrollTop = rowRef.current.scrollHeight;
+  }, [tags.length, editing]);
   useEffect(() => {
     if (current >= 0) document.getElementById(`${listId}-${current}`)?.scrollIntoView?.({ block: 'nearest' });
   }, [current, listId]);
@@ -156,6 +167,7 @@ export function SearchTagInput({
   };
 
   const onInputKeyDown = event => {
+    if (composing(event)) return;
     if (event.key === 'ArrowDown' && options.length) {
       event.preventDefault();
       setOpen(true);
@@ -211,6 +223,7 @@ export function SearchTagInput({
         size={Math.max(4, session.text.length + 1)}
         onChange={event => editText(event.target.value)}
         onKeyDown={event => {
+          if (composing(event)) return;
           if (event.key === 'Enter') {
             event.preventDefault();
             finishEdit(true, true);
@@ -244,7 +257,7 @@ export function SearchTagInput({
       >
         <span className="mt-1.5 shrink-0 text-mail-text-muted" aria-hidden="true">{leading}</span>
         {/* Many tags wrap onto more rows and then scroll, never widen the bar. */}
-        <div data-tag-row="true" className="flex flex-1 min-w-0 flex-wrap items-center gap-1 max-h-24 overflow-y-auto py-0.5">
+        <div ref={rowRef} data-tag-row="true" className="flex flex-1 min-w-0 flex-wrap items-center gap-1 max-h-24 overflow-y-auto py-0.5">
           {tags.map((tag, index) => (editing && !editing.isNew && editing.index === index
             ? editChip(keys[index], editing)
             : (

@@ -132,6 +132,30 @@ describe('committing tags', () => {
   });
 });
 
+describe('typing through an input method', () => {
+  // Japanese, Korean and Chinese input confirm a candidate with Enter while
+  // composing; that Enter picks the word, it must not commit a tag or search.
+  it('ignores Enter and Backspace while a word is still being composed', () => {
+    render(<SearchBar />);
+    commit('a');
+    type('にほん');
+    fireEvent.keyDown(input(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 });
+    expect(tagTexts()).toEqual(['a']);
+    expect(input().value).toBe('にほん');
+
+    type('');
+    fireEvent.keyDown(input(), { key: 'Backspace', isComposing: true });
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Edit a' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit a' }));
+    const edit = screen.getByTestId('search-tag-edit');
+    type('にほん', edit);
+    fireEvent.keyDown(edit, { key: 'Enter', isComposing: true });
+    expect(screen.getByTestId('search-tag-edit')).toBe(edit);
+  });
+});
+
 describe('removing and editing a tag', () => {
   it('removes a tag at once with its x', () => {
     render(<SearchBar />);
@@ -262,6 +286,7 @@ describe('the / operator list', () => {
     render(<SearchBar />);
     fireEvent.focus(input());
     type('/');
+    expect(menu()).not.toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(menu()).toBeNull();
     expect(input().value).toBe('/');
