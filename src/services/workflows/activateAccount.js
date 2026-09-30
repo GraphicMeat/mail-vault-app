@@ -493,7 +493,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     // The view on screen already shows its rows; a placeholder window over
     // them would only shrink the list. Unless it is the shorter of the two.
     const ownPaint = reactivatesView && currentEmails.length >= restoredPaint.length;
-    const painted = ownPaint ? currentEmails : restoredPaint;
+    // The store's own rows are read where they are painted, not here: the
+    // awaits below (the folder list's disk read) are long enough for a flag to
+    // be written, and a snapshot from the top of the activation puts it back.
+    let painted = ownPaint ? currentEmails : restoredPaint;
 
     console.log('[activateAccount] %s restore HIT for %s:%s — rendering %d headers (%s)',
       label, accountId, restored.mailbox, painted.length,
@@ -510,6 +513,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const cachedMailboxEntry = await db.getCachedMailboxEntry(accountId);
       restoredMailboxes = pickMailboxList(restored.mailboxes, cachedMailboxEntry?.mailboxes);
     }
+
+    if (ownPaint) painted = get().emails;
 
     // The descriptor lists bare uids of its own folder; the store's sets are keyed.
     const restoredFolder = restored.mailbox || mailbox;

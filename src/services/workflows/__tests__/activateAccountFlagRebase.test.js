@@ -18,9 +18,10 @@ vi.stubGlobal('navigator', { onLine: true });
 const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue(null);
 const mockGetEmailHeadersPartial = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
+const mockGetCachedMailboxEntry = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../db', () => ({
-  getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
+  getCachedMailboxEntry: (...a) => mockGetCachedMailboxEntry(...a),
   getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
   getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
   getVaultUidSets: async () => ({ saved: new Set(), archived: new Set() }),
@@ -61,9 +62,10 @@ vi.mock('../../graphConfig', () => ({
   graphMessageToEmail: (m) => m,
   isPersonalMicrosoftEmail: () => false,
 }));
+const mockGetRestoreDescriptor = vi.fn().mockReturnValue(null);
 vi.mock('../../cacheManager', () => ({
   saveRestoreDescriptor: vi.fn(),
-  getRestoreDescriptor: vi.fn().mockReturnValue(null),
+  getRestoreDescriptor: (...a) => mockGetRestoreDescriptor(...a),
   listGraphMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   getGraphMessageId: vi.fn().mockReturnValue(null),
   resolveGraphMessageId: vi.fn().mockResolvedValue(null),
@@ -142,6 +144,8 @@ const savedRow = (uid) => mockSaveEmailHeaders.mock.calls.at(-1)?.[2]?.find(e =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetRestoreDescriptor.mockReturnValue(null);
+  mockGetCachedMailboxEntry.mockResolvedValue(null);
   mockGetEmailHeadersMeta.mockResolvedValue(null);
   mockGetEmailHeadersPartial.mockResolvedValue({ emails: rows(), totalEmails: 5, totalCached: 5, uidValidity: 1 });
   mockGetDaemonHealth.mockReturnValue({ alive: false });
@@ -205,5 +209,37 @@ describe('activateAccount — a flag written after the first paint survives the 
 
     expect(storeRow(3).flags).toContain('\\Seen');
     expect(storeRow(4).flags).toEqual([]);
+  });
+});
+
+describe('activateAccount — the restore paint of the view already on screen', () => {
+  it('does not put back the rows it read before an await: a flag written meanwhile stays', async () => {
+    // The reopen of the folder on screen paints the store's own rows. They were
+    // read at the top of the activation; the descriptor's folder list may need
+    // a disk read first, and a mark-read written during it was painted over.
+    useMailStore.setState({
+      activeAccountId: ACCOUNT.id,
+      activeMailbox: 'INBOX',
+      emails: rows(),
+      totalEmails: 5,
+      mailboxes: [],
+    });
+    mockGetRestoreDescriptor.mockReturnValue({
+      mailbox: 'INBOX', firstWindow: rows().slice(0, 2), totalEmails: 5, mailboxes: [], serverUids: null,
+    });
+    const listing = parked();
+    mockGetCachedMailboxEntry.mockReturnValueOnce(listing.promise);
+    // The background refresh the paint starts stays on its disk read: this
+    // checks the paint itself, not a later commit that could repair it.
+    mockGetEmailHeadersPartial.mockReturnValue(parked().promise);
+
+    const done = useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+    await vi.waitFor(() => expect(mockGetCachedMailboxEntry).toHaveBeenCalled());
+
+    markRead(3);
+    listing.resolve(null);
+    await done;
+
+    expect(storeRow(3).flags).toContain('\\Seen');
   });
 });

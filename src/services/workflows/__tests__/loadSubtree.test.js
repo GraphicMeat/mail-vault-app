@@ -206,6 +206,30 @@ describe('loadSubtree', () => {
     expect(state.emails).toEqual([]);
   });
 
+  it('keeps a flag the user wrote while a later folder was on the wire, through every later commit', async () => {
+    // Each folder's commit rebuilds the list from the rows this load fetched
+    // itself. A mark-read written between two commits (opening a message in the
+    // half-filled list) must survive this one and the next.
+    let release;
+    gate = { mailbox: 'Kunden/Company XY', promise: new Promise(r => { release = r; }) };
+    emailsByMailbox = {
+      'Kunden': [msg(1, 1)],
+      'Kunden/Company XY': [msg(2, 2)],
+      'Kunden/Company XY/Invoices': [msg(3, 3)],
+    };
+
+    const run = loadSubtree(ACCOUNT.id, 'Kunden');
+    await vi.waitFor(() => expect(fetchCalls).toContain('Kunden/Company XY'));
+    // The user opens uid 1 of the first folder: marked read in the store.
+    state = { ...state, emails: state.emails.map(e => e.uid === 1 ? { ...e, flags: ['\\Seen'] } : e) };
+    release();
+    await run;
+
+    expect(state.emails.map(e => e.uid).sort()).toEqual([1, 2, 3]);
+    expect(state.emails.find(e => e.uid === 1).flags).toEqual(['\\Seen']);
+    expect(state.emails.find(e => e.uid === 2).flags).toEqual([]);
+  });
+
   it('repaints the list after each folder, not only the store', async () => {
     // sortedEmails is recomputed by an explicit call, not derived — so a load
     // that writes `emails` and stops leaves the list showing the folder before.

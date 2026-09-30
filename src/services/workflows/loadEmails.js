@@ -194,14 +194,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
     }
   }, 20000);
 
-  // Hoisted out of the try block: the catch below falls back to whatever was
-  // loaded before this attempt, and a try-scoped `const` is invisible in the
-  // paired catch at all - not just before it assigns below (line 306) but for
-  // the rest of the function too, since try/catch are separate block scopes.
-  // Every non-stale failed load threw ReferenceError here instead of setting
-  // connectionStatus/connectionError and scheduling a retry.
-  let previousEmails;
-
   try {
     account = await ensureFreshToken(account);
     if (isStale()) return;
@@ -369,15 +361,15 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       loadTrace.mark('fresh-empty-state-rendered');
     }
 
-    // Keep previous/cached emails for degraded modes
-    previousEmails = get().emails;
+    // The degraded exits below (credentials, offline, a failed load) keep what
+    // is shown and never write `emails`: a snapshot taken here and put back
+    // after these awaits would revert a flag written meanwhile.
 
     // Resolve credentialed account
     const resolved = await resolveServerAccount(activeAccountId, account);
     if (!resolved.ok) {
       console.error('[loadEmails] Credentials missing for account:', account.email);
       if (!isStale()) useMailStore.setState({
-        emails: previousEmails,
         connectionStatus: 'error',
         connectionError: t('svc.loadEmails.passwordFoundPleaseReEnter'),
         connectionErrorType: 'passwordMissing',
@@ -398,7 +390,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         if (isOnline === false) {
           console.error('[loadEmails] No network connectivity detected!');
           if (!isStale()) useMailStore.setState({
-            emails: previousEmails,
             connectionStatus: 'error',
             connectionError: t('svc.loadEmails.noInternetConnectionShowingCached'),
             connectionErrorType: 'offline',
@@ -413,7 +404,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         if (isStale()) return;
         console.error('[loadEmails] Connectivity check failed, assuming offline');
         useMailStore.setState({
-          emails: previousEmails,
           connectionStatus: 'error',
           connectionError: t('svc.loadEmails.couldCheckInternetConnectionShowing'),
           connectionErrorType: 'offline',
@@ -427,7 +417,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       if (!navigator.onLine) {
         console.error('[loadEmails] Browser reports offline');
         useMailStore.setState({
-          emails: previousEmails,
           connectionStatus: 'error',
           connectionError: t('svc.loadEmails.noInternetConnectionShowingCached'),
           connectionErrorType: 'offline',
@@ -855,7 +844,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
     if (!isStale()) {
       useMailStore.setState({
-        emails: previousEmails ?? get().emails,
         connectionStatus: 'error',
         connectionError: errorMessage,
         connectionErrorType: errorType,

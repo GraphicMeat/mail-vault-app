@@ -13,7 +13,7 @@
 import * as api from '../api';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { mailboxDescendants } from './mailboxTree';
-import { vaultKey } from '../../stores/slices/unifiedHelpers';
+import { vaultKey, rebaseFlags } from '../../stores/slices/unifiedHelpers';
 
 const HEADERS_PER_FOLDER = 200;
 
@@ -82,6 +82,9 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
 
   const merged = [];
   const seen = new Set();
+  // The list this load last wrote: the base a later commit diffs the live
+  // store against, to find a flag the user wrote since.
+  let onScreen = get().emails;
   for (const [i, path] of paths.entries()) {
     if (isStale()) return;
     try {
@@ -109,7 +112,18 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
     if (isStale()) return;
     // Publish as we go: a 23-folder branch is long enough that a list which
     // fills only at the end reads as a folder that found nothing.
-    set({ emails: newestFirst(merged), subtreeProgress: { done: i + 1, total: paths.length } });
+    const rows = newestFirst(merged);
+    // `merged` is this load's own fetches, older than anything the user did to
+    // the list since the last commit (opening a message marks it read). Lay
+    // those flags over the rows, and back into `merged`, which the next folder's
+    // commit starts from.
+    const rebased = rebaseFlags(onScreen, get().emails, rows, get());
+    if (rebased !== rows) {
+      const at = new Map(merged.map((row, k) => [row, k]));
+      rows.forEach((row, k) => { if (rebased[k] !== row) merged[at.get(row)] = rebased[k]; });
+    }
+    onScreen = rebased;
+    set({ emails: rebased, subtreeProgress: { done: i + 1, total: paths.length } });
     // sortedEmails is recomputed by an explicit call, not derived: writing
     // `emails` and stopping leaves the list painting the folder before.
     get().updateSortedEmails();
