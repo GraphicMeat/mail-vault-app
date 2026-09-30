@@ -4,24 +4,18 @@ import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribe
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useMailStore } from '../../stores/mailStore';
-import { selectionKey, resolveEmailLocation, inLocalFolder } from '../../stores/slices/unifiedHelpers';
-import { getAccountCacheMailboxes } from '../../services/cacheManager';
+import { selectionKey } from '../../stores/slices/unifiedHelpers';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
 import { QuickActions } from '../QuickActions';
 import { SnoozePicker } from '../SnoozePicker';
-import { canSnooze } from '../../services/workflows/snooze';
 import { useQuickActionConfiguration } from '../../hooks/useQuickActionConfiguration';
 import { useT } from '../../i18n/index.js';
 import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
-import { actionVisibility } from '../../utils/actionVisibility';
-import { quickActionIcon } from '../../utils/quickActionIcons';
+import { readerFacts, savedMailboxes } from '../../utils/quickActionFacts';
+import { describeQuickAction } from '../../utils/quickActionCatalog';
 
 const EMPTY_ARRAY = Object.freeze([]);
-
-function foldersFor(accountId, state) {
-  return accountId === state.activeAccountId ? state.mailboxes || [] : getAccountCacheMailboxes(accountId) || [];
-}
 
 export const EmailActionBar = memo(function EmailActionBar({
   email, variant = 'single', onReply, onReplyAll, onForward, onArchive, onDelete,
@@ -40,49 +34,19 @@ export const EmailActionBar = memo(function EmailActionBar({
   const [snoozeRect, setSnoozeRect] = useState(null);
   const config = configOverride || storedConfig;
   const state = useMailStore.getState();
-  const location = resolveEmailLocation(email, state);
-  // A message in a vault-only folder (an MBOX import kept on this computer):
-  // no server holds it. Star, read state, delete (into the deleted bin) and
-  // export are local and stay; what needs a server goes, and so does
-  // unarchive, which would drop the only copy with no bin copy kept.
-  const localFolder = inLocalFolder(email, state);
-  const read = isRead ?? !!email?.flags?.includes('\\Seen');
-  const flagged = !!email?.flags?.includes('\\Flagged');
-  // Single email, so this is just its own read/flagged/archived state — the
-  // shared rule (shown iff any target unread/read/flagged/etc) collapses to
-  // that for a target of one.
-  const visibility = actionVisibility([{ flags: [...(read ? ['\\Seen'] : []), ...(flagged ? ['\\Flagged'] : [])], isArchived }]);
-  const readOnly = !!email?._insightsReadOnly || !!email?._insightsNoServerActions;
-  const accountId = location?.accountId;
-  const junk = accountId && foldersFor(accountId, state).find(folder => String(folder.specialUse || '').toLowerCase() === '\\junk');
-  const sender = email?.from?.address;
-
-  const labelFor = entry => {
-    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.tagId)?.name || t('quickActions.action.tag');
-    if (entry.action === 'replyTemplate') return templates.find(template => template.id === entry.params?.templateId)?.name || t('quickActions.action.replyTemplate');
-    if (entry.action === 'archive') return isArchived ? t('rowMenu.unarchive') : t('common.archive');
-    if (entry.action === 'unarchive') return t('rowMenu.unarchive');
-    if (entry.action === 'delete' || entry.action === 'deleteServer') return isLocalOnly ? t('rowMenu.unarchive') : t('common.delete');
-    if (entry.action === 'deleteEverywhere') return t('rowMenu.deleteEverywhere');
-    if (entry.action === 'toggleRead') return read ? t('emailActionBar.markUnread') : t('emailActionBar.markRead');
-    if (entry.action === 'markRead') return t('emailActionBar.markRead');
-    if (entry.action === 'markUnread') return t('emailActionBar.markUnread');
-    if (entry.action === 'star') return !hasExplicitStarModes && flagged ? t('emailActionBar.unstar') : t('emailActionBar.star');
-    if (entry.action === 'unstar') return t('emailActionBar.unstar');
-    if (entry.action === 'move') return entry.params?.mailbox ? `${t('emailActionBar.move')}: ${entry.params.mailbox}` : t('emailActionBar.move');
-    if (entry.action === 'spam') return t('quickActions.action.spam');
-    if (entry.action === 'theme') return emailThemeDark ? t('emailActionBar.light') : t('emailActionBar.dark');
-    if (entry.action === 'open') return t('common.open');
-    if (entry.action === 'source') return t('emailActionBar.source');
-    if (entry.action === 'export') return t('common.export');
-    if (entry.action === 'reply') return t('emailActionBar.reply');
-    if (entry.action === 'replyAll') return t('emailActionBar.replyAll');
-    if (entry.action === 'forward') return t('emailActionBar.forward');
-    if (entry.action === 'newMessage') return t('quickActions.action.newMessage');
-    if (entry.action === 'snooze') return t('snooze.action');
-    if (entry.action === 'unsubscribe') return t('unsubscribe.action');
-    return t('quickActions.title');
-  };
+  // Which actions are on offer follows from the handlers this host wired: a
+  // missing one hides its action.
+  const facts = readerFacts(email, state, {
+    onReply, onReplyAll, onForward, onArchive, onDelete, onDeleteEverywhere, onMove, onToggleRead, onToggleFlag,
+    onSpam, onApplyLocalLabel, onOpenInWindow, onViewSource, onExport, onToggleEmailTheme,
+    isRead, isArchived, isLocalOnly, isSentEmail, singleRecipient, emailThemeDark, disabled,
+  }, config.entries, { canTag: !!applyTag });
+  const [location] = facts.locations;
+  const { accountId } = facts;
+  const read = !facts.has.markRead;
+  const flagged = facts.has.unstar;
+  const hasExplicitStarModes = facts.explicit.star;
+  const ctx = { tags: localLabels, templates, folders: id => savedMailboxes(state, id) };
 
   const callbacks = {
     reply: onReply, replyAll: onReplyAll, forward: onForward,
@@ -93,61 +57,13 @@ export const EmailActionBar = memo(function EmailActionBar({
     export: onExport, open: onOpenInWindow, source: onViewSource, theme: onToggleEmailTheme,
   };
 
-  const hasExplicitStarModes = config.entries.some(item => item.action === 'star') && config.entries.some(item => item.action === 'unstar');
-  const hasExplicitArchiveModes = config.entries.some(item => item.action === 'archive') && config.entries.some(item => item.action === 'unarchive');
   const descriptors = config.entries.map(entry => {
     const callback = callbacks[entry.action];
     const template = templates.find(item => item.id === entry.params?.templateId);
-    const label = localLabels.find(item => item.id === entry.params?.tagId);
-    const folder = entry.params?.mailbox && accountId && foldersFor(entry.params.accountId || accountId, state)
-      .some(item => (item.path || item.name) === entry.params.mailbox);
-    const hidden = !email || readOnly && ['archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere', 'move', 'toggleRead', 'markRead', 'markUnread', 'star', 'unstar', 'spam'].includes(entry.action)
-      || ['reply', 'replyAll'].includes(entry.action) && (isSentEmail || !callbacks[entry.action])
-      || entry.action === 'forward' && !onForward
-      || entry.action === 'replyAll' && singleRecipient
-      || ['archive', 'unarchive'].includes(entry.action) && (!onArchive || !location || localFolder || (hasExplicitArchiveModes && !visibility[entry.action]) || (isLocalOnly && !isArchived))
-      || entry.action === 'deleteServer' && isLocalOnly
-      || ['delete', 'deleteServer'].includes(entry.action) && (!onDelete || !location)
-      || entry.action === 'deleteEverywhere' && (!onDeleteEverywhere || !location || localFolder)
-      || entry.action === 'move' && (!onMove || isLocalOnly || !location || localFolder)
-      || entry.action === 'spam' && (!onSpam && (!junk || !location) || isLocalOnly || localFolder)
-      || entry.action === 'toggleRead' && (!onToggleRead || isLocalOnly)
-      || ['markRead', 'markUnread'].includes(entry.action) && (!onToggleRead || isLocalOnly || !visibility[entry.action])
-      || ['star', 'unstar'].includes(entry.action) && (!onToggleFlag || isLocalOnly || (hasExplicitStarModes && !visibility[entry.action]))
-      || entry.action === 'tag' && (!onApplyLocalLabel && !applyTag || !location)
-      || entry.action === 'export' && !onExport
-      || entry.action === 'open' && !onOpenInWindow
-      || entry.action === 'source' && !onViewSource
-      || entry.action === 'theme' && !onToggleEmailTheme
-      || entry.action === 'snooze' && (isLocalOnly || !canSnooze(email, state))
-      || entry.action === 'unsubscribe' && !email?.listUnsubscribe
-      || entry.action === 'newMessage';
-    const actionDisabled = !hidden && (
-      ['archive', 'unarchive'].includes(entry.action) && !!disabled.archive
-      || ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action) && !!disabled.delete
-      || entry.action === 'move' && (!!disabled.move || entry.params?.mailbox && (!folder || (entry.params.accountId && entry.params.accountId !== accountId)))
-      || ['toggleRead', 'markRead', 'markUnread'].includes(entry.action) && !!disabled.toggleRead
-      || ['star', 'unstar'].includes(entry.action) && !!disabled.toggleFlag
-      || ['reply', 'replyAll', 'forward'].includes(entry.action) && !!disabled.compose
-      || entry.action === 'tag' && !label
-      || entry.action === 'replyTemplate' && (!template || isSentEmail)
-    );
-    const special = ['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'open', 'source'].includes(entry.action)
-      || entry.action === 'archive' && isArchived;
     return {
-      id: entry.id, action: entry.action, label: labelFor(entry),
-      // The toggle shows the envelope of the direction it will take, like its
-      // label. A lone star is a toggle too, drawn filled on a starred message
-      // (an explicit Star is hidden there), and a lone archive on an archived
-      // one offers Unarchive.
-      Icon: quickActionIcon(entry.action, { read, flagged, archived: !!isArchived, dark: !!emailThemeDark }),
-      hidden,
-      disabled: actionDisabled,
-      tone: ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
-      isDestructive: ['delete', 'deleteServer', 'deleteEverywhere'].includes(entry.action),
+      ...describeQuickAction('reader', entry, facts, ctx),
       buttonRef: entry.action === 'move' ? moveButtonRef : undefined,
       expanded: entry.action === 'move' ? moveDropdownOpen : undefined,
-      restoreFocus: !special,
       onActivate: async (event) => {
         if (onActionPreview) return onActionPreview(entry, email);
         if (entry.action === 'snooze') setSnoozeRect(event.currentTarget.getBoundingClientRect());
@@ -170,9 +86,9 @@ export const EmailActionBar = memo(function EmailActionBar({
           onToggleFlag?.(email, nextFlagged);
         }
         else if (callback) callback(email);
-        else if (entry.action === 'spam' && junk) {
+        else if (entry.action === 'spam' && facts.junkPath) {
           const key = selectionKey(email, state);
-          await useMailStore.getState().moveEmails([key], junk.path || junk.name);
+          await useMailStore.getState().moveEmails([key], facts.junkPath);
         }
       },
     };

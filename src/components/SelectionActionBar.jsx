@@ -7,7 +7,6 @@ import { useSearchStore } from "../stores/searchStore";
 import { X } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { SnoozePicker } from "./SnoozePicker";
-import { canSnooze } from "../services/workflows/snooze";
 import { vaultClause, describeReaderDelete } from "../utils/custodyCopy";
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
@@ -16,110 +15,15 @@ import { QuickActions } from "./QuickActions";
 import { useQuickActionConfiguration } from "../hooks/useQuickActionConfiguration";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
-  inLocalFolder,
   resolveEmailLocation,
   selectionKey,
 } from "../stores/slices/unifiedHelpers";
-import { getAccountCacheMailboxes } from "../services/cacheManager";
+import { savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
+import { describeQuickAction } from "../utils/quickActionCatalog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
-import { resolveQuickActionSelectionTarget } from "../utils/quickActions";
-import { quickActionIcon } from "../utils/quickActionIcons";
 import { t, useT } from "../i18n/index.js";
 
 const EMPTY_ARRAY = Object.freeze([]);
-
-// Parse a selection key (may be "accountId:uid" in unified mode) to extract raw uid
-const parseKey = (key) => {
-  const s = String(key);
-  const i = s.indexOf(":");
-  if (i > 0) {
-    const raw = s.slice(i + 1);
-    return /^\d+$/.test(raw) ? Number(raw) : raw;
-  }
-  return key;
-};
-
-// What the ticked messages are, as the bar's buttons and its confirmation read
-// them: `selectedEmailIds` the selection (a Set of keys), `selectedRows` its
-// messages the loaded lists resolve, `allSelectionRows` every loaded row, and
-// `archivedEmailIds` the uids the vault holds.
-function selectionFacts(selectedEmailIds, selectedRows, allSelectionRows, archivedEmailIds) {
-  // Determine archive state of selected emails. The counts, not just the
-  // booleans: the delete confirmation says how many of them the vault
-  // actually holds, and it must agree with what gates Archive/Unarchive.
-  let archived = 0;
-  let unarchived = 0;
-  for (const key of selectedEmailIds) {
-    if (archivedEmailIds.has(parseKey(key))) archived++;
-    else unarchived++;
-  }
-  const selectionTarget = resolveQuickActionSelectionTarget(
-    [...selectedEmailIds],
-    allSelectionRows,
-    useMailStore.getState(),
-  );
-  const selectedRowKeys = new Set(
-    selectedRows.map((email) => selectionKey(email, useMailStore.getState())),
-  );
-  const selectionIsFullyResolved =
-    selectedRowKeys.size === selectedEmailIds.size &&
-    [...selectedEmailIds].every((key) => selectedRowKeys.has(key));
-  const hasUnread = selectedRows.some((email) =>
-    !email.flags?.includes("\\Seen")
-  );
-  const hasRead = selectedRows.some((email) => email.flags?.includes("\\Seen"));
-  const locations = selectedRows.map((email) =>
-    resolveEmailLocation(email, useMailStore.getState())
-  );
-  const resolved = selectionIsFullyResolved && locations.length > 0 &&
-    locations.every(Boolean);
-  const singleAccount = !!selectionTarget;
-  const oneMailbox = !!selectionTarget?.mailbox;
-  // A selection in a vault-only folder (an MBOX import kept on this computer):
-  // no server holds it, so nothing that needs one is offered, and neither is
-  // a purge or unarchive (each would drop the only copies with no bin copy
-  // kept). Delete stays, as the delete workflow's local path into the bin.
-  const localFolder = selectedRows.some((email) =>
-    inLocalFolder(email, useMailStore.getState())
-  );
-  const allServerBacked = !localFolder && selectionIsFullyResolved && selectedRows.length > 0 &&
-    selectedRows.every((email) =>
-      email.source !== "local-only" && !email._insightsReadOnly &&
-      !email._insightsNoServerActions
-    );
-  const junkPaths = [
-    ...new Set(locations.map((location) => {
-      if (!location) return null;
-      const state = useMailStore.getState();
-      const mailboxes = location.accountId === state.activeAccountId
-        ? state.mailboxes
-        : getAccountCacheMailboxes(location.accountId);
-      return mailboxes?.find((folder) =>
-        String(folder.specialUse || "").toLowerCase() === "\\junk"
-      )?.path || null;
-    })),
-  ];
-  const selectionJunkPath = singleAccount && junkPaths.length === 1
-    ? junkPaths[0]
-    : null;
-  return {
-    hasArchived: archived > 0,
-    hasUnarchived: unarchived > 0,
-    archivedCount: archived,
-    totalCount: archived + unarchived,
-    selectionTarget,
-    selectionIsFullyResolved,
-    hasUnread,
-    hasRead,
-    locations,
-    resolved,
-    singleAccount,
-    oneMailbox,
-    localFolder,
-    allServerBacked,
-    selectionJunkPath,
-  };
-}
 
 export function SelectionActionBar() {
   const t = useT();
@@ -336,23 +240,25 @@ export function SelectionActionBar() {
     ],
     [sortedEmails, serverEmails, localEmails, sentEmails, searchResults],
   );
+  // What the ticked messages are, as the bar's buttons and its confirmation
+  // read them: the selection's keys, its rows the loaded lists (and search)
+  // resolve, every loaded row, and the uids the vault holds.
   const facts = selectionFacts(
     selectedEmailIds,
     selectedRows,
     allSelectionRows,
     archivedEmailIds,
+    useMailStore.getState(),
   );
   const {
     archivedCount,
     totalCount,
-    hasUnread,
     locations,
-    singleAccount,
-    oneMailbox,
     localFolder,
-    allServerBacked,
-    selectionJunkPath,
+    serverActions: allServerBacked,
+    junkPath: selectionJunkPath,
   } = facts;
+  const hasUnread = facts.has.markRead;
   const selectionKeys = [...selectedEmailIds];
   // What a button does. Which buttons are on offer is the view's.
   const runAction = async (entry, event) => {
@@ -445,8 +351,8 @@ export function SelectionActionBar() {
             >
               <MoveToFolderDropdown
                 uids={[...selectedEmailIds]}
-                accountId={singleAccount ? locations[0]?.accountId : null}
-                currentMailbox={oneMailbox ? locations[0]?.mailbox : null}
+                accountId={facts.accountId ? locations[0]?.accountId : null}
+                currentMailbox={facts.mailbox ? locations[0]?.mailbox : null}
                 onClose={() => setShowMoveDropdown(false)}
               />
             </div>
@@ -538,147 +444,25 @@ export function SelectionActionBarView({
   const selectedEmailIds = keys || new Set(
     selectedRows.map((email) => selectionKey(email, useMailStore.getState())),
   );
-  const {
-    hasArchived,
-    hasUnarchived,
-    selectionTarget,
-    selectionIsFullyResolved,
-    hasUnread,
-    hasRead,
-    locations,
-    resolved,
-    singleAccount,
-    localFolder,
-    allServerBacked,
-    selectionJunkPath,
-  } = facts || selectionFacts(
+  const state = useMailStore.getState();
+  const targetFacts = facts || selectionFacts(
     selectedEmailIds,
     selectedRows,
     selectedRows,
     new Set(selectedRows.filter((email) => email.isArchived).map((email) => email.uid)),
+    state,
   );
-  const selectionDescriptors = config.entries.map((entry) => {
-    const label = entry.action === "tag"
-      ? localLabels.find((item) => item.id === entry.params?.tagId)?.name ||
-        t("quickActions.action.tag")
-      : entry.action === "move" && entry.params?.mailbox
-      ? `${t("selection.move")}: ${entry.params.mailbox}`
-      : entry.action === "spam"
-      ? t("quickActions.action.spam")
-      : entry.action === "toggleRead"
-      ? (hasUnread ? t("selection.markRead") : t("selection.markUnread"))
-      : entry.action === "deleteServer"
-      ? (localFolder ? t("common.delete") : t("rowMenu.deleteServer"))
-      : entry.action === "delete"
-      ? t("common.delete")
-      : entry.action === "deleteEverywhere"
-      ? t("selection.deleteEverywhere")
-      : entry.action === "export"
-      ? t("selection.exportSelected")
-      : entry.action === "archive"
-      ? t("common.archive")
-      : entry.action === "unarchive"
-      ? t("selection.unarchive")
-      : entry.action === "markRead"
-      ? t("selection.markRead")
-      : entry.action === "markUnread"
-      ? t("selection.markUnread")
-      : entry.action === "star"
-      ? t("rowMenu.star")
-      : entry.action === "unstar"
-      ? t("rowMenu.unstar")
-      : entry.action === "move"
-      ? t("selection.moveFolder")
-      : entry.action === "snooze"
-      ? t("snooze.action")
-      : t("quickActions.title");
-    const disabledAction = [
-      "open",
-      "source",
-      "theme",
-      "reply",
-      "replyAll",
-      "forward",
-      "replyTemplate",
-      "newMessage",
-    ].includes(entry.action) ||
-      entry.action === "archive" && !hasUnarchived ||
-      entry.action === "unarchive" &&
-        (!hasArchived || !selectionIsFullyResolved ||
-          !locations.every(Boolean) || localFolder) ||
-      ["delete", "deleteServer"].includes(entry.action) &&
-        !allServerBacked && !(localFolder && selectionIsFullyResolved) ||
-      entry.action === "deleteEverywhere" && (!resolved || localFolder) ||
-      entry.action === "markRead" &&
-        (!selectionIsFullyResolved || !hasUnread) ||
-      entry.action === "toggleRead" &&
-        (!selectionIsFullyResolved || (!hasUnread && !hasRead)) ||
-      entry.action === "markUnread" &&
-        (!selectionIsFullyResolved || !hasRead) ||
-      entry.action === "star" &&
-        !selectedRows.some((email) => !email.flags?.includes("\\Flagged")) ||
-      entry.action === "unstar" &&
-        !selectedRows.some((email) => email.flags?.includes("\\Flagged")) ||
-      entry.action === "move" &&
-        (!allServerBacked || !singleAccount || (entry.params?.mailbox && (
-          (entry.params.accountId &&
-            entry.params.accountId !== selectionTarget.accountId) ||
-          locations.some((location) =>
-            location.accountId !== selectionTarget.accountId
-          ) ||
-          !(selectionTarget &&
-            (selectionTarget.accountId ===
-                useMailStore.getState().activeAccountId
-              ? useMailStore.getState().mailboxes
-              : getAccountCacheMailboxes(selectionTarget.accountId))?.some(
-                (folder) =>
-                  !folder.noselect &&
-                  (folder.path || folder.name) === entry.params.mailbox,
-              ))
-        ))) ||
-      entry.action === "spam" && (!allServerBacked || !selectionJunkPath) ||
-      entry.action === "snooze" &&
-        (!selectionIsFullyResolved || !selectedRows.length ||
-          !selectedRows.every((email) =>
-            canSnooze(email, useMailStore.getState())
-          )) ||
-      entry.action === "tag" &&
-        (!localLabels.some((item) => item.id === entry.params?.tagId) ||
-          !resolved);
-    const Icon = quickActionIcon(entry.action, { read: !hasUnread });
-    return {
-      id: entry.id,
-      action: entry.action,
-      label,
-      titleLabel: entry.action === "archive"
-        ? t("selection.archiveSelected")
-        : entry.action === "unarchive"
-        ? t("selection.unarchiveSelected")
-        : undefined,
-      Icon,
-      disabled: !!disabledAction,
-      tone:
-        ["delete", "deleteServer", "deleteEverywhere"].includes(entry.action)
-          ? "danger"
-          : ["archive", "unarchive"].includes(entry.action)
-          ? "positive"
-          : undefined,
-      isDestructive: ["delete", "deleteServer", "deleteEverywhere"].includes(
-        entry.action,
-      ),
-      buttonRef: entry.action === "move" ? moveButtonRef : undefined,
-      expanded: entry.action === "move" ? showMoveDropdown : undefined,
-      restoreFocus: ![
-        "move",
-        "snooze",
-        "delete",
-        "deleteServer",
-        "deleteEverywhere",
-        "unarchive",
-      ].includes(entry.action),
-      onActivate: preview ? () => {} : (event) => onAction(entry, event),
-    };
-  });
+  const ctx = {
+    tags: localLabels,
+    templates: EMPTY_ARRAY,
+    folders: (accountId) => savedMailboxes(state, accountId),
+  };
+  const selectionDescriptors = config.entries.map((entry) => ({
+    ...describeQuickAction("selection", entry, targetFacts, ctx),
+    buttonRef: entry.action === "move" ? moveButtonRef : undefined,
+    expanded: entry.action === "move" ? showMoveDropdown : undefined,
+    onActivate: preview ? () => {} : (event) => onAction(entry, event),
+  }));
 
   return (
     <div

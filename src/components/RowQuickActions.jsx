@@ -4,41 +4,22 @@ import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useQuickActionConfiguration } from '../hooks/useQuickActionConfiguration';
-import { selectionKey, resolveEmailLocation, spansMailboxes, inLocalFolder } from '../stores/slices/unifiedHelpers';
-import { describePurge, describeServerDelete, describeReaderDelete } from '../utils/custodyCopy';
+import { selectionKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { describeServerDelete, describeReaderDelete } from '../utils/custodyCopy';
 import { replyTarget } from '../utils/replyTarget';
-import { getSenderName } from '../utils/emailParser';
 import { openCompose } from '../utils/composeOpener';
 import { setDeleteUndo, reloadListInView } from '../services/workflows/messageMutations';
-import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SnoozePicker } from './SnoozePicker';
-import { canSnooze } from '../services/workflows/snooze';
 import { registerRowActions } from '../utils/rowActionRegistry';
-import { actionVisibility } from '../utils/actionVisibility';
+import { rowFacts, savedMailboxes, isLocalOnly } from '../utils/quickActionFacts';
+import { describeQuickAction } from '../utils/quickActionCatalog';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
-import { quickActionIcon } from '../utils/quickActionIcons';
 import { useT } from '../i18n/index.js';
 
-const DESTRUCTIVE = new Set(['delete', 'deleteServer', 'deleteEverywhere']);
 const EMPTY_ARRAY = Object.freeze([]);
-const isLocalOnly = email => email?.source === 'local-only' || email?._origin === 'local-only';
-
-function savedMailboxes(state, accountId) {
-  return accountId === state.activeAccountId ? state.mailboxes || [] : getAccountCacheMailboxes(accountId) || [];
-}
-
-function locationsFor(emails, state) {
-  return emails.map(email => resolveEmailLocation(email, state));
-}
-
-function sameResolvedAccount(locations) {
-  return locations.length > 0 && locations.every(Boolean) && new Set(locations.map(location => location.accountId)).size === 1;
-}
-
-function folderPath(folder) { return folder?.path || folder?.name || null; }
 
 // `configOverride` shows that set instead of the saved one; `preview` (Settings'
 // sample rows) makes every action a no-op and draws a wheel in place.
@@ -73,43 +54,18 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const registerMarker = useCallback(node => registerRowActions(node, describeRef), []);
   if (!emails.length) return null;
 
-  const newest = emails.reduce((a, b) => new Date(b.date) > new Date(a.date) ? b : a);
-  const senderAddress = newest.from?.address || '';
-  const locs = locationsFor(emails, state);
-  // A thread row unsubscribes through its newest message that offers it.
-  const listIndex = emails.reduce((best, email, index) => email.listUnsubscribe
-    && (best < 0 || new Date(email.date) > new Date(emails[best].date)) ? index : best, -1);
-  const unsubscribe = listIndex < 0 ? null : unsubscribeTarget(emails[listIndex], locs[listIndex]?.accountId);
-  // Whether each of these applies to the target: mark read while any target
-  // is unread, mark unread while any is read (both for a mixed target), same
-  // for star/unstar and archive/unarchive.
-  const visibility = actionVisibility(emails);
-  const { markRead: hasUnread, markUnread: hasRead, star: hasUnflagged, unstar: hasFlagged, archive: hasUnarchived, unarchive: hasArchived } = visibility;
-  // Rows of a vault-only folder (an MBOX import kept on this computer): no
-  // server holds them, so no server action is offered, and neither is a
-  // purge or unarchive (each would drop the only copy with no bin copy kept).
-  // Delete stays: the delete workflow sends them into the deleted bin.
-  const localFolder = emails.some(email => inLocalFolder(email, state));
+  const facts = rowFacts(emails, state, {
+    backedUp: emails.some(email => isBackedUp(email, backupScan) === true),
+    canConfirm: !!onRequestDelete,
+    saving: disabled,
+  });
+  const { primary: newest, locations: locs, localFolder, purge, junkPath } = facts;
+  const hasUnread = facts.has.markRead;
+  const hasServerBacked = facts.serverBacked;
+  const unsubscribe = facts.unsubscribe && unsubscribeTarget(facts.unsubscribe.email, facts.unsubscribe.accountId);
   const serverTargets = emails.map((email, index) => ({ email, location: locs[index] }))
     .filter(target => target.email.source !== 'local-only');
   const serverEmails = serverTargets.map(target => target.email);
-  const hasServerBacked = serverEmails.length > 0;
-  const purge = !localFolder && describePurge({
-    server: hasServerBacked,
-    vault: hasArchived,
-    backup: emails.some(email => isBackedUp(email, backupScan) === true),
-  }, emails.length);
-  const locationsResolved = locs.length > 0 && locs.every(Boolean);
-  const oneAccount = sameResolvedAccount(locs);
-  const oneMailbox = locs.length > 0 && locs.every(location => location?.mailbox === locs[0]?.mailbox);
-  const canServerAction = !localFolder && locationsResolved && emails.every(email => email.source !== 'local-only'
-    && !email._insightsReadOnly && !email._insightsNoServerActions);
-  const accountIds = locationsResolved ? [...new Set(locs.map(location => location.accountId))] : [];
-  const junkTargets = accountIds.map(accountId => {
-    const junk = savedMailboxes(state, accountId).find(folder => String(folder.specialUse || '').toLowerCase() === '\\junk');
-    return junk ? folderPath(junk) : null;
-  });
-  const junkPath = junkTargets.length && junkTargets.every(Boolean) && new Set(junkTargets).size === 1 ? junkTargets[0] : null;
 
   const runScoped = async (fn, { destructive = false } = {}) => {
     const prior = [...useMailStore.getState().selectedEmailIds];
@@ -182,68 +138,14 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     const resolved = await replyTarget(newest, null, useMailStore.getState());
     if (resolved !== newest) openCompose({ mode, replyTo: resolved, _fillFrom: newest });
   };
-  const openNewMessage = () => openCompose({ initialData: { to: senderAddress, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
-  const actionLabel = entry => {
-    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.tagId)?.name || t('quickActions.action.tag');
-    if (entry.action === 'move' && entry.params?.mailbox) return `${t('quickActions.action.move')}: ${entry.params.mailbox}`;
-    if (entry.action === 'replyTemplate') return templates.find(template => template.id === entry.params?.templateId)?.name || t('quickActions.action.replyTemplate');
-    if (entry.action === 'toggleRead') return hasUnread ? t('rowMenu.markRead') : t('rowMenu.markUnread');
-    if (entry.action === 'archive') return t('common.archive');
-    if (entry.action === 'delete') return t('common.delete');
-    if (entry.action === 'deleteServer') return localFolder ? t('common.delete') : t('rowMenu.deleteServer');
-    if (entry.action === 'deleteEverywhere') return purge?.label || t('rowMenu.deleteEverywhere');
-    if (entry.action === 'unarchive') return t('rowMenu.unarchive');
-    if (entry.action === 'markRead') return t('rowMenu.markRead');
-    if (entry.action === 'markUnread') return t('rowMenu.markUnread');
-    if (entry.action === 'star') return t('rowMenu.star');
-    if (entry.action === 'unstar') return t('rowMenu.unstar');
-    if (entry.action === 'move') return t('rowMenu.moveFolder');
-    if (entry.action === 'spam') return t('quickActions.action.spam');
-    if (entry.action === 'reply') return t('emailActionBar.reply');
-    if (entry.action === 'replyAll') return t('emailActionBar.replyAll');
-    if (entry.action === 'forward') return t('emailActionBar.forward');
-    if (entry.action === 'export') return t('common.export');
-    if (entry.action === 'newMessage') return t('rowMenu.newMessageTo', { name: getSenderName(newest) });
-    if (entry.action === 'snooze') return t('snooze.action');
-    if (entry.action === 'unsubscribe') return t('unsubscribe.action');
-    return t('quickActions.title');
-  };
+  const openNewMessage = () => openCompose({ initialData: { to: facts.sender, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
+  const ctx = { tags: localLabels, templates, folders: accountId => savedMailboxes(state, accountId) };
   // One entry's descriptor. Also what a trackpad swipe runs an action through
   // (utils/rowActionRegistry.js), whether or not the row's menu lists it.
   const describe = entry => {
     const template = templates.find(item => item.id === entry.params?.templateId);
-    const label = localLabels.find(item => item.id === entry.params?.tagId);
-    const savedTargetAccount = entry.params?.accountId || (oneAccount ? locs[0].accountId : null);
-    const destination = savedTargetAccount && savedMailboxes(state, savedTargetAccount)
-      .some(folder => folderPath(folder) === entry.params?.mailbox);
-    const targetMatches = entry.params?.accountId ? locs.every(location => location?.accountId === entry.params.accountId) : oneAccount;
-    const disabledAction = entry.action === 'archive' && disabled
-      || entry.action === 'unarchive' && (!locationsResolved || !onRequestDelete)
-      || entry.action === 'delete' && (!onRequestDelete || hasServerBacked && !canServerAction && !localFolder || !hasServerBacked && !emails.every(isLocalOnly))
-      || entry.action === 'deleteServer' && (!hasServerBacked || !canServerAction && !localFolder || !onRequestDelete)
-      || entry.action === 'deleteEverywhere' && (!purge || !locationsResolved || !onRequestDelete)
-      || entry.action === 'toggleRead' && !locationsResolved
-      || entry.action === 'tag' && (!label || !locationsResolved)
-      || entry.action === 'move' && (!canServerAction || (entry.params?.mailbox ? !targetMatches || !destination : !oneAccount))
-      || entry.action === 'spam' && (!junkPath || !oneAccount || !canServerAction)
-      || entry.action === 'replyTemplate' && !template
-      || entry.action === 'newMessage' && !senderAddress
-      || entry.action === 'snooze' && !emails.every(email => canSnooze(email, state));
     return {
-      id: entry.id, action: entry.action, label: actionLabel(entry),
-      // The toggle shows the envelope of the direction it will take, like its label.
-      Icon: quickActionIcon(entry.action, { read: !hasUnread }),
-      disabled: !!disabledAction,
-      // No copy of our own, no purge: it would only repeat "Delete from server".
-      // markRead/markUnread, star/unstar and archive/unarchive hide the side
-      // that does not apply to the target instead of showing it disabled.
-      hidden: entry.action === 'deleteServer' && !hasServerBacked || entry.action === 'deleteEverywhere' && !purge
-        || entry.action === 'unarchive' && localFolder
-        || entry.action === 'unsubscribe' && !unsubscribe
-        || ['markRead', 'markUnread', 'star', 'unstar', 'archive', 'unarchive'].includes(entry.action) && !visibility[entry.action] && !entry.thread,
-      tone: DESTRUCTIVE.has(entry.action) ? 'danger' : ['archive', 'unarchive'].includes(entry.action) ? 'positive' : undefined,
-      isDestructive: DESTRUCTIVE.has(entry.action),
-      restoreFocus: !['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'].includes(entry.action),
+      ...describeQuickAction('row', entry, facts, ctx),
       onActivate: preview ? () => {} : async event => {
         if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !email.isArchived))); onClose?.(); }
         else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
@@ -294,7 +196,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     <span hidden data-row-actions ref={registerMarker} />
     <QuickActions surface="row" config={menuConfig} descriptors={descriptors} identity={identity || keys.join('|')} onActionStart={onActionStart} openAt={openAt} onOpenChange={setMenuOpen} preview={preview} />
     {moveRect && <MoveToFolderDropdown uids={keys} anchorRect={moveRect} accountId={locs[0]?.accountId}
-      currentMailbox={oneMailbox ? locs[0]?.mailbox : null}
+      currentMailbox={facts.mailbox}
       onMove={target => useMailStore.getState().moveEmails(keys, target)}
       onClose={() => { setMoveRect(null); onClose?.(); }} />}
     {snoozeRect && <SnoozePicker keys={keys} anchorRect={snoozeRect}
