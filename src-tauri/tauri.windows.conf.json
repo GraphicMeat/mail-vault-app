@@ -5,8 +5,8 @@
       {
         "url": "app.html",
         "fullscreen": false,
-        "height": 700,
-        "width": 1200,
+        "height": 600,
+        "width": 1100,
         "minHeight": 600,
         "minWidth": 600,
         "resizable": true,

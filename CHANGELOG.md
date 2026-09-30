@@ -7,6 +7,9 @@
 - **Code looks like code in a message, written and read.** Text between backticks and blocks fenced with three backticks were already shown as code while you wrote; now the message carries that look with it (monospace type on a soft grey background), so mail clients that ignore styles still show it as code, and the editor toolbar has a button for inline code beside the code block one. When you read a message, code the sender styled is left as they made it, unstyled code in an HTML message gets the same monospace look, and in a plain-text message backticks and three-backtick blocks are shown as code too.
 - **Product Hunt launch page.** From 12:01 am Pacific on 4 October 2026 (10:01 am in Vilnius) for 24 hours, whatever your timezone, MailVault opens on a full-screen orange page asking you to support the launch on Product Hunt. While MailVault is in the background the words PRODUCT HUNT sweep across the screen; when you switch to it the sweep finishes and the cat and the Support button animate in. The page has no close button: the Support button opens the launch page in your browser and then takes the page away for good. Until you press it, MailVault stays behind the page. A small note under the button says when the page ends in your own timezone and how much time is left. If you are new, the page waits until 10 minutes after you finish setting up MailVault.
 
+### Changed
+- **The window fits the screen on Windows.** On a 1920 × 1080 screen at the 125% or 150% scaling Windows sets for most such screens, the window MailVault opened in ran under the taskbar. It now opens at 1100 × 600, and on a screen with even less room it shrinks to fit above the taskbar and opens centred.
+
 ## [2.17.0] - 2026-09-30
 
 ### Added

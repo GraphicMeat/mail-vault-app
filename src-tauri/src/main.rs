@@ -3228,6 +3228,28 @@ fn hide_main_window(window: &tauri::WebviewWindow) {
     set_main_webview_visible(window, false);
 }
 
+/// Clamps the main window to 90% of its monitor's work area (the screen
+/// minus the taskbar) and re-centers it; a window that already fits is left
+/// alone.
+#[cfg(windows)]
+fn fit_main_window_to_work_area(window: &tauri::WebviewWindow) {
+    let monitor = window.current_monitor().ok().flatten();
+    let Some(monitor) = monitor.or_else(|| window.primary_monitor().ok().flatten()) else {
+        return;
+    };
+    let Ok(size) = window.inner_size() else { return };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area().size;
+    let size = size.to_logical::<f64>(scale);
+    let max_w = area.width as f64 / scale * 0.9;
+    let max_h = area.height as f64 / scale * 0.9;
+    if size.width <= max_w && size.height <= max_h {
+        return;
+    }
+    let _ = window.set_size(tauri::LogicalSize::new(size.width.min(max_w), size.height.min(max_h)));
+    let _ = window.center();
+}
+
 /// Brings the main window back from the tray, a minimize, or behind others.
 fn show_main_window(window: &tauri::WebviewWindow) {
     #[cfg(windows)]
@@ -3544,6 +3566,15 @@ fn main() {
                     #[cfg(target_os = "windows")]
                     mailto::register();
                 }
+            }
+
+            // tauri.windows.conf.json opens at 1100x600 logical, which fits a
+            // 1920x1080 screen at the 150% scaling Windows picks for most
+            // 1080p panels. At higher scaling that is still taller than the
+            // work area, so shrink it to fit above the taskbar and re-center.
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                fit_main_window_to_work_area(&window);
             }
 
             // WebKitGTK's checker is off until it is switched on, and it needs a
