@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
 import {
@@ -160,6 +160,13 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   setLoadAbortController(_loadAbortController);
   const signal = _loadAbortController.signal;
 
+  // The rows on screen as this load begins: the base every commit below merges
+  // local flag writes against, advanced to what each commit puts in the store.
+  // The rows read from disk (and the seed's own restore window) predate any
+  // flag the user writes while the load runs, and each commit would put the
+  // old state back.
+  let onScreen = get().emails;
+
   const mailboxesByAccount = new Map();
   await Promise.all(
     accounts.filter(a => !hiddenAccounts[a.id]).map(async (account) => {
@@ -211,10 +218,11 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         const key = `${e._accountId}:${e.uid}`;
         return !seen.has(key) && seen.add(key);
       }).sort(byDateDesc).slice(0, CHUNK_SIZE);
+      const merged = onScreen = rebaseFlags(onScreen, live.emails, rows, live);
       useMailStore.setState({
-        emails: rows,
-        serverUids: serverUids(new Set(rows.map(e => e.uid)), { complete: false }),
-        totalEmails: Math.max(rows.length, live.totalEmails || 0),
+        emails: merged,
+        serverUids: serverUids(new Set(merged.map(e => e.uid)), { complete: false }),
+        totalEmails: Math.max(merged.length, live.totalEmails || 0),
         _sortedEmailsFingerprint: '',
       });
       settleLoading(get, useMailStore);
@@ -288,8 +296,19 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   }
   _unifiedFolderCache.set(targetFolder, { emails: allEmails, timestamp: Date.now() });
 
+  // The first `n` rows of allEmails with any flag written since the last commit
+  // merged in, and written back into allEmails so the next, longer prefix (and
+  // the folder cache, which holds this array) starts from them.
+  const commitPrefix = (n) => {
+    const rows = allEmails.slice(0, n);
+    const merged = rebaseFlags(onScreen, get().emails, rows, get());
+    if (merged !== rows) for (let i = 0; i < merged.length; i++) allEmails[i] = merged[i];
+    onScreen = merged;
+    return merged;
+  };
+
   const total = allEmails.length;
-  const firstBatch = allEmails.slice(0, CHUNK_SIZE);
+  const firstBatch = commitPrefix(CHUNK_SIZE);
 
   const allServerUids = new Set();
   for (const e of firstBatch) allServerUids.add(e.uid);
@@ -335,7 +354,8 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
       await new Promise(r => setTimeout(r, 0));
 
       offset += CHUNK_SIZE;
-      const chunk = allEmails.slice(0, Math.min(offset, total));
+      if (signal.aborted) break;
+      const chunk = commitPrefix(Math.min(offset, total));
       const chunkServerUids = new Set();
       for (const e of chunk) chunkServerUids.add(e.uid);
 

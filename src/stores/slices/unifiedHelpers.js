@@ -172,6 +172,70 @@ export function sameMessage(row, target, state) {
   return !!id && id.accountId === target.accountId && id.mailbox === target.mailbox;
 }
 
+const _flagsDiffer = (a, b) => {
+  const x = a || [];
+  const y = b || [];
+  return x.length !== y.length || x.some(f => !y.includes(f));
+};
+
+/**
+ * The flags a loader may commit: a three-way merge of what it started from
+ * (`base`), the rows in the store right now (`live`) and what it is about to
+ * commit (`incoming`).
+ *
+ * A loader reads the list, awaits the network and commits what it read. Any
+ * flag the user wrote during those awaits (the auto mark-read of the message
+ * they just opened, a star) is in `live` but not in the loader's snapshot, and
+ * committing the snapshot puts the old state back in the list AND, through the
+ * sidecar write the loader does with the same rows, on disk. A row whose flags
+ * moved between `base` and `live` was written locally since the snapshot: that
+ * change, flag by flag, is laid over the incoming row (so a remote change to
+ * ANOTHER flag in the same batch survives too; CONDSTORE reports it once).
+ * Every other row takes the incoming flags. Rows match by message identity
+ * (rowIdentity), never by bare uid.
+ *
+ * Call it in the same tick as the commit, with `live` read then: one await
+ * between reading `live` and committing reopens the window. A row `base` never
+ * held has no local write to protect and is incoming whole. A load that
+ * replaces the uid space (UIDVALIDITY changed) must not call it at all: an old
+ * uid is not the same message.
+ *
+ * Returns `incoming` itself when there is nothing to carry over, and `live ===
+ * base` (no write touched the list) costs nothing.
+ */
+export function rebaseFlags(base, live, incoming, state) {
+  if (!incoming?.length || !live?.length || !base?.length || live === base) return incoming;
+  const keyOf = (row) => {
+    const id = rowIdentity(row, state);
+    return id ? `${id.accountId}\u0000${id.mailbox}\u0000${id.uid}` : null;
+  };
+  const baseFlags = new Map();
+  for (const row of base) {
+    const key = keyOf(row);
+    if (key !== null && !baseFlags.has(key)) baseFlags.set(key, row.flags);
+  }
+  // key -> { add, remove }: what the user did to this row since the snapshot.
+  const written = new Map();
+  for (const row of live) {
+    const key = keyOf(row);
+    if (key === null || !baseFlags.has(key)) continue;
+    const was = baseFlags.get(key);
+    if (!_flagsDiffer(was, row.flags)) continue;
+    written.set(key, {
+      add: (row.flags || []).filter(f => !(was || []).includes(f)),
+      remove: (was || []).filter(f => !(row.flags || []).includes(f)),
+    });
+  }
+  if (!written.size) return incoming;
+  return incoming.map((row) => {
+    const local = written.get(keyOf(row));
+    if (!local) return row;
+    const flags = (row.flags || []).filter(f => !local.remove.includes(f));
+    for (const f of local.add) if (!flags.includes(f)) flags.push(f);
+    return { ...row, flags };
+  });
+}
+
 /**
  * `accountId-mailbox-uid` for a message, resolved through the view state — the
  * same shape selectEmail uses for its body cache. A bare UID is not a key: the

@@ -10,6 +10,9 @@ export class UidMap {
     this._uidValidity = uidValidity ?? null;
     this._map = new Map(); // uid → email header object
     this._sorted = null;   // invalidated on mutation
+    // The rows this activation last put in the store (or found there when it
+    // began): the snapshot every later commit merges local flag writes against.
+    this.committed = null;
   }
 
   get uidValidity() {
@@ -43,6 +46,20 @@ export class UidMap {
     this._sorted = null;
   }
 
+  /**
+   * Swap in rows that are already held under their own uid, whatever their
+   * source: the flag merge at commit time carries a local write into the row a
+   * server stream would otherwise keep re-committing with the old flags.
+   */
+  replaceRows(rows) {
+    for (const row of rows) {
+      if (this._map.has(row.uid) && this._map.get(row.uid) !== row) {
+        this._map.set(row.uid, row);
+        this._sorted = null;
+      }
+    }
+  }
+
   delete(uid) {
     if (this._map.delete(uid)) {
       this._sorted = null;
@@ -74,6 +91,8 @@ export class UidMap {
   invalidate() {
     this._map.clear();
     this._sorted = null;
+    // The old uids name other messages now: nothing local to merge against.
+    this.committed = null;
   }
 
   /**

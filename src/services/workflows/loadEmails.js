@@ -7,7 +7,7 @@ import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
-import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, rebaseFlags } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
@@ -469,6 +469,9 @@ export async function loadEmails({ rereadFlags = false } = {}) {
     // bottom carries the store's current claim forward — the UID-search
     // delta-sync branch proves it directly via searchAllUids.
     let provedComplete;
+    // The listing below replaces the uid space (UIDVALIDITY changed): a uid
+    // written to before is not the message that holds it now.
+    let uidSpaceReplaced = false;
 
     if (hasCachedSync) {
       const status = await api.checkMailboxStatus(account, activeMailbox);
@@ -486,6 +489,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       if (newUidValidity !== cachedUidValidity) {
         console.log('[loadEmails] UIDVALIDITY changed (%d -> %d), full reload', cachedUidValidity, newUidValidity);
         await db.clearMailboxCache(activeAccountId, activeMailbox);
+        uidSpaceReplaced = true;
         const serverResult = await api.fetchEmails(account, activeMailbox, 1);
         serverTotal = serverResult.total;
         mergedEmails = serverResult.emails.map((email, idx) => ({
@@ -776,6 +780,13 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       return;
     }
 
+    // Everything above awaited the network on a snapshot of the list: a flag
+    // the user wrote meanwhile (opening a message marks it read) is in the
+    // store but not in mergedEmails, and committing it would revert the row
+    // and, through the sidecar write below, the disk. Read the live rows here,
+    // in the commit's own tick.
+    if (!uidSpaceReplaced) mergedEmails = rebaseFlags(existingEmails, get().emails, mergedEmails, get());
+
     const existingServerUidSet = get().serverUids.uids;
     const mergedServerUidSet = existingServerUidSet.size > 0
       ? new Set([...existingServerUidSet, ...mergedEmails.map(e => e.uid)])
@@ -952,12 +963,15 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
     const headers = result.headers || [];
 
-    const mergedEmails = headers.map((email, idx) => ({
+    let mergedEmails = headers.map((email, idx) => ({
       ...email,
       displayIndex: idx,
       isLocal: savedEmailIds.has(email.uid),
       source: 'server',
     }));
+    // The listing was fetched over a snapshot (priorEmails): keep a flag the
+    // user wrote while it was on the wire.
+    mergedEmails = rebaseFlags(priorEmails, get().emails, mergedEmails, get());
 
     const serverTotal = mergedEmails.length;
     const hasMoreEmails = !!result.nextLink;

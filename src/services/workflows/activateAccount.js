@@ -29,7 +29,7 @@ import { openFolder } from './loadSubtree';
 import { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { refreshFolderStatus } from './folderStatus';
-import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey, readerClearOnNavigation } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey, readerClearOnNavigation, rebaseFlags } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
 import {
@@ -298,7 +298,8 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   if (!useMailStoreRef.getState().unifiedInbox) {
     _saveRestore(_buildRestoreDescriptor(useMailStoreRef.getState()));
   }
-  db.saveEmailHeaders(accountId, activeMailbox, sorted, serverTotal)
+  // Read again: the commit above may have carried a local flag write into the uidMap.
+  db.saveEmailHeaders(accountId, activeMailbox, uidMap.toSortedArray(), serverTotal)
     .catch(e => console.warn('[activateAccount:graph] Failed to cache headers:', e));
 
   trace.end('graph-done', { count: sorted.length });
@@ -360,7 +361,16 @@ function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) 
   const store = useMailStoreRef.getState();
   if (store.activeAccountId !== accountId) return;
 
-  const sortedEmails = uidMap.toSortedArray();
+  // The uidMap was built from disk reads and server answers that all began
+  // before now: a flag the user wrote since the last commit (opening a message
+  // marks it read) is in the store, not in these rows. Merge it back in, and
+  // into the uidMap, so the caller's sidecar write carries it too.
+  let sortedEmails = uidMap.toSortedArray();
+  const rebased = rebaseFlags(uidMap.committed, store.emails, sortedEmails, store);
+  if (rebased !== sortedEmails) {
+    uidMap.replaceRows(rebased);
+    sortedEmails = uidMap.toSortedArray();
+  }
 
   // Preserve optimistic sent-email entries that have not yet been reconciled
   // by the server copy. IMAP APPEND can lag the UI by >8s on slow servers;
@@ -374,6 +384,7 @@ function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) 
     ? [...optimisticSurvivors, ...sortedEmails]
     : sortedEmails;
 
+  uidMap.committed = merged;
   useMailStoreRef.setState({
     emails: merged,
     totalEmails: (extras.totalEmails ?? sortedEmails.length) + optimisticSurvivors.length,
@@ -619,6 +630,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   }
 
   const uidMap = new UidMap(null);
+  // What is on screen as this activation begins (a restore paint, or nothing):
+  // the base of the first commit's flag merge.
+  uidMap.committed = get().emails;
 
   const mbResult = await loadMailboxes(accountId, account, mailbox, signal, useMailStoreRef, { isBackgroundRefresh });
   if (!mbResult || signal.aborted) return;
@@ -1279,7 +1293,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
       // Descriptor saved on switch-away, not during load
 
-      db.saveEmailHeaders(accountId, effectiveMailbox, sorted, serverTotal, {
+      // Read again: the commit above may have carried a local flag write into the uidMap.
+      db.saveEmailHeaders(accountId, effectiveMailbox, uidMap.toSortedArray(), serverTotal, {
         uidValidity: newUidValidity,
         uidNext: newUidNext,
         highestModseq: newHighestModseq ?? null,
