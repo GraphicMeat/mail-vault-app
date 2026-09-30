@@ -24,6 +24,8 @@ import { hasOpenDialog } from '../hooks/useDialogA11y';
 import { linkRangeAt, applyLink, removeLink, removeLinkWithText, openLink } from '../utils/editorLinks';
 import { imageList, resizedImage, scaleOffer } from '../utils/signatureImageScale';
 import { ImageScaleDialog } from './ImageScaleDialog';
+import { SlashMenu as SlashMenuTrigger } from './slashMenuExtension';
+import { SlashMenu } from './SlashMenu';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
@@ -384,6 +386,8 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const [card, setCard] = useState(null);          // hovered link: { a, href, top, left }
   const [linkEdit, setLinkEdit] = useState(null);  // link panel: { from, to, text, href, edit, top, left }
+  const [slash, setSlash] = useState(null);         // the typed "/query": { query, from, to, box }
+  const slashKeys = useRef(null);                   // the open menu's key handler, see SlashMenu
   const editor = useEditor({
     // Build the editor in useEditor's mount effect, never during render. Built
     // during render, @tiptap/react arms a 1 ms timer that destroys it unless
@@ -393,7 +397,10 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     // Compose of a session committed an editor the timer had already destroyed.
     // `editor` is null for the first render instead.
     immediatelyRender: false,
-    extensions: editorExtensions(placeholder, { resizeImages: imageTools }),
+    extensions: [
+      ...editorExtensions(placeholder, { resizeImages: imageTools }),
+      SlashMenuTrigger.configure({ onChange: setSlash, onKey: (name) => slashKeys.current?.(name) ?? false }),
+    ],
     content,
     // Fires once the instance above is actually built (never during render —
     // see the immediatelyRender note above). Reply/replyAll use `placeCaret`
@@ -629,6 +636,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
       <div className="flex-1 overflow-y-auto" onMouseOver={onMouseOver} onMouseOut={onMouseOut}>
         <EditorContent editor={editor} className="h-full" />
       </div>
+      {editor && <SlashMenu editor={editor} slash={slash} keysRef={slashKeys} />}
       {card && <LinkCard card={card} onAction={onCardAction} onEnter={keepCard} onLeave={hideCardSoon} />}
       {linkEdit && (
         <LinkPanel

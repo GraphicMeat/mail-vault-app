@@ -38,6 +38,7 @@
   "compose.later.minutes",
   "compose.re",
   "compose.recipientExampleCom",
+  "editor.slash.emoji",
   "email.header.cc",
   "email.header.dkim",
   "email.header.dmarc",

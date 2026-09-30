@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     testTimeout: 60000,
     hookTimeout: 60000,
+    setupFiles: ['./vitest.setup.js'],
     // tests/integration/** drives the mock IMAP server through imapflow —
     // hermetic but needs a cargo build, so it runs as its own tier:
     // `npm run test:integration`.
