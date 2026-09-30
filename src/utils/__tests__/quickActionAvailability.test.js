@@ -53,7 +53,10 @@ describe('quickActionAvailability', () => {
     expect(check('row', { action: 'move', params: { mailbox: 'Nowhere' } }).disabled).toBe(true);
     expect(check('row', { action: 'move', params: { mailbox: 'Archive', accountId: 'acct-b' } }).disabled).toBe(true);
     expect(check('row', { action: 'move', params: { mailbox: 'Archive' } }, { accountId: null }).disabled).toBe(true);
-    expect(check('selection', { action: 'move', params: { mailbox: 'Parent' } }).disabled).toBe(true);
+    // A \Noselect folder only parents others, on every surface.
+    for (const surface of ['row', 'selection', 'reader']) {
+      expect(check(surface, { action: 'move', params: { mailbox: 'Parent' } }).disabled, surface).toBe(true);
+    }
   });
 
   it('holds back the busy group only', () => {

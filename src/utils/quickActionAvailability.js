@@ -18,7 +18,7 @@ const BUSY_GROUP = {
 const PAIR = { star: 'star', unstar: 'star', archive: 'archive', unarchive: 'archive' };
 
 // Each gate passes (true) when the action may go ahead on its account.
-// `ctx`: `tags`, `templates`, `folders(accountId)` and the surface policy.
+// `ctx`: `tags`, `templates` and `folders(accountId)`.
 const deletable = f => f.serverActions || f.localFolder && f.fullyResolved;
 const GATES = {
   never: () => false,
@@ -48,11 +48,13 @@ const GATES = {
   purge: f => !!f.purge,
   junk: f => !!f.junkPath,
   spamRoute: f => !!f.can.spam || !!f.junkPath,
+  // A saved move needs the targets' one account, and a folder of it that
+  // can hold messages (a \Noselect folder is only a parent in the tree).
   moveTarget: (f, entry, ctx) => {
     const { mailbox, accountId } = entry.params || {};
     if (!mailbox) return !!f.accountId;
     return !!f.accountId && (!accountId || accountId === f.accountId) && ctx.folders(f.accountId)
-      .some(folder => folderPath(folder) === mailbox && !(ctx.policy.selectableFolders && folder.noselect));
+      .some(folder => folderPath(folder) === mailbox && !folder.noselect);
   },
   tag: (f, entry, ctx) => ctx.tags.some(tag => tag.id === entry.params?.tagId),
   template: (f, entry, ctx) => ctx.templates.some(template => template.id === entry.params?.templateId),
@@ -68,7 +70,7 @@ const GATES = {
 // action while it has no message.
 export const QUICK_ACTION_SURFACE_POLICY = {
   row: { hides: true },
-  selection: { hides: false, selectableFolders: true },
+  selection: { hides: false },
   reader: { hides: true, requires: ['present'] },
 };
 
@@ -161,8 +163,7 @@ QUICK_ACTION_RULES.unstar = QUICK_ACTION_RULES.star;
 export function quickActionAvailability(surface, entry, facts, ctx) {
   const policy = QUICK_ACTION_SURFACE_POLICY[surface];
   const rule = QUICK_ACTION_RULES[entry.action]?.[surface] || {};
-  const gateCtx = { ...ctx, policy };
-  const fails = gates => (gates || []).some(gate => !GATES[gate](facts, entry, gateCtx));
+  const fails = gates => (gates || []).some(gate => !GATES[gate](facts, entry, ctx));
   return {
     hidden: policy.hides ? fails(policy.requires) || fails(rule.hide) : undefined,
     disabled: fails(rule.disable),
