@@ -1086,6 +1086,34 @@ describe('thread cache follows the list it was built from', () => {
 
     expect(lastVirtualizerConfig.count).toBe(3);
   });
+
+  // Undo re-keys a restored message to the uid the server gave it: one uid
+  // changes in the middle of the list, and the length and both end uids stay.
+  // The cache kept the threads built from the old uid, so the new row matched
+  // none of them and never reached the screen (Windows e2e delete-undo).
+  it('rebuilds when one uid inside a same-length list is swapped for another', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      sortedEmails: rows(3, false),
+      totalEmails: 3,
+      getChatEmails: () => useMailStore.getState().sortedEmails,
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    const { rerender } = render(React.createElement(EmailList.type));
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(3);
+
+    const swapped = rows(3, false);
+    swapped[1] = { ...swapped[1], uid: 9 };
+    useMailStore.setState({ sortedEmails: swapped });
+    rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect(lastVirtualizerConfig.count).toBe(3);
+  });
 });
 
 // The reading pane's open thread is a snapshot of one entry in the map built

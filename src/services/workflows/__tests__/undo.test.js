@@ -7,6 +7,7 @@
 // server call it made.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
+import { remember as memoRemember, peek as memoPeek, forget as memoForget } from '../../headerMemo';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -600,6 +601,25 @@ describe('undo puts the row back first, then the server follows', () => {
     // Nothing left to reload: the row on screen is already the right one.
     expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
     expect(mockRefreshCurrentView).not.toHaveBeenCalled();
+  });
+
+  // The memo of a mailbox you left is stamped by counts (total, cached, modseq).
+  // Undo swaps a uid for another and keeps every count, so a memo taken before
+  // the delete matched the cache after the undo and painted the retired uid,
+  // which its own tombstone then hid: the message was on the server and in the
+  // cache and never on the list (Windows e2e, connected-delete-undo).
+  it('drops the in-memory header memo of the mailbox whose uid it re-keyed', async () => {
+    primeStore({ emails: [row(7), row(8)] });
+    memoRemember('a1', 'INBOX', [row(7), row(8)], { totalEmails: 2, totalCached: 2, highestModseq: 5, uidValidity: 1 });
+    memoRemember('a1', 'Archive', [row(1)], { totalEmails: 1, totalCached: 1, highestModseq: 5, uidValidity: 1 });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
+
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
+
+    expect(memoPeek('a1', 'INBOX')).toBeNull();
+    expect(memoPeek('a1', 'Archive')).not.toBeNull();
+    memoForget('a1');
   });
 
   // EmailList memoises its rows on a fingerprint of size, end uids and

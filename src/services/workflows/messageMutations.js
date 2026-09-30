@@ -12,6 +12,7 @@ import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import { retryOnce, isLocalMailbox } from './mailboxTree';
+import { forget as forgetHeaderMemo } from '../headerMemo';
 import { cancelPendingMarkRead } from './selectEmail';
 import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
@@ -1335,6 +1336,11 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
   } catch (error) {
     console.warn('[undo] Could not re-key the header cache:', error);
   }
+  // The header memo is stamped by counts (total, cached, modseq) and a re-key
+  // keeps every one of them: the memo taken when this mailbox was left still
+  // matches the cache and would paint the retired uid, which its tombstone then
+  // hides. Nothing but the app's own write can swap a uid inside a count.
+  forgetHeaderMemo(accountId, mailbox);
 
   // The vault copy is filed under the uid the delete retired. Left there it
   // renders next to the message it is a copy of, and a second delete stamps

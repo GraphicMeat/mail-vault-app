@@ -84,6 +84,15 @@ const ROW_APPEAR_MS = 300;
 
 const ROW_HEIGHT_DEFAULT = listRowHeight(false);
 
+// Order-sensitive 32-bit digest of a row list's uids, for cache keys that
+// length and end uids cannot tell apart. One pass, far cheaper than the
+// threading it saves.
+function uidDigest(rows) {
+  let h = 0;
+  for (const e of rows) h = (Math.imul(h, 31) + (e.uid | 0)) | 0;
+  return h;
+}
+
 function getDateRange(emails) {
   if (!emails || emails.length === 0) return null;
   let oldest = null;
@@ -656,8 +665,13 @@ function EmailListComponent({ stacked = false }) {
   // the un-stamped rows, nothing matched them, and the list rendered zero rows
   // over a full store. (Only visible once the unified list stopped arriving
   // doubled, which had kept the two counts different.)
+  //
+  // So is a digest of every UID. Length and both ends do not move when a uid
+  // changes in the middle — the restored row of an undo takes the uid the
+  // server gave it — and the threads kept from the old uid matched no row of
+  // the new list: the message was in the store and missing from the screen.
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${activeAccountId}-${activeMailbox}-${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${mergedEmails[0]?._accountId || ''}-${mergedEmails[mergedEmails.length - 1]?._accountId || ''}-${flagSeq}-${archivedSize}-${alertCount}` : '',
+    () => mergedEmails ? `${activeAccountId}-${activeMailbox}-${viewMode}-${mergedEmails.length}-${uidDigest(mergedEmails)}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${mergedEmails[0]?._accountId || ''}-${mergedEmails[mergedEmails.length - 1]?._accountId || ''}-${flagSeq}-${archivedSize}-${alertCount}` : '',
     [mergedEmails, flagSeq, viewMode, archivedSize, alertCount, activeAccountId, activeMailbox]
   );
 
@@ -706,7 +720,7 @@ function EmailListComponent({ stacked = false }) {
     const emails = usesMerged
       ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId, e => selectionKey(e, useMailStore.getState()), unreadKeep)
       : displayEmails;
-    const fp = `sender-${activeAccountId}-${activeMailbox}-${mergesSent}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${userAddress}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
+    const fp = `sender-${activeAccountId}-${activeMailbox}-${mergesSent}-${emails.length}-${uidDigest(emails)}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${userAddress}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
