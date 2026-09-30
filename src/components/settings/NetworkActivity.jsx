@@ -25,6 +25,7 @@ const PURPOSE_KEYS = {
   'connectivity check': 'netActivity.purposes.connectivityCheck',
   'account setup': 'netActivity.purposes.accountSetup',
   'alias lookup': 'netActivity.purposes.aliasLookup',
+  fonts: 'netActivity.purposes.fonts',
   export: 'common.export',
 };
 const RESULT_KEYS = { ok: 'netActivity.ok', cancelled: 'netActivity.cancelled' };

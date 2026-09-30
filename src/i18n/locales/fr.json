@@ -3432,6 +3432,7 @@
   "netActivity.purposes.connectivityCheck": "Test de connexion",
   "netActivity.purposes.accountSetup": "Configuration du compte",
   "netActivity.purposes.aliasLookup": "Recherche d'alias",
+  "netActivity.purposes.fonts": "Polices",
   "netActivity.notShown.title": "Ce que cette liste ne montre pas",
   "netActivity.notShown.webContent": "Les images distantes et autres contenus web des e-mails. Les images sont comptées plus haut.",
   "netActivity.notShown.appWindow": "Les requêtes que la fenêtre de l'app fait elle-même, comme les vérifications d'achat.",

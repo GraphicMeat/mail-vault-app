@@ -3432,6 +3432,7 @@
   "netActivity.purposes.connectivityCheck": "连接检查",
   "netActivity.purposes.accountSetup": "账户设置",
   "netActivity.purposes.aliasLookup": "别名查询",
+  "netActivity.purposes.fonts": "字体",
   "netActivity.notShown.title": "此列表不显示的内容",
   "netActivity.notShown.webContent": "邮件中的远程图片和其他网页内容。图片在上方计数。",
   "netActivity.notShown.appWindow": "应用窗口自己发出的请求，例如购买验证。",

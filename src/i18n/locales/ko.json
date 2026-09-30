@@ -3432,6 +3432,7 @@
   "netActivity.purposes.connectivityCheck": "연결 확인",
   "netActivity.purposes.accountSetup": "계정 설정",
   "netActivity.purposes.aliasLookup": "별칭 조회",
+  "netActivity.purposes.fonts": "글꼴",
   "netActivity.notShown.title": "이 목록에 표시되지 않는 것",
   "netActivity.notShown.webContent": "이메일 안의 원격 이미지와 기타 웹 콘텐츠. 이미지는 위에서 집계합니다.",
   "netActivity.notShown.appWindow": "앱 창이 직접 보내는 요청(예: 구매 확인).",

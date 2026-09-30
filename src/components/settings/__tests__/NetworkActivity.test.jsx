@@ -86,6 +86,14 @@ describe('Network Activity', () => {
     expect(row.textContent).not.toContain('alias lookup');
   });
 
+  // The daemon's `fonts.download` fetches a chosen Google font, once.
+  it('words a Google Fonts download, tied to no account', async () => {
+    await mount([ev({ host: 'fonts.gstatic.com', protocol: 'https', port: 443, purpose: 'fonts', account: null })]);
+    const row = screen.getByTestId('net-row');
+    expect(row.textContent).toContain('Fonts');
+    expect(within(row).getByTestId('net-account').textContent).toBe('Not tied to an account');
+  });
+
   // An update check or a model download is no account's: said, not left blank.
   it('says a connection is not tied to an account, on screen and in Copy as text', async () => {
     await mount([ev({ host: 'app.test', protocol: 'https', purpose: 'AI model', account: null })]);
