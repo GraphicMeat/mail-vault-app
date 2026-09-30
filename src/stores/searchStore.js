@@ -8,9 +8,7 @@ import { parseSearchQuery } from '../utils/searchQuery';
 import { useTagStore } from './tagStore';
 import { useFieldStore } from './fieldStore';
 import { daemonCall } from '../services/daemonClient';
-import { normalizeMessageId } from '../utils/emailParser';
-import { isBackedUp } from '../components/email/MessageStateIcon';
-import { annotateRowAlerts } from './slices/rowAlerts';
+import * as searchRows from './searchRows';
 
 /// A `tag:` term that names no tag. It can match nothing, which is the point.
 const MISSING_TAG = '\u0000none';
@@ -81,54 +79,6 @@ async function keepRowsWithTags(rows, tagIds) {
   return rows.filter((_row, index) => keep.has(index));
 }
 
-// Merge incremental daemon rows without losing the existing custody/location
-// preference rules.
-function finalize(allResults, scan = {}) {
-  const sourcePriority = { 'local': 3, 'local-only': 3, 'server-search': 2, 'server': 1 };
-  const preferMailbox = scan.activeMailbox === 'UNIFIED' ? 'INBOX' : scan.activeMailbox;
-  const dedupe = (rows, keyOf, tieBreak) => {
-    const seen = new Map();
-    for (const email of rows) {
-      const key = keyOf(email);
-      const existing = seen.get(key);
-      const byRank = existing && (sourcePriority[email.source] || 0) - (sourcePriority[existing.source] || 0);
-      if (!existing || byRank > 0 || (byRank === 0 && tieBreak(email, existing))) {
-        seen.set(key, email);
-      }
-    }
-    return Array.from(seen.values());
-  };
-
-  // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
-  // two different messages, and this loop kept exactly one of them —
-  // by source priority, so the row on screen could already be a message
-  // other than the one that matched.
-  // `emailKey` always returns a string, so the messageId fallback has to
-  // be chosen on the uid, not on a falsy key that never comes.
-  const perCopy = dedupe(allResults, e => (e.uid != null ? emailKey(e) : `mid:${e.messageId}`), () => false);
-  // One message can still sit in two folders of one account: archived from
-  // INBOX and backed up from a Gmail label. Two rows with two different
-  // custody glyphs read as two messages. A tie goes to the copy the backup
-  // drive is known to hold (each row's dot is read from its OWN folder's
-  // scan), then to the open folder's copy.
-  const vouched = (e) => isBackedUp(e, scan) === true;
-  let unkeyed = 0;
-  const perMessage = dedupe(perCopy, e => {
-    const mid = normalizeMessageId(e.messageId);
-    return mid ? `${e._accountId || e._srcAccountId || ''}|${mid}` : `#${unkeyed++}`;
-  }, (e, existing) => (vouched(e) !== vouched(existing)
-    ? vouched(e)
-    : e._mailbox === preferMailbox && existing._mailbox !== preferMailbox));
-
-  perMessage.sort((a, b) => {
-    const dateA = new Date(a.date || a.internalDate || 0);
-    const dateB = new Date(b.date || b.internalDate || 0);
-    return dateB - dateA;
-  });
-  // The same shields the folder list paints, or a hit wears none of them.
-  return annotateRowAlerts(perMessage, useMailStore.getState(), useSettingsStore.getState());
-}
-
 let generation = 0;
 let activeUnlisten = null;
 let activeId = null;
@@ -174,9 +124,7 @@ export const useSearchStore = create((set, get) => ({
     hasAttachments: false,
   },
   searchResults: [],
-  indexedSearchRows: {},
-  searchRowsOutsideIndex: [],
-  excludedSearchCopies: new Set(),
+  ...searchRows.emptyRows(),
   isSearching: false,
   activeSearchId: null,
   searchGeneration: 0,
@@ -201,7 +149,7 @@ export const useSearchStore = create((set, get) => ({
     // vault copy until a sync prunes it (or for good, when archived). The
     // tombstones the delete wrote are what the mail list already hides it by.
     const tombstones = mail.deleteTombstones;
-    const rows = tombstones?.size ? allRows.filter(row => !tombstones.has(emailKey(row))) : allRows;
+    const kept = tombstones?.size ? allRows.filter(row => !tombstones.has(emailKey(row))) : allRows;
     const searchSnapshot = {
       backedUpKeys: mail.backedUpKeys,
       backedUpScopes: mail.backedUpScopes,
@@ -221,10 +169,7 @@ export const useSearchStore = create((set, get) => ({
       searchError: null,
       searchFallback: null,
       searchIndexCoverage: null,
-      indexedSearchRows: {},
-      excludedSearchCopies: new Set(),
-      searchRowsOutsideIndex: rows,
-      searchResults: finalize(rows, searchSnapshot),
+      ...searchRows.showRows(kept, searchSnapshot),
     });
   },
 
@@ -243,37 +188,20 @@ export const useSearchStore = create((set, get) => ({
         || !Number.isFinite(frame.sequence)
         || frame.sequence <= state.lastSequence) return state;
 
-      const rows = Array.isArray(frame.rows) ? frame.rows : [];
+      const frameRows = Array.isArray(frame.rows) ? frame.rows : [];
       const replaceAccountId = frame.replaceIndexAccountId;
       if (replaceAccountId != null && (typeof replaceAccountId !== 'string'
         || !replaceAccountId
         || frame.lane !== 'local'
         || frame.localMode !== 'index'
         || !Array.isArray(frame.rows)
-        || rows.some(row => row?._accountId !== replaceAccountId))) return state;
+        || frameRows.some(row => row?._accountId !== replaceAccountId))) return state;
 
       accepted = true;
       const terminal = !!frame.terminal;
       if (terminal && state.isSearching && state.searchQuery.trim()) historyQuery = state.searchQuery.trim();
-      const indexedSearchRows = replaceAccountId == null
-        ? state.indexedSearchRows
-        : {
-          ...state.indexedSearchRows,
-          [replaceAccountId]: rows.filter(row => !state.excludedSearchCopies.has(emailKey(row))),
-        };
-      const searchRowsOutsideIndex = replaceAccountId == null
-        ? [
-          ...state.searchRowsOutsideIndex,
-          ...rows.filter(row => !state.excludedSearchCopies.has(emailKey(row))),
-        ]
-        : state.searchRowsOutsideIndex;
       return {
-        searchResults: finalize([
-          ...Object.values(indexedSearchRows).flat(),
-          ...searchRowsOutsideIndex,
-        ], state.searchSnapshot || {}),
-        indexedSearchRows,
-        searchRowsOutsideIndex,
+        ...searchRows.addFrameRows(state, frameRows, replaceAccountId),
         lastSequence: frame.sequence,
         searchProgress: terminal ? null : { done: frame.completed ?? 0, total: frame.total ?? 0 },
         searchIndexCoverage: frame.coverage ?? state.searchIndexCoverage,
@@ -293,82 +221,33 @@ export const useSearchStore = create((set, get) => ({
 
   /// A verdict learned after the search ran (the reader scanned a hit's body)
   /// has to reach its row: `searchResults` is in no list the mail store maps.
-  patchResults: (mapRow) => set(state => {
-    if (!state.searchResults.length) return state;
-    let changed = false;
-    const searchResults = state.searchResults.map(row => {
-      const next = mapRow(row);
-      if (next !== row) changed = true;
-      return next;
-    });
-    return changed ? { searchResults } : state;
-  }),
+  patchResults: (mapRow) => set(state => searchRows.mapRows(state, mapRow) || state),
 
   // A flag change anywhere has to reach the rows a search is showing.
   // `searchResults` is the ONE list the mutation paths never map — a hit is in
   // it and in no list of the store they write through — so marking a message
   // read (by hand, or by opening it) left its search row bold until the query
   // was run again. Keyed on the copy, never on a bare uid: folder A's uid 34
-  // and folder B's are two messages. A row that names no account or folder
-  // (a single-folder result) matches on what it does name.
+  // and folder B's are two messages.
   patchResultFlags: (targets, map) => {
     if (!targets?.length) return;
-    set(state => {
-      if (!state.searchResults.length) return state;
-      // All three fields, all present: a row that names no account or folder
-      // would otherwise match on the uid alone, and a bare uid names a
-      // different message in every other folder. A miss leaves a stale bold
-      // row — what this repaint already had to live with; a false match paints
-      // another message's row read.
-      const hit = row => row._accountId && row._mailbox && targets.some(t =>
-        row.uid === t.uid && row._accountId === t.accountId && row._mailbox === t.mailbox);
-      let changed = false;
-      const searchResults = state.searchResults.map(row => {
-        if (!hit(row)) return row;
-        const flags = map(row.flags);
-        if (String(flags) === String(row.flags)) return row;
-        changed = true;
-        return { ...row, flags };
-      });
-      return changed ? { searchResults } : state;
-    });
+    // All three fields, all present: a row that names no account or folder
+    // would otherwise match on the uid alone, and a bare uid names a
+    // different message in every other folder. A miss leaves a stale bold
+    // row — what this repaint already had to live with; a false match paints
+    // another message's row read.
+    const hit = row => row._accountId && row._mailbox && targets.some(t =>
+      row.uid === t.uid && row._accountId === t.accountId && row._mailbox === t.mailbox);
+    set(state => searchRows.mapRows(state, row => {
+      if (!hit(row)) return row;
+      const flags = map(row.flags);
+      return String(flags) === String(row.flags) ? row : { ...row, flags };
+    }) || state);
   },
 
   removeSearchResults: keys => {
-    const copyKeys = new Set(keys);
-    if (!copyKeys.size) return;
-    set(state => {
-      const sourceRows = [
-        ...Object.values(state.indexedSearchRows).flat(),
-        ...state.searchRowsOutsideIndex,
-      ];
-      const removedCopies = new Set([...sourceRows, ...state.searchResults]
-        .filter(row => copyKeys.has(emailKey(row)))
-        .map(emailKey));
-      if (!removedCopies.size) return state;
-
-      const excludedSearchCopies = new Set([
-        ...state.excludedSearchCopies,
-        ...removedCopies,
-      ]);
-      const keep = row => !excludedSearchCopies.has(emailKey(row));
-      const indexedSearchRows = Object.fromEntries(Object.entries(state.indexedSearchRows)
-        .map(([accountId, rows]) => [accountId, rows.filter(keep)]));
-      const indexedRows = Object.values(indexedSearchRows).flat();
-      const searchRowsOutsideIndex = state.searchRowsOutsideIndex.filter(keep);
-      const representedCopies = new Set([...indexedRows, ...searchRowsOutsideIndex].map(emailKey));
-      searchRowsOutsideIndex.push(...state.searchResults.filter(row => keep(row)
-        && !representedCopies.has(emailKey(row))));
-      return {
-        indexedSearchRows,
-        searchRowsOutsideIndex,
-        excludedSearchCopies,
-        searchResults: finalize([
-          ...indexedRows,
-          ...searchRowsOutsideIndex,
-        ], state.searchSnapshot || {}),
-      };
-    });
+    if (!keys?.length) return;
+    set(state => searchRows.dropCopies(state, keys) || state);
   },
 
   restartSearch: () => get().performSearch(),
@@ -426,9 +305,7 @@ export const useSearchStore = create((set, get) => ({
       lastSequence: 0,
       searchSnapshot,
       searchResults: [],
-      indexedSearchRows: {},
-      searchRowsOutsideIndex: [],
-      excludedSearchCopies: new Set(),
+      ...searchRows.emptyRows(),
       isSearching: hasCriteria,
       searchActive: hasCriteria,
       searchProgress: null,
@@ -525,9 +402,7 @@ export const useSearchStore = create((set, get) => ({
         hasAttachments: false,
       },
       searchResults: [],
-      indexedSearchRows: {},
-      searchRowsOutsideIndex: [],
-      excludedSearchCopies: new Set(),
+      ...searchRows.emptyRows(),
       isSearching: false,
       searchProgress: null,
       searchIndexCoverage: null,

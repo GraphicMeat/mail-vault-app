@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A message you open from search now stays read.** While a search was still running, opening a result marked it read, and the next batch of results could turn it bold again. The read mark now holds for the rest of the search.
+
 ## [2.17.1] - 2026-09-30
 
 ### Added

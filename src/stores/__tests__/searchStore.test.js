@@ -389,6 +389,50 @@ describe('daemon-backed search lifecycle', () => {
     expect(rows.find(r => r.subject === 'another folder, same uid').flags).toEqual([]);
   });
 
+  // The repaint used to touch `searchResults` alone. The next frame of a
+  // running search rebuilds it from the rows the lanes delivered, which still
+  // held the flags the hit was found with, so a message opened (and marked
+  // read) while the search streamed turned bold again.
+  it('a read mark survives the next frame of the running search', async () => {
+    const run = await startSearch('flag survives');
+    progress(run, 1, { lane: 'local', localMode: 'index', replaceIndexAccountId: 'acct-1', rows: [
+      result(7, 'indexed hit', { _accountId: 'acct-1', _mailbox: 'Archive', messageId: '<a@example.test>', source: 'local', flags: [] }),
+    ] });
+    progress(run, 2, { lane: 'server', rows: [
+      result(9, 'server hit', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<s@example.test>', source: 'server-search', flags: [] }),
+    ] });
+
+    const markRead = flags => [...(flags || []), '\\Seen'];
+    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-1', mailbox: 'Archive', uid: 7 }], markRead);
+    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-1', mailbox: 'INBOX', uid: 9 }], markRead);
+
+    progress(run, 3, { lane: 'server', rows: [
+      result(11, 'a later arrival', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<l@example.test>', source: 'server-search', flags: [] }),
+    ] });
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows.find(r => r.subject === 'indexed hit').flags).toEqual(['\\Seen']);
+    expect(rows.find(r => r.subject === 'server hit').flags).toEqual(['\\Seen']);
+    expect(rows.find(r => r.subject === 'a later arrival').flags).toEqual([]);
+  });
+
+  // Same for a verdict the reader learned after the search ran: it is patched
+  // into the rows the lanes delivered, or the next frame paints it away.
+  it('a verdict learned after the search survives the next frame', async () => {
+    const run = await startSearch('verdict survives');
+    progress(run, 1, { rows: [
+      result(7, 'scanned hit', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<v@example.test>', source: 'local', flags: [] }),
+    ] });
+
+    useSearchStore.getState().patchResults(row => (row.uid === 7 ? { ...row, _linkAlert: 'red' } : row));
+    progress(run, 2, { lane: 'server', rows: [
+      result(8, 'another arrival', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<w@example.test>', source: 'server-search', flags: [] }),
+    ] });
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows.find(r => r.subject === 'scanned hit')._linkAlert).toBe('red');
+  });
+
   // A row that names no folder is not a row this can key: the uid alone would
   // match a different message in every other folder.
   it('leaves an unstamped row alone rather than guessing', async () => {
