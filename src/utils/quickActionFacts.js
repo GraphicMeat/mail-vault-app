@@ -82,15 +82,14 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
   };
 }
 
-// A ticked message is archived when its row says the vault holds it, as the
-// row menu reads it. The uids in `archivedIds` name only the open folder's
-// messages, so they stand in only for a bare key no row resolves; reading a
-// full key's uid there counted an archived message of another account or
-// folder (every row of a spanning view, a search hit) as unarchived.
-const isArchivedKey = (rowByKey, archivedIds) => key => {
-  const row = rowByKey.get(key);
-  return row ? !!row.isArchived : !String(key).includes(':') && archivedIds.has(key);
-};
+// A ticked message is archived when its row says the vault holds it, or when
+// it is the open folder's (a bare key) and `archivedIds` holds its uid. Those
+// uids name only the open folder's messages, so a full key's uid is never read
+// there: that counted an archived message of another account or folder (every
+// row of a spanning view, a search hit) as unarchived. They still count for a
+// bare key whose row says no, as Server view writes on every row it lists.
+const isArchivedKey = (rowByKey, archivedIds) => key =>
+  !!rowByKey.get(key)?.isArchived || (!String(key).includes(':') && archivedIds.has(key));
 
 /**
  * The ticked `keys` whose message the vault holds, in selection order: `rows`

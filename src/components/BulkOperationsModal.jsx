@@ -360,7 +360,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   // follow the checkboxes, not the stale range. One traversal shared by all
   // four consumers — selections here can reach ~15k, so this must not be a
   // count computed once per consumer. Archived is the selection bar's rule:
-  // a key's own row, else the open folder's uids for a bare key.
+  // a key's own row, or the open folder's uids for a bare key.
   const archivedSelectedCount = useMemo(() => archivedSelectionKeys(
     selectedEmailIds,
     loadedRows({ sortedEmails, emails: serverEmails, localEmails, sentEmails }, searchResults),

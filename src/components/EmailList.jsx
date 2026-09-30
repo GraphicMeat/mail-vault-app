@@ -1166,7 +1166,7 @@ function EmailListComponent({ stacked = false }) {
       const state = useMailStore.getState();
       const { removeLocalEmails, archivedEmailIds } = state;
       // Only archived messages have anything to remove, read by the selection
-      // bar's rule: a key's own row, else the open folder's uids for a bare
+      // bar's rule: a key's own row, or the open folder's uids for a bare
       // key. One call for the run: one vault delete and one re-read per
       // (account, mailbox).
       const rows = loadedRows(state, useSearchStore.getState().searchResults);
