@@ -36,7 +36,7 @@ vi.mock('framer-motion', () => ({
 
 // Store window holds 2 of 5 — the paginated render window. A loaded row
 // carries its folder's archived state, as updateSortedEmails derives it.
-const windowRow = (uid, date) => ({ uid, date, get isArchived() { return archivedEmailIds.has(uid); } });
+const windowRow = (uid, date) => ({ uid, date, get isArchived() { return archivedEmailIds.has(`acct-1:INBOX:${uid}`); } });
 const WINDOW = [
   windowRow(5, '2026-03-01T10:00:00Z'),
   windowRow(4, '2026-02-01T10:00:00Z'),

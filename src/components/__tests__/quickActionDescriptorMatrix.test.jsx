@@ -81,7 +81,7 @@ const { SelectionActionBar, SelectionActionBarView } = await import('../Selectio
 const { EmailActionBar } = await import('../email/EmailActionBar');
 const { QUICK_ACTION_SURFACE_ACTIONS, QUICK_ACTION_TYPES, DEFAULT_QUICK_ACTIONS } = await import('../../utils/quickActions');
 const { FilledStar } = await import('../../utils/quickActionIcons');
-const { resolveEmailLocation, selectionKey } = await import('../../stores/slices/unifiedHelpers');
+const { resolveEmailLocation, selectionKey, vaultKey } = await import('../../stores/slices/unifiedHelpers');
 const { describePurge } = await import('../../utils/custodyCopy');
 const { isOutgoingMailboxName } = await import('../../utils/sentFolder');
 
@@ -272,7 +272,7 @@ describe('selection view (Settings sample: rows only)', () => {
 });
 
 // The live bar: keys from the store, rows out of every pool, archived state
-// out of `archivedEmailIds` by uid.
+// out of `archivedEmailIds` by accountId:mailbox:uid.
 function renderSelection(selected, { state = {}, pools = selected, search = [], extraKeys = [] } = {}) {
   mocks.configs.selection = surfaceConfig('selection');
   mailStore.setState(baseMailState(state), true);
@@ -280,7 +280,7 @@ function renderSelection(selected, { state = {}, pools = selected, search = [], 
   mailStore.setState({
     sortedEmails: pools, emails: pools,
     selectedEmailIds: new Set([...selected.map(email => selectionKey(email, live)), ...extraKeys]),
-    archivedEmailIds: new Set([...pools, ...search].filter(email => email.isArchived).map(email => email.uid)),
+    archivedEmailIds: new Set([...pools, ...search].filter(email => email.isArchived).map(email => vaultKey(email._accountId ?? 'acct-a', email._mailbox ?? 'INBOX', email.uid))),
     getSelectionSummary: () => ({ threads: selected.length + extraKeys.length, emails: selected.length + extraKeys.length }),
   });
   mocks.searchResults = search;

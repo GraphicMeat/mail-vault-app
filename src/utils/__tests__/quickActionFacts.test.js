@@ -88,7 +88,7 @@ describe('selectionFacts', () => {
     expect(selectionFacts(new Set([1, 2]), server, server, new Set(), STATE, { backedUp: true }).purge)
       .toMatchObject({ label: 'Delete from server and backup' });
     const archived = [mail(1, { isArchived: true }), mail(2)];
-    expect(selectionFacts(new Set([1, 2]), archived, archived, new Set([1]), STATE).purge)
+    expect(selectionFacts(new Set([1, 2]), archived, archived, new Set(['acct-a:INBOX:1']), STATE).purge)
       .toMatchObject({ label: 'Delete from server and vault' });
     const local = [mail(1, { _mailbox: 'Imported', isArchived: true })];
     expect(selectionFacts(new Set(['acct-a:Imported:1']), local, local, new Set(), STATE, { backedUp: true }).purge).toBeNull();
@@ -96,14 +96,14 @@ describe('selectionFacts', () => {
 
   it('offers Unarchive for a bare key the open folder holds archived, whatever its row says (Server view)', () => {
     const rows = [mail(1), mail(2)];
-    const facts = selectionFacts(new Set([1, 2]), rows, rows, new Set([1]), STATE);
+    const facts = selectionFacts(new Set([1, 2]), rows, rows, new Set(['acct-a:INBOX:1']), STATE);
     expect(facts).toMatchObject({ archivedCount: 1, totalCount: 2 });
     expect(facts.has).toMatchObject({ archive: true, unarchive: true });
   });
 
-  it('falls back to the open folder\'s archived uids only for a bare key no row resolves', () => {
+  it('falls back to the vault\'s keys only for a key no row resolves, each in its own folder', () => {
     const rows = [mail(1)];
-    const facts = selectionFacts(new Set([1, 9, 'acct-b:INBOX:9']), rows, rows, new Set([9]), STATE);
+    const facts = selectionFacts(new Set([1, 9, 'acct-b:INBOX:9']), rows, rows, new Set(['acct-a:INBOX:9']), STATE);
     expect(facts).toMatchObject({ archivedCount: 1, totalCount: 3 });
     expect(facts.has).toMatchObject({ archive: true, unarchive: true });
   });
@@ -112,17 +112,17 @@ describe('selectionFacts', () => {
 // The bulk modal's counts and its Unarchive run read the ticked keys by the
 // selection bar's rule, not by the open folder's uids alone.
 describe('archivedSelectionKeys', () => {
-  it('names the ticked keys the vault holds: a row by its own state, a bare key no row resolves by the open folder', () => {
+  it('names the ticked keys the vault holds: a row by its own state, a key no row resolves by its own folder', () => {
     const rows = [mail(1), mail(3, { isArchived: true }), mail(12, { _accountId: 'acct-b', isArchived: true })];
     const keys = new Set([1, 3, 9, 7, 'acct-b:INBOX:12', 'acct-b:INBOX:9']);
-    expect(archivedSelectionKeys(keys, rows, new Set([9]), STATE)).toEqual([3, 9, 'acct-b:INBOX:12']);
+    expect(archivedSelectionKeys(keys, rows, new Set(['acct-a:INBOX:9']), STATE)).toEqual([3, 9, 'acct-b:INBOX:12']);
   });
 
-  // Server view writes isArchived false on every row it lists, while the open
-  // folder's archived uids still name what the vault holds.
+  // Server view writes isArchived false on every row it lists, while the vault's
+  // keys still name what it holds.
   it('counts a bare key the open folder holds archived even when its row says not', () => {
     const rows = [mail(1), mail(2)];
-    expect(archivedSelectionKeys(new Set([1, 2]), rows, new Set([1]), STATE)).toEqual([1]);
+    expect(archivedSelectionKeys(new Set([1, 2]), rows, new Set(['acct-a:INBOX:1']), STATE)).toEqual([1]);
   });
 
   // The list's row comes first and carries the derived state; a vault row the

@@ -670,7 +670,7 @@ describe('bulk Unarchive', () => {
     const { useSearchStore } = await import('../../stores/searchStore');
     const removeLocalEmails = vi.fn(async () => {});
     const hit = { ...mockEmails[0], uid: 900, _accountId: 'acc2', _mailbox: 'INBOX', isArchived: true };
-    useMailStore.setState({ removeLocalEmails, updateSortedEmails: vi.fn(), archivedEmailIds: new Set([777]) });
+    useMailStore.setState({ removeLocalEmails, updateSortedEmails: vi.fn(), archivedEmailIds: new Set(['acc1:INBOX:777']) });
     useSearchStore.getState().searchResults = [hit];
 
     const { EmailList } = await import('../EmailList.jsx');
@@ -1036,7 +1036,7 @@ describe('rows repaint when the derivation mutates them in place', () => {
     rows[0].source = 'local';
     useMailStore.setState({
       sortedEmails: [...rows],
-      archivedEmailIds: new Set([rows[0].uid]),
+      archivedEmailIds: new Set([`acc1:INBOX:${rows[0].uid}`]),
     });
     rerender(React.createElement(EmailList, { 'data-render': 2 }));
 
