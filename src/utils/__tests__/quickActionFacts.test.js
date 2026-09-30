@@ -47,7 +47,7 @@ describe('rowFacts', () => {
   // folder's archived uids still name what the vault holds. Another folder's
   // or account's uid is never read there.
   it('reads a row of the open folder as archived when the folder\'s archived uids hold it', () => {
-    const state = { ...STATE, archivedEmailIds: new Set([1]) };
+    const state = { ...STATE, archivedEmailIds: new Set(['acct-a:INBOX:1']) };
     const facts = rowFacts([mail(1)], state);
     expect(facts.has).toMatchObject({ archive: false, unarchive: true });
     expect(facts.purge).toMatchObject({ label: 'Delete from server and vault' });

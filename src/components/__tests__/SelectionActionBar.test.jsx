@@ -176,7 +176,7 @@ describe('SelectionActionBar delete confirmation', () => {
   // Unarchive and the run must reach those rows too.
   it('unarchives a Server view row of the open folder the folder\'s archived uids hold', async () => {
     const removeLocalEmails = vi.fn().mockResolvedValue();
-    useMailStoreMock.setState({ archivedEmailIds: new Set([1]), removeLocalEmails });
+    useMailStoreMock.setState({ archivedEmailIds: new Set(['acct-1:INBOX:1']), removeLocalEmails });
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Unarchive selected'));
     fireEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
