@@ -81,34 +81,30 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
   };
 }
 
-// Parse a selection key (may be "accountId:uid" in unified mode) to extract raw uid
-const parseKey = (key) => {
-  const s = String(key);
-  const i = s.indexOf(':');
-  if (i > 0) {
-    const raw = s.slice(i + 1);
-    return /^\d+$/.test(raw) ? Number(raw) : raw;
-  }
-  return key;
-};
-
 /**
  * The selection bar's targets: `keys` the ticked selection (a Set), `rows` its
  * messages the loaded lists resolve, `pool` every loaded row and
- * `archivedIds` the uids the vault holds. Adds `archivedCount`/`totalCount`,
- * which the delete confirmation states and which must agree with the
- * Archive/Unarchive gates.
+ * `archivedIds` the open folder's archived uids. Adds `archivedCount`/
+ * `totalCount`, which the delete confirmation states and which must agree
+ * with the Archive/Unarchive gates.
  */
 export function selectionFacts(keys, rows, pool, archivedIds, state) {
+  // A row says whether the vault holds it, as the row menu reads it. The
+  // uids in `archivedIds` name only the open folder's messages, so they
+  // stand in only for a bare key no row resolves; reading a full key's uid
+  // there counted an archived message of another account or folder (every
+  // row of a spanning view) as unarchived.
+  const rowByKey = new Map(rows.map(email => [selectionKey(email, state), email]));
   let archived = 0;
   let unarchived = 0;
   for (const key of keys) {
-    if (archivedIds.has(parseKey(key))) archived++;
+    const row = rowByKey.get(key);
+    const isArchived = row ? !!row.isArchived : !String(key).includes(':') && archivedIds.has(key);
+    if (isArchived) archived++;
     else unarchived++;
   }
   const target = resolveQuickActionSelectionTarget([...keys], pool, state);
-  const rowKeys = new Set(rows.map(email => selectionKey(email, state)));
-  const fullyResolved = rowKeys.size === keys.size && [...keys].every(key => rowKeys.has(key));
+  const fullyResolved = rowByKey.size === keys.size && [...keys].every(key => rowByKey.has(key));
   const locations = rows.map(email => resolveEmailLocation(email, state));
   // A selection in a vault-only folder: nothing that needs a server is
   // offered, and neither is a purge or unarchive. Delete stays, as the delete

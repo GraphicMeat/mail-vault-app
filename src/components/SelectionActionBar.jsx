@@ -242,7 +242,7 @@ export function SelectionActionBar() {
   );
   // What the ticked messages are, as the bar's buttons and its confirmation
   // read them: the selection's keys, its rows the loaded lists (and search)
-  // resolve, every loaded row, and the uids the vault holds.
+  // resolve, every loaded row, and the open folder's archived uids.
   const facts = selectionFacts(
     selectedEmailIds,
     selectedRows,

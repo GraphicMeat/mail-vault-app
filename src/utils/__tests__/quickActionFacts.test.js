@@ -58,6 +58,23 @@ describe('selectionFacts', () => {
     const partial = selectionFacts(new Set([1, 2, 9]), rows, rows, new Set(), STATE);
     expect(partial).toMatchObject({ fullyResolved: false, resolved: false, serverActions: false, snooze: false, accountId: null });
   });
+
+  // `archivedIds` is the open folder's uids; a message of another account or
+  // folder is keyed `account:mailbox:uid` and its row says whether the vault
+  // holds it, as the row menu reads it.
+  it('reads a resolved row\'s archived state off the row, whatever its key', () => {
+    const other = mail(12, { _accountId: 'acct-b', isArchived: true });
+    const facts = selectionFacts(new Set(['acct-b:INBOX:12']), [other], [other], new Set(), STATE);
+    expect(facts.has).toMatchObject({ archive: false, unarchive: true });
+    expect(facts).toMatchObject({ archivedCount: 1, totalCount: 1 });
+  });
+
+  it('falls back to the open folder\'s archived uids only for a bare key no row resolves', () => {
+    const rows = [mail(1)];
+    const facts = selectionFacts(new Set([1, 9, 'acct-b:INBOX:9']), rows, rows, new Set([9]), STATE);
+    expect(facts).toMatchObject({ archivedCount: 1, totalCount: 3 });
+    expect(facts.has).toMatchObject({ archive: true, unarchive: true });
+  });
 });
 
 describe('readerFacts', () => {

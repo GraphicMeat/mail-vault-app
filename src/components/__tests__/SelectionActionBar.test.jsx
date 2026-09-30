@@ -7,7 +7,7 @@
 // `deleteMode` rather than the old boolean `showDeleteConfirm`.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import { create } from 'zustand';
 import { t as tr } from '../../i18n/index.js';
 
@@ -145,13 +145,28 @@ describe('SelectionActionBar delete confirmation', () => {
   });
 
   it('promises the vault copy survives when every selected message is archived', () => {
-    useMailStoreMock.setState({ archivedEmailIds: new Set([1, 2]) });
+    // As the store has it: the archived ids and the rows derived from them.
+    const archivedRows = selectionFixtureRows.map(row => ({ ...row, isArchived: true }));
+    useMailStoreMock.setState({ archivedEmailIds: new Set([1, 2]), emails: archivedRows, sortedEmails: archivedRows });
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Delete from server'));
 
     const copy = screen.getByText(/Delete 2 emails from the server\?/);
     expect(copy.textContent).toMatch(/Your vault keeps the copies/);
     expect(copy.textContent).not.toMatch(/cannot be undone/i);
+  });
+
+  // An archive landing in the open folder writes new archived ids and
+  // re-derives the rows from them; the bar follows the rows.
+  it('offers Unarchive once an archive lands on a selected row of the open folder', () => {
+    render(<SelectionActionBar />);
+    expect(quickAction('Unarchive selected').disabled).toBe(true);
+    const archivedRows = selectionFixtureRows.map(row => ({ ...row, isArchived: row.uid === 1 }));
+    act(() => {
+      useMailStoreMock.setState({ archivedEmailIds: new Set([1]) });
+      useMailStoreMock.setState({ emails: archivedRows, sortedEmails: archivedRows });
+    });
+    expect(quickAction('Unarchive selected').disabled).toBe(false);
   });
 
   it('Delete everywhere shows the everywhere confirmation copy', () => {

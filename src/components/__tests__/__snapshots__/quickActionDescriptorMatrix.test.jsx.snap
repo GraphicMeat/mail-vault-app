@@ -8653,8 +8653,8 @@ exports[`selection bar (store) > single:otherAccountArchived 1`] = `
 [
   {
     "descriptors": [
-      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":true}",
-      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":false}",
+      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":true}",
+      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":false}",
       "{"id":"delete","action":"delete","label":"common.delete","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteServer","action":"deleteServer","label":"rowMenu.deleteServer","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteEverywhere","action":"deleteEverywhere","label":"selection.deleteEverywhere","icon":"ShieldX","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
@@ -8950,8 +8950,8 @@ exports[`selection bar (store) > spanning view, archived row 1`] = `
 [
   {
     "descriptors": [
-      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":true}",
-      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":false}",
+      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":true}",
+      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":false}",
       "{"id":"delete","action":"delete","label":"common.delete","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteServer","action":"deleteServer","label":"rowMenu.deleteServer","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteEverywhere","action":"deleteEverywhere","label":"selection.deleteEverywhere","icon":"ShieldX","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
@@ -9215,7 +9215,7 @@ exports[`selection bar (store) > thread:otherAccount 1`] = `
   {
     "descriptors": [
       "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":true}",
-      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":false}",
+      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":false}",
       "{"id":"delete","action":"delete","label":"common.delete","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteServer","action":"deleteServer","label":"rowMenu.deleteServer","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteEverywhere","action":"deleteEverywhere","label":"selection.deleteEverywhere","icon":"ShieldX","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
@@ -9907,8 +9907,8 @@ exports[`selection view (Settings sample: rows only) > single:otherAccountArchiv
 [
   {
     "descriptors": [
-      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":true}",
-      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":false}",
+      "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":true}",
+      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":false}",
       "{"id":"delete","action":"delete","label":"common.delete","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteServer","action":"deleteServer","label":"rowMenu.deleteServer","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteEverywhere","action":"deleteEverywhere","label":"selection.deleteEverywhere","icon":"ShieldX","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
@@ -10438,7 +10438,7 @@ exports[`selection view (Settings sample: rows only) > thread:otherAccount 1`] =
   {
     "descriptors": [
       "{"id":"archive","action":"archive","label":"common.archive","titleLabel":"selection.archiveSelected","icon":"Archive","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":true}",
-      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":true,"tone":"positive","isDestructive":false,"restoreFocus":false}",
+      "{"id":"unarchive","action":"unarchive","label":"selection.unarchive","titleLabel":"selection.unarchiveSelected","icon":"ArchiveRestore","disabled":false,"tone":"positive","isDestructive":false,"restoreFocus":false}",
       "{"id":"delete","action":"delete","label":"common.delete","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteServer","action":"deleteServer","label":"rowMenu.deleteServer","icon":"Trash2","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
       "{"id":"deleteEverywhere","action":"deleteEverywhere","label":"selection.deleteEverywhere","icon":"ShieldX","disabled":false,"tone":"danger","isDestructive":true,"restoreFocus":false}",
