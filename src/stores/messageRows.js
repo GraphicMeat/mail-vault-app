@@ -1,0 +1,148 @@
+// ── The one registry of every place a message row lives ──
+//
+// One message can sit in `emails`, `localEmails`, `sentEmails`, the open
+// reader and its thread, the body cache, a search's rows and a Notes card. A
+// writer that changes a row (a flag, the star, a verdict) and patches the
+// containers it happens to remember leaves the rest showing the old value,
+// and a reader that resolves a key against the containers it happens to
+// remember does not find the row. This file is the only list of them.
+//
+//   registerRows(container)   each store registers the containers it holds,
+//                             once, where it is created — a container nobody
+//                             registered is one no writer reaches
+//   patchEverywhere(...)      the ONLY way a writer changes a row's flags,
+//                             star, tags or verdicts
+//   resolvePool(state)        the ordered candidate rows, for every key
+//                             resolver and every read of the state a row has
+//                             right now
+//
+// A container is `{ name, store, fields, mapRows?, rows?, rank?, derived? }`:
+//   fields   the store fields it holds (the guard spec lists every collection
+//            a store has and asks that each is registered or exempted)
+//   mapRows  (state, ctx) -> a partial state, or null when nothing changed.
+//            Pure over `state`; `ctx.hit(row)` says which row of `keys` this
+//            is, `ctx.mapRow(row, key)` returns the row itself when nothing
+//            about it changes. Containers of one store are merged and land
+//            in ONE setState: `emails` runs to five figures, and a click must
+//            not pay a render per container.
+//   rows     (state) -> the rows a key can be resolved against
+//   rank     where its rows sit in the pool; the lowest wins a key both hold
+//   derived  a projection of another container (`sortedEmails`): a writer
+//            that re-derives the list afterwards passes `skipDerived`
+//
+// This module imports no store, so every store can import it.
+
+import { emailScopeKey } from './slices/unifiedHelpers';
+
+const containers = new Map();
+let mailStore = null;
+
+/// `store` is a zustand store; the mail store is the one a row's location is
+/// read against (an unstamped row is the view's), so it is registered as such.
+export function registerRows(container) {
+  containers.set(container.name, container);
+}
+
+/// The store `emailScopeKey` reads its view from.
+export function setIdentityStore(store) {
+  mailStore = store;
+}
+
+/// Every store field a registered container holds, by store.
+export function registeredFields(store) {
+  const fields = new Set();
+  for (const container of containers.values()) {
+    if (container.store === store) for (const field of container.fields || []) fields.add(field);
+  }
+  return fields;
+}
+
+export function registeredContainers() {
+  return [...containers.values()];
+}
+
+/// The candidate rows of `state` (the mail store's), best copy first: the
+/// lists in view, then the reader's copy, then whatever else registered rows
+/// (a search's hits, which no list holds). Take the first row per key.
+export function resolvePool(state = mailStore?.getState()) {
+  const pool = [];
+  const ranked = [...containers.values()].filter(container => container.rows)
+    .sort((a, b) => (a.rank ?? 100) - (b.rank ?? 100));
+  for (const container of ranked) {
+    const own = container.store === mailStore ? state : container.store.getState();
+    for (const row of container.rows(own) || []) if (row) pool.push(row);
+  }
+  return pool;
+}
+
+/// `rows` as a Map from `keyOf(row)`, the first row of a key winning.
+export function indexRows(rows, keyOf) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!byKey.has(key)) byKey.set(key, row);
+  }
+  return byKey;
+}
+
+/// A list with `ctx.mapRow` applied to its rows of `keys`: the array itself
+/// when no row changed (updateSortedEmails memoises on it), else a copy.
+export function mapList(rows, ctx) {
+  if (!rows?.length) return rows;
+  let out = null;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const key = ctx.hit(row);
+    if (key === null) continue;
+    const next = ctx.mapRow(row, key);
+    if (next !== row) {
+      out ??= rows.slice();
+      out[i] = next;
+    }
+  }
+  return out ?? rows;
+}
+
+/**
+ * Change the rows of `keys` (`accountId-mailbox-uid`, the mail store's
+ * `emailScopeKey`) in every registered container. `mapRow(row, key)` returns
+ * the row itself when nothing about it changes.
+ *
+ * One pass per container, uid first (a five-figure list is scanned by a Set
+ * lookup on a number), and one setState per store. `only` names the one
+ * container an optimistic paint is for (a Notes card painted before the
+ * flag core lands the change everywhere else).
+ */
+export function patchEverywhere(keys, mapRow, { skipDerived = false, only = null } = {}) {
+  const wanted = new Set(keys);
+  if (!wanted.size) return;
+  const mail = mailStore?.getState();
+  // A uid is the tail of the key; nothing else in a key can end in one. A
+  // negative one (a sample row) reads as a dash before the tail.
+  const uids = new Set();
+  for (const key of wanted) {
+    const at = key.lastIndexOf('-');
+    const tails = [key.slice(at + 1)];
+    if (at > 0 && key[at - 1] === '-') tails.push(key.slice(at));
+    for (const uid of tails) {
+      uids.add(uid);
+      if (/^-?\d+$/.test(uid)) uids.add(Number(uid));
+    }
+  }
+  const ctx = {
+    keys: wanted,
+    mapRow,
+    hit: (row) => {
+      if (!row || !uids.has(row.uid)) return null;
+      const key = emailScopeKey(row, mail);
+      return key !== null && wanted.has(key) ? key : null;
+    },
+  };
+  const patches = new Map();
+  for (const container of containers.values()) {
+    if (!container.mapRows || (skipDerived && container.derived) || (only && container.name !== only)) continue;
+    const patch = container.mapRows(container.store.getState(), ctx);
+    if (patch) patches.set(container.store, { ...patches.get(container.store), ...patch });
+  }
+  for (const [store, patch] of patches) store.setState(patch);
+}

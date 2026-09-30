@@ -37,8 +37,22 @@ vi.mock('../../services/daemonClient', () => ({
 vi.mock('../../services/api', () => ({ searchEmails: async () => ({ emails: [], total: 0 }) }));
 
 const { useSearchStore } = await import('../searchStore.js');
+const { patchEverywhere, setIdentityStore } = await import('../messageRows.js');
 const { useTagStore } = await import('../tagStore');
 const { useFieldStore } = await import('../fieldStore');
+
+// The flag core's repaint of search rows: a change through the registry, to the
+// search container only (the mail store is a stub in this file).
+setIdentityStore({ getState: () => harness.mailState });
+const patchFlags = (targets, map) => patchEverywhere(
+  targets.map(target => `${target.accountId}-${target.mailbox}-${target.uid}`),
+  row => {
+    const flags = map(row.flags);
+    return String(flags) === String(row.flags) ? row : { ...row, flags };
+  },
+  { only: 'searchRows' },
+);
+const patchVerdict = (key, verdict) => patchEverywhere([key], row => ({ ...row, ...verdict }), { only: 'searchRows' });
 
 const DEFAULT_FILTERS = {
   location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
@@ -378,7 +392,7 @@ describe('daemon-backed search lifecycle', () => {
       result(7, 'another folder, same uid', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<b@example.test>', source: 'local', flags: [] }),
     ] });
 
-    useSearchStore.getState().patchResultFlags(
+    patchFlags(
       [{ accountId: 'acct-1', mailbox: 'Archive', uid: 7 }],
       flags => [...(flags || []), '\\Seen'],
     );
@@ -403,8 +417,8 @@ describe('daemon-backed search lifecycle', () => {
     ] });
 
     const markRead = flags => [...(flags || []), '\\Seen'];
-    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-1', mailbox: 'Archive', uid: 7 }], markRead);
-    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-1', mailbox: 'INBOX', uid: 9 }], markRead);
+    patchFlags([{ accountId: 'acct-1', mailbox: 'Archive', uid: 7 }], markRead);
+    patchFlags([{ accountId: 'acct-1', mailbox: 'INBOX', uid: 9 }], markRead);
 
     progress(run, 3, { lane: 'server', rows: [
       result(11, 'a later arrival', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<l@example.test>', source: 'server-search', flags: [] }),
@@ -424,7 +438,7 @@ describe('daemon-backed search lifecycle', () => {
       result(7, 'scanned hit', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<v@example.test>', source: 'local', flags: [] }),
     ] });
 
-    useSearchStore.getState().patchResults(row => (row.uid === 7 ? { ...row, _linkAlert: 'red' } : row));
+    patchVerdict('acct-1-INBOX-7', { _linkAlert: 'red' });
     progress(run, 2, { lane: 'server', rows: [
       result(8, 'another arrival', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<w@example.test>', source: 'server-search', flags: [] }),
     ] });
@@ -439,7 +453,7 @@ describe('daemon-backed search lifecycle', () => {
     const run = await startSearch('unstamped');
     progress(run, 1, { rows: [result(7, 'no folder on it', { messageId: '<c@example.test>', flags: [] })] });
 
-    useSearchStore.getState().patchResultFlags(
+    patchFlags(
       [{ accountId: 'acct-1', mailbox: 'INBOX', uid: 7 }],
       flags => [...(flags || []), '\\Seen'],
     );
@@ -452,7 +466,7 @@ describe('daemon-backed search lifecycle', () => {
     progress(run, 1, { rows: [result(7, 'hit', { _accountId: 'acct-1', _mailbox: 'INBOX', flags: [] })] });
     const before = useSearchStore.getState().searchResults;
 
-    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-9', mailbox: 'INBOX', uid: 7 }], () => ['\\Seen']);
+    patchFlags([{ accountId: 'acct-9', mailbox: 'INBOX', uid: 7 }], () => ['\\Seen']);
 
     expect(useSearchStore.getState().searchResults).toBe(before);
   });
@@ -508,7 +522,7 @@ describe('daemon-backed search lifecycle', () => {
 // The Starred built-in view is a saved view like any other: its rows arrive
 // through `showRows` (see its own doc comment) and sit in `searchResults`
 // until the view is reopened. A flag change reaches them only through
-// `patchResultFlags` — nothing here re-filters the list by `\Flagged` — so an
+// `patchEverywhere` — nothing here re-filters the list by `\Flagged` — so an
 // unstarred row stays on screen, just repainted, until the next `showRows`
 // (the sidebar's reload of the view) leaves it out.
 describe('a view keeps a row it no longer matches until it is reloaded', () => {
@@ -522,7 +536,7 @@ describe('a view keeps a row it no longer matches until it is reloaded', () => {
 
     // The flag core's repaint of search rows (patchSearchFlags in
     // messageMutations.js), not a re-run of the view.
-    useSearchStore.getState().patchResultFlags(
+    patchFlags(
       [{ accountId: 'acct-1', mailbox: 'INBOX', uid: 7 }],
       flags => flags.filter(f => f !== '\\Flagged'),
     );
@@ -653,7 +667,7 @@ describe('search rows carry the list\'s safety verdicts', () => {
 
   it('patches an open hit with a verdict learned after the search ran', () => {
     useSearchStore.getState().showRows([result(9, 'Deal', { _accountId: 'acct-1', _mailbox: 'INBOX' })]);
-    useSearchStore.getState().patchResults(row => (row.uid === 9 ? { ...row, _linkAlert: 'yellow' } : row));
+    patchVerdict('acct-1-INBOX-9', { _linkAlert: 'yellow' });
     expect(useSearchStore.getState().searchResults[0]._linkAlert).toBe('yellow');
   });
 });

@@ -12,6 +12,7 @@ import { createUiSlice } from './slices/uiSlice';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { useSnoozeStore } from './snoozeStore';
+import { registerRows, setIdentityStore, mapList } from './messageRows';
 
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
@@ -44,6 +45,57 @@ export const useMailStore = create((...a) => ({
   ...createSyncSlice(...a),
   ...createUiSlice(...a),
 }));
+
+// ── Where a message row lives in this store ──
+// Every container of rows, registered once (messageRows.js): a writer changes a
+// row through patchEverywhere and a resolver reads the candidates through
+// resolvePool, and neither keeps a list of these of its own.
+setIdentityStore(useMailStore);
+const listPatch = (field) => (state, ctx) => {
+  const next = mapList(state[field], ctx);
+  return next === state[field] ? null : { [field]: next };
+};
+registerRows({ name: 'emails', store: useMailStore, fields: ['emails'], rank: 10,
+  rows: s => s.emails, mapRows: listPatch('emails') });
+registerRows({ name: 'sentEmails', store: useMailStore, fields: ['sentEmails'], rank: 20,
+  rows: s => s.sentEmails, mapRows: listPatch('sentEmails') });
+registerRows({ name: 'localEmails', store: useMailStore, fields: ['localEmails'], rank: 30,
+  rows: s => s.localEmails, mapRows: listPatch('localEmails') });
+// A projection of `emails`: a writer that re-derives the list afterwards
+// (updateSortedEmails) skips it.
+registerRows({ name: 'sortedEmails', store: useMailStore, fields: ['sortedEmails'], derived: true,
+  mapRows: listPatch('sortedEmails') });
+registerRows({ name: 'selectedEmail', store: useMailStore, fields: ['selectedEmail'], rank: 40,
+  rows: s => (s.selectedEmail ? [s.selectedEmail] : []),
+  mapRows: (state, ctx) => {
+    const row = state.selectedEmail;
+    const key = row && ctx.hit(row);
+    if (key === null || !row) return null;
+    const next = ctx.mapRow(row, key);
+    return next === row ? null : { selectedEmail: next };
+  } });
+// The open thread is a snapshot of buildThreads' output: the list swaps a fresh
+// one in only when its MEMBERS change, and a flag change moves none.
+registerRows({ name: 'selectedThread', store: useMailStore, fields: ['selectedThread'],
+  mapRows: (state, ctx) => {
+    const thread = state.selectedThread;
+    const emails = mapList(thread?.emails, ctx);
+    return emails === thread?.emails ? null : { selectedThread: { ...thread, emails } };
+  } });
+// The body cache freezes the flags a message had when it was fetched, so a
+// reopen of an uncorrected entry paints the state from before the change. Its
+// keys are the scope keys themselves, and it is patched in place: the Map is
+// no reactive state, and the entries carry their LRU stamps.
+registerRows({ name: 'emailCache', store: useMailStore, fields: ['emailCache'],
+  mapRows: (state, ctx) => {
+    for (const key of ctx.keys) {
+      const entry = state.emailCache.get(key);
+      if (!entry?.email) continue;
+      const next = ctx.mapRow(entry.email, key);
+      if (next !== entry.email) entry.email = next;
+    }
+    return null;
+  } });
 
 // ── Online/offline listeners for header loading pipeline ──
 // When going offline: header loading pauses naturally (API calls will fail, backoff kicks in)

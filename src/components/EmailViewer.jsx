@@ -27,7 +27,7 @@ import { ThreadView } from './email/ThreadView';
 import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
-import { useSearchStore } from '../stores/searchStore';
+import { patchEverywhere } from '../stores/messageRows';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
 import { Button } from './ui/Button';
@@ -445,16 +445,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
     if (scanAlertLevel && selectedEmail && !selectedEmail._linkAlert) {
-      useMailStore.setState(state => ({
-        selectedEmail: { ...state.selectedEmail, _linkAlert: scanAlertLevel },
-        // Match on the scoped key, not the uid: in unified inbox `emails`
-        // spans accounts, and every row sharing the number would light up.
-        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
-        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
-      }));
-      // A search hit is in none of the mail store's lists.
-      const mail = useMailStore.getState();
-      useSearchStore.getState().patchResults?.(e => scopeKey && !e._linkAlert && emailScopeKey(e, mail) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e);
+      // Every row that IS this message, by the scoped key rather than the uid:
+      // in unified inbox `emails` spans accounts, and every row sharing the
+      // number would light up. A search hit is one of the containers too.
+      if (scopeKey) patchEverywhere([scopeKey], row => (row._linkAlert === scanAlertLevel ? row : { ...row, _linkAlert: scanAlertLevel }));
       useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
     }
   }, [scanAlertLevel, scopeKey]);

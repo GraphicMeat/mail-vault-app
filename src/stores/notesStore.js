@@ -6,6 +6,7 @@ import { useSettingsStore } from './settingsStore';
 import { accountPayload } from './viewStore';
 import { useTagStore, tagRowKey } from './tagStore';
 import { flattenMailboxes } from './slices/unifiedHelpers';
+import { registerRows, patchEverywhere } from './messageRows';
 import { compareNames } from '../utils/collation';
 
 /// The columns the daemon files an untagged note into, in board order. A
@@ -173,28 +174,17 @@ export const useNotesStore = create((set, get) => ({
     }
   }),
 
-  /// One flag change for these copies, from wherever it was made: this
-  /// board's star, the undo of one, a star on a list row of the same message.
-  /// Each copy keeps its own flags, and a card is starred while any copy is.
-  /// Nothing changes identity unless a copy on the board was named.
-  applyCopyFlag: (targets, flag, on) => {
-    const named = copy => targets.some(target => target.accountId === copy.accountId
-      && target.mailbox === copy.mailbox && String(target.uid) === String(copy.uid));
-    let touched = false;
-    const cards = get().cards.map(card => {
-      if (!(card.copies || []).some(named)) return card;
-      touched = true;
-      const copies = card.copies.map(copy => {
-        if (!named(copy)) return copy;
-        const flags = (copy.flags || []).filter(other => other !== flag);
-        return { ...copy, flags: on ? [...flags, flag] : flags };
-      });
-      return flag === '\\Flagged'
-        ? { ...card, copies, starred: copies.some(copy => copy.flags?.includes('\\Flagged')) }
-        : { ...card, copies };
-    });
-    if (touched) set({ cards });
-  },
+  /// One flag change for these copies, painted on the board before the flag
+  /// core lands it everywhere else (this board's star). The same patch the
+  /// core makes: the board is one of the containers messageRows knows.
+  applyCopyFlag: (targets, flag, on) => patchEverywhere(
+    targets.map(target => `${target.accountId}-${target.mailbox}-${target.uid}`),
+    copy => {
+      const flags = (copy.flags || []).filter(other => other !== flag);
+      return { ...copy, flags: on ? [...flags, flag] : flags };
+    },
+    { only: 'notesCards' },
+  ),
 
   /// A sync wrote another device's read or star into the header cache of
   /// this folder (the change feed's `updatedFlags`). The board's copies there
@@ -302,3 +292,36 @@ function guarded(card, action) {
     useNotesStore.setState({ busy: rest });
   });
 }
+
+// The board's cards are a container of message rows: each keeps every copy's
+// own flags and reads its star off them. Only the board's own star used to
+// change a card, so a star from the list, or the undo of one, left the card
+// showing the star it no longer had. A card is starred while any copy is.
+registerRows({
+  name: 'notesCards',
+  store: useNotesStore,
+  fields: ['cards'],
+  mapRows: (state, ctx) => {
+    const flagged = copies => copies.some(copy => copy.flags?.includes('\\Flagged'));
+    let touched = false;
+    const cards = state.cards.map(card => {
+      const copies = card.copies || [];
+      let mapped = null;
+      copies.forEach((copy, index) => {
+        const key = `${copy.accountId}-${copy.mailbox}-${copy.uid}`;
+        if (!ctx.keys.has(key)) return;
+        const next = ctx.mapRow(copy, key);
+        if (next !== copy) {
+          mapped ??= copies.slice();
+          mapped[index] = next;
+        }
+      });
+      if (!mapped) return card;
+      touched = true;
+      return flagged(mapped) === flagged(copies)
+        ? { ...card, copies: mapped }
+        : { ...card, copies: mapped, starred: flagged(mapped) };
+    });
+    return touched ? { cards } : null;
+  },
+});

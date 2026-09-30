@@ -20,6 +20,7 @@ import {
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { inboxUnread } from '../../stores/snoozeStore';
 import { withoutUids } from '../../stores/slices/serverUids';
+import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
@@ -70,6 +71,9 @@ export async function reloadListInView() {
 
 
 // Rows a selection key can be resolved against, beyond the loaded lists.
+// The flag and move workflows read them through resolvePool (the registry);
+// the delete and purge paths still build their own pools from these, in an
+// order that decides which copy's local-only proof they read.
 //
 // A search hit can name a message no list holds — it is in `searchResults` and
 // nowhere else. A pool without them resolved that key to no row, and the row
@@ -461,8 +465,7 @@ export async function saveSelectedLocally() {
   useMailStore.setState({ selectedEmailIds: new Set() });
   // Each key names its own account and folder (a full key), or the view's (a
   // bare uid) — the same reading every other selection workflow does.
-  const emailMap = new Map([...(await _searchRows()), ...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]
-    .map(e => [selectionKey(e, state), e]));
+  const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
   const rows = [];
   for (const key of keys) {
     const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
@@ -1435,26 +1438,6 @@ export async function markServerDeleted(accountId, mailbox, uid) {
 //
 // The key is `emailKey`'s, never a selection key — a single folder's list keys
 // its selection by bare uid, which matches no result row at all.
-// The flag half of the same problem: a search row is in `searchResults` and in
-// no list the writes above map, so it kept the read state it was found with.
-// Fire-and-forget — the rows are already correct everywhere else, and nothing
-// downstream waits on the repaint.
-function patchSearchFlags(targets, map) {
-  import('../../stores/searchStore')
-    .then(({ useSearchStore }) => useSearchStore.getState().patchResultFlags(targets, map))
-    .catch(error => console.warn('[messageMutations] Could not repaint the search rows:', error));
-}
-
-// And the Notes to Self board: a card is no row either, it keeps each copy's
-// flags and reads its star off them. Only the board's own star used to change
-// a card, so undoing that star changed the server and the list and left the
-// card showing the star it no longer had.
-function patchNotesFlags(targets, flag, on) {
-  import('../../stores/notesStore')
-    .then(({ useNotesStore }) => useNotesStore.getState().applyCopyFlag(targets, flag, on))
-    .catch(error => console.warn('[messageMutations] Could not repaint the notes board:', error));
-}
-
 // And the badge beside each saved view: a read, a star, a delete or a move
 // can change what a view holds. The store asks the daemon once, a beat after
 // the last of a burst, so every path below can say so without waiting on it.
@@ -1678,6 +1661,15 @@ export const withFlag = (flags, flag, on) => on
 
 const _withSeen = (flags, read) => withFlag(flags, '\\Seen', read);
 
+// A row with its flags mapped — the row itself when they come out the same, so
+// a container that holds nothing changed keeps its identity (updateSortedEmails
+// memoises on the lists).
+function _flagRow(row, map) {
+  const flags = map(row.flags);
+  const was = row.flags || [];
+  return flags.length === was.length && flags.every(f => was.includes(f)) ? row : { ...row, flags };
+}
+
 // One message's flag change on the server. Graph accounts have no IMAP flags —
 // the bulk path used to skip this branch, so mark-as-read silently failed there
 // — and only two of ours map onto anything Graph understands: isRead and its
@@ -1730,28 +1722,6 @@ function _syncUnifiedUnreadBadges(useMailStore) {
   for (const [id, rows] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, inboxUnread(id, rows));
 }
 
-// The vault half of a flag change.
-//
-// `localEmails` holds the rows the list gets from the vault, and `sentEmails`
-// the Sent copies an INBOX list merges in; a row in one of those is in NO
-// other array, so a mutation that maps `emails` alone leaves it untouched —
-// the change never reaches the screen. Identity matters too: the array is
-// replaced only when a row actually changed, because updateSortedEmails
-// memoises on it.
-function _mapLocalFlags(localEmails, matches, map) {
-  if (!localEmails?.length || !localEmails.some(matches)) return localEmails;
-  return localEmails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e);
-}
-
-// The open thread is a snapshot of buildThreads' output, and the list only
-// swaps a fresh one in when its MEMBERS change (refreshSelectedThread) — a
-// flag change moves none, so the thread reader kept the read state it was
-// opened with and its toggle offered the wrong next action.
-function _mapThreadFlags(thread, matches, map) {
-  const emails = _mapLocalFlags(thread?.emails, matches, map);
-  return emails === thread?.emails ? thread : { ...thread, emails };
-}
-
 // Is `e` the row of this message? Its own location against the target's, with
 // no wildcard (sameMessage): a delayed mark lands after the user may have
 // switched accounts, and a bare row of the new view under the same folder name
@@ -1786,10 +1756,8 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => sameMessage(e, { accountId
 // is a different file — the one restore uploads. So a uid with no row of THIS
 // folder is skipped rather than guessed at.
 //
-// A saved view's or a search's row lives only in `searchResults`, so it is
-// looked up there after a miss, and only when it names its account and
-// folder, as patchResultFlags matches it. Only a miss awaits the import: a
-// list row's write stays in the caller's tick.
+// A saved view's or a search's row lives only in `searchResults`; the pool
+// (resolvePool) holds it, when it names its account and folder.
 //
 // `namedUids` need no row: their caller named the folder from the vault
 // itself (the Notes to Self board, whose copies the daemon lists from the
@@ -1799,18 +1767,12 @@ const _rowOf = (s, accountId, mailbox, uid) => (e) => sameMessage(e, { accountId
 async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, flag, on, namedUids = []) {
   try {
     const s = useMailStore.getState();
-    const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
-    let searchRows = null;
+    const pool = resolvePool(s);
     const changes = [];
     for (const uid of uids) {
       if (!namedUids.includes(uid)) {
         const isRow = _rowOf(s, accountId, mailbox, uid);
-        let row = pool.find(e => e && isRow(e));
-        if (!row) {
-          searchRows ??= await _searchRows();
-          row = searchRows.find(e => e.uid === uid && e._accountId === accountId && e._mailbox === mailbox);
-        }
-        if (!row) {
+        if (!pool.some(isRow)) {
           console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
           continue;
         }
@@ -1843,22 +1805,8 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   const s = useMailStore.getState();
   const isRow = _rowOf(s, accountId, mailbox, uid);
   const matches = (e) => isRow(e) && (!isUnified || e._accountId === accountId);
-  useMailStore.setState(state => ({
-    emails: state.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
-    // A vault-only row lives in `localEmails` and never in `emails` — see
-    // deriveDisplayRows, which pushes it into the list from there. Mapping
-    // only `emails` is why marking one read did nothing at all on screen.
-    localEmails: _mapLocalFlags(state.localEmails, matches, (f) => _withSeen(f, read)),
-    // And a Sent copy merged into the INBOX list lives in `sentEmails`.
-    sentEmails: _mapLocalFlags(state.sentEmails, matches, (f) => _withSeen(f, read)),
-    selectedEmail: state.selectedEmail && matches(state.selectedEmail)
-      ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
-      : state.selectedEmail,
-    selectedThread: _mapThreadFlags(state.selectedThread, matches, (f) => _withSeen(f, read)),
-  }));
-
-  const entry = useMailStore.getState().emailCache.get(`${accountId}-${mailbox}-${uid}`);
-  if (entry) entry.email = { ...entry.email, flags: _withSeen(entry.email.flags, read) };
+  // The key names the account, so a row of another one is not matched.
+  patchEverywhere([`${accountId}-${mailbox}-${uid}`], (row) => _flagRow(row, (f) => _withSeen(f, read)), { skipDerived: true });
 
   // With the unread filter on, this row has just stopped matching it. Hold it
   // on screen for the rest of the filter session — auto-mark-on-open is the
@@ -1872,8 +1820,6 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
       || (after.selectedEmail && matches(after.selectedEmail) ? after.selectedEmail : null);
     if (row) after.keepVisibleWhileUnreadFiltered([selectionKey(row, after)]);
   }
-
-  patchSearchFlags([{ accountId, mailbox, uid }], (f) => _withSeen(f, read));
 
   _refreshAfterFlagChange(useMailStore);
   // …which recounts the badge for a single-account list. The unified one is on
@@ -1977,7 +1923,6 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   if (!targets.length) return;
 
   const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
-  const matches = (e) => targetKeys.has(emailScopeKey(e, state));
   const map = (flags) => withFlag(flags, flag, on);
 
   // Read the flags the rows carry NOW, before the mapping below rewrites them:
@@ -1985,9 +1930,12 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   // messages read when three already were is a change to seven, and undoing it
   // must not mark those three unread. A target with no row on screen counts as
   // changed — the conservative half, since the offer then does put it back.
+  // uid first: it rules out nearly every row of a five-figure list for free.
+  const targetUids = new Set(targets.flatMap(t => [t.uid, String(t.uid), Number(t.uid)]));
   const rowFlags = new Map();
-  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), state.selectedEmail]) {
-    const k = e && emailScopeKey(e, state);
+  for (const e of resolvePool(state)) {
+    if (!targetUids.has(e.uid)) continue;
+    const k = emailScopeKey(e, state);
     if (k && !rowFlags.has(k)) rowFlags.set(k, e.flags);
   }
   const changed = targets.filter(t =>
@@ -1996,26 +1944,13 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   // A hand-set read state outranks the open message's mark-read countdown.
   if (flag === '\\Seen') cancelPendingMarkRead(targetKeys);
 
-  useMailStore.setState(s => ({
-    emails: s.emails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e),
-    // Vault-only rows are reached through `localEmails`, not `emails` — and
-    // the INBOX list's merged Sent copies through `sentEmails`.
-    localEmails: _mapLocalFlags(s.localEmails, matches, map),
-    sentEmails: _mapLocalFlags(s.sentEmails, matches, map),
-    selectedEmail: s.selectedEmail && matches(s.selectedEmail)
-      ? { ...s.selectedEmail, flags: map(s.selectedEmail.flags) }
-      : s.selectedEmail,
-    selectedThread: _mapThreadFlags(s.selectedThread, matches, map),
-  }));
-
-  // The body cache freezes the flags a message had when it was fetched, so a
-  // reopen of an uncorrected entry paints the state from before this change.
-  for (const t of targets) {
-    const entry = get().emailCache.get(`${t.accountId}-${t.mailbox}-${t.uid}`);
-    if (entry) entry.email = { ...entry.email, flags: map(entry.email.flags) };
-  }
-  patchSearchFlags(targets, map);
-  patchNotesFlags(targets, flag, on);
+  // Every container the message is in: the lists (vault-only rows are in
+  // `localEmails`, the INBOX list's merged Sent copies in `sentEmails`), the
+  // open reader and thread, the body cache (which freezes the flags a message
+  // had when it was fetched, so a reopen of an uncorrected entry paints the
+  // state from before this change), a search's rows and the Notes board. The
+  // derived list is re-derived below.
+  patchEverywhere(targetKeys, (row) => _flagRow(row, map), { skipDerived: true });
   _refreshAfterFlagChange(useMailStore);
 
   // The rows have changed; offer the change back. Only the two flags the user
@@ -2106,11 +2041,7 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
   if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
   const state = get();
 
-  const emailMap = new Map();
-  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), ...(await _searchRows())]) {
-    const k = selectionKey(e, state);
-    if (!emailMap.has(k)) emailMap.set(k, e);
-  }
+  const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
   const targets = [];
   for (const key of keys) {
     const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
@@ -2176,17 +2107,15 @@ export async function setSelectedFlagged(on) {
  * `undefined`, and `!undefined?.flags?.includes(...)` is `true` whatever the
  * message's real state, so the toggle always tried to ADD the star: an
  * already-starred row got the no-op "add" it already had, and the toast
- * announced it had been starred rather than removed. `_searchRows()` is the
- * same pool `applyFlagToKeys` already reads to resolve the target's account
- * and folder, just consulted here too so the two agree on which way this
- * message is going.
+ * announced it had been starred rather than removed. `resolvePool` is the
+ * same pool `applyFlagToKeys` reads to resolve the target's account and
+ * folder, so the two agree on which way this message is going.
  */
 export async function toggleFlagged(key) {
   const { useMailStore } = await import('../../stores/mailStore');
   const state = useMailStore.getState();
   const sameKey = (e) => String(selectionKey(e, state)) === String(key);
-  const row = [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), ...(await _searchRows())].find(sameKey)
-    || (state.selectedEmail && sameKey(state.selectedEmail) ? state.selectedEmail : null);
+  const row = resolvePool(state).find(sameKey);
   const on = !row?.flags?.includes('\\Flagged');
   return applyFlagToKeys([key], '\\Flagged', on);
 }
@@ -2855,8 +2784,9 @@ export async function moveEmails(keys, targetMailbox) {
   const isUnified = spansMailboxes(state);
   const { activeAccountId, activeMailbox } = state;
 
-  const emailMap = new Map([...state.emails, ...state.sentEmails, ...(state.localEmails || [])]
-    .map(e => [selectionKey(e, state), e]));
+  // The search hits too: a hit no list holds still has to give its Message-ID,
+  // which is what an undo finds the moved copy by on a server with no UIDPLUS.
+  const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
   const groups = new Map();
   for (const key of keys) {
     const ctx = _resolveKeyContext(key, state, emailMap, { require: false });

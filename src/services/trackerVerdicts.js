@@ -1,7 +1,7 @@
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useSearchStore } from '../stores/searchStore';
+import { patchEverywhere } from '../stores/messageRows';
 import { emailScopeKey, bodyMatchesHeader, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
 
@@ -24,32 +24,16 @@ export function recordTrackerSummary(scopeKey, summary) {
   applyVerdicts({ [scopeKey]: summary });
 }
 
-// One setState for a batch: `emails` runs to five figures in a big mailbox and
-// the map rebuilds it, so a per-message patch inside a scroll would rebuild it
-// forty times.
+// One patch for a batch, through the registry: `emails` runs to five figures
+// and a per-message patch inside a scroll would rebuild it forty times.
+// `sortedEmails` is patched in place too (nothing re-derives it after a
+// verdict), and a search hit is one of the containers.
 function applyVerdicts(verdicts) {
   const keys = Object.keys(verdicts);
   if (keys.length === 0) return;
 
-  const patchWith = state => e => {
-    if (e._trackerInfo) return e;
-    const info = verdicts[emailScopeKey(e, state)];
-    return info ? { ...e, _trackerInfo: info } : e;
-  };
-  useMailStore.setState(state => {
-    const patch = patchWith(state);
-    const selectedKey = state.selectedEmail && emailScopeKey(state.selectedEmail, state);
-    return {
-      emails: state.emails.map(patch),
-      sortedEmails: state.sortedEmails.map(patch),
-      ...(selectedKey && verdicts[selectedKey]
-        ? { selectedEmail: { ...state.selectedEmail, _trackerInfo: verdicts[selectedKey] } }
-        : {}),
-    };
-  });
-
-  // A search hit is in none of the lists above.
-  useSearchStore.getState().patchResults?.(patchWith(useMailStore.getState()));
+  patchEverywhere(keys, (row, key) => (row._trackerInfo === verdicts[key]
+    ? row : { ...row, _trackerInfo: verdicts[key] }));
 
   const { setTrackerAlert } = useSettingsStore.getState();
   for (const key of keys) setTrackerAlert(key, verdicts[key]);

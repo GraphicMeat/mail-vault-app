@@ -9,6 +9,7 @@ import { useTagStore } from './tagStore';
 import { useFieldStore } from './fieldStore';
 import { daemonCall } from '../services/daemonClient';
 import * as searchRows from './searchRows';
+import { registerRows } from './messageRows';
 
 /// A `tag:` term that names no tag. It can match nothing, which is the point.
 const MISSING_TAG = '\u0000none';
@@ -219,32 +220,6 @@ export const useSearchStore = create((set, get) => ({
     }
   },
 
-  /// A verdict learned after the search ran (the reader scanned a hit's body)
-  /// has to reach its row: `searchResults` is in no list the mail store maps.
-  patchResults: (mapRow) => set(state => searchRows.mapRows(state, mapRow) || state),
-
-  // A flag change anywhere has to reach the rows a search is showing.
-  // `searchResults` is the ONE list the mutation paths never map — a hit is in
-  // it and in no list of the store they write through — so marking a message
-  // read (by hand, or by opening it) left its search row bold until the query
-  // was run again. Keyed on the copy, never on a bare uid: folder A's uid 34
-  // and folder B's are two messages.
-  patchResultFlags: (targets, map) => {
-    if (!targets?.length) return;
-    // All three fields, all present: a row that names no account or folder
-    // would otherwise match on the uid alone, and a bare uid names a
-    // different message in every other folder. A miss leaves a stale bold
-    // row — what this repaint already had to live with; a false match paints
-    // another message's row read.
-    const hit = row => row._accountId && row._mailbox && targets.some(t =>
-      row.uid === t.uid && row._accountId === t.accountId && row._mailbox === t.mailbox);
-    set(state => searchRows.mapRows(state, row => {
-      if (!hit(row)) return row;
-      const flags = map(row.flags);
-      return String(flags) === String(row.flags) ? row : { ...row, flags };
-    }) || state);
-  },
-
   removeSearchResults: keys => {
     if (!keys?.length) return;
     set(state => searchRows.dropCopies(state, keys) || state);
@@ -411,3 +386,24 @@ export const useSearchStore = create((set, get) => ({
     });
   },
 }));
+
+// A search's rows are in none of the lists the mail store holds, so they are a
+// container of their own: a hit is patched here (the list and both pools, or
+// the next frame rebuilds the row from the pools) and found here by every
+// resolver of a selection key.
+//
+// A row that names no account (in either field) or folder is not a row anything can key: the
+// uid alone names a different message in every other folder, and painting
+// another message's row read is worse than leaving a stale bold one.
+const stamped = row => !!((row?._accountId || row?._srcAccountId) && row._mailbox);
+registerRows({
+  name: 'searchRows',
+  store: useSearchStore,
+  fields: ['searchResults', 'indexedSearchRows', 'searchRowsOutsideIndex'],
+  rank: 50,
+  rows: state => state.searchResults.filter(stamped),
+  mapRows: (state, ctx) => searchRows.mapRows(state, row => {
+    const key = stamped(row) ? ctx.hit(row) : null;
+    return key === null ? row : ctx.mapRow(row, key);
+  }),
+});
