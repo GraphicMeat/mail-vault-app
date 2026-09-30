@@ -46,9 +46,8 @@ export function uiFontStack(family) {
   return font ? `'${font.family}', ${UI_FALLBACK[font.category]}` : '';
 }
 
-// The one way a family name is written into signature HTML: quoted only when
-// it is not a plain word, so the editor reads back what it wrote
-// (utils/fontFamilyMark.js writes the same form).
+// A family name in a stack: quoted only when it is not a plain word. The
+// editor rewrites a signature's list into its own form (utils/fontFamilyMark.js).
 export const cssFamilyName = name => (/^-?[A-Za-z][A-Za-z-]*$/.test(name) ? name : `'${name}'`);
 
 /** A signature's stack for a catalogue family ('' for any other). */

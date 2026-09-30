@@ -4,7 +4,7 @@
 // real one (the editor's schema), since it is what the Code view must go through.
 import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../RichTextEditor', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -13,7 +13,12 @@ vi.mock('../../RichTextEditor', async (importOriginal) => ({
   ),
 }));
 
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
+const daemonCall = vi.fn(async () => ({ fonts: [], downloading: [] }));
+vi.mock('../../../services/daemonClient', () => ({ daemonCall: (...args) => daemonCall(...args) }));
+
 import { SignatureEditor } from '../SignatureEditor';
+import { useFontStore } from '../../../services/fontService';
 
 afterEach(cleanup);
 
@@ -120,5 +125,47 @@ describe('SignatureEditor', () => {
     expect(box.contains(screen.getByTestId('fake-editor'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Code' }));
     expect(box.contains(source())).toBe(true);
+  });
+});
+
+describe('SignatureEditor font', () => {
+  const menu = () => {
+    fireEvent.click(screen.getByRole('button', { name: /Signature font/ }));
+    return screen.getByRole('menu');
+  };
+
+  it('writes a common font into the whole signature as an inline stack mail clients have', () => {
+    open();
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Georgia' }));
+    const georgia = 'font-family: Georgia, &quot;Times New Roman&quot;, serif;';
+    expect(seen.at(-1)).toBe(`<p><span style="${georgia}">Ann</span></p><p><span style="${georgia}">Lee</span></p>`);
+    expect(screen.getByRole('button', { name: /Signature font/ }).textContent).toContain('Georgia');
+  });
+
+  it('offers downloaded Google families with a fallback, and says what recipients see', async () => {
+    useFontStore.setState({ installed: ['Lora'], progress: {}, errors: {} });
+    open();
+    expect(screen.getByText(/Recipients who don't have the font see a similar default/)).toBeTruthy();
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Lora' }));
+    expect(seen.at(-1)).toContain('font-family: Lora, Georgia, &quot;Times New Roman&quot;, serif;');
+    useFontStore.setState({ installed: [] });
+  });
+
+  it('goes back to the default font', () => {
+    open({ initial: `<p><span style="font-family: Georgia, serif">Ann</span></p>` });
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Default font' }));
+    expect(seen.at(-1)).toBe('<p>Ann</p>');
+  });
+
+  it('opens the Google Fonts picker from More fonts', async () => {
+    open();
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'More fonts…' }));
+    expect(await screen.findByRole('dialog', { name: 'More fonts' })).toBeTruthy();
+  });
+
+  it('is not offered in Code view', () => {
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Code' }));
+    expect(screen.getByRole('button', { name: /Signature font/ }).disabled).toBe(true);
   });
 });

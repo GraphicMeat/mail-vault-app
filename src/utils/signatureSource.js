@@ -2,7 +2,9 @@
 //
 // A signature is only ever sanitized by the editor's schema: whatever the
 // compose editor cannot represent (scripts, styles, event handlers, unsafe
-// link targets, tables, spans) is dropped when the HTML is loaded into it.
+// link targets, tables, any span but a font's) is dropped when the HTML is
+// loaded into it. A span keeps only its `font-family`, and only plain family
+// names in it (utils/fontFamilyMark.js).
 // Code view adds no second path: every draft is read back through that same
 // schema before it reaches the stored signature, so the source a person types
 // is never what is saved.
@@ -25,6 +27,26 @@ export function sanitizeSignatureHtml(html, fallback = '') {
     return padEmptyLines(editor.getHTML());
   } catch {
     return fallback;
+  } finally {
+    try { editor?.destroy(); } catch { /* nothing left to free */ }
+  }
+}
+
+/**
+ * The whole signature set in `stack` (a font-family list), or back to the
+ * default font when `stack` is empty: the font control's answer when there
+ * is no live editor to apply it to a selection.
+ */
+export function setSignatureFont(html, stack) {
+  if (!html || typeof html !== 'string') return html || '';
+  let editor = null;
+  try {
+    editor = new Editor({ extensions: editorExtensions(''), content: html });
+    const chain = editor.chain().selectAll();
+    (stack ? chain.setFontFamily(stack) : chain.unsetFontFamily()).run();
+    return padEmptyLines(editor.getHTML());
+  } catch {
+    return html;
   } finally {
     try { editor?.destroy(); } catch { /* nothing left to free */ }
   }

@@ -31,6 +31,8 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { toClientPoint, toAttachment } from '../utils/nativeDrop';
+import { FontFamily } from '../utils/fontFamilyMark';
+import { loadFontFacesForHtml } from '../services/fontService';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -335,6 +337,9 @@ export const editorExtensions = (placeholder, { resizeImages = false } = {}) => 
     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
   }),
   Placeholder.configure({ placeholder }),
+  // A signature's chosen font, and the fonts quoted mail was written in: an
+  // inline family list only (utils/fontFamilyMark.js).
+  FontFamily,
   // allowBase64: compose restores initialData.body HTML after minimize /
   // undo-send, and the inline picture must parse back out of that string.
   // `resizeImages`: a picture gets corner handles; the size lands in its
@@ -557,6 +562,10 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
         && active.matches?.('input, textarea, select, [contenteditable="true"]'))) placeCaret(editor);
     }
   }, [content, editor]);
+
+  // A downloaded Google font the content is written in draws in it here
+  // (services/fontService.js); anything else draws in its fallback.
+  useEffect(() => { void loadFontFacesForHtml(content); }, [content]);
 
   // The link button and the card's Edit. With no range given, the link the
   // caret is in (or just after); a selection counts only when it lies inside
