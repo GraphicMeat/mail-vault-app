@@ -15,7 +15,7 @@ import {
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { sentMailboxPathFor } from '../../utils/sentFolder';
-import { _resolveMailboxPath, vaultHas, vaultKey } from './unifiedHelpers';
+import { _resolveMailboxPath, rowIdentity, vaultHas, vaultKey } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { rowMailbox } from '../../utils/autoTagInboxFilter';
 import { rowVisibility } from '../../utils/rowVisibility';
@@ -232,6 +232,12 @@ export function deriveDisplayRows({
   // looked up by its own folder and account, never by its bare uid.
   const view = { activeAccountId, activeMailbox };
   const vaulted = (set, e) => vaultHas(set, e, view);
+  // A row's two vault marks from one placement: this runs per row on every
+  // derivation, the flag click's repaint included.
+  const vaultKeyOf = (e) => {
+    const id = rowIdentity(e, view);
+    return id ? vaultKey(id.accountId, id.mailbox, id.uid) : null;
+  };
 
   let result = [];
 
@@ -255,8 +261,9 @@ export function deriveDisplayRows({
   } else {
     const loadedKeys = new Set(emails.map(e => uidKey(e)));
     for (const e of emails) {
-      e.isLocal = vaulted(savedEmailIds, e);
-      e.isArchived = vaulted(archivedEmailIds, e);
+      const key = vaultKeyOf(e);
+      e.isLocal = key !== null && savedEmailIds.has(key);
+      e.isArchived = key !== null && archivedEmailIds.has(key);
       e.source = 'server';
     }
     result = [...emails];
