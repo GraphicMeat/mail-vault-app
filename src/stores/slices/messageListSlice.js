@@ -15,7 +15,7 @@ import {
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { sentMailboxPathFor } from '../../utils/sentFolder';
-import { _resolveMailboxPath } from './unifiedHelpers';
+import { _resolveMailboxPath, rowIdentity } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
 import { useTagStore, requestRowTags } from '../tagStore';
@@ -276,10 +276,14 @@ export function deriveDisplayRows({
   // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
   // hydration on account/folder switch must not resurrect them.
   if (deleteTombstones?.size) {
+    // Placed the way the writers place the row (rowIdentity): by its own
+    // folder, never by the view's. A branch view's activeMailbox is the branch
+    // root, so the view's folder hid the root's uid 34 along with the child
+    // folder's, and never matched a tombstone written inside the branch.
+    const view = { activeAccountId, activeMailbox };
     result = result.filter(e => {
-      const acct = e._accountId || activeAccountId;
-      const mbox = activeMailbox === 'UNIFIED' ? (e._mailbox || 'INBOX') : activeMailbox;
-      return !deleteTombstones.has(`${acct}|${mbox}|${e.uid}`);
+      const id = rowIdentity(e, view);
+      return !id || !deleteTombstones.has(`${id.accountId}|${id.mailbox}|${id.uid}`);
     });
   }
 
