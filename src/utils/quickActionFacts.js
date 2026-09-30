@@ -84,11 +84,12 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
 /**
  * The selection bar's targets: `keys` the ticked selection (a Set), `rows` its
  * messages the loaded lists resolve, `pool` every loaded row and
- * `archivedIds` the open folder's archived uids. Adds `archivedCount`/
- * `totalCount`, which the delete confirmation states and which must agree
- * with the Archive/Unarchive gates.
+ * `archivedIds` the open folder's archived uids. `backedUp` is whether any
+ * of the rows is on the backup drive. Adds `archivedCount`/`totalCount`,
+ * which the delete confirmation states and which must agree with the
+ * Archive/Unarchive gates.
  */
-export function selectionFacts(keys, rows, pool, archivedIds, state) {
+export function selectionFacts(keys, rows, pool, archivedIds, state, { backedUp = false } = {}) {
   // A row says whether the vault holds it, as the row menu reads it. The
   // uids in `archivedIds` name only the open folder's messages, so they
   // stand in only for a bare key no row resolves; reading a full key's uid
@@ -112,6 +113,7 @@ export function selectionFacts(keys, rows, pool, archivedIds, state) {
   const localFolder = rows.some(email => inLocalFolder(email, state));
   const junkPaths = [...new Set(locations.map(location => location ? junkPathOf(state, location.accountId) : null))];
   const { markRead, markUnread, star, unstar } = actionVisibility(rows);
+  const serverBacked = rows.some(email => email.source !== 'local-only');
   return {
     ...BASE,
     count: keys.size,
@@ -124,11 +126,14 @@ export function selectionFacts(keys, rows, pool, archivedIds, state) {
     localFolder,
     localOnly: rows.length > 0 && rows.every(isLocalOnly),
     readOnly: rows.some(insightsOnly),
-    serverBacked: rows.some(email => email.source !== 'local-only'),
+    serverBacked,
     serverActions: !localFolder && fullyResolved && rows.length > 0
       && rows.every(email => email.source !== 'local-only' && !insightsOnly(email)),
     junkPath: target && junkPaths.length === 1 ? junkPaths[0] : null,
     snooze: fullyResolved && rows.length > 0 && rows.every(email => canSnooze(email, state)),
+    // The row's purge: the places past the server it reaches, none while the
+    // server holds the only copy (Delete from server is that action).
+    purge: !localFolder && describePurge({ server: serverBacked, vault: archived > 0, backup: backedUp }, keys.size) || null,
     archivedCount: archived,
     totalCount: archived + unarchived,
   };

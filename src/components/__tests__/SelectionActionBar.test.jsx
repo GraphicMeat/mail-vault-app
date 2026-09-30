@@ -116,6 +116,8 @@ describe('SelectionActionBar delete confirmation', () => {
       purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 2, failed: 0, queuedBackup: 0, needsResync: 0 }),
       removeLocalEmail: vi.fn(),
       getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+      // Both on the backup drive, so Delete everywhere reaches past the server.
+      backedUpKeys: new Set(['acct-1:INBOX:1', 'acct-1:INBOX:2']),
     });
   });
   afterEach(() => cleanup());
@@ -167,6 +169,16 @@ describe('SelectionActionBar delete confirmation', () => {
       useMailStoreMock.setState({ emails: archivedRows, sortedEmails: archivedRows });
     });
     expect(quickAction('Unarchive selected').disabled).toBe(false);
+  });
+
+  // As on a row: Delete everywhere is offered only where it reaches more
+  // than the server. With no vault or backup copy it is Delete from server
+  // under a scarier name.
+  it('disables Delete everywhere while the server holds the only copy', () => {
+    useMailStoreMock.setState({ backedUpKeys: new Set() });
+    render(<SelectionActionBar />);
+    expect(quickAction('Delete from server').disabled).toBe(false);
+    expect(quickAction('Delete everywhere').disabled).toBe(true);
   });
 
   it('Delete everywhere shows the everywhere confirmation copy', () => {
@@ -236,6 +248,7 @@ describe('SelectionActionBar refusal reporting', () => {
       purgeSelectedEverywhere: vi.fn().mockRejectedValue(new Error(REFUSAL)),
       removeLocalEmail: vi.fn(),
       getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+      backedUpKeys: new Set(['acct-1:INBOX:1', 'acct-1:INBOX:2']),
     });
   });
   afterEach(() => { consoleError.mockRestore(); cleanup(); });
@@ -430,6 +443,8 @@ describe('SelectionActionBar over search results', () => {
   afterEach(() => { cleanup(); searchResultRows = []; });
 
   it('leaves the destructive actions live for a row only the search holds', () => {
+    // A vault copy too, so Delete everywhere reaches past the server.
+    searchResultRows = [{ ...searchRow, isArchived: true }];
     render(<SelectionActionBar />);
     expect(quickAction('Delete from server').disabled).toBe(false);
     expect(quickAction('Delete everywhere').disabled).toBe(false);

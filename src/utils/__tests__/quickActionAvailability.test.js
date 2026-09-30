@@ -54,6 +54,12 @@ describe('quickActionAvailability', () => {
     }
   });
 
+  it('Delete everywhere needs a purge that reaches past the server, on the row and the selection bar', () => {
+    expect(check('row', { action: 'deleteEverywhere' }, { purge: null })).toEqual({ hidden: true, disabled: true });
+    expect(check('selection', { action: 'deleteEverywhere' }, { purge: null }).disabled).toBe(true);
+    expect(check('selection', { action: 'deleteEverywhere' }).disabled).toBe(false);
+  });
+
   it('the reader hides a star side only when both sides are configured', () => {
     expect(check('reader', { action: 'unstar' }).hidden).toBe(false);
     expect(check('reader', { action: 'unstar' }, { explicit: { star: true, archive: false } }).hidden).toBe(true);

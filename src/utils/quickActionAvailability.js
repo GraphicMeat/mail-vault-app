@@ -99,7 +99,7 @@ export const QUICK_ACTION_RULES = {
   },
   deleteEverywhere: {
     row: { hide: ['purge'], disable: ['purge', 'placed', 'handler'] },
-    selection: { disable: ['placed', 'notLocalFolder'] },
+    selection: { disable: ['purge', 'placed', 'notLocalFolder'] },
     reader: { hide: [...READER_SERVER, 'placed', 'notLocalFolder'], disable: ['idle'] },
   },
   toggleRead: {

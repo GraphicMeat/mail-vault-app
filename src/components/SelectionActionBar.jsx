@@ -21,6 +21,7 @@ import {
 import { savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
 import { describeQuickAction } from "../utils/quickActionCatalog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { isBackedUp, useBackupScan } from "./email/MessageStateIcon";
 import { t, useT } from "../i18n/index.js";
 
 const EMPTY_ARRAY = Object.freeze([]);
@@ -53,6 +54,7 @@ export function SelectionActionBar() {
   // delete from server and delete everywhere over a selection the user had
   // just made.
   const searchResults = useSearchStore((s) => s.searchResults);
+  const backupScan = useBackupScan();
 
   // Which delete was requested — 'server' or 'everywhere' — so a single
   // popover can show the right confirmation copy for whichever button
@@ -242,13 +244,15 @@ export function SelectionActionBar() {
   );
   // What the ticked messages are, as the bar's buttons and its confirmation
   // read them: the selection's keys, its rows the loaded lists (and search)
-  // resolve, every loaded row, and the open folder's archived uids.
+  // resolve, every loaded row, the open folder's archived uids, and whether
+  // the backup drive holds any of them (the scan the rows already read).
   const facts = selectionFacts(
     selectedEmailIds,
     selectedRows,
     allSelectionRows,
     archivedEmailIds,
     useMailStore.getState(),
+    { backedUp: selectedRows.some((email) => isBackedUp(email, backupScan) === true) },
   );
   const {
     archivedCount,

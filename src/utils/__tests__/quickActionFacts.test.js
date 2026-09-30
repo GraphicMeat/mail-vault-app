@@ -69,6 +69,20 @@ describe('selectionFacts', () => {
     expect(facts).toMatchObject({ archivedCount: 1, totalCount: 1 });
   });
 
+  // The row's rule: a purge names the places beyond the server it reaches,
+  // and there is none while the server holds the only copy.
+  it('offers a purge only where a vault or backup copy exists, never in a vault-only folder', () => {
+    const server = [mail(1), mail(2)];
+    expect(selectionFacts(new Set([1, 2]), server, server, new Set(), STATE).purge).toBeNull();
+    expect(selectionFacts(new Set([1, 2]), server, server, new Set(), STATE, { backedUp: true }).purge)
+      .toMatchObject({ label: 'Delete from server and backup' });
+    const archived = [mail(1, { isArchived: true }), mail(2)];
+    expect(selectionFacts(new Set([1, 2]), archived, archived, new Set([1]), STATE).purge)
+      .toMatchObject({ label: 'Delete from server and vault' });
+    const local = [mail(1, { _mailbox: 'Imported', isArchived: true })];
+    expect(selectionFacts(new Set(['acct-a:Imported:1']), local, local, new Set(), STATE, { backedUp: true }).purge).toBeNull();
+  });
+
   it('falls back to the open folder\'s archived uids only for a bare key no row resolves', () => {
     const rows = [mail(1)];
     const facts = selectionFacts(new Set([1, 9, 'acct-b:INBOX:9']), rows, rows, new Set([9]), STATE);
