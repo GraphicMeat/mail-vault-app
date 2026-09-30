@@ -710,6 +710,27 @@ describe('bulk run across folders', () => {
       useMailStore.setState({ accounts: prev.accounts, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, loadEmails: prev.loadEmails, error: null });
     }
   });
+
+  it('hands the manager the vault-only folders and says how many it kept off the server', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const prev = useMailStore.getState();
+    const accounts = [{ id: 'acc1', email: 'one@test.com' }];
+    const localFolders = { acc1: [{ name: 'Imported', dir: 'Imported' }] };
+    bulkManager.start.mockImplementation(async () => { bulkManager.operation = { status: 'complete', skipped: 0, skippedLocal: 1 }; });
+    useMailStore.setState({ accounts, localFolders, activeAccountId: 'acc1', activeMailbox: 'INBOX', loadEmails: vi.fn(async () => {}), error: null });
+    try {
+      const { EmailList } = await import('../EmailList.jsx');
+      render(React.createElement(EmailList));
+      await act(() => bulkModal.props.onConfirm({ action: 'delete', uids: [3, 'acc1:Imported:9'] }));
+
+      expect(bulkManager.start).toHaveBeenCalledWith(expect.objectContaining({ type: 'delete', localFolders }));
+      expect(useMailStore.getState().error).toBe('1 email was skipped because it is in a folder kept only on this computer, which no server holds.');
+    } finally {
+      bulkManager.start.mockReset();
+      bulkManager.operation = null;
+      useMailStore.setState({ accounts: prev.accounts, localFolders: prev.localFolders, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, loadEmails: prev.loadEmails, error: null });
+    }
+  });
 });
 
 // purgeEverywhere's four outcome counts (deleted/failed/queuedBackup/needsResync)

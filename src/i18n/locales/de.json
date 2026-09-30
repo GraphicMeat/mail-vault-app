@@ -291,6 +291,8 @@
   "bulk.result.keptDeleteFailed_other": "{{count}} E-Mails konnten nicht vom Server entfernt werden und blieben dort.",
   "bulk.result.skippedNoFolder_one": "{{count}} E-Mail wurde übersprungen, weil ihr Ordner nicht bestimmt werden konnte.",
   "bulk.result.skippedNoFolder_other": "{{count}} E-Mails wurden übersprungen, weil ihr Ordner nicht bestimmt werden konnte.",
+  "bulk.result.skippedLocalFolder_one": "{{count}} E-Mail wurde übersprungen, weil sie in einem Ordner liegt, der nur auf diesem Computer gespeichert ist und auf keinem Server liegt.",
+  "bulk.result.skippedLocalFolder_other": "{{count}} E-Mails wurden übersprungen, weil sie in einem Ordner liegen, der nur auf diesem Computer gespeichert ist und auf keinem Server liegt.",
   "bulk.result.keptNotArchived_one": "{{count}} E-Mail blieb auf dem Server, weil sie im Tresor nicht bestätigt werden konnte.",
   "bulk.result.keptNotArchived_other": "{{count}} E-Mails blieben auf dem Server, weil sie im Tresor nicht bestätigt werden konnten.",
   "bulk.result.removedFromServer": "{{total}} vom Server entfernt.",

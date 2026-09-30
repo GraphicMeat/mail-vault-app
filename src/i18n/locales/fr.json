@@ -291,6 +291,8 @@
   "bulk.result.keptDeleteFailed_other": "{{count}} e-mails n'ont pas pu être retirés du serveur et y sont restés.",
   "bulk.result.skippedNoFolder_one": "{{count}} e-mail a été ignoré, car son dossier n'a pas pu être déterminé.",
   "bulk.result.skippedNoFolder_other": "{{count}} e-mails ont été ignorés, car leur dossier n'a pas pu être déterminé.",
+  "bulk.result.skippedLocalFolder_one": "{{count}} e-mail a été ignoré, car il se trouve dans un dossier conservé uniquement sur cet ordinateur, qu'aucun serveur ne contient.",
+  "bulk.result.skippedLocalFolder_other": "{{count}} e-mails ont été ignorés, car ils se trouvent dans un dossier conservé uniquement sur cet ordinateur, qu'aucun serveur ne contient.",
   "bulk.result.keptNotArchived_one": "{{count}} e-mail est resté sur le serveur, car il n'a pas pu être vérifié dans votre coffre.",
   "bulk.result.keptNotArchived_other": "{{count}} e-mails sont restés sur le serveur, car ils n'ont pas pu être vérifiés dans votre coffre.",
   "bulk.result.removedFromServer": "{{total}} retirés du serveur.",

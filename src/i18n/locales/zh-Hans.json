@@ -291,6 +291,8 @@
   "bulk.result.keptDeleteFailed_other": "有 {{count}} 封邮件无法从服务器移除，仍保留在服务器上。",
   "bulk.result.skippedNoFolder_one": "有 {{count}} 封邮件因无法确定所在文件夹而被跳过。",
   "bulk.result.skippedNoFolder_other": "有 {{count}} 封邮件因无法确定所在文件夹而被跳过。",
+  "bulk.result.skippedLocalFolder_one": "有 {{count}} 封邮件位于仅保存在这台电脑上、任何服务器上都没有的文件夹中，因此已跳过。",
+  "bulk.result.skippedLocalFolder_other": "有 {{count}} 封邮件位于仅保存在这台电脑上、任何服务器上都没有的文件夹中，因此已跳过。",
   "bulk.result.keptNotArchived_one": "由于无法在保险库中核实，有 {{count}} 封邮件保留在服务器上。",
   "bulk.result.keptNotArchived_other": "由于无法在保险库中核实，有 {{count}} 封邮件保留在服务器上。",
   "bulk.result.removedFromServer": "已从服务器移除 {{total}} 封。",

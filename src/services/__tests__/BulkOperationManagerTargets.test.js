@@ -208,6 +208,34 @@ describe('BulkOperationManager runs each key in its own folder', () => {
     for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1]);
   });
 
+  // A vault-only folder (an MBOX import kept on this computer) is on no
+  // server: its server call can only fail, and a failure ends the whole run,
+  // so the folders after it never ran. It is kept out and counted on its own.
+  it('keeps a vault-only folder out of the server calls, runs the rest, and counts it apart', async () => {
+    const localFolders = { acc1: [{ name: 'Imported', dir: 'Imported' }] };
+    await bulkOperationManager.start({
+      type: 'archive', accountId: 'acc1', account: acc1, accounts, localFolders, mailbox: 'INBOX',
+      uids: [1, 'acc1:Imported:4', 'acc2:INBOX:7'], onProgress: () => {},
+    });
+
+    expect(archiveCalls()).toEqual([
+      { accountId: 'acc1', mailbox: 'INBOX', uids: [1], jsonId: 'acc1' },
+      { accountId: 'acc2', mailbox: 'INBOX', uids: [7], jsonId: 'acc2' },
+    ]);
+    expect(bulkOperationManager.operation).toMatchObject({ status: 'complete', total: 2, skipped: 0, skippedLocal: 1 });
+  });
+
+  it('sends no server delete for a selection made only in a vault-only folder', async () => {
+    const localFolders = { acc1: [{ name: 'Imported', dir: 'Imported' }] };
+    await bulkOperationManager.start({
+      type: 'delete', accountId: 'acc1', account: acc1, accounts, localFolders, mailbox: 'Imported',
+      uids: [4, 5], onProgress: () => {},
+    });
+
+    expect(mockBulkDeleteEmails).not.toHaveBeenCalled();
+    expect(bulkOperationManager.operation).toMatchObject({ status: 'complete', total: 0, skippedLocal: 2 });
+  });
+
   it('persists self-describing keys, so a resume runs each folder where it was', async () => {
     await bulkOperationManager.start({
       type: 'delete', accountId: 'acc1', account: acc1, accounts, mailbox: 'INBOX',

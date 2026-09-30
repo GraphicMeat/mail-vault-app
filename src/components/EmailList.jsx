@@ -1184,6 +1184,7 @@ function EmailListComponent({ stacked = false }) {
         accountId: activeAccountId,
         account,
         accounts,
+        localFolders: useMailStore.getState().localFolders,
         mailbox: activeMailbox,
         spans: spansMailboxes(useMailStore.getState()),
         uids,
@@ -1199,10 +1200,13 @@ function EmailListComponent({ stacked = false }) {
       // no-op for them. The two shapes differ, so each has its own formatter.
       const opResult = bulkOperationManager.operation?.result;
       const skipped = bulkOperationManager.operation?.skipped || 0;
-      // What the manager refused (no one folder to run it in) is said, not dropped.
+      const skippedLocal = bulkOperationManager.operation?.skippedLocal || 0;
+      // What the manager refused (no one folder to run it in, or a folder no
+      // server holds) is said, not dropped.
       const outcomeMessage = [
         action === 'archive_backup_delete' ? formatArchiveBackupDeleteOutcome(opResult) : formatPurgeEverywhereOutcome(opResult),
         skipped > 0 ? t('bulk.result.skippedNoFolder', { count: skipped }) : null,
+        skippedLocal > 0 ? t('bulk.result.skippedLocalFolder', { count: skippedLocal }) : null,
       ].filter(Boolean).join(' ') || null;
       if (outcomeMessage) {
         // Reuses the store's `error` field, the one feedback channel already

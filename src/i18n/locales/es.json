@@ -291,6 +291,8 @@
   "bulk.result.keptDeleteFailed_other": "{{count}} correos no se pudieron quitar del servidor y se dejaron allí.",
   "bulk.result.skippedNoFolder_one": "{{count}} correo se omitió porque no se pudo determinar su carpeta.",
   "bulk.result.skippedNoFolder_other": "{{count}} correos se omitieron porque no se pudo determinar su carpeta.",
+  "bulk.result.skippedLocalFolder_one": "{{count}} correo se omitió porque está en una carpeta guardada solo en este ordenador, que no está en ningún servidor.",
+  "bulk.result.skippedLocalFolder_other": "{{count}} correos se omitieron porque están en una carpeta guardada solo en este ordenador, que no está en ningún servidor.",
   "bulk.result.keptNotArchived_one": "{{count}} correo se quedó en el servidor porque no se pudo verificar en tu bóveda.",
   "bulk.result.keptNotArchived_other": "{{count}} correos se quedaron en el servidor porque no se pudieron verificar en tu bóveda.",
   "bulk.result.removedFromServer": "{{total}} quitados del servidor.",

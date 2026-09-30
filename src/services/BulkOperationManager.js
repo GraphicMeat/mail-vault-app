@@ -3,6 +3,7 @@ import { send } from './transport.js';
 import { ensureFreshToken } from './authUtils';
 import { t } from '../i18n/index.js';
 import { _parseSelKey } from '../stores/slices/unifiedHelpers.js';
+import { isLocalMailbox } from './workflows/mailboxTree.js';
 
 // Operation states: 'idle' | 'archiving' | 'verifying' | 'backingUp' | 'deleting' | 'complete' | 'cancelled' | 'error'
 
@@ -73,12 +74,13 @@ class BulkOperationManager {
    * @param {string} params.accountId - The open view's account: where a bare uid lives.
    * @param {Object} params.account - Full account object (for IMAP auth)
    * @param {Object[]} [params.accounts] - Every account a full key may name.
+   * @param {Object} [params.localFolders] - Vault-only folders per account (`state.localFolders`).
    * @param {string} params.mailbox - The open view's folder: where a bare uid lives.
    * @param {boolean} [params.spans] - The view spans folders, so a bare uid names no one message.
    * @param {Array<number|string>} params.uids - Selection keys: bare uids and `account:mailbox:uid` keys.
    * @param {Function} params.onProgress - Called with operation state updates
    */
-  async start({ type, accountId, account, accounts = [], mailbox, spans = false, uids, onProgress }) {
+  async start({ type, accountId, account, accounts = [], localFolders = {}, mailbox, spans = false, uids, onProgress }) {
     if (this.isRunning) {
       throw new Error(t('errors.operationRunning'));
     }
@@ -92,12 +94,18 @@ class BulkOperationManager {
     const accountsById = new Map([...accounts, account].filter(Boolean).map(a => [a.id, a]));
     const { groups: resolved, refused } = everywhere ? { groups: [], refused: [] } : groupBulkTargets(uids, { accountId, mailbox, spans });
     const groups = [];
+    // A vault-only folder (an MBOX import kept on this computer) is on no
+    // server: its archive or delete call can only fail, and a failure ends the
+    // run before the folders after it. Kept out, and counted on its own.
+    let skippedLocal = 0;
     for (const group of resolved) {
       const groupAccount = accountsById.get(group.accountId);
-      if (groupAccount) groups.push({ ...group, account: groupAccount });
-      else refused.push(...group.uids.map(uid => fullKey(group, uid)));
+      if (!groupAccount) refused.push(...group.uids.map(uid => fullKey(group, uid)));
+      else if (isLocalMailbox(localFolders, group.accountId, group.mailbox)) skippedLocal += group.uids.length;
+      else groups.push({ ...group, account: groupAccount });
     }
     if (refused.length) console.warn(`[BulkOp] ${refused.length} selected keys name no one folder, skipped:`, refused);
+    if (skippedLocal) console.warn(`[BulkOp] ${skippedLocal} selected messages are in a vault-only folder, skipped`);
     this._current = null;
     this._base = { completed: 0, errors: 0 };
 
@@ -115,6 +123,7 @@ class BulkOperationManager {
       completed: 0,
       errors: 0,
       skipped: refused.length,
+      skippedLocal,
       createdAt: new Date().toISOString(),
     };
 
@@ -348,7 +357,7 @@ class BulkOperationManager {
   /**
    * Resume a pending operation (from app restart).
    */
-  async resume(pendingOp, account, onProgress, { accounts = [] } = {}) {
+  async resume(pendingOp, account, onProgress, { accounts = [], localFolders = {} } = {}) {
     const remainingUids = pendingOp.totalUids.filter(
       uid => !pendingOp.completedUids.includes(uid)
     );
@@ -363,6 +372,7 @@ class BulkOperationManager {
       accountId: pendingOp.accountId,
       account,
       accounts,
+      localFolders,
       mailbox: pendingOp.mailbox,
       uids: remainingUids,
       onProgress,

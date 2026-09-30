@@ -291,6 +291,8 @@
   "bulk.result.keptDeleteFailed_other": "{{count}} e-mail non sono state rimosse dal server e sono rimaste lì.",
   "bulk.result.skippedNoFolder_one": "{{count}} e-mail è stata saltata perché non è stato possibile determinarne la cartella.",
   "bulk.result.skippedNoFolder_other": "{{count}} e-mail sono state saltate perché non è stato possibile determinarne la cartella.",
+  "bulk.result.skippedLocalFolder_one": "{{count}} e-mail è stata saltata perché si trova in una cartella conservata solo su questo computer, che nessun server contiene.",
+  "bulk.result.skippedLocalFolder_other": "{{count}} e-mail sono state saltate perché si trovano in una cartella conservata solo su questo computer, che nessun server contiene.",
   "bulk.result.keptNotArchived_one": "{{count}} e-mail è rimasta sul server perché non è stato possibile verificarla nella cassaforte.",
   "bulk.result.keptNotArchived_other": "{{count}} e-mail sono rimaste sul server perché non è stato possibile verificarle nella cassaforte.",
   "bulk.result.removedFromServer": "{{total}} rimosse dal server.",
