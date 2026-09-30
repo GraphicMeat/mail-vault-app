@@ -57,7 +57,7 @@ describe('diffText', () => {
 describe('clipDiff', () => {
   it('keeps the change in view when the shared text is longer than the window', () => {
     const parts = clipDiff(diffText(ADDRESS, `${ADDRESS}, asd`), 20);
-    expect(parts[0]).toEqual({ type: 'same', text: '…' + ADDRESS.slice(-20) });
+    expect(parts[0]).toEqual({ type: 'same', text: '…Vaivorykštės g. 63' });
     expect(parts[1]).toEqual({ type: 'add', text: ', asd' });
     expect(parts).toHaveLength(2);
   });
@@ -71,6 +71,18 @@ describe('clipDiff', () => {
     expect(shared[0].text.startsWith('…')).toBe(true);
     expect(shared.at(-1).text.endsWith('…')).toBe(true);
     expect(join(parts, 'del')).toBe('onetwo');
+  });
+
+  it('never cuts a word in half', () => {
+    const before = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda';
+    const parts = clipDiff(diffText(before, before.replace('theta', 'THETA')), 14);
+    const head = parts[0];
+    const tail = parts.at(-1);
+    expect(head.text).toBe('…zeta eta ');
+    expect(tail.text).toBe(' iota kappa…');
+    for (const word of `${head.text} ${tail.text}`.replace(/…/g, ' ').split(/\s+/).filter(Boolean)) {
+      expect(before.split(/\s+/), word).toContain(word);
+    }
   });
 
   it('leaves short text untouched', () => {

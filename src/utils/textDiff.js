@@ -70,9 +70,26 @@ function normalize(parts) {
   return out;
 }
 
-/// Shrinks the shared text around each change to `context` characters, with
-/// "…" where text was cut, so an edit at the end of a long phrase is still
-/// on screen.
+// The last `n` characters of `text`, starting on a word: a cut through the
+// middle of one reads as a different word. A single word longer than `n` is cut.
+function tailOf(text, n) {
+  const cut = text.slice(-n);
+  if (/\s/.test(text[text.length - n - 1]) || /^\s/.test(cut)) return cut;
+  const space = cut.search(/\s/);
+  return space === -1 ? cut : cut.slice(space + 1);
+}
+
+// The first `n` characters of `text`, ending on a word.
+function headOf(text, n) {
+  const cut = text.slice(0, n);
+  if (/\s/.test(text[n]) || /\s$/.test(cut)) return cut;
+  const space = cut.search(/\s\S*$/);
+  return space === -1 ? cut : cut.slice(0, space);
+}
+
+/// Shrinks the shared text around each change to about `context` characters,
+/// cut between words, with "…" where text was cut, so an edit at the end of a
+/// long phrase is still on screen.
 export function clipDiff(parts, context = 30) {
   return parts.map((part, index) => {
     if (part.type !== 'same') return part;
@@ -80,8 +97,8 @@ export function clipDiff(parts, context = 30) {
     const last = index === parts.length - 1;
     const { text } = part;
     if (first && last) return part;
-    if (first) return text.length > context ? { ...part, text: `…${text.slice(-context)}` } : part;
-    if (last) return text.length > context ? { ...part, text: `${text.slice(0, context)}…` } : part;
-    return text.length > context * 2 ? { ...part, text: `${text.slice(0, context)}…${text.slice(-context)}` } : part;
+    if (first) return text.length > context ? { ...part, text: `…${tailOf(text, context)}` } : part;
+    if (last) return text.length > context ? { ...part, text: `${headOf(text, context)}…` } : part;
+    return text.length > context * 2 ? { ...part, text: `${headOf(text, context)}…${tailOf(text, context)}` } : part;
   });
 }
