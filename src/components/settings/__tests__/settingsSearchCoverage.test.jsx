@@ -70,6 +70,9 @@ const ALLOWLIST = new Set([
   'autoTag.newTagPlaceholder', 'autoTag.resultHeading',
   'fields.moveUp', 'fields.moveDown', 'fields.newOption', 'fields.optionColor',
   'settings.searchIndex.indexing', // progress status text, not a setting
+  // the Google Fonts picker's own search box and category tabs, and the signature editor's Rendered/Code switch: controls inside a setting already indexed, not settings
+  'fonts.picker.search', 'fonts.picker.categories',
+  'settings.accounts.signatureSourceLabel', 'settings.accounts.signatureView',
   // choices for one MBOX import in its options dialog, not settings
   'settings.backup.restore.mboxAccount', 'settings.backup.restore.mboxUseLabels',
   'settings.storage.hoarderOrBackup', // info-popover trigger explaining the download modes, not a setting
