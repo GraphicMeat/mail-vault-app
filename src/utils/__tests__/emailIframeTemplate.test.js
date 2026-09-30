@@ -431,3 +431,26 @@ describe('attachEmailIframeAutoSize', () => {
     expect(() => attachEmailIframeAutoSize(iframe, { minHeight: 300 })()).not.toThrow();
   });
 });
+
+describe('code in the reader frame', () => {
+  const css = buildEmailIframeHtml({ bodyHtml: '<p>hi</p>' });
+  const rule = (selector) => {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, selector).toBeGreaterThan(-1);
+    return css.slice(start, css.indexOf('}', start));
+  };
+
+  it('gives code and blocks a monospace, tinted look when the sender styled none', () => {
+    expect(rule(':where(code, pre)')).toMatch(/font-family:[^;]*monospace/);
+    expect(rule(':where(code)')).toMatch(/background-color:\s*rgba\(/);
+    expect(rule(':where(pre)')).toMatch(/background-color:\s*rgba\(/);
+  });
+
+  it('does it at zero specificity, so any style the sender wrote still wins', () => {
+    expect(css).not.toMatch(/(^|[\s}])(pre|code)\s*\{[^}]*background/);
+  });
+
+  it('does not tint a block twice', () => {
+    expect(rule(':where(pre code)')).toMatch(/background-color:\s*transparent/);
+  });
+});

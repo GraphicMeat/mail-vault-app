@@ -1,5 +1,6 @@
 import { t } from '../i18n/index.js';
 import { linkifyHtml } from './linkify';
+import { CODE_FONT, CODE_LOOK, lookCss } from './codeLook';
 // Shared iframe template for rendering HTML email bodies.
 //
 // Baseline is always LIGHT (white bg, dark text). This gives Dark Reader a
@@ -316,6 +317,12 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
       * { overflow-wrap: break-word; word-wrap: break-word; }
       ${tableCss}
       pre, code { white-space: pre-wrap; overflow-x: auto; max-width: 100%; overflow-wrap: break-word; }
+      /* Code the sender did not style still reads as code. :where() has no
+         specificity, so any style the sender wrote wins. */
+      :where(code, pre) { font-family: ${CODE_FONT}; font-size: 0.9em; }
+      :where(code) { ${lookCss({ backgroundColor: CODE_LOOK.inline.backgroundColor, borderRadius: CODE_LOOK.inline.borderRadius, padding: CODE_LOOK.inline.padding })} }
+      :where(pre) { ${lookCss({ backgroundColor: CODE_LOOK.block.backgroundColor, borderRadius: CODE_LOOK.block.borderRadius, padding: CODE_LOOK.block.padding })} }
+      :where(pre code) { background-color: transparent; padding: 0; border-radius: 0; }
       blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid #ddd; overflow: hidden; }
     </style>
     ${extraHead}

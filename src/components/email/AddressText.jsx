@@ -1,6 +1,8 @@
 import React, { memo, useMemo } from 'react';
 import { openMailtoCompose } from '../../utils/mailto';
 import { linkifyText } from '../../utils/linkify';
+import { codeRuns } from '../../utils/codeText';
+import { CODE_LOOK } from '../../utils/codeLook';
 
 /**
  * Plain-text body text with its email and web addresses made clickable.
@@ -11,6 +13,9 @@ import { linkifyText } from '../../utils/linkify';
  * as a `mailto:` in an HTML body, and each web address opens in the browser,
  * the same as a link in the reader's frame.
  *
+ * `inline` and ```fenced``` code in the text is shown as code (codeText), and
+ * nothing inside it is linked: it is shown as it was written.
+ *
  * Rendered as React children, never `dangerouslySetInnerHTML`: the text came
  * out of someone else's email, and React's own escaping is the reason none of
  * it can become markup.
@@ -18,13 +23,23 @@ import { linkifyText } from '../../utils/linkify';
 // `readOnly` (the compose pane's copy): an email address shows as a link but
 // composes nothing; a web address still opens, which is reading.
 export const AddressText = memo(function AddressText({ text, accountId, readOnly = false }) {
-  const segments = useMemo(() => linkifyText(text), [text]);
+  const runs = useMemo(() => codeRuns(text).map(run => (
+    run.code ? run : { ...run, segments: linkifyText(run.text) }
+  )), [text]);
 
-  // Nothing to link — hand back the string itself so the common case adds no
-  // elements to the tree at all.
-  if (!segments.some(seg => seg.href)) return text ?? null;
+  // Nothing to link and no code — hand back the string itself so the common
+  // case adds no elements to the tree at all.
+  if (!runs.some(run => run.code || run.segments.some(seg => seg.href))) return text ?? null;
 
-  return segments.map((seg, i) => seg.href ? (
+  return runs.map((run, r) => {
+    if (run.code === 'inline') return <code key={r} style={CODE_LOOK.inline}>{run.text}</code>;
+    if (run.code === 'block') return <pre key={r} style={{ ...CODE_LOOK.block, margin: '0.25em 0' }}>{run.text}</pre>;
+    return run.segments.map((seg, i) => linked(seg, `${r}.${i}`, accountId, readOnly));
+  });
+});
+
+function linked(seg, i, accountId, readOnly) {
+  return seg.href ? (
     <a
       key={i}
       href={seg.href}
@@ -50,5 +65,5 @@ export const AddressText = memo(function AddressText({ text, accountId, readOnly
     >
       {seg.text}
     </a>
-  ) : seg.text);
-});
+  ) : seg.text;
+}

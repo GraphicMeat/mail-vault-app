@@ -89,4 +89,31 @@ describe('AddressText', () => {
     expect([...container.querySelectorAll('a')].map(a => a.textContent))
       .toEqual(['a@b.com', 'c@d.org']);
   });
+
+  describe('code in the text', () => {
+    it('shows `inline` code as code, and the ticks are gone', () => {
+      const { container } = render(<AddressText text="run `npm test` now" />);
+      expect(container.querySelector('code').textContent).toBe('npm test');
+      expect(container.textContent).toBe('run npm test now');
+    });
+
+    it('shows a fenced block as a block with its lines kept', () => {
+      const { container } = render(<AddressText text={'see:\n```js\nconst a = 1;\nb();\n```\nthanks'} />);
+      const block = container.querySelector('pre');
+      expect(block.textContent).toBe('const a = 1;\nb();');
+      expect(container.textContent).toBe('see:\nconst a = 1;\nb();thanks');
+    });
+
+    it('does not make a link out of an address inside code, and still links the rest', () => {
+      const { container } = render(<AddressText text="mail a@b.com or `c@d.org`" />);
+      expect([...container.querySelectorAll('a')].map(a => a.textContent)).toEqual(['a@b.com']);
+      expect(container.querySelector('code').textContent).toBe('c@d.org');
+    });
+
+    it('never turns code into markup', () => {
+      const { container } = render(<AddressText text={'`<img src=x onerror=alert(1)>`'} />);
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('code').textContent).toBe('<img src=x onerror=alert(1)>');
+    });
+  });
 });

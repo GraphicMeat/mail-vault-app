@@ -23,6 +23,7 @@ import { Z } from './ui/layers';
 import { hasOpenDialog } from '../hooks/useDialogA11y';
 import { linkRangeAt, applyLink, removeLink, removeLinkWithText, openLink } from '../utils/editorLinks';
 import { imageList, resizedImage, scaleOffer } from '../utils/signatureImageScale';
+import { CODE_LOOK } from '../utils/codeLook';
 import { ImageScaleDialog } from './ImageScaleDialog';
 import { SlashMenu as SlashMenuTrigger } from './slashMenuExtension';
 import { SlashMenu } from './SlashMenu';
@@ -765,16 +766,8 @@ const EDITOR_SPACING = {
   PRE: '0.5em 0',
 };
 
-// Code, carried the same way. CSS variables do not exist in a mail client, and
-// a grey with alpha reads on both a white and a dark reader. A <pre> holds its
-// <code>, so the block gets the background and the code inside it only the font.
-const CODE_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace";
-const CODE_LOOK = {
-  inline: { fontFamily: CODE_FONT, fontSize: '0.9em', backgroundColor: 'rgba(127, 127, 127, 0.18)', borderRadius: '4px', padding: '1px 4px' },
-  block: { fontFamily: CODE_FONT, fontSize: '0.9em', backgroundColor: 'rgba(127, 127, 127, 0.14)', borderRadius: '6px', padding: '8px 12px', whiteSpace: 'pre-wrap', overflowX: 'auto' },
-  inBlock: { fontFamily: CODE_FONT },
-};
-
+// Code, carried the same way: the look lives in utils/codeLook (a <pre> holds its
+// <code>, so the block gets the background and the code inside it only the font).
 function inlineCodeLook(doc) {
   doc.body.querySelectorAll('pre, code').forEach((el) => {
     const look = el.tagName === 'PRE' ? CODE_LOOK.block : el.closest('pre') ? CODE_LOOK.inBlock : CODE_LOOK.inline;
