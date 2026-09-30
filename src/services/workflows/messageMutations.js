@@ -9,7 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import { retryOnce, isLocalMailbox } from './mailboxTree';
 import { forget as forgetHeaderMemo } from '../headerMemo';
@@ -710,9 +710,11 @@ function _openAfterDelete(state, isOpenRow, isRemoved) {
 // lives, never by its bare uid — the same key the tombstone filter uses.
 const READER_CLOSED = { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null };
 const _targetId = ({ accountId, mailbox, uid }) => `${accountId}|${mailbox}|${uid}`;
+// A row whose location cannot be resolved has no id, and so is no target's row:
+// it used to be read as an INBOX row of its own account.
 const _rowId = (e, state) => {
-  const loc = resolveEmailLocation(e, state);
-  return _targetId({ accountId: loc?.accountId ?? e._accountId, mailbox: loc?.mailbox ?? 'INBOX', uid: e.uid });
+  const id = rowIdentity(e, state);
+  return id && _targetId(id);
 };
 // The view a row was deleted from. An undo puts it back only into that one;
 // any other view learns it from its reload.
@@ -752,10 +754,7 @@ function _hideDeleted(useMailStore, targets, { keys = [] } = {}) {
   const ids = new Set(targets.map(_targetId));
   const gone = (e) => !!e && ids.has(_rowId(e, live));
   const view = _viewId(live);
-  const removed = [...live.emails, ...live.sentEmails].filter(gone).map((row) => {
-    const loc = resolveEmailLocation(row, live);
-    return { accountId: loc?.accountId ?? row._accountId, mailbox: loc?.mailbox ?? 'INBOX', uid: row.uid, row, view };
-  });
+  const removed = [...live.emails, ...live.sentEmails].filter(gone).map((row) => ({ ...rowIdentity(row, live), row, view }));
   const dropKeys = new Set([...keys, ...removed.map(r => selectionKey(r.row, live))]);
   // The open thread is a snapshot: take the message out of it, and close the
   // reader only when nothing is left (pruneSelectedThread).
@@ -1545,14 +1544,6 @@ export async function applyServerRemoval(uid, {
   // or the Bin, and that is precisely the guess this whole change removes.
   if (deletedByUs) await markServerDeleted(accountId, mailbox, uid);
 
-  // A uid names a message only inside one (account, mailbox). In a list that
-  // spans mailboxes another account's row carries the same number, so the row
-  // filter has to read each row's own location — this is the same predicate
-  // the localEmails stamp below has always used. A single folder's list has
-  // one location, and there the bare uid is the whole answer.
-  const sameMessage = (e) => e.uid === uid
-    && (e._mailbox == null || e._mailbox === mailbox)
-    && (e._accountId == null || e._accountId === accountId);
   // `localEmails` can still contain the optimistic row after a local-only
   // delete has removed its Maildir file. Ask the durable archive index instead
   // and fail closed when it cannot prove that the vault copy survived.
@@ -1580,13 +1571,16 @@ export async function applyServerRemoval(uid, {
   const liveSpansMailboxes = live.activeMailbox === 'UNIFIED' || !!live.mailboxScope;
   const targetViewMatches = live.activeAccountId === accountId && live.activeMailbox === mailbox;
   const viewMatches = liveSpansMailboxes || targetViewMatches;
-  const isRemoved = liveSpansMailboxes
-    ? sameMessage
-    : targetViewMatches ? (e) => e.uid === uid : () => false;
+  // A uid names a message only inside one (account, mailbox): another
+  // account's row, or this account's merged Sent copy, carries the same number
+  // in a list that holds both. Every row is read at its own location, and the
+  // view is never a wildcard (sameMessage, unifiedHelpers).
+  const isRow = (e) => sameMessage(e, { accountId, mailbox, uid }, live);
+  const isRemoved = viewMatches ? isRow : () => false;
   const currentEmails = live.emails;
   const currentSentEmails = live.sentEmails;
   const targetIsInSpanningView = liveSpansMailboxes
-    && [...currentEmails, ...currentSentEmails].some(sameMessage);
+    && [...currentEmails, ...currentSentEmails].some(isRow);
   // `counted`: a delete's optimistic paint (_hideDeleted) already took it off.
   // A view that spans mailboxes counts only what it lists, so it drops one
   // only when a row in it was the message. A branch listing's activeMailbox
@@ -1622,7 +1616,7 @@ export async function applyServerRemoval(uid, {
   // stamps it at read time), so stamp them here too rather than waiting for the
   // next disk read — the row must go gold in this paint, not the one after.
   if (deletedByUs && viewMatches) updates.localEmails = get().localEmails.map(e => (
-    sameMessage(e) ? { ...e, serverDeleted: true } : e
+    isRow(e) ? { ...e, serverDeleted: true } : e
   ));
 
   // The optimistic delete installed a session tombstone so a stale header
@@ -1758,13 +1752,11 @@ function _mapThreadFlags(thread, matches, map) {
   return emails === thread?.emails ? thread : { ...thread, emails };
 }
 
-// Is `e` the row of this message? The account is compared the way
-// resolveEmailLocation derives it, never skipped: a delayed mark lands after
-// the user may have switched accounts, and a bare row of the new view under
-// the same folder name and uid is another message.
-const _rowOf = (s, accountId, mailbox, uid) => (e) => e.uid === uid
-  && (e._accountId || e._srcAccountId || s.activeAccountId) === accountId
-  && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox;
+// Is `e` the row of this message? Its own location against the target's, with
+// no wildcard (sameMessage): a delayed mark lands after the user may have
+// switched accounts, and a bare row of the new view under the same folder name
+// and uid is another message.
+const _rowOf = (s, accountId, mailbox, uid) => (e) => sameMessage(e, { accountId, mailbox, uid }, s);
 
 // The durable half of a flag change.
 //

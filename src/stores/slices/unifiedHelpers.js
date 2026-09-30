@@ -146,6 +146,33 @@ export function accountEmailOf(email, state) {
 }
 
 /**
+ * Where a row lives: `{ accountId, mailbox, uid }`, the row's own folder as
+ * `resolveEmailLocation` places it (an unstamped row is the view's), or null
+ * when that cannot be resolved. THE one answer to "which message is this row",
+ * and the only one a matcher or a key may be built from: a bare uid names a
+ * different message in every other folder and account.
+ */
+export function rowIdentity(row, state) {
+  const loc = row && resolveEmailLocation(row, state);
+  return loc ? { accountId: loc.accountId, mailbox: loc.mailbox, uid: row.uid } : null;
+}
+
+/**
+ * Is `row` the message `{ accountId, mailbox, uid }`? An unresolvable location
+ * (foreign account with no folder tag, an unstamped row of a view that is no
+ * folder) matches NOTHING, never everything: a wildcard here is how a delete in
+ * one account took another account's row, and a merged Sent copy, off the
+ * screen. `target` must name a real folder, or nothing matches either.
+ */
+export function sameMessage(row, target, state) {
+  if (!target?.accountId || !target.mailbox || target.mailbox === 'UNIFIED') return false;
+  // uid first: it rules out nearly every row of a five-figure list for free.
+  if (row?.uid !== target.uid) return false;
+  const id = rowIdentity(row, state);
+  return !!id && id.accountId === target.accountId && id.mailbox === target.mailbox;
+}
+
+/**
  * `accountId-mailbox-uid` for a message, resolved through the view state — the
  * same shape selectEmail uses for its body cache. A bare UID is not a key: the
  * same number is a different message in every other folder/account, so keying
@@ -157,8 +184,8 @@ export function accountEmailOf(email, state) {
  * a miss for anything that warns the user.
  */
 export function emailScopeKey(email, state) {
-  const loc = email && resolveEmailLocation(email, state);
-  return loc ? `${loc.accountId}-${loc.mailbox}-${email.uid}` : null;
+  const id = rowIdentity(email, state);
+  return id ? `${id.accountId}-${id.mailbox}-${id.uid}` : null;
 }
 
 /**

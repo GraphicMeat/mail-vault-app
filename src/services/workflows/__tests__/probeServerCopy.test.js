@@ -125,6 +125,28 @@ describe('a completed sweep that finds nothing', () => {
   });
 });
 
+describe('a sweep answered after the user changed folders', () => {
+  // The sweep is a network round trip. When it lands the screen may show ANOTHER
+  // folder of the same account, whose rows carry no folder of their own and
+  // whose uid 7 is a different message: it must not go gold, and its row is not
+  // the "stale server row" this sweep is about.
+  it('stamps and removes only the message it asked about, never the open folder\'s uid 7', async () => {
+    const archiveRow = { uid: 7, subject: 'Something else' };
+    const archiveVaultRow = { uid: 7, isArchived: true, subject: 'Something else' };
+    storeState.activeMailbox = 'Archive';
+    storeState.emails = [archiveRow];
+    storeState.localEmails = [VAULT_ROW, archiveVaultRow];
+    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
+
+    const result = await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' });
+
+    expect(result.state).toBe('absent');
+    expect(storeState.localEmails[0].serverAbsent).toBe(true);
+    expect(storeState.localEmails[1].serverAbsent).toBeUndefined();
+    expect(mockApplyServerRemoval).not.toHaveBeenCalled();
+  });
+});
+
 describe('an incomplete sweep', () => {
   it('is unknown, not absent — the folder that would not open could be holding it', async () => {
     mockFindMessageId.mockResolvedValue({

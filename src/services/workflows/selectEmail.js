@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation, sameMessage } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval, keyAfterUndo } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -249,9 +249,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
 // that one back: its flags painted the Sent copy's viewer, and its Message-ID
 // made the Sent copy's own vault file look like another message's.
 function _rowOf(state, accountId, mailbox, uid, clickedRow = null) {
-  const belongsToSelection = row => row?.uid === uid
-    && (row._accountId || state.activeAccountId) === accountId
-    && (resolveEmailLocation(row, state)?.mailbox ?? mailbox) === mailbox;
+  const belongsToSelection = row => sameMessage(row, { accountId, mailbox, uid }, state);
   if (belongsToSelection(clickedRow)) return clickedRow;
 
   const pool = [...(state.emails || []), ...(state.sortedEmails || []), ...(state.localEmails || []), ...(state.sentEmails || [])];
@@ -687,7 +685,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     publish(state => ({
       selectedEmail: withAccount(email),
       selectedEmailSource: actualSource,
-      emails: state.emails.map(e => e.uid === realUid ? { ...e, hasAttachments: hasReal } : e),
+      emails: state.emails.map(e => sameMessage(e, { accountId, mailbox, uid: realUid }, state) ? { ...e, hasAttachments: hasReal } : e),
     }));
   } catch (error) {
     if (!isCurrent()) return;

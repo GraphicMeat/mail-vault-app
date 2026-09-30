@@ -9,7 +9,7 @@ import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { setArchivedGroup } from '../stores/slices/messageListSlice';
-import { spansMailboxes } from '../stores/slices/unifiedHelpers';
+import { spansMailboxes, sameMessage } from '../stores/slices/unifiedHelpers';
 import { _pruneIfGone } from './workflows/messageMutations';
 
 export { hasValidCredentials };
@@ -383,7 +383,9 @@ export class AccountPipeline {
         // creating a new emails array (which would trigger expensive re-renders)
         if (email?.hasAttachments) {
           const state = useMailStore.getState();
-          const target = state.emails.find(e => e.uid === uid);
+          // This pass is for one (account, mailbox); the screen may show another, whose
+          // row under the same number is a different message.
+          const target = state.emails.find(e => sameMessage(e, { accountId: this.accountId, mailbox, uid }, state));
           if (target) target.hasAttachments = true;
           // emails[] is the canonical list — already updated by UID above
         }

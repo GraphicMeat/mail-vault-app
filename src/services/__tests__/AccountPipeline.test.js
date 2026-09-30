@@ -408,8 +408,16 @@ describe('AccountPipeline background body fetch', () => {
     settings.autoDownloadAttachments = false;
   });
 
+  afterEach(() => {
+    mail.state.activeAccountId = 'acc-1';
+    mail.state.activeMailbox = 'INBOX';
+    mail.state.emails = [];
+  });
+
   it('leaves the webview body cache alone, and still marks the row as having attachments', async () => {
     const row = { uid: 1 };
+    mail.state.activeAccountId = 'acc-2';
+    mail.state.activeMailbox = 'INBOX';
     mail.state.emails = [row];
     api.fetchEmailLight.mockResolvedValue({ uid: 1, hasAttachments: true, html: '<p>body</p>' });
     const pipeline = new AccountPipeline(account, { concurrency: 1 });
@@ -420,6 +428,43 @@ describe('AccountPipeline background body fetch', () => {
     expect(mail.state.addToCache).not.toHaveBeenCalled();
     expect(row.hasAttachments).toBe(true);
     pipeline.destroy();
+    mail.state.emails = [];
+  });
+
+  // A uid names a message only inside one (account, mailbox). The pass runs for
+  // acc-2's INBOX in the background while the screen shows something else; a
+  // row of that other view sharing the number is another message and must not
+  // get the paperclip.
+  it("marks acc-2's INBOX row only, not another account's row sharing the uid in All inboxes", async () => {
+    const mine = { uid: 1, _accountId: 'acc-2', _mailbox: 'INBOX' };
+    const theirs = { uid: 1, _accountId: 'acc-1', _mailbox: 'INBOX' };
+    mail.state.activeMailbox = 'UNIFIED';
+    mail.state.emails = [theirs, mine];
+    api.fetchEmailLight.mockResolvedValue({ uid: 1, hasAttachments: true, html: '<p>body</p>' });
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1], 'INBOX');
+    await browserTicks(6);
+
+    expect(mine.hasAttachments).toBe(true);
+    expect(theirs.hasAttachments).toBeUndefined();
+    pipeline.destroy();
+    mail.state.emails = [];
+  });
+
+  it("leaves the row of acc-1's Archive alone while acc-2's INBOX downloads", async () => {
+    const archiveRow = { uid: 1 };
+    mail.state.activeAccountId = 'acc-1';
+    mail.state.activeMailbox = 'Archive';
+    mail.state.emails = [archiveRow];
+    api.fetchEmailLight.mockResolvedValue({ uid: 1, hasAttachments: true, html: '<p>body</p>' });
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1], 'INBOX');
+    await browserTicks(6);
+
+    expect(archiveRow.hasAttachments).toBeUndefined();
+    pipeline.destroy();
+    mail.state.activeAccountId = 'acc-1';
+    mail.state.activeMailbox = 'INBOX';
     mail.state.emails = [];
   });
 

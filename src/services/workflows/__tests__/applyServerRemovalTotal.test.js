@@ -210,3 +210,33 @@ describe('applyServerRemoval: the count follows the rows', () => {
     expect(useMailStore.getState().totalEmails).toBe(999);
   });
 });
+
+describe('applyServerRemoval: a merged Sent copy is another message', () => {
+  // The INBOX list merges the account's Sent copies in (`sentEmails`), and the
+  // INBOX's own message under uid 34 shares that number with the Sent copy's.
+  const inboxRow = { uid: 34, subject: 'In', flags: [], messageId: '<in@mock>', date: '2026-08-27T09:00:00Z' };
+  const sentCopy = {
+    uid: 34, subject: 'Out', flags: ['\\Seen'], messageId: '<out@mock>', date: '2026-08-27T08:00:00Z',
+    _accountId: ACCOUNT.id, _mailbox: 'Sent', _fromSentFolder: true,
+  };
+
+  it('leaves the Sent copy alone when INBOX 34 is gone', async () => {
+    useMailStore.setState({ emails: [inboxRow], sentEmails: [sentCopy], totalEmails: 1 });
+
+    await applyServerRemoval(34, { accountId: ACCOUNT.id, mailbox: 'INBOX', skipRefresh: true, clearSelection: false });
+
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(useMailStore.getState().sentEmails).toEqual([sentCopy]);
+  });
+
+  it('leaves the Sent copy alone on the refreshing path too', async () => {
+    const loadEmails = vi.fn();
+    useMailStore.setState({ emails: [inboxRow], sentEmails: [sentCopy], totalEmails: 1, loadEmails });
+
+    await applyServerRemoval(34, { accountId: ACCOUNT.id, mailbox: 'INBOX', clearSelection: false });
+
+    expect(useMailStore.getState().sentEmails).toEqual([sentCopy]);
+    expect(loadEmails).toHaveBeenCalledTimes(1);
+  });
+
+});

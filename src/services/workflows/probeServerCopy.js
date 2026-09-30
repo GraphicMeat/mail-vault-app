@@ -28,7 +28,7 @@ import * as db from '../db';
 import { ensureFreshToken, hasValidCredentials } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { applyServerRemoval, stampVaultEntry } from './messageMutations';
-import { _resolveUnifiedContext, spansMailboxes } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, spansMailboxes, sameMessage } from '../../stores/slices/unifiedHelpers';
 
 /**
  * @param {number} uid
@@ -114,9 +114,8 @@ export async function probeServerCopy(uid, scope = {}) {
   // answered a stronger version of the question a failed body fetch asks, so
   // route it through the same path that answer already takes. NOT a delete:
   // `deletedByUs` stays false, because we did not.
-  const stale = (get().emails || []).some(e => e.uid === uid
-    && (e._mailbox == null || e._mailbox === mailbox)
-    && (e._accountId == null || e._accountId === accountId));
+  const target = { accountId, mailbox, uid };
+  const stale = (get().emails || []).some(e => sameMessage(e, target, get()));
   if (stale) {
     await applyServerRemoval(uid, {
       accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false,
@@ -127,12 +126,11 @@ export async function probeServerCopy(uid, scope = {}) {
 }
 
 // A uid names a message only inside one (account, mailbox) — never restamp a
-// row that merely shares the number.
+// row that merely shares the number. The sweep was a round trip: the screen may
+// show another folder by now, and its unstamped rows are that folder's.
 function _restampRows(useMailStore, uid, accountId, mailbox, fields) {
   const get = () => useMailStore.getState();
-  const matches = (e) => e.uid === uid
-    && (e._mailbox == null || e._mailbox === mailbox)
-    && (e._accountId == null || e._accountId === accountId);
+  const matches = (e) => sameMessage(e, { accountId, mailbox, uid }, get());
   const restamp = (list) => (list || []).map(e => (matches(e) ? { ...e, ...fields } : e));
   useMailStore.setState({
     localEmails: restamp(get().localEmails),
