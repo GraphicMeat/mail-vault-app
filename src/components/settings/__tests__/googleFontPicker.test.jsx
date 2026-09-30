@@ -137,6 +137,25 @@ describe('Text settings with Google Fonts', () => {
     expect(useSettingsStore.getState().appFont).toBe('inter');
   });
 
+  // The picker may be closed while the download runs: its outcome still shows.
+  it('keeps a download it started in view after the picker closes, with a retry on failure', async () => {
+    downloadAnswer = { state: 'failed', errorCode: 'E_FONT_OFFLINE' };
+    render(<AppearanceSettings initialSection="text" />);
+    fireEvent.click(screen.getByRole('button', { name: t('settings.text.moreFonts') }));
+    search('Pacifico');
+    fireEvent.click(within(row('Pacifico')).getByRole('button', { name: /^Pacifico/ }));
+    await waitFor(() => expect(within(row('Pacifico')).getByText(t('fonts.error.offline'))).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('common.close') }));
+    const status = await screen.findByTestId('font-download-status');
+    expect(status.textContent).toContain('Pacifico');
+    expect(status.textContent).toContain(t('fonts.error.offline'));
+
+    downloadAnswer = { state: 'ready' };
+    fireEvent.click(within(status).getByRole('button', { name: t('common.retry') }));
+    await waitFor(() => expect(useSettingsStore.getState().appFont).toBe('google:Pacifico'));
+    await waitFor(() => expect(screen.queryByTestId('font-download-status')).toBeNull());
+  });
+
   it('goes back to the default font when the current one is removed', async () => {
     useSettingsStore.setState({ appFont: 'google:Lora' });
     render(<AppearanceSettings initialSection="text" />);

@@ -74,7 +74,12 @@ function onEvent(payload) {
   const family = payload?.family;
   if (!findGoogleFont(family)) return;
   if (payload.state === 'downloading') markDownloading(family, payload.done || 0, payload.total || 0);
-  else if (payload.state === 'ready') { markReady(family); settle(family); }
+  else if (payload.state === 'ready') {
+    markReady(family);
+    settle(family);
+    // Downloaded in another window, for a font this one draws with.
+    if (wanted.has(family)) void loadFontFaces(family);
+  }
   else if (payload.state === 'failed') {
     const code = payload.errorCode || 'E_FONT_NETWORK';
     markFailed(family, code);
@@ -88,7 +93,7 @@ function wire() {
     wiring = (async () => {
       try {
         await listen(FONT_EVENT, e => onEvent(e.payload));
-        await listen('daemon-reconnected', () => { void reconcile(); });
+        await listen('daemon-reconnected', () => { void reconcile(); retryWanted(); });
         await listen('daemon-events-lagged', () => { void reconcile(); });
       } catch { /* no Tauri: nothing to hear */ }
     })();
@@ -163,6 +168,14 @@ export async function downloadFont(family) {
 
 // family -> Promise<FontFace[] | null>; a failure is not kept.
 const loaded = new Map();
+// Every family this window asked to draw with. One that did not load (the
+// daemon not up yet at launch, not downloaded yet) is asked again when the
+// daemon connects, and when a download of it finishes.
+const wanted = new Set();
+
+function retryWanted() {
+  for (const family of wanted) if (!loaded.has(family)) void loadFontFaces(family);
+}
 
 const bytesOf = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
 
@@ -175,6 +188,8 @@ export function loadFontFaces(family) {
   if (!findGoogleFont(family) || typeof FontFace !== 'function' || typeof document === 'undefined' || !document.fonts) {
     return Promise.resolve(false);
   }
+  wanted.add(family);
+  void wire();
   let faces = loaded.get(family);
   if (!faces) {
     faces = (async () => {
@@ -225,6 +240,7 @@ export async function removeFont(family) {
   const faces = await loaded.get(family);
   loaded.delete(family);
   faces?.forEach(face => document.fonts.delete(face));
+  wanted.delete(family);
   useFontStore.setState(s => ({ installed: s.installed.filter(f => f !== family), errors: without(s.errors, family) }));
   return true;
 }

@@ -89,6 +89,31 @@ describe('loading a downloaded family into this window', () => {
     expect(await mod.loadFontFaces('Roboto')).toBe(false);
   });
 
+  // The main window asks right after hydration, which can be before the
+  // daemon answers: a failed first read must not leave the fallback for the
+  // whole session.
+  it('tries a family again when the daemon (re)connects', async () => {
+    daemonCall.mockRejectedValueOnce(new Error('daemon not running'));
+    expect(await mod.loadFontFaces('Lora')).toBe(false);
+    daemonCall.mockResolvedValue(faces('Lora'));
+    await vi.waitFor(() => expect(listeners.has('daemon-reconnected')).toBe(true));
+    fire('daemon-reconnected', {});
+    await vi.waitFor(() => expect(document.fonts.add).toHaveBeenCalledTimes(2));
+    // Loaded now: another reconnect asks nothing.
+    daemonCall.mockClear();
+    fire('daemon-reconnected', {});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(daemonCall.mock.calls.filter(([m]) => m === 'fonts.read')).toEqual([]);
+  });
+
+  it('loads a family another window downloaded, once this window wanted it', async () => {
+    daemonCall.mockResolvedValueOnce({ family: 'Lora', faces: [], errorCode: 'E_FONT_MISSING' });
+    expect(await mod.loadFontFaces('Lora')).toBe(false);
+    daemonCall.mockResolvedValue(faces('Lora'));
+    fire('font-download', { family: 'Lora', state: 'ready' });
+    await vi.waitFor(() => expect(document.fonts.add).toHaveBeenCalledTimes(2));
+  });
+
   it('loads the downloaded families a piece of HTML names', async () => {
     daemonCall.mockImplementation(async (method, params) => {
       if (method === 'fonts.list') return { fonts: [{ family: 'Lora' }], downloading: [] };

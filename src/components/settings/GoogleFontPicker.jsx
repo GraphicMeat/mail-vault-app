@@ -18,6 +18,8 @@ const CATEGORY_KEYS = {
   handwriting: 'fonts.category.handwriting',
 };
 const ERROR_KEYS = { E_FONT_OFFLINE: 'fonts.error.offline' };
+/** The message for a failed download's code. */
+export const fontErrorText = (t, code) => t(ERROR_KEYS[code] || 'fonts.error.failed');
 
 /**
  * `pick(family)` downloads the family when it is not downloaded yet, then
@@ -39,7 +41,7 @@ export function useGoogleFontChoice(apply) {
 function FontRow({ font, status, onChoose, onRemove }) {
   const t = useT();
   const ready = status.state === 'ready';
-  const error = status.state === 'failed' && t(ERROR_KEYS[status.errorCode] || 'fonts.error.failed');
+  const error = status.state === 'failed' && fontErrorText(t, status.errorCode);
   return (
     <li data-testid={`google-font-${font.family}`} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-mail-surface-hover">
       <button type="button" onClick={() => onChoose(font.family)} className="flex-1 min-w-0 flex items-baseline gap-2 text-left">
@@ -74,14 +76,17 @@ function FontRow({ font, status, onChoose, onRemove }) {
 /**
  * The Google Fonts catalogue: searchable, by category, browsed with no
  * network (the list is bundled). Choosing a family downloads it once through
- * the daemon, then `onPick(family)`. `onRemoved(family)` after a removal.
+ * the daemon, then `onPick(family)`. `onChoose(family)` hears the click
+ * itself, so a caller can keep showing a download the picker was closed on.
+ * `onRemoved(family)` after a removal.
  */
-export function GoogleFontPicker({ open, onClose, onPick, onRemoved }) {
+export function GoogleFontPicker({ open, onClose, onPick, onChoose, onRemoved }) {
   const t = useT();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(null);
   const store = useFontStore();
-  const choose = useGoogleFontChoice(family => onPick?.(family));
+  const pick = useGoogleFontChoice(family => onPick?.(family));
+  const choose = family => { onChoose?.(family); return pick(family); };
 
   useEffect(() => { if (open) void refreshFonts(); }, [open]);
 
