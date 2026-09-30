@@ -49,6 +49,7 @@ const BASE = {
 export function isRowArchived(email, state, archivedIds = state?.archivedEmailIds) {
   if (!email) return false;
   if (email.isArchived) return true;
+  if (!archivedIds?.size) return false;
   return vaultHasSelection(archivedIds, selectionKey(email, state), state);
 }
 

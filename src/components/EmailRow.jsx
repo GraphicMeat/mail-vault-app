@@ -20,6 +20,7 @@ import { TagChips } from './TagChips';
 import { formatEmailDate, intlLocale, hour12For } from '../utils/dateFormat';
 import { useSnoozeStore, wakeAtFor } from '../stores/snoozeStore';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
+import { isRowArchived } from '../utils/quickActionFacts';
 import {
   AlarmClock,
   Paperclip,
@@ -225,7 +226,10 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // surface/hover/unread background every other row has. The tone is still
   // read here so the handoff below knows when this message changed hands.
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const custodyTone = describeMessageState(email, { serverKnown }).tone;
+  // Server view writes isArchived false on every row it lists, so the row's
+  // own flag never moves there; the keyed archived set does (isRowArchived).
+  const vaultHeld = useMailStore(s => !email.isArchived && isRowArchived(email, s));
+  const custodyTone = describeMessageState(vaultHeld ? { ...email, isArchived: true } : email, { serverKnown }).tone;
   // The handoff belongs to the row, not to the 20px chip: when a message
   // becomes yours, the row is what changed hands. Null except for the one
   // ~620ms beat after this message's own custody changed.
@@ -342,7 +346,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // surface/hover/unread background every other row has. The tone is still
   // read here so the handoff below knows when this message changed hands.
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const custodyTone = describeMessageState(email, { serverKnown }).tone;
+  // Server view writes isArchived false on every row it lists, so the row's
+  // own flag never moves there; the keyed archived set does (isRowArchived).
+  const vaultHeld = useMailStore(s => !email.isArchived && isRowArchived(email, s));
+  const custodyTone = describeMessageState(vaultHeld ? { ...email, isArchived: true } : email, { serverKnown }).tone;
   // The handoff belongs to the row, not to the 20px chip: when a message
   // becomes yours, the row is what changed hands. Null except for the one
   // ~620ms beat after this message's own custody changed.

@@ -79,8 +79,11 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // members carry the mark. Folded, it IS the row you opened. Only the marking
   // mode has a sibling ground to demote to, so hover mode is untouched.
   const demoted = highlight === 'selection' && expandable && expanded;
+  // Server view writes isArchived false on every row it lists, so the row's
+  // own flag never moves there; the keyed archived set does (isRowArchived).
+  const vaultHeld = useMailStore(s => !!thread?.lastEmail && !thread.lastEmail.isArchived && isRowArchived(thread.lastEmail, s));
   const custodyTone = thread?.lastEmail
-    ? describeMessageState(thread.lastEmail, { serverKnown }).tone
+    ? describeMessageState(vaultHeld ? { ...thread.lastEmail, isArchived: true } : thread.lastEmail, { serverKnown }).tone
     : null;
   const landed = useCustodyLanding(scopeKey, custodyTone);
   // A thread in an outgoing folder names who it went TO, not you, on every row.
@@ -202,8 +205,11 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // members carry the mark. Folded, it IS the row you opened. Only the marking
   // mode has a sibling ground to demote to, so hover mode is untouched.
   const demoted = highlight === 'selection' && expandable && expanded;
+  // Server view writes isArchived false on every row it lists, so the row's
+  // own flag never moves there; the keyed archived set does (isRowArchived).
+  const vaultHeld = useMailStore(s => !!thread?.lastEmail && !thread.lastEmail.isArchived && isRowArchived(thread.lastEmail, s));
   const custodyTone = thread?.lastEmail
-    ? describeMessageState(thread.lastEmail, { serverKnown }).tone
+    ? describeMessageState(vaultHeld ? { ...thread.lastEmail, isArchived: true } : thread.lastEmail, { serverKnown }).tone
     : null;
   const landed = useCustodyLanding(scopeKey, custodyTone);
   // A thread in an outgoing folder names who it went TO, not you, on every row.
