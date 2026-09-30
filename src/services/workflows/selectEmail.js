@@ -9,7 +9,8 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
 import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation, sameMessage } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
-import { applySeenLocally, _setSeenOnServer, applyServerRemoval, keyAfterUndo } from './messageMutations';
+import { applyFlagToTargets, applyServerRemoval, keyAfterUndo } from './messageMutations';
+import { resolvePool } from '../../stores/messageRows';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
 import { isLocalMailbox } from './mailboxTree';
@@ -88,7 +89,15 @@ async function _readVerifiedLocal(accountId, mailbox, uid, headerRow, matchesHea
 // once its body was cached, and the action bar kept offering "Mark read".
 // Returns the email with \Seen applied when it marked right away, so the
 // caller's copy matches what the list now holds.
-async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isUnified, markOnServer, isCurrent = () => true }) {
+//
+// The mark is the one flag core's (applyFlagToTargets, not undoable): every row
+// showing the message changes first, then the vault copy, the journal and the
+// server, so a refusal leaves the message read and the op queued for replayOps
+// instead of a bold row nobody will ever finish. `serverless` is a message no
+// server holds a copy of (a vault-only read, a row the server has lost): the
+// core writes its vault copy and journals nothing. `named` is a vault copy whose
+// folder the caller knows without a row (the Insights reader).
+async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, account, row = null, serverless = false, named = false, isCurrent = () => true }) {
   const { markAsReadMode, markAsReadDelay } = useSettingsStore.getState();
   if (markAsReadMode === 'manual' || email?.flags?.includes('\\Seen')) return email;
 
@@ -110,18 +119,26 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
   const stillCurrent = () => isCurrent() && selectionIsCurrent();
 
   // The fence is for the WRITE: nothing is marked for a reader that has moved
-  // on. Once the server holds \Seen, every row showing this message has to
-  // say so, whatever the reader did during the round trip — the next message,
-  // the close button, a thread. Re-checking here is what left the server read
-  // and the row bold. applySeenLocally matches rows by account, folder and uid
-  // and touches the open copy only when it is this message.
+  // on. Once the write is made, every row showing this message has to say so,
+  // whatever the reader did during the round trip — the next message, the close
+  // button, a thread. The flag core matches rows by account, folder and uid and
+  // touches the open copy only when it is this message.
   const doMark = async () => {
     if (!stillCurrent()) return;
     try {
+      // With the unread filter on, this row has just stopped matching it. Hold
+      // it on screen for the rest of the filter session: a message that
+      // vanishes a beat after you open it reads as the list losing mail. Keyed
+      // the way the list keys its rows, off the row itself.
+      const now = useMailStore.getState();
+      const shown = resolvePool(now).find(e => sameMessage(e, { accountId, mailbox, uid }, now));
+      if (shown) now.keepVisibleWhileUnreadFiltered([selectionKey(shown, now)]);
       // A vault-only folder (an MBOX import kept on this computer) has no
-      // server copy to mark: the vault write applySeenLocally makes is all.
-      if (!isLocalMailbox(useMailStore.getState().localFolders, accountId, mailbox)) await markOnServer();
-      applySeenLocally(useMailStore, { accountId, mailbox, uid, read: true, isUnified });
+      // server copy to mark: the core sees that from the folder itself.
+      await applyFlagToTargets(
+        [{ account, accountId, mailbox, uid, emailObj: row || shown || null, serverless, named }],
+        '\\Seen', true, { undoable: false },
+      );
     } catch (e) {
       console.warn('[selectEmail] Mark as read failed:', e);
     }
@@ -359,21 +376,14 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     // Scoped flag writes remain the existing behavior of actually opening a
     // message. Delayed marks are cancelled when the Insights detail closes.
     email = await _autoMarkRead(useMailStore, {
-      email, accountId, mailbox, uid, isUnified: true, isCurrent,
-      // No fence of its own: doMark checks, then calls this with no await in
-      // between, and a resolve here means "written" to the repaint after it.
-      markOnServer: async () => {
-        if (localOnly || header._insightsNoServerActions) {
-          // A delta: the flags read at open are stale if the note was starred
-          // during the countdown.
-          await api.vaultApplyFlags(accountId, mailbox, account.email || null,
-            [{ uid, flags: ['\\Seen'], on: true }]);
-        } else if (graphId) {
-          await api.graphSetRead(freshAccount.oauth2AccessToken, graphId, true);
-        } else {
-          await _setSeenOnServer(freshAccount, accountId, mailbox, uid, true);
-        }
-      },
+      email, accountId, mailbox, uid, isCurrent,
+      // The token the body was read with; a Graph message resolves its id from
+      // the header row's own `_graphId` first.
+      account: freshAccount, row: header,
+      // A note or a vault-only copy has no server to write to; its folder is
+      // named by the vault itself, so the vault copy needs no row to prove it.
+      serverless: localOnly || !!header._insightsNoServerActions,
+      named: localOnly || !!header._insightsNoServerActions,
     });
     if (!isCurrent()) return false;
     publish({ selectedEmail: stamp(email), loadingEmail: false });
@@ -557,8 +567,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
       publish({ selectedEmail: withAccount(fresh), selectedEmailSource: source, loadingEmail: false });
       await _autoMarkRead(useMailStore, {
-        email: fresh, accountId, mailbox, uid: realUid, isUnified, isCurrent,
-        markOnServer: () => _setSeenOnServer(account, accountId, mailbox, realUid, true),
+        email: fresh, accountId, mailbox, uid: realUid, account, row, isCurrent,
       });
       return;
     }
@@ -589,11 +598,8 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // rule applyFlag keeps, and without it the throw would be swallowed and
       // the vault write below it never happen.
       email = await _autoMarkRead(useMailStore, {
-        email, accountId, mailbox, uid: realUid, isUnified, isCurrent,
-        markOnServer: async () => {
-          if (actualSource === 'local-only' || headerRow?.serverDeleted || headerRow?.serverAbsent) return;
-          await _setSeenOnServer(account, accountId, mailbox, realUid, true);
-        },
+        email, accountId, mailbox, uid: realUid, account, row: headerRow, isCurrent,
+        serverless: actualSource === 'local-only' || !!headerRow?.serverDeleted || !!headerRow?.serverAbsent,
       });
       if (!isCurrent()) return;
     } else if (source === 'local-only') {
@@ -629,8 +635,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
           .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
         email = await _autoMarkRead(useMailStore, {
-          email, accountId, mailbox, uid: realUid, isUnified, isCurrent,
-          markOnServer: () => api.graphSetRead(token, graphId, true),
+          email, accountId, mailbox, uid: realUid, account: freshAccount, row: headerRow, isCurrent,
         });
       } else {
         console.warn('[selectEmail] No Graph message ID found for UID', realUid);
@@ -667,8 +672,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       }
 
       email = await _autoMarkRead(useMailStore, {
-        email, accountId, mailbox, uid: realUid, isUnified, isCurrent,
-        markOnServer: () => api.updateEmailFlags(account, realUid, ['\\Seen'], 'add', mailbox),
+        email, accountId, mailbox, uid: realUid, account, row: headerRow, isCurrent,
       });
     }
 

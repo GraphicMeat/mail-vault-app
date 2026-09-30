@@ -3,7 +3,8 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags, emailScopeKey } from '../../stores/slices/unifiedHelpers';
+import { paintFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
 import {
@@ -308,6 +309,10 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   };
 
   const total = allEmails.length;
+  // What the list showed before this reload replaced it: the flags the reload
+  // changed are the ones the OTHER containers (the reader, the open thread, the
+  // body cache, a search hit) have not heard of.
+  const shownBefore = get().emails;
   const firstBatch = commitPrefix(CHUNK_SIZE);
 
   const allServerUids = new Set();
@@ -377,6 +382,22 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   }
 
   if (signal.aborted) return;
+
+  // Same tick as the last commit: `allEmails` now holds every row with the
+  // local writes of the whole load folded in (commitPrefix), so it cannot put an
+  // older flag over a container a writer patched meanwhile.
+  const stateNow = get();
+  const flagsBefore = new Map();
+  for (const row of shownBefore) {
+    const key = emailScopeKey(row, stateNow);
+    if (key !== null) flagsBefore.set(key, row.flags || []);
+  }
+  const flagsMoved = allEmails.filter((row) => {
+    const was = flagsBefore.get(emailScopeKey(row, stateNow));
+    const now = row.flags || [];
+    return was && (was.length !== now.length || now.some(f => !was.includes(f)));
+  });
+  if (flagsMoved.length) paintFlags(flagsMoved);
 
   const allLocalEmails = [];
   const allSavedIds = new Set();

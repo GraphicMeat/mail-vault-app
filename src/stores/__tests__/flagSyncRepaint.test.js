@@ -113,6 +113,7 @@ vi.mock('../settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+const { useSearchStore } = await import('../searchStore');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 
 const A1 = { id: 'a1', email: 'me@one.co', imapHost: 'h', password: 'x' };
@@ -171,5 +172,85 @@ describe('a flag change the daemon synced reaches the open folder list', () => {
     await tick();
 
     expect(useMailStore.getState().emails.find(e => e.uid === 5)).toBe(before);
+  });
+});
+
+// Another device marks the message open in the reader unread. The reread put it
+// on the list row and nowhere else: the reader still said read (and offered
+// "Mark unread"), the open thread, the cached body and a search hit kept the old
+// state, and a same-numbered message of another folder was one bare-uid match away.
+describe('a flag change the daemon synced reaches every container the message is in', () => {
+  const stamped = (r) => ({ ...r, _accountId: 'a1', _mailbox: 'INBOX' });
+  const BODY_KEY = 'a1-INBOX-5';
+
+  function seed({ listFlags }) {
+    const sentCopy = { ...row(5, ['\\Seen']), _accountId: 'a1', _mailbox: 'Sent', _fromSentFolder: true };
+    useMailStore.setState({
+      accounts: [A1], activeAccountId: 'a1', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
+      unifiedFolder: 'INBOX', viewMode: 'all', localEmails: [], sentEmails: [sentCopy],
+      savedEmailIds: new Set(), archivedEmailIds: new Set(), deleteTombstones: new Set(),
+      loading: false, loadingMore: false, _sortedEmailsFingerprint: '',
+      emails: [row(5, listFlags), row(4, ['\\Seen'])],
+      serverUids: serverUids(new Set([5, 4]), { complete: true }),
+      totalEmails: 2,
+      selectedEmail: stamped(row(5, ['\\Seen'])),
+      selectedEmailId: 5,
+      selectedThread: { threadId: 't', emails: [stamped(row(5, ['\\Seen'])), stamped(row(4, ['\\Seen']))] },
+      emailCache: new Map([[BODY_KEY, { email: stamped(row(5, ['\\Seen'])), timestamp: 1, size: 0 }]]),
+    });
+    useSearchStore.setState({
+      searchActive: false,
+      searchResults: [stamped(row(5, ['\\Seen']))],
+      indexedSearchRows: { a1: [stamped(row(5, ['\\Seen']))] },
+      searchRowsOutsideIndex: [],
+      excludedSearchCopies: new Set(),
+    });
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 6, highestModseq: 9, totalEmails: 2, totalCached: 2 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 6, highestModseq: 9, exists: 2 });
+    // The cache: 5 is unread now, 4 is as it was.
+    mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) =>
+      [row(5, []), row(4, ['\\Seen'])].filter(r => uids.includes(r.uid)));
+  }
+
+  const everywhere = () => {
+    const mail = useMailStore.getState();
+    const search = useSearchStore.getState();
+    return {
+      list: mail.emails.find(e => e.uid === 5).flags,
+      reader: mail.selectedEmail.flags,
+      thread: mail.selectedThread.emails.find(e => e.uid === 5).flags,
+      cache: mail.emailCache.get(BODY_KEY).email.flags,
+      searchList: search.searchResults[0].flags,
+      searchPool: search.indexedSearchRows.a1[0].flags,
+    };
+  };
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('the list row, the reader, the open thread, the cached body and a search hit all turn unread', async () => {
+    seed({ listFlags: ['\\Seen'] });
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+
+    expect(everywhere()).toEqual({ list: [], reader: [], thread: [], cache: [], searchList: [], searchPool: [] });
+  });
+
+  it('repaints the reader even when the list row already says unread', async () => {
+    seed({ listFlags: [] });
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+
+    expect(everywhere().reader).toEqual([]);
+    expect(everywhere().thread).toEqual([]);
+  });
+
+  it('does not touch a message of another folder that shares the uid', async () => {
+    seed({ listFlags: ['\\Seen'] });
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+
+    expect(useMailStore.getState().sentEmails[0].flags).toEqual(['\\Seen']);
   });
 });

@@ -257,6 +257,22 @@ describe('saveEmailsLocally — a thread opened from All Inboxes', () => {
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
   });
 
+  // A message the vault already holds is in `emails` and in `localEmails` under
+  // one key. Only its location leaves the lookup, and two rows of one key
+  // resolve to one location, so which of them wins cannot change what is saved.
+  it('a key both the server row and the vault copy hold is saved once, under the view\'s folder', async () => {
+    useMailStore.setState({
+      emails: [row(42)],
+      localEmails: [row(42, { _accountId: VADER.id, _mailbox: 'INBOX' })],
+      serverUids: serverUids([42], { complete: false }),
+      selectedEmailIds: new Set([42]),
+    });
+
+    await saveSelectedLocally();
+
+    expect(archiveCalls().map(c => [c.accountId, c.mailbox, c.uids])).toEqual([[VADER.id, 'INBOX', [42]]]);
+  });
+
   it('reports a failed account without claiming the rest failed', async () => {
     mockTauriInvoke.mockImplementation(async (cmd, args) => {
       if (cmd !== 'archive_emails') return undefined;

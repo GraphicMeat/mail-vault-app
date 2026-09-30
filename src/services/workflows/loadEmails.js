@@ -8,6 +8,7 @@ import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '..
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags } from '../../stores/slices/unifiedHelpers';
+import { paintFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
@@ -301,14 +302,11 @@ export async function loadEmails({ rereadFlags = false } = {}) {
           activeAccountId, activeMailbox, existingStoreEmails.map(e => e.uid)
         ).catch(() => []);
         if (isStale()) return;
-        const cachedFlags = new Map(cached.map(r => [r.uid, r.flags || []]));
-        const differs = (e) => {
-          const f = cachedFlags.get(e.uid);
-          return !!f && (f.length !== (e.flags || []).length || f.some(x => !e.flags?.includes(x)));
-        };
-        const current = get().emails;
-        if (current.some(differs)) {
-          useMailStore.setState({ emails: current.map(e => (differs(e) ? { ...e, flags: cachedFlags.get(e.uid) } : e)) });
+        // The cache is right about every row it holds, whichever container the
+        // message is in: the list, the reader, the open thread, the body cache,
+        // a search hit. The list's own row being current says nothing about the
+        // reader's (a flag-only reconcile above commits `emails` alone).
+        if (paintFlags(cached)) {
           bumpFlagChangeCounter();
           invalidateChatAndThreadCaches();
           get().updateSortedEmails();

@@ -15,6 +15,8 @@
 //   resolvePool(state)        the ordered candidate rows, for every key
 //                             resolver and every read of the state a row has
 //                             right now
+//   paintFlags(rows)          a loader's flags (header cache, a committed list)
+//                             laid over every container's copy of those rows
 //
 // A container is `{ name, store, fields, mapRows?, rows?, rank?, derived? }`:
 //   fields   the store fields it holds (the guard spec lists every collection
@@ -145,4 +147,28 @@ export function patchEverywhere(keys, mapRow, { skipDerived = false, only = null
     if (patch) patches.set(container.store, { ...patches.get(container.store), ...patch });
   }
   for (const [store, patch] of patches) store.setState(patch);
+}
+
+/// A loader read these rows' flags from somewhere that is right about them (the
+/// header cache after the daemon synced another device's change, the list a
+/// reload just committed). Lay those flags over every container's copy of each
+/// row: the list took them and the reader, the open thread, the body cache and a
+/// search hit did not. Rows match by message key, never by bare uid. Returns
+/// whether any container changed, so the caller knows to re-derive its lists.
+export function paintFlags(rows) {
+  const mail = mailStore?.getState();
+  const flagsByKey = new Map();
+  for (const row of rows) {
+    const key = row && emailScopeKey(row, mail);
+    if (key !== null && !flagsByKey.has(key)) flagsByKey.set(key, row.flags || []);
+  }
+  let changed = false;
+  patchEverywhere([...flagsByKey.keys()], (row, key) => {
+    const flags = flagsByKey.get(key);
+    const was = row.flags || [];
+    if (flags.length === was.length && flags.every(f => was.includes(f))) return row;
+    changed = true;
+    return { ...row, flags };
+  }, { skipDerived: true });
+  return changed;
 }

@@ -44,11 +44,13 @@ const log = (...args) => {
  * spend real time on ops that will never land.
  *
  * The keep-on-failure rule is applied to every op kind here, deliberately —
- * a replay cannot tell which live path wrote an entry. The live paths differ:
- * only delete keeps its row evicted and its entry queued when the server
- * refuses (messageMutations). A refused move or flag still restores the row
- * and clears its entry at the call site, so this only ever sees theirs when a
- * session died before the round trip.
+ * a replay cannot tell which live path wrote an entry. The live paths agree
+ * with it (messageMutations): a refused delete keeps its row evicted and its
+ * entry queued; a refused flag (a message opened, a hand mark, a star) leaves
+ * the row as painted and its entry queued; a refused move throws with its
+ * entry queued, the rows never having left the list. So a replay sees an
+ * entry both from a session that died before the round trip and from a live
+ * write the server refused.
  */
 export async function replayOps({ reason = 'launch' } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');

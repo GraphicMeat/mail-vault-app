@@ -125,6 +125,8 @@ function primeStore(flags = []) {
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
     activeMailbox: 'INBOX',
+    unifiedInbox: false,
+    mailboxScope: null,
     viewMode: 'all',
     emails,
     sentEmails: [],
@@ -583,6 +585,45 @@ describe('markEmailReadStatus', () => {
     expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
     // …and the Sent copy the toggle was pressed in stays open.
     expect(useMailStore.getState().selectedEmail?.messageId).toBe('s@mock');
+  });
+
+  // A bare uid names a message only inside one folder. With nothing open to say
+  // which, the folder on screen owns the number: a merged Sent copy that shares
+  // it is not the message the toggle was pressed for.
+  it('with nothing open, marks the view\'s message, not a merged Sent copy sharing the uid', async () => {
+    primeStore(['\\Seen']);
+    useMailStore.setState({
+      emails: [],
+      sentEmails: [{
+        uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'],
+        from: { address: ACCOUNT.email }, date: '2026-08-01T11:00:00Z',
+        _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+      }],
+    });
+
+    await useMailStore.getState().markEmailReadStatus(1, false);
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'remove', 'INBOX');
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalledWith(expect.anything(), 1, expect.anything(), expect.anything(), 'Sent');
+    expect(useMailStore.getState().sentEmails[0].flags).toContain('\\Seen');
+  });
+
+  it('in a view spanning accounts, a bare uid with nothing open names no message: nothing is written', async () => {
+    const B = { id: 'acct2', email: 'b@mock.test' };
+    const rowOf = (a) => ({
+      uid: 1, messageId: `${a.id}@mock`, subject: 'General', flags: ['\\Seen'],
+      from: { address: 'them@mock.test' }, date: '2026-08-01T10:00:00Z', _accountId: a.id, _mailbox: 'INBOX',
+    });
+    primeStore(['\\Seen']);
+    useMailStore.setState({
+      accounts: [ACCOUNT, B], activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX',
+      emails: [rowOf(ACCOUNT), rowOf(B)], selectedEmail: null, selectedEmailId: null,
+    });
+
+    await useMailStore.getState().markEmailReadStatus(1, false);
+
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(useMailStore.getState().emails.map(e => e.flags)).toEqual([['\\Seen'], ['\\Seen']]);
   });
 });
 

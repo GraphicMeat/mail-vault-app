@@ -1675,9 +1675,10 @@ function _flagRow(row, map) {
 // — and only two of ours map onto anything Graph understands: isRead and its
 // own flag, which is our star. \Answered and keywords have no equivalent, so
 // they are dropped with a line rather than sent as something else.
-export async function _setFlagOnServer(account, accountId, mailbox, uid, flags, action) {
+export async function _setFlagOnServer(account, accountId, mailbox, uid, flags, action, row = null) {
   if (isGraphAccount(account)) {
-    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { token: account.oauth2AccessToken });
+    // The row's own `_graphId` first (cacheManager's ladder), then the map.
+    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row, token: account.oauth2AccessToken });
     if (!graphId) {
       console.warn('[setFlagOnServer] No Graph message ID for UID', uid);
       return;
@@ -1841,10 +1842,14 @@ export async function markEmailReadStatus(uid, read) {
   // the view: the INBOX list merges the account's Sent copies in, and INBOX
   // has its own message under a merged copy's number. The viewer's toggle is
   // the caller, so the open copy (stamped with its folder when it was opened)
-  // is the answer whenever it matches; otherwise the first row carrying the
-  // uid, in-folder rows before merged Sent copies (see _markSelected).
+  // is the answer whenever it matches. Otherwise a bare uid names a message
+  // only inside the folder on screen (sameMessage: a merged Sent copy sharing
+  // the number is another message), and in a view spanning folders it names
+  // none, so nothing is written for it.
   const open = state.selectedEmail?.uid === uid ? state.selectedEmail : null;
-  const row = open || [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])].find(e => e.uid === uid);
+  if (!open && spansMailboxes(state)) return;
+  const inView = { accountId: state.activeAccountId, mailbox: state.activeMailbox, uid };
+  const row = open || resolvePool(state).find(e => sameMessage(e, inView, state));
   const loc = resolveEmailLocation(row, state);
   const accountId = loc?.accountId || state.activeAccountId;
   const rawMailbox = loc?.mailbox || state.activeMailbox;
@@ -1993,11 +1998,13 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     // Same guard deleteEmailFromServer applies before it journals a delete.
     // A message in a vault-only folder is the same case: no server holds the
     // folder, so a journalled flag on it would be replayed and refused forever.
-    if (t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
+    // `serverless`: the caller knows no server holds this one (a row the server
+    // has lost, an Insights note).
+    if (t.serverless || t.emailObj?.source === 'local-only' || t.emailObj?._localStaged
       || isLocalMailbox(state.localFolders, t.accountId, t.mailbox)) continue;
     if (isGraphAccount(t.account)) {
       try {
-        await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action);
+        await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
       } catch (e) {
         // The one branch with no journal behind it — replayOps cannot replay a
         // Graph op — so a failure here is the end of the road and has to say so.
@@ -2010,7 +2017,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
     try {
       const account = await ensureFreshToken(t.account);
-      await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action);
+      await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
       await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
     } catch (e) {
       console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);

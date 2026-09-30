@@ -197,6 +197,23 @@ describe('moveEmails', () => {
     expect(useMailStore.getState().emails).toEqual([]);
   });
 
+  // A message the vault archived is in `emails` (the server's row) and in
+  // `localEmails` (the vault's copy) under one key. The pool the move reads
+  // (resolvePool) ranks the lists server first; the move used to read the vault
+  // copy last-wins. What it takes from the row is the Message-ID an undo finds
+  // the moved copy by and, on Graph, the message id, and only the server's row
+  // is the one the server knows (the vault copy's fields are a mirror of it).
+  it('a key both the server row and the vault copy hold is moved as the server row', async () => {
+    primeStore({ emails: [row(7, { messageId: 'server@mock' })], selected: [7] });
+    useMailStore.setState({
+      localEmails: [row(7, { messageId: 'vault@mock', _accountId: ACCOUNT.id, _mailbox: 'INBOX' })],
+    });
+
+    const result = await useMailStore.getState().moveEmails([7], 'Archive');
+
+    expect(result.moved[0].messageIds).toEqual(['server@mock']);
+  });
+
   it('reports no destination uids when the server sent no COPYUID', async () => {
     mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: null });
     primeStore({ emails: [row(7)] });
