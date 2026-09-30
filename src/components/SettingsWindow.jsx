@@ -48,9 +48,17 @@ export function SettingsWindow() {
     let unsubscribeMail;
     let suppressRelay = false;
     let ready = false;
+    let scopeForwarded = false;
     const boot = async () => {
       unlistenOwner = await listen('settings-window-owner-change', event => {
-        if (disposed || !ready || event.payload?.token !== token) return;
+        if (disposed || event.payload?.token !== token) return;
+        // Taken before the payload settles: a folder switch right after
+        // detaching must not be lost, nor overwritten by the payload's older one.
+        if (event.payload.quickActionScope) {
+          scopeForwarded = true;
+          pinQuickActionScope(event.payload.quickActionScope);
+        }
+        if (!ready) return;
         suppressRelay = true;
         try {
           if (event.payload.settings) {
@@ -69,6 +77,8 @@ export function SettingsWindow() {
       unlisten = await listen('settings-window-payload', async event => {
         if (disposed || event.payload?.token !== token) return;
         const payload = event.payload;
+        // Quick actions edit the view the main window shows, not this window's INBOX.
+        if (payload.quickActionScope && !scopeForwarded) pinQuickActionScope(payload.quickActionScope);
         await Promise.all([hydrated(useSettingsStore), hydrated(useThemeStore)]);
         if (disposed) return;
         useMailStore.setState({ accounts: payload.accounts, activeAccountId: payload.activeAccountId, mailboxes: payload.mailboxes || [] });
@@ -78,8 +88,6 @@ export function SettingsWindow() {
         useSettingsStore.setState(payload.settings);
         // The main window renders the mail, so it holds the remote-image count.
         if (payload.remoteImages) useNetActivityStore.setState({ remoteImages: payload.remoteImages });
-        // Quick actions edit the view the main window shows, not this window's INBOX.
-        if (payload.quickActionScope) pinQuickActionScope(payload.quickActionScope);
         useThemeStore.setState(payload.theme);
         useThemeStore.getState().initTheme();
         await setLocale(payload.settings.language || 'en');

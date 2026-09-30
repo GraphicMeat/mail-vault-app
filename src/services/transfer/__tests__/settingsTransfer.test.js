@@ -61,6 +61,16 @@ describe('collectSettings', () => {
 });
 
 describe('applySettings', () => {
+  // A file from a build before settings v15 holds a view's quick actions as
+  // whole copies of All views; they arrive as what the view changes.
+  it('imports per-view quick actions as what each view sets differently', async () => {
+    const reader = { mode: 'inline', entries: [{ id: 'reply', action: 'reply' }], favoriteId: 'reply', palette: 'semantic', radialPagination: false, radialLayout: 'flat' };
+    const quickActions = { defaults: { reader }, overrides: { view: { reader: { ...reader, mode: 'radial' } } } };
+    await applySettings({ appSettings: { quickActions } }, {}, { applyGlobal: true });
+    expect(h.settings.quickActions.overrides).toEqual({ view: { reader: { mode: 'radial' } } });
+    expect(h.settings.quickActions.defaults).toEqual({ reader });
+  });
+
   const snapshot = {
     accountSettings: {
       signatures: { X: { html: 'sig X' }, D: { html: 'dup sig' } },

@@ -120,10 +120,6 @@ export const DEFAULT_QUICK_ACTIONS = {
 
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const nonEmptyString = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 512;
-const cloneSurface = value => ({
-  ...value,
-  entries: (value.entries || []).map(item => ({ ...item, ...(item.params ? { params: { ...item.params } } : {}) })),
-});
 const normalizeColor = value => {
   if (typeof value !== 'string') return undefined;
   const color = value.trim();
@@ -158,17 +154,24 @@ function normalizeEntry(value) {
   };
 }
 
-function normalizeSurface(value, fallback) {
-  if (!object(value)) return cloneSurface(fallback);
-  const hasEntries = Array.isArray(value.entries);
-  const entries = hasEntries ? value.entries.map(normalizeEntry).filter(Boolean) : cloneSurface(fallback).entries;
+function normalizeEntries(list) {
   const unique = [];
   const seen = new Set();
-  for (const item of entries) {
+  for (const item of list.map(normalizeEntry).filter(Boolean)) {
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     unique.push(item);
   }
+  return unique;
+}
+const SELECTION_DISPLAYS = ['icon-label', 'icon-only'];
+const clampSelectionLimit = value => Math.max(1, Math.min(6, value));
+
+// A missing surface or list takes the fallback's, normalized like a saved one
+// so that normalizing twice changes nothing.
+function normalizeSurface(input, fallback) {
+  const value = object(input) ? input : {};
+  const unique = normalizeEntries(Array.isArray(value.entries) ? value.entries : fallback.entries || []);
   const requestedFavorite = nonEmptyString(value.favoriteId) ? value.favoriteId.trim() : fallback.favoriteId;
   const safeFallback = unique.find(item => !['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(item.action))?.id;
   const favoriteId = unique.some(item => item.id === requestedFavorite)
@@ -184,11 +187,73 @@ function normalizeSurface(value, fallback) {
     radialPagination: typeof value.radialPagination === 'boolean' ? value.radialPagination : !!fallback.radialPagination,
     radialLayout: RADIAL_LAYOUTS.includes(value.radialLayout) ? value.radialLayout : fallback.radialLayout || 'flat',
     ...(fallback.selectionDisplay ? {
-      selectionDisplay: ['icon-label', 'icon-only'].includes(value.selectionDisplay) ? value.selectionDisplay : fallback.selectionDisplay,
+      selectionDisplay: SELECTION_DISPLAYS.includes(value.selectionDisplay) ? value.selectionDisplay : fallback.selectionDisplay,
       selectionActionLimit: Number.isInteger(value.selectionActionLimit)
-        ? Math.max(1, Math.min(6, value.selectionActionLimit)) : fallback.selectionActionLimit,
+        ? clampSelectionLimit(value.selectionActionLimit) : fallback.selectionActionLimit,
     } : {}),
   };
+}
+
+// The fields a view may set for itself. A view's override holds only those it
+// sets; the rest resolve from All views, so an All-views edit reaches every
+// view that does not set that field. `entries` is one field: a view's own list
+// replaces the All-views list whole, never entry by entry.
+const OVERRIDE_FIELDS = [
+  'mode', 'entries', 'favoriteId', 'palette', 'radialPagination', 'radialLayout', 'selectionDisplay', 'selectionActionLimit',
+];
+
+// A view's own fields, each checked as normalizeSurface checks it. An invalid
+// one is dropped, so the view inherits it, rather than replaced by the
+// default: a default written here would pin it against later All-views edits.
+// Nothing is compared with All views, so a field the view set stays set even
+// when All views later comes to hold the same value.
+function normalizeOverrideSurface(value, surface) {
+  if (!object(value)) return null;
+  const selection = !!DEFAULT_QUICK_ACTIONS.defaults[surface].selectionDisplay;
+  const own = {
+    ...(QUICK_ACTION_MODES.includes(value.mode) ? { mode: value.mode } : {}),
+    ...(Array.isArray(value.entries) ? { entries: normalizeEntries(value.entries) } : {}),
+    ...(nonEmptyString(value.favoriteId) ? { favoriteId: value.favoriteId.trim() } : {}),
+    ...(QUICK_ACTION_PALETTES.includes(value.palette) ? { palette: value.palette } : {}),
+    ...(typeof value.radialPagination === 'boolean' ? { radialPagination: value.radialPagination } : {}),
+    ...(RADIAL_LAYOUTS.includes(value.radialLayout) ? { radialLayout: value.radialLayout } : {}),
+    ...(selection && SELECTION_DISPLAYS.includes(value.selectionDisplay) ? { selectionDisplay: value.selectionDisplay } : {}),
+    ...(selection && Number.isInteger(value.selectionActionLimit)
+      ? { selectionActionLimit: clampSelectionLimit(value.selectionActionLimit) } : {}),
+  };
+  return Object.keys(own).length ? own : null;
+}
+
+// What a complete, normalized surface sets differently from `base`. A null
+// favorite (none of the entries can be one) is left to resolve again.
+const sameField = (field, a, b) => (field === 'entries' ? JSON.stringify(a) === JSON.stringify(b) : a === b);
+function surfaceDiff(config, base) {
+  return Object.fromEntries(OVERRIDE_FIELDS
+    .filter(field => config[field] != null && !sameField(field, config[field], base[field]))
+    .map(field => [field, config[field]]));
+}
+
+// A surface as a view shows it: All views, then what the view sets itself.
+function resolvedSurface(normalized, key, surface) {
+  const base = normalized.defaults[surface];
+  const own = key && normalized.overrides[key]?.[surface];
+  return own ? normalizeSurface({ ...base, ...own }, base) : base;
+}
+
+// Stores complete surface configs for one view as what each differs from All
+// views. A surface left matching All views loses its override, and a view left
+// with none is gone.
+function writeScopeSurfaces(normalized, key, configs) {
+  const scoped = { ...normalized.overrides[key] };
+  for (const [surface, config] of Object.entries(configs)) {
+    const base = normalized.defaults[surface];
+    const own = surfaceDiff(normalizeSurface(config, base), base);
+    if (Object.keys(own).length) scoped[surface] = own;
+    else delete scoped[surface];
+  }
+  const overrides = { ...normalized.overrides, [key]: scoped };
+  if (!Object.keys(scoped).length) delete overrides[key];
+  return normalizeQuickActions({ ...normalized, overrides });
 }
 
 export function normalizeQuickActions(value) {
@@ -204,15 +269,18 @@ export function normalizeQuickActions(value) {
     if (!key || key.length > 2048 || !object(config)) return;
     const normalized = {};
     for (const surface of QUICK_ACTION_SURFACES) {
-      if (surface in config) normalized[surface] = normalizeSurface(config[surface], defaults[surface]);
+      const own = normalizeOverrideSurface(config[surface], surface);
+      if (own) normalized[surface] = own;
     }
     if (Object.keys(normalized).length) overrides[key] = normalized;
   });
   const linksInput = object(input.styleLinks) ? input.styleLinks : {};
   const linkedOverrides = {};
   const candidateLinks = object(linksInput.overrides) ? linksInput.overrides : {};
+  // A view linked while all its style matches All views has no override, and
+  // stays linked. An unlink is only worth keeping next to an override.
   Object.entries(candidateLinks).slice(-100).forEach(([key, linked]) => {
-    if (key && key.length <= 2048 && key in overrides && typeof linked === 'boolean') linkedOverrides[key] = linked;
+    if (key && key.length <= 2048 && typeof linked === 'boolean' && (linked || key in overrides)) linkedOverrides[key] = linked;
   });
   return {
     defaults,
@@ -251,21 +319,81 @@ export function currentQuickActionScope(state, settings = {}) {
   };
 }
 
+// `inherited`: the view sets nothing of this surface itself.
 export function resolveQuickActions(value, surface, scope = null) {
   const normalized = normalizeQuickActions(value);
+  if (!QUICK_ACTION_SURFACES.includes(surface)) return { config: DEFAULT_QUICK_ACTIONS.defaults.row, inherited: true };
   const key = quickActionScopeKey(scope);
-  const scoped = key && normalized.overrides[key]?.[surface];
-  return { config: scoped || normalized.defaults[surface] || DEFAULT_QUICK_ACTIONS.defaults.row, inherited: !scoped };
+  return { config: resolvedSurface(normalized, key, surface), inherited: !(key && normalized.overrides[key]?.[surface]) };
 }
 
+// `config` is the whole surface as it should show; at a view, only what it
+// sets differently from All views is stored.
 export function setQuickActionSurface(value, surface, scope, config) {
   const normalized = normalizeQuickActions(value);
   if (!QUICK_ACTION_SURFACES.includes(surface)) return normalized;
   const key = quickActionScopeKey(scope);
+  if (key) return writeScopeSurfaces(normalized, key, { [surface]: config });
   const nextConfig = normalizeSurface(config, normalized.defaults[surface]);
-  if (!key) return normalizeQuickActions({ ...normalized, defaults: { ...normalized.defaults, [surface]: nextConfig } });
-  const overrides = { ...normalized.overrides, [key]: { ...normalized.overrides[key], [surface]: nextConfig } };
-  return normalizeQuickActions({ ...normalized, overrides });
+  return normalizeQuickActions({ ...normalized, defaults: { ...normalized.defaults, [surface]: nextConfig } });
+}
+
+/// Stores several surfaces of one view (`scope`, never All views) at once, as
+/// setQuickActionSurface stores one. Surfaces not named keep what they had.
+export function setQuickActionScopeSurfaces(value, scope, configs) {
+  const normalized = normalizeQuickActions(value);
+  const key = quickActionScopeKey(scope);
+  if (!key) return normalized;
+  const known = Object.fromEntries(Object.entries(configs || {}).filter(([surface]) => QUICK_ACTION_SURFACES.includes(surface)));
+  return writeScopeSurfaces(normalized, key, known);
+}
+
+/// Applies `fn(surface, config, { scopeKey })` to every surface that holds a
+/// list: each All-views surface (scopeKey null) and each view surface that
+/// sets its own `entries`. A view surface without them inherits the All-views
+/// list, so there is nothing of its own to change. Works on raw persisted
+/// settings as well as normalized ones; every transform of saved lists (a new
+/// action appended, a tag repointed) goes through here so no view is missed.
+export function mapQuickActionSurfaces(value, fn) {
+  if (!object(value)) return value;
+  const mapGroup = (group, scopeKey) => Object.fromEntries(Object.entries(group).map(([surface, config]) => [
+    surface,
+    QUICK_ACTION_SURFACES.includes(surface) && object(config) && (scopeKey === null || Array.isArray(config.entries))
+      ? fn(surface, config, { scopeKey })
+      : config,
+  ]));
+  return {
+    ...value,
+    ...(object(value.defaults) ? { defaults: mapGroup(value.defaults, null) } : {}),
+    ...(object(value.overrides) ? {
+      overrides: Object.fromEntries(Object.entries(value.overrides).map(([key, scoped]) => [
+        key, object(scoped) ? mapGroup(scoped, key) : scoped,
+      ])),
+    } : {}),
+  };
+}
+
+/// Rewrites every view override as what it sets differently from All views.
+/// Overrides saved before settings v15 were whole copies of each surface, so
+/// nothing told a field the view chose from one copied from All views, and
+/// every later All-views edit stopped at that view. Resolving then diffing is
+/// also a no-op on an override that is already sparse, except for a field
+/// that happens to equal All views now.
+export function quickActionOverridesAsDiffs(value) {
+  if (!object(value) || !object(value.overrides)) return value;
+  const { defaults } = normalizeQuickActions({ defaults: value.defaults });
+  const overrides = {};
+  for (const [key, scoped] of Object.entries(value.overrides)) {
+    if (!object(scoped)) continue;
+    const own = {};
+    for (const surface of QUICK_ACTION_SURFACES) {
+      if (!(surface in scoped)) continue;
+      const diff = surfaceDiff(normalizeSurface(scoped[surface], defaults[surface]), defaults[surface]);
+      if (Object.keys(diff).length) own[surface] = diff;
+    }
+    if (Object.keys(own).length) overrides[key] = own;
+  }
+  return { ...value, overrides };
 }
 
 const STYLE_FIELDS = ['mode', 'palette', 'radialPagination', 'radialLayout'];
@@ -284,9 +412,7 @@ export function setQuickActionStyleLink(value, scope, linked, sourceSurface = 'r
   const normalized = normalizeQuickActions(value);
   if (!QUICK_ACTION_SURFACES.includes(sourceSurface)) return normalized;
   const key = quickActionScopeKey(scope);
-  const source = key && normalized.overrides[key]?.[sourceSurface]
-    ? normalized.overrides[key][sourceSurface]
-    : normalized.defaults[sourceSurface];
+  const source = resolvedSurface(normalized, key, sourceSurface);
   const styleLinks = {
     ...normalized.styleLinks,
     ...(key
@@ -303,27 +429,16 @@ export function setQuickActionStyleLink(value, scope, linked, sourceSurface = 'r
       ])),
     });
   }
-  const scoped = normalized.overrides[key] || {};
-  return normalizeQuickActions({
-    ...normalized,
-    styleLinks,
-    overrides: {
-      ...normalized.overrides,
-      [key]: Object.fromEntries(QUICK_ACTION_SURFACES.map(surface => [
-        surface,
-        copyStyle(scoped[surface] || normalized.defaults[surface], source),
-      ])),
-    },
-  });
+  return writeScopeSurfaces({ ...normalized, styleLinks }, key, Object.fromEntries(QUICK_ACTION_SURFACES.map(surface => [
+    surface, copyStyle(resolvedSurface(normalized, key, surface), source),
+  ])));
 }
 
 export function setQuickActionStyle(value, surface, scope, updates) {
   const normalized = normalizeQuickActions(value);
   if (!QUICK_ACTION_SURFACES.includes(surface)) return normalized;
   const key = quickActionScopeKey(scope);
-  const current = key && normalized.overrides[key]?.[surface]
-    ? normalized.overrides[key][surface]
-    : normalized.defaults[surface];
+  const current = resolvedSurface(normalized, key, surface);
   const source = normalizeSurface({ ...current, ...updates }, normalized.defaults[surface]);
   if (!isQuickActionStyleLinked(normalized, scope)) {
     return setQuickActionSurface(normalized, surface, scope, source);
@@ -336,22 +451,17 @@ export function setQuickActionStyle(value, surface, scope, updates) {
       ])),
     });
   }
-  const scoped = normalized.overrides[key] || {};
-  return normalizeQuickActions({
-    ...normalized,
-    overrides: {
-      ...normalized.overrides,
-      [key]: Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [
-        name, copyStyle(scoped[name] || normalized.defaults[name], source),
-      ])),
-    },
-  });
+  return writeScopeSurfaces(normalized, key, Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [
+    name, copyStyle(resolvedSurface(normalized, key, name), source),
+  ])));
 }
 
 export function resetQuickActionScope(value, scope, surface) {
   const normalized = normalizeQuickActions(value);
   const key = quickActionScopeKey(scope);
-  if (!key || !normalized.overrides[key]) return normalized;
+  // A linked view may have no override at all (its style matched All views),
+  // and resetting it still unlinks it.
+  if (!key || !(normalized.overrides[key] || key in normalized.styleLinks.overrides)) return normalized;
   const scoped = { ...normalized.overrides[key] };
   if (surface) delete scoped[surface];
   else for (const name of QUICK_ACTION_SURFACES) delete scoped[name];
@@ -370,7 +480,7 @@ export function resetQuickActionScope(value, scope, surface) {
     delete remainingLinks[key];
     normalized.styleLinks = { ...normalized.styleLinks, overrides: remainingLinks };
   }
-  return normalized;
+  return normalizeQuickActions(normalized);
 }
 
 function actionLocation(email, state) {

@@ -71,7 +71,7 @@ import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAfterSettingsClose, useSettingsWindow } from './hooks/useSettingsWindow';
-import { currentQuickActionScopeSnapshot } from './hooks/useQuickActionConfiguration';
+import { currentQuickActionScopeSnapshot, watchQuickActionScope } from './hooks/useQuickActionConfiguration';
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
@@ -959,7 +959,17 @@ function App() {
     const stopRemoteImages = useNetActivityStore.subscribe((state, previous) => {
       if (state.remoteImages !== previous.remoteImages) forward({ remoteImages: state.remoteImages });
     });
-    return () => { disposed = true; stops.forEach(stop => stop()); stopSettings(); stopTheme(); stopMail(); stopRemoteImages(); };
+    // Quick actions' "Current view" there is the view shown here, so a move to
+    // another folder follows. Not through forward(): its mute covers settings
+    // relayed from that window, and a list mode chosen there changes the scope.
+    const stopScope = watchQuickActionScope(quickActionScope => {
+      const current = settingsAuxRef.current;
+      if (!current?.label) return;
+      void emitTo(current.label, 'settings-window-owner-change', { token: current.token, quickActionScope }).catch(() => {});
+    });
+    return () => {
+      disposed = true; stops.forEach(stop => stop()); stopSettings(); stopTheme(); stopMail(); stopRemoteImages(); stopScope();
+    };
   }, [closeSettings, handleReportBug]);
 
   const handleReferFriend = useCallback(() => {

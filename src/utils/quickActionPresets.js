@@ -1,5 +1,6 @@
 import {
   DEFAULT_QUICK_ACTIONS, normalizeQuickActions, QUICK_ACTION_SURFACES, quickActionScopeKey, resolveQuickActions,
+  setQuickActionScopeSurfaces,
 } from './quickActions';
 
 // Starting sets for people coming from another mail app: what that app offers
@@ -78,17 +79,21 @@ export const QUICK_ACTION_PRESETS = [
 
 // Every surface of the scope (`null` for All views) set to the preset, in one
 // write, with that scope's "style across sections" link off: a preset sets
-// each surface's layout itself. An unknown id changes nothing.
+// each surface's layout itself. A view stores only what the preset changes
+// from All views. An unknown id changes nothing.
 export function applyQuickActionPreset(value, scope, presetId) {
   const normalized = normalizeQuickActions(value);
   const preset = QUICK_ACTION_PRESETS.find(item => item.id === presetId);
   if (!preset) return normalized;
   const key = quickActionScopeKey(scope);
-  return normalizeQuickActions(key ? {
-    ...normalized,
-    overrides: { ...normalized.overrides, [key]: preset.surfaces },
-    styleLinks: { ...normalized.styleLinks, overrides: { ...normalized.styleLinks.overrides, [key]: false } },
-  } : {
+  if (key) {
+    const written = setQuickActionScopeSurfaces(normalized, scope, preset.surfaces);
+    return normalizeQuickActions({
+      ...written,
+      styleLinks: { ...written.styleLinks, overrides: { ...written.styleLinks.overrides, [key]: false } },
+    });
+  }
+  return normalizeQuickActions({
     ...normalized,
     defaults: preset.surfaces,
     styleLinks: { ...normalized.styleLinks, global: false },
@@ -107,11 +112,7 @@ const SIGNATURES = QUICK_ACTION_PRESETS.map(({ id, surfaces }) => {
 
 /** The id of the preset the scope shows exactly, or null for a custom set. */
 export function activeQuickActionPreset(value, scope = null) {
-  // Normalized like each preset: a surface never saved resolves to the raw
-  // default, whose move entry lacks the `params: {}` a saved one carries.
-  const { defaults } = normalizeQuickActions({
-    defaults: Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [name, resolveQuickActions(value, name, scope).config])),
-  });
-  const current = signature(name => defaults[name]);
+  // Resolved surfaces come normalized, like each preset's signature.
+  const current = signature(name => resolveQuickActions(value, name, scope).config);
   return SIGNATURES.find(([, preset]) => preset === current)?.[0] ?? null;
 }

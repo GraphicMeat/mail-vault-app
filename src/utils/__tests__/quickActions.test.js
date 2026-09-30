@@ -12,8 +12,10 @@ import {
   resolveQuickActionSelectionTarget,
   resolveQuickActions,
   isQuickActionStyleLinked,
+  mapQuickActionSurfaces,
   resetQuickActionScope,
   setQuickActionStyle,
+  setQuickActionSurface,
   setQuickActionStyleLink,
   QUICK_ACTION_SURFACES,
   QUICK_ACTION_SURFACE_ACTIONS,
@@ -342,7 +344,16 @@ describe('quick action presets', () => {
     before = setQuickActionStyle(before, 'row', OTHER, { mode: 'menu' });
     const after = applyQuickActionPreset(before, SCOPE, 'thunderbird');
     const key = quickActionScopeKey(SCOPE);
-    expect(after.overrides[key]).toEqual(stored('thunderbird'));
+    for (const surface of QUICK_ACTION_SURFACES) {
+      expect(resolveQuickActions(after, surface, SCOPE).config, surface).toEqual(stored('thunderbird')[surface]);
+    }
+    // Only what the set changes from All views: the favorites, paging and
+    // wheel layout match and stay inherited.
+    expect(after.overrides[key]).toEqual({
+      row: { mode: 'inline', entries: stored('thunderbird').row.entries, palette: 'neutral' },
+      selection: { entries: stored('thunderbird').selection.entries, palette: 'neutral', selectionActionLimit: 4 },
+      reader: { entries: stored('thunderbird').reader.entries, palette: 'neutral' },
+    });
     expect(after.overrides[quickActionScopeKey(OTHER)]).toEqual(before.overrides[quickActionScopeKey(OTHER)]);
     expect(after.defaults).toEqual(before.defaults);
     expect(after.styleLinks.overrides[key]).toBe(false);
@@ -401,5 +412,127 @@ describe('quick action presets', () => {
       overrides: { [quickActionScopeKey(SCOPE)]: { row: preset('gmail').surfaces.row } },
     });
     expect(activeQuickActionPreset(rowOnly, SCOPE)).toBe('gmail');
+  });
+});
+
+// A view stores only what it sets itself; everything else comes from All
+// views, so an All-views edit reaches every view that does not set that field.
+describe('per-view overrides are sparse', () => {
+  const SCOPE = { kind: 'mailbox', accountId: 'a', mailbox: 'INBOX' };
+  const key = quickActionScopeKey(SCOPE);
+  const resolved = (value, surface) => resolveQuickActions(value, surface, SCOPE).config;
+
+  it('writes only the field that differs from All views', () => {
+    const next = setQuickActionStyle(normalizeQuickActions({}), 'reader', SCOPE, { mode: 'radial' });
+    expect(next.overrides).toEqual({ [key]: { reader: { mode: 'radial' } } });
+    expect(resolved(next, 'reader')).toEqual({ ...next.defaults.reader, mode: 'radial' });
+    expect(resolveQuickActions(next, 'reader', SCOPE).inherited).toBe(false);
+    expect(resolveQuickActions(next, 'row', SCOPE).inherited).toBe(true);
+  });
+
+  it('lets an All-views edit reach a view that overrides a different field', () => {
+    let next = setQuickActionStyle(normalizeQuickActions({}), 'reader', SCOPE, { mode: 'radial' });
+    next = setQuickActionStyle(next, 'reader', null, { palette: 'neutral' });
+    expect(resolved(next, 'reader')).toMatchObject({ mode: 'radial', palette: 'neutral' });
+    const entries = [{ id: 'reply', action: 'reply' }];
+    next = setQuickActionSurface(next, 'reader', null, { ...next.defaults.reader, entries });
+    expect(resolved(next, 'reader').entries).toEqual(entries);
+    // The view's own field stays its own.
+    next = setQuickActionStyle(next, 'reader', null, { mode: 'menu' });
+    expect(resolved(next, 'reader').mode).toBe('radial');
+  });
+
+  it('keeps a view\'s own action list whole when All views changes its list', () => {
+    const own = [{ id: 'delete', action: 'delete' }];
+    let next = setQuickActionSurface(normalizeQuickActions({}), 'row', SCOPE, { ...resolved(normalizeQuickActions({}), 'row'), entries: own });
+    // Its favorite falls back for want of Archive; nothing to pin for it.
+    expect(next.overrides[key]).toEqual({ row: { entries: own } });
+    next = setQuickActionSurface(next, 'row', null, { ...next.defaults.row, entries: [{ id: 'archive', action: 'archive' }] });
+    expect(resolved(next, 'row').entries).toEqual(own);
+  });
+
+  it('drops a field, then the surface, then the scope once they match All views again', () => {
+    let next = setQuickActionStyle(normalizeQuickActions({}), 'reader', SCOPE, { mode: 'radial', palette: 'neutral' });
+    expect(next.overrides[key]).toEqual({ reader: { mode: 'radial', palette: 'neutral' } });
+    next = setQuickActionStyle(next, 'reader', SCOPE, { mode: 'inline' });
+    expect(next.overrides[key]).toEqual({ reader: { palette: 'neutral' } });
+    next = setQuickActionStyle(next, 'reader', SCOPE, { palette: 'semantic' });
+    expect(next.overrides).toEqual({});
+    expect(resolveQuickActions(next, 'reader', SCOPE).inherited).toBe(true);
+    // Saving the view as it already resolves writes nothing.
+    const fresh = normalizeQuickActions({});
+    expect(setQuickActionSurface(fresh, 'row', SCOPE, resolved(fresh, 'row')).overrides).toEqual({});
+  });
+
+  it('normalizes a view\'s own fields without filling in or diffing against All views, idempotently', () => {
+    const other = quickActionScopeKey({ kind: 'mailbox', accountId: 'b', mailbox: 'INBOX' });
+    const once = normalizeQuickActions({ overrides: {
+      [key]: {
+        // `inline` equals All views and is kept: the view set it itself.
+        reader: { mode: 'inline', palette: 'rainbow', selectionActionLimit: 2, entries: [{ action: 'reply' }, { action: 'runShell' }] },
+        row: { palette: 'rainbow' },
+        selection: { selectionActionLimit: 99, selectionDisplay: 'icon-only', favoriteId: ' archive ' },
+      },
+      [other]: { row: 'nope' },
+    } });
+    expect(once.overrides).toEqual({ [key]: {
+      reader: { mode: 'inline', entries: [{ id: 'reply', action: 'reply' }] },
+      selection: { selectionDisplay: 'icon-only', selectionActionLimit: 6, favoriteId: 'archive' },
+    } });
+    expect(normalizeQuickActions(once)).toEqual(once);
+  });
+
+  it('keeps linked style sparse across the view\'s surfaces', () => {
+    let next = setQuickActionStyleLink(normalizeQuickActions({}), SCOPE, true, 'row');
+    expect(isQuickActionStyleLinked(next, SCOPE)).toBe(true);
+    // The rows' radial layout, carried to the two surfaces that differ.
+    expect(next.overrides[key]).toEqual({ selection: { mode: 'radial' }, reader: { mode: 'radial' } });
+    next = setQuickActionStyle(next, 'reader', SCOPE, { palette: 'neutral' });
+    expect(next.overrides[key]).toEqual({
+      row: { palette: 'neutral' },
+      selection: { mode: 'radial', palette: 'neutral' },
+      reader: { mode: 'radial', palette: 'neutral' },
+    });
+  });
+
+  it('keeps a view linked while it has nothing of its own, until the view is reset', () => {
+    const linked = setQuickActionStyleLink(normalizeQuickActions({ defaults: { row: { mode: 'inline' } } }), SCOPE, true, 'row');
+    expect(linked.overrides).toEqual({});
+    expect(isQuickActionStyleLinked(linked, SCOPE)).toBe(true);
+    expect(isQuickActionStyleLinked(normalizeQuickActions(linked), SCOPE)).toBe(true);
+    expect(isQuickActionStyleLinked(resetQuickActionScope(linked, SCOPE), SCOPE)).toBe(false);
+    expect(isQuickActionStyleLinked(resetQuickActionScope(linked, SCOPE, 'row'), SCOPE)).toBe(false);
+  });
+
+  it('maps every All-views surface and every view surface that sets its own list', () => {
+    const seen = [];
+    const value = {
+      defaults: { row: { entries: [] }, reader: { mode: 'menu' } },
+      overrides: { [key]: { row: { entries: [] }, reader: { mode: 'radial' } } },
+      styleLinks: { global: false, overrides: {} },
+    };
+    const mapped = mapQuickActionSurfaces(value, (surface, config, { scopeKey }) => {
+      seen.push([surface, scopeKey]);
+      return { ...config, mapped: true };
+    });
+    expect(seen).toEqual([['row', null], ['reader', null], ['row', key]]);
+    expect(mapped.defaults.reader.mapped).toBe(true);
+    expect(mapped.overrides[key]).toEqual({ row: { entries: [], mapped: true }, reader: { mode: 'radial' } });
+    expect(mapped.styleLinks).toBe(value.styleLinks);
+    expect(mapQuickActionSurfaces(undefined, () => ({}))).toBeUndefined();
+  });
+
+  it('names the preset a view shows through its diff, and applies a preset as a diff', () => {
+    const gmail = applyQuickActionPreset(normalizeQuickActions({}), null, 'gmail');
+    const same = applyQuickActionPreset(gmail, SCOPE, 'gmail');
+    expect(same.overrides).toEqual({});
+    expect(activeQuickActionPreset(same, SCOPE)).toBe('gmail');
+    const outlook = applyQuickActionPreset(gmail, SCOPE, 'outlook');
+    expect(activeQuickActionPreset(outlook, SCOPE)).toBe('outlook');
+    // Both sets are inline and neutral: the view inherits those.
+    for (const surface of QUICK_ACTION_SURFACES) {
+      expect(outlook.overrides[key][surface].mode, surface).toBeUndefined();
+      expect(outlook.overrides[key][surface].palette, surface).toBeUndefined();
+    }
   });
 });

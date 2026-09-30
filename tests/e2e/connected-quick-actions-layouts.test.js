@@ -204,13 +204,14 @@ describe('Quick action layouts', function () {
     expect(opened).toBe(true);
     await waitForLayout('reader', 'inline');
 
-    // The view's real scope key, made by the app: "Customize this view" on
-    // the reader tab, read back, then cleared again.
+    // The view's real scope key, made by the app: a Current-view layout on
+    // the reader tab (a view stores only what differs), read back, then
+    // cleared again.
     await openQuickActions('reader');
     await pick('Scope', 'Current view');
-    await clickSettingsButton('Customize this view');
+    await pick('Layout', 'Menu');
     await browser.waitUntil(async () => Object.keys((await quickActions()).overrides).length === 1,
-      { timeout: 5_000, interval: 100, timeoutMsg: 'Customize this view wrote no override' });
+      { timeout: 5_000, interval: 100, timeoutMsg: 'a Current-view layout wrote no override' });
     [scopeKey] = Object.keys((await quickActions()).overrides);
     await closeSettings();
     await resetQuickActions();
@@ -237,8 +238,11 @@ describe('Quick action layouts', function () {
     await closeSettings();
     await expectLayout('reader', 'inline');
 
+    // Inline is what All views says, so the view keeps no reader override of
+    // its own and Settings opens on All views.
+    expect((await quickActions()).overrides[scopeKey]?.reader).toBeUndefined();
     await openQuickActions('reader');
-    expect(await checkedIn('Scope')).toBe('Current view');
+    expect(await checkedIn('Scope')).toBe('All views');
     expect(await checkedIn('Layout')).toBe('Inline');
   });
 
@@ -272,7 +276,7 @@ describe('Quick action layouts', function () {
     await expectLayout('reader', 'menu');
   });
 
-  it('"Use all-view defaults" returns the view to the All-views layout', async function () {
+  it('"Use All views" returns the view to the All-views layout', async function () {
     await browser.execute(() => window.__SETTINGS_STORE__.getState().setQuickActionStyle('reader', null, { mode: 'menu' }));
     await linkCurrentViewFromRows();
     await closeSettings();
@@ -280,12 +284,12 @@ describe('Quick action layouts', function () {
 
     await openQuickActions('reader');
     expect(await checkedIn('Scope')).toBe('Current view');
-    await clickSettingsButton('Use all-view defaults');
+    await clickSettingsButton('Use All views');
     await browser.waitUntil(async () => !(await quickActions()).overrides[scopeKey]?.reader,
       { timeout: 5_000, interval: 100, timeoutMsg: 'the reader kept its Current-view override' });
-    // Still on this view's scope, now offering to customize it again.
+    // Still on this view's scope, which no longer differs from All views.
     expect(await checkedIn('Scope')).toBe('Current view');
-    expect(await settingsHasButton('Customize this view')).toBe(true);
+    expect(await settingsHasButton('Use All views')).toBe(false);
     await closeSettings();
     await expectLayout('reader', 'menu');
   });

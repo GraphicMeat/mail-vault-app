@@ -100,8 +100,10 @@ export function QuickActionsSettings() {
   const normalized = useMemo(() => normalizeQuickActions(quickActions), [
     quickActions,
   ]);
-  const scopeChoice = scopeChoices[surface] ||
-    (scopeKey && normalized.overrides[scopeKey]?.[surface] ? "current" : "global");
+  // The view sets some of this surface itself, so All views does not fully
+  // reach it: said whichever scope is being edited.
+  const viewDiffers = !!(scopeKey && normalized.overrides[scopeKey]?.[surface]);
+  const scopeChoice = scopeChoices[surface] || (viewDiffers ? "current" : "global");
   const pickScope = (choice) => setScopeChoices((choices) => ({ ...choices, [surface]: choice }));
   const isGlobal = scopeChoice === "global";
   const activeAccount = accounts.find((account) =>
@@ -135,6 +137,11 @@ export function QuickActionsSettings() {
       radialPagination: defaults.radialPagination,
       radialLayout: defaults.radialLayout,
     });
+  };
+  const inheritAllViews = () => {
+    // Pinned: once the override is gone the fallback would jump to All views.
+    if (!isGlobal) pickScope("current");
+    resetScope(scope, surface);
   };
   const setMode = (mode) => persistStyle({ mode });
   const updateEntry = (index, updates) =>
@@ -350,13 +357,12 @@ export function QuickActionsSettings() {
         )}
 
         <div className="quick-actions-scope-status text-xs text-mail-text-muted">
-          {!isGlobal && <>
-            <span role="status">{resolved.inherited ? t("quickActions.scope.inherited") : t("quickActions.scope.current")}</span>
-            {/* Pinned: once the override is gone the fallback would jump to All views. */}
-            <button type="button" onClick={() => { pickScope("current"); resolved.inherited ? persist(config) : resetScope(scope, surface); }}>
-              {resolved.inherited ? t("quickActions.customizeScope") : t("quickActions.inherit")}
-            </button>
+          {/* No "customize" step: an edit on Current view stores what it changes. */}
+          {viewDiffers && <>
+            <span role="status">{t("quickActions.scope.differs")}</span>
+            <button type="button" onClick={inheritAllViews}>{t("quickActions.scope.useGlobal")}</button>
           </>}
+          {!isGlobal && !viewDiffers && <span role="status">{t("quickActions.scope.inherited")}</span>}
           {isGlobal && <button type="button" onClick={resetSurface}>{t("common.resetToDefault")}</button>}
         </div>
 

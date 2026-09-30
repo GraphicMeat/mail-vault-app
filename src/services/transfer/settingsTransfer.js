@@ -4,6 +4,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { FETCH_MODES } from '../../utils/fetchPolicy';
 import { useThemeStore } from '../../stores/themeStore';
 import { flushSafeStorage } from '../../stores/safeStorage';
+import { quickActionOverridesAsDiffs } from '../../utils/quickActions';
 
 // Deliberately NOT transferred:
 // - cleanupRules: destructive automation must never silently arm on a new machine.
@@ -97,6 +98,11 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
         endpointConsented: patch.aiSettings.endpointUrl === current.endpointUrl ? current.endpointConsented : false,
       };
     }
+    // The file carries no settings version, and one written before v15 holds
+    // each view's quick actions as whole copies of All views (see
+    // quickActionOverridesAsDiffs): rewritten as diffs, as the v15 migration
+    // does, or no later All-views edit would reach those views.
+    if (patch.quickActions) patch.quickActions = quickActionOverridesAsDiffs(patch.quickActions);
     const { accounts: _perAccount, ...globals } = snapshot.appSettings.notificationSettings || {};
     notificationSettings = { ...notificationSettings, ...globals };
   }

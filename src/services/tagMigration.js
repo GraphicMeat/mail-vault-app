@@ -4,6 +4,7 @@ import { useTagStore } from '../stores/tagStore';
 import { useViewStore } from '../stores/viewStore';
 import { useFieldStore } from '../stores/fieldStore';
 import { useMailStore } from '../stores/mailStore';
+import { mapQuickActionSurfaces } from '../utils/quickActions';
 
 /// Hand the settings-file labels (`localMailLabels`) to the daemon once.
 ///
@@ -85,24 +86,14 @@ export async function migrateLocalMailLabels() {
 /// A `tag` quick action stores the id of the label it applies. Left alone, a
 /// configured one would point at a label that no longer exists and render as
 /// the generic "Tag" entry. Both the default surfaces and every per-scope
-/// override carry entries.
+/// override that keeps a list of its own carry entries.
 function repointQuickActions(quickActions, tagOfLabel) {
-  if (!quickActions || typeof quickActions !== 'object') return quickActions;
   const mapEntry = entry => {
     if (!entry || entry.action !== 'tag') return entry;
     const tagId = entry.params?.tagId || tagOfLabel[entry.params?.labelId];
     if (!tagId) return entry;
     return { ...entry, id: `tag:${tagId}`, params: { tagId } };
   };
-  const mapSurface = surface =>
-    (Array.isArray(surface?.entries) ? { ...surface, entries: surface.entries.map(mapEntry) } : surface);
-  const mapSurfaces = group =>
-    Object.fromEntries(Object.entries(group || {}).map(([name, surface]) => [name, mapSurface(surface)]));
-  return {
-    ...quickActions,
-    defaults: mapSurfaces(quickActions.defaults),
-    overrides: Object.fromEntries(
-      Object.entries(quickActions.overrides || {}).map(([key, scoped]) => [key, mapSurfaces(scoped)])
-    ),
-  };
+  return mapQuickActionSurfaces(quickActions, (_surface, config) =>
+    (Array.isArray(config.entries) ? { ...config, entries: config.entries.map(mapEntry) } : config));
 }

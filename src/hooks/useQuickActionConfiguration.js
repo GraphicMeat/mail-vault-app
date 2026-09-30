@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -7,11 +7,21 @@ import { currentQuickActionScope, quickActionScopeKey, resolveQuickActions } fro
 
 // The detached Settings window has none of the main window's mail, search or
 // view state, so on its own it resolved every surface for INBOX. It is handed
-// the main window's scope instead and pins it here.
-// ponytail: pinned once at open; forward scope changes from the main window if
-// someone keeps a detached Settings open while moving between views.
+// the main window's scope at open and again whenever that changes (App.jsx,
+// watchQuickActionScope), and pins it here. Components re-render on a new pin:
+// Current-view edits must land on the view the main window shows now.
 let pinnedScope;
-export function pinQuickActionScope(scope) { pinnedScope = scope; }
+const pinListeners = new Set();
+export function pinQuickActionScope(scope) {
+  if (scope !== undefined && pinnedScope !== undefined && quickActionScopeKey(scope) === quickActionScopeKey(pinnedScope)) return;
+  pinnedScope = scope;
+  pinListeners.forEach(listener => listener());
+}
+const subscribePin = listener => {
+  pinListeners.add(listener);
+  return () => pinListeners.delete(listener);
+};
+const readPin = () => pinnedScope;
 
 /// The scope the main window's surfaces resolve right now, read outside React.
 export function currentQuickActionScopeSnapshot() {
@@ -20,6 +30,23 @@ export function currentQuickActionScopeSnapshot() {
     activeMailbox, activeAccountId, viewMode, unifiedInbox, unifiedFolder, mailboxScope,
     isSearchResults: useSearchStore.getState().searchActive,
   }, { emailListView: currentListView() });
+}
+
+/// Calls `onChange(scope)` whenever the main window's scope changes: a move to
+/// another folder, account, search or list mode. It listens to every store the
+/// snapshot reads and compares scope keys, which is cheap next to what a mail
+/// store update costs anyway.
+export function watchQuickActionScope(onChange) {
+  let key = quickActionScopeKey(currentQuickActionScopeSnapshot());
+  const check = () => {
+    const scope = currentQuickActionScopeSnapshot();
+    const next = quickActionScopeKey(scope);
+    if (next === key) return;
+    key = next;
+    onChange(scope);
+  };
+  const stops = [useMailStore, useSearchStore, useViewStore, useSettingsStore].map(store => store.subscribe(check));
+  return () => stops.forEach(stop => stop());
 }
 
 export function useQuickActionConfiguration(surface, scopeOverride = undefined) {
@@ -36,9 +63,10 @@ export function useQuickActionConfiguration(surface, scopeOverride = undefined) 
   const unifiedFolder = useMailStore(state => state.unifiedFolder);
   const mailboxScope = useMailStore(state => state.mailboxScope);
   const searchActive = useSearchStore(state => state.searchActive);
+  const pinned = useSyncExternalStore(subscribePin, readPin);
   const context = { activeMailbox, activeAccountId, viewMode, unifiedInbox, unifiedFolder, mailboxScope, isSearchResults: searchActive };
   const scope = scopeOverride !== undefined ? scopeOverride
-    : pinnedScope !== undefined ? pinnedScope
+    : pinned !== undefined ? pinned
       : currentQuickActionScope(context, { emailListView });
   const key = quickActionScopeKey(scope);
   const resolved = useMemo(() => resolveQuickActions(quickActions, surface, scope), [quickActions, surface, key]);

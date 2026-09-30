@@ -4,6 +4,7 @@
 
 ### Fixed
 - **A message you open from search now stays read.** While a search was still running, opening a result marked it read, and the next batch of results could turn it bold again. The read mark now holds for the rest of the search.
+- **Quick actions changed for All views reach every view.** A view customized in Settings > Appearance > Quick actions with Scope on Current view kept a full copy of every setting, so later changes to All views, and new actions such as Snooze and Unsubscribe, never reached it: one inbox could keep showing a menu in the reader while every other view showed buttons. A view now keeps only what you set differently for it and follows All views for everything else; views customized before are converted on update, keeping their own choices. Settings says when the view you are on differs from All views, with a Use All views button to drop the difference, and a Settings window of its own now follows the folder you move to in the main window.
 
 ## [2.17.1] - 2026-09-30
 

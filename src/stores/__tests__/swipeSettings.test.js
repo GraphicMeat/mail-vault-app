@@ -5,6 +5,7 @@ vi.mock('../safeStorage', () => ({
 }));
 
 const { useSettingsStore, _mergePersistedSettings, migrateSettings } = await import('../settingsStore');
+const { resolveQuickActions, setQuickActionStyle } = await import('../../utils/quickActions');
 
 describe('trackpad swipe settings', () => {
   it('are on by default: left archives, right toggles read', () => {
@@ -94,5 +95,87 @@ describe('v9 -> v10: Unsubscribe joins the saved row list once', () => {
 
   it('is in the row defaults of a new install', () => {
     expect(useSettingsStore.getState().quickActions.defaults.row.entries.some(e => e.action === 'unsubscribe')).toBe(true);
+  });
+});
+
+// Per-view overrides used to be full snapshots of a surface, copied from All
+// views when a view was first customized. New defaults and these migrations
+// only ever reached All views, and so did every later All-views edit.
+describe('quick action migrations reach per-view overrides', () => {
+  const key = JSON.stringify(['mailbox', 'acct-1', 'INBOX', 'list', 'all', null]);
+  const e = (...actions) => actions.map(action => ({ id: action, action }));
+  const style = { palette: 'semantic', radialPagination: false, radialLayout: 'flat' };
+
+  it('v8 -> v9 -> v10 append Snooze and Unsubscribe to a view\'s own lists too', () => {
+    const v8 = {
+      quickActions: {
+        defaults: { row: { entries: e('archive') }, selection: { entries: e('markRead') }, reader: { entries: e('reply') } },
+        overrides: { [key]: {
+          row: { mode: 'menu', entries: e('archive') },
+          selection: { mode: 'menu' },
+          reader: { mode: 'radial', entries: e('reply', 'forward') },
+        } },
+      },
+    };
+    const { quickActions } = migrateSettings(v8, 8);
+    expect(quickActions.defaults.row.entries.map(item => item.action)).toEqual(['archive', 'snooze', 'unsubscribe']);
+    // The view's row list gained both, so it matches All views and is no
+    // longer its own; a surface without a list of its own inherits the new one.
+    expect(quickActions.overrides[key]).toEqual({
+      row: { mode: 'menu' },
+      selection: { mode: 'menu' },
+      reader: { mode: 'radial', entries: e('reply', 'forward') },
+    });
+  });
+
+  // Shaped like the report: one INBOX override holding every surface in full,
+  // the reader radial, the rows saved before Snooze and Unsubscribe existed,
+  // and the selection limit left at 3 while All views says 6.
+  const savedDefaults = {
+    row: { mode: 'inline', entries: e('archive', 'toggleRead', 'reply', 'deleteServer', 'snooze', 'unsubscribe'), favoriteId: 'archive', ...style },
+    selection: { mode: 'inline', entries: e('markRead', 'markUnread', 'archive', 'snooze'), favoriteId: 'archive', ...style, selectionDisplay: 'icon-label', selectionActionLimit: 6 },
+    reader: { mode: 'inline', entries: e('reply', 'replyAll', 'forward', 'archive', 'delete'), favoriteId: 'reply', ...style },
+  };
+  const v14 = () => ({
+    quickActions: {
+      defaults: savedDefaults,
+      overrides: { [key]: {
+        row: { ...savedDefaults.row, entries: e('archive', 'toggleRead', 'reply', 'deleteServer') },
+        selection: { ...savedDefaults.selection, selectionActionLimit: 3 },
+        reader: { ...savedDefaults.reader, mode: 'radial' },
+      } },
+      styleLinks: { global: false, overrides: { [key]: false } },
+    },
+  });
+
+  it('v14 -> v15 keeps only what a view sets differently from All views', () => {
+    const { quickActions } = migrateSettings(v14(), 14);
+    expect(quickActions.defaults).toEqual(savedDefaults);
+    expect(quickActions.overrides).toEqual({ [key]: {
+      row: { entries: e('archive', 'toggleRead', 'reply', 'deleteServer') },
+      selection: { selectionActionLimit: 3 },
+      reader: { mode: 'radial' },
+    } });
+    // Run again, nothing more changes.
+    expect(migrateSettings({ quickActions }, 14).quickActions.overrides).toEqual(quickActions.overrides);
+  });
+
+  it('v15 lets an All-views edit reach the migrated view, except what it sets itself', () => {
+    const scope = { kind: 'mailbox', accountId: 'acct-1', mailbox: 'INBOX' };
+    let { quickActions } = migrateSettings(v14(), 14);
+    quickActions = setQuickActionStyle(quickActions, 'row', null, { mode: 'menu' });
+    quickActions = setQuickActionStyle(quickActions, 'reader', null, { palette: 'neutral' });
+    expect(resolveQuickActions(quickActions, 'row', scope).config.mode).toBe('menu');
+    expect(resolveQuickActions(quickActions, 'reader', scope).config).toMatchObject({ mode: 'radial', palette: 'neutral' });
+    expect(resolveQuickActions(quickActions, 'selection', scope).config.selectionActionLimit).toBe(3);
+  });
+
+  it('v15 removes a view that only ever copied All views', () => {
+    const copy = { quickActions: { defaults: savedDefaults, overrides: { [key]: { ...savedDefaults } } } };
+    expect(migrateSettings(copy, 14).quickActions.overrides).toEqual({});
+  });
+
+  it('v15 leaves settings with no quick actions alone', () => {
+    expect(migrateSettings({ theme: 'dark' }, 14)).toEqual({ theme: 'dark' });
   });
 });

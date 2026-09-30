@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QuickActionsSettings } from '../QuickActionsSettings';
-import { quickActionScopeKey } from '../../../utils/quickActions';
+import { quickActionScopeKey, resolveQuickActions } from '../../../utils/quickActions';
 import { applyQuickActionPreset, QUICK_ACTION_PRESETS } from '../../../utils/quickActionPresets';
 import { pinQuickActionScope } from '../../../hooks/useQuickActionConfiguration';
 import { _resetQuickActionSamples } from '../../../hooks/useQuickActionSamples';
@@ -487,7 +487,8 @@ describe('QuickActionsSettings', () => {
     const [presetId, scope] = state.applyQuickActionPreset.mock.calls.at(-1);
     expect(presetId).toBe('outlook');
     expect(quickActionScopeKey(scope)).toBe(inboxKey);
-    expect(surfaces(state.quickActions.overrides[inboxKey])).toEqual(presetSurfaces('outlook'));
+    expect(surfaces(Object.fromEntries(['row', 'selection', 'reader'].map(name => [name, resolveQuickActions(state.quickActions, name, scope).config]))))
+      .toEqual(presetSurfaces('outlook'));
     expect(state.quickActions.defaults.row.mode).toBe('radial');
     view.rerender(<QuickActionsSettings />);
     expect(presetPressed()).toEqual(['Outlook']);
@@ -524,10 +525,46 @@ describe('QuickActionsSettings', () => {
     state.resetQuickActionScope.mockImplementation(() => { state.quickActions = { defaults: {}, overrides: {} }; });
     const view = render(<QuickActionsSettings />);
     fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Use all-view defaults' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use All views' }));
     view.rerender(<QuickActionsSettings />);
     expect(checked('Current view')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Customize this view' })).toBeTruthy();
+    expect(screen.getByText('Using all-view defaults')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Use All views' })).toBeNull();
+  });
+
+  // The report: the reader of one INBOX showed a menu while every other view
+  // was inline, and nothing in Settings said that this view was different.
+  it('says the view differs from All views, from either scope, and offers to use All views', () => {
+    state.quickActions = { defaults: {}, overrides: readerOverride };
+    const view = render(<QuickActionsSettings />);
+    // The rows follow All views here: nothing to say.
+    expect(screen.queryByText('This view differs from All views')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    expect(checked('Current view')).toBe('true');
+    expect(screen.getByText('This view differs from All views')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: 'All views' }));
+    view.rerender(<QuickActionsSettings />);
+    // Editing All views, the person learns this view will not show all of it.
+    expect(screen.getByText('This view differs from All views')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use All views' }));
+    const [scope, surface] = state.resetQuickActionScope.mock.calls.at(-1);
+    expect(quickActionScopeKey(scope)).toBe(inboxKey);
+    expect(surface).toBe('reader');
+    expect(checked('All views')).toBe('true');
+  });
+
+  it('follows the scope a detached window is handed again after the main window moves', () => {
+    const work = { kind: 'mailbox', accountId: 'acct-1', mailbox: 'Work' };
+    state.quickActions = { defaults: {}, overrides: { [quickActionScopeKey(work)]: readerOverride[inboxKey] } };
+    pinQuickActionScope({ kind: 'mailbox', accountId: 'acct-1', mailbox: 'INBOX' });
+    render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
+    expect(checked('All views')).toBe('true');
+    expect(document.querySelector('.quick-actions-choice-hint').textContent).toContain('INBOX');
+    act(() => pinQuickActionScope(work));
+    expect(document.querySelector('.quick-actions-choice-hint').textContent).toContain('Work');
+    expect(checked('Current view')).toBe('true');
+    expect(checked('Radial')).toBe('true');
   });
 
   it('edits the scope a detached window was handed, not its own INBOX', () => {

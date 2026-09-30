@@ -8,7 +8,7 @@ import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 import { DEFAULT_APP_FONT, normalizeAppFont, normalizeTextScale } from '../utils/appFont';
 import {
-  DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
+  DEFAULT_QUICK_ACTIONS, mapQuickActionSurfaces, normalizeQuickActions, quickActionOverridesAsDiffs,
   resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
 } from '../utils/quickActions';
 import { applyQuickActionPreset } from '../utils/quickActionPresets';
@@ -254,6 +254,9 @@ function normalizeCleanupRule(rule) {
  * v8 → v9 / v9 → v10: Snooze, then Unsubscribe, are appended once to saved
  * quick action lists.
  *
+ * v14 → v15: per-view quick action overrides become what each view sets
+ * differently from All views.
+ *
  * Exported for tests: the disarm is the safety mechanism of the fix, so it
  * needs a test that can call it directly.
  */
@@ -291,33 +294,19 @@ export function migrateSettings(persisted, version) {
     next = { ...next, aiSettings: { ...next.aiSettings, provider: 'appleFm' } };
   }
   // v8 → v9: Snooze is a new row and selection quick action. A saved list
-  // predates it, so it is appended once; removing it afterwards sticks.
-  if (version < 9 && next.quickActions?.defaults) {
-    const withSnooze = (surface) => {
-      const saved = next.quickActions.defaults[surface];
-      if (!Array.isArray(saved?.entries) || saved.entries.some(e => e?.action === 'snooze')) return saved;
-      return { ...saved, entries: [...saved.entries, { id: 'snooze', action: 'snooze' }] };
-    };
-    next = {
-      ...next,
-      quickActions: {
-        ...next.quickActions,
-        defaults: { ...next.quickActions.defaults, row: withSnooze('row'), selection: withSnooze('selection') },
-      },
-    };
+  // predates it, so it is appended once; removing it afterwards sticks. Every
+  // saved list, All views' and each view's own (mapQuickActionSurfaces).
+  const appendOnce = (surfaces, action) => (surface, config) =>
+    !surfaces.includes(surface) || !Array.isArray(config.entries) || config.entries.some(e => e?.action === action)
+      ? config
+      : { ...config, entries: [...config.entries, { id: action, action }] };
+  if (version < 9 && next.quickActions) {
+    next = { ...next, quickActions: mapQuickActionSurfaces(next.quickActions, appendOnce(['row', 'selection'], 'snooze')) };
   }
-  // v9 -> v10: Unsubscribe joins the saved row list the same way, once. It
+  // v9 -> v10: Unsubscribe joins the saved row lists the same way, once. It
   // only renders on a row carrying List-Unsubscribe.
-  if (version < 10 && Array.isArray(next.quickActions?.defaults?.row?.entries)
-    && !next.quickActions.defaults.row.entries.some(e => e?.action === 'unsubscribe')) {
-    const row = next.quickActions.defaults.row;
-    next = {
-      ...next,
-      quickActions: {
-        ...next.quickActions,
-        defaults: { ...next.quickActions.defaults, row: { ...row, entries: [...row.entries, { id: 'unsubscribe', action: 'unsubscribe' }] } },
-      },
-    };
+  if (version < 10 && next.quickActions) {
+    next = { ...next, quickActions: mapQuickActionSurfaces(next.quickActions, appendOnce(['row'], 'unsubscribe')) };
   }
   // v10 -> v11: the search index now stores each message's sender-auth and
   // list headers. Rows an older build indexed lack them until a rebuild, so an
@@ -343,6 +332,12 @@ export function migrateSettings(persisted, version) {
   // the default From. A default From saved before is the one alias the user
   // had, so it joins that account's list (see legacyAliasesPatch).
   if (version < 14) next = { ...next, ...legacyAliasesPatch(next) };
+  // v14 -> v15: a view's quick action override was a whole copy of each
+  // surface it customized, so new defaults, the migrations above (then) and
+  // every later All-views edit stopped at that view. It now keeps only what
+  // it sets differently from All views (see quickActionOverridesAsDiffs); a
+  // list of its own stays its own.
+  if (version < 15 && next.quickActions) next = { ...next, quickActions: quickActionOverridesAsDiffs(next.quickActions) };
   return next;
 }
 
@@ -1670,7 +1665,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 14,
+      version: 15,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

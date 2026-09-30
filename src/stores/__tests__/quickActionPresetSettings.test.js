@@ -6,7 +6,7 @@ vi.mock('../safeStorage', () => ({
 
 const { useSettingsStore } = await import('../settingsStore');
 const { QUICK_ACTION_PRESETS, activeQuickActionPreset } = await import('../../utils/quickActionPresets');
-const { normalizeQuickActions, quickActionScopeKey } = await import('../../utils/quickActions');
+const { normalizeQuickActions, quickActionScopeKey, resolveQuickActions } = await import('../../utils/quickActions');
 
 describe('applyQuickActionPreset (settings store)', () => {
   const surfaces = id => normalizeQuickActions({ defaults: QUICK_ACTION_PRESETS.find(item => item.id === id).surfaces }).defaults;
@@ -22,7 +22,13 @@ describe('applyQuickActionPreset (settings store)', () => {
 
     useSettingsStore.getState().applyQuickActionPreset('outlook', scope);
     const { quickActions } = useSettingsStore.getState();
-    expect(quickActions.overrides[quickActionScopeKey(scope)]).toEqual(surfaces('outlook'));
+    // The view keeps only what Outlook's set changes from Gmail's.
+    const own = quickActions.overrides[quickActionScopeKey(scope)];
+    for (const surface of ['row', 'selection', 'reader']) {
+      expect(resolveQuickActions(quickActions, surface, scope).config, surface).toEqual(surfaces('outlook')[surface]);
+      expect(own[surface].entries, surface).toEqual(surfaces('outlook')[surface].entries);
+      expect(own[surface].palette, surface).toBeUndefined();
+    }
     expect(quickActions.defaults).toEqual(surfaces('gmail'));
     expect(activeQuickActionPreset(quickActions, scope)).toBe('outlook');
   });
