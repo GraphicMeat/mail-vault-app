@@ -22,7 +22,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
 <text x="64" y="372" fill="#4f46df">Keep the old.</text>
 </g>
 <text x="66" y="436" font-size="25" fill="#575b69">Your email. Saved on your computer.</text>
-<text x="66" y="542" font-size="24" font-weight="700" fill="#20212c">Free for macOS &amp; Linux</text>
+<text x="66" y="542" font-size="24" font-weight="700" fill="#20212c">Free for macOS, Windows &amp; Linux</text>
 <text x="66" y="581" font-size="21" fill="#575b69">mailvaultapp.com</text>
 </g>
 <image href="data:image/png;base64,${app.toString('base64')}" x="648" y="122" width="730" height="471" clip-path="url(#app)"/>

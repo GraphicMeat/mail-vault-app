@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/faq/providers.html">
   <meta property="og:title" content="Email Providers — MailVault FAQ">
   <meta property="og:description" content="Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.">
-  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Email Providers — MailVault FAQ">
   <meta name="twitter:description" content="Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.">
-  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,15 +60,15 @@
         "name": "Does MailVault work with Gmail and Outlook?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com accounts are currently affected by a known Microsoft server issue."
+          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API."
         }
       },
       {
         "@type": "Question",
-        "name": "Why can't I connect my Outlook.com account?",
+        "name": "How do I connect my Outlook.com account?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "There is a known Microsoft server-side issue affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with 'User is authenticated but not connected.' Microsoft's IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting. Microsoft 365 Business/Enterprise accounts are not affected. MailVault's OAuth2 implementation is ready and will work once Microsoft resolves the issue."
+          "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter. It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
         }
       },
       {
@@ -208,23 +208,23 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Does MailVault work with Gmail and Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com accounts are currently affected by a <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">known Microsoft server issue</a>.
+              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Why can't I connect my Outlook.com account?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I connect my Outlook.com account?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">There is a <strong>known Microsoft server-side issue</strong> affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with "User is authenticated but not connected." This affects all third-party email clients that use IMAP with OAuth2 — not just MailVault.</p>
-              <p class="mb-4">Microsoft requires OAuth2 for personal accounts. Unfortunately, their IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting to the mailbox.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">What you can do:</p>
+              <p class="mb-4">MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the <strong>Microsoft Graph API</strong>. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter.</p>
+              <p class="mb-4">It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Not available on Graph accounts yet:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Microsoft 365 Business/Enterprise accounts</strong> are not affected — OAuth2 works normally for organizational accounts</li>
-                <li><strong>Monitor the issue</strong> — This is a server-side problem that only Microsoft can fix. The <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A thread</a> tracks the issue</li>
-                <li><strong>Use the Outlook web app</strong> or Microsoft's official apps in the meantime for personal accounts</li>
-                <li><strong>MailVault is ready</strong> — Once Microsoft resolves the issue, MailVault's OAuth2 sign-in will work immediately with no changes needed</li>
+                <li><strong>Snooze</strong></li>
+                <li><strong>Restoring an MBOX file to the server</strong></li>
+                <li><strong>Recover to server</strong> for deleted emails. Recover locally works, for mail already on this computer</li>
+                <li><strong>The Inbox count</strong> that the add-account window reports after the connection test</li>
               </ul>
-              <p>For technical details: MailVault uses the same OAuth2 implementation as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, following Microsoft's official IMAP OAuth2 documentation with PKCE and XOAUTH2 authentication.</p>
+              <p>Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits. That sign-in follows the same approach as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, with PKCE and XOAUTH2 authentication.</p>
             </div>
         </article>
 
