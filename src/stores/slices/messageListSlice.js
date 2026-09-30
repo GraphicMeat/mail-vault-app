@@ -15,12 +15,13 @@ import {
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { sentMailboxPathFor } from '../../utils/sentFolder';
-import { _resolveMailboxPath, rowIdentity, vaultHas, vaultKey } from './unifiedHelpers';
+import { _resolveMailboxPath, vaultHas, vaultKey } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
-import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
+import { rowMailbox } from '../../utils/autoTagInboxFilter';
+import { rowVisibility } from '../../utils/rowVisibility';
 import { useTagStore, requestRowTags } from '../tagStore';
 import { useAutoTagStore } from '../autoTagStore';
-import { useSnoozeStore, localSnoozeKey, localSnoozeKeys } from '../snoozeStore';
+import { useSnoozeStore, localSnoozeKeys } from '../snoozeStore';
 import { recountInbox } from '../unreadCounts';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
@@ -216,7 +217,7 @@ export function deriveDisplayRows({
   deleteTombstones = null,
   // Auto Tags (Phase 4) "hide from Inbox" — both null by default, so a
   // caller that never passes them (most of this file's own tests) gets
-  // exactly today's behavior. See filterHiddenFromInbox.
+  // exactly today's behavior. See isHiddenFromInbox.
   hiddenTagIds = null,
   tagsByRow = null,
   // snoozeStore's localSnoozeKeys: messages a local snooze holds out of the
@@ -272,35 +273,13 @@ export function deriveDisplayRows({
     }
   }
 
-  // Hide messages the server flagged \Deleted but hasn't expunged yet. They
-  // still count in EXISTS, so the list total can read one or two higher than
-  // the rows shown. Archived copies stay visible — the local vault outranks
-  // the server's opinion about a message it hasn't actually removed.
-  result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
-
-  // Auto Tags "hide from Inbox" (Phase 4) — see filterHiddenFromInbox.
-  result = filterHiddenFromInbox(result, { hiddenTagIds, tagsByRow, unifiedInbox, activeMailbox, activeAccountId });
-
-  // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
-  // hydration on account/folder switch must not resurrect them.
-  if (deleteTombstones?.size) {
-    // Placed the way the writers place the row (rowIdentity): by its own
-    // folder, never by the view's. A branch view's activeMailbox is the branch
-    // root, so the view's folder hid the root's uid 34 along with the child
-    // folder's, and never matched a tombstone written inside the branch.
-    result = result.filter(e => {
-      const id = rowIdentity(e, view);
-      return !id || !deleteTombstones.has(`${id.accountId}|${id.mailbox}|${id.uid}`);
-    });
-  }
-
-  // A local snooze moved nothing (the server would not host a Snoozed
-  // folder): the row is kept out of its folder here until it wakes.
-  if (localSnoozes?.size) {
-    const spans = unifiedInbox || activeMailbox === 'UNIFIED';
-    result = result.filter(e => !e.messageId || !localSnoozes.has(localSnoozeKey(
-      e._accountId || activeAccountId, e._mailbox || (spans ? 'INBOX' : activeMailbox), e.messageId)));
-  }
+  // What the list holds back (\Deleted-not-expunged, auto-tag hidden, deleted
+  // and not yet reconciled, locally snoozed) is one rule set, rowVisibility:
+  // the Bulk Operations pool asks the same predicate of the cache.
+  result = result.filter(rowVisibility({
+    activeAccountId, activeMailbox, unifiedInbox, archivedEmailIds,
+    deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes,
+  }));
 
   // Sort by date descending (newest first)
   for (const e of result) {

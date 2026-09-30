@@ -47,6 +47,7 @@ const WINDOW = [
 const CACHED_UIDS = [1, 2, 3, 4, 5];
 const CACHED_ROWS = CACHED_UIDS.map(uid => ({
   uid,
+  messageId: `<m${uid}>`,
   date: `2026-0${uid}-01T10:00:00Z`,
   flags: uid === 3 ? ['\\Seen', '\\Deleted'] : ['\\Seen'],
 }));
@@ -120,7 +121,18 @@ vi.mock('../../stores/settingsStore', () => ({
   hasPremiumAccess: (profile) => !!profile?.premiumAccess,
 }));
 
+// The auto-tag rules, row tags and local snoozes the list hides rows by. The
+// daemon is the only thing behind them: one double answers their calls.
+const mockDaemonCall = vi.fn();
+vi.mock('../../services/daemonClient', () => ({
+  daemonCall: (...args) => mockDaemonCall(...args),
+  DaemonError: class DaemonError extends Error {},
+}));
+
 import { BulkOperationsModal } from '../BulkOperationsModal';
+import { useAutoTagStore } from '../../stores/autoTagStore';
+import { useSnoozeStore } from '../../stores/snoozeStore';
+import { useTagStore } from '../../stores/tagStore';
 
 describe('BulkOperationsModal', () => {
   beforeEach(() => {
@@ -136,6 +148,10 @@ describe('BulkOperationsModal', () => {
     });
     useSearchStoreMock.setState({ searchResults: [] });
     archivedEmailIds.clear();
+    mockDaemonCall.mockReset();
+    useAutoTagStore.setState({ rules: [] });
+    useSnoozeStore.setState({ rows: [] });
+    useTagStore.setState({ byRow: {} });
     backupState.externalBackupLocation = null;
     backupState.billingProfile = null;
   });
@@ -213,6 +229,58 @@ describe('BulkOperationsModal', () => {
 
       expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1, 'acct-1:Sent:4'] });
     });
+  });
+
+  // The pool is read from the cache, which outlives the list's own filtering:
+  // every rule the list hides a row by has to apply to it too, or a bulk run
+  // archives and deletes messages the person cannot see.
+  it('leaves out a message an auto-tag "hide from Inbox" rule keeps off the list', async () => {
+    useAutoTagStore.setState({ rules: [{ id: 'r', tagId: 't-hide', enabled: true, inboxAction: 'hide' }] });
+    mockDaemonCall.mockImplementation(async (method, params) => (
+      method === 'tags.for_messages' ? { tags: params.items.map(i => (i.uid === 4 ? ['t-hide'] : [])) } : undefined
+    ));
+    // The list's own window already leaves the hidden message out.
+    useMessageListStoreMock.setState({ sortedEmails: [WINDOW[0]] });
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
+  });
+
+  it('leaves out a message a local snooze holds out of the folder', async () => {
+    useSnoozeStore.setState({ rows: [{
+      accountId: 'acct-1', fromMailbox: 'INBOX', messageId: '<m1>', snoozedMailbox: '', state: 'snoozed',
+    }] });
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4] });
+  });
+
+  it('a tombstone names the message by its own folder', async () => {
+    tombstones.add('acct-1|INBOX/Sub|4'); // another folder's uid 4
+    try {
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      expect(screen.getByText('3 emails selected')).toBeTruthy();
+    } finally {
+      tombstones.delete('acct-1|INBOX/Sub|4');
+    }
   });
 
   // Backdrop, header X, and Escape all delegate to the `onClose` prop, which

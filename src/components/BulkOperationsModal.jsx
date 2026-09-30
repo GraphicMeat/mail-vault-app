@@ -9,12 +9,18 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
-import { vaultKey } from '../stores/slices/unifiedHelpers';
+import { rowVisibility } from '../utils/rowVisibility';
+import { useAutoTagStore } from '../stores/autoTagStore';
+import { useTagStore } from '../stores/tagStore';
+import { useSnoozeStore, localSnoozeKeys } from '../stores/snoozeStore';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
 import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
 import { selectionKey } from '../stores/slices/unifiedHelpers';
 import { T } from '../i18n/T.jsx';
+
+// Rows whose tags one daemon call answers while the pool is read.
+const TAG_CHUNK = 1000;
 
 const ACTION_STYLES = () => ({
   archive: {
@@ -196,17 +202,36 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
         // bigger mailbox ever makes the modal stall on open.
         const rows = await db.getEmailHeadersByUids(activeAccountId, activeMailbox, listing.uids);
         if (cancelled || !rows.length) return;
-        // The cache outlives the list's own filtering, so re-apply it here:
-        // messages the user deleted (tombstoned, awaiting reconcile) or the
-        // server flagged \Deleted are hidden from the list and must not be
+        // The cache outlives the list's own filtering, so re-apply it here, by
+        // the list's own rule set (rowVisibility): a message the person cannot
+        // see (deleted and awaiting reconcile, \Deleted on the server, kept off
+        // the Inbox by an auto-tag rule, held by a local snooze) must not be
         // silently re-archived or re-deleted by a bulk run.
         const { deleteTombstones, archivedEmailIds: archived } = useMailStore.getState();
-        const mbox = activeMailbox === 'UNIFIED' ? 'INBOX' : activeMailbox;
+        const hiddenTagIds = useAutoTagStore.getState().hiddenTagIds();
+        // Tags load per page of rows, and a row whose tags are not known is
+        // never hidden on a guess: a hide rule needs the whole pool's tags
+        // before it can say what the Inbox holds back.
+        if (hiddenTagIds.size && activeMailbox === 'INBOX') {
+          const location = { accountId: activeAccountId, mailbox: activeMailbox };
+          for (let i = 0; i < rows.length && !cancelled; i += TAG_CHUNK) {
+            await useTagStore.getState().loadRowTags(rows.slice(i, i + TAG_CHUNK).map(email => ({ email, location })))
+              .catch(() => {});
+          }
+          if (cancelled) return;
+        }
+        const visible = rowVisibility({
+          activeAccountId, activeMailbox,
+          archivedEmailIds: archived,
+          deleteTombstones,
+          hiddenTagIds,
+          tagsByRow: hiddenTagIds.size ? useTagStore.getState().byRow : null,
+          localSnoozes: localSnoozeKeys(useSnoozeStore.getState().rows),
+        });
         // Newest first, same order the list renders and the drain reads in —
         // bulk progress then works down from the most recent message.
         setCachedRows(rows
-          .filter(e => !deleteTombstones?.has(`${activeAccountId}|${mbox}|${e.uid}`))
-          .filter(e => archived.has(vaultKey(activeAccountId, activeMailbox, e.uid)) || !e.flags?.includes('\\Deleted'))
+          .filter(visible)
           .map(e => ({ uid: e.uid, date: e.date || e.internalDate }))
           .sort((a, b) => b.uid - a.uid));
         cachedForRef.current = identity;
