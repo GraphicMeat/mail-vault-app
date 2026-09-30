@@ -812,16 +812,16 @@ describe('updateSortedEmails memoization', () => {
       deleteTombstones: new Set(),
       // Same sizes as the correct state below, different uid — this is the
       // stale half-loaded moment.
-      archivedEmailIds: new Set([99]),
-      savedEmailIds: new Set([99]),
+      archivedEmailIds: new Set(['acct-1:Archive:99']),
+      savedEmailIds: new Set(['acct-1:Archive:99']),
       _sortedEmailsFingerprint: '',
     });
     useMailStore.getState().updateSortedEmails();
     expect(useMailStore.getState().sortedEmails).toHaveLength(0);
 
     useMailStore.setState({
-      archivedEmailIds: new Set([3]),
-      savedEmailIds: new Set([3]),
+      archivedEmailIds: new Set(['acct-1:Archive:3']),
+      savedEmailIds: new Set(['acct-1:Archive:3']),
     });
     useMailStore.getState().updateSortedEmails();
 
@@ -851,8 +851,8 @@ describe('updateSortedEmails memoization', () => {
       viewMode: 'all',
       emails: [],
       localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
-      archivedEmailIds: new Set([3]),
-      savedEmailIds: new Set([3]),
+      archivedEmailIds: new Set(['acct-1:INBOX:3']),
+      savedEmailIds: new Set(['acct-1:INBOX:3']),
       serverUids: serverUids(new Set(), { complete: false }),
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
@@ -875,8 +875,8 @@ describe('updateSortedEmails memoization', () => {
       viewMode: 'all',
       emails: [],
       localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
-      archivedEmailIds: new Set([3]),
-      savedEmailIds: new Set([3]),
+      archivedEmailIds: new Set(['acct-1:INBOX:3']),
+      savedEmailIds: new Set(['acct-1:INBOX:3']),
       serverUids: serverUids(new Set([7]), { complete: true }),
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
@@ -893,8 +893,8 @@ describe('updateSortedEmails memoization', () => {
       viewMode: 'all',
       emails: [],
       localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000', serverDeleted: true }],
-      archivedEmailIds: new Set([3]),
-      savedEmailIds: new Set([3]),
+      archivedEmailIds: new Set(['acct-1:INBOX:3']),
+      savedEmailIds: new Set(['acct-1:INBOX:3']),
       // Deliberately the state that used to be required and now proves
       // nothing: an unverified set. The stamp on the message is the evidence.
       serverUids: serverUids(new Set(), { complete: false }),
@@ -913,8 +913,8 @@ describe('updateSortedEmails memoization', () => {
       viewMode: 'all',
       emails: [],
       localEmails: [{ uid: 3, subject: 'Archived message 3' }],
-      archivedEmailIds: new Set([3]),
-      savedEmailIds: new Set([3]),
+      archivedEmailIds: new Set(['acct-1:Archive:3']),
+      savedEmailIds: new Set(['acct-1:Archive:3']),
       serverUids: NO_SERVER_UIDS,
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',

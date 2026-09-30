@@ -340,7 +340,7 @@ describe('FullViewEmailModal actions', () => {
     const target = fullMessage({ uid: 81, isArchived: false });
     renderModal(vi.fn(), vi.fn(), target, {
       accounts: [ACCOUNT_A], activeAccountId: ACCOUNT_A.id, activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
-      archivedEmailIds: new Set([81]),
+      archivedEmailIds: new Set([`${ACCOUNT_A.id}:INBOX:81`]),
     });
     expect(screen.getByTestId('reader-action-archive').textContent).toBe('Unarchive');
   });

@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation, sameMessage } from '../../stores/slices/unifiedHelpers';
+import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation, sameMessage, vaultKey } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applyFlagToTargets, applyServerRemoval, keyAfterUndo } from './messageMutations';
 import { resolvePool } from '../../stores/messageRows';
@@ -666,8 +666,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         const savedUid = email.uid ?? realUid;
         publish(s => {
           const showsFolder = spansMailboxes(s) || (s.activeAccountId === accountId && s.activeMailbox === mailbox);
-          if (!showsFolder || s.savedEmailIds?.has(savedUid)) return {};
-          return { savedEmailIds: new Set([...(s.savedEmailIds || []), savedUid]) };
+          const savedKey = vaultKey(accountId, mailbox, savedUid);
+          if (!showsFolder || s.savedEmailIds?.has(savedKey)) return {};
+          return { savedEmailIds: new Set([...(s.savedEmailIds || []), savedKey]) };
         });
       }
 
@@ -768,7 +769,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // Only for a message the vault actually holds — nothing rides on the
       // answer otherwise — and never awaited: it is a SELECT per folder, and
       // the click that started this is waiting on `loadingEmail`.
-      if (isCurrent() && get().archivedEmailIds?.has(realUid)) {
+      if (isCurrent() && get().archivedEmailIds?.has(vaultKey(accountId, mailbox, realUid))) {
         probeServerCopy(realUid, { accountId, mailbox })
           .catch(probeError => console.warn('[selectEmail] Server-wide check failed:', probeError));
       }

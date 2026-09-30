@@ -707,7 +707,7 @@ describe('activateAccount: a forced refetch bypasses a fresh mailbox cache', () 
 describe('activateAccount keeps the known archived ids when the read fails on activation (I-5 fix round 1, F1)', () => {
   it('RED on the old code: a null read on background refresh must not wipe archivedEmailIds to empty', async () => {
     primeActiveForBackgroundRefresh();
-    useMailStore.setState({ archivedEmailIds: new Set([5, 6]) });
+    useMailStore.setState({ archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:5`, `${ACCOUNT.id}:INBOX:6`]) });
     mockGetEmailHeadersMeta.mockResolvedValue(null); // no cached sync -> IMAP-fallback branch
     mockGetArchivedEmailIds.mockResolvedValueOnce(null); // the failed read
     mockFetchEmails.mockResolvedValue({ total: 500, emails: [mkHeader(1), mkHeader(2)] });
@@ -715,12 +715,12 @@ describe('activateAccount keeps the known archived ids when the read fails on ac
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([5, 6]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:5`, `${ACCOUNT.id}:INBOX:6`]));
   });
 
   it('control: a successful read still replaces the set', async () => {
     primeActiveForBackgroundRefresh();
-    useMailStore.setState({ archivedEmailIds: new Set([5, 6]) });
+    useMailStore.setState({ archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:5`, `${ACCOUNT.id}:INBOX:6`]) });
     mockGetEmailHeadersMeta.mockResolvedValue(null);
     mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([9]));
     mockFetchEmails.mockResolvedValue({ total: 500, emails: [mkHeader(1), mkHeader(2)] });
@@ -728,7 +728,7 @@ describe('activateAccount keeps the known archived ids when the read fails on ac
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:9`]));
   });
 });
 

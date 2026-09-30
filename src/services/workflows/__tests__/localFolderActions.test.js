@@ -137,8 +137,8 @@ function prime(extra = {}) {
     emails: [],
     sentEmails: [],
     localEmails: [{ ...ROW }],
-    savedEmailIds: new Set([7]),
-    archivedEmailIds: new Set([7]),
+    savedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:7`]),
+    archivedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:7`]),
     serverUids: serverUids(new Set(), { complete: false }),
     deleteTombstones: new Set(),
     selectedEmailIds: new Set(),
@@ -199,7 +199,7 @@ describe('a message in a local folder', () => {
 
   it('is never fetched from a server when the vault cannot serve it, nor are its neighbours prefetched from one', async () => {
     const OLDER = { ...ROW, uid: 8, messageId: '<imported-8@example.test>', date: '2026-01-04T10:00:00Z' };
-    prime({ localEmails: [{ ...ROW }, { ...OLDER }], savedEmailIds: new Set([7, 8]), archivedEmailIds: new Set([7, 8]) });
+    prime({ localEmails: [{ ...ROW }, { ...OLDER }], savedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:7`, `${ACCOUNT.id}:${NAME}:8`]), archivedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:7`, `${ACCOUNT.id}:${NAME}:8`]) });
     // uid 7: no vault copy answers; uid 8: a light row with no body yet.
     m.getLocalEmailLight.mockImplementation(async (accountId, mailbox, uid) => (uid === 8 ? { ...OLDER } : null));
 

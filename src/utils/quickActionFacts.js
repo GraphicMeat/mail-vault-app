@@ -3,7 +3,7 @@
 // rows) and the reader (one open message and the handlers its host wired).
 // quickActionAvailability.js and quickActionCatalog.js read only this shape;
 // each builder below says what its surface's facts mean.
-import { resolveEmailLocation, inLocalFolder, selectionKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, inLocalFolder, selectionKey, vaultHasSelection } from '../stores/slices/unifiedHelpers';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { canSnooze } from '../services/workflows/snooze';
 import { actionVisibility } from './actionVisibility';
@@ -39,21 +39,17 @@ const BASE = {
 
 /**
  * Whether the vault holds a message, by the same rule as a ticked key: its
- * own flag says so, or it lives in the open folder (outside a view spanning
- * several) and the folder's archived uids hold it. Server view writes
+ * own flag says so, or the keyed archived set holds it. Server view writes
  * isArchived false on every row it lists, so the flag alone undercounts
- * there; and those uids name only the open folder's messages, so another
- * folder's message that shares a uid is never read against them.
+ * there. A key names its own account and folder, so another folder's message
+ * that shares a uid is never read against this folder's entries.
  * `archivedIds` defaults to the store's; a component passes the set it
  * subscribes to.
  */
 export function isRowArchived(email, state, archivedIds = state?.archivedEmailIds) {
   if (!email) return false;
   if (email.isArchived) return true;
-  if (spansMailboxes(state)) return false;
-  const location = resolveEmailLocation(email, state);
-  return !!location && location.accountId === state.activeAccountId && location.mailbox === state.activeMailbox
-    && !!archivedIds?.has(email.uid);
+  return vaultHasSelection(archivedIds, selectionKey(email, state), state);
 }
 
 /**
@@ -103,18 +99,17 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
 }
 
 // A ticked message is archived when its row says the vault holds it, or when
-// it is the open folder's (a bare key) and `archivedIds` holds its uid. Those
-// uids name only the open folder's messages, so a full key's uid is never read
-// there: that counted an archived message of another account or folder (every
-// row of a spanning view, a search hit) as unarchived. They still count for a
-// bare key whose row says no, as Server view writes on every row it lists.
-const isArchivedKey = (rowByKey, archivedIds) => key =>
-  !!rowByKey.get(key)?.isArchived || (!String(key).includes(':') && archivedIds.has(key));
+// `archivedIds` (the vault's keys, accountId:mailbox:uid) holds it: a bare key
+// names the open folder's message, a full key its own folder's. The keys still
+// count when the row says no, as Server view writes isArchived false on every
+// row it lists.
+const isArchivedKey = (rowByKey, archivedIds, state) => key =>
+  !!rowByKey.get(key)?.isArchived || vaultHasSelection(archivedIds, key, state);
 
 /**
  * The ticked `keys` whose message the vault holds, in selection order: `rows`
- * the loaded rows (those no key names are ignored), `archivedIds` the open
- * folder's archived uids. The bulk modal's counts and its Unarchive run read
+ * the loaded rows (those no key names are ignored), `archivedIds` the vault's
+ * keys. The bulk modal's counts and its Unarchive run read
  * this, so they agree with the selection bar.
  */
 export function archivedSelectionKeys(keys, rows, archivedIds, state) {
@@ -125,7 +120,7 @@ export function archivedSelectionKeys(keys, rows, archivedIds, state) {
     const key = selectionKey(email, state);
     if (!rowByKey.has(key)) rowByKey.set(key, email);
   }
-  return [...keys].filter(isArchivedKey(rowByKey, archivedIds));
+  return [...keys].filter(isArchivedKey(rowByKey, archivedIds, state));
 }
 
 /** Every loaded row a selection key can name: the lists on screen and the search hits. */
@@ -136,14 +131,14 @@ export function loadedRows({ sortedEmails, emails, localEmails, sentEmails }, se
 /**
  * The selection bar's targets: `keys` the ticked selection (a Set), `rows` its
  * messages the loaded lists resolve, `pool` every loaded row and
- * `archivedIds` the open folder's archived uids. `backedUp` is whether any
+ * `archivedIds` the vault's keys. `backedUp` is whether any
  * of the rows is on the backup drive. Adds `archivedCount`/`totalCount`,
  * which the delete confirmation states and which must agree with the
  * Archive/Unarchive gates.
  */
 export function selectionFacts(keys, rows, pool, archivedIds, state, { backedUp = false } = {}) {
   const rowByKey = new Map(rows.map(email => [selectionKey(email, state), email]));
-  const archived = [...keys].filter(isArchivedKey(rowByKey, archivedIds)).length;
+  const archived = [...keys].filter(isArchivedKey(rowByKey, archivedIds, state)).length;
   const unarchived = keys.size - archived;
   const target = resolveQuickActionSelectionTarget([...keys], pool, state);
   const fullyResolved = rowByKey.size === keys.size && [...keys].every(key => rowByKey.has(key));

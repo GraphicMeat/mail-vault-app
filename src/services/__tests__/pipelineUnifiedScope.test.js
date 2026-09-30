@@ -115,6 +115,20 @@ describe('the active account pipeline in a view that spans mailboxes', () => {
     expect(mailbox).not.toBe('UNIFIED');
   });
 
+  it('does not skip a uid because ANOTHER account saved the same number', async () => {
+    store.state = {
+      accounts: [LUKE, YODA],
+      activeMailbox: 'UNIFIED',
+      emails: [uRow(5, 'luke', 'INBOX'), uRow(6, 'luke', 'INBOX')],
+      // yoda holds its own 5 in the vault; luke holds 6.
+      savedEmailIds: new Set(['yoda:INBOX:5', 'luke:INBOX:6']),
+    };
+
+    await pipelineManager.startActiveAccountPipeline('luke');
+
+    expect(startContentCaching.mock.calls[0][0]).toEqual([5]);
+  });
+
   it('takes the folder from the rows, so a namespaced server gets its own path', async () => {
     // Dovecot/Hostinger resolve the unified folder to `INBOX.…` per account;
     // loadUnifiedInbox stamps that resolved path on every row it builds.

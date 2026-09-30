@@ -21,10 +21,10 @@ export function _buildRestoreDescriptor(state, mailbox, { topVisibleIndex = 0 } 
     mailboxesFetchedAt: state.mailboxesFetchedAt || null,
     firstWindow: sorted.slice(0, 50),
     firstWindowSavedUids: sorted.slice(0, 50)
-      .filter(e => state.savedEmailIds?.has(e.uid))
+      .filter(e => vaultHas(state.savedEmailIds, e, state))
       .map(e => e.uid),
     firstWindowArchivedUids: sorted.slice(0, 50)
-      .filter(e => state.archivedEmailIds?.has(e.uid))
+      .filter(e => vaultHas(state.archivedEmailIds, e, state))
       .map(e => e.uid),
     // Carried whole, completeness included. Snapshotting the uids without it
     // was the same mistake as splitting them in the store: every restore
@@ -155,6 +155,71 @@ export function accountEmailOf(email, state) {
 export function rowIdentity(row, state) {
   const loc = row && resolveEmailLocation(row, state);
   return loc ? { accountId: loc.accountId, mailbox: loc.mailbox, uid: row.uid } : null;
+}
+
+/**
+ * The key a message holds in the vault sets (`archivedEmailIds`,
+ * `savedEmailIds`) and in `backedUpKeys`: `accountId:mailbox:uid`. Those sets
+ * span every account and folder in view, and a bare uid names a different
+ * message in each of them.
+ */
+export const vaultKey = (accountId, mailbox, uid) => `${accountId}:${mailbox}:${uid}`;
+
+/**
+ * One folder's bare uid Set (what the vault read and the per-group cache
+ * answer) as keys for the store's sets. `null` (an unknown read) stays `null`:
+ * callers keep what they already hold on it, they never adopt "nothing".
+ * `current`: the set the store holds now, for the identity rule below.
+ */
+export function vaultKeys(accountId, mailbox, uids, current = null) {
+  if (uids == null) return uids;
+  const keys = new Set(Array.from(uids, uid => vaultKey(accountId, mailbox, uid)));
+  // The same contents as `current` answer with `current` itself: the list's
+  // re-sort guard compares these sets by identity, and a fresh-but-equal set
+  // on every refresh would re-sort the list for nothing.
+  return current && current.size === keys.size && [...keys].every(k => current.has(k)) ? current : keys;
+}
+
+/**
+ * The bare uids one folder holds in a keyed vault `set`: what the daemon's
+ * per-folder calls (`getArchivedEmails`) take, which a store-wide set of keys
+ * is not.
+ */
+export function vaultUids(set, accountId, mailbox) {
+  const prefix = `${accountId}:${mailbox}:`;
+  const uids = new Set();
+  for (const key of set || []) {
+    if (typeof key !== 'string' || !key.startsWith(prefix)) continue;
+    const uid = Number(key.slice(prefix.length));
+    if (Number.isInteger(uid)) uids.add(uid);
+  }
+  return uids;
+}
+
+/**
+ * Does the keyed vault `set` hold `row`? The row is placed by `rowIdentity`,
+ * and one whose location cannot be resolved is in NO set (never "in whichever
+ * folder shares its uid").
+ */
+export function vaultHas(set, row, state) {
+  const id = set?.size ? rowIdentity(row, state) : null;
+  return !!id && set.has(vaultKey(id.accountId, id.mailbox, id.uid));
+}
+
+/**
+ * Does the keyed vault `set` hold the message a SELECTION KEY names? A key in a
+ * list spanning mailboxes is already `accountId:mailbox:uid`; a single
+ * folder's list keys by bare uid and means the view's own folder. A key that
+ * names no folder (a two-part key from before folders joined the format, or a
+ * spanning view with nothing to place a bare uid in) is in no set.
+ */
+export function vaultHasSelection(set, key, state) {
+  if (!set?.size) return false;
+  const parsed = _parseSelKey(key);
+  const accountId = parsed.accountId ?? state?.activeAccountId;
+  const mailbox = parsed.accountId ? parsed.mailbox : state?.activeMailbox;
+  if (!accountId || !mailbox || mailbox === 'UNIFIED') return false;
+  return set.has(vaultKey(accountId, mailbox, parsed.uid));
 }
 
 /**

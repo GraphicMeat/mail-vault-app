@@ -7,7 +7,7 @@ import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
-import { _buildRestoreDescriptor, rebaseFlags } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
 import { paintFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
@@ -104,7 +104,7 @@ export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => tr
     return;
   }
   setArchivedGroup(accountId, mailbox, vault.archived);
-  useMailStore.setState({ savedEmailIds: vault.saved, archivedEmailIds: vault.archived });
+  useMailStore.setState({ savedEmailIds: vaultKeys(accountId, mailbox, vault.saved), archivedEmailIds: vaultKeys(accountId, mailbox, vault.archived) });
   // Painted per batch: a large import is read in pages.
   const paint = (rows) => {
     if (!here()) return;
@@ -232,8 +232,8 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       // I-5: `null` means "could not read" — keep the store's current values
       // rather than adopting "nothing is archived" (this disarms the
       // empty-server guard and re-downloads the whole mailbox further down).
-      savedEmailIds = vault?.saved ?? get().savedEmailIds;
-      archivedEmailIds = vault?.archived ?? get().archivedEmailIds;
+      savedEmailIds = vaultKeys(activeAccountId, activeMailbox, vault?.saved) ?? get().savedEmailIds;
+      archivedEmailIds = vaultKeys(activeAccountId, activeMailbox, vault?.archived) ?? get().archivedEmailIds;
       setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
     }
     if (isStale()) return;
@@ -252,7 +252,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         try {
           let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
           if (!localEmails) {
-            localEmails = await db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds);
+            localEmails = await db.getArchivedEmails(activeAccountId, activeMailbox, vaultUids(archivedEmailIds, activeAccountId, activeMailbox));
           }
           if (get().activeAccountId !== archivedAccount || loadSignal.aborted) return;
           useMailStore.setState({ localEmails });
@@ -493,7 +493,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         mergedEmails = serverResult.emails.map((email, idx) => ({
           ...email,
           displayIndex: idx,
-          isLocal: savedEmailIds.has(email.uid),
+          isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid)),
           source: 'server'
         }));
         // This single page IS the whole mailbox exactly when it already
@@ -645,7 +645,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
           const { emails: newHeaders } = await api.fetchHeadersByUids(account, activeMailbox, sortedNewUids);
           const newEmailsWithMeta = newHeaders.map(email => ({
             ...email,
-            isLocal: savedEmailIds.has(email.uid),
+            isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid)),
             source: 'server'
           }));
           updatedEmails = [...newEmailsWithMeta, ...updatedEmails];
@@ -697,20 +697,20 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         const newEmailsWithIndex = newEmails.map((email, idx) => ({
           ...email,
           displayIndex: idx,
-          isLocal: savedEmailIds.has(email.uid),
+          isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid)),
           source: 'server'
         }));
         const shiftedExisting = cleanedExisting.map((email, idx) => ({
           ...email,
           displayIndex: newEmails.length + idx,
-          isLocal: savedEmailIds.has(email.uid)
+          isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid))
         }));
         mergedEmails = [...newEmailsWithIndex, ...shiftedExisting];
       } else {
         mergedEmails = serverResult.emails.map((email, idx) => ({
           ...email,
           displayIndex: idx,
-          isLocal: savedEmailIds.has(email.uid),
+          isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid)),
           source: 'server'
         }));
         // Same proof as the UIDVALIDITY-changed branch above: mergedEmails
@@ -896,14 +896,14 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   if (isStale()) return;
   // I-5: keep the store's current values on a failed read instead of
   // adopting "nothing is in the vault".
-  const savedEmailIds = vault?.saved ?? get().savedEmailIds;
-  const archivedEmailIds = vault?.archived ?? get().archivedEmailIds;
+  const savedEmailIds = vaultKeys(activeAccountId, activeMailbox, vault?.saved) ?? get().savedEmailIds;
+  const archivedEmailIds = vaultKeys(activeAccountId, activeMailbox, vault?.archived) ?? get().archivedEmailIds;
   setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
   useMailStore.setState({ savedEmailIds, archivedEmailIds });
 
   if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {
     const archivedAccount = activeAccountId;
-    db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds, (batchEmails) => {
+    db.getArchivedEmails(activeAccountId, activeMailbox, vaultUids(archivedEmailIds, activeAccountId, activeMailbox), (batchEmails) => {
       if (get().activeAccountId !== archivedAccount) return;
       useMailStore.setState({ localEmails: batchEmails });
       get().updateSortedEmails();
@@ -964,7 +964,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     let mergedEmails = headers.map((email, idx) => ({
       ...email,
       displayIndex: idx,
-      isLocal: savedEmailIds.has(email.uid),
+      isLocal: savedEmailIds.has(vaultKey(activeAccountId, activeMailbox, email.uid)),
       source: 'server',
     }));
     // The listing was fetched over a snapshot (priorEmails): keep a flag the

@@ -165,7 +165,7 @@ describe('saveEmailLocally — already-cached branch', () => {
 
     await saveEmailLocally(30);
 
-    expect(useMailStore.getState().archivedEmailIds.has(30)).toBe(true);
+    expect(useMailStore.getState().archivedEmailIds.has(`${ACCOUNT.id}:INBOX:30`)).toBe(true);
   });
 
   it('reports the failure and does not claim the message was archived', async () => {
@@ -177,7 +177,7 @@ describe('saveEmailLocally — already-cached branch', () => {
     const { error, archivedEmailIds } = useMailStore.getState();
     expect(error).toContain('Nothing was removed from the server');
     expect(error).toContain('Email UID 30 not found in Maildir');
-    expect(archivedEmailIds.has(30)).toBe(false);
+    expect(archivedEmailIds.has(`${ACCOUNT.id}:INBOX:30`)).toBe(false);
   });
 });
 

@@ -41,7 +41,7 @@ import { getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
@@ -179,7 +179,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const emailDarkMode = effectiveEmailTheme === 'dark';
   const emailColors = getEmailColors(effectiveEmailTheme, palette);
 
-  const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
+  const isCached = selectedEmail && vaultHas(savedEmailIds, selectedEmail, useMailStore.getState());
   const isArchived = !!selectedEmail && isRowArchived(selectedEmail, useMailStore.getState(), archivedEmailIds);
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');

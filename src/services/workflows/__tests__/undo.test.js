@@ -825,7 +825,7 @@ describe('undo puts the row back first, then the server follows', () => {
     primeStore({ emails: [row(7), row(8)] });
     useMailStore.setState({
       localEmails: [row(7, { source: 'local' })],
-      archivedEmailIds: new Set([7]),
+      archivedEmailIds: new Set(['a1:INBOX:7']),
       _sortedEmailsFingerprint: '',
     });
 
@@ -837,7 +837,7 @@ describe('undo puts the row back first, then the server follows', () => {
     expect(mockGetLocalIndexEntry).toHaveBeenLastCalledWith('a1', 'INBOX', 41);
     expect(mockAppendLocalIndex).toHaveBeenLastCalledWith('a1', 'INBOX',
       [expect.objectContaining({ serverDeleted: false })]);
-    expect([...useMailStore.getState().archivedEmailIds]).toEqual([41]);
+    expect([...useMailStore.getState().archivedEmailIds]).toEqual(['a1:INBOX:41']);
     expect(useMailStore.getState().sortedEmails.filter(e => e.subject === 'm7')).toHaveLength(1);
   });
 });

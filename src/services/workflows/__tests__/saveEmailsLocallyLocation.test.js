@@ -226,14 +226,14 @@ describe('saveEmailsLocally — a thread opened from All Inboxes', () => {
     unified(rows);
     // Another account's archived row is already in the union; it must survive.
     useMailStore.setState({
-      archivedEmailIds: new Set([7]),
+      archivedEmailIds: new Set([`${VADER.id}:INBOX:7`]),
       localEmails: [row(7, { _accountId: VADER.id, _mailbox: 'INBOX' })],
     });
 
     await saveEmailsLocally(rows);
 
     const s = useMailStore.getState();
-    expect([...s.archivedEmailIds].sort()).toEqual([42, 7]);
+    expect([...s.archivedEmailIds].sort()).toEqual([`${LUKE.id}:INBOX:42`, `${VADER.id}:INBOX:7`].sort());
     expect(s.localEmails).toEqual([
       expect.objectContaining({ uid: 7, _accountId: VADER.id }),
       expect.objectContaining({ uid: 42, _accountId: LUKE.id, _accountEmail: LUKE.email, _mailbox: 'INBOX' }),
@@ -319,8 +319,8 @@ describe("saveEmailsLocally — a single folder's list", () => {
     ]);
     // INBOX's own message 6 is a different message; nothing was archived under it.
     const { archivedEmailIds } = useMailStore.getState();
-    expect(archivedEmailIds.has(1)).toBe(true);
-    expect(archivedEmailIds.has(6)).toBe(false);
+    expect(archivedEmailIds.has(`${VADER.id}:INBOX:1`)).toBe(true);
+    expect(archivedEmailIds.has(`${VADER.id}:INBOX:6`)).toBe(false);
   });
 
   it('skips a row whose location it cannot resolve rather than guessing a folder', async () => {
@@ -378,7 +378,7 @@ describe('saveEmailsLocally - archive-progress is keyed by operation (R3.2 / N3)
     await saveEmailsLocally(rows);
 
     const { archivedEmailIds } = useMailStore.getState();
-    expect(archivedEmailIds.has(99)).toBe(true);
-    expect(archivedEmailIds.has(555)).toBe(false);
+    expect(archivedEmailIds.has(`${LUKE.id}:INBOX:99`)).toBe(true);
+    expect(archivedEmailIds.has(`${LUKE.id}:INBOX:555`)).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
+import { vaultKey } from '../stores/slices/unifiedHelpers';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
 import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
@@ -205,7 +206,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
         // bulk progress then works down from the most recent message.
         setCachedRows(rows
           .filter(e => !deleteTombstones?.has(`${activeAccountId}|${mbox}|${e.uid}`))
-          .filter(e => archived.has(e.uid) || !e.flags?.includes('\\Deleted'))
+          .filter(e => archived.has(vaultKey(activeAccountId, activeMailbox, e.uid)) || !e.flags?.includes('\\Deleted'))
           .map(e => ({ uid: e.uid, date: e.date || e.internalDate }))
           .sort((a, b) => b.uid - a.uid));
         cachedForRef.current = identity;

@@ -3,7 +3,7 @@
 import * as db from '../../services/db';
 import { useSettingsStore } from '../settingsStore';
 import { getAccountCacheMailboxes as _getAccountMailboxes } from '../../services/cacheManager';
-import { _resolveMailboxPath } from './unifiedHelpers';
+import { _resolveMailboxPath, vaultKey, vaultKeys } from './unifiedHelpers';
 import { setArchivedGroup, deriveArchivedUnion } from './messageListSlice';
 
 export const createUiSlice = (set, get) => ({
@@ -137,7 +137,7 @@ export const createUiSlice = (set, get) => ({
               const vault = await db.getVaultUidSets(account.id, localFolder);
               let locals = await db.readLocalEmailIndex(account.id, localFolder);
               if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
-              if (vault) for (const uid of vault.saved) allSavedIds.add(uid);
+              if (vault) for (const uid of vault.saved) allSavedIds.add(vaultKey(account.id, localFolder, uid));
               else savedUnknown = true;
               // I-5: a null (unknown) read keeps this group's own last-known
               // ids (setArchivedGroup skips a null write) instead of the
@@ -181,7 +181,7 @@ export const createUiSlice = (set, get) => ({
             if (live.unifiedInbox || live.activeAccountId !== activeAccountId || live.activeMailbox !== activeMailbox) return;
             const archivedEmailIds = deriveArchivedUnion(live.archivedEmailIds, [[activeAccountId, activeMailbox]]);
             set({
-              savedEmailIds: vault?.saved ?? live.savedEmailIds,
+              savedEmailIds: vaultKeys(activeAccountId, activeMailbox, vault?.saved, live.savedEmailIds) ?? live.savedEmailIds,
               archivedEmailIds,
               localEmails: localEmails ?? live.localEmails,
             });

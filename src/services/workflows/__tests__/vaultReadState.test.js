@@ -135,7 +135,7 @@ function primeUnifiedVault(flags = []) {
     sentEmails: [],
     localEmails: [vaultRow(flags)],
     savedEmailIds: new Set(),
-    archivedEmailIds: new Set([UID]),
+    archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:${UID}`]),
     serverUids: serverUids(new Set(), { complete: false }),
     deleteTombstones: new Set(),
     totalEmails: 0,
@@ -243,7 +243,7 @@ describe('marking a vault-only row read from the unified list', () => {
     const second = { ...vaultRow([]), uid: UID + 1, messageId: 'v2@mock', subject: 'Second slot' };
     useMailStore.setState(s => ({
       localEmails: [...s.localEmails, second],
-      archivedEmailIds: new Set([UID, UID + 1]),
+      archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:${UID}`, `${ACCOUNT.id}:INBOX:${UID + 1}`]),
       selectedEmailIds: new Set([SEL_KEY, _selKey(second)]),
     }));
     invalidateChatAndThreadCaches();

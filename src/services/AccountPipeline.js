@@ -9,7 +9,7 @@ import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { setArchivedGroup } from '../stores/slices/messageListSlice';
-import { spansMailboxes, sameMessage } from '../stores/slices/unifiedHelpers';
+import { spansMailboxes, sameMessage, vaultKeys, vaultUids } from '../stores/slices/unifiedHelpers';
 import { _pruneIfGone } from './workflows/messageMutations';
 
 export { hasValidCredentials };
@@ -564,15 +564,17 @@ export class AccountPipeline {
         if (live.activeAccountId === activeAccountId && live.activeMailbox === activeMailbox && !spansMailboxes(live)) {
           // I-5: an unknown read (`null`) keeps the store's current saved and
           // archived values instead of adopting "nothing is in the vault".
-          const newArchivedIds = vault?.archived ?? live.archivedEmailIds;
+          // The store's sets are keyed by folder; the daemon reads take this
+          // folder's bare uids.
+          const newArchivedUids = vault?.archived ?? vaultUids(live.archivedEmailIds, activeAccountId, activeMailbox);
           setArchivedGroup(activeAccountId, activeMailbox, vault?.archived ?? null);
           useMailStore.setState({
-            savedEmailIds: vault?.saved ?? live.savedEmailIds,
-            archivedEmailIds: newArchivedIds,
+            savedEmailIds: vaultKeys(activeAccountId, activeMailbox, vault?.saved) ?? live.savedEmailIds,
+            archivedEmailIds: vaultKeys(activeAccountId, activeMailbox, vault?.archived) ?? live.archivedEmailIds,
           });
           // Refresh archived emails from disk (async Rust, won't freeze UI)
-          if (newArchivedIds.size > 0) {
-            db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds, (batchEmails) => {
+          if (newArchivedUids.size > 0) {
+            db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedUids, (batchEmails) => {
               const current = useMailStore.getState();
               if (current.activeAccountId !== activeAccountId) return;
               useMailStore.setState({ localEmails: batchEmails });

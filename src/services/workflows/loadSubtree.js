@@ -13,6 +13,7 @@
 import * as api from '../api';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { mailboxDescendants } from './mailboxTree';
+import { vaultKey } from '../../stores/slices/unifiedHelpers';
 
 const HEADERS_PER_FOLDER = 200;
 
@@ -97,7 +98,7 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
           _accountId: accountId,
           _mailbox: path,
           source: 'server',
-          isLocal: savedEmailIds.has(email.uid),
+          isLocal: savedEmailIds.has(vaultKey(accountId, path, email.uid)),
         });
       }
     } catch (error) {

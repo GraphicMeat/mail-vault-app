@@ -521,7 +521,7 @@ describe('BulkOperationsModal', () => {
   // Task 9: storage legend + Delete Everywhere action and its own confirm.
   describe('storage legend and Delete Everywhere', () => {
     it('legend shows server and local-archive counts and omits any backup count, even when backup is configured', async () => {
-      archivedEmailIds.add(1); // uid 1 is in the "All" selection (5, 4, 1)
+      archivedEmailIds.add('acct-1:INBOX:1'); // uid 1 is in the "All" selection (5, 4, 1)
       backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' };
 
       render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
@@ -642,7 +642,7 @@ describe('BulkOperationsModal', () => {
     });
 
     it('some but not all archived: only says copies survive for the already-archived ones', async () => {
-      archivedEmailIds.add(1); // 1 of 3 selected
+      archivedEmailIds.add('acct-1:INBOX:1'); // 1 of 3 selected
       backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' }; // must not change this branch's wording
       await openToStep2();
       // Exact-string match — a stray "...and in backup" tail would make this
@@ -652,7 +652,7 @@ describe('BulkOperationsModal', () => {
     });
 
     it('all archived, no backup configured: the local copy is named as kept', async () => {
-      archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
+      archivedEmailIds.add('acct-1:INBOX:5'); archivedEmailIds.add('acct-1:INBOX:4'); archivedEmailIds.add('acct-1:INBOX:1');
       backupState.externalBackupLocation = null;
       await openToStep2();
       expect(screen.getByText('Remove from the server only. Your vault keeps its copy.')).toBeTruthy();
@@ -660,7 +660,7 @@ describe('BulkOperationsModal', () => {
     });
 
     it('all archived, backup configured: renders the identical string — configuring a backup does not claim these uids are mirrored', async () => {
-      archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
+      archivedEmailIds.add('acct-1:INBOX:5'); archivedEmailIds.add('acct-1:INBOX:4'); archivedEmailIds.add('acct-1:INBOX:1');
       backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' };
       await openToStep2();
       // Exact-string match — same description as the no-backup case above,

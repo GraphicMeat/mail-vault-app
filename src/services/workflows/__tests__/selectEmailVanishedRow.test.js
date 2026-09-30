@@ -247,7 +247,7 @@ describe('selectEmail — a row the server no longer holds', () => {
     // custody claim — so ask, instead of guessing either way.
     mockFetchEmailLight.mockRejectedValue(goneError(31056));
     primeStore();
-    useMailStore.setState({ archivedEmailIds: new Set([31056]) });
+    useMailStore.setState({ archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:31056`]) });
 
     await useMailStore.getState().selectEmail(31056, 'server');
 

@@ -15,7 +15,7 @@
 import * as api from './api';
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
-import { _resolveMailboxPath } from '../stores/slices/unifiedHelpers';
+import { _resolveMailboxPath, sameMessage, vaultKey } from '../stores/slices/unifiedHelpers';
 import { addArchivedGroupUid } from '../stores/slices/messageListSlice';
 import { send } from './transport';
 import { getRealAttachments, replaceCidUrls } from './attachmentUtils';
@@ -118,7 +118,7 @@ export async function deleteLocalDraft({ accountId, mailbox, uid }) {
   } catch (err) {
     console.warn('[localDrafts] delete failed:', err);
   }
-  _hideFromList(accountId, uid);
+  _hideFromList(accountId, mailbox, uid);
 }
 
 /**
@@ -300,13 +300,13 @@ function _showInList(accountId, mailbox, entry) {
     localEmails: [row, ...(st.localEmails || []).filter(e => e.uid !== entry.uid)],
     // A local row is only rendered when its uid is in this set — a new Set
     // instance, or the sorted-rows memo skips the recompute.
-    archivedEmailIds: new Set([...(st.archivedEmailIds || []), entry.uid]),
-    savedEmailIds: new Set([...(st.savedEmailIds || []), entry.uid]),
+    archivedEmailIds: new Set([...(st.archivedEmailIds || []), vaultKey(accountId, mailbox, entry.uid)]),
+    savedEmailIds: new Set([...(st.savedEmailIds || []), vaultKey(accountId, mailbox, entry.uid)]),
   }));
   useMailStore.getState().updateSortedEmails?.();
 }
 
-function _hideFromList(accountId, uid) {
+function _hideFromList(accountId, mailbox, uid) {
   // Scoped to the account whose view is on screen: a uid is unique inside one
   // mailbox only, so dropping it from another account's sets would blank an
   // unrelated row.
@@ -318,11 +318,15 @@ function _hideFromList(accountId, uid) {
   useMailStore.setState(st => {
     const archived = new Set(st.archivedEmailIds || []);
     const saved = new Set(st.savedEmailIds || []);
-    archived.delete(uid);
-    saved.delete(uid);
+    const key = vaultKey(accountId, mailbox, uid);
+    archived.delete(key);
+    saved.delete(key);
+    // Rows go by the message they are (account, folder, uid), so a real
+    // message of another folder that carries the draft's number stays.
+    const isDraft = (e) => sameMessage(e, { accountId, mailbox, uid }, st);
     return {
-      localEmails: (st.localEmails || []).filter(e => e.uid !== uid),
-      emails: (st.emails || []).filter(e => e.uid !== uid),
+      localEmails: (st.localEmails || []).filter(e => !isDraft(e)),
+      emails: (st.emails || []).filter(e => !isDraft(e)),
       archivedEmailIds: archived,
       savedEmailIds: saved,
     };

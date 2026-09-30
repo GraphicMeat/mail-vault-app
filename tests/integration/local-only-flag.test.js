@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startSeededServer, createClient, deliver } from './mockHarness.js';
 import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
 import { serverUids } from '../../src/stores/slices/serverUids.js';
+import { vaultKeys } from '../../src/stores/slices/unifiedHelpers.js';
 
 // The production derivation, imported directly. This file used to call
 // `services/emailListUtils.js`, a test-only reimplementation of it that had
@@ -13,6 +14,11 @@ import { serverUids } from '../../src/stores/slices/serverUids.js';
 // `display()` is a fixture, not a second implementation — it only supplies the
 // inputs the old signature left implicit. When a case passes no uid set, it
 // means "the emails I passed ARE the whole server", and now says so.
+//
+// The vault sets the store holds are keyed `accountId:mailbox:uid`; a case here
+// is one folder on screen, so its bare uids are keyed to that view.
+const VIEW = { activeAccountId: 'acct-1', activeMailbox: 'INBOX' };
+const inView = (uids) => vaultKeys(VIEW.activeAccountId, VIEW.activeMailbox, uids);
 function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, serverUids: explicitServerUids, ...rest }) {
   // A caller that builds the pair itself wins. It used to lose: the key was
   // overwritten below and the fallback claimed COMPLETE, so the one case that
@@ -23,7 +29,7 @@ function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), 
       ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
       : serverUids(emails.map(e => e.uid), { complete: true }));
   return deriveDisplayRows({
-    emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
+    ...VIEW, emails, localEmails, archivedEmailIds: inView(archivedEmailIds), viewMode, savedEmailIds: inView(savedEmailIds), ...rest,
     serverUids: resolved,
   });
 }

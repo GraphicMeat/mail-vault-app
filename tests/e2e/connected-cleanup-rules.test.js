@@ -334,7 +334,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
         rowStates: { victim: stateOf(victim), orphan: stateOf(orphan) },
         victimUid: uid,
         serverUidsComplete: s.serverUids?.complete,
-        archivedHasVictim: s.archivedEmailIds?.has(uid),
+        archivedHasVictim: s.archivedEmailIds?.has(`${s.activeAccountId}:${s.activeMailbox}:${uid}`),
         inEmails: pick((s.emails || []).find((e) => e.uid === uid)),
         inLocalEmails: pick((s.localEmails || []).find((e) => e.uid === uid)),
         inSorted: pick((s.sortedEmails || []).find((e) => e.uid === uid)),

@@ -29,7 +29,7 @@ import { openFolder } from './loadSubtree';
 import { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { refreshFolderStatus } from './folderStatus';
-import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey, readerClearOnNavigation, rebaseFlags } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey, readerClearOnNavigation, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
 import {
@@ -275,7 +275,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   const serverEmails = headers.map((email, idx) => ({
     ...email,
     displayIndex: idx,
-    isLocal: savedEmailIds.has(email.uid),
+    isLocal: savedEmailIds.has(vaultKey(accountId, activeMailbox, email.uid)),
     source: 'server',
   }));
   uidMap.merge(serverEmails);
@@ -511,13 +511,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       restoredMailboxes = pickMailboxList(restored.mailboxes, cachedMailboxEntry?.mailboxes);
     }
 
-    const restoredSavedIds = new Set(restored.firstWindowSavedUids || []);
-    const restoredArchivedIds = new Set(restored.firstWindowArchivedUids || []);
+    // The descriptor lists bare uids of its own folder; the store's sets are keyed.
+    const restoredFolder = restored.mailbox || mailbox;
+    const restoredSavedIds = vaultKeys(accountId, restoredFolder, restored.firstWindowSavedUids || []);
+    const restoredArchivedIds = vaultKeys(accountId, restoredFolder, restored.firstWindowArchivedUids || []);
     // The descriptor only lists saved/archived UIDs for its own window; past it,
     // recover them from the rows, which carry the flags.
     for (const e of painted) {
-      if (e.isLocal) restoredSavedIds.add(e.uid);
-      if (e.isArchived) restoredArchivedIds.add(e.uid);
+      if (e.isLocal) restoredSavedIds.add(vaultKey(accountId, restoredFolder, e.uid));
+      if (e.isArchived) restoredArchivedIds.add(vaultKey(accountId, restoredFolder, e.uid));
     }
 
     // A newer activation has already aborted this one — the awaits above are
@@ -670,9 +672,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // `restored?.archivedEmailIds`: no restore descriptor has that key (both
       // builders emit `firstWindowArchivedUids`, capped at ~50 uids), so that
       // fallback silently collapsed to `new Set()` on every failed read.
-      const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds ?? new Set();
+      const archivedEmailIds = vaultKeys(accountId, effectiveMailbox, rawArchivedEmailIds) ?? get().archivedEmailIds ?? new Set();
       // Same rule for the saved ids: unknown keeps THIS account's store value.
-      const savedEmailIds = vault?.saved ?? get().savedEmailIds ?? new Set();
+      const savedEmailIds = vaultKeys(accountId, effectiveMailbox, vault?.saved) ?? get().savedEmailIds ?? new Set();
 
       // On a stamp mismatch this re-reads only the sidecars that moved (readdir
       // + mtime, then one read per changed UID) instead of discarding the set —
@@ -739,8 +741,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         const headersWithSource = cachedHeaders.emails.map(e => ({
           ...e,
           source: e.source || 'cache',
-          isLocal: savedEmailIds.has(e.uid),
-          isArchived: archivedEmailIds.has(e.uid),
+          isLocal: savedEmailIds.has(vaultKey(accountId, effectiveMailbox, e.uid)),
+          isArchived: archivedEmailIds.has(vaultKey(accountId, effectiveMailbox, e.uid)),
         }));
         // loadServerEmails refuses to certify completeness only over rows this
         // paint merged EARLIER. When the server half won the race and already
@@ -831,7 +833,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
       if (archivedEmailIds.size > 0) {
         const archivedAccount = accountId;
-        db.getArchivedEmails(accountId, effectiveMailbox, archivedEmailIds, (batchEmails) => {
+        // The daemon takes this folder's bare uids, not the store's keys.
+        db.getArchivedEmails(accountId, effectiveMailbox, rawArchivedEmailIds ?? vaultUids(archivedEmailIds, accountId, effectiveMailbox), (batchEmails) => {
           if (signal.aborted || get().activeAccountId !== archivedAccount) return;
           useMailStore.setState({ localEmails: batchEmails });
           get().updateSortedEmails();
@@ -944,8 +947,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               const headersWithSource = freshCache.emails.map(e => ({
                 ...e,
                 source: 'cache',
-                isLocal: get().savedEmailIds.has(e.uid),
-                isArchived: get().archivedEmailIds.has(e.uid),
+                isLocal: get().savedEmailIds.has(vaultKey(accountId, effectiveMailbox, e.uid)),
+                isArchived: get().archivedEmailIds.has(vaultKey(accountId, effectiveMailbox, e.uid)),
               }));
 
               // Drop rows the daemon pruned as expunged. merge() alone can't do
@@ -1118,7 +1121,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           serverEmails = serverResult.emails.map((email, idx) => ({
             ...email,
             displayIndex: idx,
-            isLocal: savedEmailIds.has(email.uid),
+            isLocal: savedEmailIds.has(vaultKey(accountId, effectiveMailbox, email.uid)),
             source: 'server',
           }));
         } else if (
@@ -1218,7 +1221,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             if (signal.aborted) return;
             const newEmailsWithMeta = newHeaders.map(email => ({
               ...email,
-              isLocal: savedEmailIds.has(email.uid),
+              isLocal: savedEmailIds.has(vaultKey(accountId, effectiveMailbox, email.uid)),
               source: 'server',
             }));
             uidMap.merge(newEmailsWithMeta);
@@ -1245,7 +1248,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         serverEmails = serverResult.emails.map((email, idx) => ({
           ...email,
           displayIndex: idx,
-          isLocal: savedEmailIds.has(email.uid),
+          isLocal: savedEmailIds.has(vaultKey(accountId, effectiveMailbox, email.uid)),
           source: 'server',
         }));
       }

@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags, emailScopeKey } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags, emailScopeKey, vaultKey } from '../../stores/slices/unifiedHelpers';
 import { paintFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
@@ -408,7 +408,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         const vault = await db.getVaultUidSets(account.id, localFolder);
         let locals = await db.readLocalEmailIndex(account.id, localFolder);
         if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
-        if (vault) for (const uid of vault.saved) allSavedIds.add(uid);
+        if (vault) for (const uid of vault.saved) allSavedIds.add(vaultKey(account.id, localFolder, uid));
         else savedUnknown = true;
         // I-5: a null (unknown) read keeps this group's own last-known ids
         // (setArchivedGroup skips a null write) instead of the whole unified

@@ -107,7 +107,7 @@ describe('thread body loading', () => {
 describe('thread message archived state', () => {
   it('reads the open folder\'s archived uids for its own message only', () => {
     useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
-    useMailStore.setState({ activeAccountId: 'acct-1', activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false, archivedEmailIds: new Set([7]) });
+    useMailStore.setState({ activeAccountId: 'acct-1', activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false, archivedEmailIds: new Set(['acct-1:INBOX:7']) });
     const own = [
       { ...emails[0], _accountId: 'acct-1', isArchived: false },
       { ...emails[1], _accountId: 'acct-1' },

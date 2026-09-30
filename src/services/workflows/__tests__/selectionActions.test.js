@@ -656,8 +656,8 @@ describe('deleteSelectedFromServer', () => {
       emails: seedThread(),
       sentEmails: [],
       localEmails: [localCopy],
-      savedEmailIds: new Set([1]),
-      archivedEmailIds: new Set([1]),
+      savedEmailIds: new Set([`${ACCOUNT.id}:INBOX:1`]),
+      archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:1`]),
       // Proven complete BEFORE the delete, and still holding uid 1 — so the
       // only thing that can make this row read local-only is the delete
       // itself taking uid 1 out of the set.
@@ -1031,7 +1031,7 @@ describe('deleteEmailFromServer', () => {
     mockGetArchivedEmailIds.mockResolvedValue(new Set([1]));
     const localCopy = { ...seedThread()[0], _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local', serverDeleted: false };
     primeStore(seedThread(), []);
-    useMailStore.setState({ localEmails: [localCopy], archivedEmailIds: new Set([1]), deleteTombstones: new Set(['other-account|INBOX|1']) });
+    useMailStore.setState({ localEmails: [localCopy], archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:1`]), deleteTombstones: new Set(['other-account|INBOX|1']) });
 
     await useMailStore.getState().deleteEmailFromServer(1);
 
@@ -1705,22 +1705,22 @@ describe('a finished mutation does not close a message opened while it ran', () 
 describe('removeLocalEmail keeps the known archived set on a failed read (I-5)', () => {
   it('RED on the old code: a null read must not wipe archivedEmailIds to empty', async () => {
     primeStore(seedThread(), []);
-    useMailStore.setState({ archivedEmailIds: new Set([1, 2]) });
+    useMailStore.setState({ archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:1`, `${ACCOUNT.id}:INBOX:2`]) });
     mockGetArchivedEmailIds.mockResolvedValueOnce(null);
 
     await useMailStore.getState().removeLocalEmail(1);
 
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([1, 2]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:1`, `${ACCOUNT.id}:INBOX:2`]));
   });
 
   it('control: a successful read still replaces the set', async () => {
     primeStore(seedThread(), []);
-    useMailStore.setState({ archivedEmailIds: new Set([1, 2]) });
+    useMailStore.setState({ archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:1`, `${ACCOUNT.id}:INBOX:2`]) });
     mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([9]));
 
     await useMailStore.getState().removeLocalEmail(1);
 
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:9`]));
   });
 });
 
@@ -1736,7 +1736,8 @@ describe('removeLocalEmail resolves one exact local copy', () => {
     useMailStore.setState({
       accounts: [ACCOUNT, OTHER_ACCOUNT], activeMailbox: 'UNIFIED', unifiedInbox: true,
       unifiedFolder: 'INBOX', emails: [], localEmails: rows,
-      savedEmailIds: new Set([5]), archivedEmailIds: new Set([5]),
+      savedEmailIds: new Set([`${ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:Sent:5`]),
+      archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:Sent:5`]),
     });
     setArchivedGroup(ACCOUNT.id, 'INBOX', new Set([5]));
     setArchivedGroup(OTHER_ACCOUNT.id, 'INBOX', new Set([5]));
@@ -1757,8 +1758,8 @@ describe('removeLocalEmail resolves one exact local copy', () => {
     expect(sortedCopies).toEqual(expect.arrayContaining([
       [ACCOUNT.id, 'INBOX', 5], [OTHER_ACCOUNT.id, 'INBOX', 5],
     ]));
-    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([5]));
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([5]));
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:INBOX:5`]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:5`, `${OTHER_ACCOUNT.id}:INBOX:5`]));
     expect(getArchivedGroup(OTHER_ACCOUNT.id, 'Sent')).toEqual(new Set());
   });
 
@@ -1784,7 +1785,7 @@ describe('removeLocalEmail resolves one exact local copy', () => {
     const liveLocals = [{ uid: 2, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }];
     useMailStore.setState({
       accounts: [ACCOUNT, OTHER_ACCOUNT], localEmails: liveLocals,
-      savedEmailIds: new Set([2]), archivedEmailIds: new Set([2]),
+      savedEmailIds: new Set([`${ACCOUNT.id}:INBOX:2`]), archivedEmailIds: new Set([`${ACCOUNT.id}:INBOX:2`]),
       selectedEmailId: 2,
     });
     mockGetSavedEmailIds.mockResolvedValueOnce(new Set([9]));
@@ -1796,8 +1797,8 @@ describe('removeLocalEmail resolves one exact local copy', () => {
     expect(mockDeleteLocalEmail).toHaveBeenCalledWith('acct2-Sent-9');
     expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith(OTHER_ACCOUNT.id, 'Sent', 9);
     expect(useMailStore.getState().localEmails).toEqual(liveLocals);
-    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([2]));
-    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([2]));
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:2`]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:2`]));
     expect(useMailStore.getState().selectedEmailId).toBe(2);
   });
 });
@@ -1810,7 +1811,7 @@ describe('removeLocalEmails: one vault delete per (account, mailbox)', () => {
   it('makes one delete call for k uids, one vault read, and one publish that drops them', async () => {
     primeStore([], []);
     const rows = [1, 2, 3].map(uid => ({ uid, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
-    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3]), archivedEmailIds: new Set([1, 2, 3]) });
+    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3].map(uid => `${ACCOUNT.id}:INBOX:${uid}`)), archivedEmailIds: new Set([1, 2, 3].map(uid => `${ACCOUNT.id}:INBOX:${uid}`)) });
     mockGetSavedEmailIds.mockResolvedValueOnce(new Set([3]));
     mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([3]));
     mockGetLocalEmails.mockResolvedValueOnce([rows[2]]);
@@ -1823,7 +1824,7 @@ describe('removeLocalEmails: one vault delete per (account, mailbox)', () => {
     expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
     expect(mockGetArchivedEmailIds).toHaveBeenCalledTimes(1);
     expect(mockGetLocalEmails).toHaveBeenCalledTimes(1);
-    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([3]));
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:3`]));
     expect(useMailStore.getState().localEmails.map(e => e.uid)).toEqual([3]);
   });
 
@@ -1847,13 +1848,13 @@ describe('removeLocalEmails: one vault delete per (account, mailbox)', () => {
   it('an unknown vault read keeps the store minus the removed uids, never an empty set', async () => {
     primeStore([], []);
     const rows = [1, 2, 3].map(uid => ({ uid, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }));
-    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3]), archivedEmailIds: new Set([1, 2, 3]) });
+    useMailStore.setState({ localEmails: rows, savedEmailIds: new Set([1, 2, 3].map(uid => `${ACCOUNT.id}:INBOX:${uid}`)), archivedEmailIds: new Set([1, 2, 3].map(uid => `${ACCOUNT.id}:INBOX:${uid}`)) });
     mockGetArchivedEmailIds.mockResolvedValueOnce(null);
     mockGetLocalEmails.mockResolvedValueOnce(null);
 
     await removeLocalEmailsWorkflow([1, 2]);
 
-    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([3]));
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([`${ACCOUNT.id}:INBOX:3`]));
     expect(useMailStore.getState().localEmails.map(e => e.uid)).toEqual([3]);
   });
 });

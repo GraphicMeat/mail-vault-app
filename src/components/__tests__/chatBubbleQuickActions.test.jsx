@@ -179,7 +179,7 @@ describe('chat bubble configurable actions', () => {
   it('offers Unarchive for an open-folder message its folder holds archived, whatever its flag says', () => {
     mocks.accountState = { activeAccountId: ACCOUNT_A.id, activeMailbox: 'INBOX' };
     mailStore.setState({ activeMailbox: 'INBOX', unifiedInbox: false });
-    mocks.messageListState.archivedEmailIds = new Set([82]);
+    mocks.messageListState.archivedEmailIds = new Set([`${ACCOUNT_A.id}:INBOX:82`]);
     setActions(action('archive'));
     renderChat(email({ uid: 82, isArchived: false, _accountId: ACCOUNT_A.id, _mailbox: 'INBOX' }));
     fireEvent.mouseEnter(screen.getByRole('group').parentElement.parentElement);

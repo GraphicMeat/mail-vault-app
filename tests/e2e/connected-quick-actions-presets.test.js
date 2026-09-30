@@ -80,7 +80,9 @@ describe('Quick action samples and action sets', function () {
     return {
       messages: wanted.map((uid) => {
         const email = s.emails.find((e) => e.uid === uid);
-        return email ? [uid, [...(email.flags || [])].sort().join(' '), !!s.archivedEmailIds?.has(uid)] : [uid, 'gone'];
+        // The vault set is keyed accountId:mailbox:uid, by the row's own folder.
+        const vaulted = email && s.archivedEmailIds?.has(`${email._accountId ?? s.activeAccountId}:${email._mailbox ?? s.activeMailbox}:${uid}`);
+        return email ? [uid, [...(email.flags || [])].sort().join(' '), !!vaulted] : [uid, 'gone'];
       }),
       selected: s.selectedEmailIds.size,
       open: s.selectedEmail?.uid ?? null,

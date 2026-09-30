@@ -149,7 +149,7 @@ describe('SelectionActionBar delete confirmation', () => {
   it('promises the vault copy survives when every selected message is archived', () => {
     // As the store has it: the archived ids and the rows derived from them.
     const archivedRows = selectionFixtureRows.map(row => ({ ...row, isArchived: true }));
-    useMailStoreMock.setState({ archivedEmailIds: new Set([1, 2]), emails: archivedRows, sortedEmails: archivedRows });
+    useMailStoreMock.setState({ archivedEmailIds: new Set(['acct-1:INBOX:1', 'acct-1:INBOX:2']), emails: archivedRows, sortedEmails: archivedRows });
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Delete from server'));
 
@@ -165,7 +165,7 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(quickAction('Unarchive selected').disabled).toBe(true);
     const archivedRows = selectionFixtureRows.map(row => ({ ...row, isArchived: row.uid === 1 }));
     act(() => {
-      useMailStoreMock.setState({ archivedEmailIds: new Set([1]) });
+      useMailStoreMock.setState({ archivedEmailIds: new Set(['acct-1:INBOX:1']) });
       useMailStoreMock.setState({ emails: archivedRows, sortedEmails: archivedRows });
     });
     expect(quickAction('Unarchive selected').disabled).toBe(false);
@@ -492,7 +492,7 @@ describe('SelectionActionBar in a folder kept on this computer', () => {
       localFolders: { 'acct-1': [{ name: LOCAL, dir: 'MBOX_import_2026-09-29', kind: 'import' }] },
       emails: [], sortedEmails: rows, localEmails: rows, sentEmails: [],
       selectedEmailIds: new Set([1, 2]),
-      archivedEmailIds: new Set([1, 2]),
+      archivedEmailIds: new Set([`acct-1:${LOCAL}:1`, `acct-1:${LOCAL}:2`]),
       clearSelection: vi.fn(),
       saveSelectedLocally: vi.fn(),
       markSelectedAsRead: vi.fn(),

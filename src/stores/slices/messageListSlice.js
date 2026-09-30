@@ -15,7 +15,7 @@ import {
 } from '../../services/workflows/loadEmails';
 import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { sentMailboxPathFor } from '../../utils/sentFolder';
-import { _resolveMailboxPath, rowIdentity } from './unifiedHelpers';
+import { _resolveMailboxPath, rowIdentity, vaultHas, vaultKey } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
 import { useTagStore, requestRowTags } from '../tagStore';
@@ -79,16 +79,20 @@ export function addArchivedGroupUid(accountId, mailbox, uid) {
 
 // The union of exactly these (accountId, mailbox) pairs, never every group
 // the session has ever read, so a group that left the view stops
-// contributing to it. Returns the SAME Set instance passed in as `currentSet`
-// when nothing actually changed: the re-sort guard below short-circuits on
-// Set identity, and handing it a fresh-but-equal Set on every group write
-// would force a needless re-sort.
+// contributing to it. The group cache holds bare uids; the union is KEYED
+// (`accountId:mailbox:uid`, vaultKey), because a uid names a message only
+// inside its own folder and the union spans accounts and folders.
+//
+// Returns the SAME Set instance passed in as `currentSet` when nothing
+// actually changed: the re-sort guard below short-circuits on Set identity,
+// and handing it a fresh-but-equal Set on every group write would force a
+// needless re-sort.
 export function deriveArchivedUnion(currentSet, pairs) {
   const union = new Set();
   let anyKnown = false;
   for (const [accountId, mailbox] of pairs) {
     const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
-    if (ids) { anyKnown = true; for (const uid of ids) union.add(uid); }
+    if (ids) { anyKnown = true; for (const uid of ids) union.add(vaultKey(accountId, mailbox, uid)); }
   }
   // None of the groups in view has ever gone through this map (e.g. this
   // round's own read is a miss, and a failed read skips the write) and
@@ -97,7 +101,7 @@ export function deriveArchivedUnion(currentSet, pairs) {
   // claiming "nothing is archived", which is the exact bug this map exists
   // to prevent.
   if (!anyKnown) return currentSet;
-  if (union.size === currentSet.size && [...union].every(u => currentSet.has(u))) return currentSet;
+  if (union.size === currentSet.size && [...union].every(k => currentSet.has(k))) return currentSet;
   return union;
 }
 
@@ -110,9 +114,9 @@ export function mergeArchivedGroup(currentSet, accountId, mailbox) {
   const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
   if (!ids) return currentSet;
   for (const uid of ids) {
-    if (currentSet.has(uid)) continue;
+    if (currentSet.has(vaultKey(accountId, mailbox, uid))) continue;
     const merged = new Set(currentSet);
-    for (const u of ids) merged.add(u);
+    for (const u of ids) merged.add(vaultKey(accountId, mailbox, u));
     return merged;
   }
   return currentSet;
@@ -223,6 +227,10 @@ export function deriveDisplayRows({
   const uidKey = unifiedInbox
     ? (e) => `${e._accountId || ''}:${e.uid}`
     : (e) => e.uid;
+  // The vault sets are keyed by where a message lives (vaultKey), so a row is
+  // looked up by its own folder and account, never by its bare uid.
+  const view = { activeAccountId, activeMailbox };
+  const vaulted = (set, e) => vaultHas(set, e, view);
 
   let result = [];
 
@@ -236,7 +244,7 @@ export function deriveDisplayRows({
   } else if (viewMode === 'local') {
     result = [];
     for (const e of localEmails) {
-      if (archivedEmailIds.has(e.uid)) {
+      if (vaulted(archivedEmailIds, e)) {
         e.isLocal = true;
         e.isArchived = true;
         e.source = custodySource(e);
@@ -246,14 +254,14 @@ export function deriveDisplayRows({
   } else {
     const loadedKeys = new Set(emails.map(e => uidKey(e)));
     for (const e of emails) {
-      e.isLocal = savedEmailIds.has(e.uid);
-      e.isArchived = archivedEmailIds.has(e.uid);
+      e.isLocal = vaulted(savedEmailIds, e);
+      e.isArchived = vaulted(archivedEmailIds, e);
       e.source = 'server';
     }
     result = [...emails];
 
     for (const localEmail of localEmails) {
-      if (!loadedKeys.has(uidKey(localEmail)) && archivedEmailIds.has(localEmail.uid)) {
+      if (!loadedKeys.has(uidKey(localEmail)) && vaulted(archivedEmailIds, localEmail)) {
         localEmail.isLocal = true;
         localEmail.isArchived = true;
         // Not "missing from this mailbox" — see custodySource. A vault row the
@@ -280,7 +288,6 @@ export function deriveDisplayRows({
     // folder, never by the view's. A branch view's activeMailbox is the branch
     // root, so the view's folder hid the root's uid 34 along with the child
     // folder's, and never matched a tombstone written inside the branch.
-    const view = { activeAccountId, activeMailbox };
     result = result.filter(e => {
       const id = rowIdentity(e, view);
       return !id || !deleteTombstones.has(`${id.accountId}|${id.mailbox}|${id.uid}`);

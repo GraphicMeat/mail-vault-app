@@ -57,13 +57,13 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('EmailViewer archived state', () => {
   it('offers Unarchive for an open-folder message its folder holds archived, in Server view', () => {
-    const bar = renderViewer(message(), { viewMode: 'server', archived: [5] });
+    const bar = renderViewer(message(), { viewMode: 'server', archived: ['acct-1:INBOX:5'] });
     expect(bar.queryAllByRole('button', { name: /^Unarchive$/ })).toHaveLength(1);
     expect(bar.queryAllByRole('button', { name: /^Archive$/ })).toHaveLength(0);
   });
 
   it('never claims a vault copy for another folder\'s message that shares an archived uid', async () => {
-    const bar = renderViewer(message({ _mailbox: 'Sent' }), { archived: [5] });
+    const bar = renderViewer(message({ _mailbox: 'Sent' }), { archived: ['acct-1:INBOX:5'] });
     expect(bar.queryAllByRole('button', { name: /^Archive$/ })).toHaveLength(1);
     fireEvent.click(bar.getByRole('button', { name: /delete/i }));
     const dialog = await screen.findByRole('alertdialog');

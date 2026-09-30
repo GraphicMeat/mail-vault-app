@@ -162,7 +162,7 @@ describe('selectEmail marks a body the daemon cached as saved, with no vault rea
 
     await useMailStore.getState().selectEmail(42, 'server');
 
-    expect(useMailStore.getState().savedEmailIds.has(42)).toBe(true);
+    expect(useMailStore.getState().savedEmailIds.has(`${A.id}:INBOX:42`)).toBe(true);
     expect(mockGetVaultUidSets).not.toHaveBeenCalled();
     expect(vaultReads()).toEqual([]);
   });
@@ -173,18 +173,18 @@ describe('selectEmail marks a body the daemon cached as saved, with no vault rea
 
     await useMailStore.getState().selectEmail(42, 'server');
 
-    expect(useMailStore.getState().savedEmailIds.has(43)).toBe(true);
+    expect(useMailStore.getState().savedEmailIds.has(`${A.id}:INBOX:43`)).toBe(true);
   });
 
   it('keeps every other id a spanning view already holds', async () => {
     const foreign = { ...MSG, _accountId: B.id, _mailbox: 'INBOX' };
     mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>', vaultCached: true });
     primeStore({ unified: true, emails: [foreign] });
-    useMailStore.setState({ savedEmailIds: new Set([7, 8]) });
+    useMailStore.setState({ savedEmailIds: new Set([`${B.id}:INBOX:7`, `${B.id}:INBOX:8`]) });
 
     await useMailStore.getState().selectEmail(42, 'server');
 
-    expect([...useMailStore.getState().savedEmailIds].sort((a, b) => a - b)).toEqual([7, 8, 42]);
+    expect([...useMailStore.getState().savedEmailIds].sort()).toEqual([`${B.id}:INBOX:7`, `${B.id}:INBOX:8`, `${B.id}:INBOX:42`].sort());
     expect(vaultReads()).toEqual([]);
   });
 
@@ -194,7 +194,7 @@ describe('selectEmail marks a body the daemon cached as saved, with no vault rea
 
     await useMailStore.getState().selectEmail(42, 'server');
 
-    expect(useMailStore.getState().savedEmailIds.has(42)).toBe(false);
+    expect(useMailStore.getState().savedEmailIds.has(`${A.id}:INBOX:42`)).toBe(false);
     expect(vaultReads()).toEqual([]);
   });
 });

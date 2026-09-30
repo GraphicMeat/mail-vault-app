@@ -187,7 +187,8 @@ describe('All inboxes — Archive All on a thread from another account', functio
     // context, exactly as in his own INBOX view.
     expect(after.progress).toEqual(expect.objectContaining({ total: 3, completed: 3, errors: 0 }));
     expect(after.error).toBeNull();
-    for (const uid of threadUids) expect(after.archived).toContain(uid);
+    // The vault sets are keyed accountId:mailbox:uid.
+    for (const uid of threadUids) expect(after.archived).toContain(`${lukeId}:INBOX:${uid}`);
     // The vault rows are luke's, in his INBOX — not the active account's.
     const vaultRows = after.local.filter((e) => threadUids.includes(e.uid) && e.acct === lukeId && e.box === 'INBOX');
     expect(vaultRows.length).toBe(3);

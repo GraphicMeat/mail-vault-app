@@ -149,7 +149,7 @@ describe('saveLocalDraft', () => {
     expect(storeState.localEmails[0].subject).toBe('Second pass');
     expect(storeState.localEmails[0].isArchived).toBe(true);
     // A local row only renders when its uid is in this set.
-    expect(storeState.archivedEmailIds.has(1700000000)).toBe(true);
+    expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000000')).toBe(true);
   });
 
   it('leaves the list alone when the user is looking somewhere else', async () => {
@@ -171,7 +171,7 @@ describe('deleteLocalDraft', () => {
     });
     expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith('acct-1', 'Drafts', 1700000000);
     expect(storeState.localEmails.length).toBe(0);
-    expect(storeState.archivedEmailIds.has(1700000000)).toBe(false);
+    expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000000')).toBe(false);
   });
 
   it('does nothing without a draft to delete', async () => {

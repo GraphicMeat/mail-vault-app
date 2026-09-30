@@ -8,6 +8,7 @@ import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKey
 import { waitForSentMailboxPath, findSentMailboxPath, mergesSentIntoThreads } from '../utils/sentFolder';
 import { fetchPolicy, keepsBody } from '../utils/fetchPolicy';
 import { downloadCapChanged } from '../utils/transferLimits';
+import { vaultUids } from '../stores/slices/unifiedHelpers';
 
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
@@ -84,9 +85,10 @@ class EmailPipelineManager {
     // everything from the reuse check to `startContentCaching` must run
     // without a yield (see below). Only Index Only asks the index.
     const policy = fetchPolicy(useSettingsStore.getState(), accountId);
-    let kept = savedEmailIds;
+    // The store's set is keyed by folder; this pipeline keeps one folder's uids.
+    let kept = vaultUids(savedEmailIds, accountId, pipelineMailbox);
     if (policy?.mode === 'indexOnly') {
-      kept = await this._keptUids(accountId, pipelineMailbox, savedEmailIds, policy);
+      kept = await this._keptUids(accountId, pipelineMailbox, kept, policy);
       // The read yielded: a newer activation owns the pipelines now.
       if (this._activeAccountId !== accountId || this._destroyed) return;
     }

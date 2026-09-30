@@ -273,8 +273,8 @@ describe('reloading a local folder', () => {
     activeMailbox: NAME,
     localFolders: { [ACCOUNT.id]: [FOLDER] },
     localEmails: h.rows.map(r => ({ ...r })),
-    savedEmailIds: new Set([1, 2]),
-    archivedEmailIds: new Set([1, 2]),
+    savedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:1`, `${ACCOUNT.id}:${NAME}:2`]),
+    archivedEmailIds: new Set([`${ACCOUNT.id}:${NAME}:1`, `${ACCOUNT.id}:${NAME}:2`]),
     hasMoreEmails: false,
   });
 

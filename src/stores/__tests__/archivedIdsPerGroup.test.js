@@ -130,6 +130,11 @@ const { _loadEmailsViaGraph } = await import('../../services/workflows/loadEmail
 const A = { id: 'acct-a', email: 'a@example.com' };
 const B = { id: 'acct-b', email: 'b@example.com' };
 
+// The store's vault sets are keyed by where the message lives:
+// accountId:mailbox:uid. One helper so the expectations read as uids.
+const key = (account, uid, mailbox = 'INBOX') => `${account.id}:${mailbox}:${uid}`;
+const keysOf = (account, uids) => uids.map(uid => key(account, uid));
+
 // A single microtask flush is not always enough for setViewMode's unified
 // branch (a nested Promise.all inside a Promise.all().then()); two macrotask
 // ticks clears it the same way the existing switchUnifiedFolder spec does.
@@ -182,7 +187,7 @@ describe('setViewMode: narrowing out of unified inbox drops groups no longer in 
     useMailStore.getState().setViewMode('all');
     await flush();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([key(A, 1), key(B, 2)]);
 
     // Switch to a single-mailbox view on A, whose own re-read now fails.
     mockGetArchivedEmailIds.mockImplementation(async (accountId, mailbox) => (
@@ -194,9 +199,9 @@ describe('setViewMode: narrowing out of unified inbox drops groups no longer in 
 
     const { archivedEmailIds } = useMailStore.getState();
     // A's own group survives from its last known-good read...
-    expect(archivedEmailIds.has(1)).toBe(true);
+    expect(archivedEmailIds.has(key(A, 1))).toBe(true);
     // ...but B is no longer in view, so its ids must not still be here.
-    expect(archivedEmailIds.has(2)).toBe(false);
+    expect(archivedEmailIds.has(key(B, 2))).toBe(false);
   });
 });
 
@@ -210,7 +215,7 @@ describe('setViewMode: a per-account read failure inside a unified pass (Phase 2
     useMailStore.setState({ unifiedInbox: true, unifiedFolder: 'INBOX' });
     useMailStore.getState().setViewMode('all');
     await flush();
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([key(A, 1), key(B, 2)]);
 
     // Second unified pass: A's read fails, B's succeeds with a fresh id.
     mockGetArchivedEmailIds.mockImplementation(async (accountId, mailbox) => {
@@ -223,9 +228,9 @@ describe('setViewMode: a per-account read failure inside a unified pass (Phase 2
 
     const { archivedEmailIds } = useMailStore.getState();
     // A's ids must still be there: nothing dropped by the failed read.
-    expect(archivedEmailIds.has(1)).toBe(true);
+    expect(archivedEmailIds.has(key(A, 1))).toBe(true);
     // B's fresh read landed too.
-    expect([...archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...archivedEmailIds].sort()).toEqual([key(A, 1), key(B, 2), key(B, 3)]);
   });
 });
 
@@ -238,7 +243,7 @@ describe('deriveArchivedUnion: a group never seen by the map is not "nothing arc
       unifiedInbox: false,
       activeAccountId: A.id,
       activeMailbox: 'INBOX',
-      archivedEmailIds: new Set([1]),
+      archivedEmailIds: new Set(keysOf(A, [1])),
     });
     mockGetArchivedEmailIds.mockResolvedValue(null);
 
@@ -248,7 +253,7 @@ describe('deriveArchivedUnion: a group never seen by the map is not "nothing arc
     // The map has nothing for this group and this round's own read also
     // failed, so there is no group-level evidence to narrow from: the
     // field must not collapse to empty.
-    expect([...useMailStore.getState().archivedEmailIds]).toEqual([1]);
+    expect([...useMailStore.getState().archivedEmailIds]).toEqual(keysOf(A, [1]));
   });
 });
 
@@ -263,7 +268,7 @@ describe('setViewMode: the Set-identity trap (Step 6)', () => {
     await flush();
     const firstIds = useMailStore.getState().archivedEmailIds;
     const firstSorted = useMailStore.getState().sortedEmails;
-    expect([...firstIds]).toEqual([1]);
+    expect([...firstIds]).toEqual(keysOf(A, [1]));
 
     for (let i = 0; i < 3; i++) {
       useMailStore.getState().setViewMode('all');
@@ -290,7 +295,7 @@ describe('review fix: a bypassing writer\'s successful read must feed the group 
       unifiedInbox: false,
       activeAccountId: A.id,
       activeMailbox: 'INBOX',
-      archivedEmailIds: new Set([1]),
+      archivedEmailIds: new Set(keysOf(A, [1])),
     });
 
     // AccountPipeline._finish() is one of the three sites that write
@@ -304,7 +309,7 @@ describe('review fix: a bypassing writer\'s successful read must feed the group 
     await flush();
 
     // Sanity check: the write site itself was actually reached.
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
 
     // Now a later read for the SAME group fails, the mechanism F2 already
     // uses for this elsewhere (see the "excluded writer" spec above).
@@ -314,7 +319,7 @@ describe('review fix: a bypassing writer\'s successful read must feed the group 
 
     // The ids _finish just wrote must survive: the map is no longer staler
     // than the store, so the failed read has nothing to narrow down to.
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
   });
 });
 
@@ -324,7 +329,7 @@ describe('review follow-up: 4 more bypassing writers must feed the group map too
       unifiedInbox: false,
       activeAccountId: A.id,
       activeMailbox: 'INBOX',
-      archivedEmailIds: new Set([1]),
+      archivedEmailIds: new Set(keysOf(A, [1])),
     });
     setArchivedGroup(A.id, 'INBOX', new Set([1]));
     mockGetSavedEmailIds.mockResolvedValue(new Set());
@@ -334,39 +339,39 @@ describe('review follow-up: 4 more bypassing writers must feed the group map too
     mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
     await saveEmailLocally(42);
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
 
     mockGetArchivedEmailIds.mockResolvedValue(null);
     useMailStore.getState().setViewMode('all');
     await flush();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
   });
 
   it('removeLocalEmail keeps the map in sync on a successful read', async () => {
     mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
     await removeLocalEmail(99);
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
 
     mockGetArchivedEmailIds.mockResolvedValue(null);
     useMailStore.getState().setViewMode('all');
     await flush();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
   });
 
   it('loadEmails (main list load) keeps the map in sync on a successful read', async () => {
     mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
     await useMailStore.getState().loadEmails();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
 
     mockGetArchivedEmailIds.mockResolvedValue(null);
     useMailStore.getState().setViewMode('all');
     await flush();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
   });
 
   it('_loadEmailsViaGraph keeps the map in sync on a successful read', async () => {
@@ -374,12 +379,12 @@ describe('review follow-up: 4 more bypassing writers must feed the group map too
     const generation = getLoadEmailsGeneration();
     await _loadEmailsViaGraph(A, A.id, 'INBOX', generation);
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
 
     mockGetArchivedEmailIds.mockResolvedValue(null);
     useMailStore.getState().setViewMode('all');
     await flush();
 
-    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual(keysOf(A, [1, 2, 3]));
   });
 });

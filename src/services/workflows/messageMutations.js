@@ -9,7 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import { retryOnce, isLocalMailbox } from './mailboxTree';
 import { forget as forgetHeaderMemo } from '../headerMemo';
@@ -219,8 +219,8 @@ export async function saveEmailLocally(uid) {
       const live = get();
       if (live.activeAccountId === accountId && live.activeMailbox === mailbox) {
         useMailStore.setState({
-          savedEmailIds: vault?.saved ?? live.savedEmailIds,
-          archivedEmailIds: vault?.archived ?? live.archivedEmailIds,
+          savedEmailIds: vaultKeys(accountId, mailbox, vault?.saved) ?? live.savedEmailIds,
+          archivedEmailIds: vaultKeys(accountId, mailbox, vault?.archived) ?? live.archivedEmailIds,
           localEmails: localEmails ?? live.localEmails,
         });
       }
@@ -302,10 +302,8 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
     tally.errors = base.errors + errors;
     useMailStore.setState({ bulkSaveProgress: { ...tally, active: true } });
   };
-  // `archivedEmailIds` is keyed by bare uid, so a group that is not the
-  // folder on screen must not paint into it: INBOX's own message under a Sent
-  // copy's uid would read as archived. A list spanning mailboxes holds the
-  // union and takes every group.
+  // `archivedEmailIds` holds the folder on screen, or the union of a list
+  // spanning mailboxes: a group that is not in the view has no place in it.
   const s0 = get();
   const paintsIds = spansMailboxes(s0) || (accountId === s0.activeAccountId && mailbox === s0.activeMailbox);
 
@@ -334,9 +332,10 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
           // account/mailbox still has this uid even if its own re-read fails.
           addArchivedGroupUid(accountId, mailbox, p.lastUid);
           const { archivedEmailIds } = get();
-          if (!archivedEmailIds.has(p.lastUid)) {
+          const archivedKey = vaultKey(accountId, mailbox, p.lastUid);
+          if (!archivedEmailIds.has(archivedKey)) {
             const updated = new Set(archivedEmailIds);
-            updated.add(p.lastUid);
+            updated.add(archivedKey);
             useMailStore.setState({ archivedEmailIds: updated });
             get().updateSortedEmails();
           }
@@ -430,14 +429,14 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   if (!spans) {
     if (accountId !== s.activeAccountId || mailbox !== s.activeMailbox) return;
     const archivedEmailIds = deriveArchivedUnion(s.archivedEmailIds, [[accountId, mailbox]]);
-    useMailStore.setState({ savedEmailIds: vault?.saved ?? s.savedEmailIds, archivedEmailIds, localEmails: locals ?? s.localEmails });
+    useMailStore.setState({ savedEmailIds: vaultKeys(accountId, mailbox, vault?.saved) ?? s.savedEmailIds, archivedEmailIds, localEmails: locals ?? s.localEmails });
     get().updateSortedEmails();
     return;
   }
 
   const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
   useMailStore.setState({
-    savedEmailIds: new Set([...s.savedEmailIds, ...(vault?.saved || [])]),
+    savedEmailIds: new Set([...s.savedEmailIds, ...(vaultKeys(accountId, mailbox, vault?.saved) || [])]),
     // A spanning view only grows as groups come into it, so merge this
     // group's cached ids (never the whole map) into the existing union.
     archivedEmailIds: mergeArchivedGroup(s.archivedEmailIds, accountId, mailbox),
@@ -595,6 +594,7 @@ async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
   const get = () => useMailStore.getState();
   viewCountsStale();
   const removed = new Set(uids.map(String));
+  const removedKeys = new Set(uids.map(uid => vaultKey(accountId, mailbox, uid)));
   const isRemoved = email => removed.has(String(email.uid));
 
   const [vault, storedLocalEmails] = await Promise.all([
@@ -603,7 +603,7 @@ async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
   ]);
   // Unknown (`null`) falls through to the `??` fallbacks below, which keep
   // the store's own rows and ids minus the removed uid.
-  const savedEmailIds = vault?.saved ?? null;
+  const savedEmailIds = vaultKeys(accountId, mailbox, vault?.saved) ?? null;
   const targetLocalEmails = storedLocalEmails?.filter(email => !isRemoved(email));
   setArchivedGroup(accountId, mailbox, vault?.archived ?? null);
 
@@ -630,7 +630,7 @@ async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
   if (activeFolder || targetInView) {
     // Unknown keeps the store's ids minus the ones just removed, the same
     // fallback the rows take on the next line.
-    let nextSavedEmailIds = savedEmailIds ?? new Set([...(live.savedEmailIds || [])].filter(id => !removed.has(String(id))));
+    let nextSavedEmailIds = savedEmailIds ?? new Set([...(live.savedEmailIds || [])].filter(id => !removedKeys.has(id)));
     let nextLocalEmails = targetLocalEmails ?? (live.localEmails || []).filter(email => !isTargetRow(email) || !isRemoved(email));
     let viewPairs = [[accountId, mailbox]];
 
@@ -655,9 +655,11 @@ async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
       ];
       const refreshedSavedEmailIds = savedEmailIds ?? new Set();
       nextSavedEmailIds = new Set([...(live.savedEmailIds || []), ...refreshedSavedEmailIds]);
+      // Keyed by folder, so only THIS folder's key goes: another folder's copy
+      // of the same number is a different message and keeps its own entry.
       for (const uid of uids) {
-        if (savedEmailIds != null && !refreshedSavedEmailIds.has(uid) && !otherLocalEmails.some(email => String(email.uid) === String(uid))) {
-          nextSavedEmailIds.delete(uid);
+        if (savedEmailIds != null && !refreshedSavedEmailIds.has(vaultKey(accountId, mailbox, uid))) {
+          nextSavedEmailIds.delete(vaultKey(accountId, mailbox, uid));
         }
       }
     }
@@ -1349,18 +1351,20 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
   // Stamped "we deleted the server copy" by the delete; it is back, so custody
   // must stop claiming this is the only copy left. See stores/slices/custody.js.
   for (const [, uid] of rebound) await stampVaultEntry(accountId, mailbox, uid, { serverDeleted: false });
-  const swap = (set) => {
+  const swap = (set, keyOf = (uid) => uid) => {
     if (!set) return set;
     const out = new Set(set);
-    for (const [old, uid] of rebound) if (out.delete(old)) out.add(uid);
+    for (const [old, uid] of rebound) if (out.delete(keyOf(old))) out.add(keyOf(uid));
     return out;
   };
+  // The group cache holds bare uids, the store's sets are keyed by folder.
+  const swapKeyed = (set) => swap(set, (uid) => vaultKey(accountId, mailbox, uid));
   setArchivedGroup(accountId, mailbox, swap(getArchivedGroup(accountId, mailbox)) ?? null);
   const now = get();
   const localOf = new Map(rebound.map(([old, uid]) => [_targetId({ accountId, mailbox, uid: old }), uid]));
   useMailStore.setState({
-    archivedEmailIds: swap(now.archivedEmailIds),
-    savedEmailIds: swap(now.savedEmailIds),
+    archivedEmailIds: swapKeyed(now.archivedEmailIds),
+    savedEmailIds: swapKeyed(now.savedEmailIds),
     localEmails: now.localEmails.map((e) => {
       const uid = localOf.get(_rowId(e, now));
       return uid == null ? e : { ...e, uid, serverDeleted: false };
@@ -1398,7 +1402,7 @@ export async function stampVaultEntry(accountId, mailbox, uid, extra) {
     // does not would put a row on screen with nothing behind it.
     const { useMailStore } = await import('../../stores/mailStore');
     const state = useMailStore.getState();
-    if (!state.archivedEmailIds?.has(uid)) return false;
+    if (!state.archivedEmailIds?.has(vaultKey(accountId, mailbox, uid))) return false;
     const row = [...(state.localEmails || []), ...(state.emails || []), ...(state.sortedEmails || [])]
       .find(e => e.uid === uid && (e._mailbox == null || e._mailbox === mailbox));
     if (!row?.subject) return false;
@@ -2337,7 +2341,7 @@ export async function deleteSelectedFromServer() {
       const groupKey = `${accountId}|${mailbox}`;
       if (!prunes.has(groupKey)) prunes.set(groupKey, { accountId, mailbox, uids: [] });
       prunes.get(groupKey).uids.push(realUid);
-      if (!isUnified && get().archivedEmailIds.has(realUid)) {
+      if (!isUnified && get().archivedEmailIds.has(vaultKey(accountId, mailbox, realUid))) {
         survivingLocalTombstones.add(tombstone);
       }
       // Same durable stamp the single delete writes — a surviving vault copy is
@@ -2697,8 +2701,8 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     const live = get();
     if (live.activeAccountId === state.activeAccountId && live.activeMailbox === state.activeMailbox) {
       useMailStore.setState({
-        savedEmailIds: vault?.saved ?? live.savedEmailIds,
-        archivedEmailIds: vault?.archived ?? live.archivedEmailIds,
+        savedEmailIds: vaultKeys(activeGroup.accountId, activeGroup.mailbox, vault?.saved) ?? live.savedEmailIds,
+        archivedEmailIds: vaultKeys(activeGroup.accountId, activeGroup.mailbox, vault?.archived) ?? live.archivedEmailIds,
         localEmails: localEmails ?? live.localEmails,
       });
     }
