@@ -301,6 +301,7 @@ registerRows({
   name: 'notesCards',
   store: useNotesStore,
   fields: ['cards'],
+  held: state => state.cards.flatMap(card => card.copies || []),
   mapRows: (state, ctx) => {
     const flagged = copies => copies.some(copy => copy.flags?.includes('\\Flagged'));
     let touched = false;

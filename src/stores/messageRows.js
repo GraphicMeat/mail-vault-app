@@ -17,8 +17,11 @@
 //                             right now
 //   paintFlags(rows)          a loader's flags (header cache, a committed list)
 //                             laid over every container's copy of those rows
+//   paintMovedFlags(rows, list)  the same for a reread of a whole list's flags:
+//                             only the rows that differ from the list, or that a
+//                             container outside the list holds
 //
-// A container is `{ name, store, fields, mapRows?, rows?, rank?, derived? }`,
+// A container is `{ name, store, fields, mapRows?, rows?, held?, rank?, derived? }`,
 // or, for a snapshot of rows that lives outside any store, `{ name, invalidate }`:
 //   fields   the store fields it holds (the guard spec lists every collection
 //            a store has and asks that each is registered or exempted)
@@ -30,6 +33,10 @@
 //            not pay a render per container.
 //   rows     (state) -> the rows a key can be resolved against
 //   rank     where its rows sit in the pool; the lowest wins a key both hold
+//   held     (state) -> the few rows it keeps outside the lists (the reader, the
+//            open thread, a search's hits, the body cache, a Notes card's
+//            copies). A reread of every list row's flags repaints these even
+//            when the list's own copy is current.
 //   derived  a projection of another container (`sortedEmails`): a writer
 //            that re-derives the list afterwards passes `skipDerived`
 //   invalidate  (ctx) -> void, for a cache of rows a store does not hold (the
@@ -198,6 +205,35 @@ export function patchEverywhere(keys, mapRow, { skipDerived = false, only = null
 /// row: the list took them and the reader, the open thread, the body cache and a
 /// search hit did not. Rows match by message key, never by bare uid. Returns
 /// whether any container changed, so the caller knows to re-derive its lists.
+const sameFlags = (a, b) => {
+  const x = a || [];
+  const y = b || [];
+  return x.length === y.length && x.every(f => y.includes(f));
+};
+
+/// The uids of the rows the containers keep outside the lists (`held`).
+function heldUids() {
+  const uids = new Set();
+  for (const container of containers.values()) {
+    if (!container.held) continue;
+    for (const row of container.held(container.store.getState()) || []) if (row) uids.add(row.uid);
+  }
+  return uids;
+}
+
+/// `paintFlags` for a reread of the flags of every row a list holds (the daemon
+/// synced a change, and the echo of the user's own STORE is the common case): a
+/// five-figure list must not be keyed and scanned for the few rows that moved.
+/// Paints the rows whose flags differ from the list's copy, and the rows a
+/// container outside the list holds (the reader may be stale while the list is
+/// current). `listRows` is the list the `rows` were read for.
+export function paintMovedFlags(rows, listRows) {
+  const inList = new Map();
+  for (const row of listRows) if (!inList.has(row.uid)) inList.set(row.uid, row.flags);
+  const held = heldUids();
+  return paintFlags(rows.filter(row => row && (held.has(row.uid) || !inList.has(row.uid) || !sameFlags(inList.get(row.uid), row.flags))));
+}
+
 export function paintFlags(rows) {
   const mail = mailStore?.getState();
   const flagsByKey = new Map();
@@ -209,7 +245,7 @@ export function paintFlags(rows) {
   patchEverywhere([...flagsByKey.keys()], (row, key) => {
     const flags = flagsByKey.get(key);
     const was = row.flags || [];
-    if (flags.length === was.length && flags.every(f => was.includes(f))) return row;
+    if (sameFlags(was, flags)) return row;
     changed = true;
     return { ...row, flags };
   }, { skipDerived: true });

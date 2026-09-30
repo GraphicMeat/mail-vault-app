@@ -67,6 +67,7 @@ registerRows({ name: 'sortedEmails', store: useMailStore, fields: ['sortedEmails
   mapRows: listPatch('sortedEmails') });
 registerRows({ name: 'selectedEmail', store: useMailStore, fields: ['selectedEmail'], rank: 40,
   rows: s => (s.selectedEmail ? [s.selectedEmail] : []),
+  held: s => (s.selectedEmail ? [s.selectedEmail] : []),
   mapRows: (state, ctx) => {
     const row = state.selectedEmail;
     const key = row && ctx.hit(row);
@@ -77,6 +78,7 @@ registerRows({ name: 'selectedEmail', store: useMailStore, fields: ['selectedEma
 // The open thread is a snapshot of buildThreads' output: the list swaps a fresh
 // one in only when its MEMBERS change, and a flag change moves none.
 registerRows({ name: 'selectedThread', store: useMailStore, fields: ['selectedThread'],
+  held: s => s.selectedThread?.emails,
   mapRows: (state, ctx) => {
     const thread = state.selectedThread;
     const emails = mapList(thread?.emails, ctx);
@@ -87,6 +89,7 @@ registerRows({ name: 'selectedThread', store: useMailStore, fields: ['selectedTh
 // keys are the scope keys themselves, and it is patched in place: the Map is
 // no reactive state, and the entries carry their LRU stamps.
 registerRows({ name: 'emailCache', store: useMailStore, fields: ['emailCache'],
+  held: s => [...s.emailCache.values()].map(entry => entry?.email),
   mapRows: (state, ctx) => {
     for (const key of ctx.keys) {
       const entry = state.emailCache.get(key);

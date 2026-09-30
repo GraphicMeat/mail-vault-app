@@ -402,6 +402,7 @@ registerRows({
   fields: ['searchResults', 'indexedSearchRows', 'searchRowsOutsideIndex'],
   rank: 50,
   rows: state => state.searchResults.filter(stamped),
+  held: state => state.searchResults.filter(stamped),
   mapRows: (state, ctx) => searchRows.mapRows(state, row => {
     const key = stamped(row) ? ctx.hit(row) : null;
     return key === null ? row : ctx.mapRow(row, key);

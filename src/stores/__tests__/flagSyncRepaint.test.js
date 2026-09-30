@@ -115,6 +115,8 @@ vi.mock('../settingsStore', () => ({
 const { useMailStore } = await import('../mailStore');
 const { useSearchStore } = await import('../searchStore');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
+const { registerRows, unregisterRows } = await import('../messageRows');
+const { useNotesStore } = await import('../notesStore');
 
 const A1 = { id: 'a1', email: 'me@one.co', imapHost: 'h', password: 'x' };
 const row = (uid, flags) => ({
@@ -252,5 +254,90 @@ describe('a flag change the daemon synced reaches every container the message is
     await tick();
 
     expect(useMailStore.getState().sentEmails[0].flags).toEqual(['\\Seen']);
+  });
+});
+
+// The daemon re-reads the flags of EVERY row the list holds (five figures on a
+// big folder) after each synced change, and the echo of the user's own STORE
+// differs in none of them. The repaint used to key every cached row and scan
+// every container for each key; it now keys only the rows whose flags moved,
+// plus the rows the reader, the thread, a search, the body cache and a Notes card
+// hold outside the list.
+describe('the flag sync repaint only works on what differs', () => {
+  const N = 2000;
+  const bigList = () => Array.from({ length: N }, (_, i) => row(i + 1, ['\\Seen']));
+  const keysPainted = [];
+  let off;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    keysPainted.length = 0;
+    // One call per write the registry makes, with the keys of that write.
+    registerRows({ name: 'probe', invalidate: (ctx) => keysPainted.push([...ctx.keys]) });
+    off = () => unregisterRows('probe');
+    useMailStore.setState({
+      accounts: [A1], activeAccountId: 'a1', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
+      unifiedFolder: 'INBOX', viewMode: 'all', localEmails: [], sentEmails: [],
+      savedEmailIds: new Set(), archivedEmailIds: new Set(), deleteTombstones: new Set(),
+      selectedEmail: null, selectedEmailId: null, selectedThread: null, emailCache: new Map(),
+      loading: false, loadingMore: false, _sortedEmailsFingerprint: '',
+      emails: bigList(),
+      serverUids: serverUids(new Set(bigList().map(r => r.uid)), { complete: true }),
+      totalEmails: N,
+    });
+    useSearchStore.setState({ searchActive: false, searchResults: [], indexedSearchRows: {}, searchRowsOutsideIndex: [], excludedSearchCopies: new Set() });
+    useNotesStore.setState({ cards: [] });
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: N + 1, highestModseq: 9, totalEmails: N, totalCached: N });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: N + 1, highestModseq: 9, exists: N });
+  });
+  const afterEach_ = () => off();
+
+  const cacheWith = (overrides = {}) =>
+    mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) =>
+      bigList().map(r => (overrides[r.uid] ? { ...r, flags: overrides[r.uid] } : r)).filter(r => uids.includes(r.uid)));
+
+  it('the echo of the list\'s own flags paints nothing', async () => {
+    cacheWith();
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+    afterEach_();
+
+    expect(keysPainted).toEqual([]);
+  });
+
+  it('one changed row is the only key painted out of the whole list', async () => {
+    cacheWith({ 7: [] });
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+    afterEach_();
+
+    expect(keysPainted).toEqual([['a1-INBOX-7']]);
+    expect(flagsOf(7)).toEqual([]);
+  });
+
+  it('a reader that is stale while the list is current is still repainted, and only it', async () => {
+    const reader = { ...row(9, []), _accountId: 'a1', _mailbox: 'INBOX' }; // the list row says read
+    useMailStore.setState({ selectedEmail: reader, selectedEmailId: 9 });
+    cacheWith();
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+    afterEach_();
+
+    expect(useMailStore.getState().selectedEmail.flags).toEqual(['\\Seen']);
+    expect(keysPainted).toEqual([['a1-INBOX-9']]);
+  });
+
+  it('a Notes card copy that is stale while the list is current is still repainted', async () => {
+    useNotesStore.setState({ cards: [{ key: 'c1', starred: false,
+      copies: [{ accountId: 'a1', mailbox: 'INBOX', uid: 11, flags: [] }] }] });
+    cacheWith();
+    await useMailStore.getState().loadEmails({ rereadFlags: true });
+    await tick();
+    afterEach_();
+
+    expect(useNotesStore.getState().cards[0].copies[0].flags).toEqual(['\\Seen']);
+    expect(keysPainted).toEqual([['a1-INBOX-11']]);
   });
 });

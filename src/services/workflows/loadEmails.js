@@ -8,7 +8,7 @@ import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '..
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
-import { paintFlags } from '../../stores/messageRows';
+import { paintMovedFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
@@ -297,8 +297,10 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         // The cache is right about every row it holds, whichever container the
         // message is in: the list, the reader, the open thread, the body cache,
         // a search hit. The list's own row being current says nothing about the
-        // reader's (a flag-only reconcile above commits `emails` alone).
-        if (paintFlags(cached)) {
+        // reader's (a flag-only reconcile above commits `emails` alone). Only
+        // what differs is painted: the list can hold five figures of rows and
+        // the echo of the user's own STORE differs in none of them.
+        if (paintMovedFlags(cached, get().emails)) {
           bumpFlagChangeCounter();
           invalidateChatAndThreadCaches();
           get().updateSortedEmails();
