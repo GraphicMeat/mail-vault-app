@@ -3,10 +3,10 @@ import { Popover } from '../ui/Popover';
 import { Info } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { ConnectedStateIcon } from './MessageStateIcon';
+import { useMailStore } from '../../stores/mailStore';
+import { isRowArchived } from '../../utils/quickActionFacts';
 import { getSenderName } from '../../utils/emailParser';
 import { useT } from '../../i18n/index.js';
-import { useMailStore } from '../../stores/mailStore';
-import { vaultHas } from '../../stores/slices/unifiedHelpers';
 
 /**
  * Portal-based sender info popover for chat view.
@@ -34,10 +34,11 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   const composeToSender = () => { onReply?.(); onClose?.(); };
 
   // `email` is fetched fresh for its body (IMAP/Maildir/chat list), not
-  // derived through the row pipeline, so it never carries `.isArchived`.
-  // archivedEmailIds is the live store Set and stays the source of truth,
-  // same as the ternary this replaced.
-  const stateEmail = { ...email, isArchived: vaultHas(archivedEmailIds, email, useMailStore.getState()) };
+  // derived through the row pipeline, so it often carries no `.isArchived`.
+  // Read it by the rule the reader's buttons use (isRowArchived): its own flag,
+  // else the live keyed archivedEmailIds, which place it by its own account
+  // and folder.
+  const stateEmail = { ...email, isArchived: isRowArchived(email, useMailStore.getState(), archivedEmailIds) };
 
   // Extract mailing list name
   const listId = email?.listId || email?.headers?.['list-id'];

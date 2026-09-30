@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 import { custodyProof, custodySource } from '../../stores/slices/custody';
+import { withArchivedState } from '../../utils/quickActionFacts';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -265,5 +266,9 @@ export function isBackedUp(email, { backedUpKeys, backedUpScopes, backupConfigur
 export function ConnectedStateIcon({ email, size = 14 }) {
   const backedUp = useBackedUp(email);
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  return <MessageStateIcon email={email} size={size} backedUp={backedUp} serverKnown={serverKnown} />;
+  // Server view writes isArchived false on every row it lists; the keyed
+  // archived set still says the vault holds it (isRowArchived).
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
+  const shown = withArchivedState(email, useMailStore.getState(), archivedEmailIds);
+  return <MessageStateIcon email={shown} size={size} backedUp={backedUp} serverKnown={serverKnown} />;
 }

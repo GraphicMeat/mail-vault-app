@@ -42,7 +42,7 @@ import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
-import { isRowArchived } from '../utils/quickActionFacts';
+import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -204,7 +204,9 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     serverAbsent: selectedEmail.serverAbsent,
   } : null;
   const custodyRow = useMailStore(s => insightsCustody ? null : custodyRowFor(selectedEmail, s));
-  const custodySubject = insightsCustody || custodyRow || {
+  // The row, read by isRowArchived's rule: Server view writes isArchived false
+  // on every row it lists while the keyed archived set holds it.
+  const custodySubject = insightsCustody || withArchivedState(custodyRow, useMailStore.getState(), archivedEmailIds) || {
     isArchived: isArchived || !!selectedEmail?.isArchived,
     _origin: selectedEmail?._origin,
     serverDeleted: selectedEmail?.serverDeleted,

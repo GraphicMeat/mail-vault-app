@@ -148,6 +148,30 @@ describe('EmailSenderInfo click targets', () => {
   });
 });
 
+// The popover's custody glyph reads a message by the reader buttons' rule:
+// its own flag, or the keyed archived set at its own account and folder.
+describe('EmailSenderInfo details popover custody', () => {
+  const openPopover = (email) => {
+    render(<EmailSenderInfo email={email} archivedEmailIds={new Set(['acc1:INBOX:1'])} variant="thread" expanded={false} onReply={vi.fn()} onToggle={vi.fn()} />);
+    fireEvent.click(screen.getByText('prime'));
+    return screen.getByTestId('msg-state-icon').getAttribute('data-state');
+  };
+  const setView = async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ activeAccountId: 'acc1', activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false });
+  };
+
+  it('shows an open-folder message its folder holds archived as in the vault', async () => {
+    await setView();
+    expect(openPopover({ ...EMAIL, _accountId: 'acc1', _mailbox: 'INBOX' })).toMatch(/^archived/);
+  });
+
+  it('never reads another folder\'s uid against the open folder\'s archived uids', async () => {
+    await setView();
+    expect(openPopover({ ...EMAIL, _accountId: 'acc1', _mailbox: 'Sent' })).toMatch(/^server-only/);
+  });
+});
+
 describe('EmailSenderInfo unsubscribe link', () => {
   it('shows only for a message with List-Unsubscribe and opens the confirm flow without folding the row', async () => {
     const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');

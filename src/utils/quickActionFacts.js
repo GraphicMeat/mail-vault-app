@@ -52,6 +52,11 @@ export function isRowArchived(email, state, archivedIds = state?.archivedEmailId
   return vaultHasSelection(archivedIds, selectionKey(email, state), state);
 }
 
+/** `email` as a custody statement reads it: archived by isRowArchived's rule. */
+export function withArchivedState(email, state, archivedIds = state?.archivedEmailIds) {
+  return !email || email.isArchived || !isRowArchived(email, state, archivedIds) ? email : { ...email, isArchived: true };
+}
+
 /**
  * A list row's targets: one message, or every message of a thread row.
  * `backedUp` is whether any of them is on the backup drive, `canConfirm`

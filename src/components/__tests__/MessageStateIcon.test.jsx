@@ -243,6 +243,21 @@ describe('ConnectedStateIcon', () => {
     expect(dotOf()).toBe('filled');
   });
 
+  // Server view writes isArchived false on every row it lists; the keyed
+  // archived set still says the vault holds the message. Another folder's
+  // message that shares the uid is not that entry.
+  it('shows an open-folder row its folder holds archived as in the vault, whatever its flag says', () => {
+    mockStoreState = store({ backedUpKeys: new Set(), backedUpScopes: new Set(['acc1:INBOX']), archivedEmailIds: new Set(['acc1:INBOX:5']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toMatch(/^archived/);
+  });
+
+  it('never reads another folder\'s uid against the open folder\'s archived uids', () => {
+    mockStoreState = store({ backedUpKeys: new Set(), backedUpScopes: new Set(['acc1:Sent']), archivedEmailIds: new Set(['acc1:INBOX:5']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'Sent', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only');
+  });
+
   // The bug this key shape exists for. INBOX threads merge Sent copies
   // (getChatEmails stamps them `_mailbox: <sent path>`), and a uid names a
   // message only inside one mailbox — so keyed by account alone, Sent uid 4102

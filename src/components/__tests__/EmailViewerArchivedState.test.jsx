@@ -60,11 +60,14 @@ describe('EmailViewer archived state', () => {
     const bar = renderViewer(message(), { viewMode: 'server', archived: ['acct-1:INBOX:5'] });
     expect(bar.queryAllByRole('button', { name: /^Unarchive$/ })).toHaveLength(1);
     expect(bar.queryAllByRole('button', { name: /^Archive$/ })).toHaveLength(0);
+    // The custody band states the same thing the buttons act on.
+    expect(document.querySelector('[data-testid="email-custody-band"]').getAttribute('data-tone')).toBe('local');
   });
 
   it('never claims a vault copy for another folder\'s message that shares an archived uid', async () => {
     const bar = renderViewer(message({ _mailbox: 'Sent' }), { archived: ['acct-1:INBOX:5'] });
     expect(bar.queryAllByRole('button', { name: /^Archive$/ })).toHaveLength(1);
+    expect(document.querySelector('[data-testid="email-custody-band"]').getAttribute('data-tone')).toBe('server');
     fireEvent.click(bar.getByRole('button', { name: /delete/i }));
     const dialog = await screen.findByRole('alertdialog');
     expect(dialog.textContent).toContain('This email will be permanently deleted from the server.');
