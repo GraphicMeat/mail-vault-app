@@ -455,6 +455,7 @@
   "editor.bulletList": "Aufzählung",
   "editor.clearFormatting": "Formatierung entfernen",
   "editor.codeBlock": "Codeblock",
+  "editor.inlineCode": "Inline-Code",
   "editor.insertLink": "Link einfügen",
   "editor.italicCtrlI": "Kursiv (Strg+I)",
   "editor.link.edit": "Bearbeiten",

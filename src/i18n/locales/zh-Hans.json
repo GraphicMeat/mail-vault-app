@@ -455,6 +455,7 @@
   "editor.bulletList": "项目符号列表",
   "editor.clearFormatting": "清除格式",
   "editor.codeBlock": "代码块",
+  "editor.inlineCode": "行内代码",
   "editor.insertLink": "插入链接",
   "editor.italicCtrlI": "斜体 (Ctrl+I)",
   "editor.link.edit": "编辑",

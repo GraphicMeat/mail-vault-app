@@ -455,6 +455,7 @@
   "editor.bulletList": "글머리 기호 목록",
   "editor.clearFormatting": "서식 지우기",
   "editor.codeBlock": "코드 블록",
+  "editor.inlineCode": "인라인 코드",
   "editor.insertLink": "링크 삽입",
   "editor.italicCtrlI": "기울임 (Ctrl+I)",
   "editor.link.edit": "편집",

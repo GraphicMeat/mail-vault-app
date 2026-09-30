@@ -455,6 +455,7 @@
   "editor.bulletList": "Liste à puces",
   "editor.clearFormatting": "Effacer la mise en forme",
   "editor.codeBlock": "Bloc de code",
+  "editor.inlineCode": "Code en ligne",
   "editor.insertLink": "Insérer un lien",
   "editor.italicCtrlI": "Italique (Ctrl+I)",
   "editor.link.edit": "Modifier",

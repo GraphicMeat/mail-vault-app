@@ -455,6 +455,7 @@
   "editor.bulletList": "Lista con viñetas",
   "editor.clearFormatting": "Quitar formato",
   "editor.codeBlock": "Bloque de código",
+  "editor.inlineCode": "Código en línea",
   "editor.insertLink": "Insertar enlace",
   "editor.italicCtrlI": "Cursiva (Ctrl+I)",
   "editor.link.edit": "Editar",

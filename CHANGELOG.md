@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Code in a message looks like code for the person who reads it.** Text between backticks and blocks fenced with three backticks were already shown as code while you wrote; now the message carries that look with it (monospace type on a soft grey background), so mail clients that ignore styles still show it as code. The editor toolbar also has a button for inline code, next to the code block one.
+
 ## [2.17.0] - 2026-09-30
 
 ### Added

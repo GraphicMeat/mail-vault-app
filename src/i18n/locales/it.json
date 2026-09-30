@@ -455,6 +455,7 @@
   "editor.bulletList": "Elenco puntato",
   "editor.clearFormatting": "Rimuovi formattazione",
   "editor.codeBlock": "Blocco di codice",
+  "editor.inlineCode": "Codice in linea",
   "editor.insertLink": "Inserisci link",
   "editor.italicCtrlI": "Corsivo (Ctrl+I)",
   "editor.link.edit": "Modifica",

@@ -455,6 +455,7 @@
   "editor.bulletList": "Bullet List",
   "editor.clearFormatting": "Clear Formatting",
   "editor.codeBlock": "Code Block",
+  "editor.inlineCode": "Inline code",
   "editor.insertLink": "Insert Link",
   "editor.italicCtrlI": "Italic (Ctrl+I)",
   "editor.link.edit": "Edit",

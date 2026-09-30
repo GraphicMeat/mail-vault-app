@@ -9,7 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
-  List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck,
+  List, ListOrdered, Quote, Code, SquareCode, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck,
   ExternalLink, Pencil, Unlink, Trash2, ImagePlus
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -109,8 +109,11 @@ function Toolbar({ editor, onLink, onImage }) {
       <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title={t('editor.blockquote')}>
         <Quote size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('editor.codeBlock')}>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title={t('editor.inlineCode')}>
         <Code size={S} />
+      </ToolbarButton>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('editor.codeBlock')}>
+        <SquareCode size={S} />
       </ToolbarButton>
       <ToolbarButton onClick={() => onLink()} active={editor.isActive('link')} title={t('editor.insertLink')}>
         <LinkIcon size={S} />
@@ -754,6 +757,26 @@ const EDITOR_SPACING = {
   PRE: '0.5em 0',
 };
 
+// Code, carried the same way. CSS variables do not exist in a mail client, and
+// a grey with alpha reads on both a white and a dark reader. A <pre> holds its
+// <code>, so the block gets the background and the code inside it only the font.
+const CODE_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace";
+const CODE_LOOK = {
+  inline: { fontFamily: CODE_FONT, fontSize: '0.9em', backgroundColor: 'rgba(127, 127, 127, 0.18)', borderRadius: '4px', padding: '1px 4px' },
+  block: { fontFamily: CODE_FONT, fontSize: '0.9em', backgroundColor: 'rgba(127, 127, 127, 0.14)', borderRadius: '6px', padding: '8px 12px', whiteSpace: 'pre-wrap', overflowX: 'auto' },
+  inBlock: { fontFamily: CODE_FONT },
+};
+
+function inlineCodeLook(doc) {
+  doc.body.querySelectorAll('pre, code').forEach((el) => {
+    const look = el.tagName === 'PRE' ? CODE_LOOK.block : el.closest('pre') ? CODE_LOOK.inBlock : CODE_LOOK.inline;
+    for (const [property, value] of Object.entries(look)) {
+      // A style the message already carries is the author's, not ours.
+      if (!el.style[property]) el.style[property] = value;
+    }
+  });
+}
+
 export function inlineComposeSpacing(html) {
   if (!html) return html;
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -762,5 +785,6 @@ export function inlineComposeSpacing(html) {
     if (el.style.margin || el.style.marginTop || el.style.marginBottom) return;
     el.style.margin = EDITOR_SPACING[el.tagName];
   });
+  inlineCodeLook(doc);
   return doc.body.innerHTML;
 }

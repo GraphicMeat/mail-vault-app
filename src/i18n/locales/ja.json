@@ -455,6 +455,7 @@
   "editor.bulletList": "箇条書き",
   "editor.clearFormatting": "書式をクリア",
   "editor.codeBlock": "コードブロック",
+  "editor.inlineCode": "インラインコード",
   "editor.insertLink": "リンクを挿入",
   "editor.italicCtrlI": "斜体 (Ctrl+I)",
   "editor.link.edit": "編集",
