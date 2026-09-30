@@ -147,6 +147,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             done(id, blocking(move || si::body_indexed_uids(&st, &account, &mailbox).map_or(Value::Null, |uids| serde_json::json!(uids))).await)
         }
+        // The search bar's typeahead: `[{ kind: "sender", address, name,
+        // count } | { kind: "term", term, count }]`, at most `limit` (10 by
+        // default). No accounts named is every account. Never an error: an
+        // index that cannot answer offers nothing.
+        "search.suggest" => {
+            let prefix = params.get("prefix").and_then(Value::as_str).unwrap_or("").to_string();
+            let accounts: Vec<String> = serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null)).unwrap_or_default();
+            let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(10).min(20) as usize;
+            done(id, blocking(move || serde_json::to_value(si::suggest_search(&st, &accounts, &prefix, limit)).unwrap_or(Value::Array(Vec::new()))).await)
+        }
         _ => return None,
     })
 }
@@ -368,6 +378,70 @@ mod tests {
         let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
         assert_eq!(crate::server::handle_request_for_test(&s, "vault_close", json!({})).await.result, Some(serde_json::Value::Null));
         assert_eq!(crate::server::handle_request_for_test(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
+    }
+
+    /// An open index holding two messages from Ann, one about an invoice.
+    fn seed_suggestions(t: &tempfile::TempDir, s: &Arc<DaemonState>) {
+        use mailvault_core::search_index::{db, lock};
+        let conn = db::open(t.path()).unwrap();
+        for (uid, account, subject) in [(1u32, "a", "invoice 12"), (2, "a", "lunch"), (3, "b", "invoice 13")] {
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, from_addr_lc, from_name_lc, subject_lc, row_json)
+                 VALUES (?1, 'INBOX', ?2, ?3, 1, 1, 1, 'ann@acme.test', 'ann', ?4, '{\"from\":{\"address\":\"ann@acme.test\",\"name\":\"Ann\"}}')",
+                rusqlite::params![account, uid, format!("{uid}.eml"), subject],
+            )
+            .unwrap();
+        }
+        *lock(&s.search_index.db) = Some(conn);
+    }
+
+    /// The search bar's typeahead: senders and subject words of the accounts
+    /// it searches, each saying what kind it is.
+    #[tokio::test]
+    async fn search_suggest_offers_senders_and_words_from_the_accounts_asked_for() {
+        let (t, s) = st();
+        seed_suggestions(&t, &s);
+        let r = call(&s, "search.suggest", json!({"prefix": "an", "accounts": ["a"], "limit": 10})).await.result.unwrap();
+        assert_eq!(r, json!([{"kind": "sender", "address": "ann@acme.test", "name": "Ann", "count": 2}]));
+        let r = call(&s, "search.suggest", json!({"prefix": "inv", "accounts": ["a"]})).await.result.unwrap();
+        assert_eq!(r, json!([{"kind": "term", "term": "invoice", "count": 1}]));
+        let r = call(&s, "search.suggest", json!({"prefix": "inv", "accounts": []})).await.result.unwrap();
+        assert_eq!(r, json!([{"kind": "term", "term": "invoice", "count": 2}]), "no account named is every account");
+    }
+
+    /// A suggestion list is a convenience: an index that is closed, or busy
+    /// with a batch, offers nothing rather than an error or a wait.
+    #[tokio::test]
+    async fn search_suggest_offers_nothing_while_the_index_is_closed_or_busy() {
+        let (t, s) = st();
+        let r = call(&s, "search.suggest", json!({"prefix": "inv", "accounts": ["a"]})).await;
+        assert_eq!(r.result, Some(json!([])));
+
+        seed_suggestions(&t, &s);
+        let held = Arc::clone(&s);
+        let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let worker = std::thread::spawn(move || {
+            let _guard = mailvault_core::search_index::lock(&held.search_index.db);
+            locked_tx.send(()).unwrap();
+            let _ = release_rx.recv_timeout(Duration::from_secs(10));
+        });
+        locked_rx.recv().unwrap();
+        let started = std::time::Instant::now();
+        let r = call(&s, "search.suggest", json!({"prefix": "inv", "accounts": ["a"]})).await;
+        let waited = started.elapsed();
+        release_tx.send(()).unwrap();
+        worker.join().unwrap();
+        assert_eq!(r.result, Some(json!([])));
+        assert!(waited < Duration::from_millis(500), "a busy index must not hold a keystroke: {waited:?}");
+    }
+
+    #[tokio::test]
+    async fn search_suggest_with_nothing_typed_offers_nothing() {
+        let (t, s) = st();
+        seed_suggestions(&t, &s);
+        assert_eq!(call(&s, "search.suggest", json!({"accounts": ["a"]})).await.result, Some(json!([])));
+        assert_eq!(call(&s, "search.suggest", json!({"prefix": "  "})).await.result, Some(json!([])));
     }
 
     #[tokio::test]

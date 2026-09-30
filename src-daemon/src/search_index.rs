@@ -39,7 +39,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_by_uids" | "vault_rows"
             | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "imap_move_emails"
             | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
-            | "archive_emails" | "bulk_delete_emails"
+            | "archive_emails" | "bulk_delete_emails" | "search.suggest"
     )
 }
 
@@ -652,6 +652,29 @@ pub fn suggest_terms(
     let guard = lock(&st.db);
     let Some(conn) = guard.as_ref() else { return Ok(Vec::new()) };
     core::query::suggest_terms(conn, accounts, prefix, offset, limit)
+}
+
+/// The search bar's typeahead (`search.suggest`). Asked on every pause in
+/// typing, so it never waits on the index: a sweep batch holding it gets
+/// ~100 ms, then the keystroke goes without suggestions, the same way a list
+/// read goes without its preview line (`attach_snippets`). Nothing while the
+/// index is off, closed or failing: a suggestion list is a convenience, not a
+/// claim about the mail.
+pub fn suggest_search(st: &SearchIndexState, accounts: &[String], prefix: &str, limit: usize) -> Vec<core::query::SearchSuggestion> {
+    if *g(&st.enabled) == Some(false) || prefix.trim().is_empty() {
+        return Vec::new();
+    }
+    let ask = |conn: Option<&rusqlite::Connection>| {
+        conn.and_then(|c| core::query::suggest_search(c, accounts, prefix, limit).ok()).unwrap_or_default()
+    };
+    for _ in 0..20 {
+        match st.db.try_lock() {
+            Ok(guard) => return ask(guard.as_ref()),
+            Err(std::sync::TryLockError::Poisoned(p)) => return ask(p.into_inner().as_ref()),
+            Err(std::sync::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(5)),
+        }
+    }
+    Vec::new()
 }
 
 /// The index's list rows for `uids` of one folder: `row_json` (headers,
@@ -1596,7 +1619,7 @@ mod tests {
     #[test]
     fn only_what_a_person_waits_on_counts_as_foreground() {
         use crate::search_index::is_foreground_method as fg;
-        for m in ["maildir_read_light", "maildir_set_flags", "maildir_delete_many", "imap_delete_email", "load_email_cache_by_uids", "vault_rows"] {
+        for m in ["maildir_read_light", "maildir_set_flags", "maildir_delete_many", "imap_delete_email", "load_email_cache_by_uids", "vault_rows", "search.suggest"] {
             assert!(fg(m), "{m}");
         }
         for m in ["search_index_status", "search_index_configure", "ping", "save_email_cache", "sync.watch", "prefetch_attachments"] {

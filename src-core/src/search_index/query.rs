@@ -661,13 +661,21 @@ pub fn suggest_terms(
         .collect();
     drop(st);
 
-    let attach_filter = if accounts.is_empty() { String::new() } else { format!(" AND m.account_id IN ({})", vec!["?"; accounts.len()].join(", ")) };
+    let mut attach_filter = if accounts.is_empty() { String::new() } else { format!(" AND m.account_id IN ({})", vec!["?"; accounts.len()].join(", ")) };
+    let mut attach_args = account_args.clone();
+    // SQLite's `lower()` folds ASCII only, so an ASCII prefix can narrow the
+    // names in SQL (the word-boundary check below still decides); any other
+    // prefix reads every name, as before.
+    if p.is_ascii() {
+        attach_filter += " AND instr(lower(a.filename), ?) > 0";
+        attach_args.push(Value::Text(p.clone()));
+    }
     let attach_sql = format!(
         "SELECT a.message_row, a.filename FROM attachments a JOIN messages m ON m.id = a.message_row WHERE a.filename != ''{attach_filter}"
     );
     let mut st = conn.prepare(&attach_sql).map_err(|e| e.to_string())?;
     let attachments: Vec<(i64, String)> = st
-        .query_map(rusqlite::params_from_iter(account_args.iter()), |r| Ok((r.get(0)?, r.get(1)?)))
+        .query_map(rusqlite::params_from_iter(attach_args.iter()), |r| Ok((r.get(0)?, r.get(1)?)))
         .map_err(|e| e.to_string())?
         .filter_map(Result::ok)
         .collect();
@@ -694,6 +702,41 @@ pub fn suggest_terms(
     // Total order (count, then term) so paging by offset never skips or repeats a row.
     ranked.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.term.cmp(&b.term)));
     Ok(ranked.into_iter().skip(offset).take(limit).collect())
+}
+
+/// One entry of the search bar's typeahead: a sender (the bar offers it as a
+/// `from:` tag) or a word or phrase from subjects and attachment names.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum SearchSuggestion {
+    Sender { address: String, name: String, count: u64 },
+    Term { term: String, count: u64 },
+}
+
+/// The search bar's typeahead for `prefix`: senders first, then words, at
+/// most `limit` in all. When both kinds have more than enough, each gets half;
+/// otherwise the one with more fills what the other leaves. Each list keeps
+/// its own ranking (`suggest_senders`, `suggest_terms`), and both are already
+/// one entry per address or word.
+pub fn suggest_search(
+    conn: &rusqlite::Connection,
+    accounts: &[String],
+    prefix: &str,
+    limit: usize,
+) -> Result<Vec<SearchSuggestion>, String> {
+    if limit == 0 || prefix.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let senders = suggest_senders(conn, accounts, prefix, limit)?;
+    let terms = suggest_terms(conn, accounts, prefix, 0, limit)?;
+    let sender_room = senders.len().min((limit / 2).max(limit.saturating_sub(terms.len())));
+    let term_room = terms.len().min(limit - sender_room);
+    Ok(senders
+        .into_iter()
+        .take(sender_room)
+        .map(|s| SearchSuggestion::Sender { address: s.address, name: s.name, count: s.count })
+        .chain(terms.into_iter().take(term_room).map(|t| SearchSuggestion::Term { term: t.term, count: t.count }))
+        .collect())
 }
 
 /// Every occurrence of `prefix` in `text` (both already lowercase) that
@@ -1473,6 +1516,102 @@ mod tests {
         let (_t, conn) = term_fixture(&[("a", 1, "Invoice", &[])]);
         assert!(suggest_terms(&conn, &[], "i", 0, 20).unwrap().is_empty());
         assert!(suggest_terms(&conn, &[], " ", 0, 20).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_filename_in_capitals_still_matches_a_lowercase_prefix() {
+        let (_t, conn) = term_fixture(&[("a", 1, "no match here", &["RECEIPT-4471.PDF", "photo.png"])]);
+        assert_eq!(terms(&suggest_terms(&conn, &[], "rece", 0, 20).unwrap()), vec!["receipt"]);
+    }
+
+    /// Messages for the search bar's typeahead: `(account, sender address, sender name, subject)`.
+    fn mixed_fixture(rows: &[(&str, &str, &str, &str)]) -> (tempfile::TempDir, rusqlite::Connection) {
+        let (tmp, conn) = coverage_fixture();
+        for (i, (account, address, name, subject)) in rows.iter().enumerate() {
+            let uid = i as u32 + 1;
+            let row = serde_json::json!({ "from": { "address": address, "name": name } }).to_string();
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, from_addr_lc, from_name_lc, subject_lc, row_json)
+                 VALUES (?1, 'INBOX', ?2, ?3, 1, 1, 1, ?4, ?5, ?6, ?7)",
+                rusqlite::params![account, uid, format!("{uid}{INFO_PREFIX}.eml"), address.to_lowercase(), name.to_lowercase(), subject.to_lowercase(), row],
+            )
+            .unwrap();
+        }
+        (tmp, conn)
+    }
+
+    fn sender(address: &str, name: &str, count: u64) -> SearchSuggestion {
+        SearchSuggestion::Sender { address: address.into(), name: name.into(), count }
+    }
+
+    fn term(term: &str, count: u64) -> SearchSuggestion {
+        SearchSuggestion::Term { term: term.into(), count }
+    }
+
+    #[test]
+    fn the_search_bar_is_offered_senders_first_then_subject_words_by_how_much_mail_carries_them() {
+        let (_t, conn) = mixed_fixture(&[
+            ("a", "invoices@acme.test", "Acme Billing", "Invoice 12"),
+            ("a", "ann@acme.test", "Ann", "Invoice 13"),
+            ("a", "ann@acme.test", "Ann", "Invitation to lunch"),
+        ]);
+        assert_eq!(
+            suggest_search(&conn, &[], "inv", 10).unwrap(),
+            vec![sender("invoices@acme.test", "Acme Billing", 1), term("invoice", 2), term("invitation", 1)]
+        );
+    }
+
+    #[test]
+    fn the_limit_is_the_whole_list_shared_between_senders_and_words() {
+        let letters: Vec<char> = ('a'..='l').collect();
+        let addresses: Vec<String> = letters.iter().map(|c| format!("an{c}@x.test")).collect();
+        let subjects: Vec<String> = letters.iter().map(|c| format!("an{c}{c}")).collect();
+        let rows: Vec<(&str, &str, &str, &str)> =
+            addresses.iter().zip(&subjects).map(|(a, s)| ("a", a.as_str(), "", s.as_str())).collect();
+        let (_t, conn) = mixed_fixture(&rows);
+        let found = suggest_search(&conn, &[], "an", 10).unwrap();
+        let senders = found.iter().filter(|s| matches!(s, SearchSuggestion::Sender { .. })).count();
+        assert_eq!((found.len(), senders), (10, 5), "both kinds overflow: half each");
+    }
+
+    #[test]
+    fn one_kind_fills_what_the_other_cannot() {
+        let letters: Vec<char> = ('a'..='l').collect();
+        let subjects: Vec<String> = letters.iter().map(|c| format!("an{c}{c}")).collect();
+        let mut rows: Vec<(&str, &str, &str, &str)> = subjects.iter().map(|s| ("a", "zed@x.test", "", s.as_str())).collect();
+        rows.push(("a", "anna@x.test", "", "hello"));
+        let (_t, conn) = mixed_fixture(&rows);
+        let found = suggest_search(&conn, &[], "an", 10).unwrap();
+        assert_eq!(found.len(), 10);
+        assert_eq!(found[0], sender("anna@x.test", "", 1));
+        assert!(found[1..].iter().all(|s| matches!(s, SearchSuggestion::Term { .. })));
+    }
+
+    #[test]
+    fn a_suggestion_is_offered_once_and_only_from_the_accounts_asked_for() {
+        let (_t, conn) = mixed_fixture(&[
+            ("a", "ann@acme.test", "Ann", "Annual report"),
+            ("b", "ann@acme.test", "Ann", "Annual report"),
+            ("b", "anton@b.test", "Anton", "Anniversary"),
+        ]);
+        assert_eq!(suggest_search(&conn, &[], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 2), term("annual", 2), term("anniversary", 1)]);
+        assert_eq!(suggest_search(&conn, &["a".into()], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 1), term("annual", 1)]);
+    }
+
+    #[test]
+    fn nothing_typed_or_no_room_suggests_nothing() {
+        let (_t, conn) = mixed_fixture(&[("a", "ann@acme.test", "Ann", "Annual report")]);
+        assert!(suggest_search(&conn, &[], "  ", 10).unwrap().is_empty());
+        assert!(suggest_search(&conn, &[], "ann", 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_suggestion_says_what_kind_it_is() {
+        assert_eq!(
+            serde_json::to_value(sender("ann@acme.test", "Ann", 2)).unwrap(),
+            serde_json::json!({ "kind": "sender", "address": "ann@acme.test", "name": "Ann", "count": 2 })
+        );
+        assert_eq!(serde_json::to_value(term("annual", 1)).unwrap(), serde_json::json!({ "kind": "term", "term": "annual", "count": 1 }));
     }
 
     /// Inserts one `messages` row shaped like Notes to Self needs it: a
