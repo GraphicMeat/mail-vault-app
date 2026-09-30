@@ -3509,5 +3509,9 @@
   "errors.E_ABD_JOB_UNFINISHED": "The job is still going. Stop it first.",
   "errors.E_ABD_NO_JOB": "There is no job for this account.",
   "errors.E_ABD_UNAVAILABLE": "This needs the desktop app.",
-  "errors.abdPremiumRequired": "Archive and delete jobs are part of Premium."
+  "errors.abdPremiumRequired": "Archive and delete jobs are part of Premium.",
+  "productHunt.dialogLabel": "MailVault is live on Product Hunt",
+  "productHunt.openLabel": "Support MailVault on Product Hunt",
+  "productHunt.endsNote": "This banner will not be shown after {{when}}.",
+  "productHunt.timeLeft": "{{left}} left"
 }

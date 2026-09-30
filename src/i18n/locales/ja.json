@@ -3509,5 +3509,9 @@
   "settings.backup.abd.setup.summaryTotal_one": "{{count}}通、{{size}}",
   "settings.backup.abd.setup.estimateDays_one": "1日{{limit}}で約{{count}}日",
   "abd.panel.kept_one": "{{count}}通をサーバーに残しました",
-  "abd.panel.daysLeft_one": "1日{{limit}}であと約{{count}}日"
+  "abd.panel.daysLeft_one": "1日{{limit}}であと約{{count}}日",
+  "productHunt.dialogLabel": "MailVaultがProduct Huntに登場",
+  "productHunt.openLabel": "Product HuntでMailVaultを応援する",
+  "productHunt.endsNote": "このバナーは{{when}}以降は表示されません。",
+  "productHunt.timeLeft": "残り{{left}}"
 }

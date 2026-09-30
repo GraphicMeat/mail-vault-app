@@ -1,0 +1,216 @@
+/* Product Hunt launch takeover. Sizes come from vw/vh only, never from content,
+ * so nothing here can ever add scroll height: the page is fixed, clipped, and
+ * hero + button together stay under ~80vh at any window size. */
+.ph-launch {
+  --ph-orange: #e54e1b;
+  --ph-cream: #fdf9e8;
+  --ph-ink: #0b0705;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  overflow: clip;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: var(--ph-orange);
+  color: var(--ph-cream);
+}
+/* Everything but the button lets the click through to the root, which is the
+ * window's drag region: the page is still movable by its titlebar strip. */
+.ph-launch > * { pointer-events: none; }
+
+.ph-dots {
+  /* One tile larger than the page and moved by transform, so the 24 hours it
+   * idles cost a compositor translate, not a full-screen repaint per frame. */
+  position: absolute;
+  inset: -22px;
+  background-image: radial-gradient(rgba(11, 7, 5, 0.09) 1.5px, transparent 1.7px);
+  background-size: 22px 22px;
+  animation: ph-drift 9s linear infinite;
+}
+@keyframes ph-drift { to { transform: translate(22px, 22px); } }
+
+/* Pixel plus, drawn with four box-shadows around a 4px square. */
+.ph-spark {
+  --c: var(--ph-cream);
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 4px;
+  height: 4px;
+  background: var(--c);
+  box-shadow: 4px 0 0 var(--c), -4px 0 0 var(--c), 0 4px 0 var(--c), 0 -4px 0 var(--c);
+  transform: scale(var(--s));
+  animation: ph-twinkle 1.6s steps(2, jump-none) infinite;
+  animation-delay: var(--d);
+}
+@keyframes ph-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+/* ---- The sweep: PRODUCT HUNT, right to left ---- */
+.ph-marquee {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  overflow: clip;
+  animation: ph-marquee-in 850ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  transition: transform 750ms cubic-bezier(0.55, 0, 0.8, 0.3), opacity 750ms ease-in;
+}
+.ph-marquee[data-settled] { transform: translateX(-115vw); opacity: 0; }
+@keyframes ph-marquee-in { from { transform: translateX(100vw); } }
+
+.ph-row { overflow: clip; line-height: 0.9; }
+.ph-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  font-family: 'Arial Black', Impact, 'Helvetica Neue', system-ui, sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ph-row:not(.ph-row-ghost) .ph-track {
+  font-size: min(14vw, 26vh);
+  color: var(--ph-cream);
+  text-shadow: 0.05em 0.05em 0 var(--ph-ink);
+}
+.ph-row span { display: inline-flex; align-items: center; }
+.ph-row i { font-style: normal; margin: 0 0.4em; color: var(--ph-ink); font-size: 0.6em; }
+
+.ph-row-ghost .ph-track {
+  font-size: min(9vw, 15vh);
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(253, 249, 232, 0.4);
+  animation: ph-ghost 26s linear infinite;
+}
+.ph-row-ghost i { color: rgba(253, 249, 232, 0.4); }
+.ph-row-top { margin-bottom: 4vh; }
+.ph-row-bottom { margin-top: 4vh; }
+.ph-row-bottom .ph-track { animation-duration: 34s; }
+@keyframes ph-ghost { to { transform: translateX(-50%); } }
+
+/* ---- Hero + button ---- */
+.ph-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 2.5vh, 26px);
+  max-width: 100vw;
+}
+.ph-hero {
+  position: relative;
+  width: min(52vh, 92vw);
+  aspect-ratio: 1;
+}
+.ph-hero-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Its edges are the page orange but not the same byte, so fade them out
+   * instead of leaving a visible square. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent),
+    linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent),
+    linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+  mask-composite: intersect;
+}
+[data-phase='settled'] .ph-hero-img { animation: ph-float 4.4s ease-in-out 1.2s infinite; }
+@keyframes ph-float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-1.6%) rotate(-0.8deg); }
+}
+/* Small print under the button: when the page ends (local time) and what is left. */
+.ph-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+  max-width: min(92vw, 660px);
+  margin: 0;
+  text-align: center;
+  font: 600 clamp(11px, 1.9vh, 15px) / 1.3 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ph-cream);
+  text-shadow: 0 1px 0 rgba(11, 7, 5, 0.55);
+}
+.ph-note strong { font-weight: 800; letter-spacing: 0.02em; }
+
+/* One ring leaves the cat the moment it lands. */
+.ph-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  margin: -35% 0 0 -35%;
+  border-radius: 50%;
+  border: 0.8vmin solid var(--ph-cream);
+  opacity: 0;
+  animation: ph-burst 900ms cubic-bezier(0.16, 1, 0.3, 1) 380ms;
+}
+@keyframes ph-burst {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+.ph-cta {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+  /* Height capped at ~21vh: width = 21vh x the image's 1982:382 ratio. */
+  width: min(92vw, 660px, 109vh);
+  pointer-events: none;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-phase='settled'] .ph-cta { pointer-events: auto; }
+.ph-cta:focus-visible { outline: 4px solid var(--ph-cream); outline-offset: 6px; border-radius: 12px; }
+.ph-cta-face { position: relative; display: block; }
+.ph-cta-face[data-live] { animation: ph-pulse 1.8s ease-in-out 1.6s infinite; }
+.ph-cta img { display: block; width: 100%; height: auto; }
+@keyframes ph-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.028); }
+}
+/* A glint crosses the button, clipped to the button's own silhouette. */
+.ph-cta-shine {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: var(--ph-btn) center / 100% 100% no-repeat;
+  mask: var(--ph-btn) center / 100% 100% no-repeat;
+  overflow: clip;
+}
+.ph-cta-shine::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.75) 50%, transparent);
+  transform: translateX(0);
+}
+.ph-cta-face[data-live] .ph-cta-shine::before { animation: ph-shine 3.4s ease-in-out 2.2s infinite; }
+@keyframes ph-shine {
+  0% { transform: translateX(0); }
+  45%, 100% { transform: translateX(350%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-dots, .ph-spark, .ph-row-ghost .ph-track,
+  [data-phase='settled'] .ph-hero-img, .ph-burst,
+  .ph-cta-face[data-live], .ph-cta-face[data-live] .ph-cta-shine::before { animation: none; }
+  .ph-marquee { animation: none; transition: opacity 300ms ease; }
+  .ph-marquee[data-settled] { transform: none; }
+  /* Static word: centred and clipped, not scrolling. */
+  .ph-row:not(.ph-row-ghost) .ph-track { margin: 0 auto; }
+}

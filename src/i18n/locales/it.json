@@ -3509,5 +3509,9 @@
   "errors.E_ABD_JOB_UNFINISHED": "L'attività è ancora in corso. Fermala prima.",
   "errors.E_ABD_NO_JOB": "Non c'è nessuna attività per questo account.",
   "errors.E_ABD_UNAVAILABLE": "Serve l'app per desktop.",
-  "errors.abdPremiumRequired": "Le attività di archiviazione ed eliminazione fanno parte di Premium."
+  "errors.abdPremiumRequired": "Le attività di archiviazione ed eliminazione fanno parte di Premium.",
+  "productHunt.dialogLabel": "MailVault è su Product Hunt",
+  "productHunt.openLabel": "Sostieni MailVault su Product Hunt",
+  "productHunt.endsNote": "Questo banner non verrà più mostrato dopo il {{when}}.",
+  "productHunt.timeLeft": "Restano {{left}}"
 }

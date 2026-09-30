@@ -3509,5 +3509,9 @@
   "errors.E_ABD_JOB_UNFINISHED": "Der Auftrag läuft noch. Beende ihn zuerst.",
   "errors.E_ABD_NO_JOB": "Für dieses Konto gibt es keinen Auftrag.",
   "errors.E_ABD_UNAVAILABLE": "Dafür wird die Desktop-App benötigt.",
-  "errors.abdPremiumRequired": "Aufträge zum Archivieren und Löschen gehören zu Premium."
+  "errors.abdPremiumRequired": "Aufträge zum Archivieren und Löschen gehören zu Premium.",
+  "productHunt.dialogLabel": "MailVault ist auf Product Hunt",
+  "productHunt.openLabel": "Unterstütze MailVault auf Product Hunt",
+  "productHunt.endsNote": "Dieses Banner wird nach dem {{when}} nicht mehr angezeigt.",
+  "productHunt.timeLeft": "Noch {{left}}"
 }

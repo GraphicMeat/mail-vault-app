@@ -39,6 +39,7 @@ if (!isComposeWindow) useSettingsStore.persist?.onFinishHydration?.(() => {
   setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
 });
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
+import { ProductHuntLaunch } from './components/ProductHuntLaunch';
 
 // A row can vanish at four layers — the sidecar cache, `emails`, the filters
 // that produce `sortedEmails`, and the virtualizer's render window — and from
@@ -245,6 +246,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           matching @media block in styles/index.css. */}
       <MotionConfig reducedMotion="user">
         <SplashDismisser>
+          {!isComposeWindow && !isOriginalWindow && !isSettingsWindow && <ProductHuntLaunch />}
           <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : isOriginalWindow ? <OriginalMessageWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />}</React.Suspense>
         </SplashDismisser>
       </MotionConfig>

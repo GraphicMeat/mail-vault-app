@@ -3509,5 +3509,9 @@
   "settings.backup.abd.setup.summaryTotal_one": "{{count}} 封邮件，{{size}}",
   "settings.backup.abd.setup.estimateDays_one": "按每天 {{limit}} 计算，约需 {{count}} 天",
   "abd.panel.kept_one": "{{count}} 封邮件保留在服务器上",
-  "abd.panel.daysLeft_one": "按每天 {{limit}} 计算，还需约 {{count}} 天"
+  "abd.panel.daysLeft_one": "按每天 {{limit}} 计算，还需约 {{count}} 天",
+  "productHunt.dialogLabel": "MailVault 已登陆 Product Hunt",
+  "productHunt.openLabel": "在 Product Hunt 上支持 MailVault",
+  "productHunt.endsNote": "此横幅将在{{when}}之后不再显示。",
+  "productHunt.timeLeft": "还剩 {{left}}"
 }

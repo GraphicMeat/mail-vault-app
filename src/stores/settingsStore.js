@@ -591,6 +591,9 @@ export const useSettingsStore = create(
 
       // Onboarding
       onboardingComplete: false,
+      // When onboarding last finished (ms). null on installs that finished it
+      // before this was recorded; the Product Hunt launch page waits after it.
+      onboardingCompletedAt: null,
       // One invitation for installs that completed onboarding before the
       // appearance update. Completing today's flow opts new users out too.
       appearanceOnboardingPromptSeen: false,
@@ -1387,10 +1390,11 @@ export const useSettingsStore = create(
       // Onboarding
       setOnboardingComplete: (complete) => set({
         onboardingComplete: complete,
-        ...(complete ? { appearanceOnboardingPromptSeen: true, onboardingSkippedAt: null } : {}),
+        ...(complete ? { appearanceOnboardingPromptSeen: true, onboardingSkippedAt: null, onboardingCompletedAt: Date.now() } : {}),
       }),
       skipOnboarding: (step) => set({
         onboardingComplete: true,
+        onboardingCompletedAt: Date.now(),
         appearanceOnboardingPromptSeen: true,
         onboardingSkippedAt: step || 'splash',
       }),
@@ -1625,6 +1629,7 @@ export const useSettingsStore = create(
           listPaneHeight: 320,
           viewerPaneSize: 50,
           onboardingComplete: false,
+          onboardingCompletedAt: null,
           onboardingSkippedAt: null,
           searchHistoryLimit: 20,
           searchMailboxConcurrency: 3,

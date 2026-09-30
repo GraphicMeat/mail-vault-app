@@ -3509,5 +3509,9 @@
   "settings.backup.abd.setup.summaryTotal_one": "메일 {{count}}통, {{size}}",
   "settings.backup.abd.setup.estimateDays_one": "하루 {{limit}} 기준 약 {{count}}일",
   "abd.panel.kept_one": "메일 {{count}}통이 서버에 남아 있음",
-  "abd.panel.daysLeft_one": "하루 {{limit}} 기준 약 {{count}}일 남음"
+  "abd.panel.daysLeft_one": "하루 {{limit}} 기준 약 {{count}}일 남음",
+  "productHunt.dialogLabel": "MailVault가 Product Hunt에 올라왔습니다",
+  "productHunt.openLabel": "Product Hunt에서 MailVault 응원하기",
+  "productHunt.endsNote": "이 배너는 {{when}} 이후에는 표시되지 않습니다.",
+  "productHunt.timeLeft": "{{left}} 남음"
 }

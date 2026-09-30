@@ -3509,5 +3509,9 @@
   "errors.E_ABD_JOB_UNFINISHED": "La tâche est toujours en cours. Arrêtez-la d'abord.",
   "errors.E_ABD_NO_JOB": "Aucune tâche n'existe pour ce compte.",
   "errors.E_ABD_UNAVAILABLE": "Cette action nécessite l'application de bureau.",
-  "errors.abdPremiumRequired": "Les tâches d'archivage et de suppression font partie de Premium."
+  "errors.abdPremiumRequired": "Les tâches d'archivage et de suppression font partie de Premium.",
+  "productHunt.dialogLabel": "MailVault est sur Product Hunt",
+  "productHunt.openLabel": "Soutenez MailVault sur Product Hunt",
+  "productHunt.endsNote": "Cette bannière ne sera plus affichée après le {{when}}.",
+  "productHunt.timeLeft": "Il reste {{left}}"
 }

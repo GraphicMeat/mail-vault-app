@@ -3509,5 +3509,9 @@
   "errors.E_ABD_JOB_UNFINISHED": "O trabalho ainda está em andamento. Pare-o primeiro.",
   "errors.E_ABD_NO_JOB": "Não há nenhum trabalho para esta conta.",
   "errors.E_ABD_UNAVAILABLE": "Isso exige o aplicativo para desktop.",
-  "errors.abdPremiumRequired": "Os trabalhos de arquivar e excluir fazem parte do Premium."
+  "errors.abdPremiumRequired": "Os trabalhos de arquivar e excluir fazem parte do Premium.",
+  "productHunt.dialogLabel": "O MailVault está no Product Hunt",
+  "productHunt.openLabel": "Apoie o MailVault no Product Hunt",
+  "productHunt.endsNote": "Este banner não será mais exibido após {{when}}.",
+  "productHunt.timeLeft": "Faltam {{left}}"
 }
