@@ -5,6 +5,15 @@ import {
   waitForNativeCompose, openComposeFreshNative, inlineComposeShown, closeNativeCompose,
 } from './composeHelpers.js';
 
+// A native window's field is present before its state has arrived: a second WebView2 hydrates slower
+// than the first, so wait for the value, then assert it for the failure message.
+async function expectFieldValue(testid, value) {
+  await browser.waitUntil(async () => (await fieldValue(testid)) === value, {
+    timeout: 15_000, interval: 200, timeoutMsg: `${testid} never held "${value}"`,
+  }).catch(() => {});
+  expect(await fieldValue(testid)).toBe(value);
+}
+
 describe('Connected Compose Detach', function () {
   this.timeout(120_000);
   let mainHandle;
@@ -84,8 +93,8 @@ describe('Connected Compose Detach', function () {
       timeout: 15_000,
       timeoutMsg: 'Detached compose did not finish initialization',
     });
-    expect(await fieldValue('compose-subject')).toBe('Native handoff');
-    expect(await fieldValue('compose-to')).toBe('detach@example.test');
+    await expectFieldValue('compose-subject', 'Native handoff');
+    await expectFieldValue('compose-to', 'detach@example.test');
     await setField('compose-subject', 'Typed in detached window');
 
     const wideSize = await setNativeSize(1050, 760);
@@ -210,8 +219,8 @@ describe('Connected Compose Detach', function () {
     await settingsCall('setComposeOpenMode', 'app');
     await browser.$('[data-testid="undo-send-btn"]').click();
     await browser.waitUntil(modalOpen, { timeout: 15_000, timeoutMsg: 'Undo did not restore the detached draft' });
-    expect(await fieldValue('compose-subject')).toBe('Detached delayed send');
-    expect(await fieldValue('compose-to')).toBe('undo-detach@example.test');
+    await expectFieldValue('compose-subject', 'Detached delayed send');
+    await expectFieldValue('compose-to', 'undo-detach@example.test');
   });
 
   it('remembers a pop-out: the next compose and the next reply open in a window of their own', async () => {
@@ -260,6 +269,6 @@ describe('Connected Compose Detach', function () {
     await browser.waitUntil(() => testidPresent('compose-subject'), {
       timeout: 15_000, timeoutMsg: 'The reply did not initialize in its own window',
     });
-    expect(await fieldValue('compose-subject')).toBe('Re: Remembered window');
+    await expectFieldValue('compose-subject', 'Re: Remembered window');
   });
 });

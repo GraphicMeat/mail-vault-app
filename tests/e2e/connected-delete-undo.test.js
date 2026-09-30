@@ -351,7 +351,16 @@ describe('Delete from server, then undo', function () {
     await browser.waitUntil(async () => browser.execute((needle) =>
       window.__MAIL_STORE__.getState().selectedEmail?.subject === needle, SUBJECT),
     { timeout: 30_000, interval: 300, timeoutMsg: `"${SUBJECT}" never opened in the reader` });
-    const total = await browser.execute(() => window.__MAIL_STORE__.getState().totalEmails);
+    // The merged list keeps counting while its accounts page in (50, then 561 on a slower machine):
+    // the count to compare against is the one that has held still.
+    let total = null;
+    let steady = 0;
+    await browser.waitUntil(async () => {
+      const now = await browser.execute(() => window.__MAIL_STORE__.getState().totalEmails);
+      steady = now === total ? steady + 1 : 0;
+      total = now;
+      return steady >= 4;
+    }, { timeout: 60_000, interval: 500, timeoutMsg: 'the All Inboxes count never held still' });
 
     await deleteRow();
 

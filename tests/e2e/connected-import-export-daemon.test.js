@@ -131,8 +131,12 @@ function buildBackupZip(destZipPath, { accountEmail, mailbox, files }) {
     writeFileSync(join(root, 'manifest.json'), JSON.stringify({
       version: 2, exportedAt: new Date().toISOString(), accounts: [{ email: accountEmail }], settings: null,
     }));
-    // Windows has no `zip`; its bundled bsdtar writes a zip archive with `-a`.
-    if (process.platform === 'win32') execFileSync('tar', ['-a', '-cf', destZipPath, 'mailvault-backup'], { cwd: staging });
+    // Windows has no `zip`; its bundled bsdtar writes a zip archive with `-a`. Named by path: under
+    // Git Bash a bare `tar` is GNU tar, which reads `C:` as a remote host and cannot write a zip.
+    if (process.platform === 'win32') {
+      const bsdtar = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+      execFileSync(bsdtar, ['-a', '-cf', destZipPath, 'mailvault-backup'], { cwd: staging });
+    }
     else execFileSync('zip', ['-rq', destZipPath, 'mailvault-backup'], { cwd: staging });
   } finally {
     rmSync(staging, { recursive: true, force: true });

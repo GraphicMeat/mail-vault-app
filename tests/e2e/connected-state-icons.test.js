@@ -237,15 +237,25 @@ describe('Message state icons', function () {
       // failure of this assertion's premise — not a reason to skip it.
       expect(idx).toBeGreaterThanOrEqual(0);
 
-      // `idx` counts rows, and a row without a state icon would shift an
-      // index into the icons themselves: focus the one inside that row.
-      expect(await browser.execute((i) => {
-        const el = document.querySelectorAll('[data-testid="email-row"]')[i]?.querySelector('[data-testid="msg-state-icon"]');
-        el?.focus();
-        return !!el && document.activeElement === el;
-      }, idx)).toBe(true);
-      await browser.waitUntil(async () => !!(await tooltipText()), {
-        timeout: 5_000, interval: 100, timeoutMsg: 'Archived row tooltip never opened',
+      // The archived row's own icon, found by its state: a row index drifts when the
+      // virtualized list redraws. The tooltip closes on any scroll, and `focus()` scrolls
+      // an out-of-view row into it AFTER the tooltip has opened, so the icon is brought
+      // into view and left to settle before it is focused in place.
+      const ARCHIVED_ICON = '[data-testid="email-row"] [data-testid="msg-state-icon"][data-state^="archived"]';
+      await browser.execute((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), ARCHIVED_ICON);
+      await browser.pause(300);
+      await browser.waitUntil(async () => {
+        const focused = await browser.execute((sel) => {
+          const el = document.querySelector(sel);
+          el?.blur();
+          el?.focus({ preventScroll: true });
+          return !!el && document.activeElement === el;
+        }, ARCHIVED_ICON);
+        if (!focused) return false;
+        await browser.pause(200);
+        return !!(await tooltipText());
+      }, {
+        timeout: 15_000, interval: 300, timeoutMsg: 'Archived row tooltip never opened',
       });
 
       const text = await tooltipText();

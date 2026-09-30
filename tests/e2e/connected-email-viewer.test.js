@@ -622,7 +622,9 @@ describe('Email Viewer — a body fetch whose connection dies', function () {
       .map((f) => readFileSync(join(dir, f), 'utf-8'))
       .join('\n');
   };
-  const RETRIED = /UID FETCH 9301\b[^\n]*connection lost[^\n]*retrying once on a new connection/;
+  // The pool logs this line only when `is_connection_lost` matched the error, and Windows words that
+  // error differently ("os error 10054"), so the line's own wording is not part of the match.
+  const RETRIED = /UID FETCH 9301\b[^\n]*retrying once on a new connection/;
 
   const clickRow = (subject) => browser.execute((needle) => {
     const row = [...document.querySelectorAll('[data-testid="email-row"]')]
