@@ -94,7 +94,6 @@
   "fad58cdae4d7": "설정 → 결제를 열고 월간을 선택한 후 결제를 완료하세요. 확인하기 전에 가격과 결제 정보를 검토하세요.",
   "df6d8f8a437c": "취소하거나 Free로 돌아가도 로컬 메일은 계속 이용할 수 있습니다.",
   "dec4af947928": "스크린샷 닫기",
-  "d07d2aa25671": "macOS 또는 Linux용 MailVault를 다운로드하세요. 이메일을 연결하고 첫 아카이브를 만든 뒤 앱에서 선택한 요금제를 시작하세요.",
   "0152148db2ff": "제품 스크린샷",
   "15d29c476ef7": "MailVault 받은편지함",
   "bb8b96bdb06c": "“‘test/verify’ 단계 옵션이 마음에 듭니다. <strong>정말 단계를 하나 줄여 줍니다.</strong>”",
@@ -131,7 +130,6 @@
   "80018a69c369": "저장한 메일과 Free 기능은 계속 이용할 수 있습니다. Premium은 체험 또는 유료 기간이 끝날 때까지 활성화된 뒤 앱이 Free로 돌아갑니다. 연간 체험 중 취소하면 구독 요금이 청구되지 않습니다.",
   "5c647649390b": "제품 업데이트와 실용적인 팁. 언제든 구독을 취소할 수 있습니다.",
   "c94d3175a656": "이메일 주소",
-  "5f9b52cff13e": "이메일의 검색 가능한 사본을 컴퓨터에 저장하고, 준비되면 사서함 공간을 비우세요. macOS와 Linux용 무료 메일 클라이언트 및 수동 이메일 보관 기능입니다.",
   "115f599ba061": "MailVault — 새 메일을 위한 공간을 만드세요. 이전 메일은 보관하세요.",
   "d6ba9232914d": "MailVault 지원",
   "29438940747e": "연간 결제 시 약 {monthlyEquivalent}/month",
@@ -232,7 +230,5 @@
   "78c0778c5b6f": "MailVault의 서버 변경 안내",
   "7bf0101cf05a": "확대: 이미지 또는 HTML로 내보내기",
   "6ba74d86c98f": "MailVault의 이미지 또는 HTML 내보내기",
-  "5ffaca3ae9d8": "볼트는 Mac 또는 Linux 컴퓨터에서 <a href=\"https://datatracker.ietf.org/doc/html/rfc5322\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">.eml 파일</a>을 <a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a> 형식으로 정리한 폴더입니다. 이메일당 파일 하나이며 데이터베이스가 필요 없습니다. 데이터는 컴퓨터를 떠나거나 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 널리 지원되는 이메일 형식이므로 Apple Mail, Thunderbird, Outlook 또는 EML을 지원하는 다른 앱에서 이메일을 열 수 있습니다. MailVault에 묶이지 않습니다.",
-  "9795343f41ec": "볼트는 Mac 또는 Linux 컴퓨터에 있는 Maildir 형식으로 정리된 표준 .eml 파일 폴더입니다. 이메일당 파일 하나이며 데이터베이스가 필요 없습니다. macOS에서는 MailVault가 샌드박스 처리되므로 폴더는 ~/Library/Application Support가 아니라 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/에 있습니다. Linux에서는 .deb 패키지의 경우 ~/.local/share/com.mailvault.app/에, Snap의 경우 ~/snap/mailvault/current/.local/share/com.mailvault.app/에 있습니다. ~/Library는 Finder에서 숨겨지고 Spotlight가 색인화하지 않으므로, 드라이브에서 com.mailvault.app을 검색해도 아무것도 찾지 못할 수 있습니다. Finder에서 Shift + Command + G를 누르고 ~/Library를 입력하거나, Finder의 이동 메뉴를 열 때 Option을 누르거나, 홈 폴더에서 Command + J를 눌러 라이브러리 폴더 보기를 선택하세요. MailVault는 설정, 백업 및 복원, 백업 설정, 메일 저장 위치에서도 사용 중인 폴더를 보여 줍니다. 데이터는 컴퓨터를 떠나거나 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 널리 지원되는 이메일 형식이므로 Apple Mail, Thunderbird, Outlook 또는 EML을 지원하는 다른 앱에서 이메일을 열 수 있습니다. MailVault에 묶이지 않습니다.",
   "8b302c851f90": "MailVault는 언제나 앱 자체 저장소에 작동 사본을 보관합니다. 여기서 메일을 읽고, 검색하고, 엽니다. 외부 백업 위치는 선택한 드라이브의 두 번째 독립 사본을 더합니다. 외장 SSD, NAS 공유 또는 동기화 폴더를 선택할 수 있습니다. 백업 실행 중 작동 사본과 동시에 같은 .eml 및 Maildir 구조로 기록되므로 EML을 지원하는 앱이 메시지 파일을 읽을 수 있습니다. 앱은 일상적으로 이 사본을 읽지 않으며 콜드 스토리지입니다. 서버에서 삭제하거나 MailVault에서 제거한 이메일도 외부 사본에는 남습니다. 설정의 백업에서 ‘두 번째 사본 — 외부 콜드 스토리지’를 지정하세요. macOS에서 MailVault는 폴더의 보안 범위 책갈피를 저장하므로 재시작과 앱 업데이트 뒤에도 접근이 유지됩니다. 상태 배지는 준비됨, 재승인 필요, 사용할 수 없음 또는 접근 거부를 표시하고 재승인은 한 번의 클릭으로 할 수 있습니다. 백업 중 드라이브를 분리해도 작동 사본은 계속 성공하며 MailVault는 외부 사본에 저장하지 못한 메시지 수를 보고합니다. 다음 실행에서 그 메시지를 복사합니다."
 }

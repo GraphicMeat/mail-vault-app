@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
   <meta property="og:title" content="Armazenamento e seu cofre — MailVault FAQ">
   <meta property="og:description" content="Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.">
-  <meta property="og:image:alt" content="MailVault: abra espaço para novos e-mails. Guarde os antigos. Gratuito para macOS e Linux, com uma prévia do app.">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Armazenamento e seu cofre — MailVault FAQ">
   <meta name="twitter:description" content="Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.">
-  <meta name="twitter:image:alt" content="MailVault: abra espaço para novos e-mails. Guarde os antigos. Gratuito para macOS e Linux, com uma prévia do app.">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "Onde meus e-mails ficam guardados?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Seu cofre é uma pasta de arquivos .eml padrão organizados no formato Maildir — no seu Mac ou computador Linux — um arquivo por e-mail, sem precisar de banco de dados. No macOS, o MailVault é isolado, por isso a pasta fica em ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ em vez de ~/Library/Application Support. No Linux, ela fica em ~/.local/share/com.mailvault.app/ para o pacote .deb ou em ~/snap/mailvault/current/.local/share/com.mailvault.app/ para o Snap. ~/Library fica oculta no Finder e o Spotlight não a indexa; por isso, procurar por com.mailvault.app na unidade não encontra nada: no Finder, pressione Shift + Command + G e digite ~/Library, mantenha Option pressionado ao abrir o menu Ir do Finder ou pressione Command + J na sua pasta Início e marque Mostrar pasta Biblioteca. O MailVault também mostra a pasta usada em Configurações, Backup e restauração, Configurações de backup, Onde seu e-mail é armazenado. Seus dados nunca saem do computador e nunca são enviados a um serviço de nuvem. Como .eml é um formato de e-mail amplamente aceito, seus e-mails podem ser abertos pelo Apple Mail, Thunderbird, Outlook ou outros apps compatíveis com EML — você nunca fica preso ao MailVault."
+        "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your computer — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
       }
     },
     {
@@ -224,7 +224,7 @@
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Onde meus e-mails ficam guardados?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Seu cofre é uma pasta de <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivos .eml</a> padrão organizados no formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> no seu Mac ou computador Linux &mdash; um arquivo por e-mail, sem precisar de banco de dados. Seus dados nunca saem do computador e nunca são enviados a um serviço de nuvem. Como .eml é um formato de e-mail amplamente aceito, seus e-mails podem ser abertos pelo Apple Mail, Thunderbird, Outlook ou outros apps compatíveis com EML — você nunca fica preso ao MailVault.</p>
+              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">A pasta exata</p>
               <p class="mb-2">O MailVault é um app em sandbox, então no macOS o cofre fica dentro do contêiner do próprio app &mdash; não diretamente em <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, que é onde a maioria olha primeiro:</p>

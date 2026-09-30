@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/ja/faq/providers.html">
   <meta property="og:title" content="メールプロバイダ — MailVault FAQ">
   <meta property="og:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。">
-  <meta property="og:image:alt" content="MailVault：新しいメールのための空きを作り、古いメールを残す。macOS と Linux 向けの無料アプリで、アプリのプレビューもあります。">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="メールプロバイダ — MailVault FAQ">
   <meta name="twitter:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。">
-  <meta name="twitter:image:alt" content="MailVault：新しいメールのための空きを作り、古いメールを残す。macOS と Linux 向けの無料アプリで、アプリのプレビューもあります。">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,15 +60,15 @@
       "name": "MailVaultはGmailやOutlookで使えますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。MailVaultはGmail、Outlook、そのほかIMAPに対応したあらゆるメールサービスで使えます。GmailはOAuth2でGoogleアカウントに直接サインインできるので、IMAP設定を手で入力する必要はありません。Microsoft 365のBusinessおよびEnterpriseのアカウントも、OAuth2でMicrosoftアカウントに直接サインインできます。個人向けのOutlook.comアカウントは現在、Microsoftの既知のサーバー障害の影響を受けています。"
+        "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API."
       }
     },
     {
       "@type": "Question",
-      "name": "Outlook.comのアカウントに接続できないのはなぜですか？",
+      "name": "How do I connect my Outlook.com account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "2024年後半以降、個人向けのOutlook.com、Hotmail、Live.comのアカウントに影響するMicrosoftのサーバー側の既知の問題が発生しています。Microsoftアカウントでサインインしたあと、IMAP接続が「User is authenticated but not connected.」というエラーで失敗します。MicrosoftのIMAPサービスには、OAuth2で認証したセッションが接続できないリグレッションがあります。Microsoft 365のBusiness/Enterpriseアカウントは影響を受けません。MailVaultのOAuth2実装は準備できており、Microsoftが問題を解決すればそのまま動作します。"
+        "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter. It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
       }
     },
     {
@@ -208,23 +208,23 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはGmailやOutlookで使えますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。MailVaultはGmail、Outlook、そのほかIMAPに対応するどのメールサービスでも使えます。Gmailの場合はOAuth2でGoogleのアカウントに直接サインインできます — IMAPの設定を手で入れる必要はありません。Microsoft 365のBusinessとEnterpriseのアカウントも、OAuth2でMicrosoftのアカウントに直接サインインでき、二要素認証とも問題なく組み合わせられます。個人のOutlook.comのアカウントは現在、<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">既知のMicrosoftのサーバーの問題</a>の影響を受けています。
+              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Outlook.comのアカウントに接続できないのはなぜですか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I connect my Outlook.com account?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">2024年後半以降、個人のOutlook.com、Hotmail、Live.comのアカウントに影響する<strong>既知のMicrosoftのサーバー側の問題</strong>があります。Microsoftのアカウントでサインインしたあと、IMAPの接続が「User is authenticated but not connected.」で失敗します。これはMailVaultだけでなく、OAuth2でIMAPを使うすべての第三者のメールクライアントに影響します。</p>
-              <p class="mb-4">Microsoftは個人アカウントにOAuth2を必須としています。しかし同社のIMAPサービスには、OAuth2で認証したセッションがメールボックスに接続できないリグレッションがあります。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">できること:</p>
+              <p class="mb-4">MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the <strong>Microsoft Graph API</strong>. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter.</p>
+              <p class="mb-4">It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Not available on Graph accounts yet:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Microsoft 365のBusiness／Enterpriseのアカウント</strong>は影響を受けません — 組織のアカウントではOAuth2は通常どおり動きます</li>
-                <li><strong>問題の推移を見守る</strong> — これはMicrosoftにしか直せないサーバー側の問題です。<a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A のスレッド</a>で追跡されています</li>
-                <li>個人のアカウントでは当面、<strong>Outlookのウェブ版</strong>やMicrosoftの公式アプリをお使いください</li>
-                <li><strong>MailVaultの準備はできています</strong> — Microsoftが問題を解決すれば、MailVaultのOAuth2のサインインは何も変えずにすぐ動きます</li>
+                <li><strong>Snooze</strong></li>
+                <li><strong>Restoring an MBOX file to the server</strong></li>
+                <li><strong>Recover to server</strong> for deleted emails. Recover locally works, for mail already on this computer</li>
+                <li><strong>The Inbox count</strong> that the add-account window reports after the connection test</li>
               </ul>
-              <p>技術的な詳細: MailVaultは<a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>と同じOAuth2の実装を使い、PKCEとXOAUTH2の認証について、MicrosoftのIMAP OAuth2の公式ドキュメントに従っています。</p>
+              <p>Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits. That sign-in follows the same approach as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, with PKCE and XOAUTH2 authentication.</p>
             </div>
         </article>
 

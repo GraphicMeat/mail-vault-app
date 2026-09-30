@@ -116,8 +116,6 @@
   "60742f1dccf5": "Le contrôle de sécurité des liens, gratuit dans MailVault, signale déjà les liens qui redirigent par un domaine de pistage, et vous prévient avant d'en ouvrir un. Le blocage des traqueurs s'occupe des balises qui se déclenchent sans le moindre clic.",
   "bb1f532c991e": "Puis-je voir ce qui a été bloqué ?",
   "ccd325765885": "Oui — le glyphe se change en œil barré et liste chaque balise retirée, avec son fournisseur et son URL. L'écran Blocage des traqueurs, dans les Paramètres, tient aussi un décompte de ce qui a été trouvé dans votre courrier.",
-  "855980f93db6": "Cela fonctionne-t-il sous Linux comme sous macOS ?",
-  "66c57a681e58": "Oui. Cela fait partie du moteur de rendu des messages, donc le comportement est identique sur les deux plateformes.",
   "78331e29481b": "MailVault détecte les pixels espions cachés dans le courrier marketing et les retire du HTML avant l'affichage du message. Voyez l'avant et l'après, le code de pistage lui-même, et ce qu'un seul pixel 1×1 dit à l'expéditeur.",
   "8c843d1b37f2": "Blocage des traqueurs d'e-mail — retirez les pixels espions avant leur chargement",
   "bb169dfeb6f4": "Le courrier marketing cache une image 1×1 qui signale l'instant où vous l'ouvrez. MailVault la retire du HTML avant l'affichage du message.",

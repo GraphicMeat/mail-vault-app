@@ -94,7 +94,6 @@
   "fad58cdae4d7": "打开“设置 → 账单”，选择月付并完成结账。确认前请查看价格和付款详情。",
   "df6d8f8a437c": "即使取消订阅或回到 Free，你的本地邮件仍可访问。",
   "dec4af947928": "关闭截图",
-  "d07d2aa25671": "下载适用于 macOS 或 Linux 的 MailVault。连接邮箱，创建第一份归档，并在应用中启动你选择的套餐。",
   "0152148db2ff": "产品截图",
   "15d29c476ef7": "MailVault 收件箱",
   "bb8b96bdb06c": "“我喜欢这个‘测试/验证’步骤选项。<strong>它确实省了我一步。</strong>”",
@@ -131,7 +130,6 @@
   "80018a69c369": "你仍可访问已保存的邮件和 Free 功能。Premium 会持续到试用期或已付费周期结束，然后应用会回到 Free。在年付试用期间取消，可避免订阅扣款。",
   "5c647649390b": "产品更新和实用提示。可随时取消订阅。",
   "c94d3175a656": "邮箱地址",
-  "5f9b52cff13e": "在电脑上保存可搜索的邮件副本，准备好后再腾出邮箱空间。适用于 macOS 和 Linux 的免费邮件客户端和手动归档。",
   "115f599ba061": "MailVault — 为新邮件腾出空间，保留旧邮件。",
   "d6ba9232914d": "支持 MailVault",
   "29438940747e": "约 {monthlyEquivalent}/月，按年付费",
@@ -232,7 +230,5 @@
   "78c0778c5b6f": "MailVault 中的引导式服务器更换",
   "7bf0101cf05a": "放大：导出为图片或 HTML",
   "6ba74d86c98f": "MailVault 中的导出为图片或 HTML",
-  "5ffaca3ae9d8": "你的保险库是 Mac 或 Linux 电脑上的标准<a href=\"https://datatracker.ietf.org/doc/html/rfc5322\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">.eml 文件</a>文件夹，采用<a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a>格式组织——每封邮件一个文件，无需数据库。你的数据绝不会离开电脑，也绝不会上传到任何云服务。由于 .eml 是广泛支持的邮件格式，你可以用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件——绝不会被锁定在 MailVault 中。",
-  "9795343f41ec": "你的保险库是按 Maildir 格式组织的标准 .eml 文件夹——位于 Mac 或 Linux 电脑上——每封邮件一个文件，无需数据库。在 macOS 上，MailVault 受沙盒保护，因此文件夹位于 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而非 ~/Library/Application Support。在 Linux 上，.deb 包位于 ~/.local/share/com.mailvault.app/，Snap 则位于 ~/snap/mailvault/current/.local/share/com.mailvault.app/。Finder 中的 ~/Library 是隐藏的，Spotlight 不会索引它，因此在驱动器中搜索 com.mailvault.app 找不到任何内容：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或在打开 Finder 的“前往”菜单时按住 Option，或在主文件夹中按 Command + J 并勾选“显示资源库文件夹”。MailVault 也会在“设置 → Backup & Restore → Backup Settings → Where your mail is stored”下显示正在使用的文件夹。你的数据绝不会离开电脑，也绝不会上传到任何云服务。由于 .eml 是广泛支持的邮件格式，你可以用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件——绝不会被锁定在 MailVault 中。",
   "8b302c851f90": "MailVault 始终会在应用自己的存储中保留一份可用的邮件副本——这正是你阅读、搜索和打开的内容。外部备份位置会在你选择的驱动器上增加第二份独立副本：外接 SSD、NAS 共享或同步文件夹。它会在备份运行时与工作副本同时写入，采用相同的 .eml 和 Maildir 布局，因此支持 EML 的应用可以读取邮件文件。应用日常不会读取它，它属于冷存储：服务器上删除的邮件，或在 MailVault 中移除的邮件，都会保留在外部副本中。在“设置 → Backup”中，在“Second copy — external cold storage”下进行设置。在 macOS 上，MailVault 会为该文件夹存储安全范围书签，使访问能跨重启和应用更新保持有效；状态徽章会显示 Ready、Needs reauthorization、Unavailable 或 Access denied，重新授权只需点击一次。若备份时驱动器未连接，工作副本仍会成功，MailVault 会报告有多少邮件未能写入外部副本；下一次运行会将它们复制过去。"
 }

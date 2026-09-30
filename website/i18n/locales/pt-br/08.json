@@ -116,8 +116,6 @@
   "60742f1dccf5": "O verificador de segurança de links do MailVault, que é gratuito, já sinaliza links que redirecionam por um domínio de rastreamento e avisa antes de você abrir um. O bloqueio de rastreadores cuida dos pixels que disparam sem nenhum clique.",
   "bb1f532c991e": "Ainda consigo ver o que foi bloqueado?",
   "ccd325765885": "Sim &mdash; o símbolo vira um olho riscado e lista cada rastreador que foi removido, com o fornecedor e a URL. A tela de Bloqueio de Rastreadores nas Configurações também mantém uma contagem contínua do que foi encontrado nas suas mensagens.",
-  "855980f93db6": "Isso funciona no Linux tanto quanto no macOS?",
-  "66c57a681e58": "Sim. Faz parte do renderizador de mensagens, então se comporta de forma idêntica nas duas plataformas.",
   "78331e29481b": "O MailVault detecta os pixels de rastreamento escondidos no e-mail de marketing e os remove do HTML antes de a mensagem ser exibida. Veja o antes e o depois, o próprio código de rastreamento e o que um único pixel de 1×1 conta ao remetente.",
   "8c843d1b37f2": "Bloqueio de rastreadores de e-mail — remova os pixels de rastreamento antes que eles carreguem",
   "bb169dfeb6f4": "O e-mail de marketing esconde uma imagem de 1×1 que avisa o remetente no momento em que você abre. O MailVault a remove do HTML antes de a mensagem ser exibida.",

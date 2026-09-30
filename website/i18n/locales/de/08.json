@@ -116,8 +116,6 @@
   "60742f1dccf5": "Die kostenlose Link-Sicherheitsprüfung von MailVault markiert bereits Links, die über eine Tracking-Domain umleiten, und warnt, bevor du einen öffnest. Das Tracker-Blockieren kümmert sich um die Beacons, die ganz ohne Klick feuern.",
   "bb1f532c991e": "Kann ich trotzdem sehen, was blockiert wurde?",
   "ccd325765885": "Ja — das Zeichen wird zu einem durchgestrichenen Auge und listet jeden entfernten Beacon auf, mit Anbieter und URL. Der Bereich „Tracker blockieren“ in den Einstellungen führt außerdem laufend mit, was in deiner Post gefunden wurde.",
-  "855980f93db6": "Funktioniert das unter Linux genauso wie unter macOS?",
-  "66c57a681e58": "Ja. Es ist Teil der Nachrichtendarstellung und verhält sich auf beiden Plattformen identisch.",
   "78331e29481b": "MailVault erkennt die Tracking-Pixel, die sich in Werbepost verstecken, und entfernt sie aus dem HTML, bevor die Nachricht dargestellt wird. Sieh vorher und nachher, den Tracking-Code selbst und was ein einzelnes 1×1-Pixel dem Absender verrät.",
   "8c843d1b37f2": "E-Mail-Tracker blockieren — Tracking-Pixel entfernen, bevor sie laden",
   "bb169dfeb6f4": "Werbepost versteckt ein 1×1-Bild, das in dem Moment zurückmeldet, in dem du sie öffnest. MailVault entfernt es aus dem HTML, bevor die Nachricht dargestellt wird.",

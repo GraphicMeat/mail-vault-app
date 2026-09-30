@@ -116,8 +116,6 @@
   "60742f1dccf5": "Lo scanner gratuito di sicurezza dei link di MailVault segnala già i link che passano da un dominio di tracciamento, e ti avvisa prima che ne apri uno. Il blocco dei tracciatori si occupa dei beacon che partono senza nessun clic.",
   "bb1f532c991e": "Posso vedere che cosa è stato bloccato?",
   "ccd325765885": "Sì — il simbolo diventa un occhio barrato ed elenca ogni beacon rimosso, con il suo fornitore e l'URL. La schermata Blocco dei tracciatori nelle Impostazioni tiene anche un conteggio progressivo di quello che è stato trovato nella tua posta.",
-  "855980f93db6": "Funziona su Linux oltre che su macOS?",
-  "66c57a681e58": "Sì. Fa parte del renderer dei messaggi, quindi si comporta in modo identico su entrambe le piattaforme.",
   "78331e29481b": "MailVault rileva i pixel di tracciamento nascosti nella posta pubblicitaria e li toglie dall'HTML prima che il messaggio venga mostrato. Guarda il prima e il dopo, il codice di tracciamento vero e che cosa dice al mittente un singolo pixel 1×1.",
   "8c843d1b37f2": "Blocco dei tracciatori email — rimuovi i pixel di tracciamento prima che si carichino",
   "bb169dfeb6f4": "La posta pubblicitaria nasconde un'immagine 1×1 che riferisce nell'istante in cui la apri. MailVault la toglie dall'HTML prima che il messaggio venga mostrato.",

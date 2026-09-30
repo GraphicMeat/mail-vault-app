@@ -116,8 +116,6 @@
   "60742f1dccf5": "El análisis de seguridad de enlaces de MailVault, que es gratuito, ya marca los enlaces que redirigen por un dominio de seguimiento y te avisa antes de abrir uno. El bloqueo de rastreadores se ocupa de las balizas que se disparan sin ningún clic.",
   "bb1f532c991e": "¿Puedo ver qué se ha bloqueado?",
   "ccd325765885": "Sí: el símbolo cambia a un ojo tachado y lista todas las balizas que se han quitado, con su proveedor y su URL. La pantalla de bloqueo de rastreadores en Ajustes también lleva la cuenta de lo que se ha encontrado en tu correo.",
-  "855980f93db6": "¿Funciona en Linux además de en macOS?",
-  "66c57a681e58": "Sí. Forma parte del renderizador de mensajes, así que se comporta igual en las dos plataformas.",
   "78331e29481b": "MailVault detecta los píxeles de seguimiento ocultos en el correo comercial y los quita del HTML antes de mostrar el mensaje. Mira el antes y el después, el propio código de seguimiento y qué le cuenta al remitente un solo píxel de 1×1.",
   "8c843d1b37f2": "Bloqueo de rastreadores de correo — quita los píxeles de seguimiento antes de que carguen",
   "bb169dfeb6f4": "El correo comercial esconde una imagen de 1×1 que avisa en cuanto lo abres. MailVault la quita del HTML antes de mostrar el mensaje.",
