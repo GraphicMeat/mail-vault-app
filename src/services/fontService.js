@@ -146,7 +146,8 @@ export async function downloadFont(family) {
   const entry = { answered: false };
   entry.promise = new Promise((resolve, reject) => Object.assign(entry, { resolve, reject }));
   pending.set(family, entry);
-  markDownloading(family);
+  // One already here answers `ready` at once: no spinner flash for it.
+  if (!useFontStore.getState().installed.includes(family)) markDownloading(family);
   if (!poll) poll = setInterval(() => { void reconcile(); }, POLL_MS);
 
   let answer;
