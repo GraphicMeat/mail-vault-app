@@ -5,6 +5,28 @@ import { Button } from './ui/Button';
 import { Z } from './ui/layers';
 import { useUnsavedStore } from '../stores/unsavedStore';
 import { useT } from '../i18n/index.js';
+import { diffText, clipDiff } from '../utils/textDiff';
+
+/// Removed text red and struck through, added text green: the colour is never
+/// the only cue, <del> and <ins> say it too.
+const MARK = {
+  del: 'bg-mail-danger-tint text-mail-danger line-through rounded-sm px-0.5',
+  add: 'bg-mail-success-tint text-mail-success rounded-sm px-0.5',
+};
+
+function TextChange({ change }) {
+  const parts = clipDiff(diffText(change.before, change.after));
+  return <>
+    <span className="font-medium">{change.label}: </span>
+    <span className="break-words" data-testid="unsaved-diff">
+      {parts.map((part, i) => {
+        if (part.type === 'del') return <del key={i} className={MARK.del}>{part.text}</del>;
+        if (part.type === 'add') return <ins key={i} className={`${MARK.add} no-underline`}>{part.text}</ins>;
+        return <span key={i} className="text-mail-text-muted">{part.text}</span>;
+      })}
+    </span>
+  </>;
+}
 
 /// Asked when a way out of a page would drop unsaved edits: what changed, and
 /// save, discard or stay. Portaled and above every dialog, so it shows over
@@ -30,7 +52,9 @@ export function UnsavedChangesDialog() {
         data-testid="unsaved-save" onClick={() => answer('save')}>{t('unsaved.save')}</Button>
     </>}>
     <ul className="list-disc pl-5 text-sm text-mail-text space-y-1" data-testid="unsaved-list">
-      {changes.map(change => <li key={change}>{change}</li>)}
+      {changes.map(change => typeof change === 'string'
+        ? <li key={change}>{change}</li>
+        : <li key={change.key}><TextChange change={change} /></li>)}
     </ul>
   </Dialog>;
 }

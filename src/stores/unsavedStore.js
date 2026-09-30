@@ -4,7 +4,9 @@ import { create } from 'zustand';
 /// out of the page asks through `leave` first. One guard at a time: Settings
 /// shows one editor.
 ///
-/// guard: `{ changes: string[], save: () => Promise<boolean>, discard: () => Promise<void> }`
+/// guard: `{ changes, save: () => Promise<boolean>, discard: () => Promise<void> }`
+/// `changes` lists what leaving would lose: a string names a part that changed;
+/// `{ key, label, before, after }` names a text part and shows how its text changed.
 export const useUnsavedStore = create((set, get) => ({
   guard: null,
   /// The way out waiting on an answer.

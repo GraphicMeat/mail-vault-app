@@ -58,11 +58,9 @@ const CHANGE_LABELS = {
   fields: 'views.filter.fields', group: 'views.filter.group', sort: 'views.filter.sort',
   direction: 'views.filter.direction', showTimeline: 'views.showTimeline',
 };
-/// Parts that are a phrase: the prompt shows what it was and what it is now,
-/// not just that the part changed.
+/// Parts that are a phrase: the prompt gets what it was and what it is now,
+/// whole, and draws the difference itself.
 const TEXT_CHANGES = ['name', 'query', 'sender'];
-const clip = text => (text.length > 60 ? `${text.slice(0, 59)}…` : text);
-const quoted = value => (value ? `“${clip(String(value))}”` : '—');
 const SORTS = ['date', 'sender', 'subject'];
 const DIRECTIONS = ['desc', 'asc'];
 
@@ -379,14 +377,14 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
   const changes = [...new Set(Object.keys(CHANGE_LABELS)
     .filter(key => JSON.stringify(current[key] ?? null) !== JSON.stringify(baseline[key] ?? null))
     .map(key => (TEXT_CHANGES.includes(key)
-      ? `${t(CHANGE_LABELS[key])}: ${quoted(baseline[key])} → ${quoted(current[key])}`
+      ? { key, label: t(CHANGE_LABELS[key]), before: String(baseline[key] ?? ''), after: String(current[key] ?? '') }
       : t(CHANGE_LABELS[key]))))];
   const answers = useRef(null);
   answers.current = {
     save: async () => { const saved = await persist(); if (saved) onSaved?.(); return saved; },
     discard: async () => { await onDiscard?.(); },
   };
-  const changesKey = changes.join('\n');
+  const changesKey = JSON.stringify(changes);
   useEffect(() => {
     useUnsavedStore.getState().setGuard(changes.length
       ? { changes, save: () => answers.current.save(), discard: () => answers.current.discard() }

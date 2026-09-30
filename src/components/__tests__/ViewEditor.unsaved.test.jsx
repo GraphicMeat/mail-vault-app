@@ -87,23 +87,31 @@ describe('unsaved changes', () => {
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'invoice' } });
     fireEvent.click(screen.getByTestId('view-starred-yes'));
     expect(guard().changes).toEqual([
-      'views.name: “Receipts” → “Bills”', 'views.filter.query: — → “invoice”', 'views.filter.starred',
+      { key: 'name', label: 'views.name', before: 'Receipts', after: 'Bills' },
+      { key: 'query', label: 'views.filter.query', before: '', after: 'invoice' },
+      'views.filter.starred',
     ]);
     fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
-    expect(guard().changes).toEqual(['views.filter.query: — → “invoice”', 'views.filter.starred']);
+    expect(guard().changes).toEqual([
+      { key: 'query', label: 'views.filter.query', before: '', after: 'invoice' },
+      'views.filter.starred',
+    ]);
   });
 
-  it('shows the phrase a text part was and became, and long ones clipped', () => {
-    render(<ViewEditor view={VIEW} onClose={() => {}} showPreview={false} />);
-    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'x'.repeat(80) } });
-    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'statement' } });
-    const [name, query] = guard().changes;
-    expect(name).toBe(`views.name: “Receipts” → “${'x'.repeat(59)}…”`);
-    expect(query).toBe('views.filter.query: — → “statement”');
-    // an emptied part reads as removed, not as a bare label
+  it('hands the prompt the whole phrase, before and after, however long it is', () => {
+    const long = 'Jasinskio && 14A-37 || mindaugo g. 30 || Vaivorykštės g. 63';
+    const view = { ...VIEW, def: { ...VIEW.def, query: long } };
+    render(<ViewEditor view={view} onClose={() => {}} showPreview={false} />);
+    // a word typed and not yet added: Save would keep it, so the prompt shows it
+    fireEvent.change(screen.getByTestId('view-query'), { target: { value: 'asd' } });
+    expect(guard().changes).toEqual([{ key: 'query', label: 'views.filter.query', before: long, after: `${long} && asd` }]);
     fireEvent.change(screen.getByTestId('view-query'), { target: { value: '' } });
-    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
     expect(guard()).toBeNull();
+    // a word removed from the phrase
+    cleanup();
+    render(<ViewEditor view={{ ...VIEW, def: { ...VIEW.def, query: `${long} && asd` } }} onClose={() => {}} showPreview={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'common.remove asd' }));
+    expect(guard().changes).toEqual([{ key: 'query', label: 'views.filter.query', before: `${long} && asd`, after: long }]);
   });
 
   it('the prompt saves what the form says, then tells the host', async () => {
