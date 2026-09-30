@@ -150,7 +150,7 @@ export const QUICK_ACTION_RULES = {
     selection: { disable: ['snooze'] },
     reader: { hide: ['notLocalOnly', 'snooze'] },
   },
-  unsubscribe: { row: { hide: ['unsubscribe'] }, reader: { hide: ['unsubscribe'] } },
+  unsubscribe: { row: { hide: ['unsubscribe'] }, ...SELECTION_UNSUPPORTED, reader: { hide: ['unsubscribe'] } },
 };
 QUICK_ACTION_RULES.markUnread = QUICK_ACTION_RULES.markRead;
 QUICK_ACTION_RULES.unstar = QUICK_ACTION_RULES.star;

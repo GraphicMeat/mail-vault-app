@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUICK_ACTION_TYPES } from '../quickActions';
+import { QUICK_ACTION_SURFACE_ACTIONS, QUICK_ACTION_TYPES } from '../quickActions';
 import { QUICK_ACTION_RULES, quickActionAvailability } from '../quickActionAvailability';
 
 // A single resolved, server-backed, unread message in acct-a with every
@@ -35,6 +35,14 @@ describe('quickActionAvailability', () => {
     expect(check('row', { action: 'markUnread' })).toEqual({ hidden: true, disabled: false });
     // A thread row's split toggle offers both sides.
     expect(check('row', { action: 'markUnread', thread: true })).toEqual({ hidden: false, disabled: false });
+  });
+
+  // A saved selection list may name any action (normalization keeps them);
+  // one the bar has no handler for must not read as a live button.
+  it('disables on the selection bar every action it cannot run, whatever the target', () => {
+    const unsupported = QUICK_ACTION_TYPES.filter(action => !QUICK_ACTION_SURFACE_ACTIONS.selection.includes(action));
+    expect(unsupported).toContain('unsubscribe');
+    for (const action of unsupported) expect(check('selection', { action }).disabled, action).toBe(true);
   });
 
   it('the reader hides a star side only when both sides are configured', () => {
