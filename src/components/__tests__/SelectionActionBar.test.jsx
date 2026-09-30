@@ -171,6 +171,20 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(quickAction('Unarchive selected').disabled).toBe(false);
   });
 
+  // Server view writes isArchived false on every row it lists; the open
+  // folder's archived uids still name what the vault holds, so the bar offers
+  // Unarchive and the run must reach those rows too.
+  it('unarchives a Server view row of the open folder the folder\'s archived uids hold', async () => {
+    const removeLocalEmails = vi.fn().mockResolvedValue();
+    useMailStoreMock.setState({ archivedEmailIds: new Set([1]), removeLocalEmails });
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Unarchive selected'));
+    fireEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
+    await waitFor(() => expect(removeLocalEmails).toHaveBeenCalledWith([
+      { uid: 1, location: { accountId: 'acct-1', mailbox: 'INBOX' } },
+    ]));
+  });
+
   // As on a row: Delete everywhere is offered only where it reaches more
   // than the server. With no vault or backup copy it is Delete from server
   // under a scarier name.

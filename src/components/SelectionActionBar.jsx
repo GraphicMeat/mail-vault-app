@@ -18,7 +18,7 @@ import {
   resolveEmailLocation,
   selectionKey,
 } from "../stores/slices/unifiedHelpers";
-import { savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
+import { isRowArchived, savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
 import { describeQuickAction } from "../utils/quickActionCatalog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isBackedUp, useBackupScan } from "./email/MessageStateIcon";
@@ -162,7 +162,7 @@ export function SelectionActionBar() {
     const state = useMailStore.getState();
     // One call: grouped per (account, mailbox) into one vault delete each.
     const targets = selectedRows
-      .filter((email) => email.isArchived)
+      .filter((email) => isRowArchived(email, state))
       .map((email) => ({ uid: email.uid, location: resolveEmailLocation(email, state) }))
       .filter((target) => target.location);
     try {
@@ -390,7 +390,7 @@ export function SelectionActionBar() {
               : t("rowMenu.deleteServer"),
             description: deleteMode === "unarchive"
               ? selectedRows.some((email) =>
-                  email.isArchived &&
+                  isRowArchived(email, useMailStore.getState()) &&
                   (email.source === "local-only" ||
                     email._origin === "local-only")
                 )

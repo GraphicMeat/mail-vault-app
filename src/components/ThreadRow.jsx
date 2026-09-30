@@ -16,6 +16,7 @@ import { TagChips } from './TagChips';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { isRowArchived } from '../utils/quickActionFacts';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { RowGutter, RowSnippet, WithSnippet } from './EmailRow';
 import {
@@ -105,7 +106,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const rows = members.filter(em => !em.isArchived);
+      const rows = members.filter(em => !isRowArchived(em, useMailStore.getState()));
       if (rows.length > 0) await actions.saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);
@@ -224,7 +225,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const rows = members.filter(em => !em.isArchived);
+      const rows = members.filter(em => !isRowArchived(em, useMailStore.getState()));
       if (rows.length > 0) await actions.saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);

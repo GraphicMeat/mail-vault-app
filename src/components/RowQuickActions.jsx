@@ -13,7 +13,7 @@ import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SnoozePicker } from './SnoozePicker';
 import { registerRowActions } from '../utils/rowActionRegistry';
-import { rowFacts, savedMailboxes, isLocalOnly } from '../utils/quickActionFacts';
+import { rowFacts, savedMailboxes, isLocalOnly, isRowArchived } from '../utils/quickActionFacts';
 import { describeQuickAction } from '../utils/quickActionCatalog';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
@@ -98,11 +98,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     confirmLabel: t('common.delete'),
   } : {
     title: t('rowMenu.deleteServer2'),
-    description: describeServerDelete(serverEmails.length, serverEmails.filter(email => email.isArchived).length),
+    description: describeServerDelete(serverEmails.length, serverEmails.filter(email => isRowArchived(email, state)).length),
     confirmLabel: t('rowMenu.deleteServer'),
   }, { confirmOptional: true });
   const requestUnarchive = () => {
-    const archived = emails.filter(email => email.isArchived);
+    const archived = emails.filter(email => isRowArchived(email, state));
     const localOnly = archived.some(isLocalOnly);
     onRequestDelete?.(async () => {
       // One call: grouped per (account, mailbox) into one vault delete each.
@@ -147,7 +147,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     return {
       ...describeQuickAction('row', entry, facts, ctx),
       onActivate: preview ? () => {} : async event => {
-        if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !email.isArchived))); onClose?.(); }
+        if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !isRowArchived(email, state)))); onClose?.(); }
         else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
         else if (entry.action === 'delete') { onClose?.(); hasServerBacked ? requestServerDelete() : requestUnarchive(); }
         else if (entry.action === 'deleteServer') { onClose?.(); requestServerDelete(); }

@@ -484,6 +484,29 @@ describe('RowQuickActions — read/star/archive visibility', () => {
     expect(screen.queryByTestId('quick-action-archive')).toBeNull();
     expect(screen.getByTestId('quick-action-unarchive')).toBeTruthy();
   });
+
+  // Server view writes isArchived false on every row it lists, while the open
+  // folder's archived uids still say the vault holds the message: the row
+  // reads it as the selection bar and the bulk modal do.
+  it('reads a Server view row of the open folder as archived when the folder\'s archived uids hold it', async () => {
+    useMailStoreMock.setState({ archivedEmailIds: new Set([8]) });
+    setActions(action('archive'), action('unarchive'));
+    const onRequestDelete = vi.fn();
+    const { actions } = renderActions({ emails: [email({ uid: 8 })], onRequestDelete });
+    expect(screen.queryByTestId('quick-action-archive')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('quick-action-unarchive'));
+    await onRequestDelete.mock.calls[0][0]();
+    expect(actions.removeLocalEmails).toHaveBeenCalledWith([{ uid: 8, location: { accountId: ACCOUNT_A.id, mailbox: 'INBOX' } }]);
+  });
+
+  it('never reads another account\'s uid against the open folder\'s archived uids', () => {
+    useMailStoreMock.setState({ archivedEmailIds: new Set([8]) });
+    setActions(action('archive'), action('unarchive'));
+    renderActions({ emails: [email({ uid: 8, _accountId: ACCOUNT_B.id })], onRequestDelete: vi.fn() });
+    expect(screen.getByTestId('quick-action-archive')).toBeTruthy();
+    expect(screen.queryByTestId('quick-action-unarchive')).toBeNull();
+  });
 });
 
 // The radial toggle's glyph was pinned to the open envelope, so an already

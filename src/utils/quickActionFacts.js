@@ -38,13 +38,26 @@ const BASE = {
 };
 
 /**
+ * Whether the vault holds a loaded message, by the same rule as a ticked key:
+ * its row says so, or it is the open folder's own (its selection key is the
+ * bare uid) and the folder's archived uids hold it. Server view writes
+ * isArchived false on every row it lists, so the row alone undercounts there.
+ */
+export function isRowArchived(email, state) {
+  if (email?.isArchived) return true;
+  const key = selectionKey(email, state);
+  return !String(key).includes(':') && !!state.archivedEmailIds?.has(key);
+}
+
+/**
  * A list row's targets: one message, or every message of a thread row.
  * `backedUp` is whether any of them is on the backup drive, `canConfirm`
  * whether the row can ask before a delete, `saving` an archive in flight.
  */
 export function rowFacts(emails, state, { backedUp = false, canConfirm = false, saving = false } = {}) {
   const locations = emails.map(email => resolveEmailLocation(email, state));
-  const has = actionVisibility(emails);
+  const archived = emails.map(email => isRowArchived(email, state));
+  const has = { ...actionVisibility(emails), archive: archived.some(value => !value), unarchive: archived.some(Boolean) };
   const resolved = locations.length > 0 && locations.every(Boolean);
   const oneAccount = resolved && new Set(locations.map(location => location.accountId)).size === 1;
   const oneMailbox = locations.length > 0 && locations.every(location => location?.mailbox === locations[0]?.mailbox);
