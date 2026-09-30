@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { inboxUnread } from '../../stores/snoozeStore';
+import { inboxCount, applyRecounts, selectTotalUnread } from '../../stores/unreadCounts';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, storageKeyOf } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
@@ -196,7 +196,10 @@ export async function refreshAllAccounts(options = {}) {
               await db.saveEmailHeaders(account.id, normalizedMailbox, headers, targetFolder.totalItemCount);
               console.log(`[mailStore] Graph: cached ${headers.length} ${normalizedMailbox} headers for ${account.email}`);
             }
-            if (normalizedMailbox === 'INBOX') countedUnread[account.id] = inboxUnread(account.id, headers);
+            if (normalizedMailbox === 'INBOX') {
+              const n = inboxCount(account.id, { emails: headers, totalEmails: targetFolder.totalItemCount });
+              if (n !== null) countedUnread[account.id] = n;
+            }
 
             const newHeaders = headers.filter(e => !baseline.uids.has(e.uid));
             if (newHeaders.length > 0 && baseline.complete) {
@@ -244,8 +247,11 @@ export async function refreshAllAccounts(options = {}) {
             console.log(`[mailStore] Cached ${allEmails.length} ${resolvedMailbox} headers for ${account.email}`);
           }
 
-          // Less what a local snooze holds out of the inbox, as every badge count.
-          if (resolvedMailbox === 'INBOX') countedUnread[account.id] = inboxUnread(account.id, allEmails);
+          // Only a complete listing is a count (unreadCounts).
+          if (resolvedMailbox === 'INBOX') {
+            const n = inboxCount(account.id, { emails: allEmails, totalEmails: total });
+            if (n !== null) countedUnread[account.id] = n;
+          }
 
           const newHeaders = allEmails.filter(e => !baseline.uids.has(e.uid));
           if (newHeaders.length > 0 && baseline.complete) {
@@ -286,18 +292,12 @@ export async function refreshAllAccounts(options = {}) {
     await after.loadUnifiedInbox?.(null, after.unifiedFolder || 'INBOX');
   }
 
-  // Read the store LAST: the account on screen had its badge recounted by the
-  // loadEmails() above, and that is the fresher number for it.
-  const settings = useSettingsStore.getState();
-  const unreadPerAccount = { ...settings.unreadPerAccount, ...countedUnread };
-  settings.setUnreadPerAccount(unreadPerAccount);
-  // Summed from the map rather than accumulated in the loop, so the accounts
-  // this run skipped (already fresh, no credentials, the active one) still
-  // count towards the dock badge instead of silently dropping out of it.
-  const totalUnread = Object.entries(unreadPerAccount)
-    .filter(([id]) => !settings.isAccountHidden(id))
-    .reduce((n, [, count]) => n + (count || 0), 0);
-  useMailStore.setState({ totalUnreadCount: totalUnread });
+  // Merged LAST: the account on screen had its badge recounted by the
+  // loadEmails() above, and that is the fresher number for it. The dock badge's
+  // total is derived from the counts (unreadCounts), so the accounts this run
+  // skipped (already fresh, no credentials, the active one) still count.
+  applyRecounts(countedUnread);
+  const totalUnread = selectTotalUnread(useSettingsStore.getState());
 
   const newEmailCount = get().emails.length;
   const newEmails = Math.max(0, newEmailCount - previousEmailCount);

@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { inboxUnread } from '../../stores/snoozeStore';
+import { recountInbox } from '../../stores/unreadCounts';
 import { ensureFreshToken, resolveServerAccount, hasValidCredentials } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
@@ -809,7 +809,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         }
 
         if (resolvedMailbox === 'INBOX') {
-          useSettingsStore.getState().setUnreadForAccount(accountId, inboxUnread(accountId, cachedHeaders.emails));
+          recountInbox(accountId, cachedHeaders);
         }
       } else if (savedEmailIds.size > 0 && !isBackgroundRefresh) {
         // Expected recovery, not an anomaly: the sync that follows repopulates

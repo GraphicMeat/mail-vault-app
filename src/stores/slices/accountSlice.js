@@ -138,9 +138,6 @@ export const createAccountSlice = (set, get) => ({
   unifiedInbox: false,
   unifiedFolder: 'INBOX',
 
-  // Unread counts across all accounts
-  totalUnreadCount: 0,
-
   // ── Passthrough wrappers to workflow functions ──
 
   init: () => _init(),
@@ -170,16 +167,6 @@ export const createAccountSlice = (set, get) => ({
   deleteEmailFromServer: (uid, opts) => _deleteEmailFromServer(uid, opts),
   markEmailReadStatus: (uid, read) => _markEmailReadStatus(uid, read),
   exportEmail: (uid, subject) => _exportEmail(uid, subject),
-
-  setTotalUnreadCount: (count) => set({ totalUnreadCount: count }),
-
-  calculateUnreadCount: () => {
-    // Cross-store read via the facade: emails belong to the messageList domain
-    const { emails } = get();
-    const unreadCount = emails.filter(e => !e.flags?.includes('\\Seen')).length;
-    set({ totalUnreadCount: unreadCount });
-    return unreadCount;
-  },
 
   // Manual-refresh UI spinner — briefly spins on every click so the button
   // feels instant even when the underlying sync is throttled or already running.

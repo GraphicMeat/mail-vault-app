@@ -3,7 +3,8 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { inboxUnread, localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
+import { localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
+import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread } from '../stores/unreadCounts';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { invalidateRestoreDescriptors } from '../services/cacheManager';
@@ -107,7 +108,9 @@ export function useEmailScheduler() {
   const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
   const accounts = useAccountStore(s => s.accounts);
   const emails = useMessageListStore(s => s.emails);
-  const totalUnreadCount = useAccountStore(s => s.totalUnreadCount);
+  // Derived from the sidebar's counts (unreadCounts), so whatever moves one
+  // moves the dock badge's dependency too.
+  const totalUnread = useSettingsStore(selectTotalUnread);
   const {
     refreshInterval,
     refreshOnLaunch,
@@ -159,36 +162,25 @@ export function useEmailScheduler() {
   // account's badge would wait for the next scheduled refresh. Recount it
   // from that cache on any INBOX change, flags-only ones included (a read on
   // another device). Only a complete cache is counted: a partial one reads as
-  // fewer unread, so it only adds the arrivals.
+  // fewer unread, so it only adds the arrivals (unreadCounts owns the rule).
   // ponytail: reads the whole INBOX cache per change; a daemon-side unread
   // count if large inboxes make that slow.
   const recountInboxUnread = async (accountId, newEmails) => {
-    const settings = useSettingsStore.getState();
     let cache = null;
     try { cache = await db.getEmailHeaders(accountId, 'INBOX'); } catch { /* keep the count */ }
-    const emails = cache?.emails;
-    if (emails && !(cache.totalEmails > emails.length)) {
-      settings.setUnreadForAccount(accountId, inboxUnread(accountId, emails));
-    } else if (newEmails > 0) {
-      settings.setUnreadForAccount(accountId, (settings.unreadPerAccount?.[accountId] || 0) + newEmails);
-    } else return;
-    const { unreadPerAccount = {}, hiddenAccounts = {} } = useSettingsStore.getState();
-    useMailStore.setState({
-      totalUnreadCount: Object.entries(unreadPerAccount)
-        .filter(([id]) => !hiddenAccounts[id])
-        .reduce((sum, [, count]) => sum + (count || 0), 0),
-    });
+    if (!recountInbox(accountId, cache) && newEmails > 0) addArrivals(accountId, newEmails);
   };
 
   // A local snooze, its wake and its undo take a message out of an inbox or
   // put it back with no sync to report it. The list on screen recounts its own
-  // inbox (updateSortedEmails, from rows fresher than the cache); every other
-  // inbox that changed is recounted here.
+  // inbox (updateSortedEmails, from rows fresher than the cache) when it holds
+  // the whole inbox; every other inbox that changed, and one the list only
+  // holds a window of, is recounted here from the daemon's cache.
   useEffect(() => useSnoozeStore.subscribe((state, prev) => {
     if (state.rows === prev.rows) return;
     const before = localSnoozeKeys(prev.rows), after = localSnoozeKeys(state.rows);
     const s = useMailStore.getState();
-    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' ? s.activeAccountId : null;
+    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' && isCompleteCache(s) ? s.activeAccountId : null;
     const changed = new Set();
     for (const key of [...before, ...after]) {
       const [accountId, mailbox] = key.split('\x01');
@@ -355,12 +347,7 @@ export function useEmailScheduler() {
       // Update badge to reflect total unread across ALL accounts
       if (result) {
         if (badgeMode === 'unread') {
-          const unreadPerAccount = useSettingsStore.getState().unreadPerAccount || {};
-          const hiddenAccounts = useSettingsStore.getState().hiddenAccounts || {};
-          const total = Object.entries(unreadPerAccount)
-            .filter(([id]) => !hiddenAccounts[id])
-            .reduce((sum, [, count]) => sum + (count || 0), 0);
-          updateBadge(total);
+          updateBadge(selectTotalUnread(useSettingsStore.getState()));
         } else {
           updateBadge(useMailStore.getState().emails.length);
         }
@@ -448,20 +435,15 @@ export function useEmailScheduler() {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
     badgeTimerRef.current = setTimeout(() => {
       if (badgeMode === 'unread') {
-        // Sum unread across ALL accounts (not just current view)
-        const unreadPerAccount = useSettingsStore.getState().unreadPerAccount || {};
-        const hiddenAccounts = useSettingsStore.getState().hiddenAccounts || {};
-        const total = Object.entries(unreadPerAccount)
-          .filter(([id]) => !hiddenAccounts[id])
-          .reduce((sum, [, count]) => sum + (count || 0), 0);
-        updateBadge(total);
+        // Unread across ALL accounts (not just current view)
+        updateBadge(selectTotalUnread(useSettingsStore.getState()));
       } else {
         updateBadge(useMailStore.getState().emails.length);
       }
     }, 2000);
 
     return () => { if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
-  }, [badgeEnabled, badgeMode, emails.length, totalUnreadCount]);
+  }, [badgeEnabled, badgeMode, emails.length, totalUnread]);
 
   return { doRefresh };
 }

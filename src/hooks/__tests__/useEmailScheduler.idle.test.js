@@ -78,7 +78,6 @@ const mailState = () => ({
   activeMailbox: 'INBOX',
   unifiedInbox: false,
   unifiedFolder: 'INBOX',
-  totalUnreadCount: 0,
   emails: [],
   loadEmails: mockLoadEmails,
   loadUnifiedInbox: mockLoadUnifiedInbox,
@@ -111,6 +110,7 @@ vi.mock('../../stores/settingsStore', () => ({
 
 const { useEmailScheduler } = await import('../useEmailScheduler');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
+const { shiftInbox, selectTotalUnread } = await import('../../stores/unreadCounts');
 const { saveRestoreDescriptor, getRestoreDescriptor } = await import('../../services/cacheManager');
 
 const IMAP_A = { id: 'a1', email: 'a@one.co', password: 'pw', imapHost: 'imap.one.co', imapPort: 993 };
@@ -649,6 +649,39 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
   });
+  // The dock badge is the sum of the sidebar's counts. A mark-read moved the
+  // sidebar and left the dock on the old number until the next refresh: the
+  // effect that paints it re-ran on a stored total no mark-read ever wrote.
+  describe('dock badge', () => {
+    const badgeCalls = () => mockInvoke.mock.calls.filter(c => c[0] === 'set_badge_count').map(c => c[1].count);
+
+    it('follows a message marked read, without a refresh', async () => {
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2 } });
+      mockInvoke.mockClear();
+
+      renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(badgeCalls().at(-1)).toBe(5);
+
+      act(() => { shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { flags: [] } }], -1); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+
+      expect(badgeCalls().at(-1)).toBe(4);
+    });
+
+    it('drops an account the user hides', async () => {
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2 } });
+      mockInvoke.mockClear();
+
+      renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      act(() => { settingsStore.setState({ hiddenAccounts: { a2: true } }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+
+      expect(badgeCalls().at(-1)).toBe(3);
+    });
+  });
+
   // All Inboxes painted the arrival from the daemon's cache while the sidebar
   // badge of the account it landed in stayed at its old count until the next
   // scheduled refresh.
@@ -667,7 +700,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 2 });
-      expect(mailStore.getState().totalUnreadCount).toBe(5);
+      expect(selectTotalUnread(settingsStore.getState())).toBe(5);
     });
 
     it('recounts on a flags-only change too (read on another device)', async () => {
@@ -726,7 +759,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-      expect(mailStore.getState().totalUnreadCount).toBe(1);
+      expect(selectTotalUnread(settingsStore.getState())).toBe(1);
 
       useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
       await flush();

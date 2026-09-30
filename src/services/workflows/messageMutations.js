@@ -18,7 +18,7 @@ import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { inboxUnread } from '../../stores/snoozeStore';
+import { shiftInbox, unreadEntries } from '../../stores/unreadCounts';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
@@ -723,20 +723,12 @@ const _rowId = (e, state) => {
 // any other view learns it from its reload.
 const _viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? ''].join('|');
 
-// ±1 on an account's INBOX badge per unread message leaving or coming back.
-// Never a recount from `emails`: in All Inboxes that holds a window of each
-// account's cache, not its inbox. A single INBOX recounts in
-// updateSortedEmails right after, which wins.
+// ±1 on an account's INBOX badge per unread message leaving or coming back
+// (unreadCounts). Never a recount from `emails`: in All Inboxes that holds a
+// window of each account's cache, not its inbox. An INBOX list that IS the
+// whole inbox recounts in updateSortedEmails right after, which wins.
 function _shiftUnread(entries, sign) {
-  const byAccount = new Map();
-  for (const { accountId, mailbox, row } of entries) {
-    if (mailbox !== 'INBOX' || row?.flags?.includes('\\Seen')) continue;
-    byAccount.set(accountId, (byAccount.get(accountId) || 0) + sign);
-  }
-  const settings = useSettingsStore.getState();
-  for (const [id, n] of byAccount) {
-    settings.setUnreadForAccount(id, Math.max(0, (settings.unreadPerAccount?.[id] || 0) + n));
-  }
+  shiftInbox(unreadEntries(entries), sign);
 }
 
 // Switching unified folders repaints from this cache for five minutes; a row
@@ -1614,6 +1606,9 @@ export async function applyServerRemoval(uid, {
   }
 
   useMailStore.setState(updates);
+  // Not counted by a delete's paint: the badge loses this message now. An INBOX
+  // list that is the whole inbox recounts right after and wins.
+  if (!counted) _shiftUnread(currentEmails.filter(isRemoved).map(row => ({ accountId, mailbox, row })), -1);
   get().updateSortedEmails();
 
   const exactTargetFolder = !liveSpansMailboxes && targetViewMatches;
@@ -1706,21 +1701,6 @@ function _refreshAfterFlagChange(useMailStore) {
   useMailStore.setState(state => ({ _flagSeq: state._flagSeq + 1 }));
   useMailStore.getState().updateSortedEmails();
   viewCountsStale();
-}
-
-// Unified rows span accounts, so one \Seen change there has to be counted per
-// account. Every single-account list is recounted by updateSortedEmails, which
-// deliberately leaves this one alone — it cannot tell whose inbox it is looking
-// at. An account with no row in the list keeps the count it already had. A
-// message a local snooze holds out of the inbox is not counted (inboxUnread).
-function _syncUnifiedUnreadBadges(useMailStore) {
-  const byAccount = new Map();
-  for (const e of useMailStore.getState().emails) {
-    if (!e._accountId) continue;
-    if (!byAccount.has(e._accountId)) byAccount.set(e._accountId, []);
-    byAccount.get(e._accountId).push(e);
-  }
-  for (const [id, rows] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, inboxUnread(id, rows));
 }
 
 // Is `e` the row of this message? Its own location against the target's, with
@@ -1822,11 +1802,11 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
     if (row) after.keepVisibleWhileUnreadFiltered([selectionKey(row, after)]);
   }
 
+  // The badge moves by one, from the state the row had (unreadCounts); a list
+  // that is the whole INBOX recounts over it in the refresh below.
+  const prior = resolvePool(s).find(matches);
+  if (prior && !!prior.flags?.includes('\\Seen') !== read) shiftInbox([{ accountId, mailbox, row: prior }], read ? -1 : 1);
   _refreshAfterFlagChange(useMailStore);
-  // …which recounts the badge for a single-account list. The unified one is on
-  // us: counting its rows against `accountId` would put every account's unread
-  // on whichever account owns the row that was clicked.
-  if (isUnified) _syncUnifiedUnreadBadges(useMailStore);
   _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read);
 }
 
@@ -1924,7 +1904,6 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     targets = await Promise.all(targets.map(async t => ({ ...t, uid: await keyAfterUndo(get, t.uid, t.accountId, t.mailbox) })));
   }
   const state = get();
-  const isUnified = spansMailboxes(state);
   if (!targets.length) return;
 
   const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
@@ -1938,10 +1917,11 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   // uid first: it rules out nearly every row of a five-figure list for free.
   const targetUids = new Set(targets.flatMap(t => [t.uid, String(t.uid), Number(t.uid)]));
   const rowFlags = new Map();
+  const priorRows = new Map();
   for (const e of resolvePool(state)) {
     if (!targetUids.has(e.uid)) continue;
     const k = emailScopeKey(e, state);
-    if (k && !rowFlags.has(k)) rowFlags.set(k, e.flags);
+    if (k && !rowFlags.has(k)) { rowFlags.set(k, e.flags); priorRows.set(k, e); }
   }
   const changed = targets.filter(t =>
     (rowFlags.get(`${t.accountId}-${t.mailbox}-${t.uid}`)?.includes(flag) ?? !on) !== on);
@@ -1956,6 +1936,15 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
   // state from before this change), a search's rows and the Notes board. The
   // derived list is re-derived below.
   patchEverywhere(targetKeys, (row) => _flagRow(row, map), { skipDerived: true });
+  // The INBOX badge moves by one per message whose read state this changed, and
+  // only one whose row told us its old state: a hit no list holds says nothing
+  // (unreadCounts). A list that is the whole INBOX recounts over it below.
+  if (flag === '\\Seen') {
+    const moved = changed
+      .map(t => ({ accountId: t.accountId, mailbox: t.mailbox, row: priorRows.get(`${t.accountId}-${t.mailbox}-${t.uid}`) }))
+      .filter(e => e.row);
+    shiftInbox(moved, on ? -1 : 1);
+  }
   _refreshAfterFlagChange(useMailStore);
 
   // The rows have changed; offer the change back. Only the two flags the user
@@ -1971,9 +1960,6 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
       run: () => applyFlagToTargets(changed, flag, !on, { undoable: false }),
     });
   }
-
-  // Single-account lists were recounted by _refreshAfterFlagChange above.
-  if (flag === '\\Seen' && isUnified) _syncUnifiedUnreadBadges(useMailStore);
 
   // The vault copies are written whatever the server says — a vault-only
   // message has no server copy to fail against, and the rows on screen have
@@ -2891,6 +2877,9 @@ export async function moveEmails(keys, targetMailbox) {
     updates.selectedEmailSource = null;
     updates.selectedThread = null;
   }
+  // Its unread messages leave the INBOX badge with it.
+  const movedOut = get().emails.filter(e => keySet.has(selectionKey(e, state)));
+  _shiftUnread(movedOut.map(row => ({ ...rowIdentity(row, get()), row })).filter(e => e.accountId), -1);
   useMailStore.setState(updates);
   // Drop the moved rows now — loadEmails() below is a server round-trip, and
   // until it returns the list still renders what was moved away.

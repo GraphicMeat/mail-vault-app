@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { forgetAccount } from '../../stores/unreadCounts';
 import { isGraphAccount } from '../graphConfig';
 import { unwatchAccount } from '../syncService';
 import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as _clearGraphIdMap } from '../cacheManager';
@@ -32,8 +33,7 @@ export async function removeAccount(accountId) {
   _clearGraphIdMap(accountId);
 
   const newAccounts = get().accounts.filter(a => a.id !== accountId);
-  const { [accountId]: _removed, ...remainingUnread } = useSettingsStore.getState().unreadPerAccount;
-  useSettingsStore.getState().setUnreadPerAccount(remainingUnread);
+  forgetAccount(accountId);
 
   useMailStore.setState({ accounts: newAccounts });
 

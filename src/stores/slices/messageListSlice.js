@@ -20,7 +20,8 @@ import { getAccountCacheMailboxes } from '../../services/cacheManager';
 import { filterHiddenFromInbox, rowMailbox } from '../../utils/autoTagInboxFilter';
 import { useTagStore, requestRowTags } from '../tagStore';
 import { useAutoTagStore } from '../autoTagStore';
-import { useSnoozeStore, localSnoozeKey, localSnoozeKeys, inboxUnread } from '../snoozeStore';
+import { useSnoozeStore, localSnoozeKey, localSnoozeKeys } from '../snoozeStore';
+import { recountInbox } from '../unreadCounts';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -438,10 +439,12 @@ export const createMessageListSlice = (set, get) => ({
     //
     // INBOX only, and never a scoped branch listing (that list holds the
     // descendant folders' mail too) or the unified list (its rows span
-    // accounts — messageMutations counts those per account). A message a
-    // local snooze holds out of the list is not counted either.
+    // accounts). Only when `emails` is the whole inbox (unreadCounts): a window
+    // onto a big one says nothing about the rest, and what leaves it is
+    // shifted by whoever removed it. A message a local snooze holds out of the
+    // list is not counted either.
     if (activeAccountId && !unifiedInbox && !mailboxScope && activeMailbox === 'INBOX') {
-      useSettingsStore.getState().setUnreadForAccount(activeAccountId, inboxUnread(activeAccountId, emails));
+      recountInbox(activeAccountId, { emails, totalEmails: get().totalEmails });
     }
 
     _chatEmailsFingerprint = '';

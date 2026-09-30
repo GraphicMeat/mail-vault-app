@@ -20,6 +20,7 @@ const mockGraphSetFlagged = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
+const mockUnread = {};
 const mockSetUnreadForAccount = vi.fn();
 
 // The connectivity verdict the workflow reads. Offline is not a failure — the
@@ -108,6 +109,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       linkSafetyEnabled: false,
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
+      unreadPerAccount: mockUnread,
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -468,18 +470,24 @@ describe('mark read, through the same core', () => {
     });
   });
 
-  // All Inboxes counts its rows per account. A message a local snooze holds
-  // out of the inbox is on no badge, there as anywhere else.
-  it('a read change in All Inboxes leaves a locally snoozed message off the badge', () => {
+  // All Inboxes lists a window of each account's mail, so its badge is moved by
+  // one, never recounted from those rows (unreadCounts). A message a local
+  // snooze holds out of the inbox is on no badge, so its read change moves none.
+  it('a read change in All Inboxes moves the badge by one, and not for a locally snoozed message', () => {
     const row = (uid, messageId) => ({ uid, _accountId: 'a1', _mailbox: 'INBOX', messageId, subject: `m${uid}`, flags: [], from: { address: 'them@x' }, date: `2026-08-0${uid - 6}T10:00:00Z` });
     primeStore({ emails: [row(7, '<a@mock>'), row(8, '<held@mock>'), row(9, '<c@mock>')], activeMailbox: 'UNIFIED' });
     useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'a1', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@mock>', state: 'snoozed' }] });
+    mockUnread.a1 = 5;
     mockSetUnreadForAccount.mockClear();
     try {
+      applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 8, read: true, isUnified: true });
+      expect(mockSetUnreadForAccount).not.toHaveBeenCalled();
+
       applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 7, read: true, isUnified: true });
-      expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('a1', 1);
+      expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('a1', 4);
     } finally {
       useSnoozeStore.setState({ rows: [] });
+      delete mockUnread.a1;
     }
   });
 });

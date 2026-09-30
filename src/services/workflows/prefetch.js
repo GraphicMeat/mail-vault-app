@@ -2,7 +2,7 @@
 
 import * as db from '../db';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { inboxUnread } from '../../stores/snoozeStore';
+import { recountInbox } from '../../stores/unreadCounts';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore } from '../cacheManager';
 import { fetchAccountMailboxes, shouldUseFreshMailboxCache, isSuspiciousEmptyMailboxResult, MAILBOX_PREFETCH_LIMIT } from './activateAccount';
 
@@ -128,7 +128,7 @@ export async function _prewarmAccountCaches() {
           .filter(e => archivedEmailIds.has(e.uid)).map(e => e.uid),
         timestamp: Date.now(),
       });
-      useSettingsStore.getState().setUnreadForAccount(account.id, inboxUnread(account.id, cachedHeaders.emails));
+      recountInbox(account.id, cachedHeaders);
 
       console.log('[prewarm] Cached', cachedHeaders.emails.length, 'headers +', localEmails.length, 'local emails for', account.email);
     } catch (e) {

@@ -102,7 +102,6 @@ beforeEach(() => {
     emails: [],
     unifiedInbox: false,
     unifiedFolder: null,
-    totalUnreadCount: 0,
     loadEmails: vi.fn().mockResolvedValue(undefined),
   };
 });
