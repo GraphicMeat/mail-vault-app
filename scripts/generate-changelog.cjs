@@ -220,6 +220,8 @@ function generateHTML(versions) {
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
   </style>
+  <!-- Meatlytics tracker: same tag and ?v= as the sibling pages (website/faq.html), or seo/acquisition tests fail -->
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
