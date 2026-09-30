@@ -791,6 +791,26 @@ input[type="range"]::-moz-range-thumb:hover {
   margin: 0.75em 0;
 }
 
+/* Picture resize (signature editors). TipTap draws the four corner handles as
+   bare divs it positions at the corners; the look is ours. Shown on the
+   selected picture only. */
+.tiptap [data-resize-handle] {
+  display: none;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--mail-accent);
+  border-radius: 3px;
+  background: var(--mail-bg);
+  z-index: 1;
+}
+.tiptap .ProseMirror-selectednode[data-resize-container] [data-resize-handle] { display: block; }
+.tiptap .ProseMirror-selectednode[data-resize-container] img { outline: 2px solid var(--mail-accent); }
+.tiptap [data-resize-handle="top-left"] { transform: translate(-50%, -50%); cursor: nwse-resize; }
+.tiptap [data-resize-handle="top-right"] { transform: translate(50%, -50%); cursor: nesw-resize; }
+.tiptap [data-resize-handle="bottom-left"] { transform: translate(-50%, 50%); cursor: nesw-resize; }
+.tiptap [data-resize-handle="bottom-right"] { transform: translate(50%, 50%); cursor: nwse-resize; }
+
 .tiptap strong { font-weight: 600; }
 .tiptap em { font-style: italic; }
 .tiptap u { text-decoration: underline; }
