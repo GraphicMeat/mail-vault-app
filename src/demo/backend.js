@@ -602,6 +602,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (method.startsWith('abd.')) throw new DemoUnsupportedError(`daemon:${method}`);
         // Compose asks when its schedule panel opens; nothing is known here.
         if (method === 'scheduled.suggest_tz') return { headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null };
+        // The search bar's typeahead: the demo keeps no search index to read.
+        if (method === 'search.suggest') return [];
         // Settings > Unsubscribe: the demo sends nothing anywhere, so nothing to list.
         if (method === 'unsubscribe.senders' || method === 'unsubscribe.history') return [];
         // Settings > Storage > Deleted emails: the demo keeps no deleted-mail bin.
