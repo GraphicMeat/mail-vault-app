@@ -73,13 +73,16 @@ export function commitText(text) {
 }
 
 const same = tag => tag.toLocaleLowerCase();
+// The words that join others (`a || b`, `x && y`) repeat by meaning.
+const joiner = tag => tag === '||' || tag === '&&';
 
-/// `tags` plus each of `added` not already there (case ignored).
+/// `tags` plus each of `added` not already there (case ignored; `||` and
+/// `&&` always go in).
 export function addTags(tags, added) {
   const seen = new Set(tags.map(same));
   const out = [...tags];
   for (const tag of added) {
-    if (!tag || seen.has(same(tag))) continue;
+    if (!tag || (seen.has(same(tag)) && !joiner(tag))) continue;
     seen.add(same(tag));
     out.push(tag);
   }
@@ -93,7 +96,7 @@ export function replaceTag(tags, index, next) {
   const seen = new Set(others.map(same));
   const fresh = [];
   for (const tag of next) {
-    if (!tag || seen.has(same(tag))) continue;
+    if (!tag || (seen.has(same(tag)) && !joiner(tag))) continue;
     seen.add(same(tag));
     fresh.push(tag);
   }

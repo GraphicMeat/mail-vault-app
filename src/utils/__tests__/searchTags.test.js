@@ -97,6 +97,14 @@ describe('editing a list of tags', () => {
     expect(addTags([], [])).toEqual([]);
   });
 
+  // `a || b || c` is three alternatives; merging the second `||` into the
+  // first would make it a different query.
+  it('never merges the && and || that join words', () => {
+    expect(addTags(['a', '||', 'b'], ['||', 'c'])).toEqual(['a', '||', 'b', '||', 'c']);
+    expect(addTags(['x', '&&', 'y'], ['&&', 'z'])).toEqual(['x', '&&', 'y', '&&', 'z']);
+    expect(replaceTag(['a', '||', 'b', 'c'], 3, ['||', 'd'])).toEqual(['a', '||', 'b', '||', 'd']);
+  });
+
   it('replaces one tag with what its edit became, and an empty edit removes it', () => {
     expect(replaceTag(['a', 'from:ann', 'b'], 1, ['from:bob'])).toEqual(['a', 'from:bob', 'b']);
     expect(replaceTag(['a', 'from:ann', 'b'], 1, ['x', 'y'])).toEqual(['a', 'x', 'y', 'b']);
