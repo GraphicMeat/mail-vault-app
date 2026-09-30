@@ -51,6 +51,7 @@ pub mod net;
 pub mod net_activity;
 pub mod net_log;
 pub mod geo_ip;
+pub mod google_fonts;
 pub mod daemon_ipc;
 pub mod transport;
 pub mod paths;
