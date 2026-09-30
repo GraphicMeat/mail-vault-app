@@ -8199,7 +8199,7 @@ exports[`selection bar (store) > partial: a selected key no pool resolves 1`] = 
       "{"id":"toggleRead","action":"toggleRead","label":"selection.markUnread","icon":"Mail","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"markRead","action":"markRead","label":"selection.markRead","icon":"MailOpen","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"markUnread","action":"markUnread","label":"selection.markUnread","icon":"Mail","disabled":true,"isDestructive":false,"restoreFocus":true}",
-      "{"id":"star","action":"star","label":"rowMenu.star","icon":"Star","disabled":false,"isDestructive":false,"restoreFocus":true}",
+      "{"id":"star","action":"star","label":"rowMenu.star","icon":"Star","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"unstar","action":"unstar","label":"rowMenu.unstar","icon":"FilledStar","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag","action":"tag","label":"quickActions.action.tag","icon":"Tag","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move","action":"move","label":"selection.moveFolder","icon":"FolderInput","disabled":true,"isDestructive":false,"restoreFocus":false,"expanded":false,"buttonRef":true}",

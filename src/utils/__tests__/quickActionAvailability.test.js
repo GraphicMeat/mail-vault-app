@@ -45,6 +45,15 @@ describe('quickActionAvailability', () => {
     for (const action of unsupported) expect(check('selection', { action }).disabled, action).toBe(true);
   });
 
+  // A key no loaded list resolves has no flags to read, as for mark read.
+  it('the selection bar needs every key resolved to star or unstar, as to mark read', () => {
+    const has = { ...facts().has, unstar: true, markUnread: true };
+    for (const action of ['star', 'unstar', 'markRead', 'markUnread']) {
+      expect(check('selection', { action }, { has }).disabled, action).toBe(false);
+      expect(check('selection', { action }, { has, fullyResolved: false }).disabled, action).toBe(true);
+    }
+  });
+
   it('the reader hides a star side only when both sides are configured', () => {
     expect(check('reader', { action: 'unstar' }).hidden).toBe(false);
     expect(check('reader', { action: 'unstar' }, { explicit: { star: true, archive: false } }).hidden).toBe(true);

@@ -114,7 +114,7 @@ export const QUICK_ACTION_RULES = {
   },
   star: {
     row: { hide: ['has'] },
-    selection: { disable: ['has'] },
+    selection: { disable: ['fullyResolved', 'has'] },
     reader: { hide: [...READER_SERVER, 'notLocalOnly', 'pairShown'], disable: ['idle'] },
   },
   tag: {
