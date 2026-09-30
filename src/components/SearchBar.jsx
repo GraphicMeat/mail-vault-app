@@ -11,13 +11,15 @@ import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
 import { SUBTREE_PREFIX, mailboxDescendants } from '../services/workflows/mailboxTree';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { SEARCH_OPERATORS } from '../utils/searchQuery';
+import { addTags, commitText, serializeTags, tokenizeQuery } from '../utils/searchTags';
+import { SearchTagInput } from './SearchTagInput';
+import { useSearchSuggestions } from '../hooks/useSearchSuggestions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   X,
   Filter,
   ChevronDown,
-  Clock,
   HardDrive,
   Cloud,
   Layers,
@@ -79,18 +81,34 @@ export function SearchBar({ autoFocus = false }) {
   } = useSettingsStore();
 
   const [showFilters, setShowFilters] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [localQuery, setLocalQuery] = useState(searchQuery);
+  // The query as tags, plus the text being typed after them. The store keeps
+  // one string, the tags joined (`serializeTags`).
+  const [tags, setTags] = useState(() => tokenizeQuery(searchQuery));
+  const [draft, setDraft] = useState('');
+  const tagsRef = useRef(tags);
+  tagsRef.current = tags;
   // The store's query only changes on submit, a recent pick, a clear, or
   // another view (Settings > Unsubscribe's sender link): show what it holds.
-  useEffect(() => { setLocalQuery(searchQuery); }, [searchQuery]);
+  // Only a query these tags do not already say is read back into tags, so a
+  // tag of two words committed here is not split by its own search.
+  useEffect(() => {
+    if (serializeTags(tagsRef.current) === searchQuery) return;
+    setTags(tokenizeQuery(searchQuery));
+    setDraft('');
+  }, [searchQuery]);
+  // Suggestions come from the accounts the search reads: every account in
+  // the unified view, else the one on screen.
+  const suggestAccountKey = useAccountStore(s => (s.unifiedInbox
+    ? (s.accounts || []).map(account => account.id).join('\n')
+    : (s.activeAccountId || '')));
+  const suggestAccounts = useMemo(() => (suggestAccountKey ? suggestAccountKey.split('\n') : []), [suggestAccountKey]);
+  const suggestions = useSearchSuggestions(draft, suggestAccounts);
   // Where the operator help opens: under its button, right-aligned to it.
   const [helpAnchor, setHelpAnchor] = useState(null);
   const [hintVisible, setHintVisible] = useState(false);
   const inputRef = useRef(null);
   const helpButtonRef = useRef(null);
   const filterRef = useRef(null);
-  const historyRef = useRef(null);
   const searchContextRef = useRef(null);
 
   // Get popular filters
@@ -121,18 +139,20 @@ export function SearchBar({ autoFocus = false }) {
       if (filterRef.current && !filterRef.current.contains(e.target)) {
         setShowFilters(false);
       }
-      if (historyRef.current && !historyRef.current.contains(e.target) &&
-          !inputRef.current?.contains(e.target)) {
-        setShowHistory(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Runs the search the tags say, with any text not yet committed folded in
+  // as tags first (the Search button, or Enter on an empty box).
   const handleSearch = (e) => {
     e?.preventDefault();
-    setSearchQuery(localQuery);
+    const next = addTags(tags, commitText(draft));
+    const query = serializeTags(next);
+    setTags(next);
+    setDraft('');
+    setSearchQuery(query);
 
     // Track filter usage
     if (searchFilters.sender) {
@@ -152,16 +172,14 @@ export function SearchBar({ autoFocus = false }) {
     // Saved as typed, operators and all, when it is asked for: the store also
     // saves a run that finishes, but one cleared, replaced or failed before
     // its last frame never reached the list.
-    if (localQuery.trim()) addSearchToHistory?.(localQuery.trim());
+    if (query.trim()) addSearchToHistory?.(query.trim());
 
     setTimeout(() => performSearch(), 0);
-    setShowHistory(false);
   };
 
   const openHelp = () => {
     const rect = helpButtonRef.current?.getBoundingClientRect();
     setHelpAnchor({ top: (rect?.bottom ?? 0) + 8, right: Math.max(8, window.innerWidth - (rect?.right ?? 0)) });
-    setShowHistory(false);
     setHintVisible(false);
     if (!operatorsHintSeen) markOperatorsHintSeen?.();
   };
@@ -173,7 +191,8 @@ export function SearchBar({ autoFocus = false }) {
 
   const insertExample = (example) => {
     setHelpAnchor(null);
-    setLocalQuery(query => (query.trim() ? `${query.trimEnd()} ${example}` : example));
+    setTags(current => addTags(current, [...commitText(draft), ...commitText(example)]));
+    setDraft('');
     inputRef.current?.focus();
   };
 
@@ -182,17 +201,21 @@ export function SearchBar({ autoFocus = false }) {
     markOperatorsHintSeen?.();
   };
 
+  // A recent search's tags join the ones in the box (an empty box takes it
+  // exactly as saved) and the search runs, as picking one always has.
   const handleHistorySelect = (query) => {
-    setLocalQuery(query);
-    setSearchQuery(query);
-    setShowHistory(false);
+    const saved = tokenizeQuery(query);
+    const next = tags.length ? addTags(tags, saved) : saved;
+    setTags(next);
+    setDraft('');
+    setSearchQuery(serializeTags(next));
     setTimeout(() => performSearch(), 0);
   };
 
   const handleClear = () => {
-    setLocalQuery('');
+    setTags([]);
+    setDraft('');
     clearSearch();
-    setShowHistory(false);
     setShowFilters(false);
   };
 
@@ -214,7 +237,7 @@ export function SearchBar({ autoFocus = false }) {
   const handleFilterChange = (key, value) => {
     setSearchFilters({ [key]: value });
     // Auto-search when filters change if there's an active search
-    if (searchActive || localQuery.trim()) {
+    if (searchActive || tags.length || draft.trim()) {
       setTimeout(() => performSearch(), 0);
     }
   };
@@ -238,7 +261,6 @@ export function SearchBar({ autoFocus = false }) {
         setSearchFilters({ hasAttachments: true });
         break;
     }
-    setShowHistory(false);
     setTimeout(() => performSearch(), 0);
   };
 
@@ -264,76 +286,111 @@ export function SearchBar({ autoFocus = false }) {
 
   const LocationIcon = LOCATION_OPTIONS.find(o => o.id === searchFilters.location)?.icon || Layers;
 
+  // Above the recent searches in the box's list.
+  const popularFiltersSection = (
+    <div className="mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
+          <TrendingUp size={12} />
+          Popular filters (last {filterHistoryPeriodDays} days)
+        </h4>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {popularFilters.map((filter, idx) => {
+          const Icon = getFilterIcon(filter.type);
+          return (
+            <button
+              key={idx}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyPopularFilter(filter)}
+              className="flex items-center gap-1.5 px-2 py-1 bg-mail-accent/10 border border-mail-accent/20
+                        rounded-lg text-xs text-mail-accent-text hover:bg-mail-accent/20 transition-colors"
+            >
+              <Icon size={12} />
+              <span className="max-w-[120px] truncate">{getFilterLabel(filter)}</span>
+              <span className="text-[10px] opacity-70">({filter.count})</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div className="relative">
-      <form onSubmit={handleSearch} className="flex items-center gap-2">
-        {/* Search Input */}
-        <div className="relative flex-1">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted">
-            {isSearching ? (
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              >
-                <Search size={16} />
-              </motion.div>
-            ) : (
+      {/* Top-aligned: tags that wrap grow the box downwards, not the buttons. */}
+      <form onSubmit={handleSearch} className="flex items-start gap-2">
+        <SearchTagInput
+          tags={tags}
+          onTagsChange={setTags}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSubmit={handleSearch}
+          inputRef={inputRef}
+          autoFocus={autoFocus}
+          label={t('search.searchEmails')}
+          placeholder={t('search.searchEmails')}
+          recent={searchHistory}
+          onPickRecent={handleHistorySelect}
+          onRemoveRecent={removeSearchFromHistory}
+          onClearRecent={clearSearchHistory}
+          suggestions={suggestions}
+          header={popularFilters.length > 0 ? popularFiltersSection : null}
+          onFocus={() => {
+            if (!operatorsHintSeen) setHintVisible(true);
+          }}
+          leading={isSearching ? (
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            >
               <Search size={16} />
-            )}
-          </div>
+            </motion.div>
+          ) : (
+            <Search size={16} />
+          )}
+          trailing={(
+            // Location selector inside the box
+            <div className="flex shrink-0 items-center gap-1 mt-0.5">
+              {(tags.length > 0 || draft || searchActive) && (
+                <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
+                  type="button"
+                  data-testid="search-clear"
+                  aria-label={t('search.clearSearch')}
+                  title={t('search.clearSearch')}
+                  onClick={handleClear}
+                >
+                  <X size={14} className="text-mail-text-muted" />
+                </Button>
+              )}
 
-          <input
-            ref={inputRef}
-            data-testid="mail-search-input" autoFocus={autoFocus} aria-label={t('search.searchEmails')}
-            type="text"
-            value={localQuery}
-            onChange={(e) => setLocalQuery(e.target.value)}
-            onFocus={() => {
-              if (searchHistory.length > 0) setShowHistory(true);
-              if (!operatorsHintSeen) setHintVisible(true);
-            }}
-            placeholder={t('search.searchEmails')}
-            className="w-full pl-9 pr-28 py-2 bg-mail-bg border border-mail-border rounded-lg
-                      text-mail-text placeholder-mail-text-muted text-sm
-                      focus:border-mail-accent focus:outline-none transition-colors"
-          />
-
-          {/* Location selector inside input */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {(localQuery || searchActive) && (
-              <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
+              <Button ref={helpButtonRef} variant="ghost" icon size="xs" className="hover:bg-mail-border"
                 type="button"
-                onClick={handleClear}
+                data-testid="search-operators-help"
+                aria-label={t('search.operators.title')}
+                title={t('search.operators.title')}
+                aria-haspopup="dialog"
+                aria-expanded={!!helpAnchor}
+                onClick={openHelp}
               >
-                <X size={14} className="text-mail-text-muted" />
+                <HelpCircle size={14} className="text-mail-text-muted" />
               </Button>
-            )}
 
-            <Button ref={helpButtonRef} variant="ghost" icon size="xs" className="hover:bg-mail-border"
-              type="button"
-              data-testid="search-operators-help"
-              aria-label={t('search.operators.title')}
-              title={t('search.operators.title')}
-              aria-haspopup="dialog"
-              aria-expanded={!!helpAnchor}
-              onClick={openHelp}
-            >
-              <HelpCircle size={14} className="text-mail-text-muted" />
-            </Button>
-
-            <select
-              value={searchFilters.location}
-              onChange={(e) => handleFilterChange('location', e.target.value)}
-              className="appearance-none bg-mail-surface border border-mail-border rounded
-                        px-2 py-0.5 text-xs text-mail-text cursor-pointer
-                        focus:outline-none focus:border-mail-accent"
-            >
-              {LOCATION_OPTIONS.map(opt => (
-                <option key={opt.id} value={opt.id}>{t(opt.labelKey)}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+              <select
+                value={searchFilters.location}
+                onChange={(e) => handleFilterChange('location', e.target.value)}
+                className="appearance-none bg-mail-surface border border-mail-border rounded
+                          px-2 py-0.5 text-xs text-mail-text cursor-pointer
+                          focus:outline-none focus:border-mail-accent"
+              >
+                {LOCATION_OPTIONS.map(opt => (
+                  <option key={opt.id} value={opt.id}>{t(opt.labelKey)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        />
 
         {/* Filter button */}
         <div className="relative" ref={filterRef}>
@@ -626,92 +683,6 @@ export function SearchBar({ autoFocus = false }) {
           </Button>
         </div>
       )}
-
-      {/* Search history and popular filters dropdown */}
-      <AnimatePresence>
-        {showHistory && (searchHistory.length > 0 || popularFilters.length > 0) && (
-          <motion.div
-            ref={historyRef}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute left-0 right-24 top-full mt-2 bg-mail-surface border border-mail-border
-                      rounded-xl z-[100] p-3 max-h-80 overflow-y-auto"
-          >
-            {/* Popular filters */}
-            {popularFilters.length > 0 && (
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
-                    <TrendingUp size={12} />
-                    Popular filters (last {filterHistoryPeriodDays} days)
-                  </h4>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {popularFilters.map((filter, idx) => {
-                    const Icon = getFilterIcon(filter.type);
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => applyPopularFilter(filter)}
-                        className="flex items-center gap-1.5 px-2 py-1 bg-mail-accent/10 border border-mail-accent/20
-                                  rounded-lg text-xs text-mail-accent-text hover:bg-mail-accent/20 transition-colors"
-                      >
-                        <Icon size={12} />
-                        <span className="max-w-[120px] truncate">{getFilterLabel(filter)}</span>
-                        <span className="text-[10px] opacity-70">({filter.count})</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Recent searches */}
-            {searchHistory.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
-                    <Clock size={12} />
-                    {t('search.recentSearches')}
-                  </h4>
-                  <button
-                    onClick={clearSearchHistory}
-                    className="text-xs text-mail-text-muted hover:text-mail-danger transition-colors"
-                  >
-                    {t('search.clearAll')}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {searchHistory.map((query, idx) => (
-                    <div
-                      key={idx}
-                      className="group flex items-center gap-1 px-2 py-1 bg-mail-bg border border-mail-border
-                                rounded-lg text-sm text-mail-text hover:border-mail-accent cursor-pointer transition-colors"
-                    >
-                      <span
-                        onClick={() => handleHistorySelect(query)}
-                        className="max-w-[150px] truncate"
-                      >
-                        {query}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeSearchFromHistory(query);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-mail-border rounded transition-all"
-                      >
-                        <X size={12} className="text-mail-text-muted" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Search results indicator */}
       {searchActive && !activeViewId && (

@@ -53,6 +53,7 @@ const { SearchBar } = await import('../SearchBar.jsx');
 const { useSearchStore } = await import('../../stores/searchStore.js');
 
 const input = () => screen.getByTestId('mail-search-input');
+const tagTexts = () => screen.queryAllByTestId('search-tag-text').map(node => node.textContent);
 const helpButton = () => screen.getByRole('button', { name: 'Search operators' });
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
@@ -92,19 +93,20 @@ describe('search operator help', () => {
     }
   });
 
-  it('adds a clicked example to the query and focuses the box', () => {
+  it('adds a clicked example to the query as a tag and focuses the box', () => {
     render(<SearchBar />);
     fireEvent.change(input(), { target: { value: 'invoice' } });
     fireEvent.click(helpButton());
     fireEvent.click(screen.getByRole('button', { name: 'has:attachment' }));
 
-    expect(input().value).toBe('invoice has:attachment');
+    expect(tagTexts()).toEqual(['invoice', 'has:attachment']);
+    expect(input().value).toBe('');
     expect(document.activeElement).toBe(input());
     expect(screen.queryByRole('dialog', { name: 'Search operators' })).toBeNull();
 
     fireEvent.click(helpButton());
     fireEvent.click(screen.getByRole('button', { name: 'is:unread' }));
-    expect(input().value).toBe('invoice has:attachment is:unread');
+    expect(tagTexts()).toEqual(['invoice', 'has:attachment', 'is:unread']);
   });
 
   it('closes on Escape and gives focus back to the help button', () => {
@@ -172,7 +174,7 @@ describe('recent searches with operators', () => {
     await flush();
     await flush();
 
-    expect(input().value).toBe('from:x has:attachment');
+    expect(tagTexts()).toEqual(['from:x', 'has:attachment']);
     expect(harness.runs.at(-1).request).toMatchObject({ query: '', sender: 'x', hasAttachments: true });
   });
 });
@@ -180,14 +182,16 @@ describe('recent searches with operators', () => {
 describe('a query set from outside the box', () => {
   // Settings > Unsubscribe opens a sender's mail by writing `from:` into the
   // store while this box may already be on screen; it must show that query.
-  it('shows a query another view put in the store, and a cleared one', () => {
+  it('shows a query another view put in the store as tags, and a cleared one', () => {
     render(<SearchBar />);
     fireEvent.change(input(), { target: { value: 'old words' } });
 
     act(() => { useSearchStore.getState().setSearchQuery('from:news@list.test'); });
-    expect(input().value).toBe('from:news@list.test');
+    expect(tagTexts()).toEqual(['from:news@list.test']);
+    expect(input().value).toBe('');
 
     act(() => { useSearchStore.getState().clearSearch(); });
+    expect(tagTexts()).toEqual([]);
     expect(input().value).toBe('');
   });
 });

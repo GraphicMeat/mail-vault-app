@@ -166,8 +166,8 @@ describe('Insights native workspace and responsive states', function () {
       query: document.querySelector('[data-testid="explorer-search"]').value,
       crumbs: document.querySelector('.explorer-breadcrumbs').textContent })), beforeExplorer);
     await clickReachable('[data-testid="mail-view-list"]');
-    await setControl('[data-testid="mail-search-input"]', '');
-    await clickReachable('#mail-search-panel button[type="submit"]');
+    // The committed search is a tag now: an emptied input still searches it.
+    await clickReachable('[data-testid="search-clear"]');
     await browser.waitUntil(() => browser.execute(() => !window.__SEARCH_STORE__?.getState().searchActive
       && !window.__SEARCH_STORE__?.getState().isSearching), { timeout: 10000 });
   });
