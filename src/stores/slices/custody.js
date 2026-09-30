@@ -34,6 +34,8 @@
  * reported as unknown rather than rounded down to absent.
  */
 
+import { rowIdentity, sameMessage } from './unifiedHelpers';
+
 export const LOCALLY_CREATED = new Set(['local_sent', 'local_draft']);
 
 /**
@@ -73,15 +75,16 @@ export function custodySource(email) {
  * `selectedEmail.source`). The fix is not a third field: it is to read the one
  * the list derived.
  */
-export function custodyRowFor(email, { sortedEmails = [], localEmails = [] } = {}) {
+export function custodyRowFor(email, state = {}) {
   if (!email) return null;
   // A uid names a message only inside one (account, mailbox) — the unified list
   // holds rows from several of both at once, and Sent uid 6 is not INBOX uid 6.
-  // Compare whichever of the two either side actually carries; a row that omits
-  // one is from the active view by construction.
-  const sameScope = (a, b) => a == null || b == null || a === b;
-  const matches = (e) => e.uid === email.uid
-    && sameScope(e._accountId, email._accountId)
-    && sameScope(e._mailbox, email._mailbox);
+  // Both sides are placed the way every lookup places a row (rowIdentity): a
+  // row that omits its account or folder is the view's, and one that cannot be
+  // placed at all matches nothing — it used to match any message with its uid.
+  const target = rowIdentity(email, state);
+  if (!target) return null;
+  const { sortedEmails = [], localEmails = [] } = state;
+  const matches = (e) => sameMessage(e, target, state);
   return sortedEmails.find(matches) || localEmails.find(matches) || null;
 }

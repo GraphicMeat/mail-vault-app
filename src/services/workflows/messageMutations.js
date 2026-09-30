@@ -171,7 +171,10 @@ export async function saveEmailLocally(uid) {
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
   const account = unified?.account || state.accounts.find(a => a.id === accountId);
   if (!account) return;
-  uid = keyAfterUndo(get, uid, accountId, mailbox);
+  // The uid, not the selection key a spanning view hands over: the key is not
+  // a number, and everything below (the existence check, the archive, the cache
+  // key, the row lookup) addresses a message by its uid inside one folder.
+  uid = keyAfterUndo(get, unified?.uid ?? uid, accountId, mailbox);
   if (uid instanceof Promise) uid = await uid;
 
   const cacheKey = `${accountId}-${mailbox}-${uid}`;
@@ -199,7 +202,10 @@ export async function saveEmailLocally(uid) {
     viewCountsStale();
 
     try {
-      const emailData = get().emails?.find(e => e.uid === uid) || get().sortedEmails?.find(e => e.uid === uid);
+      // This message's own row: in a list spanning accounts and folders another
+      // row carries the same number, and its header would be written here.
+      const target = { accountId, mailbox, uid };
+      const emailData = get().emails?.find(e => sameMessage(e, target, get())) || get().sortedEmails?.find(e => sameMessage(e, target, get()));
       if (emailData) {
         await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(emailData)]);
       }
@@ -894,15 +900,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // exists in Maildir + local-index (never confirmed server-side), route to
   // the local delete path. Otherwise the server delete would error on the
   // pseudo-UID and the entry would re-hydrate on next loadEmails.
-  // Matched on the resolved uid and, in a spanning view, on the account and
-  // folder this delete is aimed at: keyed by the raw key it matches no row at
-  // all, and a bare uid matches any account's row carrying that number.
-  const candidate = [...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])].find(e => {
-    if (e.uid !== realUid) return false;
-    if (!isUnified && !explicitScope) return true;
-    const location = resolveEmailLocation(e, state);
-    return location?.accountId === accountId && location?.mailbox === mailbox;
-  });
+  // Matched by where the message lives (sameMessage): its uid, account and
+  // folder, the folder being the mailbox override when one aims the delete
+  // elsewhere than the view. Keyed by the raw argument it matches no row in a
+  // spanning view, and a bare uid matched any other folder's or account's row
+  // carrying that number — a staged Sent copy then made the delete of an INBOX
+  // message a vault delete.
+  const candidate = [...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])]
+    .find(e => sameMessage(e, { accountId, mailbox, uid: realUid }, state));
   // A message in a vault-only folder (an MBOX import kept on this computer)
   // was never on a server either: same path, into the deleted bin.
   const localFolder = isLocalMailbox(state.localFolders, accountId, mailbox);
@@ -1403,8 +1408,12 @@ export async function stampVaultEntry(accountId, mailbox, uid, extra) {
     const { useMailStore } = await import('../../stores/mailStore');
     const state = useMailStore.getState();
     if (!state.archivedEmailIds?.has(vaultKey(accountId, mailbox, uid))) return false;
+    // The row of THIS message: found by where it lives, never by its bare uid.
+    // A row with no folder used to match any folder, and so any account's, and
+    // its header was written into this message's entry.
+    const target = { accountId, mailbox, uid };
     const row = [...(state.localEmails || []), ...(state.emails || []), ...(state.sortedEmails || [])]
-      .find(e => e.uid === uid && (e._mailbox == null || e._mailbox === mailbox));
+      .find(e => sameMessage(e, target, state));
     if (!row?.subject) return false;
     await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(row, extra)]);
     return true;

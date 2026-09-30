@@ -1,7 +1,8 @@
-// A delete made inside a folder-branch view (activeMailbox = the branch root,
-// mailboxScope set, each row stamped with its own folder) writes the tombstone
-// the display derivation matches: the row's own folder. A stale repaint of the
-// deleted row then stays hidden, and the same uid in the root folder stays shown.
+// Whether a delete takes the vault-only path is decided from the row it is
+// aimed at. The lookup matched ANY list's row carrying the same number, so a
+// compose-staged Sent copy (a local-only row with a pseudo-uid) made the delete
+// of a real INBOX message that shared its uid a vault delete: the server copy
+// stayed, and the vault copy of the wrong folder's message went to the bin.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
@@ -124,26 +125,23 @@ const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/m
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test' };
 const ACCT_B = { id: 'acct-b', email: 'b@mock.test' };
 
-const row = (uid, mailbox) => ({
-  uid, subject: `m${uid}`, flags: [], from: { address: 'x@mock.test' }, date: '2026-09-01T10:00:00Z',
-  _accountId: ACCT_A.id, _accountEmail: ACCT_A.email, _mailbox: mailbox,
+const row = (uid, extra = {}) => ({
+  uid, subject: `m${uid}`, flags: [], from: { address: 'x@mock.test' }, date: '2026-09-01T10:00:00Z', ...extra,
 });
 
-const PATHS = ['Projects', 'Projects/Alpha'];
-
-function primeBranch(emails) {
+function prime({ emails = [], sentEmails = [], localEmails = [], activeMailbox = 'INBOX' }) {
   useMailStore.setState({
-    accounts: [ACCT_A],
+    accounts: [ACCT_A, ACCT_B],
     activeAccountId: ACCT_A.id,
-    activeMailbox: 'Projects',
+    activeMailbox,
     unifiedInbox: false,
     unifiedFolder: null,
-    mailboxScope: { root: 'Projects', paths: PATHS },
-    mailboxes: PATHS.map(path => ({ path, name: path })),
+    mailboxScope: null,
+    mailboxes: [],
     viewMode: 'all',
     emails,
-    sentEmails: [],
-    localEmails: [],
+    sentEmails,
+    localEmails,
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
     serverUids: serverUids([], { complete: false }),
@@ -158,42 +156,44 @@ function primeBranch(emails) {
   useMailStore.getState().updateSortedEmails();
 }
 
-const shown = () => useMailStore.getState().sortedEmails.map(e => `${e._mailbox}|${e.uid}`);
-
-describe('deleting inside a folder-branch view', () => {
+describe('the row a delete decides its path by', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     netOnline = true;
+    mockDeleteEmail.mockResolvedValue(undefined);
     mockGetLocalIndexEntry.mockResolvedValue(null);
+    globalThis.window.__TAURI__ = { core: { invoke: () => {} } };
   });
 
-  it('tombstones the child folder\'s row, so a stale repaint of it stays hidden', async () => {
-    const root = row(34, 'Projects');
-    const child = row(34, 'Projects/Alpha');
-    primeBranch([root, child]);
-    // The server never answers: what is checked is the optimistic window, where
-    // a header cache that still holds the row repaints it.
-    mockDeleteEmail.mockReturnValue(new Promise(() => {}));
-    useMailStore.getState().deleteEmailFromServer(_selKey(child));
-    await vi.waitFor(() => expect(mockDeleteEmail).toHaveBeenCalled());
-    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 34, 'Projects/Alpha');
-    expect(shown()).toEqual(['Projects|34']);
+  it("does not take another folder's staged row for the message being deleted", async () => {
+    // INBOX uid 7 is not in the loaded list; the only row with that number is
+    // the Sent copy a compose window staged.
+    prime({ sentEmails: [row(7, { _accountId: ACCT_A.id, _mailbox: 'Sent', source: 'local-only', _localStaged: true })] });
 
-    // The stale repaint: the cache hands the deleted row back.
-    useMailStore.setState({ emails: [root, { ...child }] });
-    useMailStore.getState().updateSortedEmails();
-    expect(shown()).toEqual(['Projects|34']);
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 7, 'INBOX');
+    expect(mockSend).not.toHaveBeenCalledWith('maildir_delete', expect.anything());
   });
 
-  it('deleting the root\'s row leaves the child folder\'s same uid on screen', async () => {
-    const root = row(34, 'Projects');
-    const child = row(34, 'Projects/Alpha');
-    primeBranch([root, child]);
-    mockDeleteEmail.mockReturnValue(new Promise(() => {}));
-    useMailStore.getState().deleteEmailFromServer(_selKey(root));
-    await vi.waitFor(() => expect(mockDeleteEmail).toHaveBeenCalled());
-    useMailStore.setState({ emails: [{ ...root }, child] });
-    useMailStore.getState().updateSortedEmails();
-    expect(shown()).toEqual(['Projects/Alpha|34']);
+  it('keeps the vault-only path for the staged row of the very message', async () => {
+    prime({
+      activeMailbox: 'Sent',
+      emails: [row(7, { source: 'local-only', _localStaged: true })],
+    });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', expect.objectContaining({ accountId: ACCT_A.id, mailbox: 'Sent', uid: 7 }));
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+  });
+
+  it("keeps a mailbox override: a merged Sent copy is found under the Sent folder it lives in", async () => {
+    prime({ sentEmails: [row(7, { _accountId: ACCT_A.id, _mailbox: 'Sent', source: 'local-only', _localStaged: true })] });
+
+    await useMailStore.getState().deleteEmailFromServer(7, { mailboxOverride: 'Sent' });
+
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', expect.objectContaining({ accountId: ACCT_A.id, mailbox: 'Sent', uid: 7 }));
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
   });
 });

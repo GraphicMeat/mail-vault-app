@@ -62,8 +62,11 @@ export async function probeServerCopy(uid, scope = {}) {
   // already be gone (the vanished-message path calls this right after pruning
   // it), and the vault entry outlives both.
   const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
+  // This message's own row, placed by where it lives: a row with no folder used
+  // to match any folder, and so any account's, and its Message-ID was swept for.
+  const target = { accountId, mailbox, uid };
   const row = [...(state.localEmails || []), ...(state.sortedEmails || []), ...(state.emails || [])]
-    .find(e => e.uid === uid && (e._mailbox == null || e._mailbox === mailbox));
+    .find(e => sameMessage(e, target, state));
   const messageId = entry?.message_id || entry?.messageId || row?.messageId || null;
   if (!messageId) return { state: 'unknown', reason: 'no-message-id' };
 
@@ -114,7 +117,6 @@ export async function probeServerCopy(uid, scope = {}) {
   // answered a stronger version of the question a failed body fetch asks, so
   // route it through the same path that answer already takes. NOT a delete:
   // `deletedByUs` stays false, because we did not.
-  const target = { accountId, mailbox, uid };
   const stale = (get().emails || []).some(e => sameMessage(e, target, get()));
   if (stale) {
     await applyServerRemoval(uid, {

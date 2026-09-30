@@ -1,7 +1,11 @@
-// A delete made inside a folder-branch view (activeMailbox = the branch root,
-// mailboxScope set, each row stamped with its own folder) writes the tombstone
-// the display derivation matches: the row's own folder. A stale repaint of the
-// deleted row then stays hidden, and the same uid in the root folder stays shown.
+// A custody write names ONE message by (account, folder, uid), and the header it
+// puts in the vault index has to be that message's. stampVaultEntry used to find
+// a row by bare uid with a wildcard for a row with no folder, so a bulk-archived
+// message of one account (no index entry yet) was given the header of ANOTHER
+// account's row that shared its number. The custody write of saveEmailLocally
+// looked its row up the same way, and in a spanning view it was handed the
+// whole selection key as the uid, so the lookup and every call below it (the
+// vault archive, the existence check) addressed a uid that is no number.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
@@ -44,6 +48,8 @@ vi.mock('../../db', () => ({
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
   getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   getArchivedEmails: vi.fn().mockResolvedValue([]),
+  isEmailSaved: vi.fn().mockResolvedValue(true),
+  archiveEmail: vi.fn().mockResolvedValue(undefined),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
   queueOp: (...a) => mockQueueOp(...a),
@@ -124,31 +130,31 @@ const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/m
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test' };
 const ACCT_B = { id: 'acct-b', email: 'b@mock.test' };
 
-const row = (uid, mailbox) => ({
-  uid, subject: `m${uid}`, flags: [], from: { address: 'x@mock.test' }, date: '2026-09-01T10:00:00Z',
-  _accountId: ACCT_A.id, _accountEmail: ACCT_A.email, _mailbox: mailbox,
+const { stampVaultEntry, saveEmailLocally } = await import('../messageMutations');
+const db = await import('../../db');
+import { _selKey } from '../../../stores/slices/unifiedHelpers';
+
+const row = (uid, subject, extra = {}) => ({
+  uid, subject, flags: [], from: { address: 'x@mock.test' }, date: '2026-09-01T10:00:00Z', ...extra,
 });
 
-const PATHS = ['Projects', 'Projects/Alpha'];
-
-function primeBranch(emails) {
+function prime({ active = ACCT_A.id, mailbox = 'INBOX', emails = [], localEmails = [], archived = [] }) {
   useMailStore.setState({
-    accounts: [ACCT_A],
-    activeAccountId: ACCT_A.id,
-    activeMailbox: 'Projects',
-    unifiedInbox: false,
-    unifiedFolder: null,
-    mailboxScope: { root: 'Projects', paths: PATHS },
-    mailboxes: PATHS.map(path => ({ path, name: path })),
+    accounts: [ACCT_A, ACCT_B],
+    activeAccountId: active,
+    activeMailbox: mailbox,
+    unifiedInbox: mailbox === 'UNIFIED',
+    unifiedFolder: 'INBOX',
+    mailboxScope: null,
+    mailboxes: [],
     viewMode: 'all',
     emails,
     sentEmails: [],
-    localEmails: [],
+    localEmails,
     savedEmailIds: new Set(),
-    archivedEmailIds: new Set(),
+    archivedEmailIds: new Set(archived),
     serverUids: serverUids([], { complete: false }),
     deleteTombstones: new Set(),
-    totalEmails: emails.length,
     selectedEmailIds: new Set(),
     selectedEmail: null,
     selectedEmailId: null,
@@ -158,42 +164,109 @@ function primeBranch(emails) {
   useMailStore.getState().updateSortedEmails();
 }
 
-const shown = () => useMailStore.getState().sortedEmails.map(e => `${e._mailbox}|${e.uid}`);
-
-describe('deleting inside a folder-branch view', () => {
+describe('stampVaultEntry without a durable index entry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    netOnline = true;
     mockGetLocalIndexEntry.mockResolvedValue(null);
   });
 
-  it('tombstones the child folder\'s row, so a stale repaint of it stays hidden', async () => {
-    const root = row(34, 'Projects');
-    const child = row(34, 'Projects/Alpha');
-    primeBranch([root, child]);
-    // The server never answers: what is checked is the optimistic window, where
-    // a header cache that still holds the row repaints it.
-    mockDeleteEmail.mockReturnValue(new Promise(() => {}));
-    useMailStore.getState().deleteEmailFromServer(_selKey(child));
-    await vi.waitFor(() => expect(mockDeleteEmail).toHaveBeenCalled());
-    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 34, 'Projects/Alpha');
-    expect(shown()).toEqual(['Projects|34']);
+  it("does not write another account's header under this account's uid", async () => {
+    // B archived its uid 5 through the bulk path (no entry yet); the only row
+    // in memory with that number is A's.
+    prime({
+      emails: [],
+      localEmails: [row(5, "A's private subject", { _accountId: ACCT_A.id, _mailbox: 'INBOX' })],
+      archived: [`${ACCT_B.id}:INBOX:5`],
+      mailbox: 'UNIFIED',
+    });
 
-    // The stale repaint: the cache hands the deleted row back.
-    useMailStore.setState({ emails: [root, { ...child }] });
-    useMailStore.getState().updateSortedEmails();
-    expect(shown()).toEqual(['Projects|34']);
+    const stamped = await stampVaultEntry(ACCT_B.id, 'INBOX', 5, { serverDeleted: true });
+
+    expect(stamped).toBe(false);
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
-  it('deleting the root\'s row leaves the child folder\'s same uid on screen', async () => {
-    const root = row(34, 'Projects');
-    const child = row(34, 'Projects/Alpha');
-    primeBranch([root, child]);
-    mockDeleteEmail.mockReturnValue(new Promise(() => {}));
-    useMailStore.getState().deleteEmailFromServer(_selKey(root));
-    await vi.waitFor(() => expect(mockDeleteEmail).toHaveBeenCalled());
-    useMailStore.setState({ emails: [{ ...root }, child] });
-    useMailStore.getState().updateSortedEmails();
-    expect(shown()).toEqual(['Projects/Alpha|34']);
+  it("does not take the active view's unstamped row for another account's message", async () => {
+    // A single-folder view of A: its rows carry no account or folder stamp.
+    prime({
+      active: ACCT_A.id,
+      localEmails: [row(5, "A's private subject")],
+      archived: [`${ACCT_B.id}:INBOX:5`],
+    });
+
+    const stamped = await stampVaultEntry(ACCT_B.id, 'INBOX', 5, { serverDeleted: true });
+
+    expect(stamped).toBe(false);
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+  });
+
+  it("does not take another folder's row of the same account", async () => {
+    prime({
+      localEmails: [row(5, 'Sent copy', { _accountId: ACCT_A.id, _mailbox: 'Sent' })],
+      archived: [`${ACCT_A.id}:INBOX:5`],
+      mailbox: 'UNIFIED',
+    });
+
+    expect(await stampVaultEntry(ACCT_A.id, 'INBOX', 5, { serverDeleted: true })).toBe(false);
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+  });
+
+  it('still writes the message\'s own header when its row is in memory', async () => {
+    prime({
+      localEmails: [
+        row(5, "A's private subject", { _accountId: ACCT_A.id, _mailbox: 'INBOX' }),
+        row(5, "B's own subject", { _accountId: ACCT_B.id, _mailbox: 'INBOX' }),
+      ],
+      archived: [`${ACCT_B.id}:INBOX:5`],
+      mailbox: 'UNIFIED',
+    });
+
+    expect(await stampVaultEntry(ACCT_B.id, 'INBOX', 5, { serverDeleted: true })).toBe(true);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', [
+      expect.objectContaining({ uid: 5, subject: "B's own subject", serverDeleted: true }),
+    ]);
+  });
+
+  it('still finds the unstamped row of the single folder on screen', async () => {
+    prime({
+      localEmails: [row(5, "A's own subject")],
+      archived: [`${ACCT_A.id}:INBOX:5`],
+    });
+
+    expect(await stampVaultEntry(ACCT_A.id, 'INBOX', 5, { serverDeleted: true })).toBe(true);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(ACCT_A.id, 'INBOX', [
+      expect.objectContaining({ uid: 5, subject: "A's own subject" }),
+    ]);
+  });
+
+  it('with a durable entry, stamps that entry and reads no row at all', async () => {
+    mockGetLocalIndexEntry.mockResolvedValue({ uid: 5, subject: 'the durable one' });
+    prime({ localEmails: [row(5, "A's private subject", { _accountId: ACCT_A.id, _mailbox: 'INBOX' })], mailbox: 'UNIFIED' });
+
+    expect(await stampVaultEntry(ACCT_B.id, 'INBOX', 5, { serverDeleted: true })).toBe(true);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', [
+      expect.objectContaining({ subject: 'the durable one', serverDeleted: true }),
+    ]);
+  });
+});
+
+describe('saveEmailLocally in a view that spans accounts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+  });
+
+  it("archives the message by its uid and writes that message's own header to the custody entry", async () => {
+    const a = row(5, "A's private subject", { _accountId: ACCT_A.id, _mailbox: 'INBOX' });
+    const b = row(5, "B's own subject", { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    prime({ emails: [a, b], mailbox: 'UNIFIED' });
+
+    await saveEmailLocally(_selKey(b));
+
+    expect(db.archiveEmail).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', 5);
+    expect(mockAppendLocalIndex).toHaveBeenCalledTimes(1);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', [
+      expect.objectContaining({ uid: 5, subject: "B's own subject" }),
+    ]);
   });
 });

@@ -234,6 +234,48 @@ describe('questions the probe cannot ask', () => {
   });
 });
 
+describe('the Message-ID of the message asked about', () => {
+  // No durable entry: the row in memory is the only place the Message-ID can
+  // come from, and it has to be THIS message's row. A sweep for another
+  // message's Message-ID that finds nothing stamps the wrong one "deleted by
+  // someone else", the loudest claim in the product.
+  const OTHER = { id: 'acc2', email: 'leia@mock.test', password: 'x' };
+
+  beforeEach(() => {
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+    storeState.accounts = [ACCOUNT, OTHER];
+    storeState.localEmails = [];
+  });
+
+  it("never takes another account's row with the same uid", async () => {
+    storeState.localEmails = [{ uid: 7, _accountId: 'acc2', _mailbox: 'INBOX', messageId: '<theirs@example.com>', isArchived: true }];
+
+    expect(await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' }))
+      .toEqual({ state: 'unknown', reason: 'no-message-id' });
+    expect(mockFindMessageId).not.toHaveBeenCalled();
+  });
+
+  it("never takes the folder on screen's unstamped row for another folder's message", async () => {
+    storeState.activeMailbox = 'Archive';
+    storeState.emails = [{ uid: 7, messageId: '<archive-7@example.com>' }];
+
+    expect(await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' }))
+      .toEqual({ state: 'unknown', reason: 'no-message-id' });
+    expect(mockFindMessageId).not.toHaveBeenCalled();
+  });
+
+  it('reads it off its own row when there is no vault entry', async () => {
+    storeState.localEmails = [
+      { uid: 7, _accountId: 'acc2', _mailbox: 'INBOX', messageId: '<theirs@example.com>', isArchived: true },
+      { uid: 7, _accountId: 'acc1', _mailbox: 'INBOX', messageId: '<mine@example.com>', isArchived: true },
+    ];
+    mockFindMessageId.mockResolvedValue({ found: [{ mailbox: 'INBOX', uid: 7 }], searched: ['INBOX'], failed: [], complete: false });
+
+    expect((await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' })).state).toBe('present');
+    expect(mockFindMessageId).toHaveBeenCalledWith(ACCOUNT, '<mine@example.com>', { stopOnFirst: true });
+  });
+});
+
 describe('scope', () => {
   it('does not restamp a row that merely shares the uid', async () => {
     // A uid names a message only inside one (account, mailbox): Sent uid 7 is

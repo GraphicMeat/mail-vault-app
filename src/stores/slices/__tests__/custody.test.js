@@ -131,31 +131,54 @@ describe('describeMessageState over custodySource', () => {
 });
 
 describe('custodyRowFor', () => {
+  // The state the viewer's selector hands over: the whole store, so the message
+  // is placed the way every other lookup places it (rowIdentity).
+  const view = { activeAccountId: 'a', activeMailbox: 'INBOX' };
   const row = { uid: 3, isArchived: true, serverDeleted: true, source: 'local-only' };
 
   it('finds the list row for the message the viewer is showing', () => {
-    expect(custodyRowFor({ uid: 3 }, { sortedEmails: [row], localEmails: [] })).toBe(row);
+    expect(custodyRowFor({ uid: 3 }, { ...view, sortedEmails: [row], localEmails: [] })).toBe(row);
   });
 
   it('falls back to the vault rows when the list has not got there yet', () => {
-    expect(custodyRowFor({ uid: 3 }, { sortedEmails: [], localEmails: [row] })).toBe(row);
+    expect(custodyRowFor({ uid: 3 }, { ...view, sortedEmails: [], localEmails: [row] })).toBe(row);
   });
 
   it('keeps accounts apart in the unified list', () => {
-    const a = { uid: 3, _accountId: 'a' };
-    const b = { uid: 3, _accountId: 'b' };
-    expect(custodyRowFor({ uid: 3, _accountId: 'b' }, { sortedEmails: [a, b] })).toBe(b);
+    const a = { uid: 3, _accountId: 'a', _mailbox: 'INBOX' };
+    const b = { uid: 3, _accountId: 'b', _mailbox: 'INBOX' };
+    const spanning = { activeAccountId: 'a', activeMailbox: 'UNIFIED' };
+    expect(custodyRowFor({ uid: 3, _accountId: 'b', _mailbox: 'INBOX' }, { ...spanning, sortedEmails: [a, b] })).toBe(b);
   });
 
   it('keeps folders apart — a uid is not a key across mailboxes', () => {
     const inbox = { uid: 6, _mailbox: 'INBOX', isArchived: true };
     const sent = { uid: 6, _mailbox: 'Sent', isArchived: true, serverDeleted: true };
-    expect(custodyRowFor({ uid: 6, _mailbox: 'INBOX' }, { sortedEmails: [sent, inbox] })).toBe(inbox);
+    expect(custodyRowFor({ uid: 6, _mailbox: 'INBOX' }, { ...view, sortedEmails: [sent, inbox] })).toBe(inbox);
+  });
+
+  // A row that omits its account or folder belongs to the view on screen, and
+  // only to it: it used to match ANY message carrying the same uid, so one
+  // account's viewer read another account's custody verdict.
+  it("an unstamped row of the view is not another account's message", () => {
+    const mine = { uid: 3, isArchived: true, serverDeleted: true };
+    expect(custodyRowFor({ uid: 3, _accountId: 'b', _mailbox: 'INBOX' }, { ...view, sortedEmails: [mine] })).toBeNull();
+    expect(custodyRowFor({ uid: 3, _accountId: 'a', _mailbox: 'Archive' }, { ...view, sortedEmails: [mine] })).toBeNull();
+  });
+
+  it("an unstamped viewer copy is the view's message, not any account's", () => {
+    const theirs = { uid: 3, _accountId: 'b', _mailbox: 'INBOX', isArchived: true, serverDeleted: true };
+    expect(custodyRowFor({ uid: 3 }, { ...view, sortedEmails: [theirs] })).toBeNull();
+  });
+
+  it('places nothing it cannot place', () => {
+    expect(custodyRowFor({ uid: 3 }, { sortedEmails: [row] })).toBeNull();
+    expect(custodyRowFor({ uid: 3 }, { activeAccountId: 'a', activeMailbox: 'UNIFIED', sortedEmails: [row] })).toBeNull();
   });
 
   it('returns null rather than a guess when the message is not in the list', () => {
-    expect(custodyRowFor({ uid: 9 }, { sortedEmails: [row] })).toBeNull();
-    expect(custodyRowFor(null, { sortedEmails: [row] })).toBeNull();
+    expect(custodyRowFor({ uid: 9 }, { ...view, sortedEmails: [row] })).toBeNull();
+    expect(custodyRowFor(null, { ...view, sortedEmails: [row] })).toBeNull();
   });
 
   it('gives the viewer the same verdict as the row, for one message', () => {
@@ -164,7 +187,7 @@ describe('custodyRowFor', () => {
     const fromRow = describeMessageState(row, { serverKnown: true });
     const viewerCopy = { uid: 3, isArchived: true, source: 'local' }; // vault read stamps 'local'
     const fromViewer = describeMessageState(
-      custodyRowFor(viewerCopy, { sortedEmails: [row] }) || viewerCopy, { serverKnown: true },
+      custodyRowFor(viewerCopy, { ...view, sortedEmails: [row] }) || viewerCopy, { serverKnown: true },
     );
     expect(fromViewer.tone).toBe(fromRow.tone);
     expect(fromViewer.detail).toBe(fromRow.detail);
