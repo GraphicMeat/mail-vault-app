@@ -2971,6 +2971,7 @@
   "update.failedInstallUpdate": "업데이트를 설치하지 못했습니다",
   "update.installingUpdate": "업데이트 설치 중…",
   "update.later": "나중에",
+  "update.loadingReleaseNotes": "릴리스 노트 불러오는 중",
   "update.mailvaultVersionAvailable": "MailVault v{{newVersion}} 사용 가능",
   "update.moreCommits": "GitHub에서 {{count}}개 더 보기",
   "update.remindLater": "나중에 알림",

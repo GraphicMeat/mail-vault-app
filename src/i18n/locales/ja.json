@@ -2971,6 +2971,7 @@
   "update.failedInstallUpdate": "アップデートをインストールできませんでした",
   "update.installingUpdate": "アップデートをインストール中…",
   "update.later": "後で",
+  "update.loadingReleaseNotes": "リリースノートを読み込み中",
   "update.mailvaultVersionAvailable": "MailVault v{{newVersion}} が利用可能",
   "update.moreCommits": "GitHub で他 {{count}} 件",
   "update.remindLater": "後で通知",

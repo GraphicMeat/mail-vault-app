@@ -2971,6 +2971,7 @@
   "update.failedInstallUpdate": "更新安装失败",
   "update.installingUpdate": "正在安装更新…",
   "update.later": "稍后",
+  "update.loadingReleaseNotes": "正在加载发行说明",
   "update.mailvaultVersionAvailable": "MailVault v{{newVersion}} 可用",
   "update.moreCommits": "在 GitHub 上查看另外 {{count}} 个",
   "update.remindLater": "稍后提醒",

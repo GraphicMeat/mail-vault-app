@@ -991,6 +991,18 @@ input[type="range"]::-moz-range-thumb:hover {
   to { transform: rotate(360deg); }
 }
 
+/* Lines standing in for release notes that are still loading. */
+.release-notes-skeleton {
+  background: linear-gradient(90deg, var(--mail-border) 25%, var(--mail-surface-hover) 50%, var(--mail-border) 75%);
+  background-size: 200% 100%;
+  animation: release-notes-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes release-notes-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
 .read-delay-progress {
   flex: 0 0 3px;
   height: 3px;
@@ -1034,6 +1046,11 @@ input[type="range"]::-moz-range-thumb:hover {
   .animate-pulse-soft {
     animation-duration: 1.5s !important;
     animation-iteration-count: infinite !important;
+  }
+
+  /* Still lines: the shimmer is decoration, the lines say it is loading. */
+  .release-notes-skeleton {
+    animation: none !important;
   }
 
   .read-delay-progress > span {

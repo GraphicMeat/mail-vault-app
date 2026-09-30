@@ -98,6 +98,49 @@ describe('UpdateModal release notes', () => {
   });
 });
 
+describe('UpdateModal release notes loader', () => {
+  it('shows a busy loading region in the notes box while the releases load', () => {
+    daemonCall.mockReturnValue(new Promise(() => {}));
+    openModal();
+    const box = screen.getByTestId('update-release-notes');
+    expect(box.getAttribute('aria-busy')).toBe('true');
+    const loader = within(box).getByTestId('update-release-notes-loader');
+    expect(loader.getAttribute('role')).toBe('status');
+    expect(loader.getAttribute('aria-label')).toBe('Loading release notes');
+  });
+
+  it('swaps the loader for the notes once the releases arrive', async () => {
+    let resolve;
+    daemonCall.mockReturnValue(new Promise(r => { resolve = r; }));
+    openModal();
+    expect(screen.getByTestId('update-release-notes-loader')).toBeTruthy();
+    resolve(RELEASES);
+    await waitFor(() => expect(screen.queryByTestId('update-release-notes-loader')).toBeNull());
+    const box = screen.getByTestId('update-release-notes');
+    expect(box.getAttribute('aria-busy')).not.toBe('true');
+    expect(box.textContent).toContain('Finds mail again.');
+  });
+
+  it('drops the loader, and the box with it, when the releases cannot be read and the feed has no notes', async () => {
+    daemonCall.mockRejectedValue(new Error('offline'));
+    openModal();
+    await waitFor(() => expect(screen.queryByTestId('update-release-notes-loader')).toBeNull());
+    expect(screen.queryByTestId('update-release-notes')).toBeNull();
+  });
+
+  it('keeps the feed notes beside the loader, and on their own once it fails', async () => {
+    let reject;
+    daemonCall.mockReturnValue(new Promise((_, r) => { reject = r; }));
+    openModal({ version: '2.16.0', notes: '### Fixed\n- Feed note.' });
+    const box = screen.getByTestId('update-release-notes');
+    expect(box.textContent).toContain('Feed note.');
+    expect(within(box).getByTestId('update-release-notes-loader')).toBeTruthy();
+    reject(new Error('offline'));
+    await waitFor(() => expect(screen.queryByTestId('update-release-notes-loader')).toBeNull());
+    expect(screen.getByTestId('update-release-notes').textContent).toContain('Feed note.');
+  });
+});
+
 describe('UpdateModal commits', () => {
   const NIGHTLY = '2.16.0-nightly.202609280647.gabc1234';
   const LOG = {

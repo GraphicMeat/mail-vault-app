@@ -2971,6 +2971,7 @@
   "update.failedInstallUpdate": "No se pudo instalar la actualización",
   "update.installingUpdate": "Instalando la actualización…",
   "update.later": "Más tarde",
+  "update.loadingReleaseNotes": "Cargando las notas de la versión",
   "update.mailvaultVersionAvailable": "MailVault v{{newVersion}} disponible",
   "update.moreCommits": "{{count}} más en GitHub",
   "update.remindLater": "Recordármelo luego",

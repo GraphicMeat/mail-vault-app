@@ -66,6 +66,19 @@ function renderInlineMarkdown(text) {
   });
 }
 
+/** Shimmering lines where the notes will be; one line under feed notes that are already showing. */
+function ReleaseNotesLoader({ label, compact }) {
+  const widths = compact ? ['45%'] : ['40%', '92%', '78%', '85%', '60%'];
+  return (
+    <div role="status" aria-label={label} data-testid="update-release-notes-loader"
+      className={`flex flex-col gap-2.5 ${compact ? 'mt-3' : ''}`}>
+      {widths.map((width, i) => (
+        <div key={i} aria-hidden="true" className="release-notes-skeleton h-3 rounded" style={{ width }} />
+      ))}
+    </div>
+  );
+}
+
 export function UpdateModal({ updateInfo, onClose }) {
   const t = useT();
   const [state, setState] = useState('idle'); // 'idle' | 'downloading' | 'installing' | 'error'
@@ -84,15 +97,19 @@ export function UpdateModal({ updateInfo, onClose }) {
   // The commits between the two builds. A nightly's release says only which
   // commit it is ("Nightly build of <sha>."), so for nightlies they are the notes.
   const [commitLog, setCommitLog] = useState(null);
+  // The releases are read from GitHub, so the box shows a loader until that answers either way.
+  const [notesLoading, setNotesLoading] = useState(true);
   const feedNotes = commitLog?.commits?.length && /^Nightly build of /.test(updateInfo?.notes || '') ? '' : updateInfo?.notes;
   const notes = releases.map(r => (releases.length > 1 ? `## v${r.version}\n` : '') + r.body).join('\n')
     || feedNotes || '';
   const includePrereleases = (updateTrack ?? (currentVersion.includes('-nightly') ? 'nightly' : 'stable')) === 'nightly';
   useEffect(() => {
     let alive = true;
+    setNotesLoading(true);
     daemonCall('app.release_notes', { from: currentVersion, to: newVersion, includePrereleases })
       .then(list => { if (alive && Array.isArray(list)) setReleases(list); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (alive) setNotesLoading(false); });
     daemonCall('app.release_commits', { from: currentVersion, to: newVersion })
       .then(log => { if (alive && log?.commits) setCommitLog(log); })
       .catch(() => {});
@@ -204,9 +221,11 @@ export function UpdateModal({ updateInfo, onClose }) {
           {/* Body */}
           {state === 'idle' && (
             <>
-              {notes && (
-                <div data-testid="update-release-notes" className="px-5 py-4 max-h-80 overflow-y-auto border-b border-mail-border">
+              {(notes || notesLoading) && (
+                <div data-testid="update-release-notes" aria-busy={notesLoading || undefined}
+                  className="px-5 py-4 max-h-80 overflow-y-auto border-b border-mail-border">
                   {renderChangelogMarkdown(notes)}
+                  {notesLoading && <ReleaseNotesLoader label={t('update.loadingReleaseNotes')} compact={!!notes} />}
                 </div>
               )}
               {commitLog?.commits?.length > 0 && (
