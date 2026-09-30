@@ -30,3 +30,23 @@ export async function readIndexSnippets(accountId, mailbox, rows) {
   } catch { /* no snippet: the caller keeps its spinner */ }
   return snippets;
 }
+
+/** The rows a list's first disk read (`getEmailHeadersPartial`) stamps a preview on. */
+export const PREVIEW_WINDOW = 500;
+
+/**
+ * `rows` with the index's preview stamped on those that have none, for the
+ * first window only: the header memo hands a folder back as it was left, before
+ * the index read any body that arrived since, and a disk read would have
+ * stamped it. Returns `rows` itself when nothing changes; never mutates.
+ */
+export async function stampIndexPreviews(accountId, mailbox, rows) {
+  const snippets = await readIndexSnippets(accountId, mailbox, rows.slice(0, PREVIEW_WINDOW));
+  let changed = false;
+  const stamped = rows.map((row) => {
+    if (row?.uid == null || row.previewText || row.snippet || !snippets.has(row.uid)) return row;
+    changed = true;
+    return { ...row, previewText: snippets.get(row.uid) };
+  });
+  return changed ? stamped : rows;
+}

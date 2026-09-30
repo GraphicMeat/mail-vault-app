@@ -18,6 +18,7 @@ import {
   adopt as memoAdopt, clearOnScreen as memoClearOnScreen, recallOnScreen as memoRecallOnScreen,
   isOnScreen as memoIsOnScreen,
 } from '../headerMemo';
+import { stampIndexPreviews } from '../indexSnippet';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -683,10 +684,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const ownRowsCover = ownRows.length > 0 && memoMeta?.totalCached > 0
         && memoIsOnScreen(accountId, effectiveMailbox)
         && ownRows.length >= Math.min(500, memoMeta.totalCached);
-      const memoized = await memoRecall(accountId, effectiveMailbox, memoMeta, memoIo)
+      const recalled = await memoRecall(accountId, effectiveMailbox, memoMeta, memoIo)
         ?? (ownRowsCover
           ? await memoRecallOnScreen(accountId, effectiveMailbox, ownRows, memoMeta, memoIo)
           : null);
+      if (signal.aborted) return;
+      // The memo keeps rows as they were left, before the search index read
+      // any body that landed since; a disk read stamps the preview line, so
+      // the memo's rows get the same stamp (one read of the first window).
+      const memoized = recalled ? await stampIndexPreviews(accountId, effectiveMailbox, recalled) : null;
       if (signal.aborted) return;
       const cachedHeaders = memoized
         ? {
