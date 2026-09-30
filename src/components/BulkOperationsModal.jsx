@@ -12,6 +12,7 @@ import { vaultClause } from '../utils/custodyCopy';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
 import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
+import { selectionKey } from '../stores/slices/unifiedHelpers';
 import { T } from '../i18n/T.jsx';
 
 const ACTION_STYLES = () => ({
@@ -135,6 +136,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   const activeMailbox = useMessageListStore(s => s.activeMailbox);
   const viewMode = useMessageListStore(s => s.viewMode);
   const unifiedInbox = useMessageListStore(s => s.unifiedInbox);
+  const mailboxScope = useMessageListStore(s => s.mailboxScope);
   // The brief pointed at backupStore.js for this, but that store only holds
   // ephemeral progress — the actual configured location (or null) lives in
   // settingsStore as `externalBackupLocation`. Any non-null value means the
@@ -158,9 +160,11 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   const cachedForRef = useRef(null);
 
   useEffect(() => {
-    // Local view shows archived-only, and unified spans accounts — neither maps
-    // to one mailbox's cache, so both keep using the window.
-    if (!activeAccountId || unifiedInbox || viewMode === 'local') {
+    // Local view shows archived-only, unified spans accounts and a subtree
+    // spans folders — none maps to one mailbox's cache, so all keep using the
+    // window. A subtree read of its root's cache dropped every child row whose
+    // uid the root also holds.
+    if (!activeAccountId || unifiedInbox || mailboxScope || viewMode === 'local') {
       setCachedRows(null);
       setLoadingPool(false);
       cachedForRef.current = null;
@@ -212,14 +216,17 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen, activeAccountId, activeMailbox, unifiedInbox, viewMode]);
+  }, [isOpen, activeAccountId, activeMailbox, unifiedInbox, mailboxScope, viewMode]);
 
   // Messages archived locally after being deleted from the server have no
   // sidecar, so they only exist in the window — keep them selectable.
+  // Matched by selection key, not uid: a Sent copy merged into INBOX shares
+  // its number with an INBOX message and is still a message of its own.
   const emailPool = useMemo(() => {
     if (!cachedRows) return sortedEmails;
-    const cachedUids = new Set(cachedRows.map(e => e.uid));
-    const localOnly = sortedEmails.filter(e => !cachedUids.has(e.uid));
+    const state = useMailStore.getState();
+    const cachedKeys = new Set(cachedRows.map(e => selectionKey(e, state)));
+    const localOnly = sortedEmails.filter(e => !cachedKeys.has(selectionKey(e, state)));
     return localOnly.length ? [...cachedRows, ...localOnly] : cachedRows;
   }, [cachedRows, sortedEmails]);
 
@@ -342,7 +349,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
     const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}|${rangePickRef.current}`;
     if (lastSyncedRangeRef.current === signature) return;
     lastSyncedRangeRef.current = signature;
-    setSelection(selectedEmails.map(e => e.uid));
+    // The list's own keys: a bare uid names one message only in a single
+    // folder's list, not in All Inboxes or a subtree, nor for a merged Sent copy.
+    const state = useMailStore.getState();
+    setSelection(selectedEmails.map(e => selectionKey(e, state)));
   }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal

@@ -1177,11 +1177,15 @@ function EmailListComponent({ stacked = false }) {
     }
 
     try {
+      // The selection's keys can name any account and folder; a bare uid
+      // names the open folder's message only where the view is one folder.
       await bulkOperationManager.start({
         type: action,
         accountId: activeAccountId,
         account,
+        accounts,
         mailbox: activeMailbox,
+        spans: spansMailboxes(useMailStore.getState()),
         uids,
         onProgress: (op) => setBulkOpProgress({ ...op }),
       });
@@ -1194,9 +1198,12 @@ function EmailListComponent({ stacked = false }) {
       // (BulkOperationManager.js) — null for every other action type, so this is a
       // no-op for them. The two shapes differ, so each has its own formatter.
       const opResult = bulkOperationManager.operation?.result;
-      const outcomeMessage = action === 'archive_backup_delete'
-        ? formatArchiveBackupDeleteOutcome(opResult)
-        : formatPurgeEverywhereOutcome(opResult);
+      const skipped = bulkOperationManager.operation?.skipped || 0;
+      // What the manager refused (no one folder to run it in) is said, not dropped.
+      const outcomeMessage = [
+        action === 'archive_backup_delete' ? formatArchiveBackupDeleteOutcome(opResult) : formatPurgeEverywhereOutcome(opResult),
+        skipped > 0 ? t('bulk.result.skippedNoFolder', { count: skipped }) : null,
+      ].filter(Boolean).join(' ') || null;
       if (outcomeMessage) {
         // Reuses the store's `error` field, the one feedback channel already
         // wired to a Toast at the app root (App.jsx renders it off `error`/

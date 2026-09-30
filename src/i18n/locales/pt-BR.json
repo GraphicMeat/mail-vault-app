@@ -289,6 +289,8 @@
   "bulk.result.keptCopyMismatch_other": "{{count}} e-mails ficaram no servidor porque as cópias deles no disco de backup não conferiram.",
   "bulk.result.keptDeleteFailed_one": "{{count}} e-mail não pôde ser removido do servidor e ficou lá.",
   "bulk.result.keptDeleteFailed_other": "{{count}} e-mails não puderam ser removidos do servidor e ficaram lá.",
+  "bulk.result.skippedNoFolder_one": "{{count}} e-mail foi ignorado porque não foi possível determinar a pasta dele.",
+  "bulk.result.skippedNoFolder_other": "{{count}} e-mails foram ignorados porque não foi possível determinar a pasta deles.",
   "bulk.result.keptNotArchived_one": "{{count}} e-mail ficou no servidor porque não pôde ser verificado no cofre.",
   "bulk.result.keptNotArchived_other": "{{count}} e-mails ficaram no servidor porque não puderam ser verificados no cofre.",
   "bulk.result.removedFromServer": "{{total}} removidos do servidor.",

@@ -72,8 +72,9 @@ vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: () => null }
 vi.mock('../BulkSelectionBubble', () => ({ BulkSelectionBubble: () => null }));
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
 vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAlertLevel: () => null }));
+const bulkManager = vi.hoisted(() => ({ cancel: vi.fn(), start: vi.fn(), operation: null }));
 vi.mock('../../services/BulkOperationManager', () => ({
-  bulkOperationManager: { cancel: vi.fn() },
+  bulkOperationManager: bulkManager,
 }));
 vi.mock('../../utils/linkSafety', () => ({
   getLinkAlertLevel: () => null,
@@ -680,6 +681,34 @@ describe('bulk Unarchive', () => {
 
     useSearchStore.getState().searchResults = [];
     useMailStore.setState({ archivedEmailIds: new Set() });
+  });
+});
+
+// A bulk selection can name messages in many folders and accounts. The list
+// hands the manager every account and says whether the view spans folders, so
+// each key runs where it lives and a bare uid is never aimed at the wrong
+// folder; what the manager refused is said, not dropped in silence.
+describe('bulk run across folders', () => {
+  it('hands the manager every account and the view\'s span, and says how many it skipped', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const prev = useMailStore.getState();
+    const accounts = [{ id: 'acc1', email: 'one@test.com' }, { id: 'acc2', email: 'two@test.com' }];
+    bulkManager.start.mockImplementation(async () => { bulkManager.operation = { status: 'complete', skipped: 2 }; });
+    useMailStore.setState({ accounts, activeAccountId: 'acc1', activeMailbox: 'UNIFIED', loadEmails: vi.fn(async () => {}), error: null });
+    try {
+      const { EmailList } = await import('../EmailList.jsx');
+      render(React.createElement(EmailList));
+      await act(() => bulkModal.props.onConfirm({ action: 'archive', uids: [3, 'acc2:INBOX:9'] }));
+
+      expect(bulkManager.start).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'archive', accounts, spans: true, uids: [3, 'acc2:INBOX:9'],
+      }));
+      expect(useMailStore.getState().error).toBe('2 emails were skipped because their folder could not be determined.');
+    } finally {
+      bulkManager.start.mockReset();
+      bulkManager.operation = null;
+      useMailStore.setState({ accounts: prev.accounts, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, loadEmails: prev.loadEmails, error: null });
+    }
   });
 });
 

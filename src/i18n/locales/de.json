@@ -289,6 +289,8 @@
   "bulk.result.keptCopyMismatch_other": "{{count}} E-Mails blieben auf dem Server, weil ihre Kopien auf dem Sicherungslaufwerk nicht übereinstimmten.",
   "bulk.result.keptDeleteFailed_one": "{{count}} E-Mail konnte nicht vom Server entfernt werden und blieb dort.",
   "bulk.result.keptDeleteFailed_other": "{{count}} E-Mails konnten nicht vom Server entfernt werden und blieben dort.",
+  "bulk.result.skippedNoFolder_one": "{{count}} E-Mail wurde übersprungen, weil ihr Ordner nicht bestimmt werden konnte.",
+  "bulk.result.skippedNoFolder_other": "{{count}} E-Mails wurden übersprungen, weil ihr Ordner nicht bestimmt werden konnte.",
   "bulk.result.keptNotArchived_one": "{{count}} E-Mail blieb auf dem Server, weil sie im Tresor nicht bestätigt werden konnte.",
   "bulk.result.keptNotArchived_other": "{{count}} E-Mails blieben auf dem Server, weil sie im Tresor nicht bestätigt werden konnten.",
   "bulk.result.removedFromServer": "{{total}} vom Server entfernt.",

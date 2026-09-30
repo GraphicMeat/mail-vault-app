@@ -289,6 +289,8 @@
   "bulk.result.keptCopyMismatch_other": "バックアップドライブ上のコピーが一致しなかったため、{{count}} 件のメールをサーバーに残しました。",
   "bulk.result.keptDeleteFailed_one": "サーバーから削除できなかったため、{{count}} 件のメールはサーバーに残っています。",
   "bulk.result.keptDeleteFailed_other": "サーバーから削除できなかったため、{{count}} 件のメールはサーバーに残っています。",
+  "bulk.result.skippedNoFolder_one": "フォルダーを特定できなかったため、{{count}} 件のメールをスキップしました。",
+  "bulk.result.skippedNoFolder_other": "フォルダーを特定できなかったため、{{count}} 件のメールをスキップしました。",
   "bulk.result.keptNotArchived_one": "保管庫で確認できなかったため、{{count}} 件のメールをサーバーに残しました。",
   "bulk.result.keptNotArchived_other": "保管庫で確認できなかったため、{{count}} 件のメールをサーバーに残しました。",
   "bulk.result.removedFromServer": "{{total}} 件をサーバーから削除しました。",

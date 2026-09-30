@@ -289,6 +289,8 @@
   "bulk.result.keptCopyMismatch_other": "{{count}} emails were kept on the server because their copy on your backup drive did not match.",
   "bulk.result.keptDeleteFailed_one": "{{count}} email could not be removed from the server and was left there.",
   "bulk.result.keptDeleteFailed_other": "{{count}} emails could not be removed from the server and were left there.",
+  "bulk.result.skippedNoFolder_one": "{{count}} email was skipped because its folder could not be determined.",
+  "bulk.result.skippedNoFolder_other": "{{count}} emails were skipped because their folder could not be determined.",
   "bulk.result.keptNotArchived_one": "{{count}} email was kept on the server because it could not be verified in your vault.",
   "bulk.result.keptNotArchived_other": "{{count}} emails were kept on the server because they could not be verified in your vault.",
   "bulk.result.removedFromServer": "{{total}} removed from the server.",

@@ -71,6 +71,7 @@ const useMessageListStoreMock = create((set) => ({
   activeMailbox: 'INBOX',
   viewMode: 'all',
   unifiedInbox: false,
+  mailboxScope: null,
   bulkSession: null,
   selectedEmailIds: new Set(),
   setBulkSession: (patch) => set(state => ({
@@ -130,6 +131,8 @@ describe('BulkOperationsModal', () => {
       activeAccountId: 'acct-1',
       activeMailbox: 'INBOX',
       viewMode: 'all',
+      unifiedInbox: false,
+      mailboxScope: null,
     });
     useSearchStoreMock.setState({ searchResults: [] });
     archivedEmailIds.clear();
@@ -153,6 +156,63 @@ describe('BulkOperationsModal', () => {
 
     // 5 and 4 from the window, 1 only from the cache; 2 tombstoned, 3 \Deleted.
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
+  });
+
+  // A range pick writes the list's own selection keys. A bare uid names one
+  // message only in a single folder's list: in All Inboxes or a folder subtree
+  // the same number is a different message in every account and folder, and a
+  // Sent copy merged into INBOX shares its number with an INBOX message.
+  describe('range pick keys', () => {
+    const pickAllAndArchive = async (onConfirm) => {
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+      fireEvent.click(screen.getByText('Archive'));
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    };
+
+    it('in All Inboxes, two accounts\' uid 5 stay two messages, each under its full key', async () => {
+      useMessageListStoreMock.setState({
+        activeMailbox: 'UNIFIED',
+        unifiedInbox: true,
+        bulkSession: { ...boundSession(), mailbox: 'UNIFIED' },
+        sortedEmails: [
+          { uid: 5, date: '2026-03-01T10:00:00Z', _accountId: 'acct-1', _mailbox: 'INBOX' },
+          { uid: 5, date: '2026-02-01T10:00:00Z', _accountId: 'acct-2', _mailbox: 'INBOX' },
+        ],
+      });
+      const onConfirm = vi.fn();
+      await pickAllAndArchive(onConfirm);
+
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: ['acct-1:INBOX:5', 'acct-2:INBOX:5'] });
+    });
+
+    it('in a folder subtree, picks the rows on screen from every folder, not the root folder\'s cache', async () => {
+      useMessageListStoreMock.setState({
+        activeMailbox: 'Work',
+        mailboxScope: { root: 'Work', paths: ['Work', 'Work/Sub'] },
+        bulkSession: { ...boundSession(), mailbox: 'Work' },
+        sortedEmails: [
+          { uid: 5, date: '2026-03-01T10:00:00Z', _accountId: 'acct-1', _mailbox: 'Work' },
+          { uid: 5, date: '2026-02-01T10:00:00Z', _accountId: 'acct-1', _mailbox: 'Work/Sub' },
+        ],
+      });
+      const onConfirm = vi.fn();
+      await pickAllAndArchive(onConfirm);
+
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: ['acct-1:Work:5', 'acct-1:Work/Sub:5'] });
+    });
+
+    it('in INBOX, a merged Sent copy is picked under its own key beside the INBOX message with its number', async () => {
+      useMessageListStoreMock.setState({
+        sortedEmails: [...WINDOW, { uid: 4, date: '2026-02-02T10:00:00Z', _accountId: 'acct-1', _mailbox: 'Sent' }],
+      });
+      const onConfirm = vi.fn();
+      await pickAllAndArchive(onConfirm);
+
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1, 'acct-1:Sent:4'] });
+    });
   });
 
   // Backdrop, header X, and Escape all delegate to the `onClose` prop, which

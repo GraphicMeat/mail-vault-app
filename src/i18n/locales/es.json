@@ -289,6 +289,8 @@
   "bulk.result.keptCopyMismatch_other": "{{count}} correos se quedaron en el servidor porque su copia en tu unidad de copia no coincidía.",
   "bulk.result.keptDeleteFailed_one": "{{count}} correo no se pudo quitar del servidor y se dejó allí.",
   "bulk.result.keptDeleteFailed_other": "{{count}} correos no se pudieron quitar del servidor y se dejaron allí.",
+  "bulk.result.skippedNoFolder_one": "{{count}} correo se omitió porque no se pudo determinar su carpeta.",
+  "bulk.result.skippedNoFolder_other": "{{count}} correos se omitieron porque no se pudo determinar su carpeta.",
   "bulk.result.keptNotArchived_one": "{{count}} correo se quedó en el servidor porque no se pudo verificar en tu bóveda.",
   "bulk.result.keptNotArchived_other": "{{count}} correos se quedaron en el servidor porque no se pudieron verificar en tu bóveda.",
   "bulk.result.removedFromServer": "{{total}} quitados del servidor.",

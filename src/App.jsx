@@ -1726,7 +1726,7 @@ function App() {
                 const accounts = useMailStore.getState().accounts;
                 const account = accounts.find(a => a.id === pendingOperation.accountId);
                 if (!account) return;
-                await bulkOperationManager.resume(pendingOperation, account, () => {});
+                await bulkOperationManager.resume(pendingOperation, account, () => {}, { accounts });
               }}
               className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg
                         hover:bg-mail-accent/90 transition-colors"
