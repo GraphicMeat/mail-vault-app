@@ -4,7 +4,8 @@
  * Premium state comes from the billing profile now — the old Developer toggle
  * that flipped isPaidUser is gone, and the dev override only works against the
  * Vite dev server. A test HOME has no subscription, so this covers the
- * unpaid path: the wizard renders behind the "Premium Feature" overlay.
+ * unpaid path: the settings page is the "Premium Feature" gate and nothing
+ * of the wizard (its steps, its history) is mounted behind it.
  */
 
 import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
@@ -35,17 +36,15 @@ describe('Migration Wizard', function () {
     expect(hasOverlay).toBe(true);
   });
 
-  it('should render the migration wizard steps', async function () {
-    const hasWizard = await browser.execute(() => {
+  it('should mount none of the wizard behind the gate', async function () {
+    const page = await browser.execute(() => {
       const text = document.body.innerText;
-      return text.includes('Source') && text.includes('Destination');
+      return {
+        gate: !!document.querySelector('.settings-feature-gate'),
+        steps: text.includes('Source') && text.includes('Destination'),
+        history: text.includes('Migration History'),
+      };
     });
-    expect(hasWizard).toBe(true);
-  });
-
-  it('should show migration history section', async function () {
-    const hasHistory = await browser.execute(() =>
-      document.body.innerText.includes('Migration History'));
-    expect(hasHistory).toBe(true);
+    expect(page).toEqual({ gate: true, steps: false, history: false });
   });
 });

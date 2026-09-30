@@ -123,6 +123,10 @@ describe('Quick action samples and action sets', function () {
   });
 
   it('a click in the sample reaches no mail', async function () {
+    // The reset above is the radial default, whose actions mount only while the
+    // wheel is open. Archive is an inline button in the favorite-menu layout,
+    // which is what the harness seeds.
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setQuickActionStyle('row', null, { mode: 'favorite-menu' }));
     await openQuickActions();
     await waitForRealSample();
     const uids = (await sample()).rows.map((row) => row.uid);
@@ -136,7 +140,7 @@ describe('Quick action samples and action sets', function () {
       click(rows[0], 'row');
       click(rows[1]?.querySelector('[data-testid="star-toggle"]'), 'star');
       click(rows[2]?.querySelector('input[type="checkbox"]'), 'checkbox');
-      // The row's own quick actions: the default wheel, drawn in place.
+      // The row's own quick actions, drawn in place.
       for (const action of ['archive', 'toggleRead', 'star', 'deleteServer']) {
         click(rows[1]?.querySelector(`[data-quick-action="${action}"]:not(:disabled)`), action);
       }

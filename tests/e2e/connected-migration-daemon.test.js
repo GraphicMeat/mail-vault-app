@@ -462,9 +462,7 @@ describe('Account migration through the daemon (Task 4.10)', function () {
     const frozen1 = await readState();
     expect(frozen1).not.toBeNull();
     expect(frozen1.migrated_emails).toBeLessThan(COUNT_PAUSE_A + FOLDERS_PAUSE_B.length * COUNT_PAUSE_B_EACH);
-    // Folder A's own entry, captured now (before resume) -- this run's own
-    // final state below will not carry folder A at all, see the note past
-    // the resume call.
+    // Folder A's own entry, captured now (before resume).
     const frozenA = frozen1.folder_mappings.find((f) => f.source_path === FOLDER_PAUSE_A);
     expect(frozenA.status).toBe('completed');
     expect(frozenA.migrated).toBe(COUNT_PAUSE_A);
@@ -489,47 +487,20 @@ describe('Account migration through the daemon (Task 4.10)', function () {
       return finalState?.status === 'completed';
     }, { timeout: 60_000, interval: 300, timeoutMsg: 'resumed migration never completed' });
 
-    // `resume_migration` (handlers/migration.rs) filters `folder_mappings`
-    // to `status != "completed"` BEFORE `run_migration` ever spawns, so
-    // folder A is never passed into this second run at all -- confirmed
-    // against that route's own unit test
-    // (`resume_migration_relaunches_only_the_incomplete_folder`: its final
-    // state's `migrated_emails` covers only the resumed folder, and the
-    // already-completed one is absent from `folder_mappings`, not merged
-    // back in). This run's own final state is therefore ONLY the B
-    // folders; folder A not being re-migrated is proven the other way,
-    // below, by its mailbox count staying exactly where it was.
-    expect(finalState.folder_mappings.find((f) => f.source_path === FOLDER_PAUSE_A)).toBeUndefined();
-    // Not asserted: that every one of FOLDERS_PAUSE_B appears in this run's
-    // own `folder_mappings`. A real run of this test hit exactly this:
-    // pause landed cleanly between folders (status: 'paused'), but two of
-    // the ten B folders had ALREADY completed before that point (the same
-    // reason folder A is filtered out above applies to any B folder pause
-    // happened to catch after, not just A) -- `resume_migration`'s
-    // `status != "completed"` filter excludes them from THIS run's state
-    // the same way it excludes A, so a loop asserting all ten are present
-    // threw on the two that were legitimately absent. Which folders those
-    // are is not knowable in advance (it depends on exactly where pause
-    // landed), so the only reliable per-folder proof is the server's own
-    // mailbox count, checked next -- true regardless of whether a given B
-    // folder finished before or after the pause.
-    // Not asserted either: an exact `migrated` count per folder or in total. A
-    // real run of this test showed why: `pause_migration` flips the flag,
-    // but the original task's already-in-flight message batch keeps
-    // draining for a bit (migrated_emails jumped 2 -> 122 in the ~200ms
-    // between confirming folder A done and this test's own next read), and
-    // that original task is never torn down by resume_migration (a fresh
-    // `RunGuard` with its own pause=false token is spawned alongside it,
-    // per `handlers/common.rs`'s per-kind `Vec<RunTokens>`) -- it just sits
-    // blocked forever in its own per-message pause loop. If that lingering
-    // task had already appended a few of one folder's messages before
-    // truly freezing, the resumed run's own dedup (`dest_message_ids`,
-    // fetched fresh per folder) correctly skips them rather than
-    // duplicating -- correct on disk, but it means the resumed run's own
-    // "migrated" tally undercounts by however many the frozen task snuck
-    // in, an amount this test cannot pin down without a fault-injection
-    // hook. The real, unambiguous ground truth is what actually landed on
-    // the server, checked next.
+    // `resume_migration` (handlers/migration.rs) wakes the run still parked in
+    // this daemon (`resume_kind`) instead of rebuilding one from disk, so the
+    // state it keeps writing is that run's own: folder A stays in it as
+    // `completed`, with the count it had before the pause. Folder A not being
+    // re-migrated is also proven the other way, below, by its mailbox count
+    // staying exactly where it was.
+    const finalA = finalState.folder_mappings.find((f) => f.source_path === FOLDER_PAUSE_A);
+    expect(finalA).toBeDefined();
+    expect(finalA.status).toBe('completed');
+    expect(finalA.migrated).toBe(COUNT_PAUSE_A);
+    // Not asserted: an exact `migrated` count per folder or in total, or which
+    // folders were already done when the pause landed. That depends on where
+    // the in-flight batch was when `pause_migration` flipped the flag. The
+    // unambiguous ground truth is what landed on the server, checked next.
 
     await browser.waitUntil(async () => (await mailboxMessageCount(VADER_SERVER, VADER, FOLDER_PAUSE_A)) === COUNT_PAUSE_A, {
       timeout: 20_000, interval: 500, timeoutMsg: `vader's server never showed ${COUNT_PAUSE_A} messages in "${FOLDER_PAUSE_A}"`,
