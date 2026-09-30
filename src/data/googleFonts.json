@@ -1,5 +1,5 @@
 {
- "_note": "Curated Google Fonts families (SIL OFL / Apache). Browsed offline; the daemon downloads a family only on request, and only a family listed here (mailvault_core::google_fonts).",
+ "_note": "Curated Google Fonts families, each under its open font license as Google Fonts serves it. Browsed offline; the daemon downloads a family only on request, and only a family listed here (mailvault_core::google_fonts).",
  "families": [
   {"family": "Roboto", "category": "sans", "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900], "subsets": ["latin", "latin-ext"]},
   {"family": "Open Sans", "category": "sans", "weights": [300, 400, 500, 600, 700, 800], "subsets": ["latin", "latin-ext"]},

@@ -1,7 +1,7 @@
 //! `fonts.*`: Google Fonts on demand, for the app's UI font and signatures.
 //!
 //! - `fonts.download {family}` answers at once (`ready`, `downloading`, or
-//!   `failed` with an `errorCode`) and runs the download on a
+//!   `failed` with an `errorCode` if it could not start) and runs it on a
 //!   `font-download` thread of its own at background QoS, one per family;
 //!   progress and the outcome arrive as `font-download` events.
 //! - `fonts.list` answers the families installed whole plus the ones
@@ -68,9 +68,9 @@ async fn download(state: &Arc<DaemonState>, entry: &'static CatalogueEntry) -> V
     if blocking(root, move |root| gf::read_manifest(&root, entry)).await.flatten().is_some() {
         return json!({ "family": entry.family, "state": "ready" });
     }
-    if !state.net.is_online() {
-        return json!({ "family": entry.family, "state": "failed", "errorCode": "E_FONT_OFFLINE" });
-    }
+    // No offline refusal up front: the user asked for this, and a gate still
+    // closed after a blip must not stop it (`DaemonState::net`). A failure
+    // says offline only if the gate agrees then (`outcome_code`).
     match start(state, entry, Box::new(|| NetFetch::new().map(|f| Box::new(f) as Box<dyn Fetch>))) {
         Ok(_) => json!({ "family": entry.family, "state": "downloading" }),
         Err(e) => {
@@ -113,12 +113,21 @@ fn start(state: &Arc<DaemonState>, entry: &'static CatalogueEntry, make_fetch: M
                 Ok(manifest) => emit(json!({ "family": family, "state": "ready", "bytes": manifest.bytes })),
                 Err(e) => {
                     tracing::warn!("[fonts] {family}: {e}");
-                    emit(json!({ "family": family, "state": "failed", "errorCode": e.code() }));
+                    emit(json!({ "family": family, "state": "failed", "errorCode": outcome_code(&e, state.net.is_online()) }));
                 }
             }
         })
         .map(|_| true)
         .map_err(|e| e.to_string())
+}
+
+/// The code a failed download reports: a network failure while the host is
+/// offline is worded as offline, anything else as what it was.
+fn outcome_code(e: &FontError, online: bool) -> &'static str {
+    match e {
+        FontError::Network(_) if !online => "E_FONT_OFFLINE",
+        other => other.code(),
+    }
 }
 
 fn faces(entry: &CatalogueEntry, files: Vec<(gf::ManifestFile, Vec<u8>)>) -> Value {
@@ -388,6 +397,47 @@ mod tests {
             assert!(manifest.files.iter().any(|f| f.subset == "latin" && f.weight == 400));
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// By hand only (`--ignored --nocapture`): every catalogue family's css2
+    /// request, as `install` makes it, answers with latin faces. Prints the
+    /// families whose weight list css2 refused (they fall back to 400).
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "reaches fonts.googleapis.com once per catalogue family"]
+    async fn every_catalogue_family_is_served() {
+        let (failed, fell_back) = tokio::task::spawn_blocking(|| {
+            let net = NetFetch::new().unwrap();
+            let (mut failed, mut fell_back) = (Vec::new(), Vec::new());
+            for entry in gf::catalogue() {
+                let weights = gf::download_weights(entry);
+                let css = match net.get(&gf::css2_url(&entry.family, &weights), gf::MAX_CSS_BYTES) {
+                    Err(FetchError::Status(400)) => {
+                        fell_back.push(entry.family.clone());
+                        net.get(&gf::css2_url(&entry.family, &[]), gf::MAX_CSS_BYTES).map(|css| (css, vec![400]))
+                    }
+                    other => other.map(|css| (css, weights)),
+                };
+                match css {
+                    Ok((css, weights)) if !gf::parse_css(&String::from_utf8_lossy(&css), &weights).is_empty() => {}
+                    Ok(_) => failed.push(format!("{}: no latin face", entry.family)),
+                    Err(e) => failed.push(format!("{}: {e:?}", entry.family)),
+                }
+            }
+            (failed, fell_back)
+        })
+        .await
+        .unwrap();
+        println!("fell back to 400: {fell_back:?}");
+        println!("failed: {failed:?}");
+        assert!(failed.is_empty(), "{failed:?}");
+    }
+
+    #[test]
+    fn a_network_failure_reads_as_offline_only_while_the_gate_says_so() {
+        assert_eq!(outcome_code(&FontError::Network("dns error".into()), false), "E_FONT_OFFLINE");
+        assert_eq!(outcome_code(&FontError::Network("dns error".into()), true), "E_FONT_NETWORK");
+        assert_eq!(outcome_code(&FontError::Refused(404), false), "E_FONT_REFUSED");
+        assert_eq!(outcome_code(&FontError::Invalid("html".into()), false), "E_FONT_INVALID");
     }
 
     #[tokio::test]
