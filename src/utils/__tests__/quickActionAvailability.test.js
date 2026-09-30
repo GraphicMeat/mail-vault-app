@@ -60,6 +60,17 @@ describe('quickActionAvailability', () => {
     expect(check('selection', { action: 'deleteEverywhere' }).disabled).toBe(false);
   });
 
+  // A vault-only folder's mail is already in the vault and no server holds
+  // it, so an archive (a fetch from the server into the vault) has nothing
+  // to do there. Each surface holds it back its own way.
+  it('offers Archive nowhere in a vault-only folder', () => {
+    expect(check('row', { action: 'archive' }, { localFolder: true }).hidden).toBe(true);
+    expect(check('selection', { action: 'archive' }, { localFolder: true }).disabled).toBe(true);
+    expect(check('reader', { action: 'archive' }, { localFolder: true }).hidden).toBe(true);
+    expect(check('row', { action: 'archive' }).hidden).toBe(false);
+    expect(check('selection', { action: 'archive' }).disabled).toBe(false);
+  });
+
   it('the reader hides a star side only when both sides are configured', () => {
     expect(check('reader', { action: 'unstar' }).hidden).toBe(false);
     expect(check('reader', { action: 'unstar' }, { explicit: { star: true, archive: false } }).hidden).toBe(true);

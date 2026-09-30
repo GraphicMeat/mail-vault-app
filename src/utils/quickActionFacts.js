@@ -51,7 +51,8 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
   const primary = emails.length ? emails.reduce((a, b) => new Date(b.date) > new Date(a.date) ? b : a) : null;
   // Rows of a vault-only folder (an MBOX import kept on this computer): no
   // server holds them, so no server action is offered, and neither is a
-  // purge or unarchive (each would drop the only copy with no bin copy kept).
+  // purge or unarchive (each would drop the only copy with no bin copy kept)
+  // nor an archive (it fetches from a server; the vault already has them).
   const localFolder = emails.some(email => inLocalFolder(email, state));
   const serverBacked = emails.some(email => email.source !== 'local-only');
   const accountIds = resolved ? [...new Set(locations.map(location => location.accountId))] : [];
@@ -108,8 +109,8 @@ export function selectionFacts(keys, rows, pool, archivedIds, state, { backedUp 
   const fullyResolved = rowByKey.size === keys.size && [...keys].every(key => rowByKey.has(key));
   const locations = rows.map(email => resolveEmailLocation(email, state));
   // A selection in a vault-only folder: nothing that needs a server is
-  // offered, and neither is a purge or unarchive. Delete stays, as the delete
-  // workflow's local path into the bin.
+  // offered (archive among them), and neither is a purge or unarchive.
+  // Delete stays, as the delete workflow's local path into the bin.
   const localFolder = rows.some(email => inLocalFolder(email, state));
   const junkPaths = [...new Set(locations.map(location => location ? junkPathOf(state, location.accountId) : null))];
   const { markRead, markUnread, star, unstar } = actionVisibility(rows);

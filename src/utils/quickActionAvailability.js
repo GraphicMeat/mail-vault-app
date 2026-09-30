@@ -78,8 +78,8 @@ const READER_SERVER = ['writable', 'handler'];
 const SELECTION_UNSUPPORTED = { selection: { disable: ['never'] } };
 export const QUICK_ACTION_RULES = {
   archive: {
-    row: { hide: ['has'], disable: ['idle'] },
-    selection: { disable: ['has'] },
+    row: { hide: ['notLocalFolder', 'has'], disable: ['idle'] },
+    selection: { disable: ['has', 'notLocalFolder'] },
     reader: { hide: [...READER_SERVER, 'placed', 'notLocalFolder', 'pairShown', 'localOnlyArchived'], disable: ['idle'] },
   },
   unarchive: {
