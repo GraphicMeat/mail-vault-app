@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-09-30
+
 ### Added
 - **Type "/" in a message for a command menu.** Writing a message or a signature, "/" at the start of a line or after a space opens a menu under the cursor: Emoji, Bulleted list, Numbered list, Quote, Code block and Divider. Keep typing to narrow it, use the arrow keys and Enter (or a click) to pick, Escape to close. Choose Emoji, or type "/emoji", to search emoji by name; "/rocket" finds the emoji straight away. More commands will follow.
 - **Code looks like code in a message, written and read.** Text between backticks and blocks fenced with three backticks were already shown as code while you wrote; now the message carries that look with it (monospace type on a soft grey background), so mail clients that ignore styles still show it as code, and the editor toolbar has a button for inline code beside the code block one. When you read a message, code the sender styled is left as they made it, unstyled code in an HTML message gets the same monospace look, and in a plain-text message backticks and three-backtick blocks are shown as code too.
