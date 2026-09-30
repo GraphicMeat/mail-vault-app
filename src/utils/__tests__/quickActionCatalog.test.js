@@ -48,6 +48,13 @@ describe('describeQuickAction', () => {
     expect(describeOn('row', 'archive').titleLabel).toBeUndefined();
   });
 
+  it('an action that opens follow-up UI keeps focus off its trigger on every surface', () => {
+    for (const surface of ['row', 'selection', 'reader']) {
+      for (const action of ['open', 'reply', 'unsubscribe', 'move']) expect(describeOn(surface, action).restoreFocus, `${surface} ${action}`).toBe(false);
+      expect(describeOn(surface, 'export').restoreFocus, surface).toBe(true);
+    }
+  });
+
   it('tone and destructiveness', () => {
     expect(quickActionTone('deleteEverywhere')).toBe('danger');
     expect(quickActionTone('unarchive')).toBe('positive');

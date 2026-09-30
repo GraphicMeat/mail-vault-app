@@ -14,13 +14,12 @@ export function quickActionTone(action) {
   return action === 'archive' || action === 'unarchive' ? 'positive' : undefined;
 }
 
-// Actions that open a picker, a confirmation or compose: focus goes there,
-// not back to the trigger.
-export const QUICK_ACTION_FOLLOW_UP = {
-  row: ['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage'],
-  selection: ['move', 'snooze', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive'],
-  reader: ['move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'reply', 'replyAll', 'forward', 'replyTemplate', 'open', 'source'],
-};
+// Actions that open a picker, a confirmation, compose or another view: focus
+// goes there, not back to the trigger. The same on every surface.
+export const QUICK_ACTION_FOLLOW_UP = [
+  'move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive',
+  'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage', 'open', 'source',
+];
 
 // A toggle presents itself as the direction it will take: its label, glyph
 // and focus are those of that side. Rows and the selection bar offer Star /
@@ -103,6 +102,6 @@ export function describeQuickAction(surface, entry, facts, ctx) {
     ...quickActionAvailability(surface, entry, facts, ctx),
     tone: quickActionTone(direction),
     isDestructive: DESTRUCTIVE_QUICK_ACTIONS.includes(direction),
-    restoreFocus: !QUICK_ACTION_FOLLOW_UP[surface].includes(direction),
+    restoreFocus: !QUICK_ACTION_FOLLOW_UP.includes(direction),
   };
 }
