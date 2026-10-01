@@ -37,6 +37,9 @@ export function ExplorerView({
 }) {
   const t = useT();
   const pa = usePrivateAttr();
+  // A sender group's key holds the address: the DOM gets it masked, and the
+  // focus check below compares masked to masked.
+  const domKey = useCallback(key => pa(String(key), 'name'), [pa]);
   const storedGrouping = useSettingsStore(s => s.explorerGrouping);
   // A saved view brings its own grouping, and a change made inside it goes
   // back to the view (`onGroupingChange`), never to the settings store:
@@ -132,12 +135,12 @@ export function ExplorerView({
     if (entry.email) onSelectEmail?.(entry.email);
     requestAnimationFrame(() => {
       const target = rootRef.current?.querySelector(`[data-explorer-index="${index}"]`);
-      if (target?.dataset.explorerKey !== String(key)) return;
+      if (target?.dataset.explorerKey !== domKey(key)) return;
       const focusTarget = target?.querySelector('[data-testid="explorer-group-open"]') || target;
       focusTarget?.focus({ preventScroll: true });
       focusTarget?.scrollIntoView?.({ block: 'nearest' });
     });
-  }, [entries, getItemKey, virtualized, virtualizer, onSelectEmail]);
+  }, [entries, getItemKey, virtualized, virtualizer, onSelectEmail, domKey]);
   useEffect(() => {
     const handle = event => step(event.detail);
     window.addEventListener('mailvault:explorer-step', handle);
@@ -223,7 +226,7 @@ export function ExplorerView({
             const group = entry.group;
             const selected = group && entry.emails.every(email => selectedEmailIds.has(getSelectionKey(email)));
             const rememberFocus = () => { focusAnchor.current = { key: item.key, index: item.index }; };
-            const props = { key: item.key, 'data-explorer-index': item.index, 'data-explorer-key': String(item.key),
+            const props = { key: item.key, 'data-explorer-index': item.index, 'data-explorer-key': domKey(item.key),
               onClickCapture: rememberFocus, onFocusCapture: rememberFocus,
               style: virtualized ? { position: 'absolute', top: 0, left: 0, width: '100%', height: item.size, transform: `translateY(${item.start}px)` }
                 : !group ? { position: 'relative', height: rowHeight } : undefined };

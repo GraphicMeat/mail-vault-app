@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
+import { Private } from '../privacy/Private';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
 // Cooldown constants
@@ -498,7 +499,7 @@ export function BillingSettings({ onNavigate }) {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <div className="flex-1 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text">
-                {billingEmail}
+                <Private kind="email">{billingEmail}</Private>
               </div>
               <button onClick={() => refreshSignedIn({ manual: true })} disabled={syncing || cooldownRemaining > 0}
                 className="p-2 text-sm text-mail-text-muted hover:text-mail-accent-text rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50"
@@ -541,7 +542,7 @@ export function BillingSettings({ onNavigate }) {
         {signInNotice && !isSignedIn && (
           <div className="mt-3 p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20">
             <p className="text-xs font-medium text-mail-warning">{signInNotice}</p>
-            {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">{t('settings.billing.checkedEmail', { email: selectedEmail })}</p>}
+            {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">{t('settings.billing.checkedEmail', { email: pa(selectedEmail, 'email') })}</p>}
           </div>
         )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}

@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
+import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 
 // The sub-sections of an account's settings, in tab order.
 const ACCOUNT_SECTIONS = ['profile', 'aliases', 'connection', 'advanced'];
@@ -63,6 +64,8 @@ function SavedBadge({ visible }) {
 
 export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
+  const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   const { removeAccount, activeAccountId, activeMailbox, connectionStatus, connectionError, connectionErrorType, activateAccount } = useAccountStore();
   const {
     signatures,
@@ -398,7 +401,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
               <p className="text-sm">{t('common.noAccountsConfigured')}</p>
             </div>
           ) : (
-            <AccountReorderList accounts={orderedAccounts} selectedAccountId={selectedAccountId} onReorder={setAccountOrder}>
+            <AccountReorderList accounts={orderedAccounts} selectedAccountId={selectedAccountId} onReorder={setAccountOrder} privateKind="email">
               {account => (
                   <button type="button" className="account-settings-account-button"
                     aria-pressed={account.id === selectedAccountId} onClick={() => setSelectedAccountId(account.id)}>
@@ -452,8 +455,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   {getAccountInitial(selectedAccount, getDisplayName(selectedAccountId))}
                 </span>
                 <div className="account-settings-identity-copy">
-                  <h3>{getDisplayName(selectedAccountId) || selectedAccount.name || selectedAccount.email}</h3>
-                  <p>{selectedAccount.email}</p>
+                  <h3><Private kind="name">{getDisplayName(selectedAccountId) || selectedAccount.name || selectedAccount.email}</Private></h3>
+                  <p><Private kind="email">{selectedAccount.email}</Private></p>
                 </div>
                 <SavedBadge visible={autoSaved || saved} />
               </div>
@@ -496,7 +499,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   </label>
                   <input aria-label={isFastmailAccount(selectedAccount) ? t('account.loginAddress') : t('account.emailAddress')}
                     type="text"
-                    value={selectedAccount.email}
+                    value={pa(selectedAccount.email, 'email')}
                     disabled
                     className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                               text-mail-text-muted cursor-not-allowed"
@@ -515,9 +518,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                     value={accountDisplayName}
                     onChange={(e) => setAccountDisplayName(e.target.value)}
                     placeholder={t('settings.accounts.johnDoe')}
-                    className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                    className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                               text-mail-text placeholder-mail-text-muted
-                              focus:border-mail-accent transition-all"
+                              focus:border-mail-accent transition-all`}
                   />
                 </div>
               </div>
@@ -935,7 +938,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   >
                     <div className="bg-mail-danger/5 border border-mail-danger/30 rounded-lg p-4">
                       <p className="text-sm text-mail-text mb-1 font-medium">
-                        {t('settings.accounts.sureRemoveAccount', { email: selectedAccount.email })}
+                        {t('settings.accounts.sureRemoveAccount', { email: pa(selectedAccount.email, 'email') })}
                       </p>
                       <p className="text-sm text-mail-text-muted mb-2">
                         Deletes this account\u2019s emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.

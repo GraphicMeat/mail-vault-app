@@ -96,7 +96,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
       }
       const lost = [...(result.attachmentFailures || []), ...unwritten];
       if (lost.length) {
-        notices.push(t('export.dialog.attachmentsFailed', { count: lost.length, failed: lost.join(', ') }));
+        notices.push(t('export.dialog.attachmentsFailed', { count: lost.length, failed: lost.map(name => pa(name, 'filename')).join(', ') }));
       }
       if (notices.length) setNotice(notices.join(' '));
       else onClose?.();

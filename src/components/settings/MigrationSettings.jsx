@@ -618,9 +618,9 @@ export default function MigrationSettings({ onUpgrade }) {
               <div key={entry.id} className="bg-mail-surface rounded-lg p-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1 text-sm">
-                    <span className="truncate">{entry.sourceEmail}</span>
+                    <span className="truncate"><Private kind="email">{entry.sourceEmail}</Private></span>
                     <ArrowRight size={14} className="text-mail-text-muted flex-shrink-0" />
-                    <span className="truncate">{entry.destEmail}</span>
+                    <span className="truncate"><Private kind="email">{entry.destEmail}</Private></span>
                   </div>
                   <div className="text-xs text-mail-text-muted mt-0.5">
                     {formatDateTime(entry.completedAt)}
@@ -797,7 +797,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             >
               {getAccountInitial(srcAccount)}
             </div>
-            <span className="text-sm text-mail-text">{srcAccount.email}</span>
+            <span className="text-sm text-mail-text"><Private kind="email">{srcAccount.email}</Private></span>
           </div>
         )}
         <ArrowRight size={16} className="text-mail-text-muted flex-shrink-0" />
@@ -809,7 +809,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             >
               {getAccountInitial(dstAccount)}
             </div>
-            <span className="text-sm text-mail-text">{dstAccount.email}</span>
+            <span className="text-sm text-mail-text"><Private kind="email">{dstAccount.email}</Private></span>
           </div>
         )}
         <StatusBadge status={isPaused ? 'paused' : 'running'} />

@@ -11,10 +11,13 @@ import {
   Info, Brain, ChevronDown, ChevronRight, Save, Plus,
 } from 'lucide-react';
 import { t as tr, tErr, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateInputClass } from '../../hooks/usePrivacy';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function AISettings() {
   const t = useT();
+  const privateInput = usePrivateInputClass();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -194,7 +197,7 @@ export function AISettings() {
                 >
                   <div className="flex items-center gap-1.5">
                     {editingRuleId === rule.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    <span className="font-medium text-mail-text">{rule.pattern?.fromDomain || rule.pattern?.fromAddress || rule.pattern?.subjectContains || '?'}</span>
+                    <span className="font-medium text-mail-text">{rule.pattern?.fromDomain || (rule.pattern?.fromAddress ? <Private kind="email">{rule.pattern.fromAddress}</Private> : rule.pattern?.subjectContains) || '?'}</span>
                     <span className="text-mail-text-muted">&rarr; {rule.category || rule.action}</span>
                     {rule.source === 'imported' && (
                       <span className="text-xs px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">{t('settings.ai.imported')}</span>
@@ -217,12 +220,12 @@ export function AISettings() {
                       <label className="space-y-0.5">
                         <span className="text-xs text-mail-text-muted">{t('settings.ai.address')}</span>
                         <input value={editForm.fromAddress} onChange={e => setEditForm(f => ({ ...f, fromAddress: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.userExampleCom')} />
+                          className={`${privateInput} w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text`} placeholder={t('settings.ai.userExampleCom')} />
                       </label>
                       <label className="space-y-0.5">
                         <span className="text-xs text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
                         <input value={editForm.subjectContains} onChange={e => setEditForm(f => ({ ...f, subjectContains: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.keyword')} />
+                          className={`${privateInput} w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text`} placeholder={t('settings.ai.keyword')} />
                       </label>
                       <label className="space-y-0.5">
                         <span className="text-xs text-mail-text-muted">{t('settings.ai.bodyContains')}</span>
@@ -368,12 +371,12 @@ export function AISettings() {
               <label className="space-y-0.5">
                 <span className="text-xs text-mail-text-muted">{t('settings.ai.senderAddress')}</span>
                 <input value={newRuleForm.address} onChange={e => setNewRuleForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.noreply')} />
+                  className={`${privateInput} w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text`} placeholder={t('settings.ai.noreply')} />
               </label>
               <label className="space-y-0.5">
                 <span className="text-xs text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
                 <input value={newRuleForm.subject} onChange={e => setNewRuleForm(f => ({ ...f, subject: e.target.value }))}
-                  className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.keyword')} />
+                  className={`${privateInput} w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text`} placeholder={t('settings.ai.keyword')} />
               </label>
             </div>
           )}

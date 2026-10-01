@@ -113,6 +113,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
     console.warn('[notes] action failed:', err?.message || err);
     setError(t('notes.actionFailed'));
   });
+  // ponytail: the copied link is the real one; a clipboard write is not painted on screen.
   const copyLink = card => run(navigator.clipboard?.writeText(card.links[0]));
   const openFirstLink = card => run(openLink(card.links[0]));
   const star = card => run(store().toggleStar(card));
@@ -214,7 +215,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
         {status === 'ready' && !cards.length && <div className="m-auto max-w-md text-center py-10" data-testid="notes-empty">
           <p className="text-base font-medium">{t('notes.empty')}</p>
           {addresses.length > 0 && <ul className="mt-3 text-sm text-mail-text-muted" data-testid="notes-addresses">
-            {addresses.map(address => <li key={address}>{address}</li>)}
+            {addresses.map(address => <li key={address}><Private kind="email">{address}</Private></li>)}
           </ul>}
         </div>}
         {cards.length > 0 && !columns.length && <p className="text-sm text-mail-text-muted" data-testid="notes-no-matches">{t('notes.noMatches')}</p>}

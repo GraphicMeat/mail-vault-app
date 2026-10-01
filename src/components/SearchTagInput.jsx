@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Clock, Search, User, X } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
-import { usePrivateAttr } from '../hooks/usePrivacy';
+import { usePrivateAttr, usePrivacyActive } from '../hooks/usePrivacy';
 import { registerPopoverLayer } from '../hooks/useDialogA11y';
 import {
   addTags, commitText, formatTag, operatorMenu, parseTag, pickOperator, removeTag, replaceTag, slashQuery,
@@ -10,12 +10,18 @@ import {
 
 const keyPrefix = key => (key === '-' ? '-' : `${key}:`);
 
-/// Privacy mode masks a recipient's value whole; any other tag only where a
-/// name, address or number is found in it.
+/// A tag as privacy mode shows it in an attribute: a recipient's value masked
+/// whole, any other tag only where a name, address or number is found in it.
+/// With masking off the tag is returned exactly as typed.
 const RECIPIENT_KEYS = new Set(['from', 'to']);
-function privateTag(pa, tag) {
-  const { key, value } = parseTag(tag);
-  return RECIPIENT_KEYS.has(key) ? `${keyPrefix(key)}${pa(value, 'name')}` : pa(tag, 'text');
+export function usePrivateTag() {
+  const pa = usePrivateAttr();
+  const masking = usePrivacyActive();
+  return tag => {
+    if (!masking) return tag;
+    const { key, value } = parseTag(tag);
+    return RECIPIENT_KEYS.has(key) ? `${keyPrefix(key)}${pa(value, 'name')}` : pa(tag, 'text');
+  };
 }
 
 /// A tag as the chip shows it: the operator muted, its value without quotes.
@@ -65,6 +71,7 @@ export function SearchTagInput({
 }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const privateTag = usePrivateTag();
   const listId = useId();
   const rootRef = useRef(null);
   const rowRef = useRef(null);
@@ -277,8 +284,8 @@ export function SearchTagInput({
                   ref={node => { chipRefs.current[index] = node; }}
                   type="button"
                   data-testid="search-tag-text"
-                  aria-label={t('search.tags.edit', { tag: privateTag(pa, tag) })}
-                  title={privateTag(pa, tag)}
+                  aria-label={t('search.tags.edit', { tag: privateTag(tag) })}
+                  title={privateTag(tag)}
                   onClick={() => {
                     const { key, value } = parseTag(tag);
                     startEditing({ index, key, text: key ? value : tag, isNew: false });
@@ -292,7 +299,7 @@ export function SearchTagInput({
                   type="button"
                   tabIndex={-1}
                   data-testid="search-tag-remove"
-                  aria-label={t('search.tags.remove', { tag: privateTag(pa, tag) })}
+                  aria-label={t('search.tags.remove', { tag: privateTag(tag) })}
                   onClick={() => {
                     onTagsChange(removeTag(tags, index));
                     focusInput();

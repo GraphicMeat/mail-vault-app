@@ -104,9 +104,9 @@ export default function SenderTimeline({ lanes = [], query, onQueryChange, onSel
                 </g>)}
               </svg>
               {marks.map((mark, i) => {
-                const label = mark.key ? t('insights.chart.messageLabel', { address: lane.address,
+                const label = mark.key ? t('insights.chart.messageLabel', { address: pa(lane.address, 'email'),
                   date: new Intl.DateTimeFormat(chartLocale(), { dateStyle: 'long', timeStyle: 'short', timeZone: query.timeZone }).format(Date.parse(mark.at)), direction: t(`insights.chart.${mark.direction}`) })
-                  : t('insights.chart.bucketLabel', { address: lane.address, start: formatDate(mark.bucket.startDate), end: formatDate(mark.bucket.endDate), received: mark.received, sent: mark.sent });
+                  : t('insights.chart.bucketLabel', { address: pa(lane.address, 'email'), start: formatDate(mark.bucket.startDate), end: formatDate(mark.bucket.endDate), received: mark.received, sent: mark.sent });
                 return <button type="button" key={mark.key || `${mark.startDate}-${i}`} className="insights-timeline-hit" aria-label={label} title={label}
                   style={{ left: `${position(mark.time)}%` }} onClick={() => select(lane, mark)} />;
               })}

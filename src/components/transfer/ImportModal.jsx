@@ -3,6 +3,7 @@ import { AlertTriangle, FileKey } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 import { getAccounts } from '../../services/db';
 import { decryptTransfer, planImport, applyImport } from '../../services/workflows/transferAccounts';
 import { transferErrorKey } from '../../services/transfer/transferErrors';
@@ -138,7 +139,7 @@ export function ImportModal({ onClose, reload = reloadWindow }) {
                 <label key={row.fileId} className={`flex items-center gap-2 text-sm ${row.alreadyAdded ? 'text-mail-text-muted' : 'text-mail-text'}`}>
                   <input type="checkbox" className="accent-mail-accent" disabled={row.alreadyAdded}
                     checked={!row.alreadyAdded && selected.has(row.fileId)} onChange={() => toggle(row.fileId)} />
-                  <span className="truncate">{row.email}</span>
+                  <span className="truncate"><Private kind="email">{row.email}</Private></span>
                   {row.alreadyAdded && <span className="ml-auto flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">
                     {t('settings.transfer.alreadyAdded')}
                   </span>}

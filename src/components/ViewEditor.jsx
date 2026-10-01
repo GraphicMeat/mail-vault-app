@@ -9,6 +9,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useUnsavedStore } from '../stores/unsavedStore';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
+import { usePrivateTag } from './SearchTagInput';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { TypeaheadChips } from './ui/TypeaheadChips';
@@ -88,6 +89,8 @@ const dropTargetAt = (event, root) => {
 /// a full page means there may be more, fetched as the list is scrolled.
 function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest, pageSize, minChars = 1 }) {
   const t = useT();
+  // A word like `from:ann@x.test` names someone: masked like a search tag.
+  const privateTag = usePrivateTag();
   const root = useRef(null);
   const [suggestions, setSuggestions] = useState([]);
   /// The text being paged, how far it got, and whether a page is in flight.
@@ -193,8 +196,8 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
             <span className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}${isCarried(g, i) ? ' is-dragging' : ''}`}
               data-drop={`w:${g}:${i}`} title={t('views.query.dragHint')}
               onPointerDown={startDrag({ kind: 'word', g, i }, key)}>
-              {key}
-              <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${key}`}
+              {privateTag(key)}
+              <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${privateTag(key)}`}
                 onPointerDown={event => event.stopPropagation()}
                 onClick={() => setGroups(current => removeWord(current, g, i))}>
                 <X size={12} aria-hidden="true" />
@@ -227,7 +230,7 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
     <p id={`${prefix}-hint`} className="view-query-hint">{hint}</p>
     {ghost && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
       data-testid={`${prefix}-ghost`} style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
-      <span>{ghost.label}</span>
+      <span>{privateTag(ghost.label)}</span>
     </div>, document.body)}
   </div>;
 }

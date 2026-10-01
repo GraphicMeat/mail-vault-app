@@ -4,9 +4,12 @@ import { GripVertical } from 'lucide-react';
 import { useT } from '../../i18n';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 
-export function AccountReorderList({ accounts, selectedAccountId, onReorder, children, labels }) {
+// `privateKind`: the rows are people (accounts), masked in privacy mode. The
+// same list orders views and quick actions, whose labels name no one.
+export function AccountReorderList({ accounts, selectedAccountId, onReorder, children, labels, privateKind = null }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const shown = label => (privateKind ? pa(label, privateKind) : label);
   const instructionsId = useId();
   const listRef = useRef(null);
   const pointerRef = useRef(null);
@@ -141,7 +144,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
         data-drop-before={drag?.overList && drag.beforeId === account.id || undefined}
         className={`account-settings-account ${account.id === selectedAccountId ? 'account-settings-account-selected' : ''} ${drag?.id === account.id ? 'is-dragging' : ''}`}>
         {accounts.length > 1 && <button type="button" className="account-settings-drag-handle"
-          aria-label={labels?.reorder?.(account.email) || t('settings.accounts.reorderAccount', { email: pa(account.email, 'email') })}
+          aria-label={labels?.reorder?.(shown(account.email)) || t('settings.accounts.reorderAccount', { email: shown(account.email) })}
           aria-describedby={instructionsId} title={labels?.instructions || t('settings.accounts.reorderInstructions')}
           onPointerDown={event => startDrag(event, account)} onPointerMove={moveDrag}
           onPointerUp={finishDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}
@@ -154,7 +157,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
     <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
     {drag && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
       style={{ left: drag.x + 12, top: drag.y + 12 }}>
-      <GripVertical size={16} /><span>{drag.email}</span>
+      <GripVertical size={16} /><span>{shown(drag.email)}</span>
     </div>, document.body)}
   </>;
 }

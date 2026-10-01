@@ -533,6 +533,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         { label: t('viewer.copy'), action: () => doc.execCommand('copy') },
         ...(link ? [{
           label: t('viewer.copyLink'),
+          // ponytail: copies the real address; a clipboard write is not painted on screen.
           action: () => navigator.clipboard.writeText(link.href)
             .catch(err => console.error('Failed to copy link:', err)),
         }] : []),

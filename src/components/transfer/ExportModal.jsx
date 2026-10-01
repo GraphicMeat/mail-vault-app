@@ -3,6 +3,7 @@ import { AlertTriangle, Check } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 import { exportTransfer } from '../../services/workflows/transferAccounts';
 import { transferErrorKey, TRANSFER_PASSWORD_MIN } from '../../services/transfer/transferErrors';
 import { TRANSFER_INPUT } from './transferStyles';
@@ -69,7 +70,7 @@ export function ExportModal({ accounts, onClose }) {
           {accounts.map(a => (
             <label key={a.id} className="flex items-center gap-2 text-sm text-mail-text">
               <input type="checkbox" className="accent-mail-accent" checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
-              <span className="truncate">{a.email}</span>
+              <span className="truncate"><Private kind="email">{a.email}</Private></span>
             </label>
           ))}
         </div>

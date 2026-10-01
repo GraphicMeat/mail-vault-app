@@ -5,6 +5,8 @@ import {useMailStore} from '../../stores/mailStore';
 import {useSettingsStore} from '../../stores/settingsStore';
 import {Button} from '../ui/Button';
 import {useT,getLocale} from '../../i18n';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import SenderMap from './SenderMap';
 import SenderTimeline from './SenderTimeline';
 import ActivityCalendar from './ActivityCalendar';
@@ -16,6 +18,7 @@ import '../../styles/insights.css';
 const locale=()=>getLocale()==='zh-Hans'?'zh-CN':getLocale();
 export default function InsightsPage({onClose,onComposeReply}) {
   const t = useT();
+  const pa = usePrivateAttr();
   const state=useInsightsStore();
   const accounts=useMailStore(s=>s.accounts);
   const sendAs=useSettingsStore(s=>s.sendAsAddresses);
@@ -61,7 +64,7 @@ export default function InsightsPage({onClose,onComposeReply}) {
       <div className="insights-toolbar">
         <label><span>{t('insights.accounts')}</span><select data-testid="insights-accounts" value={preferences.accountIds?.[0] || accounts[0]?.id || ''}
           onChange={e=>state.setQuery({accountIds:e.target.value ? [e.target.value] : []})}>
-          {accounts.map(a=><option key={a.id} value={a.id}>{a.email}</option>)}</select></label>
+          {accounts.map(a=><option key={a.id} value={a.id}>{pa(a.email,'email')}</option>)}</select></label>
         <label><span>{t('insights.range')}</span><select data-testid="insights-range-preset" value={preferences.range || '12m'} onChange={e=>state.setQuery({range:e.target.value,...(e.target.value==='custom'?{startDate:query.startDate,endDate:query.endDate}:{})})}>
           <option value="30d">{t('insights.range30')}</option><option value="90d">{t('insights.range90')}</option><option value="12m">{t('insights.rangeYear')}</option><option value="custom">{t('insights.custom')}</option>
         </select></label>
@@ -86,7 +89,7 @@ export default function InsightsPage({onClose,onComposeReply}) {
         {coverage?.status==='stale' && <p>{t('insights.stale')}</p>}
         <details><summary>{t('insights.coverageDetails')}</summary><p>{t('insights.serverUnknown')}</p>
           {coverage?.updatedAt && <p>{t('insights.updated',{date:new Date(coverage.updatedAt).toLocaleString(locale())})}</p>}
-          {coverage?.folders?.map((folder,i)=><p key={`${folder.accountId}:${folder.mailbox}:${i}`}><b>{accounts.find(a=>a.id===folder.accountId)?.email} · {folder.mailbox}</b><br/>{t('insights.coverageFolder',{cached:folder.cachedHeaders,known:folder.knownServerMessages ?? t('insights.unknown')})}</p>)}
+          {coverage?.folders?.map((folder,i)=><p key={`${folder.accountId}:${folder.mailbox}:${i}`}><b><Private kind="email">{accounts.find(a=>a.id===folder.accountId)?.email}</Private> · {folder.mailbox}</b><br/>{t('insights.coverageFolder',{cached:folder.cachedHeaders,known:folder.knownServerMessages ?? t('insights.unknown')})}</p>)}
         </details>
         {result?.unknownDateCount>0 && <Button variant="link" size="xs" disabled={status!=='ready'} onClick={()=>select({startDate:null,endDate:null})}>{t('insights.unknownDates',{count:result.unknownDateCount})}</Button>}
         {result?.fallbackDateCount>0 && <p>{t('insights.fallbackDates',{count:result.fallbackDateCount})}</p>}
@@ -96,7 +99,7 @@ export default function InsightsPage({onClose,onComposeReply}) {
       <div className="insights-tabs" role="tablist" ref={tabs} aria-label={t('insights.views')} onKeyDown={switchTab}>
         {['map','timeline','activity'].map(id=><button type="button" role="tab" id={`insights-tab-${id}`} aria-controls={`insights-panel-${id}`} aria-selected={tab===id} tabIndex={tab===id?0:-1} key={id} data-testid={`insights-tab-${id}`} onClick={()=>state.setTab(id)}>{t(`insights.${id}`)}</button>)}
       </div>
-      {query.senderAddress && <Button variant="subtle" size="sm" onClick={()=>state.selectSender(null)} data-testid="insights-clear-sender" title={t('insights.clearSender')}>{query.senderAddress}<X size={14}/>{t('insights.clearSender')}</Button>}
+      {query.senderAddress && <Button variant="subtle" size="sm" onClick={()=>state.selectSender(null)} data-testid="insights-clear-sender" title={t('insights.clearSender')}><Private kind="email">{query.senderAddress}</Private><X size={14}/>{t('insights.clearSender')}</Button>}
       <div role="tabpanel" id={`insights-panel-${tab}`} aria-labelledby={`insights-tab-${tab}`} className="insights-content" aria-busy={busy} inert={status!=='ready'?'':undefined}>
         {result && <>
           {tab==='map' && <SenderMap senders={result.senders} endAt={`${query.endDate}T23:59:59`} selectedAddress={query.senderAddress} onSelect={async address=>{returnFocus.current=document.activeElement;await state.selectSender(address);const current=useInsightsStore.getState();if(current.isOpen && current.query.senderAddress===address && current.status==='ready')await current.loadMessages({senderAddress:address});}}/>}

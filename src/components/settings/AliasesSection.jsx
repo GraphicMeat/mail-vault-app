@@ -10,7 +10,7 @@ import { textToHtml, htmlToText } from '../RichTextEditor';
 import { signatureHasContent } from '../../utils/signatureImages';
 import { useT } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
-import { usePrivateAttr } from '../../hooks/usePrivacy';
+import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 
 // Settings > Accounts > Aliases: every address one account sends from. The
 // login comes first and always stays; the aliases after it are the settings
@@ -68,6 +68,7 @@ export function _resetAliasesSection() {
 export function AliasesSection({ account, displayName = '' }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   const accountId = account.id;
   const login = account.email || '';
   const stored = useSettingsStore(s => s.aliases?.[accountId]) || NO_ALIASES;
@@ -225,7 +226,7 @@ export function AliasesSection({ account, displayName = '' }) {
               aria-invalid={addError ? 'true' : undefined}
               aria-describedby={addError ? errorId : undefined}
               data-testid="alias-add-input"
-              className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all" />
+              className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
           </div>
           <div className="alias-add-name">
             <label htmlFor={`${ids}-add-name`} className="block text-sm font-medium text-mail-text mb-2">{t('settings.accounts.aliases.addName')}</label>
@@ -233,7 +234,7 @@ export function AliasesSection({ account, displayName = '' }) {
               value={newName} onChange={event => setNewName(event.target.value)}
               placeholder={pa(accountName, 'name')}
               data-testid="alias-add-name-input"
-              className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all" />
+              className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
           </div>
           <Button type="submit" variant="primary" size="lg" disabled={!newAddress.trim()} data-testid="alias-add-btn">
             <Plus size={16} aria-hidden="true" />
@@ -301,11 +302,11 @@ function AliasRow({ accountId, alias, radioName, isDefault, placeholder, onDefau
       <div className="alias-row-actions">
         <Button variant="ghost" size="sm" onClick={onVerify} data-testid="alias-verify-btn"
           title={t('settings.accounts.sendTestMessageAddress')}
-          aria-label={t('settings.accounts.aliases.verifyFor', { address: alias.address })}>
+          aria-label={t('settings.accounts.aliases.verifyFor', { address: pa(alias.address, 'email') })}>
           {t('settings.accounts.verify')}
         </Button>
         <Button variant="ghost" size="sm" onClick={onRemove} data-testid="alias-remove-btn"
-          aria-label={t('settings.accounts.aliases.removeFor', { address: alias.address })}>
+          aria-label={t('settings.accounts.aliases.removeFor', { address: pa(alias.address, 'email') })}>
           <Trash2 size={14} aria-hidden="true" />
           {t('common.remove')}
         </Button>
@@ -319,6 +320,7 @@ function AliasRow({ accountId, alias, radioName, isDefault, placeholder, onDefau
  * on leaving the field, and when the row goes away with a change pending.
  */
 function AliasNameField({ id, accountId, alias, placeholder }) {
+  const privateInput = usePrivateInputClass();
   const [value, setValue] = useState(alias.name || '');
   const latest = useRef({ value, saved: alias.name || '' });
   latest.current = { value, saved: alias.name || '' };
@@ -349,7 +351,7 @@ function AliasNameField({ id, accountId, alias, placeholder }) {
       }}
       onBlur={save}
       data-testid="alias-name-input"
-      className="alias-name-input w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all" />
+      className={`${privateInput} alias-name-input w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
   );
 }
 
@@ -363,6 +365,7 @@ const signatureHtmlOf = signature => signature?.html || textToHtml(signature?.te
  */
 function AliasSignature({ accountId, alias }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const own = !!alias.signature;
   const useOwn = () => {
     const account = useSettingsStore.getState().getSignature(accountId);
@@ -373,7 +376,7 @@ function AliasSignature({ accountId, alias }) {
     <div className="alias-signature mt-3" data-testid="alias-signature">
       <div className="account-settings-choice-row">
         <span className="text-xs text-mail-text-muted">{t('settings.accounts.aliases.signatureLabel')}</span>
-        <div className="account-settings-choice-group" role="group" aria-label={t('settings.accounts.aliases.signatureFor', { address: alias.address })}>
+        <div className="account-settings-choice-group" role="group" aria-label={t('settings.accounts.aliases.signatureFor', { address: pa(alias.address, 'email') })}>
           <button type="button" aria-pressed={!own} data-testid="alias-signature-account" onClick={useAccount}>
             {t('settings.accounts.aliases.signatureAccount')}
           </button>

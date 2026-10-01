@@ -6,6 +6,7 @@ import * as api from '../../services/api';
 import { ensureFreshToken } from '../../services/authUtils';
 import { t, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
+import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 
 /**
  * Verify a send-as address by actually sending a test message from it.
@@ -21,6 +22,8 @@ import { T } from '../../i18n/T.jsx';
  */
 export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName, onClose }) {
   const t = useT();
+  const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   const [recipient, setRecipient] = useState(account?.email || '');
   const [status, setStatus] = useState('idle'); // idle | sending | ok | error
   const [message, setMessage] = useState('');
@@ -45,7 +48,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
         null
       );
       setStatus('ok');
-      setMessage(t('settings.sendAs.acceptedCheckTestMessage', { account: account.smtpHost || 'The server', sendAsAddress, recipient: recipient.trim() }));
+      setMessage(t('settings.sendAs.acceptedCheckTestMessage', { account: account.smtpHost || 'The server', sendAsAddress: pa(sendAsAddress, 'email'), recipient: pa(recipient.trim(), 'email') }));
     } catch (err) {
       setStatus('error');
       setMessage(typeof err === 'string' ? err : (err?.message || 'Send failed'));
@@ -61,7 +64,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
       description={
         <>
           <T k="settings.sendAs.sendsTestMessageSignedInAs"
-             vars={{ address: sendAsAddress, email: account?.email }}
+             vars={{ address: pa(sendAsAddress, 'email'), email: pa(account?.email, 'email') }}
              parts={[(s) => <span className="font-mono text-mail-text">{s}</span>,
                      (s) => <span className="font-mono">{s}</span>]} />
         </>
@@ -90,8 +93,8 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
             onChange={(e) => { setRecipient(e.target.value); setStatus('idle'); }}
             placeholder={t('settings.sendAs.exampleCom')}
             data-testid="send-as-verify-recipient"
-            className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                      text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all"
+            className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`}
           />
 
           {status !== 'idle' && status !== 'sending' && (

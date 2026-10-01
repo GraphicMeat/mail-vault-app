@@ -77,6 +77,15 @@ export function usePrivateSegments(value, kind = 'text') {
   }, [active, value, kind, version]);
 }
 
+/**
+ * The class an editable person field (recipients, an address being typed)
+ * carries while masking: its value cannot be swapped for filler without
+ * breaking the typing, so only its paint is hidden (ruling R14).
+ */
+export function usePrivateInputClass() {
+  return usePrivacyActive() ? 'mv-private-input' : '';
+}
+
 /** For title / aria-label / alt: returns the attribute value to render. */
 export function usePrivateAttr() {
   const active = usePrivacyActive();

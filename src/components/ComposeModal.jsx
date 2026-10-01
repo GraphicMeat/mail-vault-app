@@ -19,7 +19,7 @@ import { composeIdentities, composeSenderName, composeSignature, resolveInitialC
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
 import { Private } from './privacy/Private';
-import { usePrivateAttr } from '../hooks/usePrivacy';
+import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
@@ -48,6 +48,7 @@ const viewportBounds = () => ({ width: window.innerWidth - 32, height: window.in
 // Recipient input row with inline autocomplete + contacts-popover button.
 function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
   const inputRef = useRef(null);
+  const privateInput = usePrivateInputClass();
   return (
     <div className="flex items-center gap-2 relative">
       <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{label}</label>
@@ -61,8 +62,8 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                    outline-none text-sm py-1"
+          className={`${privateInput} flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
+                    outline-none text-sm py-1`}
         />
         <ContactsPickerButton value={value} onChange={setValue} fieldName={name.toUpperCase()} boostAccountId={boostAccountId} />
       </div>
@@ -122,6 +123,7 @@ const NO_ALIASES = {};
 export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
   // radial reply does (the late-fill effect below).
@@ -1499,8 +1501,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 }}
                 placeholder={t('compose.subject')}
                 spellCheck={spellcheckEnabled}
-                className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                          outline-none text-sm py-1"
+                className={`${privateInput} flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
+                          outline-none text-sm py-1`}
               />
             </div>
           </div>

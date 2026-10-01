@@ -28,11 +28,13 @@ import { formatDateTime } from '../../utils/dateFormat';
 import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, useT  } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { formatCount } from '../../utils/formatCount';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const priceBlurb = usePremiumPriceBlurb();
   // A native confirm() can only offer OK/Cancel, so the button on the most
   // destructive action in the app could not name what it was about to erase.
@@ -491,7 +493,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       {accounts
                         .filter(a => !hiddenAccounts?.[a.id])
                         .map(a => (
-                          <option key={a.id} value={a.email}>{a.email}</option>
+                          <option key={a.id} value={a.email}>{pa(a.email, 'email')}</option>
                         ))
                       }
                     </select>

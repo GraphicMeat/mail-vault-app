@@ -267,7 +267,7 @@ function SnapshotBrowser({ accountId }) {
       {/* Folder sidebar */}
       <div className="snapshot-folders w-48 bg-mail-surface border-r border-mail-border flex flex-col shrink-0">
         <div className="p-3 border-b border-mail-border">
-          <p className="text-xs text-mail-text-muted break-words">{activeSnapshot?.account_email}</p>
+          <p className="text-xs text-mail-text-muted break-words"><Private kind="email">{activeSnapshot?.account_email}</Private></p>
         </div>
         <nav className="flex-1 p-2 overflow-y-auto">
           {mailboxList.map(({ name, totalEmails }) => (

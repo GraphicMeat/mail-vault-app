@@ -3,6 +3,8 @@ import { ArrowUpRight, ArrowDownLeft, Pause, Play, Copy, Check } from 'lucide-re
 import { Button } from '../ui/Button';
 import { SettingsPageLayout, SettingsSection } from '../ui/SettingsForm';
 import { useT, getLocale } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { formatBytes } from '../../utils/formatBytes';
 import { compareNames } from '../../utils/collation';
 import { formatTime, formatDateTime } from '../../utils/dateFormat';
@@ -66,7 +68,7 @@ const Row = React.memo(function Row({ e }) {
       <td className={`${CELL} tabular-nums`} data-testid="net-port">{dns ? '' : e.port}</td>
       <td className={CELL}>{purposeLabel(t, e.purpose)}</td>
       <td className={`${CELL} ${e.account ? 'text-mail-text-muted' : 'text-mail-text-muted/70 italic'}`} data-testid="net-account">
-        {e.account || t('netActivity.noAccount')}
+        {e.account ? <Private kind="email">{e.account}</Private> : t('netActivity.noAccount')}
       </td>
       <td className={`${CELL} tabular-nums text-right`}>{formatBytes(e.bytesUp)}</td>
       <td className={`${CELL} tabular-nums text-right`}>{formatBytes(e.bytesDown)}</td>
@@ -80,6 +82,7 @@ const Row = React.memo(function Row({ e }) {
 
 export function NetworkActivity() {
   const t = useT();
+  const pa = usePrivateAttr();
   const rows = useNetActivityStore(visibleEvents);
   const paused = useNetActivityStore(s => s.frozen !== null);
   const loadError = useNetActivityStore(s => s.loadError);
@@ -104,6 +107,7 @@ export function NetworkActivity() {
 
   const copy = async () => {
     try {
+      // ponytail: the copied log keeps real account addresses; a clipboard write is not painted on screen.
       await navigator.clipboard.writeText(copyText(shown, t('netActivity.noAccount')));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -142,7 +146,7 @@ export function NetworkActivity() {
           </select>
           <select aria-label={t('netActivity.account')} value={query.account} onChange={e => setQuery({ account: e.target.value })} className={SELECT}>
             <option value="">{t('netActivity.allAccounts')}</option>
-            {accounts.map(a => <option key={a} value={a}>{a}</option>)}
+            {accounts.map(a => <option key={a} value={a}>{pa(a, 'email')}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-3 gap-2 mb-2" data-testid="net-summary">

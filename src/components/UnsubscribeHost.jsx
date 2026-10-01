@@ -5,6 +5,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Toast } from './Toast';
 import { useUnsubscribeStore } from '../stores/unsubscribeStore';
 import { useT } from '../i18n/index.js';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 /**
  * The confirm dialog and the outcome toast for every unsubscribe surface
@@ -13,11 +14,12 @@ import { useT } from '../i18n/index.js';
  */
 export function UnsubscribeHost() {
   const t = useT();
+  const pa = usePrivateAttr();
   const pending = useUnsubscribeStore(s => s.pending);
   const busy = useUnsubscribeStore(s => s.busy);
   const result = useUnsubscribeStore(s => s.result);
   const { confirm, cancel, dismissResult } = useUnsubscribeStore.getState();
-  const sender = result?.sender;
+  const sender = pa(result?.sender, 'email');
   const message = result?.kind === 'done' ? t('unsubscribe.done', { sender })
     : result?.kind === 'openedMailto' ? t('unsubscribe.openedMailto', { sender })
       : result?.kind === 'openedBrowser' ? t('unsubscribe.openedBrowser', { sender })
@@ -28,7 +30,7 @@ export function UnsubscribeHost() {
       onClose={cancel}
       onConfirm={confirm}
       loading={busy}
-      title={t('unsubscribe.confirmTitle', { sender: pending?.name || pending?.sender || '' })}
+      title={t('unsubscribe.confirmTitle', { sender: pa(pending?.name || pending?.sender || '', 'name') })}
       description={t('unsubscribe.confirmBody')}
       confirmLabel={t('unsubscribe.action')}
       cancelLabel={t('common.cancel')}

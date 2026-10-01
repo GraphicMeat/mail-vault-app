@@ -1767,3 +1767,5 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
 
 /* Privacy mode. The text under the blur is already filler. */
 .mv-private { filter: blur(4px); user-select: none; }
+/* A person field the user types into keeps its value; only its paint hides. */
+.mv-private-input { -webkit-text-security: disc; }

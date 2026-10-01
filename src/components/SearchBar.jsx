@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../i18n/index.js';
 import { T } from '../i18n/T.jsx';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 const LOCATION_OPTIONS = [
   { id: 'all', labelKey: 'search.location.all', icon: Layers },
@@ -45,6 +46,7 @@ const LOCATION_OPTIONS = [
 
 export function SearchBar({ autoFocus = false }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const searchQuery = useSearchStore(s => s.searchQuery);
   const searchFilters = useSearchStore(s => s.searchFilters);
   const searchActive = useSearchStore(s => s.searchActive);
@@ -294,7 +296,7 @@ export function SearchBar({ autoFocus = false }) {
 
   const getFilterLabel = (filter) => {
     switch (filter.type) {
-      case 'sender': return t('search.from', { filter: filter.value });
+      case 'sender': return t('search.from', { filter: pa(filter.value, 'email') });
       case 'folder': return t('search.in', { filter: filter.value });
       case 'dateRange': return t('search.date', { filter: filter.value });
       case 'hasAttachments': return t('chat.topics.hasAttachments');

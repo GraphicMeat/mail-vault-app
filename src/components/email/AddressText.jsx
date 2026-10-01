@@ -53,6 +53,8 @@ function linked(seg, i, accountId, readOnly, masked, show) {
     <a
       key={i}
       href={masked && mailto ? undefined : seg.href}
+      // Without its href a masked mailto is no longer a link to the keyboard.
+      {...(masked && mailto ? { role: 'link', tabIndex: 0, onKeyDown: e => { if (e.key === 'Enter') e.currentTarget.click(); } } : {})}
       // Inherits the body's colour on purpose: these sit on the message
       // surface, which is white or near-black depending on the email theme,
       // and no fixed link colour reads well on both. The underline is the

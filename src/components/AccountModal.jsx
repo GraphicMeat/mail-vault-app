@@ -10,6 +10,8 @@ import { describeConnectionError } from '../utils/connectionError';
 import { normalizeEmailIdentity } from '../utils/emailIdentity';
 import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = () => ({
@@ -141,6 +143,8 @@ function guessServerSettings(email) {
 
 export function AccountModal({ onClose, onSuccess }) {
   const t = useT();
+  const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   const titleId = useId();
   const { addAccount } = useAccountStore();
 
@@ -446,7 +450,7 @@ export function AccountModal({ onClose, onSuccess }) {
       // the same inbox there, so a byte comparison would reject correct
       // sign-ins (review: task-B2-review.md, "Important"). Fix round 1.
       if (tokenData.email && normalizeEmailIdentity(tokenData.email) !== normalizeEmailIdentity(userEnteredEmail)) {
-        setError(t('account.oauthEmailMismatch', { typed: userEnteredEmail, signedIn: tokenData.email }));
+        setError(t('account.oauthEmailMismatch', { typed: pa(userEnteredEmail, 'email'), signedIn: pa(tokenData.email, 'email') }));
         return;
       }
 
@@ -658,10 +662,10 @@ export function AccountModal({ onClose, onSuccess }) {
                       onChange={handleInputChange}
                       placeholder={t('account.outlookCom')}
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      className={`${privateInput} w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text placeholder-mail-text-muted
                                 focus:border-mail-accent focus:ring-1 focus:ring-mail-accent
-                                transition-all"
+                                transition-all`}
                     />
                   </div>
                 </div>
@@ -750,7 +754,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <div>
                         <span className="text-mail-text font-medium">{t('account.providerAccountConnected', { provider: ({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider') })}</span>
                         {formData.email && (
-                          <span className="text-mail-text-muted ml-1">({formData.email})</span>
+                          <span className="text-mail-text-muted ml-1">(<Private kind="email">{formData.email}</Private>)</span>
                         )}
                       </div>
                     </div>
@@ -793,10 +797,10 @@ export function AccountModal({ onClose, onSuccess }) {
                       onChange={handleInputChange}
                       placeholder={isFastmail ? 'you@fastmail.com' : 'you@example.com'}
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      className={`${privateInput} w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text placeholder-mail-text-muted
                                 focus:border-mail-accent focus:ring-1 focus:ring-mail-accent
-                                transition-all"
+                                transition-all`}
                     />
                   </div>
                 </div>
@@ -995,9 +999,9 @@ export function AccountModal({ onClose, onSuccess }) {
                             count: connectionCheck.messageCount,
                             messages: formatCount(connectionCheck.messageCount),
                             host: connectionCheck.host,
-                            address: connectionCheck.fromAddress,
+                            address: pa(connectionCheck.fromAddress, 'email'),
                           })
-                          : t('account.connectionSummary', { host: connectionCheck.host, address: connectionCheck.fromAddress })}
+                          : t('account.connectionSummary', { host: connectionCheck.host, address: pa(connectionCheck.fromAddress, 'email') })}
                       </p>
                     )}
                   </div>

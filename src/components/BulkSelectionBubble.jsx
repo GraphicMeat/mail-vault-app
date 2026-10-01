@@ -5,6 +5,7 @@ import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 import { formatCount } from '../utils/formatCount';
 
 /**
@@ -68,7 +69,7 @@ export function BulkSelectionBubble() {
             >
               <ListChecks size={15} className="text-mail-accent-text flex-shrink-0" />
               <span className="text-sm text-mail-text whitespace-nowrap">
-                <span className="text-mail-text-muted">{email}</span>
+                <span className="text-mail-text-muted"><Private kind="email">{email}</Private></span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
                 <span className="text-mail-text-muted">{decodeImapUtf7(folder)}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
