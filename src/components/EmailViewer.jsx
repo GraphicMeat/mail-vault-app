@@ -69,6 +69,7 @@ import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
+import { accountIdsOf } from '../services/aiClient';
 import { replyTarget } from '../utils/replyTarget';
 import { htmlToText, textToHtml } from './RichTextEditor';
 import { openCompose } from '../utils/composeOpener';
@@ -913,6 +914,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           <div className="px-3 pb-3">
             <AiComposeActions
               actions={['summarize']}
+              accountIds={accountIdsOf([selectedEmail], activeAccountId)}
               getThreadText={() => selectedEmail.text || (selectedEmail.html ? htmlToText(selectedEmail.html) : '') || selectedEmail.snippet || ''}
               onResult={(_actionId, text) => setAiSummary(text)}
             />

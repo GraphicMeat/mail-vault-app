@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { currentProvider, generate, listProviders } from '../../services/aiClient';
+import { aiErrorText, currentProvider, generate, listProviders, providerForMail } from '../../services/aiClient';
 import { AiContextPreview } from './AiContextPreview';
 import { useT } from '../../i18n/index.js';
 
@@ -42,12 +42,19 @@ function buildPrompt(actionId, text, tone) {
  * here reads it until the user clicks); `onResult(actionId, text)` gets the
  * generated text to insert, however the caller's surface wants to use it.
  *
+ * `accountIds` names the account(s) whose mail the text comes from (the open
+ * message, every message of a thread, the account a draft is written from, and
+ * the account of the message being replied to). Mail from a Google account is
+ * only ever given to an on-device provider: when the chosen provider is a cloud
+ * endpoint this switches to an available on-device one, and when there is none
+ * it says so and offers nothing.
+ *
  * Every click opens `AiContextPreview` first, local providers included
  * ("still show what was used") — see that component for why this is a
  * stricter, single-path version of the spec's "first send" floor — unless
  * the user turned the preview off (`aiSettings.skipPreview`).
  */
-export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText, getDraftText, onResult }) {
+export function AiComposeActions({ actions = Object.keys(ACTIONS), accountIds = [], getThreadText, getDraftText, onResult }) {
   const t = useT();
   // Defensive default: several existing ComposeModal specs stub the whole
   // settingsStore with a hand-built object that predates aiSettings.
@@ -55,17 +62,39 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
   const setAiSettings = useSettingsStore(s => s.setAiSettings) || (() => {});
   const provider = currentProvider(aiSettings);
 
-  // Checked only while AI is on — an install with the feature off (the
-  // default) never calls the daemon just because this row is mounted.
-  const [available, setAvailable] = useState(null);
+  // The provider that may be given THIS mail: the chosen one, or an on-device
+  // one in its place for Google mail (`providerForMail`). `refused` is "Google
+  // mail and nothing on-device is available". Kept with the inputs it answers
+  // for, so an answer for yesterday's provider or message never applies today.
+  // Checked only while AI is on: an install with the feature off (the default)
+  // never calls the daemon just because this row is mounted.
+  const idsKey = [...new Set((accountIds || []).filter(Boolean))].sort().join('\n');
+  const sig = `${provider.type}|${provider.url || ''}|${idsKey}`;
+  const [status, setStatus] = useState({ sig: null, provider: null, refused: false, available: null });
   useEffect(() => {
-    if (!aiSettings.enabled) { setAvailable(false); return; }
+    if (!aiSettings.enabled) return undefined;
     let cancelled = false;
-    listProviders(provider.type === 'endpoint' ? provider.url : undefined)
-      .then(list => { if (!cancelled) setAvailable(!!list.find(p => p.provider === provider.type)?.available); })
-      .catch(() => { if (!cancelled) setAvailable(false); });
+    const settle = (patch) => { if (!cancelled) setStatus({ sig, provider: null, refused: false, available: false, ...patch }); };
+    (async () => {
+      try {
+        const resolved = await providerForMail(provider, idsKey ? idsKey.split('\n') : []);
+        // An on-device stand-in was only picked because it is available.
+        if (resolved.refused || resolved.switched) {
+          settle({ provider: resolved.provider, refused: resolved.refused, available: resolved.switched });
+          return;
+        }
+        const list = await listProviders(provider.type === 'endpoint' ? provider.url : undefined);
+        settle({ provider, available: !!list.find(p => p.provider === provider.type)?.available });
+      } catch {
+        settle({});
+      }
+    })();
     return () => { cancelled = true; };
-  }, [aiSettings.enabled, provider.type, provider.url]);
+  }, [aiSettings.enabled, sig]);
+  const current = status.sig === sig ? status : null;
+  const activeProvider = current?.provider || provider;
+  const refused = !!current?.refused;
+  const available = aiSettings.enabled && current?.available === true;
 
   const [toneOpenFor, setToneOpenFor] = useState(false);
   const [pending, setPending] = useState(null); // { actionId, tone, text, prompt }
@@ -74,12 +103,14 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
 
   const disabledReason = !aiSettings.enabled
     ? t('ai.actions.disabledOff')
-    : available !== true
-      ? t('ai.actions.disabledUnavailable')
-      : null;
+    : refused
+      ? t('ai.googleMailOnDeviceOnly')
+      : !available
+        ? t('ai.actions.disabledUnavailable')
+        : null;
   // An endpoint the user has never confirmed still gets the preview once:
   // skipping is for text that stays on the device, or already went there.
-  const skipPreview = !!aiSettings.skipPreview && (provider.type !== 'endpoint' || aiSettings.endpointConsented);
+  const skipPreview = !!aiSettings.skipPreview && (activeProvider.type !== 'endpoint' || aiSettings.endpointConsented);
 
   const start = (actionId, tone) => {
     const cfg = ACTIONS[actionId];
@@ -96,16 +127,16 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
     if (!job || busy) return;
     setBusy(true);
     try {
-      const result = await generate({ prompt: job.prompt, provider, maxTokens: 600 });
+      const result = await generate({ prompt: job.prompt, provider: activeProvider, accountIds, maxTokens: 600 });
       // A provider that answers with nothing (or whitespace) must not wipe
       // the draft it was meant to improve — treat it the same as a failure
       // and leave both the draft and the preview alone.
       if (!result?.trim()) { setError(t('ai.actions.generateFailed')); return; }
-      if (provider.type === 'endpoint') await setAiSettings({ endpointConsented: true });
+      if (activeProvider.type === 'endpoint') await setAiSettings({ endpointConsented: true });
       setPending(null);
       onResult(job.actionId, result);
-    } catch {
-      setError(t('ai.actions.generateFailed'));
+    } catch (e) {
+      setError(aiErrorText(e, t, t('ai.actions.generateFailed')));
     } finally {
       setBusy(false);
     }
@@ -160,11 +191,14 @@ export function AiComposeActions({ actions = Object.keys(ACTIONS), getThreadText
         );
       })}
       {error && <span className="text-xs text-mail-danger">{error}</span>}
+      {aiSettings.enabled && refused && (
+        <span className="text-xs text-mail-text-muted" data-testid="ai-google-refusal">{t('ai.googleMailOnDeviceOnly')}</span>
+      )}
 
       <AiContextPreview
         open={!!pending}
         text={pending?.prompt || ''}
-        provider={provider}
+        provider={activeProvider}
         busy={busy}
         onCancel={() => setPending(null)}
         onConfirm={() => run(pending)}

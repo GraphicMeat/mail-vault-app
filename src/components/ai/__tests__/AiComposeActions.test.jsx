@@ -4,6 +4,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useMailStore } from '../../../stores/mailStore';
 import { AiComposeActions } from '../AiComposeActions';
 
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
@@ -14,6 +15,10 @@ afterEach(cleanup);
 describe('AiComposeActions', () => {
   beforeEach(() => {
     daemonCall.mockReset();
+    useMailStore.setState({ accounts: [
+      { id: 'plain', email: 'd@fastmail.com', authType: 'password', imapHost: 'imap.fastmail.com' },
+      { id: 'gmail', email: 'a@gmail.com', authType: 'oauth2', oauth2Provider: 'google', imapHost: 'imap.gmail.com' },
+    ], activeAccountId: 'plain' });
     useSettingsStore.setState({
       aiSettings: { enabled: false, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false },
     });
@@ -94,11 +99,93 @@ describe('AiComposeActions', () => {
       if (method === 'ai.providers') return Promise.resolve([{ provider: 'endpoint', available: true, reason: '' }]);
       return Promise.resolve({ text: 'Shortened.' });
     });
-    render(<AiComposeActions actions={['shorten']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+    render(<AiComposeActions actions={['shorten']} accountIds={['plain']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
 
     await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
     fireEvent.click(screen.getByText('Shorten'));
     expect(screen.getByTestId('ai-preview-text')).toBeTruthy();
     expect(daemonCall).not.toHaveBeenCalledWith('ai.generate', expect.anything());
+  });
+
+  it('tells the daemon whose mail it is sending', async () => {
+    useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false, skipPreview: true } });
+    daemonCall.mockImplementation((method) => {
+      if (method === 'ai.providers') return Promise.resolve([{ provider: 'localGguf', available: true, reason: '' }]);
+      return Promise.resolve({ text: 'Shortened.' });
+    });
+    render(<AiComposeActions actions={['shorten']} accountIds={['plain', 'gmail']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Shorten'));
+    await waitFor(() => expect(daemonCall).toHaveBeenCalledWith('ai.generate', expect.objectContaining({ accountIds: ['plain', 'gmail'] })));
+  });
+
+  describe('Gmail mail only goes to on-device AI', () => {
+    const CLOUD = { enabled: true, provider: 'endpoint', endpointUrl: 'https://api.openai.com/v1', endpointModel: 'gpt', endpointConsented: true, skipPreview: true };
+    const providers = (...available) => (method) => {
+      if (method === 'ai.providers') {
+        return Promise.resolve(['appleFm', 'localGguf', 'endpoint'].map(provider => ({ provider, available: available.includes(provider), reason: '' })));
+      }
+      return Promise.resolve({ text: 'Shortened.' });
+    };
+
+    it('uses Apple Intelligence instead of the chosen cloud endpoint for a Gmail account', async () => {
+      useSettingsStore.setState({ aiSettings: CLOUD });
+      daemonCall.mockImplementation(providers('appleFm', 'endpoint'));
+      const onResult = vi.fn();
+      render(<AiComposeActions actions={['shorten']} accountIds={['gmail']} getDraftText={() => 'a long draft'} onResult={onResult} />);
+
+      await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+      fireEvent.click(screen.getByText('Shorten'));
+      await waitFor(() => expect(onResult).toHaveBeenCalledWith('shorten', 'Shortened.'));
+      const [, params] = daemonCall.mock.calls.find(([method]) => method === 'ai.generate');
+      expect(params.provider).toEqual({ type: 'appleFm' });
+      expect(params.accountIds).toEqual(['gmail']);
+    });
+
+    it('falls back to the downloaded model when Apple Intelligence is not available', async () => {
+      useSettingsStore.setState({ aiSettings: CLOUD });
+      daemonCall.mockImplementation(providers('localGguf', 'endpoint'));
+      render(<AiComposeActions actions={['shorten']} accountIds={['plain', 'gmail']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+      await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+      fireEvent.click(screen.getByText('Shorten'));
+      await waitFor(() => expect(daemonCall).toHaveBeenCalledWith('ai.generate', expect.objectContaining({ provider: { type: 'localGguf' } })));
+    });
+
+    it('names where the text goes in the preview: this device, not the cloud endpoint', async () => {
+      useSettingsStore.setState({ aiSettings: { ...CLOUD, skipPreview: false } });
+      daemonCall.mockImplementation(providers('appleFm', 'endpoint'));
+      render(<AiComposeActions actions={['shorten']} accountIds={['gmail']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+      await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+      fireEvent.click(screen.getByText('Shorten'));
+      expect(screen.getByText('Sent to: This device')).toBeTruthy();
+      expect(screen.queryByText(/api\.openai\.com/)).toBeNull();
+    });
+
+    it('shows the refusal, offers nothing and sends nothing when no on-device provider is available', async () => {
+      useSettingsStore.setState({ aiSettings: CLOUD });
+      daemonCall.mockImplementation(providers('endpoint'));
+      render(<AiComposeActions actions={['shorten']} accountIds={['gmail']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+      expect((await screen.findByTestId('ai-google-refusal')).textContent).toMatch(/only processed by on-device AI/);
+      expect(screen.getByText('Shorten').disabled).toBe(true);
+      expect(daemonCall).not.toHaveBeenCalledWith('ai.generate', expect.anything());
+    });
+
+    it('keeps the cloud endpoint for a non-Google account', async () => {
+      useSettingsStore.setState({ aiSettings: CLOUD });
+      daemonCall.mockImplementation(providers('appleFm', 'endpoint'));
+      render(<AiComposeActions actions={['shorten']} accountIds={['plain']} getDraftText={() => 'a long draft'} onResult={() => {}} />);
+
+      await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+      fireEvent.click(screen.getByText('Shorten'));
+      await waitFor(() => expect(daemonCall).toHaveBeenCalledWith('ai.generate', expect.objectContaining({
+        provider: expect.objectContaining({ type: 'endpoint', url: 'https://api.openai.com/v1' }),
+        accountIds: ['plain'],
+      })));
+      expect(screen.queryByTestId('ai-google-refusal')).toBeNull();
+    });
   });
 });

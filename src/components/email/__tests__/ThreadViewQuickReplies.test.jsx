@@ -138,3 +138,26 @@ describe('Summarize thread (thread view)', () => {
     expect(screen.getByText('Ann and I are figuring out lunch time.')).toBeTruthy();
   });
 });
+
+describe('AI requests from a thread name the accounts behind them', () => {
+  it('sends the accounts of every message the summary and the quick replies read', async () => {
+    const fromOther = { ...older, _accountId: 'other-acct' };
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first', aiSettings: AI_ON });
+    daemonCall.mockImplementation((method) => {
+      if (method === 'ai.providers') return Promise.resolve([{ provider: 'localGguf', available: true, reason: '' }]);
+      return Promise.resolve({ text: 'Sounds good' });
+    });
+    render(<ThreadView thread={{ ...thread, emails: [fromOther, newest] }} />);
+
+    await waitFor(() => expect(screen.getByText('Summarize').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Summarize'));
+    fireEvent.click(screen.getByTestId('ai-preview-confirm'));
+    await waitFor(() => expect(daemonCall.mock.calls.some(([m, p]) => m === 'ai.generate' && p.prompt.includes('Summarize'))).toBe(true));
+
+    const generates = daemonCall.mock.calls.filter(([m]) => m === 'ai.generate').map(([, p]) => p);
+    expect(generates.length).toBeGreaterThanOrEqual(2); // the chips' Tier 2 and the summary
+    for (const params of generates) {
+      expect(params.accountIds.slice().sort()).toEqual(['acct', 'other-acct']);
+    }
+  });
+});

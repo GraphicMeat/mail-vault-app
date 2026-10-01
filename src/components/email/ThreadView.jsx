@@ -53,6 +53,7 @@ import { replySelection } from '../../utils/replySelection';
 import { registerActiveReply, openCompose } from '../../utils/composeOpener';
 import { QuickReplyChips } from './QuickReplyChips';
 import { AiComposeActions } from '../ai/AiComposeActions';
+import { accountIdsOf } from '../../services/aiClient';
 import { boundedThreadText } from '../../utils/quickReplies';
 import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
@@ -633,6 +634,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
@@ -938,6 +940,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
         <div className="ml-auto">
           <AiComposeActions
             actions={['summarize']}
+            accountIds={accountIdsOf(sortedEmails, activeAccountId)}
             getThreadText={() => boundedThreadText(sortedEmails.map(message => bodiesMapRef.current.get(emailKey(message))?.email || message))}
             onResult={(_actionId, text) => setAiSummary(text)}
           />

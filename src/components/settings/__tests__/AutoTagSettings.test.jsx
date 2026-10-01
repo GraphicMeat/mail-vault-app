@@ -24,6 +24,7 @@ const { AutoTagSettings } = await import('../AutoTagSettings');
 const { useAutoTagStore } = await import('../../../stores/autoTagStore');
 const { useTagStore } = await import('../../../stores/tagStore');
 const { useMailStore } = await import('../../../stores/mailStore');
+const { useSettingsStore } = await import('../../../stores/settingsStore');
 
 const RECEIPTS_TAG = { id: 't1', name: 'Receipts', color: '', position: 0, count: 0 };
 
@@ -139,5 +140,38 @@ describe('AutoTagSettings', () => {
     fireEvent.click(screen.getByText('New rule'));
     const from = document.querySelector('select[aria-label="From"]');
     expect(from.tomselect.options.a2.text).toBe('team@example.test');
+  });
+
+  it('does not preview a Gmail account against a cloud endpoint, and says why', async () => {
+    useMailStore.setState({ accounts: [
+      { id: 'a1', email: 'me@gmail.com', authType: 'oauth2', oauth2Provider: 'google', imapHost: 'imap.gmail.com' },
+    ], activeAccountId: 'a1' });
+    useSettingsStore.setState({ aiSettings: {
+      enabled: true, provider: 'endpoint', endpointUrl: 'https://api.openai.com/v1', endpointModel: 'gpt', endpointConsented: true,
+    } });
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    fireEvent.change(screen.getByLabelText('Rule, in plain English'), { target: { value: 'receipts' } });
+    fireEvent.click(screen.getByTestId('auto-tag-allow-remote'));
+    fireEvent.click(screen.getByTestId('ai-preview-confirm'));
+    mockDaemonCall.mockClear();
+
+    fireEvent.click(screen.getByText('Preview'));
+
+    const results = await screen.findByTestId('auto-tag-preview-results');
+    expect(within(results).getByText(/only processed by on-device AI/)).toBeTruthy();
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  it('shows the daemon refusal as the catalog text, not its raw code', async () => {
+    mockDaemonCall.mockRejectedValueOnce(new Error('E_GOOGLE_MAIL_ON_DEVICE_ONLY: Gmail messages are only processed by on-device AI. Choose Apple Intelligence, the downloaded model, or a local Ollama in Settings.'));
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    fireEvent.change(screen.getByLabelText('Rule, in plain English'), { target: { value: 'receipts' } });
+    fireEvent.click(screen.getByText('Preview'));
+
+    const results = await screen.findByTestId('auto-tag-preview-results');
+    expect(within(results).getByText(/only processed by on-device AI/)).toBeTruthy();
+    expect(within(results).queryByText(/E_GOOGLE_MAIL/)).toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SettingRow } from '../ui/SettingRow';
 import { Button } from '../ui/Button';
 import { AiContextPreview } from '../ai/AiContextPreview';
-import { currentProvider, listProviders, generate, setEndpointKey } from '../../services/aiClient';
+import { aiErrorText, currentProvider, listProviders, generate, setEndpointKey } from '../../services/aiClient';
 import { useT } from '../../i18n/index.js';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
@@ -63,11 +63,11 @@ export function AiProvidersSettings() {
   const confirmTest = async () => {
     setTestBusy(true);
     try {
-      const text = await generate({ prompt: TEST_PROMPT, provider, maxTokens: 60 });
+      const text = await generate({ prompt: TEST_PROMPT, provider, maxTokens: 60, noMailContent: true });
       if (provider.type === 'endpoint') setAiSettings({ endpointConsented: true });
       setTestResult({ ok: true, text });
     } catch (e) {
-      setTestResult({ ok: false, text: e?.message || t('ai.settings.checkFailed') });
+      setTestResult({ ok: false, text: aiErrorText(e, t, e?.message || t('ai.settings.checkFailed')) });
     } finally {
       setTestBusy(false);
       setPendingTest(false);
@@ -102,6 +102,7 @@ export function AiProvidersSettings() {
               <option value="appleFm">{t('ai.settings.providerAppleFm')}</option>
             </select>
           </SettingRow>
+          <p className="text-xs text-mail-text-muted" data-testid="ai-settings-google-on-device">{t('ai.settings.googleOnDevice')}</p>
 
           <SettingRow label={t('ai.settings.skipPreview')} description={t('ai.settings.skipPreviewHint')}>
             <ToggleSwitch

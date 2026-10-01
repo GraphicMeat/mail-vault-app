@@ -1513,6 +1513,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           <div className="px-5 py-1.5 border-b border-mail-border">
             <AiComposeActions
               actions={actionReplyTo ? ['draftReply', 'shorten', 'tone', 'actionItems', 'summarize'] : ['shorten', 'tone']}
+              // Whose mail the text is: the account this draft leaves from, and
+              // the account of the message being answered (whose body is the
+              // thread text), which can differ once From is switched.
+              accountIds={[...new Set([selectedAccountId, actionReplyTo ? (actionReplyTo._accountId || readingAccountId) : null].filter(Boolean))]}
               getThreadText={() => htmlToText(contextHtml || quotedHtml || '')}
               getDraftText={() => htmlToText(formData.body)}
               onResult={(_actionId, text) => {

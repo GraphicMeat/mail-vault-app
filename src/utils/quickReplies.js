@@ -8,7 +8,8 @@
 // silently on any failure or timeout.
 
 import { htmlToText } from '../components/RichTextEditor';
-import { generate, currentProvider } from '../services/aiClient';
+import { generate, currentProvider, accountIdsOf, providerForMail } from '../services/aiClient';
+import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { t } from '../i18n/index.js';
 
@@ -151,13 +152,28 @@ function parseStarters(text) {
 export async function tier2Starters(email, { contextMessages } = {}) {
   const settings = useSettingsStore.getState().aiSettings;
   if (!settings?.enabled) return null;
-  const provider = currentProvider(settings);
+  // Whose mail the prompt carries: this message and the thread context.
+  const accountIds = accountIdsOf(
+    [email, ...(contextMessages?.length ? contextMessages : [])],
+    useMailStore.getState().activeAccountId,
+  );
+  // Google mail is only ever asked of an on-device provider: a cloud endpoint
+  // is swapped for one, or this tier is skipped when there is none.
+  const chosen = currentProvider(settings);
+  let provider;
+  try {
+    const resolved = await providerForMail(chosen, accountIds);
+    if (resolved.refused) return null;
+    provider = resolved.provider;
+  } catch {
+    return null;
+  }
   if (provider.type === 'endpoint' && !settings.endpointConsented) return null;
 
   const threadText = boundedThreadText(contextMessages?.length ? contextMessages : [email]);
   const prompt = `Suggest exactly 3 very short email reply starters (a few words each), one per line, no numbering, for this email conversation:\n\nSubject: ${email?.subject || ''}\n\n${threadText}`;
   try {
-    const text = await withTimeout(generate({ prompt, provider, maxTokens: 120 }), 8000);
+    const text = await withTimeout(generate({ prompt, provider, accountIds, maxTokens: 120 }), 8000);
     const starters = parseStarters(text);
     return starters.length ? starters : null;
   } catch {

@@ -5,7 +5,7 @@ import { useAutoTagStore } from '../../stores/autoTagStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
-import { currentProvider } from '../../services/aiClient';
+import { aiErrorText, currentProvider, googleMailRefusal, isOnDevice, mailMustStayOnDevice } from '../../services/aiClient';
 import { AiContextPreview } from '../ai/AiContextPreview';
 import { Button } from '../ui/Button';
 import { SettingsField, SettingsSection, SegmentedControl, SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
@@ -185,6 +185,13 @@ export function AutoTagSettings() {
   };
 
   const providerFor = () => (form.allowRemote ? (form.provider || currentProvider()) : { type: 'localGguf' });
+  // Google mail never goes to a cloud endpoint (the daemon refuses it too):
+  // say so here instead of sending a request that is bound to be turned away.
+  const providerForAccount = () => {
+    const provider = providerFor();
+    if (!isOnDevice(provider) && mailMustStayOnDevice([accountId])) throw googleMailRefusal();
+    return provider;
+  };
 
   // Always the live form, never the saved `ruleId` — the whole point is
   // previewing changes before Save commits them, edit or add alike (the
@@ -195,10 +202,10 @@ export function AutoTagSettings() {
     setPreviewing(true);
     setPreviewRows(null);
     try {
-      const rows = await previewRule({ rule: formToDraft(form), accountId, provider: providerFor() });
+      const rows = await previewRule({ rule: formToDraft(form), accountId, provider: providerForAccount() });
       if (generation === previewGeneration.current) setPreviewRows(rows);
     } catch (e) {
-      if (generation === previewGeneration.current) setPreviewRows({ error: e?.message || String(e) });
+      if (generation === previewGeneration.current) setPreviewRows({ error: aiErrorText(e, t, e?.message || String(e)) });
     } finally {
       if (generation === previewGeneration.current) setPreviewing(false);
     }
@@ -233,9 +240,9 @@ export function AutoTagSettings() {
   const startBackfill = async () => {
     setBackfilling(true);
     try {
-      await runBackfill({ ruleId: editing.id, accountId, provider: providerFor() });
+      await runBackfill({ ruleId: editing.id, accountId, provider: providerForAccount() });
     } catch (e) {
-      setSaveError(e?.message || String(e));
+      setSaveError(aiErrorText(e, t, e?.message || String(e)));
     } finally {
       setBackfilling(false);
     }

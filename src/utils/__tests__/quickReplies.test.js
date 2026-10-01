@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isAutomatedThread, quickReplyThreadKey, threadShape, tier1Starters, tier2Starters } from '../quickReplies';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMailStore } from '../../stores/mailStore';
 
 vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 import { daemonCall } from '../../services/daemonClient';
@@ -110,6 +111,52 @@ describe('tier2Starters — falls back to Tier 1 on failure', () => {
     const result = await tier2Starters(person);
     expect(result).toBeNull();
     expect(daemonCall).not.toHaveBeenCalled();
+  });
+
+  describe('Gmail mail only goes to on-device AI', () => {
+    const CLOUD = { enabled: true, provider: 'endpoint', endpointUrl: 'https://api.openai.com/v1', endpointModel: 'gpt', endpointConsented: true };
+    const gmail = { ...person, _accountId: 'gmail' };
+    const answer = (...available) => (method) => {
+      if (method === 'ai.providers') {
+        return Promise.resolve(['appleFm', 'localGguf', 'endpoint'].map(provider => ({ provider, available: available.includes(provider), reason: '' })));
+      }
+      return Promise.resolve({ text: 'Sounds good\nLet me check\nThanks' });
+    };
+    const generateCalls = () => daemonCall.mock.calls.filter(([method]) => method === 'ai.generate');
+
+    beforeEach(() => {
+      useMailStore.setState({ accounts: [
+        { id: 'plain', email: 'd@fastmail.com', authType: 'password', imapHost: 'imap.fastmail.com' },
+        { id: 'gmail', email: 'a@gmail.com', authType: 'oauth2', oauth2Provider: 'google', imapHost: 'imap.gmail.com' },
+      ], activeAccountId: 'plain' });
+      useSettingsStore.setState({ aiSettings: CLOUD });
+    });
+
+    it('asks an on-device provider instead of the cloud endpoint, and names the account', async () => {
+      daemonCall.mockImplementation(answer('appleFm', 'endpoint'));
+      const result = await tier2Starters(gmail);
+      expect(result).toHaveLength(3);
+      expect(generateCalls()).toHaveLength(1);
+      expect(generateCalls()[0][1]).toMatchObject({ provider: { type: 'appleFm' }, accountIds: ['gmail'] });
+    });
+
+    it('includes the accounts of the thread context', async () => {
+      daemonCall.mockImplementation(answer('localGguf'));
+      await tier2Starters(person, { contextMessages: [{ ...person, _accountId: 'plain' }, gmail] });
+      expect(generateCalls()[0][1]).toMatchObject({ provider: { type: 'localGguf' }, accountIds: ['plain', 'gmail'] });
+    });
+
+    it('is null, sending nothing, when no on-device provider is available', async () => {
+      daemonCall.mockImplementation(answer('endpoint'));
+      expect(await tier2Starters(gmail)).toBeNull();
+      expect(generateCalls()).toHaveLength(0);
+    });
+
+    it('still uses the cloud endpoint for a non-Google account, and names it', async () => {
+      daemonCall.mockImplementation(answer('appleFm', 'endpoint'));
+      await tier2Starters({ ...person, _accountId: 'plain' });
+      expect(generateCalls()[0][1]).toMatchObject({ provider: { type: 'endpoint', url: 'https://api.openai.com/v1' }, accountIds: ['plain'] });
+    });
   });
 
   it('is null outright when AI features are off', async () => {
