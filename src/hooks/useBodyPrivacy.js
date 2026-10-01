@@ -18,8 +18,8 @@ const frameDoc = (iframe) => {
 
 /**
  * Whether a frame's srcDoc must start gated (buildEmailIframeHtml `privacy`):
- * privacy on, peeking or not, so a peek never reloads the frame; or a detached
- * window that has not read the persisted choice yet (usePrivacyActive).
+ * privacy on, peeking or not, so a peek never reloads the frame; or any window
+ * that has not read the persisted choice yet (usePrivacyActive).
  * A capture's captureMask does not gate: reloading would hand the capture a
  * blank frame, and the pass below masks the one on screen in place before paint.
  */

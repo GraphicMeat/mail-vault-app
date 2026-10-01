@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
 const { bodies } = vi.hoisted(() => ({ bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
@@ -31,6 +31,8 @@ const { useSettingsStore } = await import('../../stores/settingsStore');
 const { useMailStore } = await import('../../stores/mailStore');
 const { usePrivacyStore } = await import('../../stores/privacyStore');
 const { t } = await import('../../i18n');
+const { setPrivacyDictionary } = await import('../../utils/privacy/privacyDictionary');
+const { EMPTY_DICTIONARY } = await import('../../utils/privacy/piiDetector');
 
 const email = { uid: 7, _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Older', address: 'old@example.com' }, to: [], subject: 'Earlier', flags: [] };
 const thread = { threadId: 'one', subject: 'Conversation', emails: [email], messageCount: 1 };
@@ -71,5 +73,25 @@ describe('ThreadView under privacy mode', () => {
     render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
     fireEvent.click(screen.getAllByTestId('open-window-stub')[0]);
     expect(invoke.mock.calls.filter(([command]) => command === 'open_email_window')).toHaveLength(1);
+  });
+
+  it("masks the row's own sender in the body even when the loaded body carries no headers", () => {
+    vi.useFakeTimers();
+    try {
+      setPrivacyDictionary(EMPTY_DICTIONARY, { ready: false });
+      const sender = { ...email, from: { name: 'Marisol Quintero', address: 'mq@example.com' } };
+      bodies.set('|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Thanks, Marisol Quintero</p>', text: 'Thanks' } });
+      render(<ThreadView thread={{ ...thread, emails: [sender] }} onComposeReply={vi.fn()} />);
+      const iframe = document.querySelector('iframe');
+      act(() => {
+        const d = iframe.contentDocument; d.open(); d.write(iframe.getAttribute('srcdoc')); d.close();
+        iframe.dispatchEvent(new Event('load'));
+      });
+      act(() => vi.advanceTimersByTime(3200));
+      expect(iframe.contentDocument.getElementById('mv-privacy-gate')).toBeNull();
+      expect(iframe.contentDocument.body.textContent).not.toMatch(/Marisol|Quintero/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

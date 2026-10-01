@@ -147,7 +147,7 @@ describe('useBodyPrivacy', () => {
     act(() => writeFrame(iframe, html));
     const doc = iframe.contentDocument;
     expect(doc.getElementById(PRIVACY_GATE_ID)).not.toBeNull();
-    expect(doc.documentElement.getAttribute('style')).toBe('opacity:0!important');
+    expect(doc.documentElement.style.getPropertyPriority('opacity')).toBe('important');
     act(() => iframe.dispatchEvent(new Event('load')));
     expect(error).toHaveBeenCalledTimes(1);
     act(() => setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true }));

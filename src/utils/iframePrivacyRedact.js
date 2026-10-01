@@ -1,5 +1,5 @@
 import { redactTree, PII_CLASS } from './privacy/redactDom';
-import { PRIVACY_GATE_ID, PRIVACY_GATE_CSS, PRIVACY_GATE_HTML_STYLE } from './emailIframeTemplate';
+import { PRIVACY_GATE_ID, PRIVACY_GATE_CSS } from './emailIframeTemplate';
 
 /**
  * Privacy mode inside a message frame. Same parent-side walking as the search
@@ -17,7 +17,13 @@ const attrOriginals = new WeakMap(); // element -> Map(name -> original | null)
 
 // Ours is in <head>: an element of the mail's own carrying the id is not the gate.
 const gateOf = (doc) => doc?.head?.querySelector?.(`style#${PRIVACY_GATE_ID}`) || null;
-const inlineGated = (doc) => doc?.documentElement?.getAttribute?.('style') === PRIVACY_GATE_HTML_STYLE;
+// Read through the CSSOM, not the attribute string: a script that touches
+// <html>'s style re-serializes the attribute, and an exact-string check would
+// then never release.
+const inlineGated = (doc) => {
+  const style = doc?.documentElement?.style;
+  return !!style && style.getPropertyValue('opacity') === '0' && style.getPropertyPriority('opacity') === 'important';
+};
 
 /** Whether the body is still held back, unmasked text underneath. */
 export function isPrivacyGated(doc) {
@@ -29,7 +35,11 @@ export function releasePrivacyGate(doc) {
   const inline = inlineGated(doc);
   if (!gate && !inline) return;
   gate?.remove();
-  if (inline) doc.documentElement.removeAttribute('style');
+  if (inline) {
+    const root = doc.documentElement;
+    root.style.removeProperty('opacity');
+    if (!root.getAttribute('style')?.trim()) root.removeAttribute('style');
+  }
   const host = doc.defaultView?.frameElement;
   const HostEvent = host?.ownerDocument?.defaultView?.Event;
   if (HostEvent) host.dispatchEvent(new HostEvent(PRIVACY_RELEASED_EVENT));
@@ -45,7 +55,7 @@ export function reinstatePrivacyGate(doc) {
     style.textContent = PRIVACY_GATE_CSS;
     doc.head.appendChild(style);
   }
-  root.setAttribute('style', PRIVACY_GATE_HTML_STYLE);
+  root.style.setProperty('opacity', '0', 'important');
 }
 
 export function restorePrivacyRedaction(doc) {

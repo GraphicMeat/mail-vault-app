@@ -142,7 +142,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
 
   // Privacy masking first: it must run on `load` before the search highlight.
-  useBodyPrivacy(iframeRef, iframeContent, { message: loadedEmail || email });
+  // The loaded body may carry no headers: the row's parties go in too (as ChatBubbleView merges).
+  useBodyPrivacy(iframeRef, iframeContent, { message: loadedEmail ? { ...email, ...loadedEmail } : email });
   // The thread is a second reader of the same body — including for the search
   // highlight, or a hit opened in thread mode is marked nowhere.
   useSearchHighlight(iframeRef, iframeContent);

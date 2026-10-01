@@ -60,4 +60,11 @@ describe('iframe privacy redaction', () => {
     expect(doc.head.querySelector(`style#${PRIVACY_GATE_ID}`)).not.toBeNull();
     expect(isPrivacyGated(doc)).toBe(true);
   });
+  it('releases the inline gate even after a script re-serialized our <html> style', () => {
+    const doc = docOf('<p>x</p>');
+    doc.documentElement.style.setProperty('color', 'red');
+    applyPrivacyRedaction(doc, dict);
+    expect(doc.documentElement.style.getPropertyValue('opacity')).toBe('');
+    expect(doc.documentElement.style.getPropertyValue('color')).toBe('red');
+  });
 });
