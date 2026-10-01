@@ -54,6 +54,7 @@ export function SearchBar({ autoFocus = false }) {
   const searchFallback = useSearchStore(s => s.searchFallback);
   const searchError = useSearchStore(s => s.searchError);
   const searchResults = useSearchStore(s => s.searchResults);
+  const searchDurationMs = useSearchStore(s => s.searchDurationMs);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
   const performSearch = useSearchStore(s => s.performSearch);
@@ -243,6 +244,12 @@ export function SearchBar({ autoFocus = false }) {
     pickedFolder === 'current' ? activeMailbox : pickedFolder,
     flattenMailboxes(mailboxes),
   ).length > 1;
+
+  // The folder a `current` search reads, by the name the sidebar gives it: in
+  // the unified view that is the unified folder, never the internal mailbox.
+  const currentFolderName = unifiedInbox
+    ? (unifiedFolder === 'INBOX' ? t('sidebar.inbox') : unifiedFolder)
+    : decodeImapUtf7(activeMailbox);
 
   const handleFilterChange = (key, value) => {
     setSearchFilters({ [key]: value });
@@ -711,15 +718,24 @@ export function SearchBar({ autoFocus = false }) {
             </span>
           ) : (
             <>
-              <T k="search.foundResults" vars={{ count: searchResults.length }}
-                 parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
-              {!scopedToBranch && searchFilters.folder === 'current' && t('search.inFolder', { folder: decodeImapUtf7(activeMailbox) })}
-              {!scopedToBranch && searchFilters.folder === 'all' && t('search.inAllFolders')}
-              {/* A branch count read as one folder's is the same lie the
-                  INBOX-only "all folders" search used to tell. */}
-              {scopedToBranch && t('search.inFolderAndSubfolders', {
-                folder: decodeImapUtf7(pickedFolder === 'current' ? activeMailbox : pickedFolder),
-              })}
+              <span data-testid="search-summary">
+                <T k="search.foundResults" vars={{ count: searchResults.length }}
+                   parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
+                {!scopedToBranch && searchFilters.folder === 'current' && (unifiedInbox
+                  ? t('search.inUnifiedFolder', { folder: currentFolderName })
+                  : t('search.inFolder', { folder: currentFolderName }))}
+                {!scopedToBranch && searchFilters.folder === 'all' && t('search.inAllFolders')}
+                {/* A branch count read as one folder's is the same lie the
+                    INBOX-only "all folders" search used to tell. */}
+                {scopedToBranch && t('search.inFolderAndSubfolders', {
+                  folder: pickedFolder === 'current' ? currentFolderName : decodeImapUtf7(pickedFolder),
+                })}
+              </span>
+              {searchDurationMs != null && (
+                <span className="ml-2 tabular-nums" data-testid="search-duration">
+                  {t('search.durationMs', { ms: searchDurationMs.toLocaleString() })}
+                </span>
+              )}
               {searchResults.length > 0 && <SaveSearchAsView />}
               {searchResults.length > 0 && (
                 <span className="ml-2 text-[10px]">

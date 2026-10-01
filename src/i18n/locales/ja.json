@@ -1422,6 +1422,8 @@
   "search.in": "場所: {{filter}}",
   "search.inAllFolders": "（すべてのフォルダー）",
   "search.inFolder": "（{{folder}} 内）",
+  "search.inUnifiedFolder": "（すべてのアカウントの {{folder}} 内）",
+  "search.durationMs": "{{ms}} ミリ秒",
   "search.inFolderAndSubfolders": "「{{folder}}」とそのサブフォルダ内",
   "search.includeSubfolders": "サブフォルダを含める",
   "search.indexBuilding": "検索インデックスは{{percent}}%作成済みです。一部の結果が表示されない場合があります。",

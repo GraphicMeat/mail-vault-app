@@ -1422,6 +1422,8 @@
   "search.in": "Em: {{filter}}",
   "search.inAllFolders": " em todas as pastas",
   "search.inFolder": " em {{folder}}",
+  "search.inUnifiedFolder": " em {{folder}} de todas as contas",
+  "search.durationMs": "{{ms}} ms",
   "search.inFolderAndSubfolders": " em {{folder}} e suas subpastas",
   "search.includeSubfolders": "Incluir subpastas",
   "search.indexBuilding": "Índice de busca {{percent}}% concluído. Alguns resultados podem estar faltando.",

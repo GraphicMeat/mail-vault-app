@@ -138,6 +138,10 @@ export const useSearchStore = create((set, get) => ({
   // { indexed, total, complete, matched, shown } when the offline index answered the vault
   // half of the last search, null when the scan did.
   searchIndexCoverage: null,
+  // When the running search started, and how long the last one took once its
+  // terminal frame arrived (ms), for the summary under the box.
+  searchStartedAt: null,
+  searchDurationMs: null,
 
   /// Show rows the app did not search for — a saved view's result. They
   /// arrive in the same shape the index lane of a search produces, so they go
@@ -170,6 +174,8 @@ export const useSearchStore = create((set, get) => ({
       searchError: null,
       searchFallback: null,
       searchIndexCoverage: null,
+      searchStartedAt: null,
+      searchDurationMs: null,
       ...searchRows.showRows(kept, searchSnapshot),
     });
   },
@@ -209,6 +215,9 @@ export const useSearchStore = create((set, get) => ({
         searchFallback: frame.fallbackReason ?? state.searchFallback,
         searchError: frame.errorKey || state.searchError,
         isSearching: !terminal,
+        searchDurationMs: terminal && state.searchStartedAt != null
+          ? Math.max(0, Date.now() - state.searchStartedAt)
+          : state.searchDurationMs,
       };
     });
     if (historyQuery) useSettingsStore.getState().addSearchToHistory?.(historyQuery);
@@ -283,6 +292,8 @@ export const useSearchStore = create((set, get) => ({
       ...searchRows.emptyRows(),
       isSearching: hasCriteria,
       searchActive: hasCriteria,
+      searchStartedAt: hasCriteria ? Date.now() : null,
+      searchDurationMs: null,
       searchProgress: null,
       searchIndexCoverage: null,
       searchFallback: null,
@@ -383,6 +394,8 @@ export const useSearchStore = create((set, get) => ({
       searchIndexCoverage: null,
       searchFallback: null,
       searchError: null,
+      searchStartedAt: null,
+      searchDurationMs: null,
     });
   },
 }));

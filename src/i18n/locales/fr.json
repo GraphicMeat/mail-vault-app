@@ -1422,6 +1422,8 @@
   "search.in": "Dans : {{filter}}",
   "search.inAllFolders": " dans tous les dossiers",
   "search.inFolder": " dans {{folder}}",
+  "search.inUnifiedFolder": " dans {{folder}} de tous les comptes",
+  "search.durationMs": "{{ms}} ms",
   "search.inFolderAndSubfolders": " dans {{folder}} et ses sous-dossiers",
   "search.includeSubfolders": "Inclure les sous-dossiers",
   "search.indexBuilding": "Index de recherche construit à {{percent}} %. Certains résultats peuvent manquer.",

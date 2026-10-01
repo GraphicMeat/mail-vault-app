@@ -80,6 +80,7 @@
   "quickActions.preset.mailvault",
   "quickActions.preset.outlook",
   "quickActions.preset.thunderbird",
+  "search.durationMs",
   "search.in",
   "search.inFolder",
   "search.location.server",

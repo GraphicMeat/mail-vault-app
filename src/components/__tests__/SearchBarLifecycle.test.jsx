@@ -235,6 +235,31 @@ describe('SearchBar search lifecycle', () => {
   });
 });
 
+describe('the results summary', () => {
+  it('names the unified folder, never the internal UNIFIED mailbox, and says how long the search took', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    clock.mockReturnValue(1_234);
+    act(() => harness.runs[0].onProgress({
+      searchId: harness.runs[0].request.searchId, sequence: 1, lane: 'local',
+      rows: [row(1, 'hit', 'a', 'INBOX')], completed: 1, total: 1, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: 'complete', errorKey: null,
+    }));
+    const summary = view.getByTestId('search-summary').textContent;
+    expect(summary).toContain('Found 1 results in Inbox across all accounts');
+    expect(summary).not.toContain('UNIFIED');
+    expect(view.getByTestId('search-duration').textContent).toBe('234 ms');
+    clock.mockRestore();
+  });
+
+  it('shows no duration while the search is still running', async () => {
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    expect(view.queryByTestId('search-duration')).toBeNull();
+  });
+});
+
 /// `showRows` sets `searchActive`, so every reader of that flag now also sees a
 /// saved view. The search bar must not treat one as a search it can restart.
 describe('a saved view on screen is not a search', () => {
