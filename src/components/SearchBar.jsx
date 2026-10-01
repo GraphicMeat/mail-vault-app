@@ -13,6 +13,7 @@ import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { SEARCH_OPERATORS } from '../utils/searchQuery';
 import { addTags, commitText, serializeTags, tokenizeQuery } from '../utils/searchTags';
 import { SearchTagInput } from './SearchTagInput';
+import { formatCount } from '../utils/formatCount';
 import { useSearchSuggestions } from '../hooks/useSearchSuggestions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -732,11 +733,11 @@ export function SearchBar({ autoFocus = false }) {
                 })}
                 {/* The index counts every message in the folders searched; a
                     half-built one counts only what it has, so it says nothing. */}
-                {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: searchIndexCoverage.total.toLocaleString() })}
+                {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
               </span>
               {searchDurationMs != null && (
                 <span className="ml-2 tabular-nums" data-testid="search-duration">
-                  {t('search.durationMs', { ms: searchDurationMs.toLocaleString() })}
+                  {t('search.durationMs', { ms: formatCount(searchDurationMs) })}
                 </span>
               )}
               {searchResults.length > 0 && <SaveSearchAsView />}
