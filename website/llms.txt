@@ -23,6 +23,14 @@
 - [MailVault vs paying for more storage](https://mailvaultapp.com/compare/mailvault-vs-paying-for-storage.html)
 - [Mail client vs mail vault](https://mailvaultapp.com/compare/mail-client-vs-mail-vault.html): a mirror forgets, a vault keeps
 
+## Email guides and research
+
+- [Gmail third-party account changes before January 2027](https://mailvaultapp.com/blog/gmail-third-party-changes-2027.html): Gmailify, third-party Send as, and POP fetching changes; what remains supported and how to transition
+- [Cloud versus local email search](https://mailvaultapp.com/blog/cloud-vs-local-email-search.html): AI search availability, local index coverage, offline retrieval, and diagrams showing where processing happens
+- [Leaving an email provider safely](https://mailvaultapp.com/blog/leave-email-provider-safely.html): inventory, complete archives, attachment verification, independent backups, and testing before closing an account
+- [Phishing beyond suspicious links](https://mailvaultapp.com/blog/phishing-beyond-suspicious-links.html): calendar invitations, QR codes, attached emails, independent verification, and incident reporting
+- [Searching 50,000 emails in milliseconds](https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html): measured search performance, SQLite FTS5, trigram indexing, and local search diagrams
+
 ## Optional
 
 - [Blog](https://mailvaultapp.com/blog.html)

@@ -30,7 +30,7 @@
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
   <link rel="stylesheet" href="/assets/english-site.css?v=20260928-thanks">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The technology: a very fast, very simple SQL database</h3>
           <p>There is no search server and no cloud service. The index is one SQLite file inside your vault, and SQLite is probably the most widely deployed database in the world. MailVault uses its full-text search engine, FTS5, with a <strong>trigram</strong> tokenizer: every word is stored as overlapping three-letter pieces. That is why you can type "voic" and find "invoice", with no wildcards and no exact-word rules. Accents are folded, so "reunion" finds "Réunion". Japanese and Chinese, which do not use spaces between words, go through a second table built for them.</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+
           <p>Speed comes from three plain decisions:</p>
           <ul>
             <li><strong>Search never opens a message file.</strong> Everything the list needs (sender, subject, date, folder, flags) is stored in the index row. During the 50,000-message test the mail parser was called zero times while results were built.</li>

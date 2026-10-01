@@ -44,3 +44,8 @@
  .mv-content-page main h1 { font-size:2.25rem; }
  .mv-content-page main h2 { font-size:1.65rem; }
 }
+
+/* Search figures retain readable labels and a stable editorial canvas in both themes. */
+.mv-content-page .mv-search-diagram { margin:32px 0; }
+.mv-content-page .mv-search-diagram img { display:block; width:100%; height:auto; border-radius:14px; }
+.mv-content-page .mv-search-diagram figcaption { margin-top:12px; font-size:.9rem; line-height:1.6; color:var(--mv-muted); }
