@@ -1633,7 +1633,7 @@
   "settings.accounts.signatureImageGood": "서명 이미지: {{size}}KB. 이메일에 딱 좋습니다.",
   "settings.accounts.signatureImageHint": "이미지 버튼으로 로고를 추가하거나 끌어다 놓거나 붙여넣으세요. 모서리를 끌어 크기를 조정합니다. 권장: 100KB 미만, PNG 또는 JPEG.",
   "settings.accounts.signatureImageWarn": "서명 이미지: {{size}}KB. 괜찮지만 100KB 미만이면 받는 사람에게 더 빨리 표시됩니다.",
-  "settings.accounts.signatureSourceHint": "HTML을 직접 편집합니다. 스크립트, 스타일, 편집기가 지원하지 않는 항목은 제거됩니다.",
+  "settings.accounts.signatureSourceHint": "HTML을 직접 편집합니다. 표와 인라인 스타일은 유지되고 스크립트, 양식, 이벤트 핸들러, 안전하지 않은 링크는 제거됩니다.",
   "settings.accounts.signatureFont": "서명 글꼴",
   "settings.accounts.signatureFontDefault": "기본 글꼴",
   "settings.accounts.signatureFontsCommon": "일반 글꼴",

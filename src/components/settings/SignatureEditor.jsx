@@ -7,6 +7,7 @@ import { FIELD_TRIGGER, anchorTo } from '../ui/field';
 import { GoogleFontPicker } from './GoogleFontPicker';
 import { initialSignatureSource, setSignatureFont, signatureSourceReducer } from '../../utils/signatureSource';
 import { SIGNATURE_FONTS, signatureFontStack } from '../../utils/signatureFonts';
+import { isHtmlSignature } from '../../utils/htmlSignature';
 import { refreshFonts, useFontStore } from '../../services/fontService';
 import { useT } from '../../i18n/index.js';
 
@@ -106,7 +107,8 @@ export function SignatureEditor({ html, onChange, placeholder, heightClass = 'h-
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-2">
-        <SignatureFontControl html={state.html} disabled={state.mode === 'code'} onChoose={setFont} />
+        {/* An HTML signature sets its own fonts in its markup. */}
+        <SignatureFontControl html={state.html} disabled={state.mode === 'code' || isHtmlSignature(state.html)} onChoose={setFont} />
         <SegmentedControl
           label={t('settings.accounts.signatureView')}
           value={state.mode}

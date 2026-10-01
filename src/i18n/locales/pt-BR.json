@@ -1633,7 +1633,7 @@
   "settings.accounts.signatureImageGood": "Imagens da assinatura: {{size}} KB. Perfeito para e-mail.",
   "settings.accounts.signatureImageHint": "Adicione um logotipo com o botão de imagem, arraste-o ou cole-o. Arraste um canto para redimensionar. Recomendado: menos de 100 KB, PNG ou JPEG.",
   "settings.accounts.signatureImageWarn": "Imagens da assinatura: {{size}} KB. Aceitável, mas abaixo de 100 KB carregam mais rápido para os destinatários.",
-  "settings.accounts.signatureSourceHint": "Edite o HTML diretamente. Scripts, estilos e tudo que o editor não suporta são removidos.",
+  "settings.accounts.signatureSourceHint": "Edite o HTML diretamente. Tabelas e estilos inline são mantidos; scripts, formulários, manipuladores de eventos e links inseguros são removidos.",
   "settings.accounts.signatureFont": "Fonte da assinatura",
   "settings.accounts.signatureFontDefault": "Fonte padrão",
   "settings.accounts.signatureFontsCommon": "Fontes comuns",

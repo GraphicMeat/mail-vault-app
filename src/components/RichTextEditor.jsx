@@ -32,6 +32,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { toClientPoint, toAttachment } from '../utils/nativeDrop';
 import { FontFamily } from '../utils/fontFamilyMark';
+import { HtmlSignature, SIGNATURE_HTML_SELECTOR } from '../utils/htmlSignature';
 import { loadFontFacesForHtml } from '../services/fontService';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
@@ -340,6 +341,8 @@ export const editorExtensions = (placeholder, { resizeImages = false } = {}) => 
   // A signature's chosen font, and the fonts quoted mail was written in: an
   // inline family list only (utils/fontFamilyMark.js).
   FontFamily,
+  // A signature kept as the HTML it was written in (utils/htmlSignature.js).
+  HtmlSignature,
   // allowBase64: compose restores initialData.body HTML after minimize /
   // undo-send, and the inline picture must parse back out of that string.
   // `resizeImages`: a picture gets corner handles; the size lands in its
@@ -370,6 +373,8 @@ export function padEmptyLines(html) {
   if (!html) return html;
   const doc = new DOMParser().parseFromString(html, 'text/html');
   for (const p of doc.body.querySelectorAll('p')) {
+    // An HTML signature goes out exactly as it was written.
+    if (p.closest(SIGNATURE_HTML_SELECTOR)) continue;
     let last = p;
     while (last.lastChild) last = last.lastChild;
     if (last === p || last.nodeName === 'BR') p.appendChild(doc.createElement('br'));
@@ -600,7 +605,11 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   const keepCard = () => clearTimeout(hideTimer.current);
   // Long enough for the pointer to travel from the link onto the card.
   const hideCardSoon = () => { keepCard(); hideTimer.current = setTimeout(() => setCard(null), 300); };
-  const linkIn = (e) => e.target.closest?.('.ProseMirror a[href]');
+  // Not a link in an HTML signature: it is no link mark the card could edit.
+  const linkIn = (e) => {
+    const a = e.target.closest?.('.ProseMirror a[href]');
+    return a && !a.closest(SIGNATURE_HTML_SELECTOR) ? a : null;
+  };
   const onMouseOver = (e) => {
     const a = linkIn(e);
     if (!a || linkEdit) return;
@@ -779,6 +788,7 @@ const EDITOR_SPACING = {
 // <code>, so the block gets the background and the code inside it only the font).
 function inlineCodeLook(doc) {
   doc.body.querySelectorAll('pre, code').forEach((el) => {
+    if (el.closest(SIGNATURE_HTML_SELECTOR)) return;
     const look = el.tagName === 'PRE' ? CODE_LOOK.block : el.closest('pre') ? CODE_LOOK.inBlock : CODE_LOOK.inline;
     for (const [property, value] of Object.entries(look)) {
       // A style the message already carries is the author's, not ours.
@@ -791,6 +801,8 @@ export function inlineComposeSpacing(html) {
   if (!html) return html;
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.body.querySelectorAll(Object.keys(EDITOR_SPACING).join(',')).forEach((el) => {
+    // An HTML signature carries its own spacing, or means to have none.
+    if (el.closest(SIGNATURE_HTML_SELECTOR)) return;
     // A margin the message already carries is the author's, not ours.
     if (el.style.margin || el.style.marginTop || el.style.marginBottom) return;
     el.style.margin = EDITOR_SPACING[el.tagName];

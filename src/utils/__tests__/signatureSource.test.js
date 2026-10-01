@@ -39,12 +39,11 @@ describe('sanitizeSignatureHtml', () => {
     expect(clean).toContain('Hi');
   });
 
-  it('keeps the words of markup it does not support', () => {
-    const clean = sanitizeSignatureHtml('<table><tr><td>Ann</td><td>Lee</td></tr></table><div><span style="color:red">Sales</span></div>');
-    expect(clean).toContain('Ann');
-    expect(clean).toContain('Lee');
-    expect(clean).toContain('Sales');
-    expect(clean).not.toMatch(/<table|<td|<span|style=/);
+  // Was: tables and styled spans were dropped down to their words. They are
+  // kept now, whole, as an HTML signature (htmlSignature.test.js).
+  it('keeps markup the editor cannot hold as one HTML signature block', () => {
+    const clean = sanitizeSignatureHtml('<table><tr><td>Ann</td><td onclick="x()">Lee</td></tr></table><div><span style="color:red">Sales</span></div>');
+    expect(clean).toBe('<div data-mv-signature-html=""><table><tbody><tr><td>Ann</td><td>Lee</td></tr></tbody></table><div><span style="color:red">Sales</span></div></div>');
   });
 
   it('closes broken markup instead of failing', () => {

@@ -1633,7 +1633,7 @@
   "settings.accounts.signatureImageGood": "Imágenes de la firma: {{size}} KB. Perfecto para el correo.",
   "settings.accounts.signatureImageHint": "Añade un logotipo con el botón de imagen, arrástralo o pégalo. Arrastra una esquina para cambiar el tamaño. Recomendado: menos de 100 KB, PNG o JPEG.",
   "settings.accounts.signatureImageWarn": "Imágenes de la firma: {{size}} KB. Aceptable, pero con menos de 100 KB cargan más rápido para los destinatarios.",
-  "settings.accounts.signatureSourceHint": "Edita el HTML directamente. Se eliminan los scripts, los estilos y todo lo que el editor no admite.",
+  "settings.accounts.signatureSourceHint": "Edita el HTML directamente. Se conservan las tablas y los estilos en línea; se eliminan los scripts, formularios, controladores de eventos y enlaces no seguros.",
   "settings.accounts.signatureFont": "Fuente de la firma",
   "settings.accounts.signatureFontDefault": "Fuente predeterminada",
   "settings.accounts.signatureFontsCommon": "Fuentes comunes",

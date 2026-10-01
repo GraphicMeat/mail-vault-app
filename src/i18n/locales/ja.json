@@ -1633,7 +1633,7 @@
   "settings.accounts.signatureImageGood": "署名の画像: {{size}} KB。メールに最適です。",
   "settings.accounts.signatureImageHint": "画像ボタンでロゴを追加するか、ドラッグまたは貼り付けます。角をドラッグしてサイズ変更。推奨: 100 KB未満、PNG または JPEG。",
   "settings.accounts.signatureImageWarn": "署名の画像: {{size}} KB。問題ありませんが、100 KB未満なら受信者側で速く表示されます。",
-  "settings.accounts.signatureSourceHint": "HTMLを直接編集できます。スクリプト、スタイル、エディタが対応していないものは削除されます。",
+  "settings.accounts.signatureSourceHint": "HTMLを直接編集できます。表とインラインスタイルは保持され、スクリプト、フォーム、イベントハンドラ、安全でないリンクは削除されます。",
   "settings.accounts.signatureFont": "署名のフォント",
   "settings.accounts.signatureFontDefault": "既定のフォント",
   "settings.accounts.signatureFontsCommon": "一般的なフォント",

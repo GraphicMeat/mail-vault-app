@@ -1,16 +1,17 @@
 // The signature editor's Code view: a signature's HTML as text, edited by hand.
 //
-// A signature is only ever sanitized by the editor's schema: whatever the
-// compose editor cannot represent (scripts, styles, event handlers, unsafe
-// link targets, tables, any span but a font's) is dropped when the HTML is
-// loaded into it. A span keeps only its `font-family`, and only plain family
-// names in it (utils/fontFamilyMark.js).
-// Code view adds no second path: every draft is read back through that same
-// schema before it reaches the stored signature, so the source a person types
-// is never what is saved.
+// A signature the compose schema can hold is sanitized by that schema:
+// scripts, event handlers and unsafe link targets are dropped when the HTML is
+// loaded, and a span keeps only its `font-family` (utils/fontFamilyMark.js).
+// Source the schema would lose part of (the tables and inline styles signature
+// generators write) is cleaned by an allowlist instead and kept whole as one
+// block (utils/htmlSignature.js). Either way every draft is read back through
+// the editor before it reaches the stored signature, so the source a person
+// types is never what is saved.
 
 import { Editor } from '@tiptap/core';
 import { editorExtensions, padEmptyLines } from '../components/RichTextEditor';
+import { isHtmlSignature, signatureMarkupForEditor, unwrapSignatureHtml } from './htmlSignature';
 
 /**
  * `html` as the editor would hold it after loading it, written the way the
@@ -23,7 +24,7 @@ export function sanitizeSignatureHtml(html, fallback = '') {
   if (typeof html !== 'string') return fallback;
   let editor = null;
   try {
-    editor = new Editor({ extensions: editorExtensions(''), content: html });
+    editor = new Editor({ extensions: editorExtensions(''), content: signatureMarkupForEditor(html) });
     return padEmptyLines(editor.getHTML());
   } catch {
     return fallback;
@@ -56,9 +57,13 @@ export function setSignatureFont(html, stack) {
 // there changes nothing on the way back. Text, and a <pre>'s inside, is left alone.
 const AFTER_BLOCK = /(<\/(?:p|pre)>)(?=<(?!\/li>))|(<\/(?:li|ul|ol|blockquote)>|<(?:ul|ol|blockquote)>)(?=<)/g;
 
-/** One block per line: the editor writes its HTML as a single line. */
+/**
+ * One block per line: the editor writes its HTML as a single line. An HTML
+ * signature is shown as the markup inside its block, laid out as it was typed.
+ */
 export function prettyPrintSignatureHtml(html) {
   if (!html || typeof html !== 'string') return '';
+  if (isHtmlSignature(html)) return unwrapSignatureHtml(html);
   return html.replace(AFTER_BLOCK, '$&\n');
 }
 
