@@ -234,6 +234,9 @@ mod tests {
         let raw = include_str!("../../tests/fixtures/vault_dir_names.json");
         let cases: Vec<(String, String)> = serde_json::from_str(raw).unwrap();
         for (input, want) in cases {
+            // The fixture holds the unix names; Windows adds the reserved-name step.
+            #[cfg(windows)]
+            let want = avoid_reserved(&want);
             assert_eq!(vault_dir_name(&input), want, "{input:?}");
         }
     }

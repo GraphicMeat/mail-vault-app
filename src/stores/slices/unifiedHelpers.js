@@ -581,8 +581,8 @@ export function _resolveMailboxPath(accountMailboxes, folderId) {
 // On Windows, `vault_dir_name` (src-core/src/search_index/text.rs) additionally
 // suffixes Win32-reserved names — mirrored here by `avoidReserved`, gated on
 // the same platform check `vaultDirName` uses. The two sides agree everywhere,
-// not just on unix; the shared fixture (`vaultDirNameParity.test.js`) only
-// covers the unix-equal part, since it runs on a non-Windows CI host.
+// not just on unix; the shared fixture (`vaultDirNameParity.test.js`) holds
+// the unix names, and both tests add `avoidReserved` to them on Windows.
 const VAULT_UNSAFE_RE = /[^\p{Alphabetic}\p{N}.\-_]/gu;
 
 const RESERVED_DEVICES = new Set(['CON', 'PRN', 'AUX', 'NUL']);
